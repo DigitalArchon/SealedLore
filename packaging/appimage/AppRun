@@ -1,0 +1,48 @@
+#!/bin/sh
+# SealedLore AppImage entry point.
+#
+#   SealedLore.AppImage [gui options]   the app (--data-dir, --mock, --story)
+#   SealedLore.AppImage cli <args>      the terminal client: list, chat, generate, …
+set -e
+HERE="$(dirname "$(readlink -f "$0")")"
+PYTHON="$HERE/opt/python3.12/bin/python3.12"
+
+# X11 helper libraries many systems lack (libxcb-cursor above all, which Qt
+# 6.5+ needs before it will load the xcb plugin). Built for an old glibc, so
+# they work on any system this AppImage supports. Only this folder: the Python
+# base's own libraries in usr/lib are found through its RUNPATH, and must not
+# stand in for the system's copies of the same libraries.
+export LD_LIBRARY_PATH="$HERE/usr/lib/x11${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+# The tokenizer's data file, bundled so a first run needn't download it.
+export TIKTOKEN_CACHE_DIR="${TIKTOKEN_CACHE_DIR:-$HERE/usr/share/sealedlore/tiktoken}"
+# The sample plot files and the format guide, for Help → About and the Plot tab.
+export SEALEDLORE_SAMPLES="${SEALEDLORE_SAMPLES:-$HERE/usr/share/sealedlore/samples}"
+# The host's Python settings must not leak into the bundled interpreter.
+unset PYTHONHOME PYTHONPATH
+# Certificate authorities for anything that asks OpenSSL for its defaults.
+# The Python base's OpenSSL 1.1 was built on a Red Hat system and looks for
+# /etc/pki/tls/cert.pem, which Debian and Ubuntu don't have: Sigstore's
+# trust-root update (the Private Mode attestation) then failed on every
+# fetch. httpx is unaffected (it passes certifi's bundle itself). The host's
+# own bundle is preferred, so the system's trust decisions stand and a child
+# process is handed a path that outlives the app; certifi's is the fallback.
+if [ -z "${SSL_CERT_FILE:-}" ]; then
+    for bundle in \
+        /etc/ssl/certs/ca-certificates.crt \
+        /etc/pki/tls/certs/ca-bundle.crt \
+        /etc/ssl/ca-bundle.pem \
+        /etc/pki/tls/cert.pem \
+        /etc/ssl/cert.pem \
+        "$HERE/opt/python3.12/lib/python3.12/site-packages/certifi/cacert.pem"; do
+        if [ -r "$bundle" ]; then
+            export SSL_CERT_FILE="$bundle"
+            break
+        fi
+    done
+fi
+
+if [ "${1:-}" = "cli" ]; then
+    shift
+    exec "$PYTHON" -s -m sealedlore.cli "$@"
+fi
+exec "$PYTHON" -s -m sealedlore.gui.app "$@"

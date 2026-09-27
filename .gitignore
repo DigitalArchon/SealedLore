@@ -1,0 +1,15 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+
+# local app data if it ever ends up under the repo during testing
+/sealedlore-data/
+
+# local benchmark results (tools/bench/transcript_bench.py)
+tools/bench/results.md

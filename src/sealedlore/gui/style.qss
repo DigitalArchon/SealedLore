@@ -1,0 +1,785 @@
+/* SealedLore's stylesheet. Colours and the monospace font are names (@panel,
+   @font_mono), filled in from the theme (gui/theme.py): write new colours
+   into the themes, never here. */
+
+QWidget {
+  background-color: @window;
+  color: @text;
+  font-size: 14px;
+}
+
+QMainWindow::separator {
+  background: @separator;
+  width: 4px;
+  height: 4px;
+}
+
+/* --- docks ---------------------------------------------------------- */
+
+QDockWidget {
+  titlebar-close-icon: none;
+  titlebar-normal-icon: none;
+  font-size: 12px;
+}
+
+QDockWidget::title {
+  background: @panel;
+  padding: 7px 10px;
+  border-bottom: 1px solid @border;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: @text_dim;
+}
+
+#centre {
+  background: @window;
+  padding: 12px;
+}
+
+/* --- transcript ----------------------------------------------------- */
+
+#transcript {
+  border: 1px solid @border;
+  border-radius: 8px;
+  background: @field;
+}
+
+#transcriptContainer {
+  background: @field;
+}
+
+#message {
+  background: @panel;
+  border: 1px solid @border;
+  border-radius: 8px;
+}
+
+#message[kind="assistant"] {
+  background: @panel;
+  border-left: 3px solid @kind_passage;
+}
+
+#message[kind="character"] {
+  background: @turn_bg;
+  border-left: 3px solid @kind_turn;
+}
+
+#message[kind="narration"] {
+  background: @narration_bg;
+  border-left: 3px solid @kind_narration;
+}
+
+#message[kind="director"] {
+  background: @director_bg;
+  border-left: 3px solid @kind_director;
+}
+
+/* An aside is about the story, not in it: set apart, and never archived. */
+#message[kind="aside"] {
+  background: @aside_bg;
+  border: 1px dashed @aside_border;
+  border-left: 3px solid @kind_aside;
+}
+
+/* A chapter as the storyteller is given it (the "As sent" view). */
+#message[kind="summary"] {
+  background: @summary_bg;
+  border: 1px solid @summary_border;
+  border-left: 3px solid @kind_summary;
+}
+
+#viewNote {
+  color: @text_hint;
+  font-size: 12px;
+  font-style: italic;
+  background: transparent;
+}
+
+/* The rows above and below the built part of the transcript (transcript.py). */
+#earlierButton, #laterButton, #jumpButton {
+  background: transparent;
+  border: 1px dashed @control_border;
+  border-radius: 6px;
+  color: @text_dim;
+  padding: 6px;
+}
+
+#jumpButton {
+  padding: 6px 12px;
+}
+
+#earlierButton:hover, #laterButton:hover, #jumpButton:hover {
+  color: @text_accent;
+  border-color: @hover_border_accent;
+}
+
+#viewToggleButton {
+  background: @panel;
+  border: 1px solid @control_border;
+  color: @text_dim;
+  padding: 3px 12px;
+  font-size: 12px;
+}
+
+#viewToggleButton:checked {
+  background: @selection;
+  color: @text_accent;
+  border-color: @checked_border;
+}
+
+/* The branch being read, above the transcript (gui/branch_bar.py). */
+#branchButton {
+  background: @panel;
+  border: 1px solid @control_border;
+  border-radius: 4px;
+  color: @text_accent;
+  font-weight: 600;
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
+#branchButton:hover {
+  border-color: @checked_border;
+}
+
+#branchButton::menu-indicator {
+  image: none;
+  width: 0;
+}
+
+/* The story map's hover card (gui/story_map.py): it stays while read. */
+#mapCard {
+  background: @button;
+  color: @text_bright;
+  border: 1px solid @hover_border;
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+/* Where a branch begins: the one place in the story it shows. */
+#branchStart {
+  background: transparent;
+  color: @accent;
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* A picture of the story, never part of what the storyteller sees. */
+#message[kind="picture"] {
+  background: @picture_bg;
+  border: 1px solid @border;
+  border-left: 3px solid @kind_picture;
+}
+
+#message[kind="aside"] #messageBody {
+  color: @aside_text;
+  font-size: 14px;
+}
+
+#asideQuestion {
+  color: @aside_question;
+  font-size: 13px;
+  font-style: italic;
+  background: transparent;
+}
+
+#messageHeader {
+  color: @text_dim;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  background: transparent;
+}
+
+/* Archived prose still reads as the story, just quieter: the model now sees
+   it only as a chapter summary (§5.2). */
+#message[archived="true"] {
+  background: @archived_bg;
+  border-style: dashed;
+}
+
+#message[archived="true"] #messageBody {
+  color: @archived_text;
+}
+
+#messageAction {
+  background: transparent;
+  border: 1px solid @control_border;
+  border-radius: 4px;
+  padding: 2px 8px;
+  color: @text_hint;
+  font-size: 11px;
+}
+
+#messageAction:hover {
+  background: @button;
+  color: @text;
+}
+
+/* ‹ 2 / 4 › — the take cycler (§10). */
+#variantButton {
+  background: transparent;
+  border: none;
+  color: @text_dim;
+  font-size: 14px;
+  padding: 0 4px;
+}
+
+#variantButton:hover {
+  color: @text_bright;
+}
+
+#variantButton:disabled {
+  color: @text_disabled_faint;
+}
+
+#variantLabel {
+  color: @text_dim;
+  font-size: 11px;
+  background: transparent;
+}
+
+#reasoningToggle {
+  background: transparent;
+  border: none;
+  color: @text_placeholder;
+  font-size: 11px;
+  padding: 0;
+}
+
+#reasoningToggle:hover {
+  color: @text_soft;
+}
+
+#messageReasoning {
+  color: @text_dim;
+  font-size: 12px;
+  font-style: italic;
+  background: @window;
+  border-left: 2px solid @button_border;
+  padding: 6px 8px;
+}
+
+#messageUsage {
+  color: @text_faint;
+  font-size: 11px;
+  background: transparent;
+}
+
+#messageEditor {
+  background: @field;
+  border: 1px solid @checked_border;
+  border-radius: 6px;
+  padding: 8px;
+  color: @text_bright;
+  font-size: 15px;
+}
+
+#messageBody {
+  color: @story_text;
+  font-size: 15px;
+  line-height: 152%;
+  background: transparent;
+}
+
+#message[kind="narration"] #messageBody {
+  color: @narration_text;
+  font-style: italic;
+}
+
+#message[kind="director"] #messageBody {
+  color: @director_text;
+}
+
+#messageOoc {
+  color: @ooc_text;
+  font-size: 13px;
+  font-style: italic;
+  background: transparent;
+  border-top: 1px dashed @button_border;
+  padding-top: 6px;
+}
+
+#placeholder {
+  color: @text_placeholder;
+  padding: 48px 24px;
+  background: transparent;
+}
+
+/* The first-run welcome: instructions to follow, so not dimmed. */
+#welcome {
+  padding: 32px 24px 16px 24px;
+  background: transparent;
+}
+
+/* --- composer ------------------------------------------------------- */
+
+#input {
+  background: @panel;
+  border: 1px solid @control_border;
+  border-radius: 8px;
+  padding: 10px;
+  color: @text_bright;
+  font-size: 15px;
+  selection-background-color: @text_selection;
+}
+
+#input:focus {
+  border: 1px solid @accent;
+}
+
+#input:disabled {
+  background: @field_disabled;
+  color: @text_faint;
+}
+
+/* --- staleness banner (§5.3) ----------------------------------------- */
+
+#stalenessBanner {
+  background: @warning_bg;
+  border: 1px solid @warning_border;
+  border-radius: 8px;
+}
+
+#stalenessText {
+  color: @warning;
+  font-size: 13px;
+  background: transparent;
+}
+
+#driftLabel {
+  color: @warning;
+  font-size: 13px;
+  background: @warning_bg;
+  border: 1px solid @warning_border;
+  border-radius: 6px;
+  padding: 8px;
+}
+
+#composerCaption {
+  color: @text_hint;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  background: transparent;
+}
+
+#oocInput {
+  background: @ooc_bg;
+  border: 1px solid @ooc_border;
+  border-radius: 8px;
+  padding: 8px;
+  color: @director_text;
+  font-size: 14px;
+}
+
+#oocInput:focus {
+  border-color: @ooc_focus;
+}
+
+QToolButton {
+  background: @button;
+  border: 1px solid @button_border;
+  border-radius: 5px;
+  padding: 6px 10px;
+  color: @text;
+}
+
+QToolButton:hover {
+  background: @button_hover;
+}
+
+QPushButton {
+  background: @button;
+  border: 1px solid @button_border;
+  border-radius: 6px;
+  padding: 7px 16px;
+  color: @text;
+}
+
+QPushButton:hover {
+  background: @button_hover;
+  border-color: @hover_border;
+}
+
+QPushButton:pressed {
+  background: @button_pressed;
+}
+
+QPushButton:disabled {
+  background: @button_disabled;
+  color: @text_disabled;
+  border-color: @border;
+}
+
+/* Small square buttons (a row's remove, move up/down): the padding above
+   would swallow a one-character label. */
+QPushButton#smallButton {
+  padding: 4px 6px;
+  min-width: 22px;
+}
+
+#sendButton {
+  background: @primary;
+  border-color: @primary_border;
+  color: @primary_text;
+  font-weight: 600;
+}
+
+#sendButton:hover {
+  background: @primary_hover;
+}
+
+#sendButton:disabled {
+  background: @button;
+  color: @text_disabled;
+  border-color: @border;
+}
+
+/* --- lists, trees, tabs --------------------------------------------- */
+
+QListWidget, QTreeWidget, QPlainTextEdit {
+  background: @field;
+  border: 1px solid @border;
+  border-radius: 6px;
+  color: @text;
+}
+
+QListWidget::item {
+  padding: 8px 8px;
+  border-bottom: 1px solid @list_divider;
+}
+
+QListWidget::item:selected, QTreeWidget::item:selected {
+  background: @selection;
+  color: @text_selected;
+}
+
+QTreeWidget::item {
+  padding: 4px 2px;
+}
+
+QTreeWidget {
+  alternate-background-color: @row_alternate;
+}
+
+QHeaderView::section {
+  background: @panel;
+  color: @text_dim;
+  border: none;
+  border-bottom: 1px solid @border;
+  padding: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+QTabWidget::pane {
+  border: 1px solid @border;
+  border-radius: 6px;
+  top: -1px;
+}
+
+QTabBar::tab {
+  background: @panel;
+  color: @text_dim;
+  /* Six tabs in the right dock: 10px keeps them all visible at its default width. */
+  padding: 7px 10px;
+  border: 1px solid @border;
+  border-bottom: none;
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+}
+
+QTabBar::tab:selected {
+  background: @button;
+  color: @text_bright;
+}
+
+#inspectorSummary {
+  color: @text_soft;
+  font-size: 13px;
+  padding: 4px 2px;
+}
+
+#inspectorPayload {
+  font-family: @font_mono;
+  font-size: 12px;
+  color: @text_payload;
+}
+
+/* --- menus, status bar, dialogs -------------------------------------- */
+
+QMenuBar {
+  background: @panel;
+  border-bottom: 1px solid @border;
+}
+
+QMenuBar::item:selected {
+  background: @button_hover;
+}
+
+QMenu {
+  background: @panel;
+  border: 1px solid @control_border;
+  padding: 4px;
+}
+
+QMenu::item {
+  padding: 6px 22px;
+  border-radius: 4px;
+}
+
+QMenu::item:selected {
+  background: @selection;
+}
+
+QStatusBar {
+  background: @panel;
+  border-top: 1px solid @border;
+}
+
+QStatusBar::item {
+  border: none;
+}
+
+/* Busy indicators: background jobs (QProgressDialog) and drafting. */
+QProgressBar {
+  background: @panel;
+  border: 1px solid @control_border;
+  border-radius: 3px;
+  min-height: 6px;
+}
+
+QProgressBar::chunk {
+  background: @accent;
+  border-radius: 3px;
+}
+
+/* The storyteller's model, clickable (main_window.choose_story_model). */
+#modelButton {
+  background: transparent;
+  border: 1px solid @control_border;
+  border-radius: 4px;
+  padding: 2px 8px;
+  color: @text_soft;
+  font-size: 12px;
+}
+
+#modelButton:hover {
+  background: @button;
+  color: @text_bright;
+}
+
+#modelButton:disabled {
+  color: @text_disabled;
+}
+
+#statusLabel {
+  color: @text_dim;
+  font-size: 12px;
+  padding: 0 8px;
+  background: transparent;
+}
+
+#budgetBar {
+  background: transparent;
+}
+
+QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
+  background: @panel;
+  border: 1px solid @control_border;
+  border-radius: 5px;
+  padding: 6px 8px;
+  color: @text_bright;
+  selection-background-color: @text_selection;
+}
+
+QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {
+  border-color: @accent;
+}
+
+QLineEdit:disabled, QComboBox:disabled, QPlainTextEdit:disabled {
+  background: @field_disabled;
+  border-color: @border;
+  color: @text_disabled;
+}
+
+QComboBox QAbstractItemView {
+  background: @panel;
+  border: 1px solid @control_border;
+  selection-background-color: @selection;
+}
+
+/* --- settings review ----------------------------------------------- */
+
+#changeRow {
+  background: @panel;
+  border: 1px solid @border;
+  border-radius: 8px;
+}
+
+#changeRow QLabel, #changeRow QCheckBox {
+  background: transparent;
+}
+
+#cannotFix {
+  color: @warning;
+  font-size: 13px;
+  background: @warning_bg;
+  border: 1px solid @warning_border;
+  border-radius: 6px;
+  padding: 8px;
+}
+
+#hintLabel {
+  color: @text_hint;
+  font-size: 12px;
+}
+
+#errorLabel {
+  color: @error;
+  font-size: 13px;
+}
+
+QCheckBox, QRadioButton {
+  spacing: 8px;
+}
+
+/* Qt's default indicators are dark-on-dark here: an unchecked box or radio
+   was all but invisible, so draw them outright. */
+QCheckBox::indicator, QListView::indicator, QRadioButton::indicator {
+  width: 14px;
+  height: 14px;
+  border: 1px solid @indicator_border;
+  background: @field;
+}
+
+QCheckBox::indicator, QListView::indicator {
+  border-radius: 3px;
+}
+
+QRadioButton::indicator {
+  border-radius: 8px;
+}
+
+QCheckBox::indicator:checked, QListView::indicator:checked,
+QRadioButton::indicator:checked {
+  background: @accent;
+  border-color: @accent;
+}
+
+QCheckBox::indicator:disabled, QListView::indicator:disabled {
+  border-color: @control_border;
+}
+
+QScrollBar:vertical {
+  background: transparent;
+  width: 11px;
+  margin: 2px;
+}
+
+/* Light enough to find: #2f3441 on the panels' #16181d was all but invisible. */
+QScrollBar::handle:vertical {
+  background: @scrollbar;
+  border-radius: 5px;
+  min-height: 28px;
+}
+
+QScrollBar::handle:vertical:hover {
+  background: @scrollbar_hover;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+  height: 0;
+}
+
+QScrollBar:horizontal {
+  background: transparent;
+  height: 11px;
+  margin: 2px;
+}
+
+QScrollBar::handle:horizontal {
+  background: @scrollbar;
+  border-radius: 5px;
+  min-width: 28px;
+}
+
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+  height: 0;
+  width: 0;
+}
+
+QToolTip {
+  background: @button;
+  color: @text_bright;
+  border: 1px solid @hover_border;
+  padding: 6px;
+}
+
+/* --- private scenes ------------------------------------------------------ */
+
+#privateToggle:checked {
+  background: @private_toggle_bg;
+  border-color: @private_toggle_border;
+  color: @private_toggle_text;
+}
+
+#input[private="true"], #oocInput[private="true"] {
+  background: @private_input_bg;
+  border: 1px solid @private_input_border;
+}
+
+#message[private="true"] {
+  border-left: 3px solid @private_mark;
+  background: @private_bg;
+}
+
+#message[private="true"] #messageBody {
+  color: @private_text;
+}
+
+#message[kind="assistant"][privatesummary="true"] {
+  border-left: 3px solid @private_mark;
+  border-style: dashed;
+}
+
+#warningLabel {
+  color: @warning;
+  font-size: 12px;
+}
+
+/* The inspector's pages: two rows of buttons (gui/tab_rows.py), every page
+   one click away, where a tab strip hid the last ones behind arrows. */
+#tabRowButton {
+  background: @panel;
+  border: 1px solid @border;
+  border-radius: 6px;
+  color: @text_dim;
+  padding: 5px 6px;
+}
+
+#tabRowButton:hover {
+  color: @text_heading;
+  border-color: @button_border;
+}
+
+#tabRowButton:checked {
+  background: @selection;
+  color: @text_bright;
+  border-color: @checked_border;
+}
+
+/* The inspector with no story open (main_window._no_story_page). */
+#emptyTitle {
+  color: @text_heading;
+  font-size: 15px;
+  font-weight: 600;
+  padding-bottom: 4px;
+}
+
+#placeholderButton {
+  padding: 6px 14px;
+}

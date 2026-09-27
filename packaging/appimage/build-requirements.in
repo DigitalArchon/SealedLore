@@ -1,0 +1,4 @@
+# The build backend that turns SealedLore's source into a wheel (pyproject's
+# [build-system]). Pinned so the installed package's metadata can't change
+# under a rebuild. Run packaging/appimage/lock.sh after changing it.
+setuptools==84.0.0

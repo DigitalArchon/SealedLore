@@ -1,0 +1,14 @@
+# What the AppImage ships, at the versions the test suite runs against. Bump
+# deliberately, then run packaging/appimage/lock.sh to pin everything they
+# pull in, by hash, into requirements.lock.
+pydantic==2.13.5
+httpx==0.28.1
+tiktoken==0.14.0
+numpy==2.5.3
+# Essentials, not PySide6: the add-ons are hundreds of megabytes the app
+# never imports.
+PySide6-Essentials==6.11.2
+# End-to-end encrypted private models: Tinfoil's attestation and EHBP client
+# (providers/private_mode.py). It pulls in sigstore, cryptography and the
+# OpenAI client; all pinned by hash below like everything else.
+tinfoil==0.14.0

@@ -1,0 +1,861 @@
+"""Provider, generation and context settings.
+
+Tabbed because the parts have different lifetimes: the provider and its key
+live in the app config, generation parameters and the context budget belong to
+the story, and the archival knobs sit across both.
+"""
+
+from __future__ import annotations
+
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QSpinBox,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
+from sealedlore.gui.attest_check import AttestationButton
+from sealedlore.gui.fields import FormScroll
+from sealedlore.gui.image_jobs import ImageCatalog
+from sealedlore.gui.image_picker import pick_image_model
+from sealedlore.gui.model_picker import Browse, ModelCatalog, ModelField, pick_model
+from sealedlore.models.config import (
+    DEFAULT_BASE_URL,
+    DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_STORY_MODEL,
+    Config,
+    EmbeddingProviderConfig,
+    ProviderConfig,
+    _same_host,
+    require_https,
+)
+from sealedlore.models.generation import GenerationParams
+from sealedlore.models.story import Story
+from sealedlore.providers.context_probe import detect_context
+from sealedlore.providers.images import parse_image_models
+from sealedlore.providers.openai_compat import OpenAICompatibleProvider
+from sealedlore.providers.tee import move_refusal
+
+UNSET = -1.0
+UNSET_INT = -1
+
+
+def _optional_double(value: float) -> float | None:
+    return None if value < 0 else value
+
+
+def _optional_int(value: int) -> int | None:
+    return None if value < 0 else value
+
+
+# Settings → Lore: how a lorebook too big to send whole is chosen from.
+LORE_SELECTORS = (
+    ("Model picks after each passage", "picker"),
+    ("Jev before each turn", "jev"),
+    ("Similarity and keywords", "similarity"),
+)
+
+
+def _scrolled(page: QWidget) -> QScrollArea:
+    """A tab page that scrolls when it is taller than the dialog."""
+    return FormScroll(page)
+
+
+class SettingsDialog(QDialog):
+    def __init__(
+        self,
+        config: Config,
+        story: Story | None,
+        parent: QWidget | None = None,
+        *,
+        catalog: ModelCatalog | None = None,
+        image_catalog: ImageCatalog | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.image_catalog = image_catalog
+        self.setWindowTitle("Settings")
+        # Wide enough for all seven tabs in view, and tall enough for most
+        # pages without scrolling (they scroll now, so the dialog no longer
+        # grows to its tallest page).
+        self.setMinimumWidth(640)
+        self.resize(660, 640)
+        self.config = config
+        self.story = story
+        # Browse… lists the models of the endpoint typed here, saved or not.
+        self._browse: Browse | None = (
+            (lambda current: pick_model(catalog, self._model_source, current, self))
+            if catalog is not None
+            else None
+        )
+
+        # Every page scrolls: the Lore page was taller than the dialog, and
+        # its last rows were drawn over. Every text model is on Models, by
+        # what it does; the rest of each tab is that feature's own options.
+        self.tabs = QTabWidget()
+        self.tabs.addTab(_scrolled(self._endpoint_tab()), "Endpoint")
+        self.tabs.addTab(_scrolled(self._models_tab()), "Models")
+        if story is not None:
+            self.tabs.addTab(_scrolled(self._generation_tab()), "Generation")
+        # Always: most of it is app-wide, and it used to be reachable (and
+        # saved) only while a story was open.
+        self.tabs.addTab(_scrolled(self._context_tab()), "Context")
+        self.tabs.addTab(_scrolled(self._lore_tab()), "Lore")
+        self.tabs.addTab(_scrolled(self._images_tab()), "Images")
+        self.tabs.addTab(_scrolled(self._private_tab()), "Private")
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._save)
+        buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.tabs)
+        self.error = QLabel()
+        self.error.setObjectName("errorLabel")
+        self.error.setWordWrap(True)
+        self.error.hide()
+        layout.addWidget(self.error)
+        layout.addWidget(buttons)
+
+    # --- tabs -------------------------------------------------------------
+
+    def _model_source(self) -> tuple[OpenAICompatibleProvider, str, bool]:
+        url = self.base_url.text().strip()
+        if not url:
+            raise ValueError("Set the base URL first.")
+        require_https(url)
+        provider = OpenAICompatibleProvider(
+            ProviderConfig(name="browse", base_url=url, api_key=self.api_key.text())
+        )
+        return provider, url, True
+
+    def _endpoint_tab(self) -> QWidget:
+        """Where the story's calls go, and how they are cached."""
+        provider = self.config.active_provider()
+        widget = QWidget()
+        form = QFormLayout(widget)
+
+        self.provider_name = QLineEdit(provider.name if provider else "default")
+        self._provider_at_open = provider.name if provider else None
+        self.base_url = QLineEdit(provider.base_url if provider else DEFAULT_BASE_URL)
+        self.api_key = QLineEdit(provider.api_key if provider else "")
+        self.api_key.setEchoMode(QLineEdit.Password)
+
+        self.cache_mode = QComboBox()
+        self.cache_mode.addItems(["auto", "on", "off"])
+        self.cache_mode.setCurrentText(self.config.cache_control_mode)
+        self.cache_ttl = QComboBox()
+        self.cache_ttl.addItem("1 hour", "1h")
+        self.cache_ttl.addItem("5 minutes", "5m")
+        self.cache_ttl.setCurrentIndex(max(0, self.cache_ttl.findData(self.config.cache_ttl)))
+        self.cache_ttl.setToolTip(
+            "How long a Claude model keeps the story's cached prompt between turns. A pause "
+            "longer than this rewrites the whole prompt at full price. An hour costs a "
+            "little more per turn and survives the pauses of real play."
+        )
+
+        form.addRow("Name", self.provider_name)
+        form.addRow("Base URL", self.base_url)
+        form.addRow("API key", self.api_key)
+        form.addRow("Prompt caching", self.cache_mode)
+        form.addRow("Cache lifetime", self.cache_ttl)
+
+        hint = QLabel(
+            "Any OpenAI-compatible /chat/completions endpoint. Caching on 'auto' "
+            "applies cache_control blocks only to Anthropic models. Which models it "
+            "runs is on the Models tab."
+        )
+        hint.setObjectName("hintLabel")
+        hint.setWordWrap(True)
+        form.addRow(hint)
+        return widget
+
+    def _models_tab(self) -> QWidget:
+        """Every text model the app calls, by what it does. They were spread
+        over five tabs (Provider, Context, Lore, Images, Private)."""
+        provider = self.config.active_provider()
+        widget = QWidget()
+        form = QFormLayout(widget)
+        intro = QLabel(
+            "Every model the app calls on this endpoint, by what it does. A blank one "
+            "uses the model named in grey. The image model is under Images, and the "
+            "private scene model under Private."
+        )
+        intro.setObjectName("hintLabel")
+        intro.setWordWrap(True)
+        form.addRow(intro)
+
+        # A new setup starts on Sonnet 4.6 rather than a blank field: one
+        # thing fewer before the first story.
+        self.model = ModelField(
+            (provider.model if provider else "") or DEFAULT_STORY_MODEL, self._browse
+        )
+        self.model.setPlaceholderText(DEFAULT_STORY_MODEL)
+        self.model.setToolTip("The storyteller: writes every passage.")
+        # Only a model the author changes here becomes the open story's: saving
+        # for any other reason used to put the provider's model on whichever
+        # story was open. Compared with the field as it opened, so the default
+        # filled into a blank field doesn't count as a change either.
+        self._model_at_open = self.model.text().strip()
+        form.addRow("Story model", self.model)
+
+        self.summarization_model = ModelField(
+            (self.story.defaults.summarization_model or "") if self.story is not None else "",
+            self._browse,
+        )
+        self.summarization_model.setPlaceholderText("same as the story model")
+        self.summarization_model.setEnabled(self.story is not None)
+        self.summarization_model.setToolTip(
+            "Writes the chapters as the story is archived. Set per story"
+            + ("." if self.story is not None else ": open a story to set it.")
+        )
+        form.addRow("Summarisation model", self.summarization_model)
+
+        self.authoring_model = ModelField(self.config.authoring_model or "", self._browse)
+        self.authoring_model.setPlaceholderText("same as the story's model")
+        self.authoring_model.setToolTip(
+            "Drafts stories from a premise and reviews settings. Occasional calls the "
+            "whole story rests on, so a stronger model (e.g. anthropic/claude-opus-5) "
+            "can be worth it here."
+        )
+        form.addRow("Authoring model", self.authoring_model)
+
+        self.keep_scene = QCheckBox("Keep the scene up to date after every passage")
+        self.keep_scene.setChecked(self.config.scene_reads == "every_turn")
+        self.keep_scene.setToolTip(
+            "After each passage, a small model reads who came in, who left, where the "
+            "scene moved and whether it is private, and the Scene tab follows (with an "
+            "Undo). One extra call per passage, on the scene model below, or on the "
+            "story's summarisation model (then its story model) when that is blank. "
+            "Off, the roster is kept by hand as before."
+        )
+        form.addRow(self.keep_scene)
+        self.scene_model = ModelField(self.config.scene_model or "", self._browse)
+        self.scene_model.setPlaceholderText("same as the story's summarisation model")
+        self.scene_model.setToolTip(
+            "Reads the scene after every passage: about 1.5k tokens in and 150 out, on "
+            "every turn. An easy task, so a small fast model is right here "
+            "(e.g. anthropic/claude-haiku-4.5)."
+        )
+        form.addRow("Scene model", self.scene_model)
+
+        self.plot_reads = QCheckBox("Keep a plot's clock and facts after every passage")
+        self.plot_reads.setChecked(self.config.plot_reads)
+        self.plot_reads.setToolTip(
+            "Only for stories with a plot. After each passage, a small model reads how "
+            "much story time passed and which of the plot's facts changed, and the Plot "
+            "tab follows (with an Undo). Off, they change only when you set them."
+        )
+        form.addRow(self.plot_reads)
+        self.plot_model = ModelField(self.config.plot_model or "", self._browse)
+        self.plot_model.setPlaceholderText("same as the scene model")
+        self.plot_model.setToolTip(
+            "Keeps a plot's clock and facts after every passage, and decides when its "
+            "events happen. Small, cheap calls on every turn of a plotted story "
+            "(mistralai/mistral-medium-3.5 was best when calibrated; Haiku 4.5 paces "
+            "well but rarely foreshadows)."
+        )
+        form.addRow("Plot model", self.plot_model)
+
+        self.lore_model = ModelField(self.config.lore_model, self._browse)
+        self.lore_model.setPlaceholderText("blank: same as the scene model")
+        self.lore_model.setToolTip(
+            "Picks lore after each passage when a lorebook is too large to send whole and "
+            'Lore → Large lorebooks is "Model picks". The default is a NanoGPT model id; '
+            "on another endpoint pick one it lists (Browse…), or leave it blank to use "
+            "the scene model."
+        )
+        form.addRow("Lore model", self.lore_model)
+
+        self.image_prompt_model = ModelField(self.config.image_prompt_model or "", self._browse)
+        self.image_prompt_model.setPlaceholderText("same as the story's model")
+        self.image_prompt_model.setToolTip(
+            "Writes the image prompt from the story. The story's own model rides its cached "
+            "prompt, so it is cheap and has read everything."
+        )
+        form.addRow("Image prompt writer", self.image_prompt_model)
+        return widget
+
+    def _generation_tab(self) -> QWidget:
+        assert self.story is not None
+        params = self.story.defaults.generation
+        widget = QWidget()
+        form = QFormLayout(widget)
+
+        self.temperature = self._double_field(params.temperature, maximum=2.0)
+        self.top_p = self._double_field(params.top_p, maximum=1.0)
+        self.max_tokens = self._int_field(params.max_tokens, maximum=200_000)
+        self.presence_penalty = self._double_field(params.presence_penalty, maximum=2.0)
+        self.frequency_penalty = self._double_field(params.frequency_penalty, maximum=2.0)
+        self.seed = self._int_field(params.seed, maximum=2_147_483_647)
+        self.stop = QLineEdit(", ".join(params.stop))
+        self.stop.setPlaceholderText("comma-separated")
+
+        self.reasoning_enabled = QCheckBox("Request reasoning")
+        self.reasoning_enabled.setChecked(params.reasoning.enabled)
+        self.reasoning_effort = QComboBox()
+        self.reasoning_effort.addItems(["low", "medium", "high"])
+        if params.reasoning.effort:
+            self.reasoning_effort.setCurrentText(params.reasoning.effort)
+
+        form.addRow("Temperature", self.temperature)
+        form.addRow("Top p", self.top_p)
+        form.addRow("Max tokens", self.max_tokens)
+        form.addRow("Presence penalty", self.presence_penalty)
+        form.addRow("Frequency penalty", self.frequency_penalty)
+        form.addRow("Seed", self.seed)
+        form.addRow("Stop sequences", self.stop)
+        form.addRow(self.reasoning_enabled)
+        form.addRow("Reasoning effort", self.reasoning_effort)
+
+        hint = QLabel("Negative values mean 'leave unset' — the field is then omitted.")
+        hint.setObjectName("hintLabel")
+        hint.setWordWrap(True)
+        form.addRow(hint)
+        return widget
+
+    def _context_tab(self) -> QWidget:
+        """Budget and archival (§5). Shown with or without a story: only the
+        budget and the summarisation model belong to one."""
+        widget = QWidget()
+        form = QFormLayout(widget)
+
+        self.budget = QSpinBox()
+        self.budget.setRange(1_000, 1_000_000)
+        self.budget.setSingleStep(1_000)
+        self.budget.setValue(
+            self.story.defaults.context_token_budget if self.story is not None else 60_000
+        )
+        self.budget.setToolTip(
+            "How many tokens the storyteller's whole prompt may use each turn: the rules, "
+            "world, cast and chapter summaries as well as the recent story word for word. "
+            "More keeps more of the story verbatim, at a higher cost per turn. Claude "
+            "Sonnet's storytelling degrades past about 60,000."
+        )
+        self.budget.setEnabled(self.story is not None)
+
+        self.auto_archive = QCheckBox("Archive automatically when the budget is reached")
+        self.auto_archive.setChecked(self.config.auto_archive)
+        self.auto_archive.setToolTip(
+            "Chapters are written in the background as the story nears its budget, so no "
+            "turn waits for them. Off, a banner offers to archive when the prompt is over "
+            "budget, and the oldest turns are left out until you do."
+        )
+
+        self.story_ledger = QCheckBox("Keep a story ledger beside the chapters")
+        self.story_ledger.setChecked(self.config.story_ledger)
+        self.story_ledger.setToolTip(
+            "A point-form record, updated with each chapter, of how people stand with each "
+            "other, who knows what, open promises and where things stand. It keeps quiet "
+            "facts that summaries lose, for about 1,200 more prompt tokens and one more "
+            "call per chapter."
+        )
+
+        self.chunk_turns = QSpinBox()
+        self.chunk_turns.setRange(2, 100)
+        self.chunk_turns.setValue(self.config.archive_chunk_turns)
+
+        self.archive_target = QSpinBox()
+        self.archive_target.setRange(20, 95)
+        self.archive_target.setSingleStep(5)
+        self.archive_target.setSuffix("%")
+        self.archive_target.setValue(round(self.config.archive_target_ratio * 100))
+        self.archive_target.setToolTip(
+            "Once archival starts it keeps taking whole chapters until the prompt is "
+            "this share of the budget. Lower means fewer, larger archival runs and "
+            "many more turns between them; higher means it stops sooner and returns "
+            "to the budget within a few turns."
+        )
+
+        self.summary_words = QSpinBox()
+        self.summary_words.setRange(50, 2_000)
+        self.summary_words.setSingleStep(25)
+        self.summary_words.setValue(self.config.summary_target_words)
+
+        scope = QLabel(
+            "The context budget belongs to the open story; the rest applies to every story."
+            if self.story is not None
+            else "The context budget is set per story (open one); the rest applies to every story."
+        )
+        scope.setObjectName("hintLabel")
+        scope.setWordWrap(True)
+        form.addRow(scope)
+        form.addRow("Context budget", self.budget)
+        form.addRow(self.auto_archive)
+        form.addRow(self.story_ledger)
+        form.addRow("Turns per chapter", self.chunk_turns)
+        form.addRow("Archive down to", self.archive_target)
+        form.addRow("Summary length (words)", self.summary_words)
+
+        hint = QLabel(
+            "Archival summarises the oldest whole chunk of the story rather than "
+            "one turn at a time, so the summary block stays stable and the cached "
+            "prompt prefix survives. The most recent turns always stay verbatim. "
+            "When it runs it keeps going until the prompt is back down to the share "
+            "of the budget above, so it happens rarely rather than every few turns. "
+            "The model that writes the chapters is on the Models tab."
+        )
+        hint.setObjectName("hintLabel")
+        hint.setWordWrap(True)
+        form.addRow(hint)
+        return widget
+
+    def done(self, result: int) -> None:  # noqa: N802 - Qt naming
+        # The private tab's own catalog fetches on a thread parented to this
+        # dialog; closing under it would destroy a running QThread.
+        self._private_catalog.wait()
+        super().done(result)
+
+    def _private_source(self) -> tuple[OpenAICompatibleProvider, str, bool]:
+        url = self.private_url.text().strip()
+        if not url:
+            raise ValueError("Set the private endpoint's base URL first.")
+        require_https(url)
+        key = self.private_key.text() or (
+            self.api_key.text() if _same_host(url, self.base_url.text().strip()) else ""
+        )
+        provider = OpenAICompatibleProvider(
+            ProviderConfig(name="private-browse", base_url=url, api_key=key)
+        )
+        return provider, url, True
+
+    def _private_test_settings(self) -> ProviderConfig | None:
+        """The private endpoint and model as typed, for Test attestation."""
+        try:
+            provider, _url, _owned = self._private_source()
+        except ValueError:
+            return None
+        provider.close()
+        return provider.config.model_copy(update={"model": self.private_model.text().strip()})
+
+    def _private_tab(self) -> QWidget:
+        """The private model: where private scenes go, and nothing else does."""
+        existing = self.config.private_provider
+        widget = QWidget()
+        form = QFormLayout(widget)
+        intro = QLabel(
+            "Private scenes (the button beside the composer) are played on this model "
+            "alone: nothing from them reaches the story's model or any other, and only the "
+            "summary you approve goes back into the story. A local server (Ollama "
+            "http://localhost:11434/v1, LM Studio http://localhost:1234/v1, llama.cpp "
+            "http://localhost:8080/v1) keeps it on this machine. On NanoGPT, a private/ "
+            "model is end-to-end encrypted to an attested enclave; a TEE/ model runs in "
+            "one, but its text still passes NanoGPT's gateway."
+        )
+        intro.setObjectName("hintLabel")
+        intro.setWordWrap(True)
+        form.addRow(intro)
+        # NanoGPT's endpoint and, with the key blank, the main key: only the
+        # model is left to choose. Nothing is saved until one is, so private
+        # scenes stay off until the author has looked this over.
+        self.private_url = QLineEdit(existing.base_url if existing else DEFAULT_BASE_URL)
+        self.private_url.setPlaceholderText("http://localhost:11434/v1")
+        self.private_key = QLineEdit(existing.api_key if existing else "")
+        self.private_key.setEchoMode(QLineEdit.Password)
+        self.private_key.setPlaceholderText(
+            "blank: the main endpoint's key on the same host, else none"
+        )
+        self._private_catalog = ModelCatalog(self)
+
+        def browse(current: str) -> str | None:
+            return pick_model(self._private_catalog, self._private_source, current, self)
+
+        self.private_model = ModelField(existing.model if existing else "", browse)
+        self.private_model.setPlaceholderText("e.g. llama3.1:8b, or TEE/glm-5.3-flash")
+        self.private_budget = QSpinBox()
+        self.private_budget.setRange(2_000, 1_000_000)
+        self.private_budget.setSingleStep(1_000)
+        self.private_budget.setValue(self.config.private_budget)
+        self.private_budget.setSuffix(" tokens")
+        self.detect_button = QPushButton("Detect")
+        self.detect_button.setToolTip("Ask the server how much context the model is running with")
+        self.detect_button.clicked.connect(self._detect_private_context)
+        budget_row = QHBoxLayout()
+        budget_row.addWidget(self.private_budget, 1)
+        budget_row.addWidget(self.detect_button)
+        self.detect_note = QLabel(
+            "Ollama often runs a model with only 4-8k of context whatever it could take: "
+            "raise it with OLLAMA_CONTEXT_LENGTH or a Modelfile's num_ctx."
+        )
+        self.detect_note.setObjectName("hintLabel")
+        self.detect_note.setWordWrap(True)
+        self.private_tee = QCheckBox("Check TEE models")
+        self.private_tee.setToolTip(
+            "What is checked: the enclave's Intel TDX quote, in its own signed bytes, binds "
+            "its signing key to a fresh nonce of ours; the quote verifies up to Intel's "
+            "root, isn't revoked and isn't a debug enclave, and Intel rates its platform; "
+            "NVIDIA's signed verdict on the GPUs is for our nonce and passes; each reply's "
+            "signature record recovers the attested key. Anything forged, revoked or for "
+            "another nonce is refused and nothing is sent; what couldn't be checked is "
+            "shown as partial. Not checked: which software the enclave runs, and the "
+            "reply's content against its record. The text still passes NanoGPT's gateway. "
+            "A private/ model is always attested, whatever this says: it is end-to-end "
+            "encrypted to the attested enclave's key."
+        )
+        self.private_tee.setChecked(self.config.private_verify_tee)
+        form.addRow("Base URL", self.private_url)
+        form.addRow("API key", self.private_key)
+        form.addRow("Model", self.private_model)
+        # Before choosing it: does this model's enclave attest? (The author:
+        # rather than start a scene and have it refused.)
+        self.private_attest = AttestationButton(self._private_test_settings)
+        self.private_model.textChanged.connect(self.private_attest.model_changed)
+        self.private_attest.model_changed(self.private_model.text())
+        form.addRow("", self.private_attest)
+        form.addRow("Context budget", budget_row)
+        form.addRow("", self.detect_note)
+        form.addRow(self.private_tee)
+        # Its own line: as the checkbox's text it ran off the dialog.
+        tee_note = QLabel(
+            "For a NanoGPT TEE/ model: the enclave's attestation (Intel's and NVIDIA's "
+            "signatures, for our nonce) when the scene begins, nothing sent if it's refused, "
+            "and that each reply is signed by the attested key (the tooltip says what that "
+            "does and doesn't prove). A private/ model is always attested."
+        )
+        tee_note.setObjectName("hintLabel")
+        tee_note.setWordWrap(True)
+        form.addRow(tee_note)
+        return widget
+
+    def _detect_private_context(self) -> None:
+        url, model = self.private_url.text().strip(), self.private_model.text().strip()
+        if not url or not model:
+            self.detect_note.setText("Set the base URL and model first.")
+            return
+        try:
+            require_https(url)
+        except ValueError as exc:
+            self.detect_note.setText(str(exc))
+            return
+        key = self.private_key.text() or (
+            self.api_key.text() if _same_host(url, self.base_url.text().strip()) else ""
+        )
+        self.detect_button.setEnabled(False)
+        self.detect_note.setText("Asking the server…")
+        QApplication.processEvents()
+        found = detect_context(url, key, model)
+        self.detect_button.setEnabled(True)
+        if found is None:
+            self.detect_note.setText(
+                "The server didn't say. Set the budget by hand, a little under the model's context."
+            )
+            return
+        # Leave room for the reply and a margin for counting differences.
+        budget = max(2_000, int(found.tokens * 0.8) - 1_000)
+        self.private_budget.setValue(min(budget, self.private_budget.maximum()))
+        note = f"{found.tokens:,} tokens ({found.source}); budget set to {budget:,}."
+        if not found.loaded:
+            note += " That's the most it can take: check what it's loaded with."
+        self.detect_note.setText(note)
+
+    def _images_tab(self) -> QWidget:
+        """Pictures: which model draws them, at what size, and who writes the prompt."""
+        widget = QWidget()
+        form = QFormLayout(widget)
+        self._image_models = parse_image_models({"data": self.config.image_models})
+        # Typed, or chosen with Browse… from a searchable table, as the text
+        # models are (gui/image_picker.py).
+        self.image_model = ModelField(
+            self.config.image_model,
+            self._browse_image_models if self.image_catalog is not None else None,
+        )
+        self.image_model.setToolTip(
+            "The model that draws. Seedream 5.0 Pro takes up to ten reference pictures "
+            "and keeps characters and ships as drawn."
+        )
+        self.image_size = QComboBox()
+        self.image_size.setEditable(True)
+        self.image_model.textChanged.connect(self._fill_image_sizes)
+        self._fill_image_sizes()
+        self.image_size.setCurrentText(self.config.image_size)
+        self.image_count = QSpinBox()
+        self.image_count.setRange(1, 4)
+        self.image_count.setValue(self.config.image_count)
+        form.addRow("Image model", self.image_model)
+        form.addRow("Size", self.image_size)
+        form.addRow("Pictures per request", self.image_count)
+        hint = QLabel(
+            "Every prompt is shown to you, and can be changed, before anything is sent "
+            "(its writer is on the Models tab). The model list and prices come from the "
+            "endpoint the first time you generate an image."
+            if not self._image_models
+            else "Every prompt is shown to you, and can be changed, before anything is sent "
+            "(its writer is on the Models tab)."
+        )
+        hint.setObjectName("hintLabel")
+        hint.setWordWrap(True)
+        form.addRow(hint)
+        return widget
+
+    def _browse_image_models(self, current: str) -> str | None:
+        chosen = pick_image_model(self.image_catalog, current, self)
+        # A Refresh may have brought new models (and their sizes).
+        self._image_models = self.image_catalog.models
+        return chosen
+
+    def _fill_image_sizes(self, *_args) -> None:
+        wanted = self.image_model.text().strip()
+        info = next((i for i in self._image_models if i.id == wanted), None)
+        current = self.image_size.currentText()
+        self.image_size.clear()
+        for size in info.resolutions if info is not None else ():
+            price = info.price(size)
+            self.image_size.addItem(size)
+            if price is not None:
+                self.image_size.setItemData(
+                    self.image_size.count() - 1, f"${price:.3f} a picture", Qt.ToolTipRole
+                )
+        if current:
+            self.image_size.setCurrentText(current)
+
+    def _lore_tab(self) -> QWidget:
+        """The embeddings endpoint and retrieval knobs (§7)."""
+        existing = self.config.embedding_provider
+        widget = QWidget()
+        form = QFormLayout(widget)
+
+        self.embeddings_enabled = QCheckBox("Retrieve lore semantically")
+        self.embeddings_enabled.setChecked(existing is not None)
+        self.embeddings_enabled.toggled.connect(self._sync_lore_fields)
+
+        self.embed_base_url = QLineEdit(existing.base_url if existing else "")
+        self.embed_base_url.setPlaceholderText("same as the chat endpoint")
+        self.embed_api_key = QLineEdit(existing.api_key if existing else "")
+        self.embed_api_key.setEchoMode(QLineEdit.Password)
+        self.embed_api_key.setPlaceholderText("same as the chat key (same host only)")
+        self.embed_model = QLineEdit(existing.model if existing else DEFAULT_EMBEDDING_MODEL)
+        self.embed_model.setPlaceholderText(DEFAULT_EMBEDDING_MODEL)
+        self.embed_dimensions = QSpinBox()
+        self.embed_dimensions.setRange(0, 8192)
+        self.embed_dimensions.setSpecialValueText("model default")
+        self.embed_dimensions.setValue(existing.dimensions if existing else 0)
+
+        self.query_prefix = QLineEdit(existing.query_prefix if existing else "")
+        self.query_prefix.setPlaceholderText("e.g. 'search_query: ' — bge-m3 needs none")
+        self.document_prefix = QLineEdit(existing.document_prefix if existing else "")
+        self.document_prefix.setPlaceholderText("e.g. 'search_document: '")
+
+        self.retrieval_k = QSpinBox()
+        self.retrieval_k.setRange(0, 50)
+        self.retrieval_k.setValue(self.config.lore_retrieval_k)
+        self.similarity = QDoubleSpinBox()
+        self.similarity.setRange(0.0, 1.0)
+        self.similarity.setSingleStep(0.05)
+        self.similarity.setDecimals(2)
+        self.similarity.setValue(self.config.lore_similarity_threshold)
+        self.query_turns = QSpinBox()
+        self.query_turns.setRange(0, 20)
+        self.query_turns.setValue(self.config.lore_query_turns)
+        self.lore_cap = QSpinBox()
+        self.lore_cap.setRange(100, 100_000)
+        self.lore_cap.setSingleStep(250)
+        self.lore_cap.setValue(self.config.lore_token_cap)
+
+        self.lore_selector = QComboBox()
+        for label, value in LORE_SELECTORS:
+            self.lore_selector.addItem(label, value)
+        self.lore_selector.setCurrentIndex(
+            max(0, self.lore_selector.findData(self.config.lore_selector))
+        )
+        self.lore_selector.setToolTip(
+            "A lorebook up to a tenth of the context budget is sent whole every turn, "
+            "cached, and none of this applies. Past that, entries are chosen per turn.\n\n"
+            "Model picks: the lore model picks after each passage, in the background, and "
+            "your turn adds any entry it names. No wait; one small call per passage.\n"
+            "Jev: TypeSafe's Jev scores every entry just before your turn is sent, plus "
+            "what your turn names. About 0.8s more per turn and ~$0.001 (NanoGPT only).\n"
+            "Similarity and keywords: no extra calls. At 100 entries it left several times "
+            "as many lore mistakes as either model.\n\n"
+            "The lore model is on the Models tab."
+        )
+        form.addRow("Large lorebooks", self.lore_selector)
+        form.addRow(self.embeddings_enabled)
+        form.addRow("Base URL", self.embed_base_url)
+        form.addRow("API key", self.embed_api_key)
+        form.addRow("Model", self.embed_model)
+        form.addRow("Dimensions", self.embed_dimensions)
+        form.addRow("Query prefix", self.query_prefix)
+        form.addRow("Document prefix", self.document_prefix)
+        form.addRow("Entries per turn", self.retrieval_k)
+        form.addRow("Similarity threshold", self.similarity)
+        form.addRow("Turns in the query", self.query_turns)
+        form.addRow("Lore token cap", self.lore_cap)
+
+        hint = QLabel(
+            "Keyword matching always runs, and is the whole story when this is off "
+            "or the endpoint fails. Prefixes are only for models that want the query "
+            "and the document marked differently."
+        )
+        hint.setObjectName("hintLabel")
+        hint.setWordWrap(True)
+        form.addRow(hint)
+
+        self._lore_fields = [
+            self.embed_base_url,
+            self.embed_api_key,
+            self.embed_model,
+            self.embed_dimensions,
+            self.query_prefix,
+            self.document_prefix,
+        ]
+        self._sync_lore_fields()
+        return widget
+
+    def _sync_lore_fields(self) -> None:
+        for field in self._lore_fields:
+            field.setEnabled(self.embeddings_enabled.isChecked())
+
+    def _double_field(self, value: float | None, *, maximum: float) -> QDoubleSpinBox:
+        box = QDoubleSpinBox()
+        box.setRange(UNSET, maximum)
+        box.setSingleStep(0.05)
+        box.setDecimals(2)
+        box.setSpecialValueText("unset")
+        box.setValue(UNSET if value is None else value)
+        return box
+
+    def _int_field(self, value: int | None, *, maximum: int) -> QSpinBox:
+        box = QSpinBox()
+        box.setRange(UNSET_INT, maximum)
+        box.setSpecialValueText("unset")
+        box.setValue(UNSET_INT if value is None else value)
+        return box
+
+    # --- saving -----------------------------------------------------------
+
+    def _save(self) -> None:
+        url = self.base_url.text().strip()
+        embed_url = self.embed_base_url.text().strip()
+        try:
+            require_https(url)
+            if self.embeddings_enabled.isChecked() and embed_url:
+                require_https(embed_url)
+            if self.private_url.text().strip():
+                require_https(self.private_url.text().strip())
+        except ValueError as exc:
+            self.error.setText(str(exc))
+            self.error.show()
+            return
+
+        name = self.provider_name.text().strip() or "default"
+        provider = next((p for p in self.config.providers if p.name == name), None)
+        if provider is None and self._provider_at_open is not None:
+            # A changed name renames the entry: adding a second one left the
+            # old, key included, in the file.
+            provider = next(
+                (p for p in self.config.providers if p.name == self._provider_at_open), None
+            )
+            if provider is not None:
+                provider.name = name
+        if provider is None:
+            provider = ProviderConfig(name=name, base_url=url)
+            self.config.providers.append(provider)
+        provider.base_url = url
+        provider.api_key = self.api_key.text()
+        provider.model = self.model.text().strip()
+        self.config.active_provider_name = name
+        self.config.authoring_model = self.authoring_model.text().strip() or None
+        self.config.image_model = self.image_model.text().strip() or self.config.image_model
+        self.config.image_size = self.image_size.currentText().strip() or self.config.image_size
+        self.config.image_count = self.image_count.value()
+        self.config.image_prompt_model = self.image_prompt_model.text().strip() or None
+        private_url = self.private_url.text().strip()
+        private_model = self.private_model.text().strip()
+        if private_url and private_model:
+            # Keep what the form doesn't show (timeout, extra_body); the URL
+            # was checked above.
+            existing = self.config.private_provider or ProviderConfig(name="private")
+            self.config.private_provider = existing.model_copy(
+                update={
+                    "name": "private",
+                    "base_url": private_url,
+                    "api_key": self.private_key.text(),
+                    "model": private_model,
+                }
+            )
+        else:
+            self.config.private_provider = None
+        self.config.private_budget = self.private_budget.value()
+        self.config.private_verify_tee = self.private_tee.isChecked()
+        self.config.scene_reads = "every_turn" if self.keep_scene.isChecked() else "manual"
+        self.config.scene_model = self.scene_model.text().strip() or None
+        self.config.plot_reads = self.plot_reads.isChecked()
+        self.config.plot_model = self.plot_model.text().strip() or None
+        self.config.cache_control_mode = self.cache_mode.currentText()  # type: ignore[assignment]
+        self.config.cache_ttl = self.cache_ttl.currentData()
+
+        if self.embeddings_enabled.isChecked():
+            self.config.embedding_provider = EmbeddingProviderConfig(
+                base_url=embed_url,
+                api_key=self.embed_api_key.text(),
+                model=self.embed_model.text().strip() or DEFAULT_EMBEDDING_MODEL,
+                dimensions=self.embed_dimensions.value(),
+                query_prefix=self.query_prefix.text(),
+                document_prefix=self.document_prefix.text(),
+            )
+        else:
+            self.config.embedding_provider = None
+        self.config.lore_retrieval_k = self.retrieval_k.value()
+        self.config.lore_similarity_threshold = self.similarity.value()
+        self.config.lore_query_turns = self.query_turns.value()
+        self.config.lore_token_cap = self.lore_cap.value()
+        self.config.lore_selector = self.lore_selector.currentData()
+        self.config.lore_model = self.lore_model.text().strip()
+
+        if self.story is not None:
+            stop = [item.strip() for item in self.stop.text().split(",") if item.strip()]
+            self.story.defaults.generation = GenerationParams(
+                temperature=_optional_double(self.temperature.value()),
+                top_p=_optional_double(self.top_p.value()),
+                max_tokens=_optional_int(self.max_tokens.value()),
+                presence_penalty=_optional_double(self.presence_penalty.value()),
+                frequency_penalty=_optional_double(self.frequency_penalty.value()),
+                seed=_optional_int(self.seed.value()),
+                stop=stop,
+                reasoning=self.story.defaults.generation.reasoning.model_copy(
+                    update={
+                        "enabled": self.reasoning_enabled.isChecked(),
+                        "effort": self.reasoning_effort.currentText(),
+                    }
+                ),
+            )
+            self.story.defaults.context_token_budget = self.budget.value()
+            self.story.defaults.summarization_model = (
+                self.summarization_model.text().strip() or None
+            )
+            if provider.model and provider.model != self._model_at_open:
+                current = self.story.defaults.main_model or ""
+                refusal = move_refusal(current, provider.model) if self.story.chat else None
+                if refusal:
+                    # A TEE chat never moves to a model that can't be attested
+                    # (StorySession.check_chat_model); the endpoint's default
+                    # still changes, for everything else.
+                    QMessageBox.information(
+                        self,
+                        "Kept to TEE models",
+                        f"This chat stays on {current}: {refusal} {provider.model} is the "
+                        "default for other stories.",
+                    )
+                else:
+                    self.story.defaults.main_model = provider.model
+        # App-wide, whether or not a story is open.
+        self.config.auto_archive = self.auto_archive.isChecked()
+        self.config.story_ledger = self.story_ledger.isChecked()
+        self.config.archive_chunk_turns = self.chunk_turns.value()
+        self.config.archive_target_ratio = self.archive_target.value() / 100
+        self.config.summary_target_words = self.summary_words.value()
+
+        self.accept()

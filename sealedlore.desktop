@@ -1,0 +1,15 @@
+[Desktop Entry]
+# Template. Exec must be an absolute path unless sealedlore-gui is on the
+# session PATH: GIO refuses to load a desktop entry whose Exec program it
+# cannot find, and the desktop portal then reports "App info not found".
+# See the manual ("Desktop entry") for the install command that substitutes it.
+Type=Application
+Name=SealedLore
+GenericName=Collaborative Fiction Roleplay
+Comment=Co-write fiction with an LLM from inside the story
+Exec=sealedlore-gui
+Terminal=false
+Categories=Office;WordProcessor;
+Keywords=writing;fiction;roleplay;llm;
+StartupWMClass=SealedLore
+Icon=sealedlore
