@@ -102,6 +102,7 @@ from sealedlore.engine.retrieval import (
     content_hash,
     cosine_scores,
     embedding_text,
+    keyword_window,
     lore_layout,
     query_text,
     select_lore,
@@ -828,7 +829,9 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
                     return self._jev_select(entries, turn, history, query)
                 except ProviderError as exc:
                     note = f"Jev failed: {exc}"
-        report = self._similarity(entries, query, allow_network=allow_network)
+        keywords_over, reach = keyword_window(entries, turn.user_text, history)
+        report = self._similarity(entries, query, keywords_over, allow_network=allow_network)
+        report = replace(report, keyword_reach=reach)
         return replace(report, selector_note=note) if note else report
 
     def _jev_select(
@@ -1004,12 +1007,21 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
         return names + list(scene.present_others)
 
     def _similarity(
-        self, entries: Sequence[LoreEntry], query: str, *, allow_network: bool
+        self,
+        entries: Sequence[LoreEntry],
+        query: str,
+        keyword_text: str,
+        *,
+        allow_network: bool,
     ) -> RetrievalReport:
+        """Embeddings over the recent prose, keywords over the author's turn
+        (or the last few exchanges when it names nothing: `keyword_window`)."""
+
         def keywords_only(reason: str | None) -> RetrievalReport:
             return select_lore(
                 entries,
                 query=query,
+                keyword_text=keyword_text,
                 k=self.config.lore_retrieval_k,
                 threshold=self.config.lore_similarity_threshold,
                 token_cap=self.config.lore_token_cap,
@@ -1051,6 +1063,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
         return select_lore(
             entries,
             query=query,
+            keyword_text=keyword_text,
             scores=scores,
             k=self.config.lore_retrieval_k,
             threshold=self.config.lore_similarity_threshold,

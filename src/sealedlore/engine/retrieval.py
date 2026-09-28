@@ -37,6 +37,10 @@ REASON_ORDER: dict[Reason, int] = {"always_on": 0, "picked": 1, "semantic": 2, "
 # threshold is falling, not so many that the list becomes the whole lorebook.
 NEAR_MISS_LIMIT = 5
 
+# How many exchanges (the author's turn and the passage answering it) the
+# keyword match reaches back when the author's own turn names no entry.
+KEYWORD_LOOKBACK = 3
+
 REASON_LABELS: dict[Reason, str] = {
     "always_on": "always on",
     "picked": "picked by the lore model",
@@ -74,6 +78,9 @@ class RetrievalReport:
     fallback_reason: str | None = None
     query_text: str = ""
     tokens: int = 0
+    # How far back the keywords were matched: 0 is the author's turn alone,
+    # N the turn and the last N exchanges (`keyword_window`).
+    keyword_reach: int = 0
     # How the lorebook reached the prompt (`lore_layout`): "whole" means every
     # entry is standing in the system block and nothing was selected.
     mode: LoreMode = "select"
@@ -151,6 +158,33 @@ def keyword_matches(text: str, entry: LoreEntry) -> bool:
     return False
 
 
+def keyword_window(
+    entries: Sequence[LoreEntry],
+    turn_text: str,
+    history: Sequence[Node],
+    *,
+    exchanges: int = KEYWORD_LOOKBACK,
+) -> tuple[str, int]:
+    """The text keywords are matched over, and how many exchanges back it reaches.
+
+    The author's turn, while it names an entry. When it names none, the last
+    exchange joins it, then two, then three: a turn that just carries the
+    scene on still gets what the scene is about, without the recent prose
+    naming half the lorebook on every turn.
+    """
+    live = [entry for entry in entries if entry.enabled]
+    if not live or any(keyword_matches(turn_text, entry) for entry in live):
+        return turn_text, 0
+    prose = [node.content for node in history if node.content.strip()]
+    for reach in range(1, exchanges + 1):
+        text = "\n\n".join([*prose[-2 * reach :], turn_text])
+        if any(keyword_matches(text, entry) for entry in live):
+            return text, reach
+        if 2 * reach >= len(prose):
+            break
+    return turn_text, 0
+
+
 @dataclass(frozen=True)
 class LoreLayout:
     """Where each entry goes: standing in the cached system block, or chosen per turn."""
@@ -200,6 +234,7 @@ def select_lore(
     entries: Iterable[LoreEntry],
     *,
     query: str = "",
+    keyword_text: str | None = None,
     scores: dict[str, float] | None = None,
     k: int = 3,
     threshold: float = 0.35,
@@ -212,6 +247,14 @@ def select_lore(
 
     `scores` maps entry id to cosine similarity; leave it out for the keyword
     path. Disabled entries never appear by any route.
+
+    Keywords are matched over `keyword_text` (the session passes the author's
+    turn), or over `query` when it is None. Matched over three messages of
+    the story's own prose, they fired on ~39 of 100 entries a turn, because
+    the names they key on are the story's everyday words, and the cap then
+    kept them by title. Live on Sonnet 4.6 (16 turns, 3 takes, 100 entries),
+    the author's turn alone with hits ranked by similarity was preferred by
+    all three judges (30-17, 28-20, 23-22) with fewer contradictions on each.
     """
     live = [entry for entry in entries if entry.enabled]
     scores = scores or {}
@@ -225,6 +268,7 @@ def select_lore(
         )
         semantic = {entry.id: score for entry, score in ranked[: max(k, 0)] if score >= threshold}
 
+    matched_over = query if keyword_text is None else keyword_text
     chosen: dict[str, Injection] = {}
     for entry in live:
         reason: Reason | None = None
@@ -235,8 +279,10 @@ def select_lore(
             reason = "always_on"
         elif entry.id in semantic:
             reason, score = "semantic", semantic[entry.id]
-        elif query and keyword_matches(query, entry):
-            reason = "keyword"
+        elif matched_over and keyword_matches(matched_over, entry):
+            # Its similarity, when there is one, orders it under the cap:
+            # by title, the cap kept whichever entries sorted first.
+            reason, score = "keyword", scores.get(entry.id)
         if reason is None:
             continue
         chosen[entry.id] = Injection(

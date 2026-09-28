@@ -639,6 +639,36 @@ def test_with_no_endpoint_configured_retrieval_is_keywords_only(session: StorySe
     assert [e.title for e in report.entries] == ["Calder ironwork"]
 
 
+def test_a_turn_that_names_an_entry_uses_its_own_keywords_only(session: StorySession):
+    """The story's own prose names its everyday things every turn."""
+    selecting(session)
+    session.provider = MockChatProvider(["The lock held all night.", "Morning came."])
+
+    list(session.send(turn("I try the door.")))
+    list(session.send(turn("I ask about the treaty.")))
+
+    assert [e.title for e in session.last_retrieval.entries] == ["The Sundering Accord"]
+    assert session.last_retrieval.keyword_reach == 0
+
+
+def test_a_turn_that_names_nothing_reaches_back_an_exchange_at_a_time(session: StorySession):
+    selecting(session)
+    session.provider = MockChatProvider(
+        ["The lock held all night.", "Morning came.", "Birds.", "Rain.", "Wind."]
+    )
+
+    list(session.send(turn("I try the door.")))  # answered: the lock held
+    for reach, text in enumerate(("I wait.", "I sit.", "I stand."), 1):
+        list(session.send(turn(text)))
+        assert [e.title for e in session.last_retrieval.entries] == ["Calder ironwork"]
+        assert session.last_retrieval.keyword_reach == reach
+
+    # Three exchanges back is as far as it goes.
+    list(session.send(turn("I wait again.")))
+    assert session.last_retrieval.entries == ()
+    assert session.last_retrieval.keyword_reach == 0
+
+
 def test_assembling_for_the_inspector_never_embeds(session: StorySession):
     """The inspector runs on the GUI thread; it must not block on the network."""
     backend = with_embeddings(session)

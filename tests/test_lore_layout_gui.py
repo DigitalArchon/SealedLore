@@ -75,3 +75,14 @@ def test_the_panel_says_who_picked(app):
     panel.show_retrieval(report)
     assert "picked after the last passage" in panel.status.text()
     assert panel.injected.item(0).text() == "The Accord — picked by the lore model"
+
+
+def test_the_panel_says_how_far_back_the_keywords_reached(app):
+    from sealedlore.engine.retrieval import Injection
+
+    entry = LoreEntry(title="The Accord", content="y")
+    panel = LorePanel()
+    panel.show_retrieval(
+        RetrievalReport(injected=(Injection(entry, "keyword", 1),), tokens=1, keyword_reach=2)
+    )
+    assert "keywords from the last 2 exchanges" in panel.status.text()

@@ -222,6 +222,10 @@ class LorePanel(QWidget):
         fell_back = (
             f"Similarity this turn ({report.selector_note}). " if report.selector_note else ""
         )
+        # Your turn named no entry, so the keywords reached back this far.
+        reach = report.keyword_reach
+        if reach:
+            count += f" · keywords from the last {reach} exchange{'s' if reach > 1 else ''}"
         if report.fallback_reason:
             self.status.setText(
                 f"{fell_back}Keyword matching only — embeddings unavailable "

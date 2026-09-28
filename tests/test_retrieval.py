@@ -9,6 +9,7 @@ from sealedlore.engine.retrieval import (
     cosine_scores,
     embedding_text,
     keyword_matches,
+    keyword_window,
     query_text,
     render_entry,
     select_lore,
@@ -250,3 +251,54 @@ def test_the_hash_covers_title_and_content():
 
 def test_whitespace_alone_does_not_invalidate_a_vector():
     assert content_hash("the accord\n") == content_hash("  the accord  ")
+
+
+def test_keywords_match_the_keyword_text_not_the_whole_query():
+    """The session passes the author's turn: keywords over the recent prose
+    fired on a third of a 100-entry lorebook every turn."""
+    entries = [entry("Bridge", keywords=["bridge"]), entry("Accord", keywords=["accord"])]
+
+    report = select_lore(
+        entries,
+        query="Earlier passage about the bridge.\n\nI ask about the accord.",
+        keyword_text="I ask about the accord.",
+        token_cap=1000,
+        count_tokens=words,
+    )
+
+    assert [i.entry.title for i in report.injected] == ["Accord"]
+
+
+def test_keyword_hits_are_kept_by_similarity_under_the_cap():
+    """By title, the cap kept whichever keyword hits sorted first."""
+    entries = [
+        entry("Aardvark", "one two three", keywords=["aardvark"]),
+        entry("Zeppelin", "four five six", keywords=["zeppelin"]),
+    ]
+    scores = {"lore-aardvark": 0.2, "lore-zeppelin": 0.4}
+
+    report = select_lore(
+        entries,
+        keyword_text="an aardvark on a zeppelin",
+        scores=scores,
+        k=0,
+        token_cap=6,
+        count_tokens=words,
+    )
+
+    assert [i.entry.title for i in report.injected] == ["Zeppelin"]
+    assert [i.entry.title for i in report.dropped] == ["Aardvark"]
+    assert report.injected[0].describe() == "keyword match"
+
+
+def test_the_keyword_window_is_the_turn_while_the_turn_names_something():
+    history = [
+        Node(id="u1", kind="user", speaker_id="a", content="I try the bridge."),
+        Node(id="a1", kind="assistant", speaker_id="n", content="It holds."),
+    ]
+    entries = [entry("Bridge", keywords=["bridge"]), entry("Accord", keywords=["accord"])]
+
+    assert keyword_window(entries, "The accord.", history) == ("The accord.", 0)
+    text, reach = keyword_window(entries, "I wait.", history)
+    assert reach == 1 and "bridge" in text and text.endswith("I wait.")
+    assert keyword_window(entries, "I wait.", history, exchanges=0) == ("I wait.", 0)

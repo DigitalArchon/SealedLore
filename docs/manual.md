@@ -900,6 +900,13 @@ tuning: the Lore tab shows the score on every hit and on the near-misses that
 fell just under it. With embeddings off or the endpoint failing, retrieval
 falls back to keyword matching and the status bar says so.
 
+Keywords are matched against your own turn. When your turn names no entry,
+the last exchange (your previous turn and the passage that answered it) is
+searched too, then the last two, then the last three; the Lore tab says how
+far back they reached. Your turn is the better guide: the story's own prose
+names its everyday people and places on every turn, and matching it all
+brought in far more than the scene needed.
+
 ## Pictures
 
 **Story → Generate image…** (Ctrl+Shift+I), the **Image…** button beside the
