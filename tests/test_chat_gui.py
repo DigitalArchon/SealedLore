@@ -500,6 +500,14 @@ def test_close_story_goes_back_to_the_start_page(app, window, tmp_path):
     assert window.session is None
     assert not window.close_story_action.isEnabled()
     assert listing(tmp_path) == before, "closing a story changed its files"
+    # Nothing of the story is left showing: its branch or who was played.
+    assert window.branch_bar.button.text().startswith("—")
+    assert not window.branch_bar.map_button.isEnabled()
+    assert window.composer.held.count() == 0 and window.composer.speaker.count() == 0
+
+    # Opened again, you speak as the character you play, not as the narrator.
+    window.open_story(window.stories.list.item(0).data(0x0100))
+    assert window.composer.speaker.currentData() == window.composer.held.currentData()
 
 
 def test_close_story_asks_before_a_memory_chat_goes(app, window, monkeypatch, tmp_path):

@@ -407,6 +407,14 @@ class Composer(QWidget):
 
     # --- population -------------------------------------------------------
 
+    def clear_cast(self) -> None:
+        """No story open: nobody to play or speak as. Emptied rather than set
+        to Nobody / Narration, which the next story would keep as a choice."""
+        for combo in (self.held, self.speaker):
+            combo.blockSignals(True)
+            combo.clear()
+            combo.blockSignals(False)
+
     def refresh(
         self,
         cast: Sequence[Character],

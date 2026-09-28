@@ -924,6 +924,7 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
         self.status_strip.set_budget(None)
         self.status_strip.set_lore(None)
         self.cast_panel.set_cast([], [], [])
+        self.composer.clear_cast()
         self.scene_panel.set_scene(SceneState(), [])
         self._refresh_plot_panel()
         self.lore_panel.set_entries([])
@@ -1246,6 +1247,7 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
     def reload_transcript(self) -> None:
         if self.session is None:
             self.transcript.clear()
+            self.refresh_branch_bar()
             missing = [] if self.use_mock else setup_missing(self.config)
             if missing:
                 # Nothing but a backup can be used before this is set up.
