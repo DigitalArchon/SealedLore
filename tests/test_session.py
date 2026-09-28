@@ -20,7 +20,7 @@ from sealedlore.models.character import Character
 from sealedlore.models.config import Config, EmbeddingProviderConfig, ProviderConfig
 from sealedlore.models.generation import GenerationParams
 from sealedlore.models.lore import LoreEntry
-from sealedlore.models.node import Node, Usage
+from sealedlore.models.node import DIRECTOR_SPEAKER_ID, Node, Usage
 from sealedlore.providers.base import ProviderError, TextDelta
 from sealedlore.providers.mock import MockChatProvider, MockEmbeddings
 from sealedlore.storage.repository import (
@@ -667,6 +667,63 @@ def test_a_turn_that_names_nothing_reaches_back_an_exchange_at_a_time(session: S
     list(session.send(turn("I wait again.")))
     assert session.last_retrieval.entries == ()
     assert session.last_retrieval.keyword_reach == 0
+
+
+def planned_entry() -> LoreEntry:
+    return LoreEntry(
+        id="lore-envoy",
+        title="The Harrow envoy",
+        content="An envoy from Harrow arrives in the spring to reopen the Accord.",
+        keywords=["envoy"],
+        until_mentioned=True,
+    )
+
+
+def test_an_entry_held_until_mentioned_reaches_no_prompt_until_the_author_names_it(
+    session: StorySession,
+):
+    session.bundle.lore = [*stock_lore(), planned_entry()]
+    session.provider = MockChatProvider(
+        ["An envoy is expected, the guards say.", "The road is empty.", "Later."]
+    )
+
+    list(session.send(turn("I watch the road.")))
+    # The storyteller naming it is not the author deciding it has come.
+    list(session.send(turn("I keep watching.")))
+    sent = "\n".join(m.text for m in session.provider.requests[-1].messages)
+    assert "Harrow" not in sent
+    assert session.held_back_ids() == {"lore-envoy"}
+
+    director = TurnRequest(speaker_id=DIRECTOR_SPEAKER_ID, user_text="The envoy rides in.")
+    list(session.send(director))
+    assert "An envoy from Harrow" in session.last_prompt.section("system.lore").text
+    assert session.held_back_ids() == set()
+    # Earlier on the path, before the mention, it is still held.
+    assert session.held_back_ids(session.path()[:4]) == {"lore-envoy"}
+
+
+def test_a_held_back_entry_is_not_embedded_until_it_is_named(session: StorySession):
+    backend = with_embeddings(session)
+    session.bundle.lore.append(planned_entry())
+
+    list(session.send(turn("I watch the road.")))
+    embedded = [text for batch, as_query in backend.calls if not as_query for text in batch]
+    assert not any("Harrow" in text for text in embedded)
+
+    list(session.send(turn("Is that the envoy?")))
+    embedded = [text for batch, as_query in backend.calls if not as_query for text in batch]
+    assert any("Harrow" in text for text in embedded)
+
+
+def test_the_title_counts_as_a_mention_and_a_private_message_does_not(session: StorySession):
+    session.bundle.lore = [planned_entry()]
+    session.provider = MockChatProvider(["They wait.", "They wait."])
+
+    list(session.send(turn("Is the Harrow envoy coming?")))
+    assert session.held_back_ids() == set()
+
+    session.path()[0].meta.private_span = "span-1"
+    assert session.held_back_ids() == {"lore-envoy"}
 
 
 def test_assembling_for_the_inspector_never_embeds(session: StorySession):

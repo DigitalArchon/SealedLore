@@ -907,6 +907,27 @@ far back they reached. Your turn is the better guide: the story's own prose
 names its everyday people and places on every turn, and matching it all
 brought in far more than the scene needed.
 
+### Lore that hasn't happened yet
+
+The storyteller takes every entry it is sent as already true. An entry about
+something still to come (an arrival planned for later, a secret that comes
+out near the end, an event you have in mind) tends to happen early. Leave
+such things out of the lorebook, write them as the plan they are ("Planned:
+…"), or tick **Hold back until I mention it** on the entry. A held-back entry
+reaches no model until one of your own turns or Directions names it, by its
+title or one of its keywords; from then on it is ordinary lore. The Lore tab
+marks it "held back" or "mentioned".
+
+- It is decided per branch: on a branch that starts before your mention, the
+  entry is held back again.
+- The storyteller naming it doesn't count, and neither does a message in a
+  private scene.
+- Revealing a small lorebook's entry changes the part of the prompt that is
+  cached, so that one turn costs a fresh cache write.
+- A story made from a premise may hold back entries of its own, and the
+  settings review can suggest holding one back when a passage brings it in
+  too early.
+
 ## Pictures
 
 **Story → Generate image…** (Ctrl+Shift+I), the **Image…** button beside the

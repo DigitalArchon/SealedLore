@@ -2982,6 +2982,8 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
             session.story.scene, passage=len(session.path()), can_undo=session.scene_changed_here()
         )
         self.scene_panel.show_age(session.scene_age(), kept=self.config.scene_reads == "every_turn")
+        # Held-back lore follows the leaf too: a mention is on one branch only.
+        self.lore_panel.set_held_back(session.held_back_ids())
         self._refresh_plot_panel()
 
     def _refresh_plot_panel(self) -> None:
@@ -3176,6 +3178,7 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
         self.session.save()
         # Vectors are keyed by content hash, so an edited entry re-embeds
         # itself on the next turn; nothing to do here but persist.
+        self.lore_panel.set_held_back(self.session.held_back_ids())
         self._reassemble_inspector()
 
     def reembed_lore(self) -> None:

@@ -860,6 +860,33 @@ def test_a_disabled_lore_entry_can_be_turned_back_on(bundle: StoryBundle):
     assert bundle.lore[0].enabled and bundle.lore[0].embedding_hash == "h"
 
 
+def test_the_review_can_hold_an_entry_back_until_it_is_mentioned(bundle: StoryBundle):
+    apply_change(
+        bundle, change("lore_edit", target="The Keep", field="until_mentioned", value=True)
+    )
+    assert bundle.lore[0].until_mentioned
+    apply_change(
+        bundle,
+        change("lore_add", value={"title": "Bells", "content": "Ring.", "until_mentioned": True}),
+    )
+    assert bundle.lore[-1].until_mentioned
+    with pytest.raises(ValueError, match="true or false"):
+        apply_change(
+            bundle, change("lore_edit", target="The Keep", field="until_mentioned", value="yes")
+        )
+
+
+def test_a_draft_can_hold_back_what_has_not_happened_yet():
+    draft = json.loads(json.dumps(DRAFT))
+    draft["lore"].append(
+        {"title": "The envoy", "content": "Arrives in spring.", "until_mentioned": True}
+    )
+    scenario, _ = parse_generated(json.dumps(draft))
+    held = {entry.title: entry.until_mentioned for entry in scenario.lore}
+    assert held["The envoy"] is True
+    assert not any(v for title, v in held.items() if title != "The envoy")
+
+
 def test_a_new_card_can_be_the_authors_alone_and_a_supporting_one_drops_skills(
     bundle: StoryBundle,
 ):

@@ -8,6 +8,7 @@ from sealedlore.engine.retrieval import (
     content_hash,
     cosine_scores,
     embedding_text,
+    held_back,
     keyword_matches,
     keyword_window,
     query_text,
@@ -302,3 +303,13 @@ def test_the_keyword_window_is_the_turn_while_the_turn_names_something():
     text, reach = keyword_window(entries, "I wait.", history)
     assert reach == 1 and "bridge" in text and text.endswith("I wait.")
     assert keyword_window(entries, "I wait.", history, exchanges=0) == ("I wait.", 0)
+
+
+def test_held_back_counts_only_the_authors_messages():
+    planned = entry("The Harrow envoy", keywords=["envoy"], until_mentioned=True)
+    storyteller = Node(id="a1", kind="assistant", speaker_id="n", content="The envoy comes.")
+    author = Node(id="u1", kind="user", speaker_id="a", content="Where is the envoy?")
+
+    assert held_back([planned], [storyteller]) == {"lore-the-harrow-envoy"}
+    assert held_back([planned], [storyteller, author]) == set()
+    assert held_back([entry("Plain")], []) == set()

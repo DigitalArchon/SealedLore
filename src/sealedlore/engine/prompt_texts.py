@@ -2528,7 +2528,12 @@ SealedLore's settings, and what each is for:
   artefacts, history, customs. Each entry is found by its relevance to the
   current scene, so keep each to one subject, 40 to 150 words, with 3 to 6
   keywords the story would use when it matters. 3 to 10 entries. Nothing that
-  must always hold: that belongs in "world".
+  must always hold: that belongs in "world". The storyteller takes every
+  entry it is given as already true, so what hasn't happened when the story
+  opens (an arrival planned for later, a secret still to come out, an event
+  to come) goes nowhere as fact: leave it out, or write it as the plan it is
+  and set "until_mentioned" true, which keeps the entry from the storyteller
+  until the author's own turn names it.
 - "cast": the characters the author may play and the few central characters
   the story turns on. Every cast sheet is sent on every turn, so 2 to 6 of
   them. "playable" is true for anyone the author might want to play.
@@ -2580,7 +2585,7 @@ Reply with one JSON object in exactly this shape, and nothing else:
   "world": "...",
   "cast": [ <character> ],
   "supporting": [ <character> ],
-  "lore": [ {"title": "...", "content": "...", "keywords": ["..."]} ],
+  "lore": [ {"title": "...", "content": "...", "keywords": ["..."], "until_mentioned": false} ],
   "play_as": "a cast member's name",
   "opening": "...",
   "starting_scene": {
@@ -2736,9 +2741,15 @@ What you can change. Each change is one setting:
   supporting cards ride along in the turns after the story names them
   ("app_settings"."supporting_recall_turns"), summary and voice only.
 - kind "lore_add": the value is {"title": ..., "content": ..., "keywords": [...],
-  "always_on": false}.
+  "always_on": false, "until_mentioned": false}.
 - kind "lore_edit": "target" is the entry's title; field one of {lore_fields}.
   "enabled" false turns an entry off, true turns one back on.
+  "until_mentioned" true keeps an entry from the storyteller until the
+  author's own turn or Direction names it (its title or a keyword). The
+  storyteller takes every entry it is sent as already true, so when a passage
+  brings in early something an entry describes as still to come (an arrival,
+  a revelation, an event), propose setting it on that entry rather than a
+  note.
 - kind "lore_disable": "target" is the entry's title.
 - kind "generation": field one of {generation_fields}.
   The value is a number, true/false for "reasoning", one of {reasoning_efforts} for

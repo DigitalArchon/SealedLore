@@ -167,7 +167,7 @@ CHARACTER_FIELDS = (
     "playable",
     "author_only",
 )
-LORE_FIELDS = ("title", "content", "keywords", "always_on", "enabled")
+LORE_FIELDS = ("title", "content", "keywords", "always_on", "enabled", "until_mentioned")
 # The text fields a change replaces whole, checked for silent loss.
 WHOLE_TEXT_FIELDS = {
     "world": (None,),
@@ -453,6 +453,7 @@ def parse_generated(text: str) -> tuple[Scenario, list[str]]:
                     title=title,
                     content=content,
                     keywords=_strings(item.get("keywords"), commas=True),
+                    until_mentioned=item.get("until_mentioned") is True,
                 )
             )
 
@@ -665,6 +666,7 @@ def settings_view(
                 "keywords": entry.keywords,
                 "always_on": entry.always_on,
                 "enabled": entry.enabled,
+                "until_mentioned": entry.until_mentioned,
             }
             for entry in bundle.lore
             if entry.id not in hidden_ids
@@ -1105,6 +1107,11 @@ def _apply_lore_edit(entry: LoreEntry, field: str | None, value: object) -> None
             raise ValueError("enabled must be true or false")
         entry.enabled = value
         return
+    elif field == "until_mentioned":
+        if not isinstance(value, bool):
+            raise ValueError("until_mentioned must be true or false")
+        entry.until_mentioned = value
+        return
     else:
         raise ValueError(f"“{field}” isn't a lore setting")
     # Changed text means a changed vector.
@@ -1304,6 +1311,7 @@ def apply_change(
                 content=_required_text(value.get("content"), "an entry"),
                 keywords=_strings(value.get("keywords"), commas=True),
                 always_on=value.get("always_on") is True,
+                until_mentioned=value.get("until_mentioned") is True,
             )
         )
     elif kind == "lore_edit":
@@ -1348,6 +1356,7 @@ _FIELD_LABELS = {
     "world_activity": "how much the world does on its own",
     "always_on": "always on",
     "enabled": "on",
+    "until_mentioned": "held back until you mention it",
     "playable": "available to play",
     "author_only": "never voiced by the storyteller",
     "context_token_budget": "context budget",

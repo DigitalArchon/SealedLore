@@ -158,6 +158,27 @@ def keyword_matches(text: str, entry: LoreEntry) -> bool:
     return False
 
 
+def mentions_entry(text: str, entry: LoreEntry) -> bool:
+    """Whether a text names an entry: one of its keywords or its title, whole words."""
+    if keyword_matches(text, entry):
+        return True
+    title = entry.title.strip().lower()
+    return bool(title) and re.search(rf"(?<!\w){re.escape(title)}(?!\w)", text.lower()) is not None
+
+
+def held_back(entries: Iterable[LoreEntry], nodes: Sequence[Node]) -> set[str]:
+    """Entries kept back until the author names them, not yet named on this path.
+
+    Only the author's own messages count (a turn, a Direction or Narration):
+    the storyteller naming something isn't the author deciding it has come.
+    """
+    waiting = [entry for entry in entries if entry.until_mentioned]
+    if not waiting:
+        return set()
+    said = [node.content for node in nodes if node.kind == "user" and node.content.strip()]
+    return {entry.id for entry in waiting if not any(mentions_entry(t, entry) for t in said)}
+
+
 def keyword_window(
     entries: Sequence[LoreEntry],
     turn_text: str,

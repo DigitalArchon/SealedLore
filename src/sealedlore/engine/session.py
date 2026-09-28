@@ -1091,8 +1091,11 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
 
         pending: list[LoreEntry] = []
         hashes: dict[str, str] = {}
+        # A held-back entry reaches no model, the embeddings endpoint's
+        # included; it is embedded on the first turn after it is named.
+        held = self.held_back_ids()
         for entry in self.bundle.lore:
-            if not entry.enabled:
+            if not entry.enabled or entry.id in held:
                 continue
             digest = content_hash(embedding_text(entry))
             hashes[entry.id] = digest

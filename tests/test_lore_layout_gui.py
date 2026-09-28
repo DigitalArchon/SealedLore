@@ -77,6 +77,20 @@ def test_the_panel_says_who_picked(app):
     assert panel.injected.item(0).text() == "The Accord — picked by the lore model"
 
 
+def test_an_entry_can_be_held_back_until_mentioned_and_says_whether_it_is(app):
+    planned = LoreEntry(id="envoy", title="The envoy", content="Arrives in spring.")
+    panel = LorePanel()
+    panel.set_entries([planned])
+
+    panel.until_mentioned.setChecked(True)
+    assert planned.until_mentioned
+
+    panel.set_held_back({"envoy"})
+    assert panel.list.item(0).text() == "The envoy  (held back)"
+    panel.set_held_back(set())
+    assert panel.list.item(0).text() == "The envoy  (mentioned)"
+
+
 def test_the_panel_says_how_far_back_the_keywords_reached(app):
     from sealedlore.engine.retrieval import Injection
 

@@ -16,6 +16,10 @@ class LoreEntry(BaseModel):
     always_on: bool = False
     priority: int = 0
     enabled: bool = True
+    # Kept from every model until the author's own turn or Direction names it
+    # (its title or a keyword) on the path being played: for what hasn't
+    # happened yet, which the storyteller otherwise treats as already true.
+    until_mentioned: bool = False
     embedding_hash: str | None = None
     # Pictures of the thing (a ship, a place) sent with an image prompt.
     reference_images: list[ImageRef] = Field(default_factory=list)

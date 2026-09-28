@@ -40,6 +40,7 @@ class LorePanel(QWidget):
         self._pictures: StoryPictures = pictures or (lambda: None)
         self._entries: list[LoreEntry] = []
         self._hidden: set[str] = set()
+        self._held_back: set[str] = set()
         self._current: LoreEntry | None = None
         self._loading = False
 
@@ -83,6 +84,12 @@ class LorePanel(QWidget):
         self.keywords.setPlaceholderText("comma-separated; matched as whole words")
         self.always_on = QCheckBox("Always include")
         self.enabled = QCheckBox("Enabled")
+        self.until_mentioned = QCheckBox("Hold back until I mention it")
+        self.until_mentioned.setToolTip(
+            "For what hasn't happened yet. No model sees this entry until one of your own "
+            "turns or Directions names it (its title or a keyword) on the branch you're "
+            "playing. The storyteller naming it doesn't count, nor does a private scene."
+        )
         self.priority = QSpinBox()
         self.priority.setRange(-100, 100)
         self.priority.setToolTip("Higher priority survives the lore token cap first")
@@ -94,6 +101,7 @@ class LorePanel(QWidget):
         self.keywords.textChanged.connect(self._apply_edits)
         self.always_on.toggled.connect(self._apply_edits)
         self.enabled.toggled.connect(self._apply_edits)
+        self.until_mentioned.toggled.connect(self._apply_edits)
         self.priority.valueChanged.connect(self._apply_edits)
 
         form_host = QWidget()
@@ -105,6 +113,7 @@ class LorePanel(QWidget):
         form.addRow("Priority", self.priority)
         form.addRow(self.always_on)
         form.addRow(self.enabled)
+        form.addRow(self.until_mentioned)
         # Full width, under its label, as on the Cast page.
         form.addRow(QLabel("Pictures"))
         form.addRow(self.pictures)
@@ -173,12 +182,27 @@ class LorePanel(QWidget):
         else:
             self._on_selection_changed(self.list.currentItem(), None)
 
+    def set_held_back(self, ids: set[str]) -> None:
+        """Which "until mentioned" entries you haven't named yet on this branch:
+        only the labels change, so an entry being edited is left alone."""
+        if ids == self._held_back:
+            return
+        self._held_back = set(ids)
+        by_id = {entry.id: entry for entry in self._entries}
+        for row in range(self.list.count()):
+            item = self.list.item(row)
+            entry = by_id.get(item.data(Qt.UserRole))
+            if entry is not None:
+                item.setText(self._label(entry))
+
     def _label(self, entry: LoreEntry) -> str:
         marks = []
         if entry.always_on:
             marks.append("always on")
         if not entry.enabled:
             marks.append("disabled")
+        elif entry.until_mentioned:
+            marks.append("held back" if entry.id in self._held_back else "mentioned")
         suffix = f"  ({', '.join(marks)})" if marks else ""
         return f"{entry.title or '(untitled)'}{suffix}"
 
@@ -265,6 +289,7 @@ class LorePanel(QWidget):
         self.priority.setValue(entry.priority)
         self.always_on.setChecked(entry.always_on)
         self.enabled.setChecked(entry.enabled)
+        self.until_mentioned.setChecked(entry.until_mentioned)
         self._loading = False
 
     def _apply_edits(self) -> None:
@@ -277,6 +302,7 @@ class LorePanel(QWidget):
         entry.priority = self.priority.value()
         entry.always_on = self.always_on.isChecked()
         entry.enabled = self.enabled.isChecked()
+        entry.until_mentioned = self.until_mentioned.isChecked()
 
         item = self.list.currentItem()
         if item is not None:

@@ -66,6 +66,7 @@ from sealedlore.engine.prompt import (
     TurnRequest,
     assemble_question,
 )
+from sealedlore.engine.retrieval import held_back
 from sealedlore.engine.rules import render_cast_sheet
 from sealedlore.engine.scene_state import (
     log_on_path,
@@ -196,8 +197,16 @@ class PlotRuntime:
         return [c for c in self.supporting if c.id not in hidden] if hidden else self.supporting
 
     def visible_lore(self) -> list[LoreEntry]:
-        hidden = self.hidden_ids()
+        hidden = self.hidden_ids() | self.held_back_ids()
         return [e for e in self.bundle.lore if e.id not in hidden] if hidden else self.bundle.lore
+
+    def held_back_ids(self, path: Sequence[Node] | None = None) -> set[str]:
+        """Lore marked "until mentioned" that the author hasn't named on this
+        path yet. Not the plot's, but kept from the models the same way.
+
+        Read from `path()`, so a mention inside a private scene reveals
+        nothing, there or after: that it was named would be scene text."""
+        return held_back(self.bundle.lore, self.path() if path is None else path)
 
     @property
     def plot_model(self) -> str:
