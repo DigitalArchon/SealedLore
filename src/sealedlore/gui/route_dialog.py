@@ -127,8 +127,10 @@ class RouteDialog(QDialog):
             "was slower and less accurate."
         )
         self.privacy_note = QLabel(
-            "Privacy is each host's own terms. Your NanoGPT account can require hosts that "
-            "keep nothing (its data retention setting), which NanoGPT applies to any route."
+            "Privacy is each host's own terms. Your NanoGPT account or API key can require "
+            "hosts that keep nothing (its data retention setting), and that wins over any "
+            "route: a host here that keeps prompts is then never used, and NanoGPT serves "
+            "the call elsewhere (the status bar shows ⚠ route not followed)."
         )
         self.privacy_note.setObjectName("hintLabel")
         self.privacy_note.setWordWrap(True)

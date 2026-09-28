@@ -142,7 +142,8 @@ def check_route(
             provider,
             False,
             "NanoGPT billed nothing, so it served the call on its own subscription routing "
-            "and not the route (the host may be down, or not serve this model now)",
+            "and not the route (the host may be down or not serve this model now, or keep "
+            "prompts while your key requires hosts that keep nothing)",
             cost,
         )
     if preferred is None or not (usage.prompt_tokens or usage.completion_tokens):
@@ -154,7 +155,8 @@ def check_route(
             provider,
             False,
             f"billed ${cost:.6f} where the preferred host would bill about ${expected:.6f}: "
-            "another host served it",
+            "another host served it (the preferred one may be busy or down, or keep prompts "
+            "while your key requires hosts that keep nothing)",
             cost,
         )
     return RouteCheck(model, provider, True, "billed at the preferred host's price", cost)

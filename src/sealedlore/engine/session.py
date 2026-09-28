@@ -110,6 +110,7 @@ from sealedlore.engine.routing import (
     HostPrice,
     RouteCheck,
     check_route,
+    describe_sent,
     role_in_use,
     routable,
     route_body,
@@ -588,6 +589,16 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
                 key = (model, json.dumps(body["provider"], sort_keys=True))
                 roles_by_key.setdefault(key, []).append(role)
         return [(at, check, roles_by_key.get(key, [])) for key, (at, check) in found]
+
+    def role_model(self, role: str) -> str:
+        """The model a role's calls go to, its fallbacks followed."""
+        return self._role_in_use(role)[1]
+
+    def route_text(self, role: str) -> str | None:
+        """The role's route as it is sent ("Fastest first word · FP8+"), or
+        None when its calls go on NanoGPT's own routing or can't be routed."""
+        body = self.route_for(role)
+        return describe_sent(body["provider"]) if body else None
 
     def _role_in_use(self, role: str) -> tuple[str, str]:
         """(the role whose model a call uses, that model): a blank role takes

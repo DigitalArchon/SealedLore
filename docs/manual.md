@@ -351,6 +351,12 @@ archiving, rebuilding summaries.
 
 - **Left dock**: the Stories list (right-click for Open folder, Duplicate and
   Delete).
+- **Above the transcript**, a line always says how the open story or chat is
+  set up: a story or a simple chat, saved on disk or **in memory only, not
+  saved**, its model and how private that is, the endpoint, the route, and a
+  private scene when one is open. Hover over it for the whole of it,
+  including, for a story, every other call's model and route. It can't be
+  changed there; it is only for reference.
 - **Above the transcript**, on the right: **Branch** names the branch you are
   reading; its menu switches to another, renames or deletes it, and **Map**
   shows every branch at once.

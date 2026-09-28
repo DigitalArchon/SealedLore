@@ -64,6 +64,7 @@ from sealedlore.gui.prompt_editor import PromptEditorDialog
 from sealedlore.gui.ref_images import load_plot_pictures
 from sealedlore.gui.review_dialog import ReviewRequestDialog, ReviewResultDialog
 from sealedlore.gui.scene_panel import ScenePanel
+from sealedlore.gui.session_line import SessionLine
 from sealedlore.gui.settings_dialog import SettingsDialog
 from sealedlore.gui.setup_dialog import SetupDialog
 from sealedlore.gui.speed_test import speed_tests
@@ -250,6 +251,9 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
         centre_layout = QVBoxLayout()
         centre_layout.setContentsMargins(0, 0, 0, 0)
         centre_layout.setSpacing(10)
+        # How the open story or chat is set up, always in view (read-only).
+        self.session_line = SessionLine()
+        centre_layout.addWidget(self.session_line)
         centre_layout.addWidget(self.staleness)
         centre_layout.addWidget(self.over_budget)
         self.view_toggle = ViewToggle()
@@ -2798,6 +2802,9 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
         return bool(path) and path[-1].meta.private_summary_of is None
 
     def _refresh_model_button(self) -> None:
+        # The line above the transcript says the same things, and more; an
+        # attestation finishing refreshes only this.
+        self.session_line.show_session(self.session, tee_state=self._tee_state)
         private = self._private_model_text()
         if private is not None:
             self.model_button.setText(private)
