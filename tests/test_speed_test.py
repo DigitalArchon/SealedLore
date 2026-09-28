@@ -119,6 +119,33 @@ def test_a_role_with_nothing_to_fall_back_to_is_left_out():
     assert [(t.model, t.roles) for t in targets] == [("a/model", ("Plot",))]
 
 
+def test_the_same_model_on_two_routes_is_two_targets():
+    """Story on the subscription, the scene on a fast route: the comparison
+    worth seeing. A blank role takes its fallback's model and its route."""
+    fast = {"provider": {"sort": "latency", "min_quantization": "fp8"}}
+    targets = plan_targets(
+        [
+            Role("Story", "z-ai/glm-5.3", MAIN),
+            Role("Summarisation", "", MAIN, "Story"),
+            Role("Scene", "z-ai/glm-5.3", MAIN, "Summarisation", fast, "Fastest first word"),
+            Role("Plot", "", MAIN, "Scene"),
+        ]
+    )
+    assert [(t.label, t.roles, t.route) for t in targets] == [
+        ("z-ai/glm-5.3", ("Story", "Summarisation"), {}),
+        ("z-ai/glm-5.3 · Fastest first word", ("Scene", "Plot"), fast),
+    ]
+
+
+def test_the_request_carries_its_route(estimator):
+    from sealedlore.providers.mock import MockChatProvider
+
+    provider = MockChatProvider(["A lamp over dark water, turning. " * 6], chunk_size=24)
+    route = {"provider": {"sort": "latency", "min_quantization": "fp8"}}
+    run_speed_test(provider, "z-ai/glm-5.3", estimator=estimator, route=route)
+    assert provider.payloads[-1]["provider"] == route["provider"]
+
+
 # --- what is measured ---------------------------------------------------------------
 
 

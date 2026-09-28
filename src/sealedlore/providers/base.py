@@ -9,7 +9,7 @@ is all the concurrency this app needs.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -76,6 +76,20 @@ class StreamCancelled(ProviderError):
 
 
 class ChatProvider(ABC):
+    # Told of every finished reply to a request that asked for a route
+    # (`extra_body["provider"]`, engine/routing.py): NanoGPT names no host in
+    # a reply, so the session reads its bill to say whether the route held.
+    route_watch: Callable[[ChatRequest, StreamCompleted], None] | None = None
+
+    def _report_route(self, request: ChatRequest, completed: StreamCompleted) -> None:
+        watch = self.route_watch
+        if watch is None or not request.extra_body.get("provider"):
+            return
+        try:
+            watch(request, completed)
+        except Exception:  # noqa: BLE001 - a report never costs the reply
+            pass
+
     @abstractmethod
     def build_payload(self, request: ChatRequest) -> dict[str, Any]:
         """The exact request body, for the context inspector and the API log."""

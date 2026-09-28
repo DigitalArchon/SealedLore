@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from sealedlore.models.private import PrivateKeep
 from sealedlore.models.prompt_edit import PromptEdit
+from sealedlore.models.route import ModelRoute
 
 DEFAULT_BASE_URL = "https://nano-gpt.com/api/v1"
 # The storyteller a new setup starts with (Settings → Models, and the CLI's
@@ -41,13 +42,16 @@ RECOMMENDED_MODELS: dict[str, str] = {
 }
 
 
+def on_nanogpt(base_url: str) -> bool:
+    """The endpoint is NanoGPT's (whose model ids and routes these are)."""
+    host = (urlparse(base_url.strip()).hostname or "").lower()
+    return host == RECOMMENDED_HOST or host.endswith("." + RECOMMENDED_HOST)
+
+
 def recommended_models(base_url: str) -> dict[str, str]:
     """The recommended model for each role on this endpoint: `Config` field
     name → model id. Empty for an endpoint whose ids we don't know."""
-    host = (urlparse(base_url.strip()).hostname or "").lower()
-    if host == RECOMMENDED_HOST or host.endswith("." + RECOMMENDED_HOST):
-        return dict(RECOMMENDED_MODELS)
-    return {}
+    return dict(RECOMMENDED_MODELS) if on_nanogpt(base_url) else {}
 
 
 CacheControlMode = Literal["auto", "on", "off"]
@@ -296,6 +300,9 @@ class Config(BaseModel):
     # cached prefix) and always shown to the author before anything is sent.
     image_model: str = "bytedance/seedream-v5.0-pro"
     image_prompt_model: str | None = None
+    # NanoGPT's host for each role's model (models/route.py), keyed by
+    # `ROUTE_ROLES`; missing means the subscription's routing.
+    model_routes: dict[str, ModelRoute] = Field(default_factory=dict)
     image_size: str = "16:9"
     image_count: int = Field(default=1, ge=1, le=4)
     # The endpoint's image listing (sizes, reference limits, prices), fetched

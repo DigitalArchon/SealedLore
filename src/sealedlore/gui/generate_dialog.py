@@ -7,6 +7,8 @@ in Setup for the author to read, and then offers to start it.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import (
     QComboBox,
@@ -45,9 +47,12 @@ class GenerateDialog(QDialog):
         browse: Browse | None = None,
         texts: PromptTexts = DEFAULT_TEXTS,
         parent: QWidget | None = None,
+        route_for: Callable[[str], dict] | None = None,
     ) -> None:
+        """`route_for`: the authoring route for the model drafting."""
         super().__init__(parent)
         self.setWindowTitle("New story from a premise")
+        self._route_for = route_for or (lambda _model: {})
         # The author's edits for every story: a draft has no story of its own yet.
         self.texts = texts
         self.setMinimumWidth(620)
@@ -154,13 +159,15 @@ class GenerateDialog(QDialog):
         if not premise.strip():
             self._show_progress("Write a premise first.")
             return
+        model = self.model_text() or self.default_model
         self.draft = StoryDraft(
             self.provider,
             premise,
-            self.model_text() or self.default_model,
+            model,
             person=self.person.currentData(),
             tense=self.tense.currentData(),
             texts=self.texts,
+            route=self._route_for(model),
         )
         self._received = 0
         self._failure = None

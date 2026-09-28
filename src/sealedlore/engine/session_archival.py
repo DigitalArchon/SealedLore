@@ -187,6 +187,8 @@ class ArchivalRuntime:
         cast = self.visible_cast()
         texts = self.texts
         model = self.summarization_model
+        # Read here: the thread below must not touch the session.
+        route = self.route_for("summarisation")
         on_path = list(self.split(history).summaries)
         previous_text = on_path[-1].content if on_path else None
         chapters = [
@@ -194,7 +196,9 @@ class ArchivalRuntime:
                 node_ids=[node.id for node in chunk],
                 fingerprint=_fingerprint(chunk),
                 summary=_Call(
-                    request=ChatRequest(model=model, messages=[], params=GenerationParams())
+                    request=ChatRequest(
+                        model=model, messages=[], params=GenerationParams(), extra_body=route
+                    )
                 ),
                 ledger=None,
             )
@@ -220,6 +224,7 @@ class ArchivalRuntime:
                         texts=texts,
                     ),
                     params=GenerationParams(),
+                    extra_body=route,
                 )
             )
         job = _ArchiveJob(chapters=chapters, scan=scan)
@@ -247,6 +252,7 @@ class ArchivalRuntime:
                             texts=texts,
                         ),
                         params=summary_params(model),
+                        extra_body=route,
                     )
                     worker = None
                     if use_ledger:
@@ -261,6 +267,7 @@ class ArchivalRuntime:
                                     texts=texts,
                                 ),
                                 params=GenerationParams(max_tokens=LEDGER_MAX_TOKENS),
+                                extra_body=route,
                             )
                         )
                         worker = threading.Thread(

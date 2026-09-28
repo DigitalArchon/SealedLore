@@ -475,6 +475,7 @@ class PrivateRuntime:
         build = build_chat_handoff_messages if chat else build_handoff_messages
         request = ChatRequest(
             model=self.model,
+            extra_body=self.route_for("story"),
             messages=build("\n\n".join(p for p in parts if p), words, texts=self.texts),
             params=GenerationParams(max_tokens=HANDOFF_MAX_TOKENS),
         )

@@ -19,6 +19,7 @@ from sealedlore.models.node import AgencyMode, NpcScope, ResponseStyle
 from sealedlore.models.plot import Plot
 from sealedlore.models.private import Attestation, PrivatePrompt, PrivateSpan
 from sealedlore.models.prompt_edit import PromptEdit
+from sealedlore.models.route import ModelRoute
 from sealedlore.models.scene import SceneLogEntry, SceneState
 
 NarrativePerson = Literal["first", "second", "third"]
@@ -76,6 +77,9 @@ class StoryDefaults(BaseModel):
     # the default. Existing stories keep what they were saved with.
     context_token_budget: int = 60_000
     main_model: str | None = None
+    # A simple chat's own route for its model, chosen with it (New chat);
+    # a story's roles take theirs from `Config.model_routes`.
+    main_route: ModelRoute | None = None
     summarization_model: str | None = None
     generation: GenerationParams = Field(default_factory=GenerationParams)
 

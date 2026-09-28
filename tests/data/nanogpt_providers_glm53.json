@@ -1,0 +1,168 @@
+{
+ "canonicalId": "z-ai/glm-5.3",
+ "displayName": "GLM 5.3",
+ "supportsProviderSelection": true,
+ "defaultPrice": {
+  "inputPer1kTokens": 0.001,
+  "outputPer1kTokens": 0.0032,
+  "cacheReadInputPer1kTokens": 0.0002
+ },
+ "autoQuantization": "FP8+",
+ "autoTps": 106.8,
+ "autoTtftMs": 3615,
+ "providers": [
+  {
+   "provider": "nube",
+   "displayName": "Nube",
+   "available": true,
+   "pricing": {
+    "inputPer1kTokens": 0.0006615000000000001,
+    "outputPer1kTokens": 0.002079,
+    "cacheReadInputPer1kTokens": 0.00012285
+   },
+   "privacy": {
+    "classification": "zdr",
+    "retainsPrompts": false,
+    "training": false
+   },
+   "tps": 251.2,
+   "ttftMs": 7153,
+   "supportsPromptCaching": true,
+   "maxInputTokens": 1000000
+  },
+  {
+   "provider": "zai",
+   "displayName": "Z.AI",
+   "available": true,
+   "pricing": {
+    "inputPer1kTokens": 0.00147,
+    "outputPer1kTokens": 0.004620000000000001,
+    "cacheReadInputPer1kTokens": 0.00027299999999999997
+   },
+   "quantization": "fp8",
+   "privacy": {
+    "classification": "zdr",
+    "retainsPrompts": false,
+    "training": false
+   },
+   "tps": 52,
+   "ttftMs": 3049,
+   "supportsPromptCaching": true
+  },
+  {
+   "provider": "relace",
+   "displayName": "Relace",
+   "available": true,
+   "pricing": {
+    "inputPer1kTokens": 0.00030450000000000003,
+    "outputPer1kTokens": 0.0030450000000000004,
+    "cacheReadInputPer1kTokens": 0.00010499999999999999
+   },
+   "quantization": "unknown",
+   "privacy": {
+    "classification": "retention_training_unknown"
+   },
+   "tps": 59,
+   "ttftMs": 1487,
+   "supportsPromptCaching": true,
+   "maxInputTokens": 1048576
+  },
+  {
+   "provider": "streamlake",
+   "displayName": "StreamLake",
+   "available": false,
+   "pricing": {
+    "inputPer1kTokens": 0.00147,
+    "outputPer1kTokens": 0.004620000000000001,
+    "cacheReadInputPer1kTokens": 0.00027299999999999997
+   },
+   "privacy": {
+    "classification": "no_training",
+    "retainsPrompts": true,
+    "training": false
+   },
+   "supportsPromptCaching": true,
+   "maxInputTokens": 1024000
+  },
+  {
+   "provider": "crusoe",
+   "displayName": "Crusoe",
+   "available": true,
+   "pricing": {
+    "inputPer1kTokens": 0.00147,
+    "outputPer1kTokens": 0.004620000000000001,
+    "cacheReadInputPer1kTokens": 0.00027299999999999997
+   },
+   "quantization": "fp4",
+   "privacy": {
+    "classification": "zdr",
+    "retainsPrompts": false,
+    "training": false
+   },
+   "tps": 109,
+   "ttftMs": 935,
+   "supportsPromptCaching": true,
+   "maxInputTokens": 1048576
+  },
+  {
+   "provider": "inceptron",
+   "displayName": "Inceptron",
+   "available": true,
+   "pricing": {
+    "inputPer1kTokens": 0.000337575,
+    "outputPer1kTokens": 0.0026696249999999997,
+    "cacheReadInputPer1kTokens": 0.00016695000000000002
+   },
+   "quantization": "fp4",
+   "privacy": {
+    "classification": "zdr",
+    "retainsPrompts": false,
+    "training": false
+   },
+   "tps": 52,
+   "ttftMs": 603,
+   "supportsPromptCaching": true,
+   "maxInputTokens": 1048576
+  },
+  {
+   "provider": "friendli",
+   "displayName": "Friendli",
+   "available": true,
+   "pricing": {
+    "inputPer1kTokens": 0.0013230000000000002,
+    "outputPer1kTokens": 0.004158,
+    "cacheReadInputPer1kTokens": 0.0002457
+   },
+   "quantization": "unknown",
+   "privacy": {
+    "classification": "no_training",
+    "retainsPrompts": true,
+    "training": false
+   },
+   "tps": 124,
+   "ttftMs": 897,
+   "supportsPromptCaching": true,
+   "maxInputTokens": 1048576
+  },
+  {
+   "provider": "parasail",
+   "displayName": "Parasail",
+   "available": true,
+   "pricing": {
+    "inputPer1kTokens": 0.00147,
+    "outputPer1kTokens": 0.004620000000000001,
+    "cacheReadInputPer1kTokens": 0.00027299999999999997
+   },
+   "quantization": "fp8",
+   "privacy": {
+    "classification": "zdr",
+    "retainsPrompts": false,
+    "training": false
+   },
+   "tps": 100.5,
+   "ttftMs": 773.5,
+   "supportsPromptCaching": true,
+   "maxInputTokens": 1048576
+  }
+ ]
+}

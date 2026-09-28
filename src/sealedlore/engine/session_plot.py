@@ -287,6 +287,7 @@ class PlotRuntime:
         places = self.plot_places()
         request = ChatRequest(
             model=self.plot_model,
+            extra_body=self.route_for("plot"),
             messages=build_chronicle_messages(
                 plot=plot,
                 chronicle=before,
@@ -501,6 +502,7 @@ class PlotRuntime:
         verbatim = list(self.split(history).verbatim)
         request = ChatRequest(
             model=self.plot_model,
+            extra_body=self.route_for("plot"),
             messages=build_choice_messages(
                 event=event,
                 chronicle=chronicle,
@@ -750,6 +752,7 @@ class PlotRuntime:
         )
         request = ChatRequest(
             model=self.model,
+            extra_body=self.route_for("story"),
             messages=prompt.messages,
             params=GenerationParams(max_tokens=GAP_MAX_TOKENS),
             use_cache_control=self.uses_cache_control(),
@@ -835,6 +838,7 @@ class PlotRuntime:
         verbatim = list(self.split(history).verbatim)
         request = ChatRequest(
             model=self.plot_model,
+            extra_body=self.route_for("plot"),
             messages=build_director_messages(
                 chronicle=chronicle,
                 armed=candidates,

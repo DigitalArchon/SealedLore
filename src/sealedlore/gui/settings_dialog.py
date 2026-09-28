@@ -28,12 +28,20 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.routing import describe, routable, route_body
 from sealedlore.engine.speed_test import Role, SpeedTarget, plan_targets
 from sealedlore.gui.attest_check import AttestationButton
 from sealedlore.gui.fields import FormScroll
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.image_picker import pick_image_model
-from sealedlore.gui.model_picker import Browse, ModelCatalog, ModelField, pick_model
+from sealedlore.gui.model_hosts import hosts_catalog
+from sealedlore.gui.model_picker import (
+    Browse,
+    ModelCatalog,
+    ModelField,
+    pick_model,
+    pick_model_and_route,
+)
 from sealedlore.gui.speed_test import SpeedTestDialog, speed_tests
 from sealedlore.models.config import (
     DEFAULT_BASE_URL,
@@ -44,10 +52,12 @@ from sealedlore.models.config import (
     EmbeddingProviderConfig,
     ProviderConfig,
     _same_host,
+    on_nanogpt,
     recommended_models,
     require_https,
 )
 from sealedlore.models.generation import GenerationParams
+from sealedlore.models.route import ModelRoute
 from sealedlore.models.story import Story
 from sealedlore.providers.context_probe import detect_context
 from sealedlore.providers.images import parse_image_models
@@ -88,9 +98,13 @@ class SettingsDialog(QDialog):
         *,
         catalog: ModelCatalog | None = None,
         image_catalog: ImageCatalog | None = None,
+        fetch_models: bool = False,
     ) -> None:
+        """`fetch_models`: load the endpoint's model list on opening (the
+        window, never a test), to know which models have a choice of host."""
         super().__init__(parent)
         self.image_catalog = image_catalog
+        self._fetch_models = fetch_models
         self.setWindowTitle("Settings")
         # Wide enough for all seven tabs in view, and tall enough for most
         # pages without scrolling (they scroll now, so the dialog no longer
@@ -99,6 +113,7 @@ class SettingsDialog(QDialog):
         self.resize(660, 640)
         self.config = config
         self.story = story
+        self._catalog = catalog
         # Browse… lists the models of the endpoint typed here, saved or not.
         self._browse: Browse | None = (
             (lambda current: pick_model(catalog, self._model_source, current, self))
@@ -187,6 +202,38 @@ class SettingsDialog(QDialog):
         form.addRow(hint)
         return widget
 
+    def _route_endpoint(self) -> str | None:
+        """The endpoint as typed, for the model fields' routes."""
+        return self.base_url.text().strip() or None
+
+    def _routed_field(self, text: str) -> ModelField:
+        """A role's model field, with its route beside it (NanoGPT only)."""
+        browse = self._browse_route if self._catalog is not None else None
+        return ModelField(
+            text,
+            self._browse,
+            route_endpoint=self._route_endpoint,
+            browse_route=browse,
+            hosts_of=self._hosts_of,
+        )
+
+    def _hosts_of(self, model: str) -> tuple[str, ...] | None:
+        """A model's hosts from the endpoint's list; None until it's loaded."""
+        models = self._catalog.models if self._catalog is not None else None
+        if not models:
+            return None
+        info = models.get(model)
+        return info.hosts if info is not None else ()
+
+    def _browse_route(self, current: str, route: ModelRoute | None):
+        return pick_model_and_route(
+            self._catalog, self._model_source, current, route, self._route_endpoint(), self
+        )
+
+    def _show_routes(self, *_args) -> None:
+        for field in self._route_fields.values():
+            field._show_route()
+
     def _models_tab(self) -> QWidget:
         """Every text model the app calls, by what it does. They were spread
         over five tabs (Provider, Context, Lore, Images, Private)."""
@@ -196,7 +243,8 @@ class SettingsDialog(QDialog):
         intro = QLabel(
             "Every model the app calls on this endpoint, by what it does. A blank one "
             "uses the model named in grey. The image model is under Images, and the "
-            "private scene model under Private."
+            "private scene model under Private. On NanoGPT, Route… beside a model "
+            "chooses which of its hosts serves it (billed pay-as-you-go)."
         )
         intro.setObjectName("hintLabel")
         intro.setWordWrap(True)
@@ -204,9 +252,7 @@ class SettingsDialog(QDialog):
 
         # A new setup starts on Sonnet 4.6 rather than a blank field: one
         # thing fewer before the first story.
-        self.model = ModelField(
-            (provider.model if provider else "") or DEFAULT_STORY_MODEL, self._browse
-        )
+        self.model = self._routed_field((provider.model if provider else "") or DEFAULT_STORY_MODEL)
         self.model.setPlaceholderText(DEFAULT_STORY_MODEL)
         self.model.setToolTip("The storyteller: writes every passage.")
         # Only a model the author changes here becomes the open story's: saving
@@ -221,9 +267,7 @@ class SettingsDialog(QDialog):
         # one for every story and the open story's. It used to be the story's
         # alone, so the field was greyed out with no story open.
         own = self.story.defaults.summarization_model if self.story is not None else None
-        self.summarization_model = ModelField(
-            own or self.config.summarization_model or "", self._browse
-        )
+        self.summarization_model = self._routed_field(own or self.config.summarization_model or "")
         self.summarization_model.setPlaceholderText("same as the story model")
         self.summarization_model.setToolTip(
             "Writes the chapters as the story is archived, and merges them. Set here for "
@@ -232,7 +276,7 @@ class SettingsDialog(QDialog):
         self._summariser_at_open = self.summarization_model.text().strip()
         form.addRow("Summarisation model", self.summarization_model)
 
-        self.authoring_model = ModelField(self.config.authoring_model or "", self._browse)
+        self.authoring_model = self._routed_field(self.config.authoring_model or "")
         self.authoring_model.setPlaceholderText("same as the story's model")
         self.authoring_model.setToolTip(
             "Drafts stories from a premise and reviews settings. Occasional calls the "
@@ -254,8 +298,8 @@ class SettingsDialog(QDialog):
         # A new setup starts with the recommended models for the small calls
         # (models/config.py); one already saved keeps what it has, blanks too.
         fresh = recommended_models(self.base_url.text()) if provider is None else {}
-        self.scene_model = ModelField(
-            self.config.scene_model or fresh.get("scene_model", ""), self._browse
+        self.scene_model = self._routed_field(
+            self.config.scene_model or fresh.get("scene_model", "")
         )
         self.scene_model.setPlaceholderText("same as the story's summarisation model")
         self.scene_model.setToolTip(
@@ -274,9 +318,7 @@ class SettingsDialog(QDialog):
             "tab follows (with an Undo). Off, they change only when you set them."
         )
         form.addRow(self.plot_reads)
-        self.plot_model = ModelField(
-            self.config.plot_model or fresh.get("plot_model", ""), self._browse
-        )
+        self.plot_model = self._routed_field(self.config.plot_model or fresh.get("plot_model", ""))
         self.plot_model.setPlaceholderText("same as the scene model")
         self.plot_model.setToolTip(
             "Keeps a plot's clock and facts after every passage, and decides when its "
@@ -286,7 +328,7 @@ class SettingsDialog(QDialog):
         )
         form.addRow("Plot model", self.plot_model)
 
-        self.lore_model = ModelField(self.config.lore_model, self._browse)
+        self.lore_model = self._routed_field(self.config.lore_model)
         self.lore_model.setPlaceholderText("blank: same as the scene model")
         self.lore_model.setToolTip(
             "Picks lore after each passage when a lorebook is too large to send whole and "
@@ -296,7 +338,7 @@ class SettingsDialog(QDialog):
         )
         form.addRow("Lore model", self.lore_model)
 
-        self.image_prompt_model = ModelField(self.config.image_prompt_model or "", self._browse)
+        self.image_prompt_model = self._routed_field(self.config.image_prompt_model or "")
         self.image_prompt_model.setPlaceholderText("same as the story's model")
         self.image_prompt_model.setToolTip(
             "Writes the image prompt from the story. The story's own model rides its cached "
@@ -329,6 +371,29 @@ class SettingsDialog(QDialog):
         row.addStretch(1)
         form.addRow(row)
         form.addRow(self.recommended_note)
+
+        # Each role's route: which of NanoGPT's hosts serves its model.
+        self._route_fields = {
+            "story": self.model,
+            "summarisation": self.summarization_model,
+            "authoring": self.authoring_model,
+            "scene": self.scene_model,
+            "plot": self.plot_model,
+            "lore": self.lore_model,
+            "image_prompt": self.image_prompt_model,
+        }
+        for role, field in self._route_fields.items():
+            field.set_route(self.config.model_routes.get(role))
+        # A chat open: its own route is the Story field's, as its model is.
+        self._route_at_open = self.model.effective_route()
+        self.base_url.textChanged.connect(self._show_routes)
+        # Which models have a choice of host is in the endpoint's list: the
+        # one Browse… uses, fetched now on NanoGPT (kept an hour).
+        self._watching_catalog = self._catalog is not None
+        if self._catalog is not None:
+            self._catalog.changed.connect(self._show_routes)
+            if self._fetch_models and on_nanogpt(self.base_url.text()):
+                self._catalog.ensure(self._model_source)
         return widget
 
     def speed_targets(self) -> list[SpeedTarget]:
@@ -339,17 +404,29 @@ class SettingsDialog(QDialog):
             raise ValueError("Set the base URL first.")
         require_https(url)
         main = ProviderConfig(name="speed test", base_url=url, api_key=self.api_key.text())
-        roles = [Role("Story", self.model.text(), main)]
-        own = (self.story.defaults.main_model or "") if self.story is not None else ""
-        if own.strip() and own.strip() != self.model.text().strip():
-            roles.append(Role("This story", own, main))
+
+        def role(name: str, field: ModelField, fallback: str | None = None) -> Role:
+            # Each field's route, as its role sends it (engine/routing.py).
+            model = field.text().strip()
+            route = field.effective_route()
+            return Role(
+                name, field.text(), main, fallback, route_body(route, model), describe(route)
+            )
+
+        roles = [role("Story", self.model)]
+        own = (self.story.defaults.main_model or "").strip() if self.story is not None else ""
+        if own and own != self.model.text().strip():
+            # A chat's own route is its own; a story's model takes the Story route.
+            route = self.story.defaults.main_route if self.story.chat else self.model.route
+            body = route_body(route, own) if routable(url, own) else {}
+            roles.append(Role("This story", own, main, None, body, describe(route)))
         roles += [
-            Role("Summarisation", self.summarization_model.text(), main, "Story"),
-            Role("Authoring", self.authoring_model.text(), main, "Story"),
-            Role("Scene", self.scene_model.text(), main, "Summarisation"),
-            Role("Plot", self.plot_model.text(), main, "Scene"),
-            Role("Lore", self.lore_model.text(), main, "Scene"),
-            Role("Image prompt writer", self.image_prompt_model.text(), main, "Story"),
+            role("Summarisation", self.summarization_model, "Story"),
+            role("Authoring", self.authoring_model, "Story"),
+            role("Scene", self.scene_model, "Summarisation"),
+            role("Plot", self.plot_model, "Scene"),
+            role("Lore", self.lore_model, "Scene"),
+            role("Image prompt writer", self.image_prompt_model, "Story"),
         ]
         private = self._private_test_settings()
         if private is not None and private.model.strip():
@@ -523,6 +600,12 @@ class SettingsDialog(QDialog):
         # dialog; closing under it would destroy a running QThread.
         self._private_catalog.wait()
         speed_tests().wait()
+        hosts_catalog().wait()
+        if self._watching_catalog:
+            # The window's catalog outlives the dialog; once only (a second
+            # disconnect warns).
+            self._watching_catalog = False
+            self._catalog.changed.disconnect(self._show_routes)
         super().done(result)
 
     def _private_source(self) -> tuple[OpenAICompatibleProvider, str, bool]:
@@ -883,6 +966,17 @@ class SettingsDialog(QDialog):
         self.config.image_size = self.image_size.currentText().strip() or self.config.image_size
         self.config.image_count = self.image_count.value()
         self.config.image_prompt_model = self.image_prompt_model.text().strip() or None
+        # Each role's route, as it applies to the model in its field.
+        for role, field in self._route_fields.items():
+            route = field.effective_route()
+            if route is None:
+                self.config.model_routes.pop(role, None)
+            else:
+                self.config.model_routes[role] = route
+        if self.story is not None and self.story.chat:
+            chosen = self.model.effective_route()
+            if chosen != self._route_at_open:
+                self.story.defaults.main_route = chosen
         private_url = self.private_url.text().strip()
         private_model = self.private_model.text().strip()
         if private_url and private_model:

@@ -572,3 +572,44 @@ def test_a_memory_chat_on_a_plain_model_stays_off_the_disk_and_out_of_the_config
     # Left before the test ends: the fixture's close would ask, unanswered.
     window.close_story()
     assert window.session is None
+
+
+def test_a_new_chat_takes_its_own_route(app, window, monkeypatch, tmp_path):
+    """A chat chooses its model in the New chat dialog, so its route is there
+    too, and belongs to the chat: never the settings, memory chat or not."""
+    from sealedlore.engine.catalog import ModelInfo
+    from sealedlore.models.config import ProviderConfig
+    from sealedlore.models.route import ModelRoute
+
+    nano = ProviderConfig(name="nano", base_url="https://nano-gpt.com/api/v1", model="z-ai/glm-5.3")
+    dialog = window_chat.NewChatDialog(model="z-ai/glm-5.3", endpoint=nano)
+    assert not dialog.model.route_button.isHidden()
+    dialog.model.setText("TEE/glm-5.3")
+    assert dialog.model.route_button.isHidden(), "a TEE chat has no route"
+    dialog.deleteLater()
+    assert window_chat.NewChatDialog(model="z-ai/glm-5.3").model.route_button.isHidden(), (
+        "no endpoint (mock): no route"
+    )
+
+    window.catalog.models = {"z-ai/glm-5.3": ModelInfo(id="z-ai/glm-5.3", hosts=("a", "b"))}
+    config_before = window.config.model_dump_json()
+
+    class Dialog(window_chat.NewChatDialog):
+        def exec(self):  # noqa: A003 - Qt naming
+            self._endpoint = nano
+            self.title.setText("Quick")
+            self.model.setText("z-ai/glm-5.3")
+            self.model.set_route(ModelRoute(priority="latency"))
+            self.keep.setCurrentIndex(self.keep.findData("memory"))
+            return window_chat.NewChatDialog.Accepted
+
+    monkeypatch.setattr(window_chat, "NewChatDialog", Dialog)
+    before = listing(tmp_path)
+    window.new_chat()
+    session = window.session
+    assert session.story.defaults.main_route == ModelRoute(priority="latency")
+    assert window.config.model_dump_json() == config_before, "the chat's route reached the settings"
+    assert listing(tmp_path) == before
+    window.catalog.models = None
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    window.close_story()

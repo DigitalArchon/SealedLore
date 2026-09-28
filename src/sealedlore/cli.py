@@ -23,6 +23,7 @@ from sealedlore.engine.export import render_markdown
 from sealedlore.engine.prompt import TurnRequest
 from sealedlore.engine.prompt_edits import texts_in_force
 from sealedlore.engine.response_style import PRESETS, label_for
+from sealedlore.engine.routing import config_route
 from sealedlore.engine.session import SessionNotice, StorySession
 from sealedlore.models.character import Character
 from sealedlore.models.config import (
@@ -176,11 +177,13 @@ def cmd_generate(args: argparse.Namespace) -> int:
     provider = build_provider(config, mock=args.mock)
     active = config.active_provider()
     chat_model = active.model if active else None
+    model = args.model or config.authoring_model or chat_model or ""
     draft = StoryDraft(
         provider,
         args.premise,
-        args.model or config.authoring_model or chat_model or "",
+        model,
         texts=texts_in_force(config.prompt_edits),
+        route=config_route(config, "authoring", model),
     )
     print(f"Drafting with {draft.model}…", flush=True)
     try:

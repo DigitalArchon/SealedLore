@@ -59,6 +59,8 @@ class ChatWindow:
             browse=self._browse_models,
             parent=self,
             endpoint=None if self.use_mock else provider,
+            browse_route=self._browse_models_and_route,
+            hosts_of=self._hosts_of,
         )
         if dialog.exec() != NewChatDialog.Accepted:
             return
@@ -70,6 +72,9 @@ class ChatWindow:
             chat_keep=dialog.keep_choice(),
         )
         story.defaults.main_model = dialog.model.text().strip()
+        # The chat's own route: on the chat, never in the settings (a chat
+        # kept in memory teaches them nothing).
+        story.defaults.main_route = dialog.route()
         bundle = StoryBundle(story=story)
         if story.chat_keep == "memory":
             self.open_memory_chat(bundle)

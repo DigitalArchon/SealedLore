@@ -204,7 +204,9 @@ Windows offers weaker privacy on the machine itself (see
    cheaper models that measured well for them; **Use recommended models**
    fills them in on a setup you already have, and **Test speed…** shows how
    quickly each model you have chosen answers. A field left blank falls back
-   to the story model.
+   to the story model. For a model NanoGPT runs on several hosts, **Route…**
+   beside its field can pick the fastest or cheapest host, or one host,
+   billed pay-as-you-go (see the manual's Models section).
 
 3. **Start from a sample.** File → New story from a sample → Doomsville (a
    survivor at a farmhouse, with a plot), or **Try a sample…** on the start

@@ -184,6 +184,8 @@ class ImageRuntime:
             provider, model = self.provider, model or self.image_prompt_model
         request = ChatRequest(
             model=model,
+            # None in a private scene: its prompt is the private model's.
+            extra_body=self.route_for("image_prompt", model),
             messages=prompt.messages,
             params=GenerationParams(max_tokens=IMAGE_PROMPT_MAX_TOKENS, temperature=0.7),
             use_cache_control=self._cache_control_for(model) and model == self.model,

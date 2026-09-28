@@ -458,6 +458,45 @@ hundred tokens (more for a model that reasons). Speeds change with the hour
 and the endpoint's load, and one short answer is a small sample: run it a few
 times before choosing between models that are close.
 
+**Which host serves a model (routes).** On NanoGPT most open models (GLM,
+DeepSeek, Kimi and the like) run on several hosts, and NanoGPT picks one; on
+the subscription, usually the cheapest at FP8 precision or better. The model
+list's **Hosts** column says how many a model has. For a model with two or
+more, **Route…** beside its field (or **Choose a route…** in the model list)
+picks for you:
+
+- **Subscription routing**: NanoGPT's own choice, as before.
+- **Fastest first word**, **Fastest overall** or **Cheapest**.
+- **A specific host**, from a table of each host's precision, privacy terms,
+  NanoGPT's measured first token and speed, prices and caching. It is a
+  preference: if that host is down, another serves the call.
+
+**FP8 or better**, ticked by default, leaves out hosts running the model at
+lower precision, or whose precision isn't listed (they are hidden from the
+table while it is ticked).
+
+**Was the route followed?** NanoGPT's replies don't name their host, so each
+routed call's bill is the evidence, and the status bar shows it at the
+bottom left once a routed call has come back: **⚡ routes** when they were
+followed, **⚠ route not followed** when not. Its tooltip gives each route's
+roles, model, last call and why. Nothing billed means NanoGPT served the call
+on its own subscription routing instead (it does this without a word when a
+chosen host is down); a bill at a clearly different price than the chosen
+host's means another host served it. **Any route but the
+subscription's is billed pay-as-you-go, even for a model the subscription
+includes.** The scene read is where a route pays most: on the fastest first
+word at FP8 or better it answered in about a third of the time, as
+accurately, for a fraction of a cent a read. Without the precision floor it
+was slower and less accurate.
+
+Each role has its own route, so a free storyteller and a fast paid scene read
+can be the same model. A simple chat's route is chosen with its model in New
+simple chat, and belongs to that chat. Routes never apply to `TEE/` or
+`private/` models, whose enclave is their host. Test speed… measures each
+role on its route, so the same model on two routes shows as two rows. Each
+host's privacy terms are its own; on NanoGPT's site your account can require
+hosts that keep nothing, which then applies to every route.
+
 ## Setting up a story
 
 **Story → Setup…** holds what a story is built on:

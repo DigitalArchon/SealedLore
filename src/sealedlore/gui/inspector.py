@@ -136,9 +136,11 @@ class ContextInspector(QWidget):
         use_cache_control: bool,
         approximate: bool,
         warnings: Sequence[str] = (),
+        extra_body: dict | None = None,
     ) -> None:
         """`warnings`: things wrong with what is sent that the author should
-        fix, one line each (style notes that say who plays whom)."""
+        fix, one line each (style notes that say who plays whom).
+        `extra_body`: the story model's route, as it is sent."""
         budget = prompt.budget
         tilde = "~" if approximate else ""
         lines = [
@@ -184,6 +186,7 @@ class ContextInspector(QWidget):
                 messages=prompt.messages,
                 params=params,
                 use_cache_control=use_cache_control,
+                extra_body=dict(extra_body or {}),
             )
         )
         self._payload_json = json.dumps(payload, indent=2, ensure_ascii=False)

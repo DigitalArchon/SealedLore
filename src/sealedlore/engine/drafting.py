@@ -41,7 +41,9 @@ class StoryDraft:
         person: NarrativePerson | None = None,
         tense: NarrativeTense | None = None,
         texts: PromptTexts = DEFAULT_TEXTS,
+        route: dict | None = None,
     ) -> None:
+        """`route`: the authoring role's (`routing.config_route`)."""
         if not premise.strip():
             raise ValueError("write a premise first")
         self.provider = provider
@@ -53,6 +55,7 @@ class StoryDraft:
         self.tense = tense
         self.request = ChatRequest(
             model=model,
+            extra_body=dict(route or {}),
             messages=build_generation_messages(premise, person=person, tense=tense, texts=texts),
             params=GenerationParams(max_tokens=GENERATION_MAX_TOKENS),
         )

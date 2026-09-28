@@ -28,6 +28,9 @@ class ModelInfo:
     # USD per million tokens, when listed.
     prompt_price: float | None = None
     completion_price: float | None = None
+    # NanoGPT's upstream hosts for the model (its detailed listing's
+    # `providers`); two or more is a choice of route (engine/routing.py).
+    hosts: tuple[str, ...] = field(default_factory=tuple)
 
     def facts(self) -> dict[str, Any]:
         """What the settings review is told about the story's model."""
@@ -67,6 +70,7 @@ def model_info(model_id: str, entry: Mapping[str, Any]) -> ModelInfo:
     capabilities = entry.get("capabilities")
     capabilities = capabilities if isinstance(capabilities, dict) else {}
     efforts = entry.get("reasoning_efforts")
+    hosts = entry.get("providers")
     price = parse_price(dict(entry))
     return ModelInfo(
         id=model_id,
@@ -81,6 +85,7 @@ def model_info(model_id: str, entry: Mapping[str, Any]) -> ModelInfo:
         else (),
         prompt_price=price.prompt if price else None,
         completion_price=price.completion if price else None,
+        hosts=tuple(h for h in hosts if isinstance(h, str)) if isinstance(hosts, list) else (),
     )
 
 

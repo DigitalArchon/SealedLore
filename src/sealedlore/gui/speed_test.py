@@ -111,7 +111,12 @@ class _Run(QObject):
             if self._stopping:
                 return SpeedResult(model=target.model, stopped=True)
             return run_speed_test(
-                provider, target.model, prices=self._prices, attest=False, attested=attested
+                provider,
+                target.model,
+                prices=self._prices,
+                attest=False,
+                attested=attested,
+                route=target.route,
             )
         except Exception as exc:  # noqa: BLE001 - shown, never fatal
             return SpeedResult(model=target.model, error=str(exc))
@@ -314,7 +319,7 @@ class SpeedTestDialog(QDialog):
         header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(NOTES, QHeaderView.Stretch)
         for row, target in enumerate(self.targets):
-            self._set(row, 0, target.model)
+            self._set(row, 0, target.label)
             self._set(row, 1, ", ".join(target.roles))
             self._set(row, NOTES, "Waiting")
 

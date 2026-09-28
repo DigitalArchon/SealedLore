@@ -109,6 +109,7 @@ class MergeRuntime:
         model = self.summarization_model
         request = ChatRequest(
             model=model,
+            extra_body=self.route_for("summarisation"),
             messages=build_merge_messages(
                 run,
                 self.visible_cast(),

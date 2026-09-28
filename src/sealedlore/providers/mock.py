@@ -101,7 +101,9 @@ class MockChatProvider(ChatProvider):
         }
         if self.usage.cost:
             raw["cost"] = self.usage.cost
-        yield StreamCompleted(usage=self.usage, finish_reason="stop", raw_usage=raw)
+        completed = StreamCompleted(usage=self.usage, finish_reason="stop", raw_usage=raw)
+        self._report_route(request, completed)
+        yield completed
 
 
 class MockEmbeddings:

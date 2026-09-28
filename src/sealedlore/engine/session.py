@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import random
 import threading
+import weakref
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
@@ -105,6 +106,14 @@ from sealedlore.engine.retrieval import (
     query_text,
     select_lore,
 )
+from sealedlore.engine.routing import (
+    HostPrice,
+    RouteCheck,
+    check_route,
+    role_in_use,
+    routable,
+    route_body,
+)
 from sealedlore.engine.scene_state import (
     SCENE_LOG_KEPT,
     closed_entry,
@@ -157,6 +166,7 @@ from sealedlore.models.node import (
     Usage,
 )
 from sealedlore.models.private import PrivateSpan
+from sealedlore.models.route import ROUTE_ROLES
 from sealedlore.models.scene import SceneLogEntry, SceneSource, SceneState
 from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
@@ -362,6 +372,8 @@ class _LorePick:
     scene: str
     vectors: dict[str, tuple[float, ...]]
     model: str
+    # Its route (`route_for`), read before the thread starts.
+    route: dict[str, Any] = field(default_factory=dict)
     candidates: list[LoreEntry] = field(default_factory=list)
     request: ChatRequest | None = None
     reply: tuple[str, StreamCompleted] | None = None
@@ -388,6 +400,12 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
     ) -> None:
         self.bundle = bundle
         self.config = config
+        # What each routed call's bill said about its route, latest per route
+        # (`route_checks`); `host_price` is the window's lookup of a host's
+        # listed price, None where it doesn't know it.
+        self._route_lock = threading.Lock()
+        self._route_checks: dict[tuple[str, str], tuple[str, RouteCheck]] = {}
+        self.host_price: Callable[[str, str], HostPrice | None] | None = None
         self.provider = provider
         # Optional by design: with no embeddings endpoint, retrieval falls back
         # to keywords silently (§7).
@@ -526,6 +544,87 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
     def scene_model(self) -> str:
         """The model that reads the scene after each passage: small and fast is right."""
         return self.config.scene_model or self.summarization_model
+
+    @property
+    def provider(self) -> ChatProvider:
+        return self._provider
+
+    @provider.setter
+    def provider(self, provider: ChatProvider) -> None:
+        """Every provider the session is given reports its routed replies here
+        (held weakly: a provider outlives the session that set it)."""
+        self._provider = provider
+        ref = weakref.WeakMethod(self._watch_route)
+
+        def watch(request: ChatRequest, completed: StreamCompleted) -> None:
+            method = ref()
+            if method is not None:
+                method(request, completed)
+
+        provider.route_watch = watch
+
+    def _watch_route(self, request: ChatRequest, completed: StreamCompleted) -> None:
+        """On whichever thread the reply came back: record what its bill says."""
+        sent = request.extra_body.get("provider") or {}
+        preferred = None
+        order = sent.get("order") or []
+        if order and self.host_price is not None:
+            preferred = self.host_price(request.model, str(order[0]))
+        check = check_route(request.model, sent, completed.usage, preferred)
+        key = (request.model, json.dumps(sent, sort_keys=True))
+        with self._route_lock:
+            self._route_checks[key] = (utc_now_iso(), check)
+
+    def route_checks(self) -> list[tuple[str, RouteCheck, list[str]]]:
+        """(when, the latest check, the roles on that route) for each route
+        used: what the status bar shows."""
+        with self._route_lock:
+            found = list(self._route_checks.items())
+        roles_by_key: dict[tuple[str, str], list[str]] = {}
+        for role in ROUTE_ROLES:
+            _role, model = self._role_in_use(role)
+            body = self.route_for(role)
+            if body:
+                key = (model, json.dumps(body["provider"], sort_keys=True))
+                roles_by_key.setdefault(key, []).append(role)
+        return [(at, check, roles_by_key.get(key, [])) for key, (at, check) in found]
+
+    def _role_in_use(self, role: str) -> tuple[str, str]:
+        """(the role whose model a call uses, that model): a blank role takes
+        its fallback's model, and with it that role's route."""
+        own = {
+            "summarisation": self.story.defaults.summarization_model
+            or self.config.summarization_model,
+            "scene": self.config.scene_model,
+            "plot": self.config.plot_model,
+            "lore": self.config.lore_model,
+            "authoring": self.config.authoring_model,
+            "image_prompt": self.config.image_prompt_model,
+        }
+        role = role_in_use(role, own)
+        if role == "summarisation" and self.story.chat and is_tee(self.model):
+            role = "story"  # a TEE chat's summaries are its own model's
+        return role, (self.model if role == "story" else own[role] or self.model)
+
+    def route_for(self, role: str, model: str | None = None) -> dict[str, Any]:
+        """The request fields that send `role`'s call to the host its route
+        asks for (engine/routing.py): none on another endpoint, for a TEE or
+        encrypted model, or in a private scene (its calls are the private
+        model's). A chat's own model has its own route. `model`: the one the
+        call is actually sent to, when a caller chose it (the picture dialog's
+        prompt writer)."""
+        provider = self.config.active_provider()
+        if provider is None or self.open_span is not None:
+            return {}
+        role, in_use = self._role_in_use(role)
+        model = model or in_use
+        if not routable(provider.base_url, model):
+            return {}
+        if role == "story" and self.story.chat:
+            route = self.story.defaults.main_route
+        else:
+            route = self.config.model_routes.get(role)
+        return route_body(route, model)
 
     @property
     def summaries(self) -> list[Summary]:
@@ -794,6 +893,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
             scene=scene_line(self.story.scene.location, self._present_names()),
             vectors=vectors,
             model=self.config.lore_model or self.scene_model,
+            route=self.route_for("lore"),
         )
         detached = getattr(self.provider, "detached", None)
         if callable(detached):
@@ -817,6 +917,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
             if pick.candidates:
                 pick.request = ChatRequest(
                     model=pick.model,
+                    extra_body=pick.route,
                     messages=build_pick_messages(
                         pick.node.content, pick.scene, pick.candidates, texts=self.texts
                     ),
@@ -1650,6 +1751,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
         model = model or self.model
         request = ChatRequest(
             model=model,
+            extra_body=self.route_for("story", model),
             messages=prompt.messages,
             params=self.story.defaults.generation,
             use_cache_control=self._cache_control_for(model),
@@ -1951,6 +2053,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
         )
         request = ChatRequest(
             model=self.summarization_model,
+            extra_body=self.route_for("summarisation"),
             messages=messages,
             params=summary_params(self.summarization_model),
         )
@@ -1997,6 +2100,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
         prose = render_chunk(chunk, self.visible_cast(), texts=self.texts)
         request = ChatRequest(
             model=self.summarization_model,
+            extra_body=self.route_for("summarisation"),
             messages=build_ledger_messages(
                 previous,
                 prose,
@@ -2087,6 +2191,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
         )
         request = ChatRequest(
             model=self.summarization_model,
+            extra_body=self.route_for("summarisation"),
             messages=messages,
             params=summary_params(self.summarization_model),
         )
@@ -2297,6 +2402,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
         on_file += [suggestion.name for suggestion in supporting.suggestions]
         request = ChatRequest(
             model=self.summarization_model,
+            extra_body=self.route_for("summarisation"),
             messages=build_extraction_messages(
                 prose, on_file=on_file, declined=supporting.dismissed, texts=self.texts
             ),
@@ -2349,6 +2455,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
             raise ValueError("there is no story yet to read the scene from")
         request = ChatRequest(
             model=self.scene_model,
+            extra_body=self.route_for("scene"),
             messages=build_scene_messages(
                 prose,
                 cast=self.visible_cast(),
@@ -2541,6 +2648,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
         """One call on the scene model. Raises ProviderError or ValueError."""
         request = ChatRequest(
             model=self.scene_model,
+            extra_body=self.route_for("scene"),
             messages=build_read_messages(
                 scene=before,
                 cast=self.visible_cast(pending=True),
@@ -2731,6 +2839,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
         character = next(c for c in (*self.cast, *self.supporting) if c.id == character_id)
         request = ChatRequest(
             model=self.summarization_model,
+            extra_body=self.route_for("summarisation"),
             messages=build_inference_messages(character, self.story.world_bible),
             params=GenerationParams(),
         )
@@ -3014,6 +3123,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
             answer_tokens = min(answer_tokens, max(limit - size, 1))
         request = ChatRequest(
             model=model,
+            extra_body=self.route_for("authoring", model),
             messages=messages,
             params=GenerationParams(max_tokens=answer_tokens, temperature=REVIEW_TEMPERATURE),
         )
@@ -3240,6 +3350,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
         )
         request = ChatRequest(
             model=model,
+            extra_body=self.route_for("story"),
             messages=prompt.messages,
             params=self.story.defaults.generation,
             use_cache_control=self._cache_control_for(model),

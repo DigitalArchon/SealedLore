@@ -17,9 +17,11 @@ nothing is written to any story's log.
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 from urllib.parse import urlparse
 
 from sealedlore.engine.pricing import estimate_cost
@@ -57,24 +59,34 @@ MIN_SPAN = 0.05
 @dataclass(frozen=True)
 class Role:
     """One use of a model, as Settings has it: the model as typed (blank to
-    fall back) and the role it falls back to."""
+    fall back), the role it falls back to, and its route (`route`: the
+    request fields, engine/routing.py; `route_label`: how it reads)."""
 
     name: str
     model: str
     endpoint: ProviderConfig | None
     fallback: str | None = None
+    route: dict[str, Any] = field(default_factory=dict)
+    route_label: str = ""
 
 
 @dataclass(frozen=True)
 class SpeedTarget:
-    """One model on one endpoint, and everything it is used for."""
+    """One model on one endpoint and one route, and everything it is used for."""
 
     settings: ProviderConfig
     roles: tuple[str, ...]
+    route: dict[str, Any] = field(default_factory=dict)
+    route_label: str = ""
 
     @property
     def model(self) -> str:
         return self.settings.model
+
+    @property
+    def label(self) -> str:
+        """The model as the table names it: with its route, if it has one."""
+        return f"{self.model} · {self.route_label}" if self.route else self.model
 
 
 @dataclass(frozen=True)
@@ -114,34 +126,40 @@ class SpeedResult:
         return self.last_text - self.first_text
 
 
-def _endpoint_key(settings: ProviderConfig) -> tuple[str, str]:
+def _endpoint_key(settings: ProviderConfig, route: dict[str, Any]) -> tuple[str, str, str]:
     parsed = urlparse(settings.base_url.strip())
     where = f"{parsed.scheme}://{(parsed.hostname or '').lower()}:{parsed.port}{parsed.path}"
-    return where.rstrip("/"), settings.model
+    return where.rstrip("/"), settings.model, json.dumps(route, sort_keys=True)
 
 
 def plan_targets(roles: Sequence[Role]) -> list[SpeedTarget]:
     """The distinct models to test, in the order their first use is listed,
     each with every role it serves. A blank role takes the model of the role
-    it falls back to; one with no model and no fallback is left out."""
+    it falls back to, and that role's route; one with no model and no
+    fallback is left out. The same model on two routes is two targets: the
+    comparison worth seeing."""
     by_name = {role.name: role for role in roles}
 
-    def resolved(role: Role, seen: tuple[str, ...] = ()) -> tuple[str, ProviderConfig | None]:
+    def resolved(role: Role, seen: tuple[str, ...] = ()) -> Role | None:
         if role.model.strip():
-            return role.model.strip(), role.endpoint
+            return role
         parent = by_name.get(role.fallback or "")
         if parent is None or parent.name in seen:
-            return "", None
+            return None
         return resolved(parent, (*seen, role.name))
 
-    found: dict[tuple[str, str], tuple[ProviderConfig, list[str]]] = {}
+    found: dict[tuple[str, str, str], tuple[ProviderConfig, list[str], Role]] = {}
     for role in roles:
-        model, endpoint = resolved(role)
-        if not model or endpoint is None:
+        source = resolved(role)
+        if source is None or source.endpoint is None:
             continue
-        settings = endpoint.model_copy(update={"model": model})
-        found.setdefault(_endpoint_key(settings), (settings, []))[1].append(role.name)
-    return [SpeedTarget(settings, tuple(names)) for settings, names in found.values()]
+        settings = source.endpoint.model_copy(update={"model": source.model.strip()})
+        key = _endpoint_key(settings, source.route)
+        found.setdefault(key, (settings, [], source))[1].append(role.name)
+    return [
+        SpeedTarget(settings, tuple(names), route=source.route, route_label=source.route_label)
+        for settings, names, source in found.values()
+    ]
 
 
 def provider_for(settings: ProviderConfig) -> ChatProvider:
@@ -210,6 +228,7 @@ def run_speed_test(
     prices: Mapping[str, ModelPrice] | None = None,
     attest: bool = True,
     attested: float | None = None,
+    route: dict[str, Any] | None = None,
 ) -> SpeedResult:
     """Send the one short request and time it. Never raises: a failure, an
     empty answer and a Stop are results too. With `attest` off the enclave,
@@ -225,6 +244,8 @@ def run_speed_test(
             attest_seconds = found
         request = ChatRequest(
             model=model,
+            # The route as the role would send it (engine/routing.py).
+            extra_body=dict(route or {}),
             messages=[PromptMessage(role="user", parts=(ContentPart(text=PROMPT),))],
             params=GenerationParams(max_tokens=MAX_TOKENS),
         )

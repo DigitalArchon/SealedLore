@@ -10,6 +10,8 @@ TEE chat's choice only). The choice is fixed with the chat. See engine/chat.py.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -23,7 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.gui.attest_check import AttestationButton
-from sealedlore.gui.model_picker import Browse, ModelField
+from sealedlore.gui.model_picker import Browse, BrowseRoute, ModelField
 from sealedlore.models.config import ProviderConfig
 from sealedlore.providers.tee import is_private_mode, is_tee
 
@@ -58,7 +60,11 @@ class NewChatDialog(QDialog):
         browse: Browse | None = None,
         parent: QWidget | None = None,
         endpoint: ProviderConfig | None = None,
+        browse_route: BrowseRoute | None = None,
+        hosts_of: Callable[[str], tuple[str, ...] | None] | None = None,
     ) -> None:
+        """`browse_route` and `hosts_of`: the chat's route, beside its model
+        (on NanoGPT); it is the chat's own, never saved in the settings."""
         super().__init__(parent)
         self.setWindowTitle("New simple chat")
         self.setMinimumWidth(560)
@@ -69,7 +75,14 @@ class NewChatDialog(QDialog):
         )
         intro.setWordWrap(True)
         self.title = QLineEdit("New chat")
-        self.model = ModelField(model, browse)
+        self._endpoint = endpoint
+        self.model = ModelField(
+            model,
+            browse,
+            route_endpoint=self._route_endpoint,
+            browse_route=browse_route,
+            hosts_of=hosts_of,
+        )
         self.prompt = QPlainTextEdit()
         self.prompt.setPlaceholderText("e.g. You are a helpful assistant. Answer concisely.")
         self.prompt.setMinimumHeight(140)
@@ -99,7 +112,6 @@ class NewChatDialog(QDialog):
         self.keep_hint.setWordWrap(True)
         self.keep_label = QLabel("Keep")
         # Before starting it: does the model's enclave attest?
-        self._endpoint = endpoint
         self.attest = AttestationButton(self._attest_settings)
 
         form = QFormLayout()
@@ -130,6 +142,13 @@ class NewChatDialog(QDialog):
         self.keep.currentIndexChanged.connect(lambda _index: self._sync())
         self.title.textChanged.connect(lambda _text: self._sync())
         self._sync()
+
+    def _route_endpoint(self) -> str | None:
+        return self._endpoint.base_url if self._endpoint is not None else None
+
+    def route(self):
+        """The route chosen for the chat's model; None: the subscription's."""
+        return self.model.effective_route()
 
     def _attest_settings(self) -> ProviderConfig | None:
         if self._endpoint is None:

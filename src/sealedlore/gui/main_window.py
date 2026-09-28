@@ -38,6 +38,7 @@ from sealedlore.engine.export import render_markdown
 from sealedlore.engine.plot_md import PLOT_SUFFIX, ParsedPlotFile, parse_plot_markdown
 from sealedlore.engine.prompt import TurnRequest
 from sealedlore.engine.prompt_edits import texts_in_force
+from sealedlore.engine.routing import HostPrice, config_route
 from sealedlore.engine.scene_update import SceneProposal
 from sealedlore.engine.session import (
     SessionNotice,
@@ -55,7 +56,8 @@ from sealedlore.gui.fields import PageStack, install_wheel_guard
 from sealedlore.gui.generate_dialog import GenerateDialog
 from sealedlore.gui.inspector import ContextInspector
 from sealedlore.gui.lore_panel import LorePanel
-from sealedlore.gui.model_picker import ModelCatalog, pick_model
+from sealedlore.gui.model_hosts import hosts_catalog
+from sealedlore.gui.model_picker import ModelCatalog, pick_model, pick_model_and_route
 from sealedlore.gui.plot_editor import PlotEditorWindow
 from sealedlore.gui.plot_panel import ClockDialog, PlotPanel
 from sealedlore.gui.prompt_editor import PromptEditorDialog
@@ -1088,6 +1090,9 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
     def _after_open(self) -> None:
         """Everything that follows a story being opened, from disk or (a
         memory-only chat) from memory."""
+        # A route to one host is checked against that host's price.
+        self.session.host_price = self._host_price
+        self._fetch_host_prices()
         self.setWindowTitle(f"SealedLore — {self.session.story.title}")
         for notice in self.session.bundle.notices:
             self.statusBar().showMessage(notice, 20000)
@@ -2463,6 +2468,7 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
             browse=self._browse_models,
             texts=texts_in_force(self.config.prompt_edits),
             parent=self,
+            route_for=lambda model: config_route(self.config, "authoring", model),
         )
         accepted = dialog.exec() == GenerateDialog.Accepted
         self._remember_authoring_model(dialog.model_text())
@@ -2744,6 +2750,45 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
 
     def _browse_models(self, current: str, **limits) -> str | None:
         return pick_model(self.catalog, self._model_source, current, self, **limits)
+
+    def _browse_models_and_route(self, current: str, route):
+        """Browse… for a field with a route (New simple chat)."""
+        provider = self.config.active_provider()
+        endpoint = provider.base_url if provider is not None and not self.use_mock else None
+        return pick_model_and_route(
+            self.catalog, self._model_source, current, route, endpoint, self
+        )
+
+    def _host_price(self, model: str, host: str) -> HostPrice | None:
+        """A host's listed price, if its model's hosts have been fetched. On
+        the reply's thread: it reads the catalog's kept list and fetches
+        nothing (`_fetch_host_prices` does, when a story opens)."""
+        provider = self.config.active_provider()
+        found = hosts_catalog().hosts(provider.base_url, model) if provider else None
+        listed = found.host(host) if found is not None else None
+        if listed is None or listed.input_price is None or listed.output_price is None:
+            return None
+        return HostPrice(listed.input_price, listed.output_price, listed.cache_read_price)
+
+    def _fetch_host_prices(self) -> None:
+        """The hosts of every model routed to one host, so its replies can
+        be checked against its price."""
+        provider = self.config.active_provider()
+        if provider is None or self.use_mock:
+            return
+        routes = list(self.config.model_routes.values())
+        if self.session is not None and self.session.story.defaults.main_route:
+            routes.append(self.session.story.defaults.main_route)
+        for route in routes:
+            if route.priority == "host" and route.host_model:
+                hosts_catalog().ensure(provider.base_url, route.host_model)
+
+    def _hosts_of(self, model: str) -> tuple[str, ...] | None:
+        """A model's hosts from the endpoint's list; None until it's loaded."""
+        info = (self.catalog.models or {}).get(model) if self.catalog.models else None
+        if not self.catalog.models:
+            return None
+        return info.hosts if info is not None else ()
 
     def _can_regenerate(self) -> bool:
         if self.session is None:
@@ -3215,6 +3260,7 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
             use_cache_control=self.session.uses_cache_control(),
             approximate=self.estimator.is_approximate,
             warnings=self._prompt_warnings(),
+            extra_body=self.session.route_for("story"),
         )
         self.status_strip.set_budget(prompt.budget, approximate=self.estimator.is_approximate)
 
@@ -3236,7 +3282,12 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
         story = self.session.story if self.session else None
         model_before = self.session.model if self.session else None
         dialog = SettingsDialog(
-            self.config, story, self, catalog=self.catalog, image_catalog=self.image_catalog
+            self.config,
+            story,
+            self,
+            catalog=self.catalog,
+            image_catalog=self.image_catalog,
+            fetch_models=not self.use_mock,
         )
         if dialog.exec() == SettingsDialog.Accepted:
             save_config(self.config, root=self.root)
@@ -3291,6 +3342,7 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
         )
         self.stories.setEnabled(not busy)
         self.close_story_action.setEnabled(has_story and not busy)
+        self.status_strip.set_routes(self.session.route_checks() if has_story else [])
         self.settings_action.setEnabled(not busy)
         self.prompts_action.setEnabled(not busy)
         # With no story the inspector shows its empty page, not greyed forms
@@ -3376,6 +3428,7 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
         self.catalog.wait()
         attestation_tests().wait()
         speed_tests().wait()
+        hosts_catalog().wait()
         if self.session is not None:
             self.session.close()
             self.session.save()

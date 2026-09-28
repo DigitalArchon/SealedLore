@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.budget import BudgetReport
 from sealedlore.engine.retrieval import RetrievalReport
+from sealedlore.engine.routing import describe_sent
 from sealedlore.gui import theme
 from sealedlore.models.node import Usage
 
@@ -212,6 +213,11 @@ class StatusStrip(QWidget):
         self.pictures_label = ElidingLabel("")
         self.pictures_label.setObjectName("statusLabel")
         self.pictures_label.hide()
+        # Whether NanoGPT followed the routes asked for (engine/routing.py):
+        # shown once a routed call has come back, ⚠ when one wasn't followed.
+        self.route_label = ElidingLabel("")
+        self.route_label.setObjectName("statusLabel")
+        self.route_label.hide()
 
         self._session_cost = 0.0
         self._story_cost: float | None = None
@@ -233,7 +239,34 @@ class StatusStrip(QWidget):
             self.cache_label,
             self.cost_label,
             self.pictures_label,
+            self.route_label,
         ]
+
+    def set_routes(self, checks: list) -> None:
+        """`checks`: (when, RouteCheck, roles) for each route used, from
+        `StorySession.route_checks`. The author: if a route isn't being met,
+        the window should say so where it can be seen."""
+        if not checks:
+            self.route_label.setText("")
+            self.route_label.setToolTip("")
+            self.route_label.hide()
+            return
+        missed = [c for c in checks if c[1].met is False]
+        lines = []
+        for at, check, roles in checks:
+            who = ", ".join(roles) or "earlier calls"
+            state = {True: "as asked", False: "⚠ NOT followed", None: "can't tell"}[check.met]
+            cost = f", ${check.cost:.4f}" if check.cost is not None else ""
+            lines.append(
+                f"{who}: {check.model} · {describe_sent(check.provider)}: {state} "
+                f"(last call {at[11:16]} UTC{cost}). {check.reason[:1].upper()}{check.reason[1:]}."
+            )
+        self.route_label.setText(f"⚠ route not followed ({len(missed)})" if missed else "⚡ routes")
+        self.route_label.setToolTip(
+            "NanoGPT names no host in its replies, so each routed call's bill is the "
+            "evidence:\n\n" + "\n".join(lines)
+        )
+        self.route_label.show()
 
     def set_pictures(self, count: int) -> None:
         self.pictures_label.setText(

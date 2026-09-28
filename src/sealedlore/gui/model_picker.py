@@ -9,6 +9,8 @@ leaves out.
 
 from __future__ import annotations
 
+import inspect
+import weakref
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
@@ -30,11 +32,15 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.catalog import ModelInfo, chat_models, matches, short_count
+from sealedlore.engine.routing import describe, routable, route_body
 from sealedlore.gui.fields import line_edit, set_field_text
+from sealedlore.gui.route_dialog import RouteDialog
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.config import ProviderConfig
+from sealedlore.models.route import ModelRoute
 from sealedlore.providers.base import ChatProvider
 from sealedlore.providers.private_catalog import encrypted_counterpart, privacy_label
+from sealedlore.providers.tee import is_tee
 
 CATALOG_MAX_AGE = timedelta(hours=1)
 
@@ -44,8 +50,19 @@ CATALOG_MAX_AGE = timedelta(hours=1)
 ProviderSource = Callable[[], tuple[ChatProvider, str, bool]]
 # Opens the picker for a field's current text; the chosen id, or None.
 Browse = Callable[[str], "str | None"]
+# Browse… for a field that takes a route: (current model, its route) → the
+# model and route chosen, or None if cancelled.
+BrowseRoute = Callable[[str, "ModelRoute | None"], "tuple[str, ModelRoute | None] | None"]
+# The endpoint's base URL as it stands, for a field's route; None: no routes.
+RouteEndpoint = Callable[[], "str | None"]
 
-COLUMNS = ("Model", "Name", "Privacy", "Context", "In $/M", "Out $/M", "Reasoning")
+SHORT_ROUTES = {
+    "latency": "⚡ Fastest start",
+    "speed": "⚡ Fastest",
+    "price": "⚡ Cheapest",
+}
+
+COLUMNS = ("Model", "Name", "Privacy", "Context", "In $/M", "Out $/M", "Reasoning", "Hosts")
 
 
 class ModelCatalog(QObject):
@@ -144,6 +161,25 @@ def _price(value: float | None) -> str:
     return "" if value is None else f"{value:g}"
 
 
+def _hosts(info: ModelInfo) -> str:
+    """How many of NanoGPT's hosts serve the model: "—" for a TEE or
+    encrypted model, whose enclave is its host, and blank when none are listed."""
+    if is_tee(info.id):
+        return "—"
+    return str(len(info.hosts)) if info.hosts else ""
+
+
+def _hosts_tip(info: ModelInfo) -> str:
+    if is_tee(info.id):
+        return "Runs in its attested enclave: no choice of host."
+    if len(info.hosts) < 2:
+        return "One host: no choice of route." if info.hosts else "No hosts listed."
+    return (
+        f"{len(info.hosts)} hosts, so a route can be chosen for it (fastest, cheapest, "
+        "or one host): " + ", ".join(info.hosts)
+    )
+
+
 class ModelPickerDialog(QDialog):
     def __init__(
         self,
@@ -154,9 +190,15 @@ class ModelPickerDialog(QDialog):
         parent: QWidget | None = None,
         allowed: Callable[[str], bool] | None = None,
         allowed_note: str = "",
+        route_endpoint: str | None = None,
+        route: ModelRoute | None = None,
     ) -> None:
+        """`route_endpoint`: the base URL, when the model is chosen for a field
+        that takes a route (Settings → Models); its current `route`."""
         super().__init__(parent)
         self.setWindowTitle("Choose a model")
+        self.route_endpoint = route_endpoint
+        self.chosen_route = route
         # Only the models this choice may move to (a TEE chat's), and why.
         self.allowed = allowed
         self.allowed_note = allowed_note
@@ -203,6 +245,15 @@ class ModelPickerDialog(QDialog):
         self.twin_button = QPushButton()
         self.twin_button.hide()
         self.twin_button.clicked.connect(self._choose_twin)
+        # A model with several hosts: which serves it (gui/route_dialog.py).
+        self.route_button = QPushButton("Choose a route…")
+        self.route_button.setToolTip(
+            "This model has several hosts on NanoGPT: choose the fastest, the cheapest, "
+            "or one of them (billed pay-as-you-go)"
+        )
+        self.route_button.clicked.connect(self._choose_route)
+        self.route_button.setVisible(route_endpoint is not None)
+        self.route_button.setEnabled(False)
         self._twin: str | None = None
         # Test the chosen TEE/ or private/ model's enclave before using it.
         from sealedlore.gui.attest_check import AttestationButton
@@ -226,6 +277,7 @@ class ModelPickerDialog(QDialog):
         layout.addWidget(self.table, 1)
         layout.addWidget(self.privacy_note)
         layout.addWidget(self.twin_button, 0, Qt.AlignLeft)
+        layout.addWidget(self.route_button, 0, Qt.AlignLeft)
         layout.addWidget(self.attest)
         layout.addWidget(self.status)
         layout.addWidget(self.buttons)
@@ -270,19 +322,23 @@ class ModelPickerDialog(QDialog):
                 _price(info.prompt_price),
                 _price(info.completion_price),
                 "✓" if info.reasoning else "",
+                _hosts(info),
             ]
         )
         row.setData(0, Qt.UserRole + 1, info.id)
         row.setData(3, Qt.UserRole, info.context_length)
         row.setData(4, Qt.UserRole, info.prompt_price)
         row.setData(5, Qt.UserRole, info.completion_price)
-        for column in (3, 4, 5, 6):
+        if _hosts(info) not in ("", "—"):
+            row.setData(7, Qt.UserRole, len(info.hosts))
+        for column in (3, 4, 5, 6, 7):
             row.setTextAlignment(column, Qt.AlignRight | Qt.AlignVCenter)
         tip = info.description or info.name or info.id
         if info.max_output_tokens:
             tip += f"\n\nWrites up to {info.max_output_tokens:,} tokens per reply."
         for column in range(len(COLUMNS)):
             row.setToolTip(column, note if column == 2 and note else tip)
+        row.setToolTip(7, _hosts_tip(info))
         return row
 
     def _matches(self, info: ModelInfo, query: str) -> bool:
@@ -368,6 +424,7 @@ class ModelPickerDialog(QDialog):
         self.twin_button.setText(f"🔐 Use the end-to-end encrypted version: {twin}" if twin else "")
         self.twin_button.setVisible(bool(twin))
         self.attest.model_changed(chosen or "")
+        self.route_button.setEnabled(self._routable_row())
 
     def selected_model(self) -> str | None:
         row = self.table.currentItem()
@@ -402,6 +459,25 @@ class ModelPickerDialog(QDialog):
                 self._accept()
                 return
 
+    def _routable_row(self) -> bool:
+        chosen = self.selected_model()
+        info = (self.catalog.models or {}).get(chosen or "")
+        return (
+            self.route_endpoint is not None
+            and info is not None
+            and routable(self.route_endpoint, info.id)
+            and len(info.hosts) >= 2
+        )
+
+    def _choose_route(self) -> None:
+        chosen = self.selected_model()
+        if not chosen or self.route_endpoint is None:
+            return
+        dialog = RouteDialog(self.route_endpoint, chosen, self.chosen_route, self)
+        if dialog.exec() == QDialog.Accepted:
+            self.chosen_route = dialog.route()
+        dialog.deleteLater()
+
     def _accept(self) -> None:
         if self.selected_model() is not None:
             self.accept()
@@ -412,28 +488,53 @@ class ModelField(QWidget):
 
     textChanged = Signal(str)
 
-    def __init__(self, text: str = "", browse: Browse | None = None) -> None:
+    def __init__(
+        self,
+        text: str = "",
+        browse: Browse | None = None,
+        *,
+        route_endpoint: RouteEndpoint | None = None,
+        browse_route: BrowseRoute | None = None,
+        hosts_of: Callable[[str], tuple[str, ...] | None] | None = None,
+    ) -> None:
+        """`route_endpoint` (held weakly) gives the field a route: NanoGPT's
+        host for its model, chosen from the label beside it; `browse_route`
+        is then Browse…, and returns the route with the model. `hosts_of`
+        (held weakly): a model's hosts from the endpoint's list, None while
+        unknown; a model with fewer than two has no route."""
         super().__init__()
+        self.route: ModelRoute | None = None
+        self._route_endpoint = _weak(route_endpoint) if route_endpoint else None
+        self._hosts_of = _weak(hosts_of) if hosts_of else None
+        self._browse_route = _weak(browse_route) if browse_route else None
         self.edit = line_edit(text)
         self.edit.textChanged.connect(self.textChanged)
         self.button = QToolButton()
         self.button.setText("Browse…")
         self.button.setToolTip("Choose from the models your endpoint offers")
-        self.button.setVisible(browse is not None)
+        self.button.setVisible(browse is not None or browse_route is not None)
         self._browse = browse
         self.button.clicked.connect(self._open)
         # Says, beside the field, whether the model is end-to-end encrypted or
         # only TEE; the tooltip says what each protects.
         self.privacy = QLabel()
         self.privacy.setObjectName("hintLabel")
+        # Which of NanoGPT's hosts serves the model: short here, whole in
+        # the tooltip; a click opens the route dialog.
+        self.route_button = QToolButton()
+        self.route_button.setObjectName("routeButton")
+        self.route_button.clicked.connect(self._edit_route)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
         layout.addWidget(self.edit, 1)
         layout.addWidget(self.privacy)
+        layout.addWidget(self.route_button)
         layout.addWidget(self.button)
         self.edit.textChanged.connect(self._show_privacy)
+        self.edit.textChanged.connect(lambda _text: self._show_route())
         self._show_privacy(text)
+        self._show_route()
 
     def text(self) -> str:
         return self.edit.text()
@@ -462,11 +563,80 @@ class ModelField(QWidget):
         self.privacy.setVisible(bool(label))
 
     def _open(self) -> None:
+        current = self.edit.text().strip() or self.edit.placeholderText()
+        browse_route = self._browse_route() if self._browse_route is not None else None
+        if browse_route is not None:
+            chosen = browse_route(current, self.route)
+            if chosen:
+                self.edit.setText(chosen[0])
+                self.set_route(chosen[1])
+            return
         if self._browse is None:
             return
-        chosen = self._browse(self.edit.text().strip() or self.edit.placeholderText())
-        if chosen:
-            self.edit.setText(chosen)
+        picked = self._browse(current)
+        if picked:
+            self.edit.setText(picked)
+
+    # --- the route --------------------------------------------------------
+
+    def _endpoint(self) -> str | None:
+        getter = self._route_endpoint() if self._route_endpoint is not None else None
+        return getter() if getter is not None else None
+
+    def set_route(self, route: ModelRoute | None) -> None:
+        self.route = route if route is not None and route.paid else None
+        self._show_route()
+
+    def _can_route(self) -> bool:
+        """A model in the field (a blank one takes its fallback's route),
+        on NanoGPT, not in an enclave, and not known to have one host."""
+        endpoint = self._endpoint()
+        model = self.edit.text().strip()
+        if endpoint is None or not model or not routable(endpoint, model):
+            return False
+        hosts_of = self._hosts_of() if self._hosts_of is not None else None
+        hosts = hosts_of(model) if hosts_of is not None else None
+        return hosts is None or len(hosts) >= 2
+
+    def effective_route(self) -> ModelRoute | None:
+        """The route as it applies to the model now in the field: none for a
+        model with no choice of host, and a host chosen for another model is
+        the subscription's routing."""
+        if not self._can_route():
+            return None
+        return self.route if route_body(self.route, self.edit.text().strip()) else None
+
+    def _show_route(self) -> None:
+        shown = self._can_route()
+        self.route_button.setVisible(shown)
+        if not shown:
+            return
+        route = self.effective_route()
+        if route is None:
+            self.route_button.setText("Route…")
+            self.route_button.setToolTip(
+                "Subscription routing: NanoGPT chooses the host. Click to choose the fastest, "
+                "the cheapest or one host instead (billed pay-as-you-go)."
+            )
+            return
+        if route.priority == "host":
+            self.route_button.setText(f"⚡ {route.host}")
+        else:
+            self.route_button.setText(SHORT_ROUTES[route.priority])
+        self.route_button.setToolTip(
+            f"Route: {describe(route)}. Billed pay-as-you-go, even on the subscription. "
+            "Click to change it."
+        )
+
+    def _edit_route(self) -> None:
+        endpoint = self._endpoint()
+        model = self.edit.text().strip()
+        if endpoint is None or not model:
+            return
+        dialog = RouteDialog(endpoint, model, self.effective_route(), self)
+        if dialog.exec() == QDialog.Accepted:
+            self.set_route(dialog.route())
+        dialog.deleteLater()
 
 
 def pick_model(
@@ -490,3 +660,28 @@ def pick_model(
     if dialog.exec() != QDialog.Accepted:
         return None
     return dialog.selected_model()
+
+
+def pick_model_and_route(
+    catalog: ModelCatalog,
+    source: ProviderSource,
+    current: str,
+    route: ModelRoute | None,
+    endpoint: str | None,
+    parent: QWidget | None,
+) -> tuple[str, ModelRoute | None] | None:
+    """The picker for a field that takes a route: the model chosen and its
+    route (Choose a route…, or the one it had), or None if cancelled."""
+    dialog = ModelPickerDialog(
+        catalog, source, current=current, parent=parent, route_endpoint=endpoint, route=route
+    )
+    if dialog.exec() != QDialog.Accepted:
+        return None
+    chosen = dialog.selected_model()
+    return (chosen, dialog.chosen_route) if chosen else None
+
+
+def _weak(method):
+    """A bound method held weakly: a field holding its own dialog's method
+    makes a cycle, and collecting such cycles crashed PySide (attest_check)."""
+    return weakref.WeakMethod(method) if inspect.ismethod(method) else lambda: method

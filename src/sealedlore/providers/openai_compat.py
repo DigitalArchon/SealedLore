@@ -120,6 +120,7 @@ class OpenAICompatibleProvider(ChatProvider):
         `close` reach both. Built once."""
         if self._sibling is None:
             self._sibling = OpenAICompatibleProvider(self.config)
+        self._sibling.route_watch = self.route_watch
         return self._sibling
 
     def detached(self) -> OpenAICompatibleProvider:
@@ -127,7 +128,9 @@ class OpenAICompatibleProvider(ChatProvider):
         (archival, merges). Unlike `sibling`, a Stop doesn't reach it and it
         is never shared, so it can't collide with the reads after the next
         passage. The caller closes it."""
-        return OpenAICompatibleProvider(self.config)
+        detached = OpenAICompatibleProvider(self.config)
+        detached.route_watch = self.route_watch
+        return detached
 
     def _get_client(self) -> httpx.Client:
         if self._client is None:
@@ -366,10 +369,12 @@ class OpenAICompatibleProvider(ChatProvider):
             raise StreamCancelled()
         self._finish(finish_reason, saw_done)
         usage_raw = with_reported_cost(usage_raw, pricing)
-        yield StreamCompleted(
+        completed = StreamCompleted(
             usage=parse_usage(usage_raw),
             finish_reason=finish_reason,
             raw_usage=usage_raw,
             response_id=response_id,
             sealed=self.sealed_replies,
         )
+        self._report_route(request, completed)
+        yield completed
