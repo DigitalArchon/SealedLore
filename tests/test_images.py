@@ -379,6 +379,29 @@ def test_the_writer_rides_the_story_prompt_and_offers_only_visible_pictures(
     assert session.unreported_usage
 
 
+def test_a_picture_added_from_disk_is_offered_in_a_story_too(tmp_path: Path, saved: StoryBundle):
+    """It was a chat's alone. A picture that belongs to no card (a place, an
+    object) is offered after the cards', and the writer is told what it is:
+    it used to be called a character."""
+    saved.cast[0].reference_images.append(ImageRef(id="ref-1", file="images/refs/serrik.png"))
+    saved.cast[1].reference_images.append(ImageRef(id="ref-2", file="images/refs/maela.png"))
+    saved.story.reference_images.append(
+        ImageRef(id="ref-9", file="images/refs/gate.png", caption="the north gate")
+    )
+    session = make_session(tmp_path, saved, ['{"references": ["R2"], "prompt": "The gate."}'])
+    session.hidden_ids = lambda *args, **kwargs: {"char-maela"}
+    offered = session.image_ref_choices()
+    assert [choice.use.ref_id for choice in offered] == ["ref-1", "ref-9"]
+    assert offered[-1].use.owner_kind == "story" and not offered[-1].present
+
+    draft = session.write_image_prompt("the gate at dusk")
+    assert [use.ref_id for use in draft.references] == ["ref-9"]
+    catalogue = session.provider.requests[-1].messages[-1].text.split("# REFERENCE PICTURES")[1]
+    assert "R1 — Serrik Vaun (character, in the scene now)" in catalogue
+    assert "R2 — the north gate (added picture): the north gate" in catalogue
+    assert "Maela" not in catalogue
+
+
 def test_rewriting_around_the_authors_pictures_keeps_their_order(
     tmp_path: Path, saved: StoryBundle
 ):

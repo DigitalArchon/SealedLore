@@ -174,8 +174,122 @@ def test_what_only_a_story_has_is_refused(tmp_path):
         list(session.ask("Why?"))
     with pytest.raises(ValueError, match="simple chat"):
         session.review_settings("too long")
-    with pytest.raises(ValueError, match="simple chat"):
+
+
+# --- a private part of a chat ---------------------------------------------------------
+
+MARKER = "ZXQ-PRIVATE-MARKER"
+
+
+def enter(session: StorySession, keep: str = "memory") -> MockChatProvider:
+    private = MockChatProvider([f"A quiet answer that holds {MARKER} close."])
+    session.enter_private(keep=keep, provider=private, model="local/model")
+    return private
+
+
+@pytest.mark.parametrize("keep", ["memory", "disk"])
+def test_nothing_from_a_chats_private_part_reaches_its_own_model(tmp_path, keep):
+    """A beta tester asked to switch to private mid-chat, as a story can. The
+    same rule holds: the part goes to the private model and nowhere else, and
+    what the chat's model reads in its place is the approved summary."""
+    import json
+
+    config = make_config(archive_chunk_turns=2, auto_archive=True)
+    session, main = chat_session(tmp_path, ["Noted."], config=config)
+    session.story.defaults.context_token_budget = 1_000
+    for i in range(3):
+        say(session, f"Question {i}: what is a torus? " + "More on that. " * 20)
+    before = len(main.payloads)
+
+    private = enter(session, keep)
+    say(session, f"Between us: {MARKER}, the first thing.")
+    say(session, f"And {MARKER} again, the second.")
+    list(session.regenerate())
+    assert len(main.payloads) == before  # nothing else is called meanwhile
+    assert len(private.payloads) == 3
+    sent = private.requests[-1]
+    assert sent.model == "local/model"
+    assert sent.messages[0].text.startswith(PROMPT)  # the chat's own system prompt
+    assert not any(marker in sent.messages[0].text for marker in STORY_MARKERS)
+    assert "what is a torus" in json.dumps(private.payloads[-1])  # it reads what came before
+
+    private.responses = ["They settled the matter and agreed to come back to it on Friday."]
+    summary = session.summarise_private()
+    asked = private.requests[-1]
+    assert asked.messages[0].text == DEFAULT_TEXTS["chat.private.summary"].strip()
+    assert MARKER in asked.messages[1].text and "torus" not in asked.messages[1].text
+    assert MARKER not in summary
+    list(session.close_private(summary))
+    assert not session.in_private
+
+    # Everything afterwards: turns, archival (the chunk is two exchanges), a
+    # retake and the picture writer.
+    for i in range(6):
+        say(session, f"Back to maths, step {i}. " + "And so on. " * 20)
+    list(session.regenerate())
+    try:
+        session.write_image_prompt("a torus")
+    except ValueError:
+        pass  # the mock's reply isn't JSON; the request went out, that's what counts
+    after = json.dumps(main.payloads[before:])
+    assert session.summaries, "the chat was archived after the private part"
+    assert MARKER not in after
+    assert "agreed to come back to it on Friday" in after
+    assert DEFAULT_TEXTS["chat.private.lead"] in after  # and says what it is
+
+    on_disk = "".join(
+        path.read_text(errors="ignore")
+        for path in (tmp_path / "stories" / session.story.id).rglob("*")
+        if path.is_file()
+    )
+    assert (MARKER in on_disk) is (keep == "disk")
+
+
+def test_a_chats_private_part_can_end_with_nothing_carried_over(tmp_path):
+    session, main = chat_session(tmp_path, ["Noted."])
+    say(session, "What is a torus?")
+    leaf = session.story.active_leaf_id
+    enter(session)
+    say(session, f"Between us: {MARKER}.")
+    session.discard_private()
+    assert session.story.active_leaf_id == leaf and not session.in_private
+    say(session, "And a sphere?")
+    assert MARKER not in str(main.payloads[-1])
+    assert len(session.path()) == 4
+
+
+def test_a_long_private_part_condenses_itself_with_a_chats_wording(tmp_path):
+    config = make_config(private_budget=400)
+    session, _main = chat_session(tmp_path, ["Noted."], config=config)
+    say(session, "What is a torus?")
+    private = enter(session, "disk")
+    private.responses = ["A reply. " * 30]
+    for i in range(3):
+        say(session, f"Private question {i}. " + "Detail. " * 30)
+    private.responses = ["They went over three private questions in turn."]
+    say(session, "One more.")
+    span = session.open_span
+    assert span.scene_summary == "They went over three private questions in turn."
+    condense = next(
+        request
+        for request in private.requests
+        if request.messages[0].text.startswith("You keep the running summary")
+    )
+    assert "conversation" in condense.messages[0].text and "story" not in condense.messages[0].text
+    assert "User: Private question 0" in condense.messages[1].text
+    # The condensed part stands where its messages stood, under a chat's heading.
+    assert "Earlier in this private part of the conversation (condensed):" in str(
+        private.payloads[-1]
+    )
+
+
+def test_a_tee_chat_has_no_private_part(tmp_path):
+    """It is private throughout: there is no other model to keep a part from."""
+    session, _main = chat_session(tmp_path, ["Hi."])
+    session.story.defaults.main_model = "TEE/deepseek-v3"
+    with pytest.raises(ValueError, match="private already"):
         session.enter_private(keep="memory", provider=MockChatProvider(), model="m")
+    assert not session.in_private
 
 
 def test_a_chat_survives_a_scenario_and_a_new_playthrough(tmp_path):

@@ -56,6 +56,23 @@ def make_chat(window, monkeypatch, *, model="anthropic/claude-sonnet-4.6", keep=
     window.new_chat()
 
 
+def wait_for(app: QApplication, condition, timeout: float = 20.0) -> None:
+    import time
+
+    deadline = time.monotonic() + timeout
+    while not condition():
+        if time.monotonic() > deadline:
+            raise AssertionError("timed out")
+        app.processEvents()
+        time.sleep(0.005)
+
+
+def send(app, window, text: str) -> None:
+    window.composer.input.setPlainText(text)
+    window.send_turn()
+    wait_for(app, lambda: not window._busy)
+
+
 def listing(root: Path) -> dict[str, bytes]:
     return {
         str(path.relative_to(root)): path.read_bytes()
@@ -70,7 +87,15 @@ def test_a_new_chat_shows_only_what_a_chat_has(app, window, monkeypatch):
     assert session.story.chat and session.story.chat_prompt == "You are a patient tutor."
     # The tail is set with the chat, not only afterwards in Setup.
     assert session.story.chat_tail == "Answer in one paragraph."
-    assert window.composer.controls_host.isHidden()
+    # Of a story's controls a chat keeps one: a part of it can be held in
+    # private, as a scene of a story can.
+    composer = window.composer
+    assert not composer.controls_host.isHidden()
+    for control in (composer.held, composer.speaker, composer.scope, composer.length):
+        assert control.isHidden()
+    for control in (composer.agency, composer.skill, composer.ooc_toggle):
+        assert control.isHidden()
+    assert not composer.private_toggle.isHidden() and not composer.private_keep.isHidden()
     tabs = window.right_tabs
     for page in (window.scene_panel, window.cast_panel, window.lore_panel, window.style_panel):
         assert not tabs.isTabVisible(tabs.indexOf(page))
@@ -170,6 +195,83 @@ def test_a_tee_chat_refuses_a_model_that_isnt(app, window, monkeypatch):
     monkeypatch.setattr(window, "_browse_models", lambda _current, **_limits: "TEE/deepseek-v3")
     window.choose_story_model()
     assert window.session.model == "TEE/deepseek-v3"
+
+
+def test_a_chat_can_hold_a_part_in_private_and_take_back_a_summary(app, window, monkeypatch):
+    """A beta tester asked for it: switch to private mid-chat, as a story
+    can. The Private button is all of a story's controls a chat shows."""
+    from PySide6.QtWidgets import QMessageBox
+
+    from sealedlore.gui.private_dialogs import PrivateSummaryDialog
+    from sealedlore.models.config import ProviderConfig
+    from sealedlore.providers.mock import MockChatProvider
+
+    make_chat(window, monkeypatch)
+    composer = window.composer
+    window.show()
+    app.processEvents()
+    assert composer.private_toggle.isVisible() and composer.private_keep.isVisible()
+    assert not composer.held.isVisible() and not composer.length.isVisible()
+    assert not composer.ooc_toggle.isVisible() and not composer.skill.isVisible()
+    assert "chat" in composer.private_toggle.toolTip()
+    assert "story" not in composer.private_toggle.toolTip()
+
+    send(app, window, "What is a torus?")
+    private = MockChatProvider(["Between us, then: MARKER-IN-PRIVATE."])
+    window.private_provider_factory = lambda settings: private
+    window.config.private_provider = ProviderConfig(
+        name="private", base_url="http://localhost:11434/v1", model="local/model"
+    )
+    window.config.private_intro_seen = True
+    composer.private_keep.setCurrentIndex(composer.private_keep.findData("disk"))
+    window.begin_private()
+    assert window.session.in_private
+    assert composer.private_toggle.text() == "End private"
+    assert composer.input.property("private") == "true"
+    assert "chat's own model" in window.statusBar().currentMessage()
+    assert not window.stories.isEnabled()
+
+    main_calls = len(window.session.provider.requests)
+    send(app, window, "Something for the private model only.")
+    assert len(private.requests) == 1
+    assert len(window.session.provider.requests) == main_calls
+
+    # Ending it: the private model writes the summary, the author approves.
+    private.responses = ["They talked something over in private and settled it."]
+    seen: list[PrivateSummaryDialog] = []
+
+    def approve(dialog):
+        seen.append(dialog)
+        dialog.choice = PrivateSummaryDialog.APPROVE
+        return PrivateSummaryDialog.Accepted
+
+    monkeypatch.setattr(PrivateSummaryDialog, "exec", approve)
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    window.end_private()
+    wait_for(app, lambda: not window._busy and not window.session.in_private)
+    assert seen and seen[0].windowTitle() == "Private part summary"
+    assert not window.session.in_private
+    assert composer.private_toggle.text() == "Private"
+    assert composer.input.property("private") == "false"
+    last = window.session.path()[-1]
+    assert last.meta.private_summary_of and "settled it" in last.content
+
+    send(app, window, "And a sphere?")
+    sent = str(window.session.provider.payloads[-1])
+    assert "MARKER-IN-PRIVATE" not in sent and "for the private model only" not in sent
+    assert "settled it" in sent and "held in private" in sent
+
+
+def test_a_tee_chat_offers_no_private_part(app, window, monkeypatch):
+    make_chat(window, monkeypatch, model="TEE/glm-5.3-flash")
+    window.show()
+    app.processEvents()
+    assert not window.composer.private_toggle.isVisible()
+    assert window.composer.input.property("private") == "true"  # private throughout
+    # A story opened afterwards has its Private button back.
+    window.composer.set_chat_mode(False)
+    app.processEvents()
+    assert window.composer.private_toggle.isVisible() and window.composer.held.isVisible()
 
 
 def test_the_picture_dialog_lets_a_chat_add_a_picture_from_disk(app, window, monkeypatch):

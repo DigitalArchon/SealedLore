@@ -73,6 +73,7 @@ take in where she is: leave her next action entirely to the author.
 - aliases: Moss, Jane
 - voice: Direct and a little dry. She jokes when she is frightened. She asks questions before she asks for help.
 - summary: A thirty-year-old ex-army medic, quick and restless, stranded on the wrong side of the river.
+- picture: pictures/jane-moss.png | in her army coat, rifle slung
 
 Jane served as an army medic before the dead rose. She is fast, fiercely
 practical and bad at waiting. Her injuries at the start of the story — two
@@ -200,6 +201,8 @@ he can get and how many people he can shoot with them.
 
 ## Hellsville
 - keywords: the town, the clinic, the gate, the trading post, the watchtower, main street
+- picture: pictures/hellsville-gate.png | the east gate and its watchtower
+- picture: pictures/hellsville-gate.png
 
 A small town south of the river: a clinic, a constable's office with a lock-up,
 Gus's trading post on the main street, a watchtower over the east gate, and a
@@ -249,6 +252,7 @@ destroyed.
 
 ## Jane's truck
 - keywords: truck, fuel, engine, bonnet
+- picture: pictures/janes-truck.png | from the front, one headlight gone
 
 A four-wheel-drive pickup with a full long-range tank, missing its tailgate and
 a headlight. It runs, just. Out here, a working engine and that much fuel are

@@ -138,10 +138,14 @@ _REMOTE_HOW = re.compile(
 # Coming in person, whatever else the "how" says. Live (GLM 5.3): the commander
 # "came down from [the command centre] by lift" was read as a channel, left off
 # the roster,
-# and flagged three passages later as already there.
+# and flagged three passages later as already there. "Arrived" was added when
+# someone who "arrived two minutes after [an officer's] comm" was dropped for
+# the call that had brought them. Being somewhere is not coming in ("already
+# in [their own room], having received the comm" was someone the scene had
+# not reached), so only words for the coming itself belong here.
 _IN_PERSON = re.compile(
-    r"\b(?:came (?:down|up|across|back|over to)|walked|stepped|entered|crossed|strode|ran"
-    r"|hurried|rushed|burst|lift|elevator|doors?|in person)\b",
+    r"\b(?:came (?:down|up|across|back|over to)|arrived|walked|stepped|entered|crossed|strode"
+    r"|ran|hurried|rushed|burst|lift|elevator|doors?|in person)\b",
     re.IGNORECASE,
 )
 

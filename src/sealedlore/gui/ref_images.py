@@ -17,6 +17,7 @@ photo shows upright, and one that is scaled is stored upright.
 
 from __future__ import annotations
 
+import base64
 from collections.abc import Callable
 from pathlib import Path
 
@@ -36,6 +37,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.plot_md import ParsedPlotFile, PlotProblem
 from sealedlore.ids import new_id
 from sealedlore.models.image import ImageRef
 from sealedlore.storage.image_meta import MetadataError, picture_kind, strip_metadata
@@ -110,6 +112,57 @@ def import_reference(source: Path, story_id: str, root: Path | None, caption: st
     relative = f"{REFS_DIR}/{ref_id}{suffix}"
     write_story_file(story_id, relative, data, root)
     return ImageRef(id=ref_id, file=relative, caption=caption)
+
+
+def inside(folder: Path, relative: str) -> Path | None:
+    """`relative` under `folder`, or None if it leads out of it (by `..`, an
+    absolute path, or a link): a plot file may be someone else's."""
+    try:
+        base = folder.resolve()
+        target = (base / relative).resolve()
+    except (OSError, RuntimeError):
+        return None
+    return target if target.is_relative_to(base) and target != base else None
+
+
+def load_plot_pictures(parsed: ParsedPlotFile, folder: Path) -> list[PlotProblem]:
+    """Bring a plot file's pictures into the scenario it was read into.
+
+    Each `- picture:` line names a file beside the plot file. It is read as
+    any added picture is (hidden data removed, scaled if large), becomes a
+    reference picture on its character's card or its place's or lore entry's,
+    and its bytes ride in the scenario to be written with the new story. One
+    that is missing or unreadable is left out and returned as a note: it
+    never stops the import.
+    """
+    scenario = parsed.scenario
+    owners = {c.id: c for c in [*scenario.cast, *scenario.supporting]}
+    owners.update({entry.id: entry for entry in scenario.lore})
+    problems: list[PlotProblem] = []
+    for picture in parsed.pictures:
+        owner = owners.get(picture.owner_id)
+        source = inside(folder, picture.source)
+        if owner is None:
+            continue
+        try:
+            if source is None:
+                raise ValueError("it leads outside the plot file's folder")
+            if not source.is_file():
+                raise ValueError("there is no such file beside the plot file")
+            data, suffix = picture_bytes(source)
+        except (OSError, ValueError) as exc:
+            problems.append(
+                PlotProblem(
+                    picture.line,
+                    f"{picture.owner_name}'s picture “{picture.source}” was left out: {exc}.",
+                )
+            )
+            continue
+        ref_id = new_id()
+        ref = ImageRef(id=ref_id, file=f"{REFS_DIR}/{ref_id}{suffix}", caption=picture.caption)
+        owner.reference_images.append(ref)
+        scenario.reference_files[ref.file] = base64.b64encode(data).decode("ascii")
+    return problems
 
 
 def thumbnail(path: Path, side: int = THUMB) -> QPixmap:

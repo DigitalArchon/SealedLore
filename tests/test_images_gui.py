@@ -126,6 +126,34 @@ def test_the_writer_fills_the_prompt_and_its_pictures(app, window: MainWindow):
     assert dialog.prompt.toPlainText() == "The man in image 1 waits by the door."
 
 
+def test_a_story_can_add_a_picture_from_disk(app, window: MainWindow, tmp_path, monkeypatch):
+    from PySide6.QtGui import QColor, QImage
+    from PySide6.QtWidgets import QFileDialog
+
+    source = tmp_path / "gate.png"
+    image = QImage(64, 48, QImage.Format_RGB32)
+    image.fill(QColor("#336699"))
+    assert image.save(str(source), "PNG")
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(source), ""))
+
+    dialog = ImageDialog(window.session, parent=window)
+    dialog.model.setText("bytedance/seedream-v5.0-pro")
+    dialog._fill_add_menu()
+    labels = [action.text() for action in dialog.add_ref.menu().actions() if action.text()]
+    assert labels[-1] == "Add a picture from disk…"
+    assert dialog.add_ref.isEnabled()
+
+    before = len(dialog._refs)
+    dialog._add_from_disk()
+    added = window.session.story.reference_images
+    assert len(added) == 1 and added[0].file.startswith("images/refs/")
+    assert [use.ref_id for use in dialog._refs][before:] == [added[0].id]
+    assert dialog._refs[-1].owner_kind == "story"
+    # Kept with the story, and offered the next time the dialog opens.
+    again = ImageDialog(window.session, parent=window)
+    assert added[0].id in [choice.use.ref_id for choice in again._choices]
+
+
 def test_a_model_that_takes_no_pictures_sends_none(app, window: MainWindow):
     dialog = ImageDialog(window.session, parent=window)
     dialog._set_refs([window.session.image_ref_choices()[0].use])

@@ -30,6 +30,7 @@ from sealedlore.models.config import (
     DEFAULT_STORY_MODEL,
     Config,
     ProviderConfig,
+    recommended_models,
     require_https,
 )
 from sealedlore.models.lore import LoreEntry
@@ -143,6 +144,12 @@ def cmd_configure(args: argparse.Namespace) -> int:
     if args.model is not None:
         provider.model = args.model
     if existing is None:
+        if not config.providers:
+            # A first setup starts with the recommended models for the small
+            # per-turn calls, as Settings does; a blank one already saved stays.
+            for field, model in recommended_models(provider.base_url).items():
+                if not getattr(config, field):
+                    setattr(config, field, model)
         config.providers.append(provider)
     config.active_provider_name = name
     save_config(config, root=root)

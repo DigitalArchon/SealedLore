@@ -39,6 +39,14 @@ class OpeningDoc(BaseModel):
     notes: str = ""
 
 
+class PictureDoc(BaseModel):
+    """A reference picture: a file beside the plot file, and what it shows."""
+
+    # Relative to the plot file's folder, with forward slashes.
+    file: str = ""
+    caption: str = ""
+
+
 class CharacterDoc(BaseModel):
     name: str = ""
     role: CharacterRole = "storyteller"
@@ -50,6 +58,7 @@ class CharacterDoc(BaseModel):
     summary: str = ""
     canon: str = ""
     hidden: bool = False
+    pictures: list[PictureDoc] = Field(default_factory=list)
     description: str = ""
 
 
@@ -60,6 +69,7 @@ class EntryDoc(BaseModel):
     keywords: list[str] = Field(default_factory=list)
     always: bool = False
     hidden: bool = False
+    pictures: list[PictureDoc] = Field(default_factory=list)
     description: str = ""
 
 

@@ -61,14 +61,16 @@ class ImageRuntime:
         """Every reference picture on a card or lore entry the models may see.
 
         A character the plot hasn't brought in yet is never offered: their
-        picture would be the first a model heard of them. A simple chat has no
-        cards: it offers its own added pictures and every picture it made.
+        picture would be the first a model heard of them. Pictures added from
+        disk (`Story.reference_images`) belong to no card and come last. A
+        simple chat has no cards: it offers those and every picture it made.
         """
+        added = [
+            (_use("story", self.story.id, ref.caption or "Added picture", ref), False)
+            for ref in self.story.reference_images
+        ]
         if self.story.chat:
-            uses = [
-                (_use("story", self.story.id, ref.caption or "Added picture", ref), False)
-                for ref in self.story.reference_images
-            ]
+            uses = added
             for image in self.generated_images():
                 shown = ImageRef(id=image.id, file=image.file, caption=image.prompt[:80])
                 uses.append((_use("picture", image.id, "A picture from this chat", shown), False))
@@ -88,7 +90,7 @@ class ImageRuntime:
                     uses.append((_use("lore", entry.id, entry.title, ref), False))
         # Those in the scene first: they are the likeliest to be in the picture.
         uses.sort(key=lambda item: not item[1])
-        return ref_choices(uses)
+        return ref_choices(uses + added)
 
     def write_image_prompt(
         self,

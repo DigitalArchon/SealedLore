@@ -66,8 +66,13 @@ _CHARACTER_FIELDS = {
     "canon",
     "summary",
     "hidden",
+    "picture",
 }
-_PLACE_FIELDS = {"keywords", "always", "hidden"}
+_PLACE_FIELDS = {"keywords", "always", "hidden", "picture"}
+# The one setting that may be given more than once: a line per picture.
+PICTURE = "picture"
+# What a picture line may name. The app reads these and no others.
+PICTURE_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif")
 _EVENT_FIELDS = {
     "when",
     "pacing",
@@ -117,10 +122,49 @@ class PlotProblem:
         return f"{kind}, {where}: {self.message}"
 
 
+@dataclass(frozen=True)
+class PlotPicture:
+    """A `- picture:` line: a file beside the plot file, for a character's
+    card or a place's or lore entry's. The parser reads no files; whoever
+    imports the plot does (gui/ref_images.load_plot_pictures)."""
+
+    owner_kind: str  # "character" or "lore"
+    owner_id: str
+    owner_name: str
+    # As written, relative to the plot file's folder, with forward slashes.
+    source: str
+    caption: str
+    line: int
+
+
+def picture_parts(value: str) -> tuple[str, str]:
+    """`pictures/john.png | front view` as (path, caption). Shared by the
+    importer and the editor's reader, so the two read a line the same way."""
+    source, _, caption = value.partition("|")
+    return source.strip().replace("\\", "/"), caption.strip()
+
+
+def picture_problem(source: str) -> str | None:
+    """Why a picture's path can't be used, or None. A plot file may come from
+    someone else: a path must stay inside the folder the file is in."""
+    parts = source.split("/")
+    if not source:
+        return "`picture` needs a file: `- picture: pictures/name.png | what it shows`."
+    if source.startswith(("/", "~")) or ":" in source or ".." in parts or "" in parts:
+        return (
+            f"The picture “{source}” must be a file in the plot file's own folder or one "
+            "inside it, written from there (pictures/name.png)."
+        )
+    if not source.lower().endswith(PICTURE_SUFFIXES):
+        return f"“{source}” isn't a picture the app reads ({', '.join(PICTURE_SUFFIXES)})."
+    return None
+
+
 @dataclass
 class ParsedPlotFile:
     scenario: Scenario
     problems: list[PlotProblem] = field(default_factory=list)
+    pictures: list[PlotPicture] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -150,6 +194,8 @@ class _Block:
 class _Fields:
     values: dict[str, tuple[int, str]]
     prose: str
+    # Every `- picture:` line, in order: (line number, value).
+    pictures: list[tuple[int, str]] = field(default_factory=list)
 
 
 def _norm(value: str) -> str:
@@ -272,6 +318,7 @@ class _Parser:
         self.place_entries: dict[str, LoreEntry] = {}
         # Places and lore both: anything `reveals:` can name.
         self.lore_entries: dict[str, LoreEntry] = {}
+        self.pictures: list[PlotPicture] = []
 
     def note(self, line: int, message: str) -> None:
         self.problems.append(PlotProblem(line, message))
@@ -342,6 +389,7 @@ class _Parser:
         field in the wrong place.
         """
         values: dict[str, tuple[int, str]] = {}
+        pictures: list[tuple[int, str]] = []
         lines = block.lines
         index = 0
         current: str | None = None
@@ -350,6 +398,10 @@ class _Parser:
             match = _FIELD.match(line)
             if match and _key(match.group(1)) in known:
                 current = _key(match.group(1))
+                if current == PICTURE:
+                    pictures.append((number, match.group(2).strip()))
+                    index += 1
+                    continue
                 if current in values:
                     self.note(number, f"`{current}` is given twice; the later one is used.")
                 values[current] = (number, match.group(2).strip())
@@ -362,8 +414,13 @@ class _Parser:
                 break
             elif current is not None and line.startswith(("  ", "\t")) and line.strip():
                 # An indented line continues the field above it.
-                line_number, value = values[current]
-                values[current] = (line_number, f"{value} {line.strip()}".strip())
+                held = pictures if current == PICTURE else None
+                line_number, value = held[-1] if held is not None else values[current]
+                joined = (line_number, f"{value} {line.strip()}".strip())
+                if held is not None:
+                    held[-1] = joined
+                else:
+                    values[current] = joined
             elif not line.strip():
                 # Blank lines inside the run are fine; the run ends at prose.
                 following = next((text for _, text in lines[index + 1 :] if text.strip()), "")
@@ -373,7 +430,7 @@ class _Parser:
             else:
                 break
             index += 1
-        return _Fields(values, _prose(lines[index:]))
+        return _Fields(values, _prose(lines[index:]), pictures)
 
     def body(self, block: _Block, known: set[str]) -> _Fields:
         """`fields`, with any sub-headings under the item kept in its prose.
@@ -387,7 +444,17 @@ class _Parser:
             parts.append(f"{'#' * child.level} {child.title}")
             if text := child.text():
                 parts.append(text)
-        return _Fields(found.values, "\n\n".join(parts))
+        return _Fields(found.values, "\n\n".join(parts), found.pictures)
+
+    def keep_pictures(self, found: _Fields, kind: str, owner_id: str, name: str) -> None:
+        """Note an item's picture lines for whoever imports the file."""
+        for line, value in found.pictures:
+            source, caption = picture_parts(value)
+            problem = picture_problem(source)
+            if problem:
+                self.error(line, problem)
+                continue
+            self.pictures.append(PlotPicture(kind, owner_id, name, source, caption, line))
 
     # --- values -----------------------------------------------------------------
 
@@ -756,6 +823,7 @@ class _Parser:
                         f"{child.title} is hidden until an event brings them in, so can't be "
                         "in the opening scene or chosen at the start.",
                     )
+            self.keep_pictures(found, "character", character.id, character.name)
             self.people[_norm(character.name)] = character.id
             for alias in character.aliases:
                 self.people.setdefault(_norm(alias), character.id)
@@ -830,6 +898,7 @@ class _Parser:
             )
             if "hidden" in found.values:
                 entry.plot_hidden = self.flag(*found.values["hidden"], "hidden")
+            self.keep_pictures(found, "lore", entry.id, entry.title)
             if _norm(child.title) in self.lore_entries:
                 self.error(child.line, f"Two places or lore entries are called “{child.title}”.")
             self.lore_entries[_norm(child.title)] = entry
@@ -969,7 +1038,9 @@ class _Parser:
                 self.note(line, f"`{key}` isn't a setting this format reads.")
         if not world:
             self.note(0, "There is no # World section.")
-        return ParsedPlotFile(scenario, sorted(self.problems, key=lambda p: p.line))
+        return ParsedPlotFile(
+            scenario, sorted(self.problems, key=lambda p: p.line), list(self.pictures)
+        )
 
 
 def _first_sentence(text: str) -> str:

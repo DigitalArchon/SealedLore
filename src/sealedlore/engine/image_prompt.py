@@ -50,11 +50,16 @@ def ref_choices(uses: Sequence[tuple[RefUse, bool]]) -> list[RefChoice]:
     ]
 
 
+# What a reference picture is of, as the writer is told. One added from disk
+# or made earlier belongs to no card, and was called a character.
+_KINDS = {"lore": "lore", "story": "added picture", "picture": "earlier picture"}
+
+
 def _catalogue(choices: Sequence[RefChoice]) -> str:
     lines = []
     for choice in choices:
         use = choice.use
-        kind = "lore" if use.owner_kind == "lore" else "character"
+        kind = _KINDS.get(use.owner_kind, "character")
         where = ", in the scene now" if choice.present else ""
         caption = f": {use.caption}" if use.caption else ""
         lines.append(f"- {choice.key} — {use.owner_name} ({kind}{where}){caption}")

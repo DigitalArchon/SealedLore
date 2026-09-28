@@ -71,11 +71,13 @@ from sealedlore.gui.plot_editor_pages import (
     WayPage,
     WorldPage,
 )
+from sealedlore.gui.plot_pictures import copy_pictures
 from sealedlore.models.plot_file import (
     CharacterDoc,
     EntryDoc,
     EventDoc,
     FactDoc,
+    PictureDoc,
     PlotDocument,
     VariantDoc,
 )
@@ -161,9 +163,9 @@ class PlotEditorWindow(QMainWindow):
             FRONT: StoryPage(),
             WORLD: WorldPage(),
             OPENING: OpeningPage(),
-            CHARACTER: CharacterPage(),
-            PLACE: EntryPage(is_place=True),
-            LORE: EntryPage(is_place=False),
+            CHARACTER: CharacterPage(self._folder, self.save),
+            PLACE: EntryPage(is_place=True, folder=self._folder, save_first=self.save),
+            LORE: EntryPage(is_place=False, folder=self._folder, save_first=self.save),
             FACT: FactPage(),
             EVENT: WayPage(is_event=True),
             "variant": WayPage(is_event=False),
@@ -239,6 +241,15 @@ class PlotEditorWindow(QMainWindow):
         close.setShortcut(QKeySequence.Close)
         close.triggered.connect(self.close)
         menu.addAction(close)
+
+    def _folder(self) -> Path | None:
+        """Where the file's pictures are kept from: None until it is saved."""
+        return self.path.parent if self.path is not None else None
+
+    def _pictures(self) -> list[PictureDoc]:
+        document = self.document
+        owners = [*document.characters, *document.places, *document.lore]
+        return [picture for owner in owners for picture in owner.pictures]
 
     def _refresh_title(self) -> None:
         name = self.path.name if self.path else "Untitled"
@@ -655,8 +666,20 @@ class PlotEditorWindow(QMainWindow):
         except OSError as exc:
             QMessageBox.warning(self, "Could not save", f"{path.name}: {exc}")
             return False
+        old = self._folder()
         self.path = path
         self._set_modified(False)
+        if old is not None and old.resolve() != path.parent.resolve():
+            # Saved somewhere else: the pictures its lines name come along.
+            left = copy_pictures(self._pictures(), old, path.parent)
+            if left:
+                QMessageBox.warning(
+                    self,
+                    "Some pictures stayed behind",
+                    f"The file was saved, but these pictures couldn't be copied beside it "
+                    f"from {old}:\n\n" + "\n".join(left),
+                )
+        self._show(self.current_ref())  # a picture's thumbnail follows the folder
         return True
 
     def preview(self) -> None:
@@ -689,8 +712,27 @@ class PlotEditorWindow(QMainWindow):
             return
         self.start_requested.emit(self.path)
 
+    def _revert(self) -> None:
+        """Back to the file as it was last saved, or to a blank one.
+
+        The window is kept while the app runs (MainWindow.open_plot_editor),
+        so a close that discarded changes left them in the document: opened
+        again, the editor showed what the author had just thrown away.
+        """
+        document = PlotDocument()
+        path = self.path
+        if path is not None:
+            try:
+                document = read_plot_document(path.read_text(encoding="utf-8")).document
+            except (OSError, UnicodeDecodeError):
+                path = None  # the file has gone: nothing to go back to
+        self.load_document(document, path=path)
+
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt naming
-        if self._confirm_discard():
-            event.accept()
-        else:
+        if not self._confirm_discard():
             event.ignore()
+            return
+        if self.modified:
+            # Still modified after the question: the answer was Discard.
+            self._revert()
+        event.accept()

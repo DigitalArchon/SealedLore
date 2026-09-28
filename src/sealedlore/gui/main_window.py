@@ -59,10 +59,12 @@ from sealedlore.gui.model_picker import ModelCatalog, pick_model
 from sealedlore.gui.plot_editor import PlotEditorWindow
 from sealedlore.gui.plot_panel import ClockDialog, PlotPanel
 from sealedlore.gui.prompt_editor import PromptEditorDialog
+from sealedlore.gui.ref_images import load_plot_pictures
 from sealedlore.gui.review_dialog import ReviewRequestDialog, ReviewResultDialog
 from sealedlore.gui.scene_panel import ScenePanel
 from sealedlore.gui.settings_dialog import SettingsDialog
 from sealedlore.gui.setup_dialog import SetupDialog
+from sealedlore.gui.speed_test import speed_tests
 from sealedlore.gui.start_dialog import StartDialog
 from sealedlore.gui.status import NoticeStatusBar, StatusStrip
 from sealedlore.gui.stories import StoryListPanel
@@ -699,6 +701,11 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
             self._warn_plain("Could not read plot file", f"{path.name}: {exc}")
             return None
         parsed = parse_plot_markdown(text, fallback_title=path.name.removesuffix(PLOT_SUFFIX))
+        if parsed.ok and parsed.pictures:
+            # The pictures its cards name, from the folder the file is in. One
+            # that can't be read is a note among the others, never a stop.
+            parsed.problems += load_plot_pictures(parsed, path.parent)
+            parsed.problems.sort(key=lambda problem: problem.line)
         if not parsed.problems:
             return parsed
         details = "\n".join(problem.describe() for problem in parsed.problems)
@@ -2693,8 +2700,10 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
             self.model_button.setText(private)
             if self.in_private:
                 self.model_button.setToolTip(
-                    "A private scene: every turn goes to the private model only. End it "
-                    "with the button beside the composer."
+                    self._say(
+                        "A private scene: every turn goes to the private model only. End "
+                        "it with the button beside the composer."
+                    )
                 )
                 self.model_button.setEnabled(False)
             else:
@@ -3315,6 +3324,7 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
         self._wait_for_attestation()
         self.catalog.wait()
         attestation_tests().wait()
+        speed_tests().wait()
         if self.session is not None:
             self.session.close()
             self.session.save()

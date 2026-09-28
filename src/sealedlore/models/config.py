@@ -22,6 +22,34 @@ DEFAULT_BASE_URL = "https://nano-gpt.com/api/v1"
 # nano-gpt and OpenRouter.
 DEFAULT_STORY_MODEL = "anthropic/claude-sonnet-4.6"
 
+# The models a new setup on NanoGPT starts with for the small calls made on
+# every turn, and what Settings → Models → Use recommended models fills in.
+# Left blank, each of these falls back to the story model, which is the most
+# expensive place to run a read of a few hundred tokens. The ids are
+# NanoGPT's: on any other endpoint the fields stay blank.
+RECOMMENDED_HOST = "nano-gpt.com"
+RECOMMENDED_MODELS: dict[str, str] = {
+    # The scene read is as good as the reasoning behind it: of the models
+    # tried on judged reads, only those that reason kept the roster right
+    # when someone came or went, and this one was the quickest of them.
+    "scene_model": "z-ai/glm-5.3",
+    # The plot's reads and its director, which runs before the turn: the
+    # steadiest answers of those tried, and the shortest wait. A model that
+    # reads well can still begin events too readily, as the scene model does.
+    "plot_model": "mistralai/mistral-medium-3.1",
+    "lore_model": "deepseek/deepseek-v4.1-flash",
+}
+
+
+def recommended_models(base_url: str) -> dict[str, str]:
+    """The recommended model for each role on this endpoint: `Config` field
+    name → model id. Empty for an endpoint whose ids we don't know."""
+    host = (urlparse(base_url.strip()).hostname or "").lower()
+    if host == RECOMMENDED_HOST or host.endswith("." + RECOMMENDED_HOST):
+        return dict(RECOMMENDED_MODELS)
+    return {}
+
+
 CacheControlMode = Literal["auto", "on", "off"]
 CacheTtl = Literal["5m", "1h"]
 SceneLedger = Literal["every_turn", "manual"]
@@ -167,6 +195,12 @@ class Config(BaseModel):
     # so that regenerating a recent take doesn't discard a fresh cache write.
     cache_exchanges_outside_prefix: int = 1
     cast_token_cap: int = 8_000
+
+    # The model that writes chapters and merges them, for every story that
+    # has none of its own (`Story.defaults.summarization_model`). Blank means
+    # the story's model. It was per story only, so Settings could not set it
+    # with no story open, unlike every other model.
+    summarization_model: str | None = None
 
     # The model that drafts a story from a premise and reviews its settings.
     # Blank means the story's own model; worth setting to a stronger one, since

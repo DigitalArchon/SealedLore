@@ -16,6 +16,11 @@ how much they matter:
 3. **A memory-only scene never reaches the disk** (`bundle_to_save`): its
    messages are dropped from what is written and its calls are logged without
    content, so the story's cost still adds up.
+
+A simple chat has private parts on the same terms (a beta tester asked to
+switch mid-chat, as a story can): the same span, the same three rules, with a
+conversation's prompts in place of a story's (`engine/chat.py`). A chat on a
+TEE model is private throughout and has none.
 """
 
 from __future__ import annotations
@@ -26,13 +31,25 @@ from typing import Any
 from urllib.parse import urlparse
 
 from sealedlore.engine.archival import render_chunk, split_path, summary_params
+from sealedlore.engine.chat import CONDENSED_LEAD as CHAT_CONDENSED_LEAD
+from sealedlore.engine.chat import (
+    build_chat_handoff_messages,
+    build_chat_private_condense_messages,
+    build_chat_private_summary_messages,
+    render_chat_chunk,
+)
 from sealedlore.engine.private_prompt import (
     build_handoff_messages,
     build_private_condense_messages,
     build_private_summary_messages,
     private_rules_sections,
 )
-from sealedlore.engine.prompt import AssembledPrompt, assemble_prompt, story_rules_sections
+from sealedlore.engine.prompt import (
+    AssembledPrompt,
+    assemble_chat,
+    assemble_prompt,
+    story_rules_sections,
+)
 from sealedlore.engine.retrieval import lore_layout
 from sealedlore.engine.scene_state import log_on_path
 from sealedlore.ids import utc_now_iso
@@ -117,9 +134,10 @@ class PrivateRuntime:
     ) -> PrivateSpan:
         if self.in_private:
             raise ValueError("a private scene is already open")
-        if self.story.chat:
+        if self.tee_chat:
             raise ValueError(
-                "a simple chat has no private scenes: start one on a TEE model instead"
+                "this chat is on a TEE model, so all of it is private already: there is "
+                "no other model to keep a part of it from"
             )
         full = self.full_path()
         span = PrivateSpan(
@@ -166,6 +184,10 @@ class PrivateRuntime:
     # --- the scene's prompt ------------------------------------------------------
 
     def private_options(self):
+        if self.story.chat:
+            # A chat has no rules to replace: its own system prompt goes, at
+            # the private model's budget.
+            return replace(self.assembly_options(), token_budget=self.config.private_budget)
         full = story_rules_sections(self.story, texts=self.texts)
         return replace(
             self.assembly_options(),
@@ -176,11 +198,20 @@ class PrivateRuntime:
     def private_history(self, span: PrivateSpan) -> list[Node]:
         return self.model_nodes(self.full_path(), include_span=span.id)
 
+    def _private_text(self, nodes: Sequence[Node]) -> str:
+        """Messages as the private model is given them outside a prompt (to
+        summarise, to condense, to count), the scene's own included."""
+        if self.story.chat:
+            return render_chat_chunk(nodes, include_private=True, texts=self.texts)
+        return render_chunk(nodes, self.cast, include_private=True, texts=self.texts)
+
     def private_assemble(self, turn, history: Sequence[Node], span: PrivateSpan) -> AssembledPrompt:
         """The story's prompt, fitted to the private model: its budget, its
         rules, the handoff in place of the chapters when there is one, and
         lore by keywords only (no embeddings or Jev: they would hear the scene)."""
         options = self.private_options()
+        if self.story.chat:
+            return self._private_assemble_chat(turn, history, span, options)
         layout = lore_layout(
             self.visible_lore(),
             budget=options.token_budget,
@@ -188,6 +219,30 @@ class PrivateRuntime:
             count_tokens=self._count_lore_tokens,
         )
         lore = () if layout.mode == "whole" else self._keyword_lore(turn, history)
+        verbatim, summaries = self._private_window(history, span)
+        prompt = assemble_prompt(
+            story=self.story,
+            cast=self.visible_cast(history),
+            history_nodes=verbatim,
+            turn=turn,
+            summaries=summaries,
+            lore=lore,
+            standing_lore=layout.standing,
+            supporting=self.supporting_for(turn.user_text, history),
+            on_file=self.visible_supporting(),
+            scene_log=log_on_path(self.story.scene_log, history),
+            estimator=self.estimator,
+            options=options,
+        )
+        self.last_prompt = prompt
+        return prompt
+
+    def _private_window(
+        self, history: Sequence[Node], span: PrivateSpan
+    ) -> tuple[list[Node], list[Summary]]:
+        """What the private model reads word for word, and what stands for the
+        rest: the handoff in place of the chapters when there is one, and the
+        scene's own condensed part where its messages stood."""
         if span.handoff:
             ids = [node.id for node in history]
             start = ids.index(span.handoff_through) + 1 if span.handoff_through in ids else 0
@@ -206,17 +261,21 @@ class PrivateRuntime:
             verbatim = [node for node in verbatim if node.id not in covered]
             if first is not None:
                 verbatim.insert(first, self._condensed_node(span))
-        prompt = assemble_prompt(
+        return verbatim, summaries
+
+    def _private_assemble_chat(
+        self, turn, history: Sequence[Node], span: PrivateSpan, options
+    ) -> AssembledPrompt:
+        """A chat's request, fitted to the private model: the same system
+        prompt and conversation, at the private budget. Nothing else of the
+        app is in a chat's prompt to begin with."""
+        verbatim, summaries = self._private_window(history, span)
+        prompt = assemble_chat(
             story=self.story,
-            cast=self.visible_cast(history),
             history_nodes=verbatim,
-            turn=turn,
+            tail=turn.user_text,
             summaries=summaries,
-            lore=lore,
-            standing_lore=layout.standing,
-            supporting=self.supporting_for(turn.user_text, history),
-            on_file=self.visible_supporting(),
-            scene_log=log_on_path(self.story.scene_log, history),
+            nodes_by_id={node.id: node for node in self.nodes},
             estimator=self.estimator,
             options=options,
         )
@@ -230,15 +289,15 @@ class PrivateRuntime:
 
     # --- a scene that outgrows the private model ---------------------------------
 
-    @staticmethod
-    def _condensed_node(span: PrivateSpan) -> Node:
+    def _condensed_node(self, span: PrivateSpan) -> Node:
         """The condensed part as one narrator message, for the prompt only:
         never attached to the story."""
+        lead = CHAT_CONDENSED_LEAD if self.story.chat else CONDENSED_LEAD
         return Node(
             id=f"condensed-{span.id}",
             kind="assistant",
             speaker_id=NARRATOR_SPEAKER_ID,
-            content=f"{CONDENSED_LEAD}\n\n{span.scene_summary or ''}",
+            content=f"{lead}\n\n{span.scene_summary or ''}",
             meta=NodeMeta(private_span=span.id),
         )
 
@@ -291,9 +350,7 @@ class PrivateRuntime:
             if index >= last_reply:
                 break  # the newest exchange stays
             chunk.append(node)
-            taken += self.estimator.estimate(
-                render_chunk([node], self.cast, include_private=True, texts=self.texts), model
-            )
+            taken += self.estimator.estimate(self._private_text([node]), model)
             if node.kind == "assistant" and taken >= excess:
                 break
         while chunk and chunk[-1].kind != "assistant":
@@ -312,20 +369,9 @@ class PrivateRuntime:
         window instead. Returns whether the summary was kept."""
         if self.private_provider is None:
             raise ValueError("the private scene has no model to condense with")
-        names = [c.name for c in self.visible_cast()] + [c.name for c in self.visible_supporting()]
-        held = self._character(self.story.held_character_id)
         request = ChatRequest(
             model=span.model,
-            messages=build_private_condense_messages(
-                previous,
-                render_chunk(chunk, self.cast, include_private=True, texts=self.texts),
-                names,
-                self.story.style.person or "third",
-                held=held.name if held else None,
-                words=PRIVATE_CONDENSE_WORDS,
-                tense=self.story.style.tense,
-                texts=self.texts,
-            ),
+            messages=self._condense_messages(previous, self._private_text(chunk)),
             params=summary_params(span.model, max_tokens=PRIVATE_CONDENSE_MAX_TOKENS),
         )
         log_ref = self._log_turn(
@@ -360,6 +406,38 @@ class PrivateRuntime:
         )
         return True
 
+    def _condense_messages(self, previous: str | None, text: str):
+        if self.story.chat:
+            return build_chat_private_condense_messages(
+                previous, text, words=PRIVATE_CONDENSE_WORDS, texts=self.texts
+            )
+        names = [c.name for c in self.visible_cast()] + [c.name for c in self.visible_supporting()]
+        held = self._character(self.story.held_character_id)
+        return build_private_condense_messages(
+            previous,
+            text,
+            names,
+            self.story.style.person or "third",
+            held=held.name if held else None,
+            words=PRIVATE_CONDENSE_WORDS,
+            tense=self.story.style.tense,
+            texts=self.texts,
+        )
+
+    def _summary_messages(self, text: str):
+        if self.story.chat:
+            return build_chat_private_summary_messages(text, texts=self.texts)
+        names = [c.name for c in self.visible_cast()] + [c.name for c in self.visible_supporting()]
+        held = self._character(self.story.held_character_id)
+        return build_private_summary_messages(
+            text,
+            names,
+            self.story.style.person or "third",
+            held=held.name if held else None,
+            tense=self.story.style.tense,
+            texts=self.texts,
+        )
+
     def private_fit(self, turn) -> PrivateFit:
         """How much of the story the private model can take, before the scene."""
         span = self.open_span or PrivateSpan(model="", keep="memory")
@@ -385,14 +463,19 @@ class PrivateRuntime:
             raise ValueError("no private scene is open")
         history = self.path()
         split = split_path(self.bundle.summaries, history)
-        parts = [f"Chapter {i}: {s.content}" for i, s in enumerate(split.summaries, 1)]
-        parts.append(render_chunk(list(split.verbatim), self.cast, texts=self.texts))
+        chat = self.story.chat
+        label = "Part" if chat else "Chapter"
+        parts = [f"{label} {i}: {s.content}" for i, s in enumerate(split.summaries, 1)]
+        parts.append(
+            render_chat_chunk(list(split.verbatim), texts=self.texts)
+            if chat
+            else render_chunk(list(split.verbatim), self.cast, texts=self.texts)
+        )
         words = max(150, int(self.config.private_budget * HANDOFF_SHARE / 1.35))
+        build = build_chat_handoff_messages if chat else build_handoff_messages
         request = ChatRequest(
             model=self.model,
-            messages=build_handoff_messages(
-                "\n\n".join(p for p in parts if p), words, texts=self.texts
-            ),
+            messages=build("\n\n".join(p for p in parts if p), words, texts=self.texts),
             params=GenerationParams(max_tokens=HANDOFF_MAX_TOKENS),
         )
         log_ref = self._log("handoff_request", {"payload": self.provider.build_payload(request)})
@@ -494,17 +577,9 @@ class PrivateRuntime:
         if not nodes:
             return ""
         scene_text = self._scene_text_for_summary(span, nodes)
-        names = [c.name for c in self.visible_cast()] + [c.name for c in self.visible_supporting()]
         request = ChatRequest(
             model=span.model,
-            messages=build_private_summary_messages(
-                scene_text,
-                names,
-                self.story.style.person or "third",
-                held=held.name if (held := self._character(self.story.held_character_id)) else None,
-                tense=self.story.style.tense,
-                texts=self.texts,
-            ),
+            messages=self._summary_messages(scene_text),
             params=summary_params(span.model, max_tokens=PRIVATE_SUMMARY_MAX_TOKENS),
         )
         log_ref = self._log_turn(
@@ -548,10 +623,11 @@ class PrivateRuntime:
         for _round in range(4):
             covered = set(self._condensed_ids(span, nodes))
             rest = [node for node in nodes if node.id not in covered]
-            text = render_chunk(rest, self.cast, include_private=True, texts=self.texts)
+            text = self._private_text(rest)
             previous = span.scene_summary if covered else None
             if previous:
-                text = f"WHAT CAME EARLIER IN THE SCENE (condensed):\n{previous}\n\n{text}"
+                earlier = "IN THIS PART" if self.story.chat else "IN THE SCENE"
+                text = f"WHAT CAME EARLIER {earlier} (condensed):\n{previous}\n\n{text}"
             if self.estimator.estimate(text, span.model) <= limit:
                 return text
             chunk = self._oldest_exchanges(rest, max(len(rest) // 2, 1) * 400, span.model)

@@ -247,7 +247,40 @@ def test_settings_tabs_and_every_model_in_one_place(app, window: MainWindow):
     assert "Generation" not in [
         without_story.tabs.tabText(i) for i in range(without_story.tabs.count())
     ]
-    assert not without_story.summarization_model.isEnabled()
+    # Every model can be chosen before any story is open: the summarisation
+    # model was the story's alone, and greyed out here.
+    assert without_story.summarization_model.isEnabled()
+
+
+def test_the_summarisation_model_is_set_for_every_story(app, window: MainWindow):
+    story = window.session.story
+    assert window.session.summarization_model == window.session.model
+
+    without_story = _settings(window)
+    without_story.summarization_model.setText("every/story")
+    without_story._save()
+    assert window.config.summarization_model == "every/story"
+    assert story.defaults.summarization_model is None
+    assert window.session.summarization_model == "every/story"
+
+    # A story's own wins, shows in the field, and an unrelated save leaves
+    # both as they were.
+    story.defaults.summarization_model = "this/story"
+    dialog = _settings(window, story)
+    assert dialog.summarization_model.text() == "this/story"
+    dialog.lore_model.setText("lore/model")
+    dialog._save()
+    assert window.config.summarization_model == "every/story"
+    assert story.defaults.summarization_model == "this/story"
+    assert window.session.summarization_model == "this/story"
+
+    # Cleared with the story open: both go back to the story model.
+    dialog = _settings(window, story)
+    dialog.summarization_model.setText("")
+    dialog._save()
+    assert window.config.summarization_model is None
+    assert story.defaults.summarization_model is None
+    assert window.session.summarization_model == window.session.model
 
 
 def test_the_models_tab_saves_where_the_old_tabs_did(app, window: MainWindow):
@@ -260,6 +293,58 @@ def test_the_models_tab_saves_where_the_old_tabs_did(app, window: MainWindow):
     assert story.defaults.summarization_model == "summary/model"
     assert window.config.lore_model == "lore/model"
     assert window.config.image_prompt_model == "prompt/model"
+
+
+def test_recommended_models_are_offered_never_imposed(app, window: MainWindow, monkeypatch):
+    """The small per-turn calls fall back to the story model when blank, the
+    most expensive place for them. A new setup on NanoGPT starts with the
+    recommended ones; a saved setup keeps its blanks until the button."""
+    from sealedlore.gui.settings_dialog import SettingsDialog
+    from sealedlore.models import config as config_module
+    from sealedlore.models.config import Config, recommended_models
+
+    table = {"scene_model": "small/scene", "plot_model": "small/plot", "lore_model": "small/lore"}
+    for field, model in table.items():
+        monkeypatch.setitem(config_module.RECOMMENDED_MODELS, field, model)
+    assert recommended_models("https://nano-gpt.com/api/v1") == table
+    assert recommended_models("https://openrouter.ai/api/v1") == {}
+    assert recommended_models("https://not-nano-gpt.com/api/v1") == {}
+
+    # A saved setup: nothing is filled in until the author asks.
+    from sealedlore.models.config import ProviderConfig
+
+    window.config.providers.append(ProviderConfig(name="default", api_key="key", model="a/model"))
+    window.config.active_provider_name = "default"
+    window.config.scene_model = window.config.plot_model = None
+    dialog = _settings(window)
+    assert dialog.scene_model.text() == "" and dialog.plot_model.text() == ""
+    dialog._fill_recommended()
+    assert dialog.scene_model.text() == "small/scene"
+    assert dialog.plot_model.text() == "small/plot"
+    assert dialog.lore_model.text() == "small/lore"
+    assert window.config.scene_model is None  # not until Save
+    dialog._save()
+    assert window.config.scene_model == "small/scene"
+    assert window.config.plot_model == "small/plot"
+
+    # Another endpoint: the ids aren't its own, so the button says so.
+    dialog = _settings(window)
+    dialog.base_url.setText("https://openrouter.ai/api/v1")
+    dialog.scene_model.setText("")
+    dialog._fill_recommended()
+    assert dialog.scene_model.text() == ""
+    assert "NanoGPT" in dialog.recommended_note.text()
+
+    # A new setup starts with them, on NanoGPT only.
+    fresh = SettingsDialog(Config(), None, window, catalog=window.catalog)
+    assert fresh.scene_model.text() == "small/scene"
+    fresh.api_key.setText("key")
+    fresh._save()
+    assert fresh.config.scene_model == "small/scene"
+    elsewhere = SettingsDialog(Config(), None, window, catalog=window.catalog)
+    elsewhere.base_url.setText("https://openrouter.ai/api/v1")
+    elsewhere._save()
+    assert elsewhere.config.scene_model is None and elsewhere.config.plot_model is None
 
 
 def test_dice_rolls_are_a_view_choice(app, window: MainWindow):

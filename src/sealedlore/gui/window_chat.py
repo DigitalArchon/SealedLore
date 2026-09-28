@@ -1,10 +1,11 @@
 """The main window's side of a simple chat (engine/chat.py). A mixin for `MainWindow`.
 
 A chat uses the window with the storytelling taken out: the composer is a text
-box, the inspector shows Story so far, Images and Prompt, and Setup is the
-system prompt. A chat on a TEE model is attested when it opens, as a private
-scene is, and has a private scene's look; one kept in memory only is never
-written anywhere and asks before it is closed.
+box and the Private button, the inspector shows Story so far, Images and
+Prompt, and Setup is the system prompt. A part of it can be held in private
+as a story's scene can (window_private). A chat on a TEE model is attested
+when it opens, as a private scene is, and has a private scene's look; one
+kept in memory only is never written anywhere and asks before it is closed.
 """
 
 from __future__ import annotations
@@ -114,7 +115,9 @@ class ChatWindow:
         ):
             self.right_tabs.setCurrentWidget(self.summaries_panel)
         tee = self.session is not None and self.session.tee_chat
-        self.composer.set_private_look(tee)
+        # A chat on a TEE model is private throughout: no part to set apart.
+        self.composer.set_private_offered(not tee)
+        self.composer.set_private_look(self._shows_private())
         self._sync_capture()
         title = self.session.story.title if self.session is not None else ""
         if self.session is not None:

@@ -12,6 +12,7 @@ belongs to. Nothing here decides what is valid; the importer does.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from sealedlore.engine.plot_md import (
@@ -27,6 +28,7 @@ from sealedlore.engine.plot_md import (
     _VARIANT_FIELDS,
     PlotProblem,
     _Block,
+    _Fields,
     _key,
     _norm,
     _Parser,
@@ -34,6 +36,7 @@ from sealedlore.engine.plot_md import (
     _slug,
     fact_parts,
     parse_plot_markdown,
+    picture_parts,
     read_clause,
     split_clauses,
 )
@@ -44,6 +47,7 @@ from sealedlore.models.plot_file import (
     EntryDoc,
     EventDoc,
     FactDoc,
+    PictureDoc,
     PlotDocument,
     VariantDoc,
 )
@@ -136,6 +140,16 @@ class _Writer:
         if value is None or value is not only_when:
             return
         self.field(key, "yes" if value else "no")
+
+    def pictures(self, pictures: Sequence[PictureDoc]) -> None:
+        """A line for each picture, in order: `- picture: file | caption`."""
+        for picture in pictures:
+            file = picture.file.strip()
+            if not file:
+                continue
+            # One line: a caption's own line break would start a new setting.
+            caption = " ".join(picture.caption.replace("|", "/").split())
+            self.field("picture", f"{file} | {caption}" if caption else file)
 
     def prose(self, text: str) -> None:
         if not text.strip():
@@ -257,6 +271,7 @@ def render_plot_markdown(document: PlotDocument) -> RenderedPlot:
             writer.field("canon", character.canon)
             writer.field("summary", character.summary)
             writer.flag("hidden", character.hidden)
+            writer.pictures(character.pictures)
             writer.prose(character.description)
 
     for section, title, entries in (
@@ -273,6 +288,7 @@ def render_plot_markdown(document: PlotDocument) -> RenderedPlot:
             writer.field("keywords", ", ".join(k.strip() for k in entry.keywords if k.strip()))
             writer.flag("always", entry.always)
             writer.flag("hidden", entry.hidden)
+            writer.pictures(entry.pictures)
             writer.prose(entry.description)
 
     if document.facts:
@@ -345,6 +361,19 @@ class _Reader:
             return None
         return self.parser.flag(*values[key], what)
 
+    def _pictures(self, found: _Fields, owner: str) -> list[PictureDoc]:
+        """Kept as written, a bad path too: the importer's check says what is
+        wrong with it, against the item it belongs to. A line naming no file
+        has nothing to keep."""
+        pictures = []
+        for line, value in found.pictures:
+            file, caption = picture_parts(value)
+            if file:
+                pictures.append(PictureDoc(file=file, caption=caption))
+            else:
+                self.problem(line, f"“{owner}” has a picture line with no file; left out.")
+        return pictures
+
     def _character(self, block: _Block) -> CharacterDoc:
         found = self.parser.body(block, _CHARACTER_FIELDS)
         values = found.values
@@ -370,6 +399,7 @@ class _Reader:
             summary=values.get("summary", (0, ""))[1],
             canon=values.get("canon", (0, ""))[1],
             hidden=bool(self._flag(values, "hidden", "hidden")),
+            pictures=self._pictures(found, block.title),
             description=found.prose,
         )
 
@@ -381,6 +411,7 @@ class _Reader:
             keywords=_names(values.get("keywords", (0, ""))[1]),
             always=bool(self._flag(values, "always", "always")),
             hidden=bool(self._flag(values, "hidden", "hidden")),
+            pictures=self._pictures(found, block.title),
             description=found.prose,
         )
 

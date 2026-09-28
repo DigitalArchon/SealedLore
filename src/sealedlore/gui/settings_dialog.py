@@ -28,19 +28,23 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.speed_test import Role, SpeedTarget, plan_targets
 from sealedlore.gui.attest_check import AttestationButton
 from sealedlore.gui.fields import FormScroll
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.image_picker import pick_image_model
 from sealedlore.gui.model_picker import Browse, ModelCatalog, ModelField, pick_model
+from sealedlore.gui.speed_test import SpeedTestDialog, speed_tests
 from sealedlore.models.config import (
     DEFAULT_BASE_URL,
     DEFAULT_EMBEDDING_MODEL,
     DEFAULT_STORY_MODEL,
+    RECOMMENDED_MODELS,
     Config,
     EmbeddingProviderConfig,
     ProviderConfig,
     _same_host,
+    recommended_models,
     require_https,
 )
 from sealedlore.models.generation import GenerationParams
@@ -212,16 +216,20 @@ class SettingsDialog(QDialog):
         self._model_at_open = self.model.text().strip()
         form.addRow("Story model", self.model)
 
+        # The open story's own, else the one for every story. Like the story
+        # model, only a change made here is saved (`_save`): it becomes the
+        # one for every story and the open story's. It used to be the story's
+        # alone, so the field was greyed out with no story open.
+        own = self.story.defaults.summarization_model if self.story is not None else None
         self.summarization_model = ModelField(
-            (self.story.defaults.summarization_model or "") if self.story is not None else "",
-            self._browse,
+            own or self.config.summarization_model or "", self._browse
         )
         self.summarization_model.setPlaceholderText("same as the story model")
-        self.summarization_model.setEnabled(self.story is not None)
         self.summarization_model.setToolTip(
-            "Writes the chapters as the story is archived. Set per story"
-            + ("." if self.story is not None else ": open a story to set it.")
+            "Writes the chapters as the story is archived, and merges them. Set here for "
+            "every story" + (", and for the open one." if self.story is not None else ".")
         )
+        self._summariser_at_open = self.summarization_model.text().strip()
         form.addRow("Summarisation model", self.summarization_model)
 
         self.authoring_model = ModelField(self.config.authoring_model or "", self._browse)
@@ -243,12 +251,18 @@ class SettingsDialog(QDialog):
             "Off, the roster is kept by hand as before."
         )
         form.addRow(self.keep_scene)
-        self.scene_model = ModelField(self.config.scene_model or "", self._browse)
+        # A new setup starts with the recommended models for the small calls
+        # (models/config.py); one already saved keeps what it has, blanks too.
+        fresh = recommended_models(self.base_url.text()) if provider is None else {}
+        self.scene_model = ModelField(
+            self.config.scene_model or fresh.get("scene_model", ""), self._browse
+        )
         self.scene_model.setPlaceholderText("same as the story's summarisation model")
         self.scene_model.setToolTip(
-            "Reads the scene after every passage: about 1.5k tokens in and 150 out, on "
-            "every turn. An easy task, so a small fast model is right here "
-            "(e.g. anthropic/claude-haiku-4.5)."
+            "Reads the scene after every passage: about 2k tokens in and 150 out, on "
+            "every turn. It needs a model that reasons: fast ones that don't miss about "
+            "half the arrivals and departures. Use recommended models fills in the one "
+            "that measured best."
         )
         form.addRow("Scene model", self.scene_model)
 
@@ -260,13 +274,15 @@ class SettingsDialog(QDialog):
             "tab follows (with an Undo). Off, they change only when you set them."
         )
         form.addRow(self.plot_reads)
-        self.plot_model = ModelField(self.config.plot_model or "", self._browse)
+        self.plot_model = ModelField(
+            self.config.plot_model or fresh.get("plot_model", ""), self._browse
+        )
         self.plot_model.setPlaceholderText("same as the scene model")
         self.plot_model.setToolTip(
             "Keeps a plot's clock and facts after every passage, and decides when its "
-            "events happen. Small, cheap calls on every turn of a plotted story "
-            "(mistralai/mistral-medium-3.5 was best when calibrated; Haiku 4.5 paces "
-            "well but rarely foreshadows)."
+            "events happen. Small calls on every turn of a plotted story, one of them "
+            "before the passage starts, so a quick, steady model is right here. Use "
+            "recommended models fills in the one that measured best."
         )
         form.addRow("Plot model", self.plot_model)
 
@@ -287,7 +303,96 @@ class SettingsDialog(QDialog):
             "prompt, so it is cheap and has read everything."
         )
         form.addRow("Image prompt writer", self.image_prompt_model)
+
+        self.recommended = QPushButton("Use recommended models")
+        self.recommended.setToolTip(
+            "Fill in the models that measured well for the small calls made on every turn "
+            "(the scene, the plot, picking lore). Left blank they run on the story model, "
+            "which costs far more. Nothing is saved until you press Save."
+        )
+        self.recommended.clicked.connect(self._fill_recommended)
+        self.recommended_note = QLabel()
+        self.recommended_note.setObjectName("hintLabel")
+        self.recommended_note.setWordWrap(True)
+        self.recommended_note.hide()
+        self.speed_test = QPushButton("Test speed…")
+        self.speed_test.setToolTip(
+            "Send each model chosen here (and the private model) one short request and "
+            "show how long its first word takes and how fast the rest comes. A model used "
+            "for several things is tested once. Uses the fields as they stand, saved or not."
+        )
+        self.speed_test.clicked.connect(self._test_speed)
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(self.recommended)
+        row.addWidget(self.speed_test)
+        row.addStretch(1)
+        form.addRow(row)
+        form.addRow(self.recommended_note)
         return widget
+
+    def speed_targets(self) -> list[SpeedTarget]:
+        """Every distinct model the fields name, as they stand. Raises
+        ValueError when the endpoint can't be used as typed."""
+        url = self.base_url.text().strip()
+        if not url:
+            raise ValueError("Set the base URL first.")
+        require_https(url)
+        main = ProviderConfig(name="speed test", base_url=url, api_key=self.api_key.text())
+        roles = [Role("Story", self.model.text(), main)]
+        own = (self.story.defaults.main_model or "") if self.story is not None else ""
+        if own.strip() and own.strip() != self.model.text().strip():
+            roles.append(Role("This story", own, main))
+        roles += [
+            Role("Summarisation", self.summarization_model.text(), main, "Story"),
+            Role("Authoring", self.authoring_model.text(), main, "Story"),
+            Role("Scene", self.scene_model.text(), main, "Summarisation"),
+            Role("Plot", self.plot_model.text(), main, "Scene"),
+            Role("Lore", self.lore_model.text(), main, "Scene"),
+            Role("Image prompt writer", self.image_prompt_model.text(), main, "Story"),
+        ]
+        private = self._private_test_settings()
+        if private is not None and private.model.strip():
+            roles.append(Role("Private", private.model, private))
+        return plan_targets(roles)
+
+    def _test_speed(self) -> None:
+        try:
+            targets = self.speed_targets()
+        except ValueError as exc:
+            self.recommended_note.setText(str(exc))
+            self.recommended_note.show()
+            return
+        dialog = SpeedTestDialog(targets, self, prices=self.config.model_prices)
+        dialog.exec()
+        dialog.deleteLater()
+
+    def _fill_recommended(self) -> None:
+        """Put the recommended model in each field it has one for. The ids are
+        NanoGPT's, so another endpoint is told where to look instead."""
+        found = recommended_models(self.base_url.text())
+        for name, model in found.items():
+            getattr(self, name).setText(model)
+        self.recommended_note.setText(
+            "Filled in: " + ", ".join(found.values()) + ". Save to keep them."
+            if found
+            else "The recommendations are NanoGPT model ids. On this endpoint, choose a "
+            "small, fast model for the scene and plot with Browse…"
+        )
+        self.recommended_note.show()
+
+    def _role_model(self, field: ModelField) -> str:
+        """A role's model as typed. A recommended id left in the field of a
+        new setup that turned out not to be on NanoGPT is a blank: the id
+        would fail on every turn there."""
+        text = field.text().strip()
+        if (
+            self._provider_at_open is None
+            and text in RECOMMENDED_MODELS.values()
+            and not recommended_models(self.base_url.text())
+        ):
+            return ""
+        return text
 
     def _generation_tab(self) -> QWidget:
         assert self.story is not None
@@ -329,7 +434,7 @@ class SettingsDialog(QDialog):
 
     def _context_tab(self) -> QWidget:
         """Budget and archival (§5). Shown with or without a story: only the
-        budget and the summarisation model belong to one."""
+        budget belongs to one."""
         widget = QWidget()
         form = QFormLayout(widget)
 
@@ -417,6 +522,7 @@ class SettingsDialog(QDialog):
         # The private tab's own catalog fetches on a thread parented to this
         # dialog; closing under it would destroy a running QThread.
         self._private_catalog.wait()
+        speed_tests().wait()
         super().done(result)
 
     def _private_source(self) -> tuple[OpenAICompatibleProvider, str, bool]:
@@ -767,6 +873,11 @@ class SettingsDialog(QDialog):
         provider.api_key = self.api_key.text()
         provider.model = self.model.text().strip()
         self.config.active_provider_name = name
+        summariser = self.summarization_model.text().strip()
+        if summariser != self._summariser_at_open:
+            self.config.summarization_model = summariser or None
+            if self.story is not None:
+                self.story.defaults.summarization_model = summariser or None
         self.config.authoring_model = self.authoring_model.text().strip() or None
         self.config.image_model = self.image_model.text().strip() or self.config.image_model
         self.config.image_size = self.image_size.currentText().strip() or self.config.image_size
@@ -791,9 +902,9 @@ class SettingsDialog(QDialog):
         self.config.private_budget = self.private_budget.value()
         self.config.private_verify_tee = self.private_tee.isChecked()
         self.config.scene_reads = "every_turn" if self.keep_scene.isChecked() else "manual"
-        self.config.scene_model = self.scene_model.text().strip() or None
+        self.config.scene_model = self._role_model(self.scene_model) or None
         self.config.plot_reads = self.plot_reads.isChecked()
-        self.config.plot_model = self.plot_model.text().strip() or None
+        self.config.plot_model = self._role_model(self.plot_model) or None
         self.config.cache_control_mode = self.cache_mode.currentText()  # type: ignore[assignment]
         self.config.cache_ttl = self.cache_ttl.currentData()
 
@@ -813,7 +924,7 @@ class SettingsDialog(QDialog):
         self.config.lore_query_turns = self.query_turns.value()
         self.config.lore_token_cap = self.lore_cap.value()
         self.config.lore_selector = self.lore_selector.currentData()
-        self.config.lore_model = self.lore_model.text().strip()
+        self.config.lore_model = self._role_model(self.lore_model)
 
         if self.story is not None:
             stop = [item.strip() for item in self.stop.text().split(",") if item.strip()]
@@ -833,9 +944,6 @@ class SettingsDialog(QDialog):
                 ),
             )
             self.story.defaults.context_token_budget = self.budget.value()
-            self.story.defaults.summarization_model = (
-                self.summarization_model.text().strip() or None
-            )
             if provider.model and provider.model != self._model_at_open:
                 current = self.story.defaults.main_model or ""
                 refusal = move_refusal(current, provider.model) if self.story.chat else None

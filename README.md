@@ -36,6 +36,10 @@ it, and the approved summary is added to your main story. You then continue
 with the smarter model, and all it knows of that part are the key plot
 points, without the material that might cause refusals.
 
+A simple chat can do the same: the Private button holds the next part of the
+conversation on your private model, and the chat's own model reads only the
+summary you approve.
+
 ### Author-driven plots
 
 The "Sealed" in the name also refers to plots written by a person (or, I
@@ -52,7 +56,8 @@ by a certain date, a town can be overrun in the background, or a character
 you would have met may be dead instead, and consequences may follow.
 
 The plot file editor (File → Plot file editor…) lets you write your own
-plots and share them.
+plots and share them, with reference pictures for their characters, places
+and lore if you like (kept in a folder beside the file).
 
 ### Auto-fix your story
 
@@ -194,8 +199,12 @@ Windows offers weaker privacy on the machine itself (see
 
 2. **Check the story model** on the Models tab. It starts as Claude Sonnet
    4.6, which with Opus 5.5 measured best as a storyteller; GLM 5.3 is a good
-   cheap one. Browse… lists what the endpoint offers. Leave the other model
-   fields blank to start with: they fall back to the story model.
+   cheap one. Browse… lists what the endpoint offers. On NanoGPT the small
+   calls made on every turn (the scene, the plot, picking lore) start on
+   cheaper models that measured well for them; **Use recommended models**
+   fills them in on a setup you already have, and **Test speed…** shows how
+   quickly each model you have chosen answers. A field left blank falls back
+   to the story model.
 
 3. **Start from a sample.** File → New story from a sample → Doomsville (a
    survivor at a farmhouse, with a plot), or **Try a sample…** on the start

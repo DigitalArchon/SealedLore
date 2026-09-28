@@ -41,6 +41,7 @@ from sealedlore.gui.composer import (
     WORLD_ACTIVITY_LABELS,
     WORLD_ACTIVITY_TIPS,
 )
+from sealedlore.gui.plot_pictures import Folder, PlotPictureStrip, SaveFirst
 from sealedlore.gui.style_panel import PERSPECTIVE_SUMMARIES
 from sealedlore.models.plot_file import (
     AssignmentDoc,
@@ -183,7 +184,7 @@ class Page(QWidget):
                 widget.valueChanged.connect(self._on_change)
             elif isinstance(widget, QTimeEdit):
                 widget.timeChanged.connect(self._on_change)
-            elif isinstance(widget, (ConditionsEditor, SetsEditor, NamePicker)):
+            elif isinstance(widget, (ConditionsEditor, SetsEditor, NamePicker, PlotPictureStrip)):
                 widget.changed.connect(self._on_change)
 
     def _name_changed(self, old: str, new: str) -> None:
@@ -359,8 +360,9 @@ class OpeningPage(Page):
 
 
 class CharacterPage(Page):
-    def __init__(self) -> None:
+    def __init__(self, folder: Folder | None = None, save_first: SaveFirst | None = None) -> None:
         super().__init__()
+        self.pictures = PlotPictureStrip(folder, save_first)
         self.name = QLineEdit()
         self.role = QComboBox()
         for role, label in ROLE_LABELS.items():
@@ -394,6 +396,10 @@ class CharacterPage(Page):
         form.addRow("Canon", self.canon)
         form.addRow("Summary", self.summary)
         form.addRow("Description", self.description)
+        # Under its label, the width of the form: beside it, the strip's
+        # buttons set the page's minimum width.
+        form.addRow(QLabel("Pictures"))
+        form.addRow(self.pictures)
         self.role.currentIndexChanged.connect(self._sync_choose)
         self._watch(
             self.name,
@@ -406,6 +412,7 @@ class CharacterPage(Page):
             self.canon,
             self.summary,
             self.description,
+            self.pictures,
         )
 
     def _sync_choose(self) -> None:
@@ -426,6 +433,7 @@ class CharacterPage(Page):
         self.canon.setText(character.canon)
         self.summary.setText(character.summary)
         self.description.setPlainText(character.description)
+        self.pictures.set_pictures(character.pictures, character.name)
         self._sync_choose()
 
     def _store(self) -> None:
@@ -447,8 +455,15 @@ class CharacterPage(Page):
 class EntryPage(Page):
     """A place, or with `is_place` off a lore entry."""
 
-    def __init__(self, *, is_place: bool) -> None:
+    def __init__(
+        self,
+        *,
+        is_place: bool,
+        folder: Folder | None = None,
+        save_first: SaveFirst | None = None,
+    ) -> None:
         super().__init__()
+        self.pictures = PlotPictureStrip(folder, save_first)
         self.name = QLineEdit()
         self.keywords = QLineEdit()
         self.keywords.setPlaceholderText("comma-separated; the name itself is always one")
@@ -470,7 +485,11 @@ class EntryPage(Page):
             )
         )
         form.addRow("Description", self.description)
-        self._watch(self.name, self.keywords, self.always, self.hidden, self.description)
+        form.addRow(QLabel("Pictures"))
+        form.addRow(self.pictures)
+        self._watch(
+            self.name, self.keywords, self.always, self.hidden, self.description, self.pictures
+        )
 
     def _fill(self) -> None:
         entry: EntryDoc = self.item
@@ -479,6 +498,7 @@ class EntryPage(Page):
         self.always.setChecked(entry.always)
         self.hidden.setChecked(entry.hidden)
         self.description.setPlainText(entry.description)
+        self.pictures.set_pictures(entry.pictures, entry.name)
 
     def _store(self) -> None:
         entry: EntryDoc = self.item

@@ -2005,6 +2005,91 @@ _text(
 )
 
 
+# A chat's private part (engine/session_private.py): the same leak rule as a
+# story's private scene, with a conversation's wording. The part's summary is
+# all the chat's own model ever reads of it.
+_text(
+    "chat.private.lead",
+    CHAT,
+    "A private part's summary: how it reads in the chat",
+    "Stands before the approved summary of a private part where it sits in the "
+    "conversation, so the chat's model knows what it is reading.",
+    "[Part of this conversation was held in private with another assistant. This is a "
+    "summary of that part, approved by the user; the messages themselves are not shown.]",
+)
+
+# A story's scene summary carries the plot across; a chat's private part has
+# no plot, only what the user chose not to pass on. The first wording ("keep
+# what the rest of the conversation may need") repeated it all: live on an
+# encrypted GLM, a code word and the reason for a tight budget, given in
+# confidence, were in the summary 3 times of 3. Saying what to leave out, and
+# that a decision can stand without its reason, left the code word out 3 of 3
+# and the reason too (one take let a word of it through), with every decision
+# kept, in about half the length. The author still reads and approves it.
+_text(
+    "chat.private.summary",
+    CHAT,
+    "Summarising a private part",
+    "The system prompt of the private model's summary when a chat's private part ends. "
+    "The summary joins the chat for its own model.",
+    """\
+You summarise one part of a conversation between a user and an assistant that
+was held in private, for another assistant that will carry the conversation
+on. That assistant never saw this part; your summary is all it will know of
+it, and it may be read by anyone.
+
+The user held this part in private so that it would not be passed on. Carry
+over only what the conversation needs in order to go on: what was decided
+and what is still open, in general terms. Leave out:
+- why: the personal circumstances, feelings and reasons behind a decision;
+- anything said in confidence, and anything intimate, sexual or about
+  health, money, work or family troubles;
+- names, numbers, code words, passwords and addresses given in this part.
+If a decision cannot be stated without one of these, state the decision and
+say only that the reason is private.
+
+Write plain prose in the past tense, no headings or bullet points, no
+quotations, 40 to 150 words. Never invent anything and never address the
+user. Reply with the summary only.
+""",
+)
+
+_text(
+    "chat.private.condense",
+    CHAT,
+    "Condensing a long private part",
+    "The private model's rolling summary of a private part's oldest messages, once the "
+    "part outgrows its budget.",
+    """You keep the running summary of the private part of a conversation for the
+assistant that is holding it, so it can go on after its oldest messages no
+longer fit the model's context. You are given the summary so far (it may be
+empty) and the messages that come next. Write the new summary: one text that
+covers both, in order. Keep everything a later reply will need: what was
+asked, said and agreed, facts and preferences the user stated, anything
+promised or left open, and names, numbers and details that may matter.
+Plain prose in the past tense, no headings, no commentary, at most {words}
+words.
+""",
+    (("words", "the summary's length in words"),),
+)
+
+_text(
+    "chat.private.handoff",
+    CHAT,
+    "Condensing the chat for a private part",
+    "Asked of the chat's own model when the conversation is too long for the private "
+    "model: one account of the conversation so far.",
+    """You condense a long conversation so far into a single account for another
+assistant that will carry it on with far less room to read. Keep what it will
+need: what the user is doing and wants, facts stated, decisions made,
+preferences, anything still open, and names, numbers and details that may
+matter later. Drop repetition and anything finished. Plain past-tense prose,
+no headings, about {words} words. Reply with the account only.
+""",
+    (("words", "the account's length in words"),),
+)
+
+
 # --- Private scenes ------------------------------------------------------
 
 

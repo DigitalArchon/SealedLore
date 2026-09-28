@@ -44,7 +44,8 @@ part of the window, and what each feature does. The README's
   and went, where the scene moved and whether it is private; the Scene tab
   follows, with Undo. Recent scenes and who was in them stay with the story.
 - **Simple chat**: a plain conversation with your own system prompt, with
-  branches, pictures and summaries, and on a TEE model attested (end-to-end
+  branches, pictures and summaries; a part of it can be held in private on
+  another model, and on a TEE model all of it is attested (end-to-end
   encrypted on a `private/` model) and, if you like, kept in memory only.
 - **Plots**: a Markdown plot file with facts, places and events; a director
   brings events about at the right moment and a clock keeps story time. A
@@ -403,7 +404,7 @@ model ids, so on another endpoint set them to one it lists (Browse…).
 |---|---|---|---|
 | Story model | Settings → Models | the story model for new stories | starts as `anthropic/claude-sonnet-4.6` |
 | This story's model | the status-bar model button | this story's storyteller | Settings → Models → Story model |
-| Summarisation model | Settings → Models (story open) | chapters, merges | the story model |
+| Summarisation model | Settings → Models | chapters, merges, for every story (and the open one, when changed with it open) | the story model |
 | Scene model | Settings → Models | the scene read after each passage | the summarisation model |
 | Plot model | Settings → Models | the plot's clock, facts and director | the scene model |
 | Authoring model | Settings → Models | drafting from a premise, settings reviews | the story model |
@@ -413,6 +414,43 @@ model ids, so on another endpoint set them to one it lists (Browse…).
 | Image model ★ | Settings → Images | pictures | — |
 | Private model | Settings → Private | private scenes | — |
 | Embeddings model | Settings → Lore | lore vectors | `BAAI/bge-m3` |
+
+A model's reasoning is kept with its passage for you to read, and is never
+sent back: no later request, to any model, carries it.
+
+**Recommended models.** Left blank, the scene and plot models fall back to the
+story model, the most expensive place to run a small call on every turn. On
+NanoGPT a new setup starts with the ones that measured best, and Settings →
+Models has **Use recommended models** to fill them in on a setup you already
+have (nothing changes until you press Save):
+
+| For | Model | Why |
+|---|---|---|
+| Scene | `z-ai/glm-5.3` | The read needs a model that reasons; this was the most accurate and the quickest of those that do |
+| Plot | `mistralai/mistral-medium-3.1` | The steadiest answers and the shortest wait before a passage. Priced per call, a small fraction of a cent each |
+| Lore | `deepseek/deepseek-v4.1-flash` | As before |
+
+They are NanoGPT model ids. On another endpoint the fields stay blank: choose
+a model that reasons for the scene and a quick one for the plot (Browse…).
+
+**How fast is each one?** Settings → Models has **Test speed…**. It sends every
+model named there, and the private model, one short request, all at the same
+time, and shows for each:
+
+- **First word**: the wait before its answer begins, any reasoning included,
+  since that is the wait you sit through.
+- **Tokens a second**: how fast the answer itself is then written, from its
+  first word to its last. A model that thinks for a long time and then writes
+  quickly is slow in the first and fast in this one.
+- **In all**: the whole request, start to finish.
+
+The notes say how long the answer took and how long the model reasoned. A
+model used for several things is tested once, and an end-to-end encrypted
+model's enclave is attested before anything is timed. It uses the fields as
+they stand, so you can try a model before saving it. Each test costs a few
+hundred tokens (more for a model that reasons). Speeds change with the hour
+and the endpoint's load, and one short answer is a small sample: run it a few
+times before choosing between models that are close.
 
 ## Setting up a story
 
@@ -468,7 +506,10 @@ write the format by hand, **File → Plot file editor…** writes it for you: th
 world, opening, characters, places, lore, facts and events each get a form,
 conditions and what an event brings or sets are picked from what the file
 already has, and the problems list at the bottom is exactly what the importer
-would say, each against the item to fix. It needs no story open; the editor's
+would say, each against the item to fix. Characters, places and lore entries
+can be given reference pictures there (**Add…** under Pictures): they are
+kept in a `pictures` folder beside the plot file, so share the folder with
+the file, and are put on the cards when the file is imported. It needs no story open; the editor's
 own **Start a story from this file** (its File menu) saves and imports in one
 go.
 
@@ -813,7 +854,10 @@ falls back to keyword matching and the status bar says so.
 **Story → Generate image…** (Ctrl+Shift+I), the **Image…** button beside the
 composer, or **Illustrate this passage…** in a passage's ⋯ menu asks the
 story's model to write an image prompt from where the story is, choosing
-among the reference pictures on cast sheets and lore entries. **Prompt written
+among the reference pictures on cast sheets and lore entries. **Add…** under
+the pictures also takes any picture from disk (a place, an object, a pose that
+belongs to no card); it is copied into the story, its hidden data removed,
+and offered from then on. **Prompt written
 by** in the dialog picks another model for that (blank is the story model;
 your choice is kept, and is the same setting as Settings → Models → Image
 prompt writer). The story model reads the story from its cache; another model
@@ -933,6 +977,17 @@ story is (Settings → Context), with a plain summariser.
   (also set at the start) is fixed text sent after your message at the end
   of every request (a style reminder, a standing rule). It is never saved
   into the conversation.
+- **A part of a chat can be held in private**, as a scene of a story can
+  (see "Private scenes"). The **Private** button beside the message box sends
+  what you write next to your private model (Settings → Private) and to
+  nothing else; the chat's own model sees none of it. Beside it you choose
+  whether that part is kept **In memory** (gone when the app closes) or **On
+  disk**. **End private** has the private model write a summary for you to
+  approve, change, or do without; what you approve joins the chat, marked as
+  a summary of a private part, and is all the chat's model ever reads of it.
+  While a part is open, Settings and switching to another chat or story are
+  paused. A chat on a TEE model has no Private button: all of it is private
+  already.
 - **On a NanoGPT `TEE/` model** the chat is private as a private scene is:
   the enclave is attested when the chat opens (unless Check TEE models is off
   under Settings → Private, which the model button then says), each reply is

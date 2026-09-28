@@ -15,7 +15,7 @@ from PySide6.QtCore import QThread
 from PySide6.QtWidgets import QCheckBox, QMessageBox
 
 from sealedlore.engine.session_plot import SessionNotice
-from sealedlore.gui.private_dialogs import FitDialog, PrivateSummaryDialog
+from sealedlore.gui.private_dialogs import FitDialog, PrivateSummaryDialog, chat_words
 from sealedlore.gui.winprivacy import exclude_from_capture
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.config import ProviderConfig
@@ -39,11 +39,24 @@ PAUSED_IN_PRIVATE = (
     "box. The private model then writes a summary for you to approve, or you can end "
     "the scene without one."
 )
+# A chat has no scene card, plot or character to pause.
+PAUSED_IN_PRIVATE_CHAT = (
+    "While a private part of the chat is open, some of the app is paused so nothing from "
+    "it can reach another model or be saved where it shouldn't:\n\n"
+    "• Settings\n"
+    "• switching to another chat, story or branch\n"
+    "• changing this chat's model\n\n"
+    "To use them again, end the private part with the End private button beside the "
+    "message box. The private model then writes a summary for you to approve, or you can "
+    "end it without one."
+)
 if sys.platform == "win32":
-    PAUSED_IN_PRIVATE += (
-        "\n\nOn Windows the window is also kept out of screen capture while the scene "
-        "is open: Recall, screenshots and screen recordings leave it out."
+    _CAPTURE = (
+        "\n\nOn Windows the window is also kept out of screen capture while it is open: "
+        "Recall, screenshots and screen recordings leave it out."
     )
+    PAUSED_IN_PRIVATE += _CAPTURE.replace("while it is open", "while the scene is open")
+    PAUSED_IN_PRIVATE_CHAT += _CAPTURE
 
 
 class PrivateWindow:
@@ -69,6 +82,14 @@ class PrivateWindow:
 
     def _private_settings(self) -> ProviderConfig | None:
         return self.config.private()
+
+    def _say(self, text: str) -> str:
+        """A message about a private scene, as it is said of a chat's private
+        part when the open story is a chat (private_dialogs.chat_words)."""
+        return chat_words(text, self.in_chat)
+
+    def _paused_text(self) -> str:
+        return PAUSED_IN_PRIVATE_CHAT if self.in_chat else PAUSED_IN_PRIVATE
 
     def _make_private_provider(self, settings: ProviderConfig) -> ChatProvider:
         if self.private_provider_factory is not None:
@@ -102,6 +123,8 @@ class PrivateWindow:
     def _sync_private_ui(self) -> None:
         span = self.session.open_span if self.session is not None else None
         self.composer.set_private_state(span is not None, span.keep if span else None)
+        # A TEE chat keeps its look with no span open.
+        self.composer.set_private_look(self._shows_private())
         self._refresh_model_button()
         self._sync_capture()
 
@@ -151,8 +174,10 @@ class PrivateWindow:
             self.show_map(False)
         for widget in (self.stories, self.branch_bar):
             widget.setToolTip(
-                "Paused during a private scene: end it with End private beside the message "
-                "box to switch."
+                self._say(
+                    "Paused during a private scene: end it with End private beside the "
+                    "message box to switch."
+                )
                 if private
                 else ""
             )
@@ -172,8 +197,10 @@ class PrivateWindow:
         if any(node.id == node_id for node in session.span_nodes(session.open_span)):
             return False
         self._warn_plain(
-            "Not during a private scene",
-            "End the private scene first: the messages before it are where it returns to.",
+            self._say("Not during a private scene"),
+            self._say(
+                "End the private scene first: the messages before it are where it returns to."
+            ),
         )
         return True
 
@@ -211,7 +238,7 @@ class PrivateWindow:
         self._sync_private_ui()
         self._update_controls()
         if not fit.fits:
-            dialog = FitDialog(fit, self.session.model, self)
+            dialog = FitDialog(fit, self.session.model, self, chat=self.in_chat)
             dialog.exec()
             if dialog.choice == FitDialog.CANCEL:
                 self.session.discard_private()
@@ -221,8 +248,11 @@ class PrivateWindow:
             if dialog.choice == FitDialog.SUMMARISE:
                 self._start_handoff()
         self.statusBar().showMessage(
-            f"Private scene: turns go to {settings.model} only; the scene card and the plot "
-            "are frozen until it ends. End it with the same button.",
+            f"Private: your messages go to {settings.model} only, and the chat's own model "
+            "sees none of them. End it with the same button."
+            if self.in_chat
+            else f"Private scene: turns go to {settings.model} only; the scene card and the "
+            "plot are frozen until it ends. End it with the same button.",
             10000,
         )
         self._attest_or_say_not(settings)
@@ -234,7 +264,11 @@ class PrivateWindow:
         if self.config.private_intro_seen:
             return
         box = QMessageBox(
-            QMessageBox.Information, "Private scene", PAUSED_IN_PRIVATE, QMessageBox.Ok, self
+            QMessageBox.Information,
+            self._say("Private scene"),
+            self._paused_text(),
+            QMessageBox.Ok,
+            self,
         )
         # Parented to the box: setCheckBox doesn't take ownership in PySide6,
         # and a checkbox Python frees under a live box crashes the app.
@@ -251,20 +285,23 @@ class PrivateWindow:
         """Settings during a scene: say why not, rather than grey it out unexplained."""
         if not self.in_private:
             return False
-        QMessageBox.information(self, "Settings are paused", PAUSED_IN_PRIVATE)
+        QMessageBox.information(self, "Settings are paused", self._paused_text())
         return True
 
     def _start_handoff(self) -> None:
         session = self.session
+        said = self._say
 
         def job():
             session.write_handoff()
-            yield SessionNotice("The story so far is condensed for the private model.")
+            yield SessionNotice(said("The story so far is condensed for the private model."))
 
         self._start(
             job,
             streaming=False,
-            busy_text=f"{session.model} is condensing the story so far for the private model…",
+            busy_text=said(
+                f"{session.model} is condensing the story so far for the private model…"
+            ),
             provider=session.provider,
         )
 
@@ -436,7 +473,9 @@ class PrivateWindow:
         span = session.open_span
         if not session.span_nodes(span):
             session.discard_private()
-            self._after_private_ended("The private scene ended; nothing was written in it.")
+            self._after_private_ended(
+                self._say("The private scene ended; nothing was written in it.")
+            )
             return
         if not self._tee_allows_send():
             return  # the summary would go to a model not yet (or never) attested
@@ -444,12 +483,15 @@ class PrivateWindow:
             answer = QMessageBox.question(
                 self,
                 "No private model",
-                "There's no private model to write the summary (Settings → Private). "
-                "Discard the private scene instead? Nothing from it goes back into the story.",
+                self._say(
+                    "There's no private model to write the summary (Settings → Private). "
+                    "Discard the private scene instead? Nothing from it goes back into the "
+                    "story."
+                ),
             )
             if answer == QMessageBox.Yes:
                 session.discard_private()
-                self._after_private_ended("The private scene was discarded.")
+                self._after_private_ended(self._say("The private scene was discarded."))
             return
         self._pending_private_summary = None
         self._summarising = True
@@ -462,8 +504,10 @@ class PrivateWindow:
         self._start(
             job,
             streaming=False,
-            busy_text=f"{span.model} is summarising the private scene… (Stop to end it "
-            "without a summary or keep playing)",
+            busy_text=self._say(
+                f"{span.model} is summarising the private scene… (Stop to end it "
+                "without a summary or keep playing)"
+            ),
         )
 
     def _offer_private_summary(self) -> None:
@@ -482,7 +526,10 @@ class PrivateWindow:
             "unchecked": "This summary's signature couldn't be checked.",
         }
         dialog = PrivateSummaryDialog(
-            summary, self, note=notes.get(self.session.open_span.summary_tee or "")
+            summary,
+            self,
+            note=notes.get(self.session.open_span.summary_tee or ""),
+            chat=self.in_chat,
         )
         exclude_from_capture(dialog, True)  # a window of its own
         dialog.exec()
@@ -492,7 +539,9 @@ class PrivateWindow:
             self._start(
                 lambda: session.close_private(text),
                 streaming=False,
-                busy_text="Adding the summary; the scene and the clock catch up from it…",
+                busy_text="Adding the summary to the chat…"
+                if self.in_chat
+                else "Adding the summary; the scene and the clock catch up from it…",
                 provider=session.provider,
             )
         elif dialog.choice == PrivateSummaryDialog.AGAIN:
@@ -504,9 +553,10 @@ class PrivateWindow:
         session = self.session
         answer = QMessageBox.question(
             self,
-            "Discard the private scene",
-            "End the scene with nothing carried over? The story goes on from where it "
-            "began."
+            self._say("Discard the private scene"),
+            self._say(
+                "End the scene with nothing carried over? The story goes on from where it began."
+            )
             + (
                 " Its messages are kept on disk as a side branch no model is sent."
                 if session.open_span.keep == "disk"
@@ -515,7 +565,7 @@ class PrivateWindow:
         )
         if answer == QMessageBox.Yes:
             session.discard_private()
-            self._after_private_ended("The private scene was discarded.")
+            self._after_private_ended(self._say("The private scene was discarded."))
 
     def _offer_no_summary(self) -> None:
         """The summary was stopped or failed. Before, nothing was said and the
@@ -532,14 +582,16 @@ class PrivateWindow:
         box = QMessageBox(
             QMessageBox.Question,
             "No summary",
-            "The private scene wasn't summarised. Ask again, end the scene without a "
-            "summary (nothing from it goes back into the story), or keep playing.",
+            self._say(
+                "The private scene wasn't summarised. Ask again, end the scene without a "
+                "summary (nothing from it goes back into the story), or keep playing."
+            ),
             QMessageBox.NoButton,
             self,
         )
         again = box.addButton("Try again", QMessageBox.AcceptRole)
         discard = box.addButton("End without a summary…", QMessageBox.DestructiveRole)
-        box.addButton("Keep playing", QMessageBox.RejectRole)
+        box.addButton(self._say("Keep playing"), QMessageBox.RejectRole)
         box.exec()
         if box.clickedButton() is again:
             return "again"
@@ -579,8 +631,10 @@ class PrivateWindow:
             self._attest_or_say_not(settings)
         else:
             self.statusBar().showMessage(
-                "This story is in a private scene, but no private model is set up "
-                "(Settings → Private). End the scene to discard it.",
+                self._say(
+                    "This story is in a private scene, but no private model is set up "
+                    "(Settings → Private). End the scene to discard it."
+                ),
                 15000,
             )
         self._sync_private_ui()
@@ -596,10 +650,12 @@ class PrivateWindow:
             return True
         answer = QMessageBox.question(
             self,
-            "Private scene still open",
-            "This private scene is held in memory only: closing now loses it, and nothing "
-            "from it goes back into the story.\n\nTo keep a summary, press Cancel and end "
-            "the scene first. Close anyway?",
+            self._say("Private scene still open"),
+            self._say(
+                "This private scene is held in memory only: closing now loses it, and "
+                "nothing from it goes back into the story.\n\nTo keep a summary, press "
+                "Cancel and end the scene first. Close anyway?"
+            ),
             QMessageBox.Yes | QMessageBox.Cancel,
         )
         if answer != QMessageBox.Yes:

@@ -420,6 +420,7 @@ def assemble_chat(
         render_chat_summaries,
     )
 
+    texts = (options or AssemblyOptions()).texts
     tail_specs = [(SECTION_AUTHOR_TURN, tail.strip())]
     if with_chat_tail:
         tail_specs.append((SECTION_CHAT_TAIL, story.chat_tail.strip()))
@@ -434,10 +435,8 @@ def assemble_chat(
         estimator=estimator,
         options=options,
         system_parts=[(SECTION_CHAT_PROMPT, story.chat_prompt.strip())],
-        summaries_text=render_chat_summaries(
-            summaries, nodes_by_id or {}, (options or AssemblyOptions()).texts
-        ),
-        render_node=render_chat_node,
+        summaries_text=render_chat_summaries(summaries, nodes_by_id or {}, texts),
+        render_node=lambda node: render_chat_node(node, texts),
     )
 
 

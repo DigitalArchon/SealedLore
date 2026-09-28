@@ -74,6 +74,7 @@ These settings go straight after the heading:
 - voice: Clipped, few words.
 - summary: One line; otherwise the first sentence of the description is used.
 - hidden: yes           # kept out of the story until an event brings them in
+- picture: pictures/john.png | front view   # a reference picture (see Pictures); one line each
 The description.
 ```
 
@@ -100,7 +101,8 @@ for the other.
 
 Each `## Place` becomes a lore entry, found by its name and by any `keywords:`
 you add. Set `always: yes` to have it sent every turn, and `hidden: yes` to keep
-it out of the story until an event reveals it (`reveals:`).
+it out of the story until an event reveals it (`reveals:`). A place can have
+reference pictures (`picture:`, see Pictures).
 
 The places are also where the program tracks the player's character: after
 each passage it records which place they are at (or none), and every place
@@ -111,7 +113,7 @@ there's no need for facts like "at_hellsville".
 
 `# Lore` holds background the storyteller needs now and then but that isn't
 somewhere to be: how a technology works, a history, a people. Entries take the
-same settings as places (`keywords`, `always`, `hidden`), and an event can
+same settings as places (`keywords`, `always`, `hidden`, `picture`), and an event can
 `reveals:` a hidden one, but the program never records the character as being
 at one, and `at =` / `visited` can't name them.
 
@@ -123,6 +125,35 @@ particular character whoever is held, put their name first:
 is only read from the prose while the author holds them, so progress they
 make off-screen (a search told as cutaways while the author plays someone
 else) is better kept in a fact that the events set.
+
+## Pictures
+
+A character, a place or a lore entry can come with reference pictures, so
+that pictures generated in the story draw them the same way each time. A
+plot file is text, so the pictures are files in a folder beside it, each named
+on a line of its own among the item's settings:
+
+```markdown
+## John
+- role: player
+- picture: pictures/john-front.png | front view, in his winter coat
+- picture: pictures/john-side.png
+```
+
+- The path is written from the plot file's own folder, with forward slashes.
+  It must stay inside that folder: a path that is absolute, or that climbs
+  out with `..`, stops the import.
+- After `|` comes the caption: what the picture shows. It is optional.
+- PNG, JPEG, WebP, BMP and GIF are read.
+- An item may have as many `picture:` lines as you like.
+- **Share the folder with the file.** A story with pictures is the `.md` and
+  its `pictures` folder together (zipped, or as they are).
+
+When the file is imported, each picture is copied into the new story and put
+on its character's card or its entry, with any hidden data in it (where and
+when a photograph was taken) removed. A picture that is missing or can't be
+read is noted and left out; it never stops the import. The plot file editor
+keeps the folder for you: **Add…** under Pictures copies a picture into it.
 
 ## Facts
 

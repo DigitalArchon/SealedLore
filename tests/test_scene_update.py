@@ -393,6 +393,21 @@ def test_someone_heard_over_a_channel_has_not_arrived():
     assert [person.name for person in delta.arrived] == ["Constable Hollis"]
 
 
+def test_someone_a_call_brought_has_arrived():
+    """The channel was how they were sent for, not how they are here. Someone
+    who is only somewhere else when the call reaches them has not come in."""
+    delta = read(
+        arrived=[
+            {
+                "name": "Hollis",
+                "how": "already in the yard, arrived two minutes after the radio call",
+            },
+            {"name": "Tess", "how": "already in the radio room, having received the message"},
+        ]
+    )
+    assert [person.name for person in delta.arrived] == ["Constable Hollis"]
+
+
 # --- the perspective decides what counts as reaching in ---------------------
 # The author's ruling: following the whole story, people watching or hearing
 # what their work gives them are the story being told; staying with the

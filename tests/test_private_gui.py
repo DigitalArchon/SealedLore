@@ -106,7 +106,7 @@ def test_a_private_scene_from_first_turn_to_approved_summary(app, window: MainWi
     class Approve:
         APPROVE, AGAIN, BACK, DISCARD = "approve", "again", "back", "discard"
 
-        def __init__(self, summary, parent=None, *, note=None):
+        def __init__(self, summary, parent=None, *, note=None, chat=False):
             self.choice = self.APPROVE
             self._summary = summary
 

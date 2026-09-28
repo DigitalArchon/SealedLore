@@ -507,6 +507,40 @@ def test_reasoning_is_never_fed_back(story, cast, estimator):
     assert "The door opens." in whole
 
 
+def test_reasoning_reaches_no_other_request_either(story, cast, estimator):
+    """A beta tester asked whether the reasoning shown with a passage is sent
+    back. It is kept for the author to read and never sent: not in a question,
+    a chat, or what the summariser and the reads are given."""
+    from sealedlore.engine.archival import render_chunk
+    from sealedlore.engine.chat import render_chat_chunk
+    from sealedlore.engine.prompt import assemble_chat, assemble_question
+
+    asked = Node(id="u0", kind="user", speaker_id="char-serrik", content="I try the door.")
+    node = Node(
+        id="a0",
+        kind="assistant",
+        speaker_id="__narrator__",
+        content="The door opens.",
+        meta=NodeMeta(reasoning="I considered a trap and rejected it."),
+    )
+    history = [asked, node]
+    question = assemble_question(
+        story=story,
+        cast=cast,
+        history_nodes=history,
+        question="Why did it open?",
+        estimator=estimator,
+        options=LOOSE,
+    )
+    chat = assemble_chat(
+        story=story, history_nodes=history, tail="And then?", estimator=estimator, options=LOOSE
+    )
+    sent = [message.text for prompt in (question, chat) for message in prompt.messages]
+    sent += [render_chunk(history, cast), render_chat_chunk(history)]
+    assert all("The door opens." in text for text in sent[-2:])
+    assert not any("considered a trap" in text for text in sent)
+
+
 def test_author_turns_carry_their_speaker_into_the_history(story, cast, estimator):
     prompt = assemble(story, cast, estimator, history_nodes=make_exchange(1))
     assert "[Serrik Vaun]" in prompt.messages[1].text

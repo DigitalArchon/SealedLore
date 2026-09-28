@@ -374,9 +374,8 @@ class ImageDialog(QDialog):
 
     def _sync_ref_buttons(self) -> None:
         row = self.refs.currentRow()
-        accepts = self._max_refs() > 0
-        # A chat can always add a picture from disk.
-        self.add_ref.setEnabled(accepts and (bool(self._choices) or self.session.story.chat))
+        # A picture can always be added from disk, so there is always a choice.
+        self.add_ref.setEnabled(self._max_refs() > 0)
         self.remove_ref.setEnabled(row >= 0)
         self.left_ref.setEnabled(row > 0)
         self.right_ref.setEnabled(0 <= row < len(self._refs) - 1)
@@ -392,17 +391,16 @@ class ImageDialog(QDialog):
             label = use.owner_name + (f" — {use.caption}" if use.caption else "")
             action = menu.addAction(label + ("  (in the scene)" if choice.present else ""))
             action.triggered.connect(lambda _checked=False, u=use: self._add(u))
-        if self.session.story.chat:
-            # A chat has no cards to hold pictures: any picture can be added.
-            if not menu.isEmpty():
-                menu.addSeparator()
-            menu.addAction("Add a picture from disk…").triggered.connect(self._add_from_disk)
-        if menu.isEmpty():
-            menu.addAction("Every picture is already attached").setEnabled(False)
+        # Any picture can be added, in a story as in a chat: one that belongs
+        # to no card (a place, an object, a pose) had no way in. It was a
+        # chat's alone, since a chat has no cards to hold pictures.
+        if not menu.isEmpty():
+            menu.addSeparator()
+        menu.addAction("Add a picture from disk…").triggered.connect(self._add_from_disk)
 
     def _add_from_disk(self) -> None:
-        """A chat's own reference picture: copied into the chat, kept on it
-        (`Story.reference_images`), and attached here."""
+        """The story's own reference picture, on no card: copied into the
+        story, kept on it (`Story.reference_images`), and attached here."""
         path, _ = QFileDialog.getOpenFileName(
             self, "Add a reference picture", str(Path.home()), PICTURE_FILTER
         )

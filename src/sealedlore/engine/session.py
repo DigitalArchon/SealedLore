@@ -510,11 +510,14 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
 
     @property
     def summarization_model(self) -> str:
-        """§5.2: configurable, defaulting to the story's main model. A TEE chat's
-        summaries are its own model's: the conversation never leaves it."""
+        """§5.2: the story's own, else the one set for every story, else the
+        story's main model. A TEE chat's summaries are its own model's: the
+        conversation never leaves it."""
         if self.story.chat and is_tee(self.model):
             return self.model
-        return self.story.defaults.summarization_model or self.model
+        return (
+            self.story.defaults.summarization_model or self.config.summarization_model or self.model
+        )
 
     @property
     def scene_model(self) -> str:

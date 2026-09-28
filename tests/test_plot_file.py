@@ -64,6 +64,74 @@ def test_a_sample_survives_reading_and_writing(path: Path):
     assert again.text == rendered.text
 
 
+def test_pictures_are_read_written_and_handed_to_whoever_imports():
+    """A picture line is a file beside the plot file. The parser reads no
+    files: it checks the path and hands the list on. A field the reader
+    doesn't carry is a field the editor silently deletes."""
+    text = EXTENDED.read_text(encoding="utf-8")
+    parsed = parse_plot_markdown(text)
+    assert parsed.ok
+    found = [(p.owner_kind, p.owner_name, p.source, p.caption) for p in parsed.pictures]
+    assert found == [
+        ("character", "Jane Moss", "pictures/jane-moss.png", "in her army coat, rifle slung"),
+        ("lore", "Hellsville", "pictures/hellsville-gate.png", "the east gate and its watchtower"),
+        # More than one to an item, a caption or none.
+        ("lore", "Hellsville", "pictures/hellsville-gate.png", ""),
+        ("lore", "Jane's truck", "pictures/janes-truck.png", "from the front, one headlight gone"),
+    ]
+    jane = next(c for c in parsed.scenario.cast if c.name == "Jane Moss")
+    assert parsed.pictures[0].owner_id == jane.id
+    assert jane.reference_images == []  # until the files are read
+    assert jane.summary.startswith("A thirty-year-old")  # the lines around it still read
+
+    document = read_plot_document(text).document
+    assert [(p.file, p.caption) for p in document.characters[0].pictures] == [
+        ("pictures/jane-moss.png", "in her army coat, rifle slung")
+    ]
+    assert len(document.places[0].pictures) == 2
+    again = parse_plot_markdown(render_plot_markdown(document).text)
+    assert [(p.owner_name, p.source, p.caption) for p in again.pictures] == [
+        row[1:] for row in found
+    ]
+
+
+@pytest.mark.parametrize(
+    ("line", "message"),
+    [
+        ("- picture: /etc/passwd.png", "own folder"),
+        ("- picture: ../elsewhere/jane.png", "own folder"),
+        ("- picture: pictures/../../jane.png", "own folder"),
+        ("- picture: C:\\Users\\jane.png", "own folder"),
+        ("- picture: ~/jane.png", "own folder"),
+        ("- picture: pictures/notes.txt", "isn't a picture"),
+        ("- picture: | just a caption", "needs a file"),
+    ],
+)
+def test_a_picture_must_be_a_picture_inside_the_files_own_folder(line: str, message: str):
+    """A plot file may be someone else's: its lines must not reach outside."""
+    text = f"# World\n\nA town.\n\n# Characters\n\n## Jane\n- role: player\n{line}\n\nA medic.\n"
+    parsed = parse_plot_markdown(text)
+    errors = [p for p in parsed.problems if p.error]
+    assert not parsed.ok and len(errors) == 1
+    assert errors[0].line == 9 and message in errors[0].message
+    assert parsed.pictures == []
+
+    # The editor keeps the line as written and shows the importer's verdict
+    # against the character it belongs to.
+    read = read_plot_document(text)
+    if "needs a file" in message:
+        # Nothing to keep, so it says so before the file is opened.
+        assert [p.line for p in read.problems] == [9]
+        return
+    _rendered, problems = check_plot_document(read.document)
+    assert [(p.where, p.error) for p in problems if p.error] == [((CHARACTER, 0, -1), True)]
+
+
+def test_a_windows_path_is_read_with_forward_slashes():
+    text = "# Characters\n\n## Jane\n- picture: pictures\\jane.png | front\n\nA medic.\n"
+    assert [p.source for p in parse_plot_markdown(text).pictures] == ["pictures/jane.png"]
+
+
 def test_an_optional_events_days_are_kept():
     text = (SAMPLES / "Doomsville.md").read_text(encoding="utf-8")
     bandits = next(e for e in read_plot_document(text).document.events if "bandit" in e.title)

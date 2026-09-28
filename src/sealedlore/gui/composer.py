@@ -119,6 +119,16 @@ PRIVATE_TIP = (
     "the story's model or any other; when you end it, the private model writes a summary "
     "for you to approve, and only that goes back into the story."
 )
+CHAT_PRIVATE_TIP = (
+    "Private: hold the next part of the chat on your private model. Nothing from it "
+    "reaches the chat's own model or any other; when you end it, the private model writes "
+    "a summary for you to approve, and only that goes back into the chat."
+)
+CHAT_END_PRIVATE_TIP = (
+    "End the private part: the private model summarises it for you to approve, or you "
+    "can end it without a summary. Settings and other chats and stories are paused until "
+    "it ends."
+)
 END_PRIVATE_TIP = (
     "End the private scene: the private model summarises it for you to approve, or you "
     "can end it without a summary. Settings, other stories and branches are paused until "
@@ -259,9 +269,12 @@ class Composer(QWidget):
         # window is narrower than it (a larger text size), a caption staying
         # with its control.
         who = WrapRow()
-        who.add_group([self._caption("Playing"), self.held])
-        who.add_group([self._caption("Speaking as"), self.speaker])
-        who.add_group([self._caption("Model voices"), self.scope, self.scope_button])
+        captions = [self._caption(text) for text in ("Playing", "Speaking as", "Model voices")]
+        who.add_group([captions[0], self.held])
+        who.add_group([captions[1], self.speaker])
+        who.add_group([captions[2], self.scope, self.scope_button])
+        # What a simple chat has none of (set_chat_mode): who is in play.
+        self._who_widgets = [*captions, self.held, self.speaker, self.scope]
 
         shape = WrapRow()
         self.length_caption = self._caption("Length")
@@ -492,7 +505,7 @@ class Composer(QWidget):
         self._sync_scope_button()
 
     def _sync_scope_button(self) -> None:
-        selected = self.npc_scope() == "selected"
+        selected = self.npc_scope() == "selected" and not getattr(self, "_chat", False)
         self.scope_button.setVisible(selected)
         names = [character.name for character in self._cast if character.id in self._scope_ids]
         self.scope_button.setText(", ".join(names) if names else "none")
@@ -544,7 +557,7 @@ class Composer(QWidget):
         )
 
     def _sync_dice(self) -> None:
-        rolling = self.will_roll() and not self.is_question()
+        rolling = self.will_roll() and not self.is_question() and not self._chat
         for widget in (self.roll_caption, self.skill, self.difficulty):
             widget.setVisible(rolling)
 
@@ -568,6 +581,8 @@ class Composer(QWidget):
         self.input.setPlaceholderText(
             QUESTION_PLACEHOLDER if asking else CHAT_PLACEHOLDER if self._chat else TURN_PLACEHOLDER
         )
+        if self._chat:
+            return  # a chat shows none of these (set_chat_mode)
         for widget in (
             self.length_caption,
             self.length,
@@ -587,11 +602,44 @@ class Composer(QWidget):
         """A simple chat (engine/chat.py): the text box and its buttons, none of
         a story's controls; nothing asked out of character, no OOC note."""
         self._chat = on
-        self.controls_host.setVisible(not on)
+        self.set_private_offered(True)
+        for widget in self._who_widgets:
+            widget.setVisible(not on)
         if on:
             self.ooc_toggle.setChecked(False)
             self.ooc.hide()
+            for widget in (
+                self.scope_button,
+                self.length_caption,
+                self.length,
+                self.agency_caption,
+                self.agency,
+                self.roll_caption,
+                self.skill,
+                self.difficulty,
+                self.ooc_toggle,
+            ):
+                widget.hide()
+        else:
+            self._sync_scope_button()
         self._sync_question_mode()
+        self._sync_private_tips()
+
+    def set_private_offered(self, offered: bool) -> None:
+        """Whether a part can be held in private: not in a chat on a TEE
+        model, which is private throughout. The Private button is all of the
+        controls a chat shows, so without it the whole row goes."""
+        for widget in (self.private_toggle, self.private_keep):
+            widget.setVisible(offered)
+        self.controls_host.setVisible(offered or not self._chat)
+
+    def _sync_private_tips(self) -> None:
+        active = self.private_toggle.isChecked()
+        if self._chat:
+            tip = CHAT_END_PRIVATE_TIP if active else CHAT_PRIVATE_TIP
+        else:
+            tip = END_PRIVATE_TIP if active else PRIVATE_TIP
+        self.private_toggle.setToolTip(tip)
 
     def set_private_look(self, on: bool) -> None:
         """A TEE chat's input is tinted as a private scene's is."""
@@ -757,7 +805,7 @@ class Composer(QWidget):
                 self.private_keep.setCurrentIndex(index)
         self.private_keep.setEnabled(not active)
         self.private_toggle.setText("End private" if active else "Private")
-        self.private_toggle.setToolTip(END_PRIVATE_TIP if active else PRIVATE_TIP)
+        self._sync_private_tips()
         # A tinted input says, while you type, where this turn is going.
         for widget in (self.input, self.ooc):
             widget.setProperty("private", "true" if active else "false")
