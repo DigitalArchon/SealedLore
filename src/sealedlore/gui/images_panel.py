@@ -7,12 +7,11 @@ so it is never lost with a branch.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from PySide6.QtCore import QPoint, QSize, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -22,10 +21,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from sealedlore.gui.ref_images import thumbnail
+from sealedlore.gui.ref_images import thumbnail_of
 from sealedlore.gui.transcript import IMAGE_ACTIONS, picture_caption
 from sealedlore.models.image import GeneratedImage
-from sealedlore.storage.images import story_path
+from sealedlore.storage.picture_store import PictureStore
 
 GALLERY_THUMB = 150
 
@@ -34,6 +33,7 @@ class ImagesPanel(QWidget):
     # (action, image id), as the transcript's picture menu.
     action_requested = Signal(str, str)
     generate_requested = Signal()
+    save_all_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -59,17 +59,25 @@ class ImagesPanel(QWidget):
         self.hint.setWordWrap(True)
         self.generate_button = QPushButton("Generate image…")
         self.generate_button.clicked.connect(self.generate_requested)
+        self.save_all_button = QPushButton("Save all…")
+        self.save_all_button.setToolTip("Copy every picture here into a folder you choose")
+        self.save_all_button.clicked.connect(self.save_all_requested)
+        self.save_all_button.setEnabled(False)
+        buttons = QHBoxLayout()
+        buttons.setContentsMargins(0, 0, 0, 0)
+        buttons.addWidget(self.generate_button, 1)
+        buttons.addWidget(self.save_all_button)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.addWidget(self.hint)
         layout.addWidget(self.list, 1)
-        layout.addWidget(self.generate_button)
+        layout.addLayout(buttons)
 
     def set_images(
         self,
         images: list[GeneratedImage],
-        folder: tuple[str, Path | None] | None,
+        store: PictureStore | None,
         on_path: set[str],
     ) -> None:
         self.list.clear()
@@ -79,17 +87,11 @@ class ImagesPanel(QWidget):
             item = QListWidgetItem(text + ("\n(not on this branch)" if elsewhere else ""))
             item.setData(Qt.UserRole, image.id)
             item.setToolTip(image.prompt)
-            if folder is not None:
-                try:
-                    item.setIcon(
-                        QIcon(
-                            thumbnail(story_path(folder[0], image.file, folder[1]), GALLERY_THUMB)
-                        )
-                    )
-                except ValueError:
-                    pass
+            if store is not None:
+                item.setIcon(QIcon(thumbnail_of(store.read(image.file), GALLERY_THUMB)))
             self.list.addItem(item)
         self.hint.setVisible(not images)
+        self.save_all_button.setEnabled(bool(images))
 
     def _menu(self, position: QPoint) -> None:
         item = self.list.itemAt(position)

@@ -143,6 +143,19 @@ def test_closing_mid_scene_in_memory_asks_first(app, window: MainWindow, monkeyp
     assert not window.session.in_private
 
 
+def test_close_story_mid_memory_scene_asks_and_discards(app, window: MainWindow, monkeypatch):
+    window.composer.private_toggle.click()
+    send(app, window, f"{MARKER} a")
+    session = window.session
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Cancel)
+    window.close_story()
+    assert window.session is session and session.in_private
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    window.close_story()
+    assert window.session is None
+    assert not session.in_private
+
+
 def test_no_private_model_says_where_to_set_one(app, window: MainWindow, monkeypatch):
     window.config.private_provider = None
     shown = []

@@ -104,10 +104,11 @@ from sealedlore.storage.archive import (
     ARCHIVE_SUFFIX,
     ArchiveError,
     file_format,
-    import_archive,
+    read_archive,
+    restore_archive,
     write_archive,
 )
-from sealedlore.storage.images import all_image_files, reference_files
+from sealedlore.storage.images import reference_files
 from sealedlore.storage.paths import data_home, sample_stories, samples_dir, story_dir
 from sealedlore.storage.repository import (
     StoryBundle,
@@ -292,13 +293,14 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
         self.stories.duplicate_settings_requested.connect(self.duplicate_story_settings)
         self.stories.duplicate_story_requested.connect(self.duplicate_entire_story)
         self.stories.delete_requested.connect(self.delete_story)
+        self.stories.open_folder_requested.connect(self._open_story_folder)
         left = QDockWidget("Stories", self)
         left.setObjectName("storiesDock")
         left.setWidget(self.stories)
         left.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
         self.addDockWidget(Qt.LeftDockWidgetArea, left)
 
-        self.cast_panel = CastPanel(self._folder)
+        self.cast_panel = CastPanel(self._story_pictures)
         self.cast_panel.changed.connect(self._on_cast_changed)
         self.cast_panel.renamed.connect(self._on_character_renamed)
         self.cast_panel.promote_requested.connect(self._promote_character)
@@ -318,7 +320,7 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
         self.plot_panel.spoilers_toggled.connect(self._on_spoilers_toggled)
         self.plot_panel.event_marked.connect(self._on_event_marked)
         self.plot_panel.bring_in_requested.connect(self._on_bring_in)
-        self.lore_panel = LorePanel(self._folder)
+        self.lore_panel = LorePanel(self._story_pictures)
         self.lore_panel.changed.connect(self._on_lore_changed)
         self.lore_panel.reembed_requested.connect(self.reembed_lore)
         self.style_panel = StylePanel()
@@ -421,6 +423,12 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
         save_action.setShortcut(QKeySequence.Save)
         save_action.triggered.connect(self.save_story)
         file_menu.addAction(save_action)
+        # Leaving a story used to take opening another or making a new one.
+        self.close_story_action = QAction("&Close story", self)
+        self.close_story_action.setShortcut(QKeySequence.Close)
+        self.close_story_action.setStatusTip("Back to the start page")
+        self.close_story_action.triggered.connect(self.close_story)
+        file_menu.addAction(self.close_story_action)
 
         file_menu.addSeparator()
         self.settings_action = QAction("Se&ttings…", self)
@@ -877,6 +885,25 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
         self.statusBar().showMessage(
             f"Deleted “{title}”" + (" (it's in the Trash)" if trashed else ""), 8000
         )
+
+    def _open_story_folder(self, story_id: str) -> None:
+        """The story's folder in the desktop's file manager (the story list's
+        right-click menu)."""
+        folder = story_dir(story_id, self.root)
+        if not folder.is_dir():
+            self._warn_plain("No folder", f"{folder} isn't there any more.")
+            self.stories.refresh(selected_id=self.session.story.id if self.session else None)
+            return
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder))):
+            self._warn_plain("Couldn't open the folder", f"The story's files are in\n{folder}")
+
+    def close_story(self) -> None:
+        """File → Close story: back to the start page. A chat or a private
+        scene kept in memory only asks first, and is gone on Yes."""
+        if self.session is None or self._busy or not self._private_allows_close():
+            return
+        self._close_story()
+        self.stories.refresh()
 
     def _close_story(self) -> None:
         """Back to the no-story state the window starts in."""
@@ -1561,13 +1588,13 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
         path = self._save_path("Export story backup", ARCHIVE_SUFFIX, "SealedLore backups")
         if not path:
             return
-        story = self.session.story
         try:
+            # From memory for a chat kept there: its log and its pictures.
             write_archive(
                 path,
                 self.session.bundle_to_save(),
-                read_api_log(story.id, root=self.root),
-                all_image_files(story.id, self.root),
+                self._story_log(),
+                self.session.pictures.all_files(),
             )
         except OSError as exc:
             self._warn_plain("Could not write the story backup", f"{path}: {exc.strerror or exc}")
@@ -1576,7 +1603,21 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
 
     def _import_archive(self, path: Path) -> None:
         try:
-            bundle = import_archive(path, root=self.root)
+            bundle, api_log = read_archive(path)
+            if bundle.story.chat and bundle.story.chat_keep == "memory":
+                # Exported from a chat kept in memory only: back into memory,
+                # with nothing written, or saved as an ordinary chat.
+                where = self._ask_memory_import(bundle.story.title)
+                if where is None:
+                    return
+                if where == "memory":
+                    files, bundle.pending_files = bundle.pending_files, {}
+                    self.open_memory_chat(bundle, files=files, log=api_log)
+                    self.statusBar().showMessage(
+                        f"Opened {bundle.story.title} in memory only", 6000
+                    )
+                    return
+            bundle = restore_archive(bundle, api_log, root=self.root)
         except ArchiveError as exc:
             self._warn_plain("Could not import the story backup", str(exc))
             return
@@ -1586,6 +1627,23 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
         self.stories.refresh(selected_id=bundle.story.id)
         self.open_story(bundle.story.id)
         self.statusBar().showMessage(f"Imported {bundle.story.title}", 6000)
+
+    def _ask_memory_import(self, title: str) -> str | None:
+        """ "memory", "disk", or None to cancel: where a memory-only chat's
+        backup comes back."""
+        box = QMessageBox(self)
+        box.setWindowTitle("A chat kept in memory only")
+        box.setText(
+            f"“{title}” was a chat kept in memory only. Open it in memory again (nothing "
+            "is written, and closing it loses it), or save it as an ordinary chat?"
+        )
+        memory = box.addButton("Open in memory only", QMessageBox.AcceptRole)
+        disk = box.addButton("Save as a normal chat", QMessageBox.AcceptRole)
+        box.addButton(QMessageBox.Cancel)
+        box.setDefaultButton(memory)
+        box.exec()
+        clicked = box.clickedButton()
+        return "memory" if clicked is memory else "disk" if clicked is disk else None
 
     def export_markdown(self, *, chapter_only: bool) -> None:
         if self.session is None:
@@ -2733,7 +2791,10 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
         if not self._chat_model_allowed(chosen):
             return
         self.session.story.defaults.main_model = chosen
-        self._set_default_model(chosen)
+        if not self.session.memory_only:
+            # A memory-only chat teaches the config nothing, its model included;
+            # Settings changes an open story's model only when its field changed.
+            self._set_default_model(chosen)
         self.session.save()
         if self.in_chat:
             self._chat_model_changed()
@@ -3229,6 +3290,7 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
             queued=self._queued is not None,
         )
         self.stories.setEnabled(not busy)
+        self.close_story_action.setEnabled(has_story and not busy)
         self.settings_action.setEnabled(not busy)
         self.prompts_action.setEnabled(not busy)
         # With no story the inspector shows its empty page, not greyed forms
@@ -3280,22 +3342,11 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
             ):
                 action.setEnabled(False)
             if self.memory_chat:
-                for action in (
-                    self.restart_action,
-                    self.export_action,
-                    self.archive_action,
-                    self.markdown_action,
-                    self.chapter_markdown_action,
-                    self.image_action,
-                    self.background_action,
-                ):
+                # Its pictures are kept in memory with it (storage.picture_store),
+                # and it can be exported (a backup, Markdown) but not restarted
+                # or made a scenario.
+                for action in (self.restart_action, self.export_action):
                     action.setEnabled(False)
-                self.images_panel.generate_button.setEnabled(False)
-                self.composer.image_button.setEnabled(False)
-                self.image_action.setToolTip(
-                    "Off in a chat kept in memory only: a picture would be written to disk, "
-                    "and the image model isn't private."
-                )
 
     def showEvent(self, event) -> None:  # noqa: N802 - Qt naming
         super().showEvent(event)

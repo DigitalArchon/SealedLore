@@ -175,6 +175,7 @@ from sealedlore.providers.decisions import DecisionsClient, build_decisions_payl
 from sealedlore.providers.embeddings import EmbeddingBackend
 from sealedlore.providers.tee import is_tee, move_refusal
 from sealedlore.providers.wire import should_use_cache_control
+from sealedlore.storage.picture_store import DiskPictures, MemoryPictures, PictureStore
 from sealedlore.storage.repository import (
     StoryBundle,
     append_api_log,
@@ -406,6 +407,8 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
         self.unreported_usage: list[Usage] = []
         # A memory-only chat's API log, which is never written (`memory_only`).
         self.memory_log: list[dict[str, Any]] = []
+        # A memory-only chat's pictures (`pictures`); a story's are on disk.
+        self._memory_pictures: MemoryPictures | None = None
         # Prices fetched for a memory-only chat, never written to the config.
         self._session_prices: dict[str, ModelPrice] = {}
         # Why the last archival's ledger update was refused, if it was.
@@ -3326,6 +3329,22 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
         self._save_config()
 
     @property
+    def pictures(self) -> PictureStore:
+        """Where this story's pictures are kept: its folder, or for a chat
+        kept in memory only, memory (`storage.picture_store`)."""
+        if not self.memory_only:
+            return DiskPictures(self.story.id, self.root)
+        if self._memory_pictures is None:
+            self._memory_pictures = MemoryPictures(self._log)
+        return self._memory_pictures
+
+    def restore_memory(self, files: dict[str, bytes], log: list[dict[str, Any]]) -> None:
+        """A memory-only chat brought back from its backup, in memory: its
+        pictures and its log, as they were exported."""
+        self._memory_pictures = MemoryPictures(self._log, files)
+        self.memory_log.extend(log)
+
+    @property
     def memory_only(self) -> bool:
         """A chat kept in memory only: nothing about it reaches the disk, not
         the story, not its log, not what it teaches the config (the author: "a
@@ -3404,3 +3423,6 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
                         "dropped": "not adopted: the story was closed",
                     },
                 )
+        if self._memory_pictures is not None:
+            # A memory-only chat's pictures go with it.
+            self._memory_pictures.close()

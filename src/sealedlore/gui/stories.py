@@ -31,6 +31,7 @@ class StoryListPanel(QWidget):
     duplicate_settings_requested = Signal(str)
     duplicate_story_requested = Signal(str)
     delete_requested = Signal(str)
+    open_folder_requested = Signal(str)
 
     def __init__(self, root: Path | None = None) -> None:
         super().__init__()
@@ -113,8 +114,17 @@ class StoryListPanel(QWidget):
         if not story_id:
             return
         self.list.setCurrentItem(item)
+        self.menu_for(story_id).exec(self.list.viewport().mapToGlobal(position))
+
+    def menu_for(self, story_id: str) -> QMenu:
+        """A story's right-click menu."""
         menu = QMenu(self)
         menu.addAction("Open", lambda: self.story_activated.emit(story_id))
+        # On an unreadable story too: that's where its files most need a look.
+        open_folder = menu.addAction(
+            "Open folder", lambda: self.open_folder_requested.emit(story_id)
+        )
+        open_folder.setToolTip("The story's files, in your file manager")
         menu.addSeparator()
         duplicate_settings = menu.addAction(
             "Duplicate settings only", lambda: self.duplicate_settings_requested.emit(story_id)
@@ -129,7 +139,7 @@ class StoryListPanel(QWidget):
         menu.setToolTipsVisible(True)
         menu.addSeparator()
         menu.addAction("Delete…", lambda: self.delete_requested.emit(story_id))
-        menu.exec(self.list.viewport().mapToGlobal(position))
+        return menu
 
     def _delete_current(self) -> None:
         item = self.list.currentItem()

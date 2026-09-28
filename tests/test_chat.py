@@ -380,6 +380,40 @@ def test_a_memory_only_chat_leaves_no_trace_on_disk(tmp_path):
     assert {request.model for request in provider.requests} == {"TEE/gemma-3-27b"}
 
 
+def test_a_memory_only_chat_on_any_model_leaves_no_trace_on_disk(tmp_path):
+    """Memory only was a TEE chat's alone; the author opened it to every
+    model (Sept 2026). A plain model's chat, through archival, a merge's worth
+    of turns and a private part, leaves the data folder as it was, and the
+    config learns nothing from it."""
+    config = make_config(archive_chunk_turns=2)
+    config_before = config.model_dump_json()
+    story = Story(title="Incognito", mode="chat", chat_prompt=PROMPT, chat_keep="memory")
+    story.defaults.main_model = "z-ai/glm-5.3"
+    story.defaults.context_token_budget = 900
+    before = listing(tmp_path)
+    provider = MockChatProvider([f"Reply {i}: " + "some words here. " * 20 for i in range(40)])
+    session = StorySession(
+        StoryBundle(story=story),
+        config,
+        provider,
+        root=tmp_path,
+        estimator=TokenEstimator(counter=fallback_counter),
+    )
+    assert session.memory_only and not session.tee_chat
+    for i in range(6):
+        say(session, f"Secret {i}: " + "more words. " * 10)
+    private = enter(session, "memory")
+    say(session, f"Between us: {MARKER}.")
+    private.responses = ["They agreed on something."]
+    list(session.close_private(session.summarise_private()))
+    for i in range(3):
+        say(session, f"After {i}: " + "more words. " * 10)
+    assert session.bundle.summaries, "nothing was archived"
+    assert listing(tmp_path) == before
+    assert config.model_dump_json() == config_before
+    assert {"request", "response", "summary_request"} <= {e["kind"] for e in session.memory_log}
+
+
 def test_a_chat_tail_ends_every_request_and_never_enters_the_history(tmp_path):
     session, provider = chat_session(tmp_path, ["Bonjour.", "Ça va."])
     session.story.chat_tail = "Reply in French."

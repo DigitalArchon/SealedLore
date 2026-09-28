@@ -3,9 +3,9 @@
 The tail was once only in Story → Setup, so a chat that needed one had to be
 created and then set up again (the author, Sept 2026).
 
-A chat on a TEE model is also asked where it is kept: on disk, as any story,
-or in memory only, a full incognito conversation (the author, Sept 2026).
-The choice is fixed with the chat. See engine/chat.py.
+Every chat is also asked where it is kept: on disk, as any story, or in
+memory only, a full incognito conversation (the author, Sept 2026; at first a
+TEE chat's choice only). The choice is fixed with the chat. See engine/chat.py.
 """
 
 from __future__ import annotations
@@ -27,11 +27,18 @@ from sealedlore.gui.model_picker import Browse, ModelField
 from sealedlore.models.config import ProviderConfig
 from sealedlore.providers.tee import is_private_mode, is_tee
 
+# Any other model: memory only is about this computer, not about the model.
+PLAIN_HINTS = {
+    "disk": "Saved like any story.",
+    "memory": "Nothing is kept on this computer, not even the log: when the chat is closed, "
+    "it is gone. The model's provider still receives every message, as with any chat (your "
+    "NanoGPT account's data retention setting applies there). Pictures are kept in memory too.",
+}
 KEEP_HINTS = {
     "disk": "Saved like any story. The model is attested and every reply's signature "
     "checked; the conversation still passes NanoGPT's gateway.",
     "memory": "Nothing is written to disk, not even the log: when the chat is closed, it is "
-    "gone. Attested and checked as on disk. Pictures are off.",
+    "gone. Attested and checked as on disk. Pictures are kept in memory too.",
 }
 # A private/ model: sealed to the attested enclave (providers/private_mode.py).
 ENCRYPTED_HINTS = {
@@ -39,7 +46,7 @@ ENCRYPTED_HINTS = {
     "attested enclave's key, and NanoGPT relays only ciphertext (it still sees the model, "
     "timing, sizes and cost).",
     "memory": "Nothing is written to disk, not even the log: when the chat is closed, it is "
-    "gone. End-to-end encrypted as on disk. Pictures are off.",
+    "gone. End-to-end encrypted as on disk. Pictures are kept in memory too.",
 }
 
 
@@ -134,14 +141,16 @@ class NewChatDialog(QDialog):
         return is_tee(self.model.text().strip())
 
     def keep_choice(self) -> str:
-        """Only a TEE chat may be kept in memory; any other is on disk."""
-        return self.keep.currentData() if self.tee else "disk"
+        return self.keep.currentData()
 
     def _sync(self) -> None:
-        # The Keep choice is a TEE chat's only.
-        for widget in (self.keep_label, self.keep, self.keep_hint):
-            widget.setVisible(self.tee)
-        hints = ENCRYPTED_HINTS if is_private_mode(self.model.text().strip()) else KEEP_HINTS
+        model = self.model.text().strip()
+        if is_private_mode(model):
+            hints = ENCRYPTED_HINTS
+        elif self.tee:
+            hints = KEEP_HINTS
+        else:
+            hints = PLAIN_HINTS
         self.keep_hint.setText(hints[self.keep.currentData()])
         self.ok_button.setEnabled(bool(self.title.text().strip() and self.model.text().strip()))
 

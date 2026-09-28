@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.retrieval import RetrievalReport
 from sealedlore.gui.fields import FormScroll, set_field_text
-from sealedlore.gui.ref_images import RefImageStrip, StoryFolder
+from sealedlore.gui.ref_images import RefImageStrip, StoryPictures
 from sealedlore.models.lore import LoreEntry
 
 
@@ -35,9 +35,9 @@ class LorePanel(QWidget):
     changed = Signal()
     reembed_requested = Signal()
 
-    def __init__(self, folder: StoryFolder | None = None) -> None:
+    def __init__(self, pictures: StoryPictures | None = None) -> None:
         super().__init__()
-        self._folder: StoryFolder = folder or (lambda: None)
+        self._pictures: StoryPictures = pictures or (lambda: None)
         self._entries: list[LoreEntry] = []
         self._hidden: set[str] = set()
         self._current: LoreEntry | None = None
@@ -86,7 +86,7 @@ class LorePanel(QWidget):
         self.priority = QSpinBox()
         self.priority.setRange(-100, 100)
         self.priority.setToolTip("Higher priority survives the lore token cap first")
-        self.pictures = RefImageStrip(self._folder, "it")
+        self.pictures = RefImageStrip(self._pictures, "it")
         self.pictures.changed.connect(lambda: self._current is not None and self.changed.emit())
 
         self.title.textChanged.connect(self._apply_edits)

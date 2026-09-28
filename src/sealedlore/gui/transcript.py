@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
 
 from PySide6.QtCore import QEvent, QPoint, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QPainter, QPixmap, QTextDocument
@@ -31,7 +30,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.dice import chip_text
 from sealedlore.gui import theme
-from sealedlore.gui.ref_images import load_pixmap
+from sealedlore.gui.ref_images import pixmap_of
 from sealedlore.models.aside import Aside
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage
@@ -92,7 +91,10 @@ class PendingPicture:
 
 # The pictures anchored after a node (None: before the first): a finished
 # one as (record, its file), or one still being drawn.
-PicturesFor = Callable[[str | None], "Sequence[tuple[GeneratedImage, Path] | PendingPicture]"]
+# A picture with its bytes (None: its file is missing), or one still being drawn.
+PicturesFor = Callable[
+    [str | None], "Sequence[tuple[GeneratedImage, bytes | None] | PendingPicture]"
+]
 
 
 def speaker_label_for(speaker_id: str, cast: Sequence[Character]) -> str:
@@ -626,7 +628,7 @@ class ImageMessageWidget(QFrame):
     # (action, image id): open, prompt, save, reference, again, background, delete.
     action_requested = Signal(str, str)
 
-    def __init__(self, image: GeneratedImage, path: Path) -> None:
+    def __init__(self, image: GeneratedImage, data: bytes | None) -> None:
         super().__init__()
         self.setObjectName("message")
         self.setProperty("kind", "picture")
@@ -664,7 +666,7 @@ class ImageMessageWidget(QFrame):
         header_row.addWidget(more)
         layout.addLayout(header_row)
 
-        pixmap = load_pixmap(path)
+        pixmap = pixmap_of(data)
         if pixmap.isNull():
             missing = QLabel(f"The picture file is missing ({image.file}).")
             missing.setObjectName("hintLabel")
@@ -991,14 +993,14 @@ class TranscriptView(QScrollArea):
             self.setStyleSheet(background_qss())
             self.viewport().update()
 
-    def set_background(self, path: Path | None) -> bool:
+    def set_background(self, data: bytes | None) -> bool:
         """Show a picture behind the text, or none. False if it couldn't be read."""
-        pixmap = load_pixmap(path) if path is not None else QPixmap()
+        pixmap = pixmap_of(data) if data is not None else QPixmap()
         self._background = None if pixmap.isNull() else pixmap
         self._background_scaled = None
         self.setStyleSheet(background_qss() if self._background is not None else "")
         self.viewport().update()
-        return path is None or self._background is not None
+        return data is None or self._background is not None
 
     @property
     def has_background(self) -> bool:
@@ -1128,8 +1130,8 @@ class TranscriptView(QScrollArea):
         self._place(widget)
         return widget
 
-    def add_picture(self, image: GeneratedImage, path: Path) -> ImageMessageWidget:
-        widget = ImageMessageWidget(image, path)
+    def add_picture(self, image: GeneratedImage, data: bytes | None) -> ImageMessageWidget:
+        widget = ImageMessageWidget(image, data)
         widget.action_requested.connect(self.image_action_requested)
         self._place(widget)
         return widget

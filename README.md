@@ -245,15 +245,20 @@ must be `https://` (plain `http://` is accepted only for `localhost`).
 - **On disk**, settings (the API key included, in plain text) and stories
   live in a data folder only your user can read. Each story keeps every
   request and reply in its `api_log.jsonl`, so a story backup carries every
-  prompt sent for it. An "in memory" scene or chat keeps its messages off
-  the disk (only a content-free record of each call is kept, for the cost).
+  prompt sent for it. An "in memory" private scene keeps its messages off
+  the disk (only a content-free record of each call is kept, for the cost);
+  an "in memory" chat, on any model, writes nothing at all.
   On Linux the app tells the system to keep no core dump after a crash;
   `crash.log` records only where in the program it happened, never your
   stories.
 - **Swap and hibernation** belong to the operating system, on Linux and
   Windows alike: it may write the app's memory, a memory-only scene or chat
   included, to swap or a hibernation file (`pagefile.sys` and `hiberfil.sys`
-  on Windows). Disk encryption covers them.
+  on Windows). Disk encryption covers them. On Linux, if privacy is your
+  main concern, turn swap off while you use SealedLore with
+  `sudo swapoff -a`, and back on afterwards with `sudo swapon -a`. Turning
+  it off first moves whatever is already in swap back into memory, which
+  needs enough free RAM. Don't hibernate meanwhile.
 
 **On Windows** the network side is the same, but the machine gives less
 protection:

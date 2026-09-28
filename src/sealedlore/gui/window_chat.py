@@ -78,9 +78,16 @@ class ChatWindow:
         self.stories.refresh(selected_id=story.id)
         self.open_story(story.id)
 
-    def open_memory_chat(self, bundle: StoryBundle) -> None:
+    def open_memory_chat(
+        self,
+        bundle: StoryBundle,
+        *,
+        files: dict[str, bytes] | None = None,
+        log: list[dict] | None = None,
+    ) -> None:
         """A chat that is never written: its session is made here, from the
-        bundle in memory, where every other story is loaded from disk."""
+        bundle in memory, where every other story is loaded from disk.
+        `files` and `log`: its pictures and log, from a backup."""
         if self.session is not None:
             self.session.close(wait_seconds=0)
         self.session = StorySession(
@@ -93,6 +100,8 @@ class ChatWindow:
             # file; an incognito chat leaves nothing, that included.
             learn_corrections=False,
         )
+        if files or log:
+            self.session.restore_memory(files or {}, log or [])
         self._after_open()
 
     # --- the window in a chat ----------------------------------------------------
@@ -128,11 +137,20 @@ class ChatWindow:
         """Leaving a chat kept in memory only loses it: ask first."""
         if not self.memory_chat:
             return True
+        drawing = len(self.image_jobs.pending(self.session.story.id))
+        lost = (
+            f" The {drawing} picture{'s' if drawing != 1 else ''} still being drawn "
+            f"{'are' if drawing != 1 else 'is'} lost with it."
+            if drawing
+            else ""
+        )
         answer = QMessageBox.question(
             self,
             "Chat kept in memory only",
             "This chat is kept in memory only: closing it loses it, and nothing of it was "
-            "ever written to disk.\n\nClose it anyway?",
+            f"ever written to disk.{lost}\n\nTo keep it, export a backup first (Story → "
+            "Export → Story backup…); to keep only its pictures, Images → Save all….\n\n"
+            "Close it anyway?",
             QMessageBox.Yes | QMessageBox.Cancel,
         )
         return answer == QMessageBox.Yes

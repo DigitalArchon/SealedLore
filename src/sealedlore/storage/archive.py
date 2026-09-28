@@ -159,6 +159,17 @@ def read_archive(path: Path) -> tuple[StoryBundle, list[dict[str, Any]]]:
 def import_archive(path: Path, root: Path | None = None) -> StoryBundle:
     """Restore an archive as a story on disk, under a fresh id if needed."""
     bundle, api_log = read_archive(path)
+    return restore_archive(bundle, api_log, root)
+
+
+def restore_archive(
+    bundle: StoryBundle, api_log: list[dict[str, Any]], root: Path | None = None
+) -> StoryBundle:
+    """Write an archive already read (`read_archive`) as a story on disk.
+
+    A chat exported from memory comes back as an ordinary saved chat: one
+    loaded from disk and still marked "memory" could never be saved."""
+    bundle.story.chat_keep = "disk"
     if not is_safe_story_id(bundle.story.id):
         # The id names a folder; one that could escape stories/ is replaced.
         bundle.story.id = new_id()

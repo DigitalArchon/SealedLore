@@ -72,6 +72,8 @@ def window(app, tmp_path: Path, story, cast) -> MainWindow:
     yield window
     window.image_jobs.stop_all()
     window.image_jobs.wait_all()
+    # A memory chat still open would ask before going, with no one to answer.
+    window._chat_allows_close = lambda: True
     window.close()
 
 
@@ -295,3 +297,196 @@ def test_the_prompt_writer_is_chosen_in_the_dialog_and_kept(app, window: MainWin
     assert window.config.image_prompt_model == "zai-org/glm-5.3"
     assert load_config(root=window.root).image_prompt_model == "zai-org/glm-5.3"
     assert ImageDialog(session, parent=window).writer.text() == "zai-org/glm-5.3"
+
+
+# --- a chat kept in memory only --------------------------------------------------
+
+
+def data_listing(root: Path) -> dict[str, bytes]:
+    return {
+        str(path.relative_to(root)): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
+def test_a_memory_chat_keeps_its_pictures_in_memory_and_can_save_them(
+    app, window: MainWindow, tmp_path: Path, tmp_path_factory, monkeypatch
+):
+    """The author (Sept 2026): pictures in a memory-only chat, kept in memory
+    only, with a way to export them. Everything a picture touches (a
+    reference from disk, the drawn picture, its log, the background) stays
+    off the disk; Save all writes only where the author chose."""
+    from PySide6.QtWidgets import QFileDialog, QMessageBox
+
+    import sealedlore.gui.image_dialog as image_dialog
+    from tests.test_chat_gui import make_chat
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    outside = tmp_path_factory.mktemp("elsewhere")
+    source = outside / "lighthouse.png"
+    source.write_bytes(PNG)
+    make_chat(window, monkeypatch, model="z-ai/glm-5.3", keep="memory")
+    session = window.session
+    assert session.memory_only
+    before = data_listing(tmp_path)
+
+    # A reference picture from disk, through the picture dialog.
+    monkeypatch.setattr(
+        image_dialog.QFileDialog, "getOpenFileName", lambda *a, **k: (str(source), "")
+    )
+    dialog = ImageDialog(session, parent=window)
+    dialog._add_from_disk()
+    ref = session.story.reference_images[0]
+    assert session.pictures.read(ref.file) is not None
+    dialog.deleteLater()
+
+    # A picture drawn with it lands in the transcript and the Images tab.
+    use = next(c.use for c in session.image_ref_choices() if c.use.ref_id == ref.id)
+    request = ImageRequest(
+        story_id=session.story.id,
+        model="hidream",
+        prompt="A lighthouse at dusk.",
+        size="1024x1024",
+        n=1,
+        references=(use,),
+        anchor_node_id=None,
+    )
+    window.image_jobs.start(request, mock_image_client(delay=0.1), session.pictures)
+    wait_for(app, lambda: not window.image_jobs.pending())
+    flush(app)
+    assert len(session.generated_images()) == 1
+    assert window.images_panel.list.count() == 1
+    assert window.images_panel.save_all_button.isEnabled()
+    assert any(p.picture is not None for p in window.transcript.findChildren(ImageMessageWidget))
+    assert {"image_request", "image_response"} <= {e["kind"] for e in session.memory_log}
+
+    # A background, from a file and from the picture made.
+    window._set_background_from(source)
+    assert window.transcript.has_background
+    window._image_action("background", session.generated_images()[0].id)
+    assert window.transcript.has_background
+
+    assert data_listing(tmp_path) == before, "a memory chat's picture reached the disk"
+
+    # Save all writes every picture where the author chose, and nowhere else.
+    target = tmp_path_factory.mktemp("saved")
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *a, **k: str(target))
+    window.save_all_pictures()
+    saved = sorted(p.name for p in target.iterdir())
+    assert len(saved) == 1 and saved[0].startswith("001-")
+    assert data_listing(tmp_path) == before
+    # And one picture at a time, from the picture's own menu.
+    one = tmp_path_factory.mktemp("one") / "picture.png"
+    monkeypatch.setattr(image_dialog.QFileDialog, "getSaveFileName", lambda *a, **k: (str(one), ""))
+    window._image_action("save", session.generated_images()[0].id)
+    assert one.read_bytes() == session.pictures.read(session.generated_images()[0].file)
+    assert data_listing(tmp_path) == before
+
+    # A picture still being drawn when the chat closes is lost with it.
+    window.image_jobs.start(request, mock_image_client(delay=0.3), session.pictures)
+    window.close_story()
+    assert window.session is None
+    wait_for(app, lambda: not window.image_jobs.pending())
+    flush(app)
+    assert session.pictures.images() == []
+    assert data_listing(tmp_path) == before
+
+
+def test_an_image_listing_fetched_in_a_memory_chat_stays_out_of_the_config(app, tmp_path: Path):
+    from sealedlore.gui.image_jobs import ImageCatalog
+    from sealedlore.models.config import Config
+    from sealedlore.providers.images import parse_image_models
+
+    config = Config()
+    before = config.model_dump_json()
+    memory = [True]
+    catalog = ImageCatalog(config, tmp_path, in_memory=lambda: memory[0])
+    found = parse_image_models(LISTING)
+    catalog._on_finished(found)
+    assert config.model_dump_json() == before, "the fetch reached the config"
+    assert not (tmp_path / "config.json").exists()
+    assert [info.id for info in catalog.models] == [info.id for info in found]
+    # Out of the memory chat, a fetch is kept in the config as ever.
+    memory[0] = False
+    catalog._on_finished(found)
+    assert config.image_models and config.image_models_fetched_at
+
+
+def test_a_memory_chat_exports_and_comes_back_in_memory_or_saved(
+    app, window: MainWindow, tmp_path: Path, tmp_path_factory, monkeypatch
+):
+    """The author: a memory chat can be exported, and its backup brought back
+    in memory again (nothing written) or as an ordinary saved chat."""
+    from PySide6.QtWidgets import QMessageBox
+
+    from sealedlore.engine.prompt import TurnRequest
+    from sealedlore.models.node import CHAT_USER_ID
+    from tests.test_chat_gui import make_chat
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    make_chat(window, monkeypatch, model="z-ai/glm-5.3", keep="memory")
+    session = window.session
+    session.provider.responses = ["A lamp on the point."]
+    list(session.send(TurnRequest(speaker_id=CHAT_USER_ID, user_text="Your lighthouse?")))
+    request = ImageRequest(
+        story_id=session.story.id,
+        model="hidream",
+        prompt="A lighthouse.",
+        size="1024x1024",
+        n=1,
+        references=(),
+        anchor_node_id=None,
+    )
+    window.image_jobs.start(request, mock_image_client(), session.pictures)
+    wait_for(app, lambda: not window.image_jobs.pending())
+    window._update_controls()
+    for action in (window.archive_action, window.markdown_action):
+        assert action.isEnabled(), action.text()
+    assert not window.restart_action.isEnabled() and not window.export_action.isEnabled()
+
+    before = data_listing(tmp_path)
+    backup = tmp_path_factory.mktemp("backups") / "chat.sealedlore-backup.json"
+    monkeypatch.setattr(window, "_save_path", lambda *a: backup)
+    window.export_story_archive()
+    assert backup.is_file()
+    window.close_story()
+    assert data_listing(tmp_path) == before
+
+    # Back into memory: nothing written; its picture, text and cost are back.
+    monkeypatch.setattr(window, "_ask_memory_import", lambda title: "memory")
+    window._import_archive(backup)
+    again = window.session
+    assert again.memory_only and again.path()[-1].content == "A lamp on the point."
+    image = again.generated_images()[0]
+    assert again.pictures.read(image.file) is not None
+    assert {"image_request", "image_response"} <= {e["kind"] for e in again.memory_log}
+    assert data_listing(tmp_path) == before
+    window.close_story()
+
+    # Cancel imports nothing.
+    monkeypatch.setattr(window, "_ask_memory_import", lambda title: None)
+    window._import_archive(backup)
+    assert window.session is None and data_listing(tmp_path) == before
+
+    # Saved: an ordinary chat on disk, with its picture.
+    monkeypatch.setattr(window, "_ask_memory_import", lambda title: "disk")
+    window._import_archive(backup)
+    saved = window.session
+    assert saved is not None and not saved.memory_only
+    assert saved.story.chat_keep == "disk"
+    assert len(load_generated_images(saved.story.id, tmp_path)) == 1
+    window.close_story()
+
+
+def test_an_ordinary_backup_is_imported_without_asking(app, window: MainWindow, tmp_path_factory):
+    backup = tmp_path_factory.mktemp("backups") / "story.sealedlore-backup.json"
+    window._save_path = lambda *a: backup
+    window.export_story_archive()
+
+    def never(title):
+        raise AssertionError("asked where to keep an ordinary story")
+
+    window._ask_memory_import = never
+    window._import_archive(backup)
+    assert window.session is not None and not window.session.memory_only

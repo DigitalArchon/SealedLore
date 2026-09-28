@@ -10,6 +10,7 @@ thread when the job finishes.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -28,6 +29,7 @@ from sealedlore.providers.images import (
     list_image_models,
     parse_image_models,
 )
+from sealedlore.storage.picture_store import DiskPictures, PictureStore
 from sealedlore.storage.repository import save_config
 
 LISTING_MAX_AGE = timedelta(days=1)
@@ -46,20 +48,40 @@ def listing_is_stale(fetched_at: str | None) -> bool:
 class ImageCatalog(QObject):
     """The endpoint's image models (sizes, reference limits, prices), kept in
     config for a day and fetched on a thread the window owns: a dialog closed
-    mid-fetch must not take a running thread down with it."""
+    mid-fetch must not take a running thread down with it.
+
+    While a chat kept in memory only is open (`in_memory`), a listing fetched
+    is kept here and not in the config: its fetch time would say when that
+    chat's picture dialog was opened, and a memory chat teaches the settings
+    nothing."""
 
     changed = Signal()
 
-    def __init__(self, config: Config, root: Path | None, parent: QObject | None = None) -> None:
+    def __init__(
+        self,
+        config: Config,
+        root: Path | None,
+        parent: QObject | None = None,
+        *,
+        in_memory: Callable[[], bool] = lambda: False,
+    ) -> None:
         super().__init__(parent)
         self.config = config
         self.root = root
+        self._in_memory = in_memory
         self._thread: QThread | None = None
         self._worker: GenerationWorker | None = None
+        # A listing fetched during a memory-only chat: (entries, fetched at).
+        self._held: tuple[list[dict], str] | None = None
+
+    def _listing(self) -> tuple[list[dict], str | None]:
+        if self._held is not None and self._in_memory():
+            return self._held
+        return self.config.image_models, self.config.image_models_fetched_at
 
     @property
     def models(self) -> list[ImageModelInfo]:
-        return parse_image_models({"data": self.config.image_models})
+        return parse_image_models({"data": self._listing()[0]})
 
     @property
     def loading(self) -> bool:
@@ -70,7 +92,7 @@ class ImageCatalog(QObject):
         provider = self.config.active_provider()
         if self.loading or provider is None:
             return
-        if not force and not listing_is_stale(self.config.image_models_fetched_at):
+        if not force and not listing_is_stale(self._listing()[1]):
             return
         found: list[ImageModelInfo] = []
         base_url = provider.base_url
@@ -95,7 +117,12 @@ class ImageCatalog(QObject):
         if not found:
             self.changed.emit()  # done loading; the listing kept stands
             return
-        self.config.image_models = [listing_entry(info) for info in found]
+        entries = [listing_entry(info) for info in found]
+        if self._in_memory():
+            self._held = (entries, utc_now_iso())
+            self.changed.emit()
+            return
+        self.config.image_models = entries
         self.config.image_models_fetched_at = utc_now_iso()
         try:
             save_config(self.config, root=self.root)
@@ -129,6 +156,8 @@ class ImageJob:
     id: str
     request: ImageRequest
     client: ImageClient
+    # Where its story keeps pictures: written by the job, added to by the window.
+    store: PictureStore
     thread: QThread | None = None
     worker: GenerationWorker | None = None
     records: list[GeneratedImage] = field(default_factory=list)
@@ -137,8 +166,8 @@ class ImageJob:
 
 
 class ImageJobs(QObject):
-    # (job id, story id, records)
-    finished = Signal(str, str, list)
+    # (job id, story id, records, the story's PictureStore)
+    finished = Signal(str, str, list, object)
     # (job id, story id, message); a stopped job fails with an empty message.
     failed = Signal(str, str, str)
     changed = Signal()
@@ -148,12 +177,17 @@ class ImageJobs(QObject):
         self.root = root
         self.jobs: dict[str, ImageJob] = {}
 
-    def start(self, request: ImageRequest, client: ImageClient) -> str:
-        job = ImageJob(id=new_id(), request=request, client=client)
+    def start(
+        self, request: ImageRequest, client: ImageClient, store: PictureStore | None = None
+    ) -> str:
+        """`store`: where the story keeps its pictures; by default its folder."""
+        if store is None:
+            store = DiskPictures(request.story_id, self.root)
+        job = ImageJob(id=new_id(), request=request, client=client, store=store)
 
         def run():
             try:
-                job.records = run_image_request(job.client, job.request, self.root)
+                job.records = run_image_request(job.client, job.request, store=job.store)
             except StreamCancelled:
                 job.stopped = True
             except Exception as exc:  # shown to the author, never lost
@@ -205,7 +239,7 @@ class ImageJobs(QObject):
         story_id = job.request.story_id
         if job.records:
             # Kept even when stopped: the service finished it and charged for it.
-            self.finished.emit(job.id, story_id, job.records)
+            self.finished.emit(job.id, story_id, job.records, job.store)
         elif job.stopped:
             self.failed.emit(job.id, story_id, "")
         else:

@@ -1,6 +1,7 @@
 """Reference pictures on a character or lore entry, and bringing picture files in.
 
-A picture added here is copied into the story's `images/refs/` folder, so the
+A picture added here is copied into the story's `images/refs/` (through its
+picture store: the story's folder, or a memory-only chat's memory), so the
 original can move or change and the story (and its archive) keeps it. A large
 one is scaled so its longest side is 2048 pixels and saved as JPEG (PNG when
 it has transparency): an image model gets the look from far less than a
@@ -11,8 +12,9 @@ kept as it is loses it without being re-encoded; one that can't be stripped
 that way is re-encoded, which carries none over.
 
 Qt ignores a photo's EXIF orientation unless asked, so pictures are read
-through `load_image` / `load_pixmap`, which apply it: a phone's portrait
-photo shows upright, and one that is scaled is stored upright.
+through `load_image` / `load_pixmap` (a file) or `image_of` / `pixmap_of`
+(bytes from a story's store), which apply it: a phone's portrait photo shows
+upright, and one that is scaled is stored upright.
 """
 
 from __future__ import annotations
@@ -41,7 +43,8 @@ from sealedlore.engine.plot_md import ParsedPlotFile, PlotProblem
 from sealedlore.ids import new_id
 from sealedlore.models.image import ImageRef
 from sealedlore.storage.image_meta import MetadataError, picture_kind, strip_metadata
-from sealedlore.storage.images import REFS_DIR, story_path, write_story_file
+from sealedlore.storage.images import REFS_DIR
+from sealedlore.storage.picture_store import PictureStore
 
 MAX_SIDE = 2048
 # Files over this are re-encoded even when small enough in pixels.
@@ -50,8 +53,8 @@ KEPT_AS_IS = {".png", ".jpg", ".jpeg", ".webp"}
 THUMB = 88
 PICTURE_FILTER = "Pictures (*.png *.jpg *.jpeg *.webp *.bmp *.gif);;All files (*)"
 
-# Where the open story keeps its files: (story id, data root).
-StoryFolder = Callable[[], "tuple[str, Path | None] | None"]
+# Where the open story keeps its pictures; None with no story open.
+StoryPictures = Callable[[], "PictureStore | None"]
 
 
 def _encoded(image: QImage, fmt: str, quality: int = -1) -> bytes:
@@ -75,6 +78,25 @@ def load_pixmap(path: Path) -> QPixmap:
     return QPixmap() if image.isNull() else QPixmap.fromImage(image)
 
 
+def image_of(data: bytes | None) -> QImage:
+    """A picture's bytes as they should be seen, as `load_image` reads a file."""
+    if not data:
+        return QImage()
+    array = QByteArray(data)
+    buffer = QBuffer(array)
+    buffer.open(QIODevice.ReadOnly)
+    reader = QImageReader(buffer)
+    reader.setAutoTransform(True)
+    image = reader.read()
+    buffer.close()
+    return image
+
+
+def pixmap_of(data: bytes | None) -> QPixmap:
+    image = image_of(data)
+    return QPixmap() if image.isNull() else QPixmap.fromImage(image)
+
+
 def picture_bytes(source: Path) -> tuple[bytes, str]:
     """A picture file's bytes and extension, its hidden data removed, and
     scaled and re-encoded if needed.
@@ -84,9 +106,21 @@ def picture_bytes(source: Path) -> tuple[bytes, str]:
     image = load_image(source)
     if image.isNull():
         raise ValueError(f"{source.name} isn't a picture this app can read")
-    data = source.read_bytes()
+    return _prepared(image, source.read_bytes(), source.suffix)
+
+
+def picture_bytes_of(data: bytes, suffix: str) -> tuple[bytes, str]:
+    """As `picture_bytes`, for a picture already held as bytes (one the
+    story made, used as a reference)."""
+    image = image_of(data)
+    if image.isNull():
+        raise ValueError("that isn't a picture this app can read")
+    return _prepared(image, data, suffix)
+
+
+def _prepared(image: QImage, data: bytes, suffix: str) -> tuple[bytes, str]:
     if (
-        source.suffix.lower() in KEPT_AS_IS
+        suffix.lower() in KEPT_AS_IS
         and len(data) <= MAX_BYTES
         and max(image.width(), image.height()) <= MAX_SIDE
     ):
@@ -105,12 +139,12 @@ def picture_bytes(source: Path) -> tuple[bytes, str]:
     return strip_metadata(encoded), ".jpg"
 
 
-def import_reference(source: Path, story_id: str, root: Path | None, caption: str = "") -> ImageRef:
+def import_reference(source: Path, store: PictureStore, caption: str = "") -> ImageRef:
     """Copy a picture into the story as a reference. Raises ValueError or OSError."""
     data, suffix = picture_bytes(source)
     ref_id = new_id()
     relative = f"{REFS_DIR}/{ref_id}{suffix}"
-    write_story_file(story_id, relative, data, root)
+    store.write(relative, data)
     return ImageRef(id=ref_id, file=relative, caption=caption)
 
 
@@ -165,11 +199,20 @@ def load_plot_pictures(parsed: ParsedPlotFile, folder: Path) -> list[PlotProblem
     return problems
 
 
-def thumbnail(path: Path, side: int = THUMB) -> QPixmap:
-    pixmap = load_pixmap(path)
+def _scaled(pixmap: QPixmap, side: int) -> QPixmap:
     if pixmap.isNull():
         return QPixmap()
     return pixmap.scaled(side, side, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+
+def thumbnail(path: Path, side: int = THUMB) -> QPixmap:
+    """A file's thumbnail (the plot editor's pictures, beside the plot file)."""
+    return _scaled(load_pixmap(path), side)
+
+
+def thumbnail_of(data: bytes | None, side: int = THUMB) -> QPixmap:
+    """A stored picture's thumbnail, made here and kept nowhere."""
+    return _scaled(pixmap_of(data), side)
 
 
 class RefImageStrip(QWidget):
@@ -177,9 +220,9 @@ class RefImageStrip(QWidget):
 
     changed = Signal()
 
-    def __init__(self, folder: StoryFolder, owner_word: str = "them") -> None:
+    def __init__(self, pictures: StoryPictures, owner_word: str = "them") -> None:
         super().__init__()
-        self._folder = folder
+        self._pictures = pictures
         self._refs: list[ImageRef] | None = None
 
         self.list = QListWidget()
@@ -232,20 +275,17 @@ class RefImageStrip(QWidget):
         """Show (and edit in place) an owner's list; None for no owner."""
         self._refs = refs
         self.list.clear()
-        folder = self._folder()
+        store = self._pictures()
         for ref in refs or []:
             item = QListWidgetItem(ref.caption or "(no caption)")
             item.setData(Qt.UserRole, ref.id)
             item.setToolTip(ref.caption or ref.file)
-            if folder is not None:
-                try:
-                    item.setIcon(QIcon(thumbnail(story_path(folder[0], ref.file, folder[1]))))
-                except ValueError:
-                    pass
+            if store is not None:
+                item.setIcon(QIcon(thumbnail_of(store.read(ref.file))))
             self.list.addItem(item)
         self.list.setVisible(bool(refs))
         self.hint.setVisible(refs is not None and not refs)
-        self.add_button.setEnabled(refs is not None and folder is not None)
+        self.add_button.setEnabled(refs is not None and store is not None)
         self._sync_buttons()
 
     def _sync_buttons(self, *_args) -> None:
@@ -260,8 +300,8 @@ class RefImageStrip(QWidget):
         return next((ref for ref in self._refs if ref.id == ref_id), None)
 
     def _add(self) -> None:
-        folder = self._folder()
-        if self._refs is None or folder is None:
+        store = self._pictures()
+        if self._refs is None or store is None:
             return
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Add reference pictures", str(Path.home()), PICTURE_FILTER
@@ -269,7 +309,7 @@ class RefImageStrip(QWidget):
         added, problems = False, []
         for path in paths:
             try:
-                self._refs.append(import_reference(Path(path), folder[0], folder[1]))
+                self._refs.append(import_reference(Path(path), store))
                 added = True
             except (OSError, ValueError) as exc:
                 problems.append(str(exc))

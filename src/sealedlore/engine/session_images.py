@@ -30,7 +30,7 @@ from sealedlore.models.node import Node
 from sealedlore.providers.base import ChatRequest
 from sealedlore.providers.images import ImageClient
 from sealedlore.providers.tee import is_tee
-from sealedlore.storage.images import clean_story_images, load_generated_images
+from sealedlore.storage.images import clean_story_images
 from sealedlore.tree import index_nodes, path_to
 
 # The most reference pictures offered when the model's own limit is unknown.
@@ -238,8 +238,8 @@ class ImageRuntime:
     # --- pictures made ---------------------------------------------------------
 
     def generated_images(self) -> list[GeneratedImage]:
-        """Read from disk each time: a job may have added one since."""
-        return load_generated_images(self.story.id, self.root)
+        """Read afresh each time: a job may have added one since."""
+        return self.pictures.images()
 
 
 def _use(kind, owner_id: str, name: str, ref) -> RefUse:

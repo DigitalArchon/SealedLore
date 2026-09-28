@@ -38,7 +38,7 @@ from PySide6.QtWidgets import (
 from sealedlore.engine.dice import TIER_ORDER
 from sealedlore.gui import theme
 from sealedlore.gui.fields import FormScroll, set_field_text
-from sealedlore.gui.ref_images import RefImageStrip, StoryFolder
+from sealedlore.gui.ref_images import RefImageStrip, StoryPictures
 from sealedlore.models.character import Character
 from sealedlore.models.supporting import CharacterSuggestion
 
@@ -59,9 +59,9 @@ class CastPanel(QWidget):
     scan_requested = Signal()
     infer_requested = Signal(str)
 
-    def __init__(self, folder: StoryFolder | None = None) -> None:
+    def __init__(self, pictures: StoryPictures | None = None) -> None:
         super().__init__()
-        self._folder: StoryFolder = folder or (lambda: None)
+        self._pictures: StoryPictures = pictures or (lambda: None)
         self._cast: list[Character] = []
         self._hidden: set[str] = set()
         self._supporting: list[Character] = []
@@ -173,7 +173,7 @@ class CastPanel(QWidget):
         skills_layout.addWidget(self.suggest_skills, 0, Qt.AlignLeft)
         self.canon = QLineEdit()
         self.canon.setPlaceholderText("e.g. 'Night of the Living Dead (1968)' — blank if original")
-        self.pictures = RefImageStrip(self._folder, "them")
+        self.pictures = RefImageStrip(self._pictures, "them")
         self.pictures.changed.connect(self._on_pictures_changed)
         self.origin_note = QLabel("Card drafted by the model from the story. Check it.")
         self.origin_note.setObjectName("hintLabel")

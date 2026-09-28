@@ -51,13 +51,13 @@ from sealedlore.gui.ref_images import (
     PICTURE_FILTER,
     THUMB,
     import_reference,
-    load_pixmap,
-    thumbnail,
+    pixmap_of,
+    thumbnail_of,
 )
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.image import GeneratedImage, RefUse
 from sealedlore.providers.images import ImageModelInfo, parse_image_models
-from sealedlore.storage.images import story_path
+from sealedlore.storage.picture_store import file_name
 
 DIRECTION_HINT = (
     "Optional. Blank pictures what is happening now. Or say what you want:\n"
@@ -94,10 +94,14 @@ class ImageDialog(QDialog):
         self._closing = False
         self._draft: ImagePromptDraft | None = None
         self._failure: str | None = None
-        self._models: list[ImageModelInfo] = parse_image_models(
-            {"data": session.config.image_models}
-        )
         self._catalog = catalog
+        # The catalog's listing when there is one: during a memory-only chat
+        # a fresh one is held there, not in the config.
+        self._models: list[ImageModelInfo] = (
+            catalog.models
+            if catalog is not None
+            else parse_image_models({"data": session.config.image_models})
+        )
 
         self._build()
         if prefill is not None:
@@ -136,10 +140,15 @@ class ImageDialog(QDialog):
         self.private_warning.setWordWrap(True)
         tee_chat = self.session.tee_chat
         if tee_chat:
+            kept = (
+                "kept in memory with the chat, never on disk"
+                if self.session.memory_only
+                else "saved with the chat"
+            )
             self.private_warning.setText(
                 "TEE chat: the prompt is written by the chat's own model, but the image "
                 "model below is not private. The prompt and any reference pictures are sent "
-                "to it, and the picture and its prompt are saved with the chat."
+                f"to it, and the picture and its prompt are {kept}."
             )
         self.private_warning.setVisible(self.session.in_private or tee_chat)
 
@@ -359,15 +368,12 @@ class ImageDialog(QDialog):
     def _set_refs(self, refs: list[RefUse]) -> None:
         self._refs = refs
         self.refs.clear()
-        folder = (self.session.story.id, self.session.root)
+        store = self.session.pictures
         for number, use in enumerate(refs, start=1):
             caption = f" ({use.caption})" if use.caption else ""
             item = QListWidgetItem(f"{number} · {use.owner_name}")
             item.setToolTip(f"image {number}: {use.owner_name}{caption}")
-            try:
-                item.setIcon(QIcon(thumbnail(story_path(folder[0], use.file, folder[1]))))
-            except ValueError:
-                pass
+            item.setIcon(QIcon(thumbnail_of(store.read(use.file))))
             self.refs.addItem(item)
         self._sync_ref_buttons()
         self._sync()
@@ -408,7 +414,7 @@ class ImageDialog(QDialog):
             return
         session = self.session
         try:
-            ref = import_reference(Path(path), session.story.id, session.root)
+            ref = import_reference(Path(path), session.pictures)
         except (OSError, ValueError) as exc:
             QMessageBox.warning(self, "Couldn't add the picture", str(exc))
             return
@@ -672,11 +678,14 @@ class FitPicture(QWidget):
 class ImageViewer(QDialog):
     """A picture full size, with its prompt."""
 
-    def __init__(self, image: GeneratedImage, path: Path, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, image: GeneratedImage, data: bytes | None, parent: QWidget | None = None
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle(f"Picture · {image.model.rsplit('/', 1)[-1]} · {image.size}")
-        self._path = path
-        picture = FitPicture(load_pixmap(path))
+        self._data = data
+        self._name = file_name(image.file)
+        picture = FitPicture(pixmap_of(data))
         prompt = QPlainTextEdit(image.prompt)
         prompt.setReadOnly(True)
         prompt.setMaximumHeight(110)
@@ -701,16 +710,20 @@ class ImageViewer(QDialog):
         self.resize(1000, 800)
 
     def _save(self) -> None:
-        save_picture_as(self, self._path)
+        save_picture_as(self, self._data, self._name)
 
 
-def save_picture_as(parent: QWidget, path: Path) -> None:
+def save_picture_as(parent: QWidget, data: bytes | None, name: str) -> None:
+    """Save a stored picture wherever the author chooses."""
+    if data is None:
+        return
+    suffix = Path(name).suffix
     target, _ = QFileDialog.getSaveFileName(
-        parent, "Save picture", str(Path.home() / path.name), f"Pictures (*{path.suffix})"
+        parent, "Save picture", str(Path.home() / name), f"Pictures (*{suffix})"
     )
     if target:
         try:
-            Path(target).write_bytes(path.read_bytes())
+            Path(target).write_bytes(data)
         except OSError as exc:
             from PySide6.QtWidgets import QMessageBox
 

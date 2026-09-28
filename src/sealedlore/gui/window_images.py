@@ -3,8 +3,9 @@
 Three rules:
 - Nothing is sent to an image model without the author seeing and approving
   the whole request in `ImageDialog`; what they approve is what is sent.
-- A picture's job never touches the session. Its record reaches images.json
-  here, on the GUI thread, through `storage.images`, never `session.save()`.
+- A picture's job never touches the session. Its record reaches the story's
+  picture store (images.json, or a memory-only chat's memory) here, on the
+  GUI thread, never through `session.save()`.
 - Pictures outlive their passages: only the author deletes one.
 """
 
@@ -18,19 +19,15 @@ from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 from sealedlore.gui.image_dialog import ImageDialog, ImageViewer, save_picture_as
 from sealedlore.gui.image_jobs import ImageCatalog, ImageJobs
 from sealedlore.gui.images_panel import ImagesPanel
-from sealedlore.gui.ref_images import PICTURE_FILTER, import_reference, picture_bytes
+from sealedlore.gui.ref_images import PICTURE_FILTER, picture_bytes, picture_bytes_of
 from sealedlore.gui.transcript import PendingPicture
 from sealedlore.gui.winprivacy import exclude_from_capture
-from sealedlore.models.image import GeneratedImage
+from sealedlore.ids import new_id
+from sealedlore.models.image import GeneratedImage, ImageRef
 from sealedlore.models.node import Usage
-from sealedlore.storage.images import (
-    IMAGES_DIR,
-    add_generated_images,
-    load_generated_images,
-    remove_generated_image,
-    story_path,
-    write_story_file,
-)
+from sealedlore.storage.image_meta import picture_kind
+from sealedlore.storage.images import IMAGES_DIR, REFS_DIR
+from sealedlore.storage.picture_store import PictureStore, file_name
 from sealedlore.storage.repository import save_config
 
 
@@ -38,7 +35,9 @@ class ImagesWindow:
     def _init_images(self) -> None:
         """Called from `_build_ui`: the jobs, the Images tab and the transcript's signals."""
         self.image_jobs = ImageJobs(self.root, self)
-        self.image_catalog = ImageCatalog(self.config, self.root, self)
+        self.image_catalog = ImageCatalog(
+            self.config, self.root, self, in_memory=lambda: self.memory_chat
+        )
         self.image_jobs.finished.connect(self._on_image_finished)
         self.image_jobs.failed.connect(self._on_image_failed)
         self.image_jobs.changed.connect(self._on_image_jobs_changed)
@@ -46,6 +45,7 @@ class ImagesWindow:
         self.images_panel = ImagesPanel()
         self.images_panel.action_requested.connect(self._image_action)
         self.images_panel.generate_requested.connect(lambda: self.generate_image())
+        self.images_panel.save_all_requested.connect(self.save_all_pictures)
         self.transcript.illustrate_requested.connect(
             lambda node_id: self.generate_image(anchor_id=node_id)
         )
@@ -88,8 +88,9 @@ class ImagesWindow:
 
     # --- the open story's pictures --------------------------------------------
 
-    def _folder(self) -> tuple[str, Path | None] | None:
-        return (self.session.story.id, self.root) if self.session is not None else None
+    def _story_pictures(self) -> PictureStore | None:
+        """Where the open story keeps its pictures: its folder, or memory."""
+        return self.session.pictures if self.session is not None else None
 
     def _load_images(self) -> None:
         self._images = self.session.generated_images() if self.session is not None else []
@@ -98,8 +99,9 @@ class ImagesWindow:
         if self.session is None:
             return []
         story_id = self.session.story.id
+        store = self.session.pictures
         items: list = [
-            (image, story_path(story_id, image.file, self.root))
+            (image, store.read(image.file))
             for image in self._images
             if image.anchor_node_id == anchor
         ]
@@ -121,7 +123,7 @@ class ImagesWindow:
             self.images_panel.set_images([], None, set())
             return
         on_path = {node.id for node in self.session.full_path()}
-        self.images_panel.set_images(self._images, self._folder(), on_path)
+        self.images_panel.set_images(self._images, self.session.pictures, on_path)
 
     def _refresh_image_views(self) -> None:
         """The Images tab now; the transcript once no passage is streaming into it."""
@@ -135,15 +137,6 @@ class ImagesWindow:
         self, *, anchor_id: str | None = None, prefill: GeneratedImage | None = None
     ) -> None:
         if self.session is None:
-            return
-        if self.memory_chat:
-            # Every way in (the composer, a message, the Images tab, "Generate
-            # again") comes here: a picture would be written to disk.
-            self.statusBar().showMessage(
-                "Pictures are off in a chat kept in memory only: a picture would be written "
-                "to disk, and the image model isn't private.",
-                8000,
-            )
             return
         if self._busy:
             self.statusBar().showMessage(
@@ -169,8 +162,9 @@ class ImagesWindow:
         # The writer picked in the dialog sticks, as Settings → Models →
         # Image prompt writer (blank: the story model).
         # (Not in private or a TEE chat: their own model writes, and the
-        # setting stays as the author left it for stories.)
-        private = self.session.in_private or self.session.tee_chat
+        # setting stays as the author left it for stories. Nor from a chat
+        # kept in memory only, which teaches the settings nothing.)
+        private = self.session.in_private or self.session.tee_chat or self.session.memory_only
         if not private and dialog.writer_model() != self.config.image_prompt_model:
             self.config.image_prompt_model = dialog.writer_model()
             save_config(self.config, root=self.root)
@@ -184,7 +178,7 @@ class ImagesWindow:
         client = self.session.image_client()
         if client is None:
             return
-        self.image_jobs.start(dialog.request, client)
+        self.image_jobs.start(dialog.request, client, self.session.pictures)
         self.statusBar().showMessage(
             "Drawing the picture in the background. It appears after its passage when done.",
             8000,
@@ -195,9 +189,11 @@ class ImagesWindow:
         count = len(self.image_jobs.pending())
         self.status_strip.set_pictures(count)
 
-    def _on_image_finished(self, _job_id: str, story_id: str, records: list) -> None:
+    def _on_image_finished(
+        self, _job_id: str, story_id: str, records: list, store: PictureStore
+    ) -> None:
         try:
-            add_generated_images(story_id, records, self.root)
+            store.add_images(records)
         except OSError as exc:
             self._warn_plain("Couldn't keep the picture", str(exc))
             return
@@ -235,16 +231,17 @@ class ImagesWindow:
     def _image(self, image_id: str) -> GeneratedImage | None:
         if self.session is None:
             return None
-        images = load_generated_images(self.session.story.id, self.root)
+        images = self.session.pictures.images()
         return next((image for image in images if image.id == image_id), None)
 
     def _image_action(self, action: str, image_id: str) -> None:
         image = self._image(image_id)
         if image is None or self.session is None:
             return
-        path = story_path(self.session.story.id, image.file, self.root)
+        store = self.session.pictures
+        data = store.read(image.file)
         if action == "open":
-            ImageViewer(image, path, self).exec()
+            ImageViewer(image, data, self).exec()
         elif action == "prompt":
             box = QMessageBox(self)
             box.setWindowTitle("Prompt")
@@ -258,11 +255,11 @@ class ImagesWindow:
             )
             box.exec()
         elif action == "save":
-            save_picture_as(self, path)
+            save_picture_as(self, data, file_name(image.file))
         elif action == "reference":
-            self._use_as_reference(path)
-        elif action == "background":
-            self._set_background_from(path)
+            self._use_as_reference(data)
+        elif action == "background" and data is not None:
+            self._set_background_data(data, picture_kind(data) or ".png")
         elif action == "again":
             self.generate_image(anchor_id=image.anchor_node_id, prefill=image)
         elif action == "delete":
@@ -270,11 +267,49 @@ class ImagesWindow:
                 self, "Delete picture", "Delete this picture? Its file is removed."
             )
             if answer == QMessageBox.Yes:
-                remove_generated_image(self.session.story.id, image.id, self.root)
+                store.remove_image(image.id)
                 self._refresh_image_views()
 
-    def _use_as_reference(self, path: Path) -> None:
+    def save_all_pictures(self) -> None:
+        """Images → Save all…: every picture of the story into a folder the
+        author picks, named in the order they were made. Nothing there is
+        overwritten. The way out for a memory-only chat's pictures, and a
+        convenience for any story."""
         if self.session is None:
+            return
+        images = self.session.pictures.images()
+        if not images:
+            return
+        chosen = QFileDialog.getExistingDirectory(self, "Save all pictures", str(Path.home()))
+        if not chosen:
+            return
+        folder = Path(chosen)
+        store = self.session.pictures
+        written, missing = 0, 0
+        try:
+            for number, image in enumerate(images, start=1):
+                data = store.read(image.file)
+                if data is None:
+                    missing += 1
+                    continue
+                name = file_name(image.file)
+                target = folder / f"{number:03d}-{name}"
+                extra = 2
+                while target.exists():
+                    target = folder / f"{number:03d}-{extra}-{name}"
+                    extra += 1
+                target.write_bytes(data)
+                written += 1
+        except OSError as exc:
+            self._warn_plain("Couldn't save the pictures", f"{folder}: {exc.strerror or exc}")
+            return
+        note = f" ({missing} missing)" if missing else ""
+        self.statusBar().showMessage(
+            f"Saved {written} picture{'s' if written != 1 else ''} to {folder}{note}", 8000
+        )
+
+    def _use_as_reference(self, data: bytes | None) -> None:
+        if self.session is None or data is None:
             return
         if self._busy:
             self.statusBar().showMessage("Wait for the story's current job to finish.", 6000)
@@ -295,11 +330,16 @@ class ImagesWindow:
         caption, ok = QInputDialog.getText(self, "Caption", "What the picture shows (optional):")
         if not ok:
             return
+        # Prepared as any added picture is: a large one is scaled down.
+        ref_id = new_id()
         try:
-            ref = import_reference(path, self.session.story.id, self.root, caption.strip())
+            prepared, suffix = picture_bytes_of(data, picture_kind(data) or ".png")
+            relative = f"{REFS_DIR}/{ref_id}{suffix}"
+            self.session.pictures.write(relative, prepared)
         except (OSError, ValueError) as exc:
             self._warn_plain("Couldn't add the picture", str(exc))
             return
+        ref = ImageRef(id=ref_id, file=relative, caption=caption.strip())
         owner.reference_images.append(ref)
         self.session.save()
         self.refresh_panels()
@@ -312,34 +352,39 @@ class ImagesWindow:
         if story is None or not story.background_image:
             self.transcript.set_background(None)
             return
-        try:
-            path = story_path(story.id, story.background_image, self.root)
-        except ValueError:
-            path = None
+        data = self.session.pictures.read(story.background_image)
         # A missing file leaves no background, quietly: nothing to warn about.
-        if path is None or not self.transcript.set_background(path):
+        if data is None or not self.transcript.set_background(data):
             self.transcript.set_background(None)
 
     def _set_background_from(self, source: Path) -> None:
+        """A picture file as the background: copied into the story, cleaned."""
+        if self.session is None:
+            return
+        try:
+            data, suffix = picture_bytes(source)
+        except (OSError, ValueError) as exc:
+            self._warn_plain("Couldn't use that picture", str(exc))
+            return
+        self._set_background_data(data, suffix)
+
+    def _set_background_data(self, data: bytes, suffix: str) -> None:
         if self.session is None:
             return
         if self._busy:
             self.statusBar().showMessage("Wait for the story's current job to finish.", 6000)
             return
+        store = self.session.pictures
+        relative = f"{IMAGES_DIR}/background{suffix}"
+        story = self.session.story
+        old = story.background_image
         try:
-            data, suffix = picture_bytes(source)
-            relative = f"{IMAGES_DIR}/background{suffix}"
-            story = self.session.story
-            old = story.background_image
-            write_story_file(story.id, relative, data, self.root)
-            if old and old != relative:
-                try:
-                    story_path(story.id, old, self.root).unlink(missing_ok=True)
-                except ValueError:
-                    pass
+            store.write(relative, data)
         except (OSError, ValueError) as exc:
             self._warn_plain("Couldn't use that picture", str(exc))
             return
+        if old and old != relative:
+            store.remove(old)
         self.session.story.background_image = relative
         self.session.save()
         self._apply_background()
@@ -359,10 +404,7 @@ class ImagesWindow:
             return
         story = self.session.story
         if story.background_image:
-            try:
-                story_path(story.id, story.background_image, self.root).unlink(missing_ok=True)
-            except (OSError, ValueError):
-                pass
+            self.session.pictures.remove(story.background_image)
         story.background_image = None
         self.session.save()
         self._apply_background()

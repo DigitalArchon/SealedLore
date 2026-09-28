@@ -44,9 +44,9 @@ part of the window, and what each feature does. The README's
   and went, where the scene moved and whether it is private; the Scene tab
   follows, with Undo. Recent scenes and who was in them stay with the story.
 - **Simple chat**: a plain conversation with your own system prompt, with
-  branches, pictures and summaries; a part of it can be held in private on
-  another model, and on a TEE model all of it is attested (end-to-end
-  encrypted on a `private/` model) and, if you like, kept in memory only.
+  branches, pictures and summaries, kept on disk or in memory only; a part
+  of it can be held in private on another model, and on a TEE model all of
+  it is attested (end-to-end encrypted on a `private/` model).
 - **Plots**: a Markdown plot file with facts, places and events; a director
   brings events about at the right moment and a clock keeps story time. A
   form-based editor writes the file for you.
@@ -328,6 +328,8 @@ searching "tee" or "private" lists both. A TEE chat's model button lists only
 the models it may move to.
 
 **Managing stories.** Right-click a story in the Stories list:
+- **Open folder** shows the story's files in your file manager (also for a
+  story that can't be read).
 - **Duplicate settings only** makes a new, unplayed story with the same world,
   cast, lore, style and opening.
 - **Duplicate entire story** copies everything: every branch, summary and
@@ -338,13 +340,17 @@ the models it may move to.
 In the terminal: `sealedlore duplicate <id> [--settings-only]` and
 `sealedlore delete <id>`, which deletes permanently after you confirm.
 
+**File → Close story** (Ctrl+W) goes back to the start page. A chat or a
+private scene kept in memory only asks first, because closing it loses it.
+
 Anything that runs as a job of its own shows a progress dialog with a
 **Stop** button: a settings review, skill suggestions, a character scan,
 archiving, rebuilding summaries.
 
 ## Getting around
 
-- **Left dock**: the Stories list (right-click for Duplicate and Delete).
+- **Left dock**: the Stories list (right-click for Open folder, Duplicate and
+  Delete).
 - **Above the transcript**, on the right: **Branch** names the branch you are
   reading; its menu switches to another, renames or deletes it, and **Map**
   shows every branch at once.
@@ -868,7 +874,8 @@ Generate. The picture is drawn in the background while you play on and lands
 in the **Images** tab, and can be set as the transcript's background (from
 its ⋯ menu, or any picture file with View → Background picture…). Pictures
 are kept even when their passage is deleted; only their own Delete removes
-them, since they cost money.
+them, since they cost money. **Save all…** in the Images tab copies every
+picture into a folder you choose; each picture's ⋯ menu saves one.
 
 ## Private scenes
 
@@ -993,13 +1000,23 @@ story is (Settings → Context), with a plain summariser.
   under Settings → Private, which the model button then says), each reply is
   checked to be signed by it ("TEE signed"), every call (summaries and
   picture prompts included) goes to that model, and the chat can move only
-  to another TEE model. Starting one asks where it is kept: **On disk**, like any story, or
-  **In memory only**, a fully incognito chat. Nothing of an in-memory chat is
-  written anywhere, not even its log; it isn't in the Stories list, closing
-  it asks first, and pictures and export are off. The text still passes
-  NanoGPT's gateway, as a private scene's does, unless the model is a
-  `private/` one: then it is end-to-end encrypted (see "Private scenes"),
-  and the chat can move only to another `private/` model.
+  to another TEE model. The text still passes NanoGPT's gateway, as a
+  private scene's does, unless the model is a `private/` one: then it is
+  end-to-end encrypted (see "Private scenes"), and the chat can move only to
+  another `private/` model.
+- **Where a chat is kept** is asked when it starts, on any model: **On
+  disk**, like any story, or **In memory only**. Nothing of an in-memory
+  chat is written on this computer, not even its log, and it teaches the
+  settings nothing (changing its model doesn't change your default). It
+  isn't in the Stories list, and closing it asks first, since it is then
+  gone. Its pictures are kept in memory with it (reference pictures and the
+  background too). To keep anything, write it out first: **Story → Export →
+  Story backup…** (the whole chat, its pictures and costs), Markdown, or
+  **Images → Save all…** for the pictures. File → Import… of such a backup
+  asks whether to open it in memory again, writing nothing, or save it as an
+  ordinary chat. In memory only is about your computer, not the model: on an
+  ordinary model the provider still receives every message (on NanoGPT, your
+  account's data retention setting applies there).
 
 ## The context budget and archiving
 
@@ -1099,7 +1116,11 @@ the system not to keep a core dump of it (a copy of its memory), so a crash
 never writes a memory-only chat or scene anywhere. Swap and hibernation are
 the system's own and outside the app's reach: the system may write the app's
 memory there, a memory-only chat or scene included. An encrypted disk, or
-encrypted swap, covers them.
+encrypted swap, covers them. On Linux you can also turn swap off while you
+use the app (`sudo swapoff -a`, then `sudo swapon -a` afterwards); turning it
+off moves what is already in swap back into memory, so it needs enough free
+RAM. The app can't lock its own memory against swapping instead: an ordinary
+user may lock only a few megabytes (`ulimit -l`), far less than it uses.
 
 ### On Windows
 

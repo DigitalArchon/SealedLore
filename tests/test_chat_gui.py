@@ -39,6 +39,9 @@ def window(app, tmp_path: Path, story, cast):
     window.show()
     window.open_story(story.id)
     yield window
+    # A memory chat still open would ask before going, with no one to answer
+    # (the test's own patches are undone by now): a failed test hung the run.
+    window._chat_allows_close = lambda: True
     window.close()
 
 
@@ -159,18 +162,30 @@ def test_a_memory_only_chat_is_never_written_and_asks_before_it_goes(
     window.reload_transcript()
     window._refresh_story_cost()
     assert listing(tmp_path) == before, "a memory-only chat wrote to disk"
-    for action in (window.image_action, window.export_action, window.archive_action):
-        assert not action.isEnabled()
-    # Every other way to a picture is closed too: the composer's button, and
-    # generate_image itself (a message's picture entry, "Generate again").
-    assert not window.composer.image_button.isEnabled()
+    # Pictures work, kept in memory with the chat (storage.picture_store);
+    # every way in reaches the dialog.
+    assert window.image_action.isEnabled() and window.composer.image_button.isEnabled()
     opened: list = []
-    monkeypatch.setattr(
-        "sealedlore.gui.window_images.ImageDialog", lambda *a, **k: opened.append(1)
-    )
+
+    class NoDialog:
+        def __init__(self, *args, **kwargs):
+            opened.append(1)
+
+        def exec(self):  # noqa: A003 - Qt naming
+            return 0
+
+        def writer_model(self):
+            return None
+
+    monkeypatch.setattr("sealedlore.gui.window_images.ImageDialog", NoDialog)
+    from sealedlore.models.config import ProviderConfig
+
+    window.config.providers = [ProviderConfig(name="nano", base_url="https://nano-gpt.com/api/v1")]
+    window.config.active_provider_name = "nano"
     window.generate_image()
     window.generate_image(anchor_id=session.path()[-1].id)
-    assert opened == []
+    assert opened == [1, 1]
+    assert listing(tmp_path) == before
 
     # Leaving asks; Cancel stays.
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Cancel)
@@ -461,3 +476,99 @@ def test_a_tee_chat_with_checking_off_says_so_on_the_model_button(app, window, m
     assert window.session.tee_chat and window.session.tee_block is None
     assert "not checked" in window._tee_state
     assert "Check TEE models" in window._private_model_text()
+
+
+def test_the_story_list_opens_a_story_s_folder(app, window, monkeypatch, tmp_path):
+    import sealedlore.gui.main_window as main_window
+
+    story_id = window.stories.list.item(0).data(0x0100)
+    opened: list[str] = []
+    monkeypatch.setattr(
+        main_window.QDesktopServices,
+        "openUrl",
+        lambda url: opened.append(url.toLocalFile()) or True,
+    )
+    menu = window.stories.menu_for(story_id)
+    next(action for action in menu.actions() if action.text() == "Open folder").trigger()
+    assert opened == [str(tmp_path / "stories" / story_id)]
+
+
+def test_close_story_goes_back_to_the_start_page(app, window, tmp_path):
+    before = listing(tmp_path)
+    assert window.close_story_action.isEnabled()
+    window.close_story()
+    assert window.session is None
+    assert not window.close_story_action.isEnabled()
+    assert listing(tmp_path) == before, "closing a story changed its files"
+
+
+def test_close_story_asks_before_a_memory_chat_goes(app, window, monkeypatch, tmp_path):
+    before = listing(tmp_path)
+    monkeypatch.setattr(window, "_attest_chat", lambda: None)
+    make_chat(window, monkeypatch, model="TEE/gemma-3-27b", keep="memory")
+    session = window.session
+    session.provider.responses = ["Understood."]
+    list(session.send(TurnRequest(speaker_id=CHAT_USER_ID, user_text="Keep this secret.")))
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Cancel)
+    window.close_story()
+    assert window.session is session
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    window.close_story()
+    assert window.session is None
+    assert listing(tmp_path) == before, "a memory-only chat reached the disk"
+
+
+def test_close_story_waits_while_a_job_runs(app, window):
+    window._busy = True
+    window._update_controls()
+    assert not window.close_story_action.isEnabled()
+    window.close_story()
+    assert window.session is not None
+    window._busy = False
+    window._update_controls()
+
+
+def test_any_chat_may_be_kept_in_memory_and_says_what_that_means(app):
+    dialog = window_chat.NewChatDialog(model="z-ai/glm-5.3")
+    assert not dialog.keep.isHidden()
+    dialog.keep.setCurrentIndex(dialog.keep.findData("memory"))
+    assert dialog.keep_choice() == "memory"
+    assert "provider still receives every message" in dialog.keep_hint.text()
+    dialog.model.setText("TEE/gemma-3-27b")
+    assert "Attested" in dialog.keep_hint.text()
+    dialog.deleteLater()
+
+
+def test_a_memory_chat_on_a_plain_model_stays_off_the_disk_and_out_of_the_config(
+    app, window, monkeypatch, tmp_path
+):
+    before = listing(tmp_path)
+    # The fixture's close asks before a memory chat goes.
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    make_chat(window, monkeypatch, model="z-ai/glm-5.3", keep="memory")
+    session = window.session
+    assert session.memory_only and not session.tee_chat
+    assert "(in memory only)" in window.windowTitle()
+    session.provider.responses = ["Understood."]
+    list(session.send(TurnRequest(speaker_id=CHAT_USER_ID, user_text="Keep this quiet.")))
+    window.reload_transcript()
+    window._refresh_story_cost()
+    # The model button changes the chat's model, never the endpoint's default:
+    # that would carry the chat's choice into config.json.
+    from sealedlore.models.config import ProviderConfig
+
+    window.config.providers = [
+        ProviderConfig(name="nano", base_url="https://nano-gpt.com/api/v1", model="z-ai/glm-5.3")
+    ]
+    window.config.active_provider_name = "nano"
+    config_before = window.config.model_dump_json()
+    monkeypatch.setattr(
+        window, "_browse_models", lambda _current, **_limits: "moonshotai/kimi-k2.6"
+    )
+    window.choose_story_model()
+    assert session.model == "moonshotai/kimi-k2.6"
+    assert window.config.model_dump_json() == config_before
+    assert listing(tmp_path) == before, "a memory-only chat wrote to disk"
+    # Left before the test ends: the fixture's close would ask, unanswered.
+    window.close_story()
+    assert window.session is None

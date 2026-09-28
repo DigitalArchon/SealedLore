@@ -2,10 +2,10 @@
 
 A picture takes from seconds to minutes, and the author goes on playing, so
 the job touches nothing the session owns: it reads its reference files,
-calls the image model, writes each picture and its API log entries into the
-story's own folder (by story id, so switching stories meanwhile is fine) and
-returns the records. The window then adds them to images.json on the GUI
-thread (`storage.images.add_generated_images`).
+calls the image model, writes each picture and its API log entries through
+its story's picture store (the story's own folder, by story id, so switching
+stories meanwhile is fine; or a memory-only chat's memory) and returns the
+records. The window then adds them to the store on the GUI thread.
 
 `ImageRequest` is built only from what the author approved in the dialog.
 Nothing between here and the wire changes its prompt.
@@ -19,7 +19,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from sealedlore.ids import new_id, utc_now_iso
+from sealedlore.ids import new_id
 from sealedlore.models.image import GeneratedImage, RefUse
 from sealedlore.providers.base import ProviderError
 from sealedlore.providers.images import (
@@ -29,9 +29,8 @@ from sealedlore.providers.images import (
     loggable_payload,
 )
 from sealedlore.storage.image_meta import MetadataError, picture_kind, strip_metadata
-from sealedlore.storage.images import IMAGES_DIR, MEDIA_TYPES, read_story_file, write_story_file
-from sealedlore.storage.paths import story_dir
-from sealedlore.storage.repository import append_api_log
+from sealedlore.storage.images import IMAGES_DIR, MEDIA_TYPES
+from sealedlore.storage.picture_store import DiskPictures, PictureStore
 
 
 @dataclass(frozen=True)
@@ -63,19 +62,20 @@ class UnstrippableReference(ValueError):
     """A reference picture whose hidden data can't be removed; nothing was sent."""
 
 
-def _log(story_id: str, root: Path | None, kind: str, body: dict) -> str:
-    entry_id = new_id()
-    append_api_log(story_id, {"id": entry_id, "kind": kind, "at": utc_now_iso(), **body}, root)
-    return entry_id
-
-
 def run_image_request(
-    client: ImageClient, request: ImageRequest, root: Path | None = None
+    client: ImageClient,
+    request: ImageRequest,
+    root: Path | None = None,
+    *,
+    store: PictureStore | None = None,
 ) -> list[GeneratedImage]:
-    """Send the request and keep what comes back. Raises ProviderError on failure."""
+    """Send the request and keep what comes back. Raises ProviderError on failure.
+
+    `store` is where the story keeps its pictures; by default its folder."""
+    store = store if store is not None else DiskPictures(request.story_id, root)
     references: list[str] = []
     for use in request.references:
-        data = read_story_file(request.story_id, use.file, root)
+        data = store.read(use.file)
         if data is None:
             raise MissingReference(f"the picture for {use.owner_name} is missing ({use.file})")
         try:
@@ -92,9 +92,7 @@ def run_image_request(
     )
     names = [f"{use.owner_name}: {use.file}" for use in request.references]
     direction = request.direction if request.direction_kept else ""
-    log_ref = _log(
-        request.story_id,
-        root,
+    log_ref = store.log(
         "image_request",
         {
             "node_id": request.anchor_node_id,
@@ -105,18 +103,17 @@ def run_image_request(
     try:
         reply = client.generate(payload)
     except Exception as exc:
-        _log(
-            request.story_id,
-            root,
+        store.log(
             # Not a response kind: a failed call isn't counted as an unpriced one.
             "image_error",
             {"request_log_ref": log_ref, "error": str(exc)},
         )
         raise
 
-    if not (story_dir(request.story_id, root) / "story.json").is_file():
-        # Deleted while the picture was drawn: don't bring its folder back.
-        raise ProviderError("the story was deleted while its picture was being drawn")
+    if not store.alive():
+        # Deleted (or a memory chat closed) while the picture was drawn: don't
+        # bring its folder back.
+        raise ProviderError("the story was closed or deleted while its picture was being drawn")
     cost, reported = reply.cost, reply.cost is not None
     usage: dict = dict(reply.raw)
     if cost is None and request.listed_price is not None:
@@ -133,7 +130,7 @@ def run_image_request(
             data = strip_metadata(data)
         except MetadataError:
             unstripped.append(relative)
-        write_story_file(request.story_id, relative, data, root)
+        store.write(relative, data)
         records.append(
             GeneratedImage(
                 id=image_id,
@@ -150,9 +147,7 @@ def run_image_request(
                 private_span=request.private_span,
             )
         )
-    _log(
-        request.story_id,
-        root,
+    store.log(
         "image_response",
         {
             "request_log_ref": log_ref,
