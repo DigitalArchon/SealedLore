@@ -215,11 +215,12 @@ class ImageRuntime:
         return draft
 
     def image_client(self) -> ImageClient | None:
-        """A client for one job, on the chat endpoint and key. The caller closes it."""
-        provider = self.config.active_provider()
-        if provider is None:
+        """A client for one job, on the picture endpoint (Settings → Images;
+        by default the chat's). The caller closes it."""
+        media = self.config.images()
+        if media is None:
             return None
-        return ImageClient(provider.base_url, provider.api_key)
+        return ImageClient(media.base_url, media.api_key, api=media.api)
 
     def clean_stored_images(self) -> None:
         """Once per story: remove the hidden data from pictures saved before

@@ -1,0 +1,661 @@
+{
+ "data": [
+  {
+   "id": "bytedance/seedance-2.5",
+   "object": "model",
+   "created": 1786060800,
+   "owned_by": "bytedance",
+   "name": "Seedance 2.5",
+   "description": "One model id that selects text, image, multimodal-reference, video-edit, or video-extend generation from the supplied inputs.",
+   "architecture": {
+    "modality": "text+image+video+audio->video",
+    "input_modalities": [
+     "text",
+     "image",
+     "video",
+     "audio"
+    ],
+    "output_modalities": [
+     "video"
+    ]
+   },
+   "pricing": {
+    "currency": "USD",
+    "variant": "standard",
+    "per_second_by_resolution": {
+     "480p": 0.18,
+     "720p": 0.36,
+     "1080p": 0.9,
+     "4k": 1.8
+    },
+    "video_reference_per_second_by_resolution": {
+     "480p": 0.11,
+     "720p": 0.22,
+     "1080p": 0.55,
+     "4k": 1.1
+    },
+    "video_reference_billing": "input plus output seconds",
+    "video_edit_per_second_by_resolution": {
+     "480p": 0.11,
+     "720p": 0.22,
+     "1080p": 0.55,
+     "4k": 1.1
+    },
+    "video_edit_billing": "input plus output seconds",
+    "default_duration": 5,
+    "min_duration": 4,
+    "max_duration": 30,
+    "default_resolution": "720p"
+   },
+   "capabilities": {
+    "video_generation": true,
+    "text_to_video": true,
+    "image_to_video": true,
+    "video_to_video": true,
+    "audio_input": true,
+    "audio_generation": false,
+    "nsfw": false
+   },
+   "supported_parameters": {
+    "parameters": {
+     "mode": {
+      "type": "select",
+      "label": "Operation",
+      "description": "Automatically infer the operation from inputs, or explicitly select video extension.",
+      "default": "auto",
+      "options": [
+       {
+        "value": "auto",
+        "label": "Automatic (from inputs)"
+       },
+       {
+        "value": "text-to-video",
+        "label": "Text / references to video"
+       },
+       {
+        "value": "image-to-video",
+        "label": "Image to video"
+       },
+       {
+        "value": "video-edit",
+        "label": "Video edit"
+       },
+       {
+        "value": "video-extend",
+        "label": "Video extend"
+       }
+      ]
+     },
+     "resolution": {
+      "type": "select",
+      "label": "Resolution",
+      "default": "720p",
+      "options": [
+       {
+        "value": "480p",
+        "label": "480p"
+       },
+       {
+        "value": "720p",
+        "label": "720p"
+       },
+       {
+        "value": "1080p",
+        "label": "1080p"
+       },
+       {
+        "value": "4k",
+        "label": "4K"
+       }
+      ],
+      "description": "Output resolution"
+     },
+     "duration": {
+      "type": "select",
+      "label": "Duration",
+      "default": "5",
+      "options": [
+       {
+        "value": "4",
+        "label": "4 seconds"
+       },
+       {
+        "value": "5",
+        "label": "5 seconds"
+       },
+       {
+        "value": "6",
+        "label": "6 seconds"
+       },
+       {
+        "value": "7",
+        "label": "7 seconds"
+       },
+       {
+        "value": "8",
+        "label": "8 seconds"
+       },
+       {
+        "value": "9",
+        "label": "9 seconds"
+       },
+       {
+        "value": "10",
+        "label": "10 seconds"
+       },
+       {
+        "value": "11",
+        "label": "11 seconds"
+       },
+       {
+        "value": "12",
+        "label": "12 seconds"
+       },
+       {
+        "value": "13",
+        "label": "13 seconds"
+       },
+       {
+        "value": "14",
+        "label": "14 seconds"
+       },
+       {
+        "value": "15",
+        "label": "15 seconds"
+       },
+       {
+        "value": "16",
+        "label": "16 seconds"
+       },
+       {
+        "value": "17",
+        "label": "17 seconds"
+       },
+       {
+        "value": "18",
+        "label": "18 seconds"
+       },
+       {
+        "value": "19",
+        "label": "19 seconds"
+       },
+       {
+        "value": "20",
+        "label": "20 seconds"
+       },
+       {
+        "value": "21",
+        "label": "21 seconds"
+       },
+       {
+        "value": "22",
+        "label": "22 seconds"
+       },
+       {
+        "value": "23",
+        "label": "23 seconds"
+       },
+       {
+        "value": "24",
+        "label": "24 seconds"
+       },
+       {
+        "value": "25",
+        "label": "25 seconds"
+       },
+       {
+        "value": "26",
+        "label": "26 seconds"
+       },
+       {
+        "value": "27",
+        "label": "27 seconds"
+       },
+       {
+        "value": "28",
+        "label": "28 seconds"
+       },
+       {
+        "value": "29",
+        "label": "29 seconds"
+       },
+       {
+        "value": "30",
+        "label": "30 seconds"
+       }
+      ],
+      "description": "Output duration from 4 to 30 seconds"
+     },
+     "aspect_ratio": {
+      "type": "select",
+      "label": "Aspect Ratio",
+      "description": "Used for text and multimodal-reference generation; image and video inputs determine framing.",
+      "default": "16:9",
+      "options": [
+       {
+        "value": "21:9",
+        "label": "Ultra-wide (21:9)"
+       },
+       {
+        "value": "16:9",
+        "label": "Landscape (16:9)"
+       },
+       {
+        "value": "4:3",
+        "label": "Classic (4:3)"
+       },
+       {
+        "value": "1:1",
+        "label": "Square (1:1)"
+       },
+       {
+        "value": "3:4",
+        "label": "Portrait classic (3:4)"
+       },
+       {
+        "value": "9:16",
+        "label": "Portrait (9:16)"
+       }
+      ]
+     },
+     "generate_audio": {
+      "type": "switch",
+      "label": "Generate Audio",
+      "description": "Generate synchronized sound effects, ambience, and speech.",
+      "default": true
+     }
+    },
+    "defaults": {
+     "mode": "auto",
+     "resolution": "720p",
+     "duration": "5",
+     "aspect_ratio": "16:9",
+     "generate_audio": true
+    }
+   },
+   "icon_url": "/icons/ByteDance.png",
+   "label": "NEW",
+   "category": "video"
+  },
+  {
+   "id": "kling-v26-pro",
+   "object": "model",
+   "created": 1764720000,
+   "owned_by": "kling",
+   "name": "Kling 2.6 Pro",
+   "description": "Latest Kling model with text-to-video and image-to-video capabilities. Supports native audio/voiceover generation. 5s and 10s durations with multiple aspect ratios.",
+   "architecture": {
+    "modality": "text+image->video",
+    "input_modalities": [
+     "text",
+     "image"
+    ],
+    "output_modalities": [
+     "video"
+    ]
+   },
+   "pricing": {
+    "currency": "USD",
+    "per_duration": {
+     "5": 0.35,
+     "10": 0.7
+    },
+    "unit": "per_video",
+    "audio_multiplier": 2
+   },
+   "capabilities": {
+    "video_generation": true,
+    "text_to_video": true,
+    "image_to_video": true,
+    "video_to_video": false,
+    "audio_input": false,
+    "audio_generation": true,
+    "nsfw": false
+   },
+   "supported_parameters": {
+    "parameters": {
+     "duration": {
+      "type": "select",
+      "label": "Duration",
+      "default": "5",
+      "options": [
+       {
+        "value": "5",
+        "label": "5 seconds"
+       },
+       {
+        "value": "10",
+        "label": "10 seconds"
+       }
+      ],
+      "description": "5 or 10 seconds"
+     },
+     "aspect_ratio": {
+      "type": "select",
+      "label": "Aspect Ratio (T2V)",
+      "default": "16:9",
+      "options": [
+       {
+        "value": "16:9",
+        "label": "Landscape (16:9)"
+       },
+       {
+        "value": "9:16",
+        "label": "Portrait (9:16)"
+       },
+       {
+        "value": "1:1",
+        "label": "Square (1:1)"
+       }
+      ],
+      "description": "Applies to text-to-video"
+     },
+     "sound": {
+      "type": "switch",
+      "label": "Audio",
+      "description": "Generate audio/voiceover for the video",
+      "default": true
+     }
+    },
+    "defaults": {
+     "duration": "5",
+     "aspect_ratio": "16:9",
+     "sound": true
+    }
+   },
+   "icon_url": "/icons/Kling.svg",
+   "label": "NEW",
+   "tags": [
+    "kling",
+    "audio"
+   ],
+   "category": "video"
+  },
+  {
+   "id": "seedance-video",
+   "object": "model",
+   "created": 1749513600,
+   "owned_by": "doubao",
+   "name": "Seedance 1.0 Pro",
+   "description": "ByteDance's Seedance video generation model. Supports both text-to-video and image-to-video generation with 5 and 10 second durations. Supports multiple aspect ratios including 16:9, 1:1, 3:4, 9:16, 21:9.",
+   "architecture": {
+    "modality": "text+image->video",
+    "input_modalities": [
+     "text",
+     "image"
+    ],
+    "output_modalities": [
+     "video"
+    ]
+   },
+   "pricing": {
+    "currency": "USD",
+    "base_prices_by_resolution": {
+     "480p": 0.12002,
+     "720p": 0.285,
+     "1080p": 0.57
+    },
+    "duration_multiplier": 2
+   },
+   "capabilities": {
+    "video_generation": true,
+    "text_to_video": true,
+    "image_to_video": true,
+    "video_to_video": false,
+    "audio_input": false,
+    "audio_generation": false,
+    "nsfw": false
+   },
+   "supported_parameters": {
+    "parameters": {
+     "resolution": {
+      "type": "select",
+      "label": "Resolution",
+      "default": "1080p",
+      "options": [
+       {
+        "value": "480p",
+        "label": "480p"
+       },
+       {
+        "value": "1080p",
+        "label": "1080p"
+       }
+      ],
+      "description": "Video resolution quality"
+     },
+     "duration": {
+      "type": "select",
+      "label": "Duration",
+      "default": "5",
+      "options": [
+       {
+        "value": "5",
+        "label": "5 seconds (1x price)"
+       },
+       {
+        "value": "10",
+        "label": "10 seconds (2x price)"
+       }
+      ],
+      "description": "Length of the generated video in seconds"
+     },
+     "aspect_ratio": {
+      "label": "Aspect Ratio",
+      "description": "Video aspect ratio",
+      "type": "select",
+      "default": "16:9",
+      "options": [
+       {
+        "value": "16:9",
+        "label": "Landscape (16:9)"
+       },
+       {
+        "value": "21:9",
+        "label": "Ultrawide (21:9)"
+       },
+       {
+        "value": "4:3",
+        "label": "Classic (4:3)"
+       },
+       {
+        "value": "1:1",
+        "label": "Square (1:1)"
+       },
+       {
+        "value": "3:4",
+        "label": "Portrait (3:4)"
+       },
+       {
+        "value": "9:16",
+        "label": "Portrait (9:16)"
+       }
+      ]
+     },
+     "camera_fixed": {
+      "label": "Fixed Camera",
+      "description": "Whether to fix the camera position",
+      "type": "boolean",
+      "default": false
+     }
+    },
+    "defaults": {
+     "resolution": "1080p",
+     "duration": "5",
+     "aspect_ratio": "16:9",
+     "camera_fixed": false
+    }
+   },
+   "icon_url": "/icons/ByteDance.png",
+   "category": "video"
+  },
+  {
+   "id": "bytedance-seedance-2-0-fast",
+   "object": "model",
+   "created": 1776124800,
+   "owned_by": "bytedance",
+   "name": "Seedance 2.0 Fast Turbo",
+   "description": "Supports both text-to-video and image-to-video turbo runs.",
+   "architecture": {
+    "modality": "text+image->video",
+    "input_modalities": [
+     "text",
+     "image"
+    ],
+    "output_modalities": [
+     "video"
+    ]
+   },
+   "pricing": {
+    "currency": "USD",
+    "raw": {
+     "type": "seedance20-turbo-dynamic",
+     "textToVideoPricesPerSecond": {
+      "720p": 0.07058823529411765,
+      "1080p": 0.07647058823529412
+     },
+     "textToVideoWithReferenceVideoPricesPerSecond": {
+      "720p": 0.05647058823529412,
+      "1080p": 0.0623529411764706
+     },
+     "imageToVideoPricesPerSecond": {
+      "720p": 0.07058823529411765,
+      "1080p": 0.07647058823529412
+     },
+     "defaultDuration": 5,
+     "defaultResolution": "720p"
+    }
+   },
+   "capabilities": {
+    "video_generation": true,
+    "text_to_video": true,
+    "image_to_video": true,
+    "video_to_video": false,
+    "audio_input": false,
+    "audio_generation": false,
+    "nsfw": true
+   },
+   "supported_parameters": {
+    "parameters": {
+     "resolution": {
+      "type": "select",
+      "label": "Resolution",
+      "default": "720p",
+      "options": [
+       {
+        "value": "720p",
+        "label": "720p"
+       },
+       {
+        "value": "1080p",
+        "label": "1080p"
+       }
+      ],
+      "description": "Output resolution"
+     },
+     "duration": {
+      "type": "select",
+      "label": "Duration",
+      "default": "5",
+      "options": [
+       {
+        "value": "5",
+        "label": "5 seconds"
+       },
+       {
+        "value": "10",
+        "label": "10 seconds"
+       },
+       {
+        "value": "15",
+        "label": "15 seconds"
+       }
+      ],
+      "description": "5, 10, or 15 seconds"
+     },
+     "aspect_ratio": {
+      "type": "select",
+      "label": "Aspect Ratio",
+      "default": "16:9",
+      "options": [
+       {
+        "value": "16:9",
+        "label": "Landscape (16:9)"
+       },
+       {
+        "value": "9:16",
+        "label": "Portrait (9:16)"
+       },
+       {
+        "value": "4:3",
+        "label": "Classic (4:3)"
+       },
+       {
+        "value": "3:4",
+        "label": "Portrait Classic (3:4)"
+       },
+       {
+        "value": "1:1",
+        "label": "Square (1:1)"
+       },
+       {
+        "value": "21:9",
+        "label": "Ultra-wide (21:9)"
+       }
+      ],
+      "description": "Target video aspect ratio"
+     },
+     "enable_web_search": {
+      "type": "switch",
+      "label": "Enable Web Search",
+      "description": "Enable real-time web context",
+      "default": false
+     },
+     "last_image": {
+      "type": "text",
+      "label": "Last Frame URL (I2V)",
+      "description": "Optional end-frame image URL for continuation",
+      "default": ""
+     },
+     "reference_images": {
+      "type": "text",
+      "label": "Reference Images (T2V)",
+      "description": "Optional JSON array of image URLs",
+      "default": ""
+     },
+     "reference_videos": {
+      "type": "text",
+      "label": "Reference Videos (T2V)",
+      "description": "Optional JSON array of video URLs (max 15s total)",
+      "default": ""
+     },
+     "reference_audios": {
+      "type": "text",
+      "label": "Reference Audios (T2V)",
+      "description": "Optional JSON array of audio URLs (max 15s total)",
+      "default": ""
+     }
+    },
+    "defaults": {
+     "resolution": "720p",
+     "duration": "5",
+     "aspect_ratio": "16:9",
+     "enable_web_search": false,
+     "last_image": "",
+     "reference_images": "",
+     "reference_videos": "",
+     "reference_audios": ""
+    }
+   },
+   "icon_url": "/icons/ByteDance.png",
+   "label": "NEW",
+   "tags": [
+    "seedance",
+    "bytedance",
+    "turbo",
+    "fast"
+   ],
+   "category": "video"
+  }
+ ]
+}

@@ -77,6 +77,11 @@ class ImageCatalog(QObject):
     def _listing(self) -> tuple[list[dict], str | None]:
         if self._held is not None and self._in_memory():
             return self._held
+        media = self.config.images()
+        source = self.config.image_models_source
+        if media is not None and source is not None and source != media.base_url:
+            # Another endpoint's listing: its models may not be this one's.
+            return [], None
         return self.config.image_models, self.config.image_models_fetched_at
 
     @property
@@ -89,16 +94,20 @@ class ImageCatalog(QObject):
 
     def ensure(self, *, force: bool = False) -> None:
         """Fetch the listing if it's a day old (or `force`, the picker's Refresh)."""
-        provider = self.config.active_provider()
-        if self.loading or provider is None:
+        media = self.config.images()
+        if self.loading or media is None:
             return
         if not force and not listing_is_stale(self._listing()[1]):
             return
         found: list[ImageModelInfo] = []
-        base_url = provider.base_url
+        wanted = self.config.image_model
 
         def job():
-            found.extend(list_image_models(base_url))
+            found.extend(
+                list_image_models(
+                    media.base_url, api=media.api, api_key=media.api_key, wanted=wanted
+                )
+            )
             return
             yield
 
@@ -124,6 +133,8 @@ class ImageCatalog(QObject):
             return
         self.config.image_models = entries
         self.config.image_models_fetched_at = utc_now_iso()
+        media = self.config.images()
+        self.config.image_models_source = media.base_url if media is not None else None
         try:
             save_config(self.config, root=self.root)
         except OSError:

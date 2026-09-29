@@ -230,7 +230,16 @@ def test_settings_tabs_and_every_model_in_one_place(app, window: MainWindow):
     dialog = _settings(window, window.session.story)
     tabs = dialog.tabs
     names = [tabs.tabText(i) for i in range(tabs.count())]
-    assert names == ["Endpoint", "Models", "Generation", "Context", "Lore", "Images", "Private"]
+    assert names == [
+        "Endpoint",
+        "Models",
+        "Generation",
+        "Context",
+        "Lore",
+        "Images",
+        "Video",
+        "Private",
+    ]
     assert all(isinstance(tabs.widget(i), QScrollArea) for i in range(tabs.count()))
     models = tabs.widget(names.index("Models"))
     for field in (

@@ -88,7 +88,7 @@ def run_image_request(
             ) from exc
         references.append(data_url(data, MEDIA_TYPES[picture_kind(data)]))
     payload = build_image_payload(
-        request.model, request.prompt, request.size, request.n, references
+        request.model, request.prompt, request.size, request.n, references, api=client.api
     )
     names = [f"{use.owner_name}: {use.file}" for use in request.references]
     direction = request.direction if request.direction_kept else ""

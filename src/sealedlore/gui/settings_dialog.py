@@ -47,9 +47,11 @@ from sealedlore.models.config import (
     DEFAULT_BASE_URL,
     DEFAULT_EMBEDDING_MODEL,
     DEFAULT_STORY_MODEL,
+    MEDIA_API_LABELS,
     RECOMMENDED_MODELS,
     Config,
     EmbeddingProviderConfig,
+    MediaEndpoint,
     ProviderConfig,
     _same_host,
     on_nanogpt,
@@ -106,11 +108,11 @@ class SettingsDialog(QDialog):
         self.image_catalog = image_catalog
         self._fetch_models = fetch_models
         self.setWindowTitle("Settings")
-        # Wide enough for all seven tabs in view, and tall enough for most
+        # Wide enough for all eight tabs in view, and tall enough for most
         # pages without scrolling (they scroll now, so the dialog no longer
         # grows to its tallest page).
-        self.setMinimumWidth(640)
-        self.resize(660, 640)
+        self.setMinimumWidth(680)
+        self.resize(700, 640)
         self.config = config
         self.story = story
         self._catalog = catalog
@@ -134,6 +136,7 @@ class SettingsDialog(QDialog):
         self.tabs.addTab(_scrolled(self._context_tab()), "Context")
         self.tabs.addTab(_scrolled(self._lore_tab()), "Lore")
         self.tabs.addTab(_scrolled(self._images_tab()), "Images")
+        self.tabs.addTab(_scrolled(self._video_tab()), "Video")
         self.tabs.addTab(_scrolled(self._private_tab()), "Private")
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
@@ -754,6 +757,13 @@ class SettingsDialog(QDialog):
         """Pictures: which model draws them, at what size, and who writes the prompt."""
         widget = QWidget()
         form = QFormLayout(widget)
+        endpoint = self.config.image_endpoint
+        self.image_url, self.image_key, self.image_api = self._media_fields(endpoint)
+        self.image_url.setPlaceholderText("same as the chat endpoint")
+        self.image_key.setPlaceholderText("same as the chat key (same host only)")
+        form.addRow("Address", self.image_url)
+        form.addRow("API key", self.image_key)
+        form.addRow("Service", self.image_api)
         self._image_models = parse_image_models({"data": self.config.image_models})
         # Typed, or chosen with Browse… from a searchable table, as the text
         # models are (gui/image_picker.py).
@@ -788,6 +798,70 @@ class SettingsDialog(QDialog):
         hint.setWordWrap(True)
         form.addRow(hint)
         return widget
+
+    def _media_fields(self, endpoint: MediaEndpoint) -> tuple[QLineEdit, QLineEdit, QComboBox]:
+        """An address, a key and the service it speaks, for pictures or video."""
+        url = QLineEdit(endpoint.base_url)
+        key = QLineEdit(endpoint.api_key)
+        key.setEchoMode(QLineEdit.Password)
+        api = QComboBox()
+        for value, label in MEDIA_API_LABELS.items():
+            api.addItem(label, value)
+        api.setCurrentIndex(max(0, api.findData(endpoint.api)))
+        api.setToolTip(
+            "Which service the address is. From the address knows NanoGPT, OpenRouter "
+            "and WaveSpeed; anything else is taken as OpenAI-compatible."
+        )
+        return url, key, api
+
+    def _video_tab(self) -> QWidget:
+        """Video: its own endpoint and key, off until a key is entered."""
+        widget = QWidget()
+        form = QFormLayout(widget)
+        warning = QLabel(
+            "Video costs far more than pictures: tens of cents to over $10 for a few "
+            "seconds, where a picture is a few cents. Every video shows its price and "
+            "asks before anything is sent.\n\nUse an API key made for video alone, with a "
+            "daily spending limit set on it in the service's dashboard (on NanoGPT, when "
+            "you create or edit the key). That limit is the only one that holds whatever "
+            "happens here."
+        )
+        warning.setObjectName("warningLabel")
+        warning.setWordWrap(True)
+        form.addRow(warning)
+        endpoint = self.config.video_endpoint
+        self.video_url, self.video_key, self.video_api = self._media_fields(endpoint)
+        self.video_url.setPlaceholderText(DEFAULT_BASE_URL)
+        self.video_key.setPlaceholderText("a key of its own; video is off until one is entered")
+        self.video_model = QLineEdit(self.config.video_model)
+        form.addRow("Address", self.video_url)
+        form.addRow("API key", self.video_key)
+        form.addRow("Service", self.video_api)
+        form.addRow("Video model", self.video_model)
+        self.video_key_note = QLabel()
+        self.video_key_note.setObjectName("hintLabel")
+        self.video_key_note.setWordWrap(True)
+        form.addRow(self.video_key_note)
+        for field in (self.video_key, self.api_key, self.image_key):
+            field.textChanged.connect(self._sync_video_key_note)
+        self._sync_video_key_note()
+        return widget
+
+    def _sync_video_key_note(self, *_args) -> None:
+        key = self.video_key.text().strip()
+        if not key:
+            self.video_key_note.setText(
+                "Video is off: there is no video key. None is taken from the chat's, so "
+                "video is never paid for by a key that wasn't meant for it."
+            )
+        elif key in {self.api_key.text().strip(), self.image_key.text().strip()} - {""}:
+            self.video_key_note.setText(
+                "⚠ This is the same key as chat or pictures. That works, but its spending "
+                "can't be capped for video alone, so every video will warn you again "
+                "before it is sent."
+            )
+        else:
+            self.video_key_note.setText("Video is on, with a key of its own.")
 
     def _browse_image_models(self, current: str) -> str | None:
         chosen = pick_image_model(self.image_catalog, current, self)
@@ -932,6 +1006,9 @@ class SettingsDialog(QDialog):
             require_https(url)
             if self.embeddings_enabled.isChecked() and embed_url:
                 require_https(embed_url)
+            for media_url in (self.image_url.text().strip(), self.video_url.text().strip()):
+                if media_url:
+                    require_https(media_url)
             if self.private_url.text().strip():
                 require_https(self.private_url.text().strip())
         except ValueError as exc:
@@ -966,6 +1043,24 @@ class SettingsDialog(QDialog):
         self.config.image_size = self.image_size.currentText().strip() or self.config.image_size
         self.config.image_count = self.image_count.value()
         self.config.image_prompt_model = self.image_prompt_model.text().strip() or None
+        images = MediaEndpoint(
+            base_url=self.image_url.text().strip(),
+            api_key=self.image_key.text().strip(),
+            api=self.image_api.currentData(),
+        )
+        if images != self.config.image_endpoint:
+            # Another endpoint's models: fetched afresh when next needed.
+            self.config.image_models_fetched_at = None
+        self.config.image_endpoint = images
+        video = MediaEndpoint(
+            base_url=self.video_url.text().strip() or DEFAULT_BASE_URL,
+            api_key=self.video_key.text().strip(),
+            api=self.video_api.currentData(),
+        )
+        if video != self.config.video_endpoint:
+            self.config.video_models_fetched_at = None
+        self.config.video_endpoint = video
+        self.config.video_model = self.video_model.text().strip() or self.config.video_model
         # Each role's route, as it applies to the model in its field.
         for role, field in self._route_fields.items():
             route = field.effective_route()

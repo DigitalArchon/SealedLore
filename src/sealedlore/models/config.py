@@ -99,6 +99,64 @@ class ProviderConfig(BaseModel):
         return require_https(value)
 
 
+# The protocol a picture or video endpoint speaks. "auto" reads it from the
+# host (`media_api`); anything unknown is taken as OpenAI's own shape.
+MediaApi = Literal["auto", "nanogpt", "openai", "openrouter", "wavespeed"]
+MEDIA_API_LABELS: dict[str, str] = {
+    "auto": "From the address",
+    "nanogpt": "NanoGPT",
+    "openai": "OpenAI-compatible",
+    "openrouter": "OpenRouter",
+    "wavespeed": "WaveSpeed",
+}
+_MEDIA_HOSTS = {
+    "nano-gpt.com": "nanogpt",
+    "openrouter.ai": "openrouter",
+    "wavespeed.ai": "wavespeed",
+}
+WAVESPEED_BASE_URL = "https://api.wavespeed.ai/api/v3"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+
+def media_api(base_url: str, api: str = "auto") -> str:
+    """The protocol a picture or video endpoint speaks: `api` unless "auto",
+    otherwise the one its host is known for."""
+    if api != "auto":
+        return api
+    host = (urlparse(base_url.strip()).hostname or "").lower()
+    for known, name in _MEDIA_HOSTS.items():
+        if host == known or host.endswith("." + known):
+            return name
+    return "openai"
+
+
+class MediaEndpoint(BaseModel):
+    """Where pictures or videos are made: an endpoint and key of their own, so
+    chat can be on one service, pictures on another and video on a third,
+    each with a key whose spending can be capped on its own."""
+
+    model_config = ConfigDict(validate_assignment=True)
+
+    base_url: str = ""
+    api_key: str = ""
+    api: MediaApi = "auto"
+
+    @field_validator("base_url")
+    @classmethod
+    def _check_scheme(cls, value: str) -> str:
+        return require_https(value) if value else value
+
+
+class ResolvedMedia(BaseModel):
+    """A media endpoint with its blanks filled in and its protocol known."""
+
+    base_url: str
+    api_key: str
+    api: str
+    # The video key is the chat's or the pictures' too: every video warns.
+    shared_key: bool = False
+
+
 DEFAULT_EMBEDDING_MODEL = "BAAI/bge-m3"
 
 
@@ -309,6 +367,32 @@ class Config(BaseModel):
     # when Settings or the image dialog first needs it and kept a day.
     image_models: list[dict] = Field(default_factory=list)
     image_models_fetched_at: str | None = None
+    # Which endpoint that listing came from: another endpoint's is stale.
+    image_models_source: str | None = None
+    # Where pictures are made. Blank address and key are the chat
+    # endpoint's (the key only on the chat's own host), as before this
+    # setting existed.
+    image_endpoint: MediaEndpoint = Field(default_factory=MediaEndpoint)
+
+    # Video (engine/videos.py). Far dearer than pictures, so it is off until
+    # a key is entered here, and that key is never taken from the chat's:
+    # a key of its own can have its own daily spending cap. A key that is
+    # the chat's or the pictures' too may be entered by hand, and then
+    # every video warns before it is sent (`ResolvedMedia.shared_key`).
+    video_endpoint: MediaEndpoint = Field(
+        default_factory=lambda: MediaEndpoint(base_url=DEFAULT_BASE_URL)
+    )
+    video_model: str = "bytedance/seedance-2.5"
+    # The last settings chosen in the video dialog, by the model's own
+    # parameter names ("resolution", "duration"…): the next video starts
+    # from them where the model has them.
+    video_params: dict[str, Any] = Field(
+        default_factory=lambda: {"resolution": "480p", "duration": "5"}
+    )
+    video_prompt_model: str | None = None
+    video_models: list[dict] = Field(default_factory=list)
+    video_models_fetched_at: str | None = None
+    video_models_source: str | None = None
 
     # Private scenes (engine/session_private.py): a separate endpoint and model
     # the main provider never hears about — a local server (Ollama, LM Studio,
@@ -342,6 +426,36 @@ class Config(BaseModel):
         if chat is not None and _same_host(settings.base_url, chat.base_url):
             return settings.model_copy(update={"api_key": chat.api_key})
         return settings
+
+    def images(self) -> ResolvedMedia | None:
+        """Where pictures are made, blanks filled from the chat endpoint.
+        None when there is nowhere to send them."""
+        settings = self.image_endpoint
+        chat = self.active_provider()
+        base_url = settings.base_url or (chat.base_url if chat is not None else "")
+        if not base_url:
+            return None
+        key = settings.api_key
+        # The chat key only goes to the chat provider's own host.
+        if not key and chat is not None and _same_host(base_url, chat.base_url):
+            key = chat.api_key
+        return ResolvedMedia(base_url=base_url, api_key=key, api=media_api(base_url, settings.api))
+
+    def videos(self) -> ResolvedMedia | None:
+        """Where videos are made. None until a video key is entered: nothing
+        is inherited, so video spend is never on a key that wasn't meant
+        for it."""
+        settings = self.video_endpoint
+        if not settings.base_url or not settings.api_key.strip():
+            return None
+        chat = self.active_provider()
+        others = {chat.api_key if chat is not None else "", self.image_endpoint.api_key}
+        return ResolvedMedia(
+            base_url=settings.base_url,
+            api_key=settings.api_key,
+            api=media_api(settings.base_url, settings.api),
+            shared_key=settings.api_key in (others - {""}),
+        )
 
     def active_provider(self) -> ProviderConfig | None:
         if self.active_provider_name is None:

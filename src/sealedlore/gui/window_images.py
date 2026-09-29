@@ -143,7 +143,7 @@ class ImagesWindow:
                 "A picture can be asked for once the story's current job is done.", 6000
             )
             return
-        if self.session.config.active_provider() is None:
+        if self.session.config.images() is None:
             self._warn_plain("No endpoint", "Set up an endpoint in Settings first.")
             return
         if anchor_id is not None and not any(n.id == anchor_id for n in self.session.nodes):
