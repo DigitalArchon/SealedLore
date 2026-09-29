@@ -167,7 +167,7 @@ KEEP = [
     "PySide6/QtMultimedia.abi3.so",
     "PySide6/Qt/lib/libQt6Multimedia.so.6",
     "PySide6/Qt/plugins/multimedia/libffmpegmediaplugin.so",
-    r"PySide6/Qt/lib/libQt6FFmpegStub-[a-z-]+\.so\.\d+",
+    r"PySide6/Qt/lib/libQt6FFmpegStub-[a-z0-9-]+\.so\.\d+",
     r"PySide6/Qt/lib/lib(avcodec|avformat|avutil|swresample|swscale)\.so\.\d+",
 ]
 keep = [re.compile(pattern.replace(".abi3", r"\.abi3") + "$") for pattern in KEEP]
