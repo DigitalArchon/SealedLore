@@ -145,7 +145,8 @@ QT="$SITE/PySide6"
 # FFmpeg plugin, and FFmpeg's libraries by the name they are loaded by (the
 # wheel carries each three times over, as .so, .so.N and .so.N.x.y, since a
 # wheel can't hold links). Everything else the add-ons put in is deleted, by
-# the add-ons' own list of their files, and a file kept that isn't there
+# the add-ons' own list of their files (less those Essentials installs too),
+# and a file kept that isn't there
 # stops the build. The add-ons' dist-info stays, for the notices.
 "$PYTHON" -s - "$SITE" <<'ADDONS'
 import csv
@@ -155,6 +156,13 @@ from pathlib import Path
 
 site = Path(sys.argv[1])
 record = next(site.glob("pyside6_addons-*.dist-info")) / "RECORD"
+# Files both wheels install (PySide6/__init__.py among them) are Essentials'.
+essentials = {
+    row[0]
+    for row in csv.reader(
+        (next(site.glob("pyside6_essentials-*.dist-info")) / "RECORD").read_text().splitlines()
+    )
+}
 KEEP = [
     "PySide6/QtMultimedia.abi3.so",
     "PySide6/Qt/lib/libQt6Multimedia.so.6",
@@ -166,7 +174,7 @@ keep = [re.compile(pattern.replace(".abi3", r"\.abi3") + "$") for pattern in KEE
 kept, removed = set(), 0
 for row in csv.reader(record.read_text().splitlines()):
     name = row[0]
-    if ".dist-info/" in name:
+    if ".dist-info/" in name or name in essentials:
         continue
     if any(pattern.fullmatch(name) for pattern in keep):
         kept.add(name)

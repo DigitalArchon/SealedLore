@@ -24,6 +24,7 @@ part of the window, and what each feature does. The README's
 - [Response length and style](#response-length-and-style)
 - [Lore retrieval](#lore-retrieval)
 - [Pictures](#pictures)
+- [Videos](#videos)
 - [Private scenes](#private-scenes)
 - [Simple chat](#simple-chat)
 - [The context budget and archiving](#the-context-budget-and-archiving)
@@ -62,6 +63,9 @@ part of the window, and what each feature does. The README's
   composer; every take is kept.
 - **Pictures**: a prompt written from the story on the story's cached prefix,
   approved before anything is sent, with the cast's reference pictures.
+- **Videos**: a few seconds of the story, from a prompt written for video,
+  optionally starting or ending on a picture; its price shown and accepted
+  before it is sent, on a key of its own; played in place.
 - **Private scenes**: a span of the story played on a local or TEE model
   alone, end-to-end encrypted on NanoGPT's `private/` models, kept on disk
   or in memory only, handed back as a summary you approve.
@@ -125,6 +129,11 @@ sudo apt-get install -y libxcb-cursor0
 
 Wayland sessions don't need it. To check which platform plugin is in play,
 run with `QT_QPA_PLATFORM=xcb` or `QT_QPA_PLATFORM=wayland`.
+
+Playing videos uses Qt Multimedia, which needs the PulseAudio client library
+(`libpulse0` on Debian/Ubuntu/Mint), present on nearly every desktop. Without
+it everything else works, and videos show without a preview and can't be
+played in place (their ⋯ menu still opens them in your own player).
 
 #### Desktop entry (optional)
 
@@ -950,6 +959,68 @@ are kept even when their passage is deleted; only their own Delete removes
 them, since they cost money. **Save all…** in the Images tab copies every
 picture into a folder you choose; each picture's ⋯ menu saves one.
 
+Pictures go to the chat endpoint unless **Settings → Images** names another:
+an address, a key, and the service it is (NanoGPT, OpenRouter, WaveSpeed, or
+any OpenAI-compatible `/images/generations`; worked out from the address
+unless you choose). Left blank, the address is the chat endpoint's, and its
+key is used only when the address is the chat endpoint's own host.
+
+## Videos
+
+**Story → Generate video…**, **Video…** in the Images tab, or **Video of this
+passage…** in a passage's ⋯ menu makes a few seconds of video of the story.
+
+**Video costs far more than pictures**: a picture is a few cents, a video tens
+of cents to over $10 for a few seconds, and it is charged when it is sent,
+even if you stop waiting or delete it afterwards. So:
+
+- **Video is off until it has an API key of its own**, in **Settings →
+  Video**. The app never uses the chat key for it. Make a key for video alone
+  at the service and set a daily spending limit on it there (on NanoGPT, when
+  you create or edit the key): that limit is the one that holds whatever
+  happens in the app. When the limit is reached the service refuses, and the
+  app says so rather than trying again. You may type your chat or picture key
+  in there instead; then every video warns you and asks again before it is
+  sent.
+- **The dialog says first what this video will cost**, in dollars and in
+  pictures' worth, worked out from the model's own price list, and **Generate
+  video** stays off until you tick that you accept that price. Changing a
+  setting that changes the price clears the tick. When the price can't be
+  worked out (some models list theirs in ways that proved wrong, and the app
+  won't guess), you tick that you accept an unknown price instead. If the
+  service charges more than the dialog showed, the app tells you.
+
+The dialog shows the model's own settings (resolution, length, aspect ratio,
+sound and so on, from the service's list; **Browse…** finds another model),
+and only values that list offers are sent. **Starts on** and **Ends on** take
+any picture of the story: a reference picture from a card, a picture it made,
+one from disk, or the last frame of an earlier video, which carries a scene
+on. Models that can't take them say so. **Write prompt** asks the prompt
+writer (the same one as pictures) for a prompt written for video: one
+continuous shot of that length, what moves, what the camera does, and what is
+heard if the video has sound, starting from the picture chosen. Change the
+length, sound or pictures afterwards and write it again. The prompt is sent
+exactly as it stands in the box.
+
+The video is made in the background, which takes a few minutes; its place
+after the passage says so, with **Stop waiting**. It is already paid for, so
+it is never lost: stopped, or with the app closed, it is fetched when you
+press **Check again** or next open the story. (In a chat kept in memory only
+it is lost with the chat, and closing the chat says so.) When it arrives,
+its hidden data (the encoder's name and settings, creation times) is blanked
+without re-encoding, and it shows as its first frame: click to play it in
+place, with sound and a position bar. Its ⋯ menu opens it in your default
+player, saves it, shows its prompt, makes the next video from its last frame,
+or uses that frame as a reference picture. Videos are listed in the Images
+tab and saved by **Save all…**. A story backup of a story with videos asks
+whether to put them in (they are megabytes each) or leave them out.
+
+The default is Seedance 2.5 at 480p for 5 seconds with sound, on NanoGPT
+($0.90 when this was written). **Settings → Video** also takes another
+service's address: OpenRouter's video API (`https://openrouter.ai/api/v1`) and
+WaveSpeed (`https://api.wavespeed.ai/api/v3`, which quotes each request
+itself) are supported.
+
 ## Private scenes
 
 The **Private** button beside the composer plays a span of the story on a
@@ -1156,11 +1227,19 @@ endpoint must be `https://` (plain `http://` is accepted only for
   filled in from the chat key when it is the same host. A large lorebook's
   picks also go to the chat endpoint (the lore model), or, with "Jev before
   each turn", to its `/decisions` route with the lore and recent story.
-- **The image endpoint** is the chat endpoint's host. It gets the approved
-  prompt and the reference pictures you chose, and the picture comes back and
-  is saved with the story (a reply that names a signed download link is
-  fetched from that link, which may be a content network). In a private scene the prompt is written by the
-  private model but still sent there, with a warning in the dialog.
+- **The image endpoint** (Settings → Images; by default the chat
+  endpoint's host) gets the approved prompt and the reference pictures you
+  chose, and the picture comes back and is saved with the story (a reply that
+  names a download link is fetched from that link, which may be a content
+  network, without the key). WaveSpeed takes pictures as links, so the
+  reference pictures are uploaded to it first. In a private scene the prompt
+  is written by the private model but still sent there, with a warning in
+  the dialog.
+- **The video endpoint** (Settings → Video, off until it has a key) gets the
+  approved prompt and the start and end pictures you chose (uploaded first
+  to WaveSpeed), then is asked after the video until it is done; the video is
+  fetched from the link it gives (NanoGPT's is a content network, fetched
+  without the key) and saved with the story.
 - **A private scene** goes to the private endpoint alone (Settings →
   Private): a local server, or a NanoGPT `TEE/` or `private/` model. Verifying
   a TEE model sends the enclave's GPU evidence, and nothing else, to NVIDIA's

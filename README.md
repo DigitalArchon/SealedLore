@@ -84,6 +84,14 @@ the prompt for a picture of the current scene, using them as references.
 You see the whole request before anything is sent. I recommend Seedream 5.0
 Pro for this, which is the default.
 
+It can make short videos of the story too (Seedance 2.5 by default), played
+in place in the story, from a prompt written for video and, if you like,
+starting or ending on one of your pictures. Video costs far more than
+pictures, so it is off until you give it an API key of its own (Settings →
+Video), and every video shows its price and waits for you to accept it.
+Pictures and video can each use a different service from chat (NanoGPT,
+OpenRouter, WaveSpeed, or anything OpenAI-compatible).
+
 You can also have a basic chat without the storytelling features, but still
 with summarising, end-to-end encrypted models, image generation and so on.
 
@@ -244,8 +252,11 @@ must be `https://` (plain `http://` is accepted only for `localhost`).
   summaries, scene and plot reads, reviews, picture prompts).
 - **The embeddings endpoint**, off by default, gets the lore entries and a
   query built from the last few passages.
-- **Pictures** go to the chat endpoint's host: the prompt you approved and
-  the reference pictures you chose.
+- **Pictures** go to the picture endpoint (Settings → Images; by default the
+  chat endpoint): the prompt you approved and the reference pictures you
+  chose.
+- **Videos** go to the video endpoint (Settings → Video, off until it has a
+  key): the prompt you approved and the start and end pictures you chose.
 - **A private scene** goes to the private model alone. Checking a TEE model
   sends the enclave's GPU evidence to NVIDIA and fetches Intel's public
   certificates; nothing from your story goes to either. A `private/` model is
