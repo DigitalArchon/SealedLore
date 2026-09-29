@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sealedlore"
-version = "1.0.0b3"
+version = "1.0.0b4"
 description = "Desktop app for collaborative fiction roleplay with an LLM."
 readme = "README.md"
 # AGPL for everyone; other terms for SealedLore's own code by separate

@@ -87,5 +87,5 @@ code (Python itself, Qt, parts of numpy, pydantic and others), taken from
 their publishers and pinned by checksum; for those, and for the image as a
 whole, rebuild the release and compare checksums as above.
 
-Releases up to 1.0.0b3 shipped only SealedLore's own code compiled. The script
+Releases up to 1.0.0b2 shipped only SealedLore's own code compiled. The script
 checks those too, and says how many files have no compiled one.

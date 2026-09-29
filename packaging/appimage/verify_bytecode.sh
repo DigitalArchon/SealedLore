@@ -13,7 +13,7 @@
 #
 # It fails on a compiled file that differs, and on one with no source beside
 # it to be checked against. A .py with no compiled file is only reported:
-# Python compiles it from the source at each launch (releases up to 1.0.0b3
+# Python compiles it from the source at each launch (releases up to 1.0.0b2
 # shipped SealedLore's own code compiled and nothing else).
 #
 # The image's own Python does the compiling, which takes its word for what
