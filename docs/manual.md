@@ -374,7 +374,8 @@ archiving, rebuilding summaries.
   it at a glance), **Cast** (sheets, skills, supporting characters), **Plot** (the clock, facts and events; shown only for a
   story with a plot), **Lore**, **Style**, **Story so far** (the chapter
   summaries: edit, rebuild, archive now; double-click one to go to it in the
-  story), **Images**, and **Prompt** (exactly what the storyteller was sent
+  story), **Media** (every picture and video the story has made), and
+  **Prompt** (exactly what the storyteller was sent
   last turn; **Copy prompt** copies it as readable text, **Copy request
   JSON** as the exact request body).
 
@@ -953,10 +954,10 @@ reads it at full price. The dialog shows the
 whole request — model, size, count, listed price, the pictures in order, and
 the prompt, which you can edit — and nothing is sent until you press
 Generate. The picture is drawn in the background while you play on and lands
-in the **Images** tab, and can be set as the transcript's background (from
+in the **Media** tab, and can be set as the transcript's background (from
 its ⋯ menu, or any picture file with View → Background picture…). Pictures
 are kept even when their passage is deleted; only their own Delete removes
-them, since they cost money. **Save all…** in the Images tab copies every
+them, since they cost money. **Save all…** in the Media tab copies every
 picture into a folder you choose; each picture's ⋯ menu saves one.
 
 Pictures go to the chat endpoint unless **Settings → Images** names another:
@@ -967,7 +968,7 @@ key is used only when the address is the chat endpoint's own host.
 
 ## Videos
 
-**Story → Generate video…**, **Video…** in the Images tab, or **Video of this
+**Story → Generate video…**, **Video…** in the Media tab, or **Video of this
 passage…** in a passage's ⋯ menu makes a few seconds of video of the story.
 
 **Video costs far more than pictures**: a picture is a few cents, a video tens
@@ -1011,7 +1012,7 @@ its hidden data (the encoder's name and settings, creation times) is blanked
 without re-encoding, and it shows as its first frame: click to play it in
 place, with sound and a position bar. Its ⋯ menu opens it in your default
 player, saves it, shows its prompt, makes the next video from its last frame,
-or uses that frame as a reference picture. Videos are listed in the Images
+or uses that frame as a reference picture. Videos are listed in the Media
 tab and saved by **Save all…**. A story backup of a story with videos asks
 whether to put them in (they are megabytes each) or leave them out.
 
@@ -1157,7 +1158,7 @@ story is (Settings → Context), with a plain summariser.
   gone. Its pictures are kept in memory with it (reference pictures and the
   background too). To keep anything, write it out first: **Story → Export →
   Story backup…** (the whole chat, its pictures and costs), Markdown, or
-  **Images → Save all…** for the pictures. File → Import… of such a backup
+  **Media → Save all…** for the pictures and videos. File → Import… of such a backup
   asks whether to open it in memory again, writing nothing, or save it as an
   ordinary chat. In memory only is about your computer, not the model: on an
   ordinary model the provider still receives every message (on NanoGPT, your

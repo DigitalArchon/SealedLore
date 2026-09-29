@@ -163,7 +163,7 @@ class ChatWindow:
             "Chat kept in memory only",
             "This chat is kept in memory only: closing it loses it, and nothing of it was "
             f"ever written to disk.{lost}\n\nTo keep it, export a backup first (Story → "
-            "Export → Story backup…); to keep only its pictures, Images → Save all….\n\n"
+            "Export → Story backup…); to keep only its pictures and videos, Media → Save all….\n\n"
             "Close it anyway?",
             QMessageBox.Yes | QMessageBox.Cancel,
         )

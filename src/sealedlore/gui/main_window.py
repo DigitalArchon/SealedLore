@@ -358,7 +358,7 @@ class MainWindow(
         self.right_tabs.addTab(self.lore_panel, "Lore")
         self.right_tabs.addTab(self.style_panel, "Style")
         self.right_tabs.addTab(self.summaries_panel, "Story so far")
-        self.right_tabs.addTab(self.images_panel, "Images")
+        self.right_tabs.addTab(self.images_panel, "Media")
         self.right_tabs.addTab(self.inspector, "Prompt")
         self.right_tabs.set_empty(self._no_story_page())
         right = QDockWidget("Inspector", self)

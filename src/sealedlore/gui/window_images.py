@@ -33,7 +33,7 @@ from sealedlore.storage.repository import save_config
 
 class ImagesWindow:
     def _init_images(self) -> None:
-        """Called from `_build_ui`: the jobs, the Images tab and the transcript's signals."""
+        """Called from `_build_ui`: the jobs, the Media tab and the transcript's signals."""
         self.image_jobs = ImageJobs(self.root, self)
         self.image_catalog = ImageCatalog(
             self.config, self.root, self, in_memory=lambda: self.memory_chat
@@ -129,7 +129,7 @@ class ImagesWindow:
         )
 
     def _refresh_image_views(self) -> None:
-        """The Images tab now; the transcript once no passage is streaming into it."""
+        """The Media tab now; the transcript once no passage is streaming into it."""
         self.refresh_images()
         if not self._busy:
             self.reload_transcript()
@@ -217,7 +217,7 @@ class ImagesWindow:
             self.statusBar().showMessage("Picture ready.", 8000)
         else:
             self.statusBar().showMessage(
-                "A picture for another story is ready; it's in that story's Images tab.", 8000
+                "A picture for another story is ready; it's in that story's Media tab.", 8000
             )
 
     def _on_image_failed(self, _job_id: str, story_id: str, message: str) -> None:
@@ -274,7 +274,7 @@ class ImagesWindow:
                 self._refresh_image_views()
 
     def save_all_pictures(self) -> None:
-        """Images → Save all…: every picture and video of the story into a folder the
+        """Media → Save all…: every picture and video of the story into a folder the
         author picks, named in the order they were made. Nothing there is
         overwritten. The way out for a memory-only chat's pictures, and a
         convenience for any story."""

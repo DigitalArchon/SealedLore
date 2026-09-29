@@ -258,7 +258,7 @@ class VideosWindow:
                 )
         else:
             self.statusBar().showMessage(
-                "A video for another story is ready; it's in that story's Images tab.", 8000
+                "A video for another story is ready; it's in that story's Media tab.", 8000
             )
 
     def _on_video_failed(self, story_id: str, message: str) -> None:

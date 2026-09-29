@@ -345,7 +345,7 @@ def test_a_memory_chat_keeps_its_pictures_in_memory_and_can_save_them(
     assert session.pictures.read(ref.file) is not None
     dialog.deleteLater()
 
-    # A picture drawn with it lands in the transcript and the Images tab.
+    # A picture drawn with it lands in the transcript and the Media tab.
     use = next(c.use for c in session.image_ref_choices() if c.use.ref_id == ref.id)
     request = ImageRequest(
         story_id=session.story.id,

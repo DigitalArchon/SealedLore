@@ -3,7 +3,7 @@
 A Linux and Windows application for AI-driven roleplay with many characters
 in an open world, with a number of particularly useful features.
 
-![The main window: the story, the composer, and the Scene page following who is where](docs/screenshots/main-window.png)
+![The main window: a video of the story in place after its passage, ready to play, and the Media page listing the story's videos and pictures](docs/screenshots/main-window.png)
 
 *Beta.* This application has been tested extensively both through
 automation and manually by the developer. It is however still in early
@@ -111,7 +111,9 @@ Have fun!
   narration, or as direction to the model; you can also ask it questions out
   of character.
 - **The world and the cast**: a world bible, cast sheets with skills,
-  supporting characters the story introduces, and a lorebook.
+  supporting characters the story introduces, and a lorebook whose entries
+  can wait, unseen by any model, until you mention them, so what hasn't
+  happened yet doesn't happen early.
 - **Outcomes and dice**: fiat, plausible, contested, or d100 rolls against
   the character's skills.
 - **Length and style**: length presets with measured word counts, a per-turn
@@ -122,6 +124,13 @@ Have fun!
   earlier message as a named branch; a map shows them all.
 - **Drafting**: a whole story drafted from a premise.
 - **Costs**: per passage, per session and per story.
+- **Routes**: on NanoGPT, choose which host serves each model (the fastest,
+  the cheapest, or one you pick), and see whether the choice was followed.
+- **Pictures and videos** of the story in its Media tab, the videos played in
+  place, and a line above the story that always says where it is kept and
+  which model and route it is on.
+- **Chats kept in memory only**, pictures and all, that leave nothing on
+  disk unless you export them.
 
 ## Installing
 
@@ -136,7 +145,9 @@ chmod +x SealedLore-*-x86_64.AppImage
 ```
 
 It needs x86_64 and glibc 2.34 or newer (Ubuntu 22.04, Mint 21, Debian 12,
-Fedora 35 and later), with nothing else to install. To check the download:
+Fedora 35 and later), with nothing else to install. (Playing videos in the
+app uses the PulseAudio client library, which nearly every desktop has.) To
+check the download:
 
 ```bash
 gh attestation verify SealedLore-<version>-x86_64.AppImage --repo DigitalArchon/SealedLore
