@@ -97,6 +97,25 @@ def pixmap_of(data: bytes | None) -> QPixmap:
     return QPixmap() if image.isNull() else QPixmap.fromImage(image)
 
 
+def pixmap_within(data: bytes | None, box: QSize) -> QPixmap:
+    """A picture's bytes as `pixmap_of` reads them, no larger than `box` (its
+    shape kept, and never enlarged): for a view that shows it no larger.
+    Whole, a 2048-pixel picture is 16 MB for as long as it is held.
+
+    Read whole and then scaled, as the view itself would scale it, so what is
+    shown is the same to the pixel. Having the decoder scale it
+    (`QImageReader.setScaledSize`) read a picture in two thirds of the time
+    and lost detail: a JPEG's text and fine lines came out visibly softer.
+    """
+    pixmap = pixmap_of(data)
+    size = pixmap.size()
+    if size.width() <= box.width() and size.height() <= box.height():
+        return pixmap
+    return pixmap.scaled(
+        size.scaled(box, Qt.KeepAspectRatio), Qt.KeepAspectRatio, Qt.SmoothTransformation
+    )
+
+
 def picture_bytes(source: Path) -> tuple[bytes, str]:
     """A picture file's bytes and extension, its hidden data removed, and
     scaled and re-encoded if needed.

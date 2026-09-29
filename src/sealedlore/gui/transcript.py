@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.dice import chip_text
 from sealedlore.gui import theme
-from sealedlore.gui.ref_images import pixmap_of
+from sealedlore.gui.ref_images import pixmap_of, pixmap_within
 from sealedlore.models.aside import Aside
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage
@@ -600,7 +600,12 @@ class PictureView(QWidget):
         if target.isEmpty():
             return
         if self._scaled is None or self._scaled.size() != target:
-            self._scaled = self._pixmap.scaled(target, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            # As it was decoded, when that is the size shown: no second copy.
+            self._scaled = (
+                self._pixmap
+                if self._pixmap.size() == target
+                else self._pixmap.scaled(target, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
         painter = QPainter(self)
         painter.drawPixmap(0, 0, self._scaled)
 
@@ -666,7 +671,9 @@ class ImageMessageWidget(QFrame):
         header_row.addWidget(more)
         layout.addLayout(header_row)
 
-        pixmap = pixmap_of(data)
+        # No larger than the column shows it: the file has the rest, and
+        # everything done with a picture reads the file.
+        pixmap = pixmap_within(data, QSize(READING_WIDTH, PICTURE_MAX_HEIGHT))
         if pixmap.isNull():
             missing = QLabel(f"The picture file is missing ({image.file}).")
             missing.setObjectName("hintLabel")

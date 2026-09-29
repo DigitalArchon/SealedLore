@@ -27,7 +27,11 @@ from sealedlore.engine.images import ImageRequest  # noqa: E402
 from sealedlore.gui.image_dialog import ImageDialog  # noqa: E402
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.gui.ref_images import MAX_SIDE, picture_bytes  # noqa: E402
-from sealedlore.gui.transcript import ImageMessageWidget, PendingPictureWidget  # noqa: E402
+from sealedlore.gui.transcript import (  # noqa: E402
+    ImageMessageWidget,
+    PendingPictureWidget,
+    PictureView,
+)
 from sealedlore.ids import utc_now_iso  # noqa: E402
 from sealedlore.models.image import ImageRef  # noqa: E402
 from sealedlore.models.story import Story  # noqa: E402
@@ -490,3 +494,80 @@ def test_an_ordinary_backup_is_imported_without_asking(app, window: MainWindow, 
     window._ask_memory_import = never
     window._import_archive(backup)
     assert window.session is not None and not window.session.memory_only
+
+
+# --- a transcript picture is held no larger than it is shown ----------------------------
+
+
+def plain_picture(width: int, height: int, fmt: str = "PNG") -> bytes:
+    from sealedlore.gui.ref_images import _encoded
+
+    image = QImage(width, height, QImage.Format_RGB32)
+    image.fill(QColor("#336699"))
+    return _encoded(image, fmt)
+
+
+def test_a_picture_is_decoded_within_the_box_and_keeps_its_shape(app):
+    from PySide6.QtCore import QSize
+
+    from sealedlore.gui.ref_images import pixmap_of, pixmap_within
+
+    box = QSize(920, 480)
+    wide = pixmap_within(plain_picture(2048, 1152, "JPEG"), box)
+    assert wide.size().toTuple() == (853, 480)
+    tall = pixmap_within(plain_picture(896, 1152), box)
+    assert tall.size().toTuple() == (373, 480)
+    # One that fits is as it is in the file: never enlarged.
+    small = plain_picture(300, 200)
+    assert pixmap_within(small, box).size() == pixmap_of(small).size()
+    assert pixmap_within(small, box).size().toTuple() == (300, 200)
+    assert pixmap_within(None, box).isNull() and pixmap_within(b"not a picture", box).isNull()
+
+
+def test_a_photo_held_sideways_is_upright_within_the_box(app):
+    from PySide6.QtCore import QSize
+
+    from sealedlore.gui.ref_images import pixmap_of, pixmap_within
+    from sealedlore.storage.image_meta import strip_metadata
+    from tests.test_image_meta import dirty_jpeg
+
+    # Stored 64 wide and 48 high, to be shown turned: 48 wide and 64 high.
+    for data in (dirty_jpeg(orientation=6), strip_metadata(dirty_jpeg(orientation=6))):
+        assert pixmap_of(data).size().toTuple() == (48, 64)
+        shown = pixmap_within(data, QSize(40, 32))
+        assert shown.size().toTuple() == (24, 32)
+
+
+def test_the_transcript_holds_a_picture_at_the_size_it_shows(app):
+    from sealedlore.gui.transcript import PICTURE_MAX_HEIGHT, READING_WIDTH
+    from sealedlore.models.image import GeneratedImage
+
+    record = GeneratedImage(file="images/big.png", prompt="p", model="m", size="2048x1152")
+    widget = ImageMessageWidget(record, plain_picture(2048, 1152))
+    held = widget.picture._pixmap.size()
+    assert held.width() <= READING_WIDTH and held.height() == PICTURE_MAX_HEIGHT
+    # Shown at the size it was decoded, it is drawn as it is: no second copy.
+    view = PictureView(widget.picture._pixmap)
+    view.resize(READING_WIDTH, PICTURE_MAX_HEIGHT)
+    view.grab()
+    assert view._scaled is view._pixmap
+    # A narrower column scales it down from what is held.
+    view.resize(400, PICTURE_MAX_HEIGHT)
+    view.grab()
+    assert view._scaled.width() in (399, 400) and view._scaled.height() == 225
+
+
+def test_a_picture_held_smaller_is_what_the_view_would_have_shown(app):
+    """Scaled by the decoder instead, a JPEG came out softer (9-37% less fine
+    detail on real pictures): it is read whole and scaled as the view scales."""
+    from PySide6.QtCore import QSize, Qt
+
+    from sealedlore.gui.ref_images import pixmap_of, pixmap_within
+    from tests.test_image_meta import qt_picture
+
+    for fmt in ("JPEG", "PNG"):
+        data = qt_picture(fmt, width=256, height=192)
+        shown = pixmap_of(data).scaled(QSize(80, 60), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        held = pixmap_within(data, QSize(100, 60))
+        assert held.size().toTuple() == (80, 60)
+        assert held.toImage() == shown.toImage()
