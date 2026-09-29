@@ -24,6 +24,8 @@ EXTRA_TEXTS = {
     # Qt for Python is LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only; the
     # AppImage takes it under the LGPL-3.0, which builds on the GPL-3.0's text.
     "pyside6-essentials": ["LGPL-3.0.txt", "GPL-3.0.txt"],
+    # Only its QtMultimedia and the FFmpeg under it are kept (build.sh).
+    "pyside6-addons": ["LGPL-3.0.txt", "GPL-3.0.txt", "LGPL-2.1.txt"],
     "shiboken6": ["LGPL-3.0.txt", "GPL-3.0.txt"],
     # MIT; the licence is in its source repository (tinfoilsh/encrypted-http-body-protocol).
     "tinfoil-ehbp": ["tinfoil-ehbp.txt"],

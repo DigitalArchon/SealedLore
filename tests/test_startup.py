@@ -28,6 +28,9 @@ from sealedlore.storage.repository import (
 SOURCE_ROOT = Path(__file__).resolve().parents[1] / "src" / "sealedlore"
 # Loaded by the one function that needs them, never by a module as it is imported.
 ON_FIRST_USE = ("numpy", "tiktoken", "tinfoil")
+# Modules of a package, likewise: QtMultimedia loads FFmpeg (~20 MB of
+# libraries) and is needed only once a video is shown or played.
+MODULES_ON_FIRST_USE = ("PySide6.QtMultimedia", "PySide6.QtMultimediaWidgets")
 
 
 def imported_at_the_top(path: Path) -> set[str]:
@@ -47,7 +50,9 @@ def test_heavy_packages_are_imported_on_first_use():
         for path in sorted(SOURCE_ROOT.rglob("*.py"))
         if (
             bad := {
-                name for name in imported_at_the_top(path) if name.split(".")[0] in ON_FIRST_USE
+                name
+                for name in imported_at_the_top(path)
+                if name.split(".")[0] in ON_FIRST_USE or name in MODULES_ON_FIRST_USE
             }
         )
     }

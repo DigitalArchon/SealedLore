@@ -43,6 +43,7 @@ from sealedlore.gui.model_picker import (
     pick_model_and_route,
 )
 from sealedlore.gui.speed_test import SpeedTestDialog, speed_tests
+from sealedlore.gui.video_jobs import VideoCatalog
 from sealedlore.models.config import (
     DEFAULT_BASE_URL,
     DEFAULT_EMBEDDING_MODEL,
@@ -100,12 +101,14 @@ class SettingsDialog(QDialog):
         *,
         catalog: ModelCatalog | None = None,
         image_catalog: ImageCatalog | None = None,
+        video_catalog: VideoCatalog | None = None,
         fetch_models: bool = False,
     ) -> None:
         """`fetch_models`: load the endpoint's model list on opening (the
         window, never a test), to know which models have a choice of host."""
         super().__init__(parent)
         self.image_catalog = image_catalog
+        self.video_catalog = video_catalog
         self._fetch_models = fetch_models
         self.setWindowTitle("Settings")
         # Wide enough for all eight tabs in view, and tall enough for most
@@ -833,7 +836,11 @@ class SettingsDialog(QDialog):
         self.video_url, self.video_key, self.video_api = self._media_fields(endpoint)
         self.video_url.setPlaceholderText(DEFAULT_BASE_URL)
         self.video_key.setPlaceholderText("a key of its own; video is off until one is entered")
-        self.video_model = QLineEdit(self.config.video_model)
+        # Browse… lists the endpoint's video models once a video key is saved.
+        self.video_model = ModelField(
+            self.config.video_model,
+            self._browse_video_models if self.video_catalog is not None else None,
+        )
         form.addRow("Address", self.video_url)
         form.addRow("API key", self.video_key)
         form.addRow("Service", self.video_api)
@@ -846,6 +853,11 @@ class SettingsDialog(QDialog):
             field.textChanged.connect(self._sync_video_key_note)
         self._sync_video_key_note()
         return widget
+
+    def _browse_video_models(self, current: str) -> str | None:
+        from sealedlore.gui.video_dialog import pick_video_model
+
+        return pick_video_model(self.video_catalog, current, self)
 
     def _sync_video_key_note(self, *_args) -> None:
         key = self.video_key.text().strip()

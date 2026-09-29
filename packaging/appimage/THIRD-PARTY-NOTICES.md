@@ -28,6 +28,25 @@ version 3 (`texts/LGPL-3.0.txt`, which adds to `texts/GPL-3.0.txt`).
   on) is listed, with its licences, at
   <https://doc.qt.io/qt-6.11/licenses-used-in-qt.html>.
 
+Of PySide6-Addons 6.11.2, only Qt Multimedia is kept (`QtMultimedia.abi3.so`,
+`Qt/lib/libQt6Multimedia.so.6`, `Qt/plugins/multimedia/libffmpegmediaplugin.so`),
+for playing videos, under the same licence and from the same sources as above.
+
+## FFmpeg
+
+Qt Multimedia plays video with FFmpeg 7.1, as built and shipped by The Qt
+Company in PySide6-Addons 6.11.2: `libavcodec.so.61`, `libavformat.so.61`,
+`libavutil.so.59`, `libswresample.so.5` and `libswscale.so.8`, with Qt's
+`libQt6FFmpegStub-*` loaders, in `Qt/lib` beside the Qt libraries. FFmpeg is
+licensed under the GNU Lesser General Public License, version 2.1 or later
+(`texts/LGPL-2.1.txt`); this build uses no GPL parts.
+
+- **Source:** FFmpeg 7.1 at <https://ffmpeg.org/releases/> (and
+  <https://git.ffmpeg.org/ffmpeg.git>); how Qt configures it is in Qt
+  Multimedia's source, above.
+- **Replacing it:** as with Qt, extract the AppImage and put your own build
+  of these libraries in their place.
+
 ## The Python runtime
 
 CPython 3.12.14, relocatable build from python-appimage

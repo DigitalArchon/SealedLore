@@ -3323,6 +3323,7 @@ class MainWindow(
             self,
             catalog=self.catalog,
             image_catalog=self.image_catalog,
+            video_catalog=self.video_catalog,
             fetch_models=not self.use_mock,
         )
         if dialog.exec() == SettingsDialog.Accepted:

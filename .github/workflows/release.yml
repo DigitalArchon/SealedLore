@@ -35,7 +35,7 @@ jobs:
           persist-credentials: false
 
       # Not bundled: what the build's checks resolve Qt against (the xcb
-      # plugin's libraries, and the import test). Nothing here goes into the
+      # plugin's libraries, QtMultimedia's, and the import test). Nothing here goes into the
       # AppImage.
       - name: Host libraries for the checks
         run: |
@@ -43,7 +43,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libegl1 libgl1 libxkbcommon0 libdbus-1-3 libfontconfig1 libglib2.0-0t64 \
             libx11-6 libx11-xcb1 libxcb1 libxcb-randr0 libxcb-render0 libxcb-shape0 \
-            libxcb-shm0 libxcb-sync1 libxcb-xfixes0 libxcb-xkb1
+            libxcb-shm0 libxcb-sync1 libxcb-xfixes0 libxcb-xkb1 \
+            libpulse0 libxrandr2 libxext6
 
       - name: Build
         id: build

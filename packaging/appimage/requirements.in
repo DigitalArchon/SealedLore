@@ -6,8 +6,10 @@ httpx==0.28.1
 tiktoken==0.14.0
 numpy==2.5.3
 # Essentials, not PySide6: the add-ons are hundreds of megabytes the app
-# never imports.
+# never imports, all but QtMultimedia and its FFmpeg, which play videos
+# (gui/video_view.py). build.sh keeps those and deletes the rest.
 PySide6-Essentials==6.11.2
+PySide6-Addons==6.11.2
 # End-to-end encrypted private models: Tinfoil's attestation and EHBP client
 # (providers/private_mode.py). It pulls in sigstore, cryptography and the
 # OpenAI client; all pinned by hash below like everything else.

@@ -274,14 +274,16 @@ class ImagesWindow:
                 self._refresh_image_views()
 
     def save_all_pictures(self) -> None:
-        """Images → Save all…: every picture of the story into a folder the
+        """Images → Save all…: every picture and video of the story into a folder the
         author picks, named in the order they were made. Nothing there is
         overwritten. The way out for a memory-only chat's pictures, and a
         convenience for any story."""
         if self.session is None:
             return
         images = self.session.pictures.images()
-        if not images:
+        # Finished videos too: they are as much the story's as its pictures.
+        videos = [v for v in self.session.pictures.videos() if v.status == "done" and v.file]
+        if not images and not videos:
             return
         chosen = QFileDialog.getExistingDirectory(self, "Save all pictures", str(Path.home()))
         if not chosen:
@@ -290,7 +292,8 @@ class ImagesWindow:
         store = self.session.pictures
         written, missing = 0, 0
         try:
-            for number, image in enumerate(images, start=1):
+            made = sorted([*images, *videos], key=lambda record: record.created_at)
+            for number, image in enumerate(made, start=1):
                 data = store.read(image.file)
                 if data is None:
                     missing += 1

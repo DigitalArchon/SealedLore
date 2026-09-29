@@ -141,6 +141,48 @@ sed -i '/\/direct_url\.json,/d' "$SITE"/*.dist-info/RECORD
 
 log "Trimming what the app never loads"
 QT="$SITE/PySide6"
+# Of the add-ons, only video playback (gui/video_view.py): QtMultimedia, its
+# FFmpeg plugin, and FFmpeg's libraries by the name they are loaded by (the
+# wheel carries each three times over, as .so, .so.N and .so.N.x.y, since a
+# wheel can't hold links). Everything else the add-ons put in is deleted, by
+# the add-ons' own list of their files, and a file kept that isn't there
+# stops the build. The add-ons' dist-info stays, for the notices.
+"$PYTHON" -s - "$SITE" <<'ADDONS'
+import csv
+import re
+import sys
+from pathlib import Path
+
+site = Path(sys.argv[1])
+record = next(site.glob("pyside6_addons-*.dist-info")) / "RECORD"
+KEEP = [
+    "PySide6/QtMultimedia.abi3.so",
+    "PySide6/Qt/lib/libQt6Multimedia.so.6",
+    "PySide6/Qt/plugins/multimedia/libffmpegmediaplugin.so",
+    r"PySide6/Qt/lib/libQt6FFmpegStub-[a-z-]+\.so\.\d+",
+    r"PySide6/Qt/lib/lib(avcodec|avformat|avutil|swresample|swscale)\.so\.\d+",
+]
+keep = [re.compile(pattern.replace(".abi3", r"\.abi3") + "$") for pattern in KEEP]
+kept, removed = set(), 0
+for row in csv.reader(record.read_text().splitlines()):
+    name = row[0]
+    if ".dist-info/" in name:
+        continue
+    if any(pattern.fullmatch(name) for pattern in keep):
+        kept.add(name)
+        continue
+    path = site / name
+    if path.is_file():
+        path.unlink()
+        removed += 1
+wanted = {"libQt6Multimedia", "libffmpegmediaplugin", "QtMultimedia.abi3", "libavcodec", "libavformat",
+          "libavutil", "libswresample", "libswscale"}
+found = {Path(name).name.split(".so")[0] for name in kept}
+if not wanted <= found:
+    sys.exit(f"the add-ons lack what video needs: {sorted(wanted - found)}")
+print(f"kept {len(kept)} of the add-ons' files, removed {removed}")
+ADDONS
+find "$QT" -type d -empty -delete
 # Qt's developer tools and headers: designer, linguist, the QML tooling.
 rm -rf "$QT"/{include,typesystems,glue,scripts,examples,doc} \
        "$QT"/{assistant,designer,linguist,lrelease,lupdate,qmlformat,qmllint,qmlls,balsam,balsamui} \
@@ -259,6 +301,15 @@ fi
 # What was trimmed must not be missed: the app still imports, and nothing left
 # in the Python base needs a library that went.
 "$PYTHON" -s -c "import sealedlore.gui.app, ssl, hashlib, sqlite3, lzma, bz2, ctypes, dbm"
+# Video: QtMultimedia loads, and its FFmpeg plugin resolves (from the
+# AppImage, or libraries every desktop with sound has: libpulse, X11).
+"$PYTHON" -s -c "import PySide6.QtMultimedia"
+missing="$(LD_LIBRARY_PATH="$X11LIB" ldd "$QT/Qt/plugins/multimedia/libffmpegmediaplugin.so" \
+    | grep 'not found' || true)"
+if [ -n "$missing" ]; then
+    echo "the FFmpeg plugin can't resolve: $missing" >&2
+    exit 1
+fi
 missing="$(find "$APPDIR/usr/lib" "$STDLIB/lib-dynload" -maxdepth 1 -name '*.so*' -type f \
     -exec ldd {} \; 2>/dev/null | grep 'not found' || true)"
 if [ -n "$missing" ]; then
