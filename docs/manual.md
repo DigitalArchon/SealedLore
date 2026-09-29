@@ -1062,7 +1062,8 @@ story is (Settings → Context), with a plain summariser.
   what you write next to your private model (Settings → Private) and to
   nothing else; the chat's own model sees none of it. Beside it you choose
   whether that part is kept **In memory** (gone when the app closes) or **On
-  disk**. **End private** has the private model write a summary for you to
+  disk**; a chat kept in memory only keeps its private parts in memory too,
+  so it doesn't ask. **End private** has the private model write a summary for you to
   approve, change, or do without; what you approve joins the chat, marked as
   a summary of a private part, and is all the chat's model ever reads of it.
   While a part is open, Settings and switching to another chat or story are

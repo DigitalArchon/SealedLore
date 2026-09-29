@@ -212,6 +212,43 @@ def test_a_tee_chat_refuses_a_model_that_isnt(app, window, monkeypatch):
     assert window.session.model == "TEE/deepseek-v3"
 
 
+def test_a_memory_chat_keeps_its_private_part_in_memory_with_no_choice_shown(
+    app, window, monkeypatch, tmp_path
+):
+    """The author: a chat started in memory only still offers Private, but
+    asking In memory or On disk makes no sense there."""
+    from sealedlore.models.config import ProviderConfig
+    from sealedlore.providers.mock import MockChatProvider
+
+    make_chat(window, monkeypatch, model="z-ai/glm-5.3", keep="memory")
+    composer = window.composer
+    app.processEvents()
+    assert composer.private_toggle.isVisible()
+    assert not composer.private_keep.isVisible()
+
+    window.config.private_keep = "disk"
+    composer.private_keep.setCurrentIndex(composer.private_keep.findData("disk"))
+    window.private_provider_factory = lambda settings: MockChatProvider(["Quietly."])
+    window.config.private_provider = ProviderConfig(
+        name="private", base_url="http://localhost:11434/v1", model="local/model"
+    )
+    window.config.private_intro_seen = True
+    before = listing(tmp_path)
+    window.begin_private()
+    assert window.session.in_private
+    assert window.session.open_span.keep == "memory"
+    assert window.config.private_keep == "disk", "a memory chat changed the setting"
+    assert listing(tmp_path) == before
+
+    # A chat kept on disk offers the choice again.
+    window.session.discard_private()
+    window._sync_private_ui()
+    window._chat_allows_close = lambda: True
+    make_chat(window, monkeypatch, keep="disk")
+    app.processEvents()
+    assert composer.private_keep.isVisible()
+
+
 def test_a_chat_can_hold_a_part_in_private_and_take_back_a_summary(app, window, monkeypatch):
     """A beta tester asked for it: switch to private mid-chat, as a story
     can. The Private button is all of a story's controls a chat shows."""

@@ -225,7 +225,8 @@ class PrivateWindow:
             )
             return
         keep = self.composer.keep_choice()
-        if keep != self.config.private_keep:
+        # A choice the author made, remembered; not one a memory chat made for them.
+        if keep != self.config.private_keep and not self.composer.keep_fixed:
             self.config.private_keep = keep
             save_config(self.config, root=self.root)
         provider = self._make_private_provider(settings)

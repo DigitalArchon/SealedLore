@@ -245,6 +245,8 @@ class Composer(QWidget):
         self.private_toggle.setCheckable(True)
         self.private_toggle.setToolTip(PRIVATE_TIP)
         self.private_toggle.clicked.connect(self._on_private_clicked)
+        self._private_offered = True
+        self._keep_fixed: str | None = None
         self.private_keep = QComboBox()
         self.private_keep.addItem("In memory", "memory")
         self.private_keep.addItem("On disk", "disk")
@@ -637,9 +639,17 @@ class Composer(QWidget):
         """Whether a part can be held in private: not in a chat on a TEE
         model, which is private throughout. The Private button is all of the
         controls a chat shows, so without it the whole row goes."""
-        for widget in (self.private_toggle, self.private_keep):
-            widget.setVisible(offered)
+        self._private_offered = offered
+        self.private_toggle.setVisible(offered)
+        self.private_keep.setVisible(offered and self._keep_fixed is None)
         self.controls_host.setVisible(offered or not self._chat)
+
+    def fix_private_keep(self, keep: str | None) -> None:
+        """Where a private part is kept, when there is no choice to make: a
+        chat kept in memory only keeps its private parts in memory too, so the
+        In memory / On disk selector goes. None gives the choice back."""
+        self._keep_fixed = keep
+        self.private_keep.setVisible(self._private_offered and keep is None)
 
     def _sync_private_tips(self) -> None:
         active = self.private_toggle.isChecked()
@@ -821,7 +831,11 @@ class Composer(QWidget):
             widget.style().polish(widget)
 
     def keep_choice(self) -> str:
-        return self.private_keep.currentData() or "memory"
+        return self._keep_fixed or self.private_keep.currentData() or "memory"
+
+    @property
+    def keep_fixed(self) -> bool:
+        return self._keep_fixed is not None
 
     def focus_input(self) -> None:
         self.input.setFocus(Qt.OtherFocusReason)
