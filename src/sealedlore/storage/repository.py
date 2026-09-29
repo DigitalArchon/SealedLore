@@ -8,7 +8,9 @@ models, and the only place that reads or writes them.
 from __future__ import annotations
 
 import shutil
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -169,8 +171,12 @@ def read_api_log(story_id: str, root: Path | None = None) -> list[dict]:
 
 
 def read_api_log_since(
-    story_id: str, offset: int, root: Path | None = None
-) -> tuple[list[dict], int, int]:
+    story_id: str,
+    offset: int,
+    root: Path | None = None,
+    *,
+    keep: Callable[[Any], Any] | None = None,
+) -> tuple[list[Any], int, int]:
     """Entries appended since byte `offset`: (entries, where they were read
     from, the offset to read from next).
 
@@ -178,20 +184,30 @@ def read_api_log_since(
     only parse what came after them. A half-written last line is left for the
     next read. A file shorter than `offset` (replaced, or a different story)
     reads from the start again.
+
+    Read a line at a time, each entry passed through `keep` as it is parsed,
+    so a caller that wants a few fields never holds the log. Cutting the
+    entries down after reading it whole saved nothing: the process stayed as
+    large as the whole log had made it (~190 MB for a 54 MB log).
     """
     path = story_dir(story_id, root) / "api_log.jsonl"
+    entries: list[Any] = []
     try:
         with path.open("rb") as handle:
             handle.seek(0, 2)
             if handle.tell() < offset:
                 offset = 0
             handle.seek(offset)
-            data = handle.read()
+            end = offset
+            for line in handle:
+                if not line.endswith(b"\n"):
+                    break
+                end += len(line)
+                for record in parse_jsonl_lines([line.decode("utf-8", errors="replace")]):
+                    entries.append(record if keep is None else keep(record))
     except FileNotFoundError:
         return [], 0, 0
-    end = data.rfind(b"\n") + 1
-    entries = parse_jsonl_lines(data[:end].decode("utf-8", errors="replace").splitlines())
-    return entries, offset, offset + end
+    return entries, offset, end
 
 
 def copy_story(story_id: str, *, title: str, root: Path | None = None) -> StoryBundle:

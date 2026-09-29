@@ -47,3 +47,45 @@ from that commit. Checking it takes the GitHub CLI and no rebuild:
 ```bash
 gh attestation verify SealedLore-<version>-x86_64.AppImage --repo DigitalArchon/SealedLore
 ```
+
+## Checking the compiled Python
+
+The AppImage is mounted read-only, so Python can't keep what it compiles:
+whatever isn't compiled when the image is built is compiled again at every
+launch. The build therefore compiles every Python file, the standard library
+and the packages with SealedLore's own, and ships each compiled file
+(`__pycache__/*.pyc`) beside its source.
+
+Python runs the compiled file, not the source. Before it does, it checks that
+the source is the one the compiled file was made from; it does not check that
+the compiled file is what that source compiles to. Someone reading the `.py`
+files inside an AppImage is reading what runs only if the compiled files are
+honest. To check that they are:
+
+```bash
+git clone https://github.com/DigitalArchon/SealedLore && cd SealedLore
+packaging/appimage/verify_bytecode.sh /path/to/the/downloaded.AppImage
+```
+
+It unpacks the image into a temporary folder, compiles every source file
+again the way the build does, and compares each result with the file that
+was shipped, byte for byte. It fails on any compiled file that differs, and
+on any with no source beside it. Of the image it runs the unpacker and
+Python, never the app, and it needs no network.
+
+The image's own Python does the compiling, so this takes that Python's word
+for what source compiles to. To take nobody's, give it a Python of the same
+version that you built or trust (compiled files differ between versions, so
+it must match to the patch number):
+
+```bash
+PYTHON=/path/to/python3.12 packaging/appimage/verify_bytecode.sh /path/to/the/downloaded.AppImage
+```
+
+This covers the Python code only. The image also holds libraries in machine
+code (Python itself, Qt, parts of numpy, pydantic and others), taken from
+their publishers and pinned by checksum; for those, and for the image as a
+whole, rebuild the release and compare checksums as above.
+
+Releases up to 1.0.0b3 shipped only SealedLore's own code compiled. The script
+checks those too, and says how many files have no compiled one.

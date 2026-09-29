@@ -122,6 +122,25 @@ def _text(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
+def usage_fields(entry: Any) -> dict[str, Any]:
+    """A log entry cut down to what `usage_report` reads of it.
+
+    A request entry holds the whole prompt, and the report reads only its
+    model: kept whole for the cost in the status bar, a 54 MB log held ~180 MB
+    for as long as its story was open. The report over these is the report
+    over the entries themselves.
+    """
+    if not isinstance(entry, dict):
+        return {}
+    kept = {key: entry[key] for key in ("kind", "id", "request_log_ref", "usage") if key in entry}
+    if entry.get("aside"):
+        kept["aside"] = True
+    payload = entry.get("payload")
+    if isinstance(payload, dict) and isinstance(payload.get("model"), str):
+        kept["payload"] = {"model": payload["model"]}
+    return kept
+
+
 def usage_report(
     entries: Iterable[dict[str, Any]],
     prices: Mapping[str, ModelPrice] | None = None,

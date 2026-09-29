@@ -46,7 +46,7 @@ from sealedlore.engine.session import (
     TurnShape,
 )
 from sealedlore.engine.tokens import TokenEstimator
-from sealedlore.engine.usage import usage_report
+from sealedlore.engine.usage import usage_fields, usage_report
 from sealedlore.gui.attest_check import attestation_tests
 from sealedlore.gui.banners import OverBudgetBanner, StalenessBanner
 from sealedlore.gui.branch_bar import BranchBar, opening_words
@@ -135,6 +135,10 @@ from sealedlore.storage.scenario import (
 )
 from sealedlore.tree import path_to
 
+# How long after the window shows the tokenizer's warm-up starts: past the
+# first paint, well before anyone has chosen a story.
+WARM_UP_DELAY_MS = 300
+
 
 def _how_it_starts(story: Story) -> dict:
     """What Setup changes about how a playthrough begins (not the description)."""
@@ -203,13 +207,13 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
         self._focus_after_job: str | None = None
         # The API log as read so far (story id, byte offset, entries): the log
         # is append-only, and parsing all of it after every turn grew with it.
+        # Of each entry, only what the cost is worked out from (usage_fields).
         self._log_cache: tuple[str | None, int, list[dict]] = (None, 0, [])
 
         self._build_ui()
         self._build_actions()
-        # tiktoken reads its vocabulary on first use (~0.4s): do it now, off
-        # the GUI thread, rather than while the first story opens.
-        threading.Thread(target=lambda: self.estimator.raw_count("warm up"), daemon=True).start()
+        # Whether the tokenizer's warm-up has been started (showEvent).
+        self._tokenizer_warming = False
         self.stories.refresh()
         # The same no-story state closing a story leaves: the transcript says
         # how to begin, and no Plot page stands for a plot there isn't.
@@ -1722,7 +1726,7 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
         cached_id, offset, entries = self._log_cache
         if cached_id != story_id:
             offset, entries = 0, []
-        new, start, end = read_api_log_since(story_id, offset, root=self.root)
+        new, start, end = read_api_log_since(story_id, offset, root=self.root, keep=usage_fields)
         if start != offset:  # the file was replaced: start over
             entries = []
         entries = entries + new
@@ -3415,6 +3419,17 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
     def showEvent(self, event) -> None:  # noqa: N802 - Qt naming
         super().showEvent(event)
         self._fit_centre_width()
+        if not self._tokenizer_warming:
+            self._tokenizer_warming = True
+            QTimer.singleShot(WARM_UP_DELAY_MS, self, self._warm_tokenizer)
+
+    def _warm_tokenizer(self) -> None:
+        """tiktoken reads its vocabulary on first use (~0.25s, holding the
+        interpreter): off the GUI thread, and once the window is up. Started
+        while the window was being built, it took most of that time from the
+        window's first paint. A story opened meanwhile waits for the rest of
+        the load (tiktoken loads an encoding once)."""
+        threading.Thread(target=lambda: self.estimator.raw_count("warm up"), daemon=True).start()
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt naming
         # The editor's unsaved file gets its own say before the app goes.

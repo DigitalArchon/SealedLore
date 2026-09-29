@@ -19,6 +19,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QEvent  # noqa: E402
 from PySide6.QtWidgets import QApplication, QPushButton  # noqa: E402
 
+from sealedlore.engine.usage import usage_fields, usage_report  # noqa: E402
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.gui.transcript import (  # noqa: E402
     PAGE,
@@ -207,7 +208,10 @@ def test_the_story_cost_matches_a_full_read(app, window: MainWindow, tmp_path: P
         root=tmp_path,
     )
     window._refresh_story_cost()
-    assert window._log_cache[2] == read_api_log(story_id, root=tmp_path)
+    # Kept cut down to what the cost reads (usage_fields), and the same report.
+    full = read_api_log(story_id, root=tmp_path)
+    assert window._log_cache[2] == [usage_fields(entry) for entry in full]
+    assert usage_report(window._log_cache[2]) == usage_report(full)
 
 
 # --- building fast (tools/bench/transcript_bench.py) ------------------------------------

@@ -117,7 +117,10 @@ def read_jsonl(path: Path) -> list[Any]:
     hand edit) is skipped rather than costing every reader the whole log."""
     if not path.exists():
         return []
-    return parse_jsonl_lines(path.read_text(encoding="utf-8").splitlines())
+    # A record ends at its newline and nowhere else: `splitlines` also breaks
+    # at U+2028, U+2029 and U+0085, which JSON leaves unescaped inside a
+    # string, and would cut such a record into pieces that parse as nothing.
+    return parse_jsonl_lines(path.read_text(encoding="utf-8").split("\n"))
 
 
 def parse_jsonl_lines(lines: list[str]) -> list[Any]:

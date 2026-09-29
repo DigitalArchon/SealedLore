@@ -23,8 +23,6 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-import numpy as np
-
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import Node
 
@@ -127,6 +125,10 @@ def cosine_scores(query: Sequence[float], vectors: Sequence[Sequence[float]]) ->
     """Cosine similarity of one query against many vectors."""
     if not vectors:
         return []
+    # Here, not at the top: numpy is ~45 ms and ~13 MB of every launch, and a
+    # story whose lorebook is sent whole, or a chat, never scores a vector.
+    import numpy as np
+
     matrix = np.asarray(vectors, dtype=np.float32)
     target = np.asarray(query, dtype=np.float32)
     if matrix.ndim != 2 or target.shape[0] != matrix.shape[1]:

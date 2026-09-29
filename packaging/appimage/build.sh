@@ -156,10 +156,37 @@ rm -rf "$APPDIR/usr/share/tcltk" "$STDLIB"/{tkinter,idlelib,turtledemo,turtle.py
 # The base's usr/bin links to pip, gone now.
 find "$APPDIR/usr/bin" -xtype l -delete
 find "$APPDIR" -name "__pycache__" -type d -prune -exec rm -rf {} +
+# Every Python file, the standard library and the packages with SealedLore's
+# own: the AppImage is mounted read-only, so what isn't compiled here is
+# compiled again at every launch and never kept (with only SealedLore's
+# compiled, that was more than half the time the imports took).
 # Hash-checked rather than dated, named without the build folder (-s), and in
 # this one process: marshal's output can depend on what the process compiled
-# before, so parallel workers (-j) would make it vary.
-"$PYTHON" -s -m compileall -q --invalidation-mode checked-hash -s "$APPDIR" "$SITE/sealedlore" >/dev/null
+# before, so parallel workers (-j) would make it vary. compileall takes each
+# folder's files in sorted order.
+"$PYTHON" -s -m compileall -q --invalidation-mode checked-hash -s "$APPDIR" "$STDLIB" >/dev/null
+# None left out (a file that doesn't compile stops the build above), and none
+# without its source: Python runs the compiled file, so one with no source
+# beside it to be checked against is code nobody can read.
+uncompiled="$("$PYTHON" -s - "$APPDIR" <<'CHECK'
+import sys
+from importlib.util import cache_from_source
+from pathlib import Path
+
+root = Path(sys.argv[1])
+sources = {path for path in root.rglob("*.py") if path.is_file()}
+compiled = {path for path in root.rglob("*.pyc")}
+expected = {Path(cache_from_source(str(path))) for path in sources}
+for path in sorted(expected - compiled):
+    print(f"not compiled: {path.relative_to(root)}")
+for path in sorted(compiled - expected):
+    print(f"compiled, with no source: {path.relative_to(root)}")
+CHECK
+)"
+if [ -n "$uncompiled" ]; then
+    echo "$uncompiled" >&2
+    exit 1
+fi
 
 log "X11 helper libraries (Debian 11)"
 # Their own folder, the only one AppRun puts on LD_LIBRARY_PATH. usr/lib holds

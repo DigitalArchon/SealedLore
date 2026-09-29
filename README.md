@@ -137,6 +137,12 @@ gh attestation verify SealedLore-<version>-x86_64.AppImage --repo DigitalArchon/
 The build is reproducible, so you can also rebuild a release yourself and
 compare checksums: see [Building and checking the AppImage](docs/building.md).
 
+The AppImage holds every Python file both as source and compiled, and Python
+runs the compiled one. So reading the source inside it tells you what runs
+only if the compiled files are what that source compiles to, which
+`packaging/appimage/verify_bytecode.sh` checks, offline and without a
+rebuild: see [Checking the compiled Python](docs/building.md#checking-the-compiled-python).
+
 ### Linux: from source
 
 Python 3.11 or newer. On Debian, Ubuntu and Mint, X11 also needs
