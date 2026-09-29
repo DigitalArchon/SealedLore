@@ -151,6 +151,13 @@ class ChatWindow:
             if drawing
             else ""
         )
+        making = self._video_counts(self.session.story.id)
+        if making:
+            lost += (
+                f" {making} video{'s' if making != 1 else ''} still being made, already paid "
+                f"for, {'are' if making != 1 else 'is'} lost too: nothing on disk says where "
+                "to fetch them."
+            )
         answer = QMessageBox.question(
             self,
             "Chat kept in memory only",

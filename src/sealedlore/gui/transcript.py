@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 from sealedlore.engine.dice import chip_text
 from sealedlore.gui import theme
 from sealedlore.gui.ref_images import pixmap_of, pixmap_within
+from sealedlore.gui.video_view import PendingVideoWidget, VideoItem, VideoMessageWidget
 from sealedlore.models.aside import Aside
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage
@@ -92,8 +93,9 @@ class PendingPicture:
 # The pictures anchored after a node (None: before the first): a finished
 # one as (record, its file), or one still being drawn.
 # A picture with its bytes (None: its file is missing), or one still being drawn.
+# A video (gui/video_view.VideoItem) comes the same way, done or not.
 PicturesFor = Callable[
-    [str | None], "Sequence[tuple[GeneratedImage, bytes | None] | PendingPicture]"
+    [str | None], "Sequence[tuple[GeneratedImage, bytes | None] | PendingPicture | VideoItem]"
 ]
 
 
@@ -196,6 +198,7 @@ class MessageWidget(QFrame):
     # (node id, +1 or -1): show the neighbouring take.
     variant_requested = Signal(str, int)
     illustrate_requested = Signal(str)
+    video_requested = Signal(str)
     # A simple chat's message kept word for word, or not (engine/chat.py).
     keep_full_requested = Signal(str, bool)
 
@@ -391,6 +394,13 @@ class MessageWidget(QFrame):
             illustrate.setToolTip("Write an image prompt for the moment this passage ends on")
             illustrate.triggered.connect(lambda: self.illustrate_requested.emit(self.node_id))
             self.actions_["illustrate"] = illustrate
+            film = menu.addAction("Video of this passage…")
+            film.setToolTip(
+                "A few seconds of video of the moment this passage ends on. Far dearer than "
+                "a picture: you see the price before anything is sent"
+            )
+            film.triggered.connect(lambda: self.video_requested.emit(self.node_id))
+            self.actions_["video"] = film
         if self._keep_full is not None:
             keep = menu.addAction("Keep in full (never summarise)")
             keep.setCheckable(True)
@@ -921,8 +931,11 @@ class TranscriptView(QScrollArea):
     rewrite_committed = Signal(str, str, str)
     variant_requested = Signal(str, int)
     illustrate_requested = Signal(str)
+    video_requested = Signal(str)
     image_action_requested = Signal(str, str)
     stop_image_requested = Signal(str)
+    # (action, video id): a finished video's menu, or a pending one's button.
+    video_action_requested = Signal(str, str)
     keep_full_requested = Signal(str, bool)
 
     def __init__(self) -> None:
@@ -1130,6 +1143,7 @@ class TranscriptView(QScrollArea):
         widget.default_branch_name = self.default_branch_name
         widget.variant_requested.connect(self.variant_requested)
         widget.illustrate_requested.connect(self.illustrate_requested)
+        widget.video_requested.connect(self.video_requested)
         widget.regenerate_requested.connect(self.regenerate_requested)
         widget.take_back_requested.connect(self.take_back_requested)
         widget.edit_committed.connect(self.edit_committed)
@@ -1140,6 +1154,14 @@ class TranscriptView(QScrollArea):
     def add_picture(self, image: GeneratedImage, data: bytes | None) -> ImageMessageWidget:
         widget = ImageMessageWidget(image, data)
         widget.action_requested.connect(self.image_action_requested)
+        self._place(widget)
+        return widget
+
+    def add_video(self, item: VideoItem) -> QFrame:
+        widget = (
+            VideoMessageWidget(item) if item.record.status == "done" else PendingVideoWidget(item)
+        )
+        widget.action_requested.connect(self.video_action_requested)
         self._place(widget)
         return widget
 
@@ -1177,6 +1199,8 @@ class TranscriptView(QScrollArea):
             for item in pictures_for(anchor) if pictures_for else ():
                 if isinstance(item, tuple):
                     self.add_picture(*item)
+                elif isinstance(item, VideoItem):
+                    self.add_video(item)
                 else:
                     self.add_pending_picture(item.job_id, item.text)
 

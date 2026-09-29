@@ -43,6 +43,9 @@ KIND_LABELS: dict[str, str] = {
     "image_prompt_response": "Image prompts",
     # Priced per picture: the reply's cost, or the listed price (marked).
     "image_response": "Images",
+    "video_prompt_response": "Video prompts",
+    # What the endpoint charged for the video (NanoGPT: on accepting it).
+    "video_response": "Videos",
     # A private scene kept in memory only logs what it cost and nothing else;
     # one kept on disk logs as usual (tagged private).
     "private_response": "Private scenes",

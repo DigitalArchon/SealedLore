@@ -24,12 +24,19 @@ from sealedlore.engine.image_prompt import (
 )
 from sealedlore.engine.prompt import assemble_chat, assemble_question
 from sealedlore.engine.scene_state import log_on_path, scene_at
+from sealedlore.engine.video_prompt import (
+    build_video_question,
+    parse_video_prompt,
+    seconds_words,
+)
 from sealedlore.models.generation import GenerationParams
 from sealedlore.models.image import GeneratedImage, ImageRef, RefUse
 from sealedlore.models.node import Node
+from sealedlore.models.video import GeneratedVideo
 from sealedlore.providers.base import ChatRequest
 from sealedlore.providers.images import ImageClient
 from sealedlore.providers.tee import is_tee
+from sealedlore.providers.videos import VideoClient
 from sealedlore.storage.images import clean_story_images
 from sealedlore.tree import index_nodes, path_to
 
@@ -111,8 +118,6 @@ class ImageRuntime:
         self._tee_guard()
         # In a private scene the private model writes the prompt, from the
         # scene; the author is warned that the picture itself is not private.
-        span = self.open_span
-        path = self.image_path(anchor_id)
         choices = self.image_ref_choices(anchor_id)
         fixed_choices = None
         if fixed is not None:
@@ -134,6 +139,30 @@ class ImageRuntime:
             chat=chat,
             texts=self.texts,
         )
+        text = self._ask_prompt_writer(
+            question, direction=direction, anchor_id=anchor_id, model=model, kind="image_prompt"
+        )
+        draft = parse_image_prompt(text, fixed_choices or choices, max_refs=max_refs)
+        if fixed is not None:
+            # The author's choice stands whatever the writer listed.
+            return ImagePromptDraft(prompt=draft.prompt, references=list(fixed), dropped=[])
+        return draft
+
+    def _ask_prompt_writer(
+        self,
+        question: str,
+        *,
+        direction: str,
+        anchor_id: str | None,
+        model: str | None,
+        kind: str,
+    ) -> str:
+        """Ask the prompt writer `question` on the story's cached prefix (or
+        a chat's), as the storyteller reads it; its reply's text. `kind`
+        names the log entries ("image_prompt", "video_prompt")."""
+        span = self.open_span
+        path = self.image_path(anchor_id)
+        chat = self.story.chat
         split = self.split(path)
         if chat:
             # The chat as its model reads it, the request last. A TEE chat's
@@ -197,22 +226,83 @@ class ImageRuntime:
             "payload": provider.build_payload(request),
         }
         log_ref = (
-            self._log_turn("request", {"image_prompt": True, **body}, span)
+            self._log_turn("request", {kind: True, **body}, span)
             if span is not None
-            else self._log("image_prompt_request", body)
+            else self._log(f"{kind}_request", body)
         )
         text, completed = provider.complete(request)
         answer = {"request_log_ref": log_ref, "text": text, "usage": completed.raw_usage}
         if span is not None:
-            self._log_turn("response", {"image_prompt": True, **answer}, span)
+            self._log_turn("response", {kind: True, **answer}, span)
         else:
-            self._log("image_prompt_response", answer)
+            self._log(f"{kind}_response", answer)
         self.unreported_usage.append(self.priced(completed.usage, model))
-        draft = parse_image_prompt(text, fixed_choices or choices, max_refs=max_refs)
-        if fixed is not None:
-            # The author's choice stands whatever the writer listed.
-            return ImagePromptDraft(prompt=draft.prompt, references=list(fixed), dropped=[])
-        return draft
+        return text
+
+    def write_video_prompt(
+        self,
+        direction: str,
+        *,
+        anchor_id: str | None = None,
+        duration: object = None,
+        audio: bool | None = None,
+        start: RefUse | None = None,
+        end: RefUse | None = None,
+        model: str | None = None,
+    ) -> str:
+        """Ask for a video prompt: one continuous shot of `duration` seconds,
+        with sound or not (`audio`, None when the model has no say), from a
+        start frame and to an end frame when there are. Raises
+        ProviderError or ValueError. Written by the same prompt writer as a
+        picture's (`model`, else the setting, else the story model); a
+        private scene's own model writes regardless."""
+        self._tee_guard()
+        held = self._character(self.story.held_character_id)
+        question = build_video_question(
+            direction=direction,
+            held_name=held.name if held is not None else None,
+            style=self.story.image_style,
+            seconds=seconds_words(duration),
+            audio=audio,
+            start=start,
+            end=end,
+            anchor_is_leaf=anchor_id is None or anchor_id == self.story.active_leaf_id,
+            chat=self.story.chat,
+            texts=self.texts,
+        )
+        text = self._ask_prompt_writer(
+            question, direction=direction, anchor_id=anchor_id, model=model, kind="video_prompt"
+        )
+        return parse_video_prompt(text)
+
+    def video_frame_choices(self, anchor_id: str | None = None) -> list[RefUse]:
+        """Pictures a video may start or end on: the story's reference
+        pictures a model may see (as for a picture), every picture it made,
+        and the last frame of every video it made (to carry a scene on)."""
+        uses = [choice.use for choice in self.image_ref_choices(anchor_id)]
+        if not self.story.chat:
+            for image in self.generated_images():
+                shown = ImageRef(id=image.id, file=image.file, caption=image.prompt[:80])
+                uses.append(_use("picture", image.id, "A picture from this story", shown))
+        for video in self.generated_videos():
+            if video.status == "done" and video.last_frame:
+                shown = ImageRef(
+                    id=f"{video.id}-last", file=video.last_frame, caption="its last frame"
+                )
+                uses.append(_use("picture", video.id, "An earlier video", shown))
+        return uses
+
+    def video_client(self) -> VideoClient | None:
+        """A client for one video job, on the video endpoint and key. None
+        while video has no key of its own (Settings → Video)."""
+        media = self.config.videos()
+        if media is None:
+            return None
+        return VideoClient(media.base_url, media.api_key, api=media.api)
+
+    def generated_videos(self) -> list[GeneratedVideo]:
+        """Read afresh each time: a job may have changed one since."""
+        return self.pictures.videos()
 
     def image_client(self) -> ImageClient | None:
         """A client for one job, on the picture endpoint (Settings → Images;

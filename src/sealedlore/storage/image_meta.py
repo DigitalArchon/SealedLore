@@ -59,9 +59,11 @@ def strip_metadata(data: bytes) -> bytes:
 def stripped_or_same(data: bytes) -> bytes:
     """Stripped when it can be, else as it was: for files coming in, which
     are kept either way. Anything that can't be stripped is refused on its
-    way out."""
+    way out. A video is stripped too (`storage.video_meta`)."""
+    from sealedlore.storage.video_meta import is_mp4, strip_video_metadata
+
     try:
-        return strip_metadata(data)
+        return strip_video_metadata(data) if is_mp4(data) else strip_metadata(data)
     except MetadataError:
         return data
 

@@ -23,14 +23,20 @@ from typing import Any, Protocol
 
 from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.image import GeneratedImage
+from sealedlore.models.video import GeneratedVideo
 from sealedlore.storage.images import (
     IMAGES_FILE,
+    RECORD_FILES,
+    VIDEOS_FILE,
     add_generated_images,
     all_image_files,
     is_safe_relative,
     load_generated_images,
+    load_videos,
+    put_video,
     read_story_file,
     remove_generated_image,
+    remove_video,
     story_path,
     write_story_file,
 )
@@ -45,6 +51,9 @@ class PictureStore(Protocol):
     def images(self) -> list[GeneratedImage]: ...
     def add_images(self, records: Iterable[GeneratedImage]) -> None: ...
     def remove_image(self, image_id: str) -> None: ...
+    def videos(self) -> list[GeneratedVideo]: ...
+    def put_video(self, record: GeneratedVideo) -> None: ...
+    def remove_video(self, video_id: str) -> None: ...
     def all_files(self) -> dict[str, bytes]: ...
     def alive(self) -> bool: ...
     def log(self, kind: str, body: dict[str, Any]) -> str: ...
@@ -84,6 +93,15 @@ class DiskPictures:
     def remove_image(self, image_id: str) -> None:
         remove_generated_image(self.story_id, image_id, self.root)
 
+    def videos(self) -> list[GeneratedVideo]:
+        return load_videos(self.story_id, self.root)
+
+    def put_video(self, record: GeneratedVideo) -> None:
+        put_video(self.story_id, record, self.root)
+
+    def remove_video(self, video_id: str) -> None:
+        remove_video(self.story_id, video_id, self.root)
+
     def all_files(self) -> dict[str, bytes]:
         return all_image_files(self.story_id, self.root)
 
@@ -115,18 +133,23 @@ class MemoryPictures:
         self._lock = threading.Lock()
         self._files: dict[str, bytes] = {}
         self._images: list[GeneratedImage] = []
+        self._videos: list[GeneratedVideo] = []
         self._closed = False
         for relative, data in (files or {}).items():
             if relative == IMAGES_FILE:
                 self._images = [
                     GeneratedImage.model_validate(item) for item in json.loads(data or b"[]")
                 ]
+            elif relative == VIDEOS_FILE:
+                self._videos = [
+                    GeneratedVideo.model_validate(item) for item in json.loads(data or b"[]")
+                ]
             elif is_safe_relative(relative):
                 self._files[relative] = data
 
     @staticmethod
     def _checked(relative: str) -> str:
-        if relative == IMAGES_FILE or not is_safe_relative(relative):
+        if relative in RECORD_FILES or not is_safe_relative(relative):
             raise ValueError(f"not a path inside the story's images: {relative!r}")
         return relative
 
@@ -160,6 +183,28 @@ class MemoryPictures:
                     self._files.pop(image.file, None)
             self._images = [image for image in self._images if image.id != image_id]
 
+    def videos(self) -> list[GeneratedVideo]:
+        with self._lock:
+            return list(self._videos)
+
+    def put_video(self, record: GeneratedVideo) -> None:
+        with self._lock:
+            if self._closed:
+                return
+            ids = [video.id for video in self._videos]
+            if record.id in ids:
+                self._videos[ids.index(record.id)] = record
+            else:
+                self._videos.append(record)
+
+    def remove_video(self, video_id: str) -> None:
+        with self._lock:
+            for video in self._videos:
+                if video.id == video_id:
+                    for relative in (video.file, video.poster, video.last_frame):
+                        self._files.pop(relative, None)
+            self._videos = [video for video in self._videos if video.id != video_id]
+
     def all_files(self) -> dict[str, bytes]:
         """As `storage.images.all_image_files` has them, for a backup."""
         with self._lock:
@@ -167,6 +212,10 @@ class MemoryPictures:
             if self._images:
                 found[IMAGES_FILE] = json.dumps(
                     [image.model_dump() for image in self._images], indent=2
+                ).encode("utf-8")
+            if self._videos:
+                found[VIDEOS_FILE] = json.dumps(
+                    [video.model_dump() for video in self._videos], indent=2
                 ).encode("utf-8")
             return found
 
@@ -181,3 +230,4 @@ class MemoryPictures:
             self._closed = True
             self._files.clear()
             self._images.clear()
+            self._videos.clear()

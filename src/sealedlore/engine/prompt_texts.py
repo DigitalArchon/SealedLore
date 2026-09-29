@@ -34,6 +34,7 @@ LORE = "Lore"
 PRIVATE = "Private scenes"
 CHAT = "Simple chat"
 PICTURES = "Pictures"
+VIDEO = "Video"
 AUTHORING = "Drafting and review"
 
 GROUPS = (
@@ -48,6 +49,7 @@ GROUPS = (
     PRIVATE,
     CHAT,
     PICTURES,
+    VIDEO,
     AUTHORING,
 )
 
@@ -2447,6 +2449,174 @@ _text(
     "Picture prompt: no pictures on file",
     "When no reference pictures exist. The program reads the JSON reply.",
     'Reply with JSON only: {"references": [], "prompt": "..."}',
+)
+
+
+# --- Video -----------------------------------------------------------------
+# A video prompt is not a picture prompt: a picture is one frozen moment, a
+# video is a few seconds of one continuous shot, so the writer is told the
+# length and asked for movement, the camera, and (when the video has sound)
+# what is heard. From a start frame the picture already shows how everyone
+# looks: the prompt is then about what moves.
+
+
+_text(
+    "video.opening.story",
+    VIDEO,
+    "Video prompt: the request",
+    "Opens the request for a video prompt, asked of the prompt writer on the story's "
+    "cached prompt.",
+    "Step outside the story. The author wants a short video of it: one continuous shot "
+    "lasting {seconds}. Write the prompt a video model will be given to make {subject}.",
+    (
+        ("seconds", "the video's length, e.g. '5 seconds'"),
+        ("subject", "Video prompt: what to show"),
+    ),
+)
+
+_text(
+    "video.opening.chat",
+    VIDEO,
+    "Video prompt: the request (chat)",
+    "Opens the request for a video prompt in a simple chat.",
+    "Step outside the conversation. The user wants a short video: one continuous shot "
+    "lasting {seconds}. Write the prompt a video model will be given to make {subject}.",
+    (
+        ("seconds", "the video's length, e.g. '5 seconds'"),
+        ("subject", "Video prompt: what to show (chat)"),
+    ),
+)
+
+_text(
+    "video.subject.story_asked",
+    VIDEO,
+    "Video prompt: what to show (asked for)",
+    "What to show, when the author said what they want.",
+    "what the author asks for, below, at {moment}",
+    (("moment", "Video prompt: the moment"),),
+)
+
+_text(
+    "video.subject.story_unasked",
+    VIDEO,
+    "Video prompt: what to show (the scene)",
+    "What to show, when the author left it to the writer.",
+    "{moment}, in motion: what someone standing there would see happen over those seconds",
+    (("moment", "Video prompt: the moment"),),
+)
+
+_text(
+    "video.moment.last",
+    VIDEO,
+    "Video prompt: the moment (latest)",
+    "The moment shown, for a video of the latest passage.",
+    "the moment the last passage ends on",
+)
+
+_text(
+    "video.moment.earlier",
+    VIDEO,
+    "Video prompt: the moment (earlier)",
+    "The moment shown, for a video of an earlier passage.",
+    "the moment the last passage above ends on (the story continues past it, but show "
+    "only what has happened by then)",
+)
+
+_text(
+    "video.subject.chat_asked",
+    VIDEO,
+    "Video prompt: what to show (chat, asked for)",
+    "What to show in a simple chat, when the user said what they want.",
+    "what the user asks for, below",
+)
+
+_text(
+    "video.subject.chat_unasked",
+    VIDEO,
+    "Video prompt: what to show (chat)",
+    "What to show in a simple chat, when the user left it to the writer.",
+    "what the conversation is about at this point",
+)
+
+_text(
+    "video.rules",
+    VIDEO,
+    "Video prompt: how to write it",
+    "The rules for writing a video prompt, in a story or a chat.",
+    "The video model knows nothing about this, and names mean nothing to it. So:\n"
+    "- Describe everyone and everything shown by what can be seen: apparent age, build, "
+    "face, hair, skin, species, clothing, what they hold; the place, light, time of day "
+    "and mood.\n"
+    "- It is one continuous shot of {seconds}: one action, or a short run of them, that "
+    "fits in that time. No cuts, no change of scene, no montage. Say what moves and how: "
+    "who does what, in what order, how fast or slowly.\n"
+    "- Say what the camera does: how it frames the shot (close-up, full figure, wide) and "
+    "whether it holds still, tracks, pans, pushes in or pulls back. One simple move at "
+    "most.\n"
+    "- Show only what has been established by then. Invent nothing that changes events; "
+    "fill in what was left unsaid (a background, a colour) consistently with it.\n"
+    "- No text or captions on screen.\n"
+    "- One paragraph of plain description in the present tense, {words} words.",
+    (
+        ("seconds", "the video's length, e.g. '5 seconds'"),
+        ("words", "the prompt's length, e.g. '60 to 150'"),
+    ),
+)
+
+_text(
+    "video.audio.on",
+    VIDEO,
+    "Video prompt: with sound",
+    "When the video is made with sound.",
+    "- The video is made with sound: say what is heard (the place's own sounds, "
+    "footsteps, rain, a door). Speech is optional: if someone speaks, give the exact "
+    "words in quotation marks, one short line at most, and say who speaks by how they "
+    "look, never by name.",
+)
+
+_text(
+    "video.audio.off",
+    VIDEO,
+    "Video prompt: without sound",
+    "When the video is made without sound.",
+    "- The video has no sound: don't describe sound or speech.",
+)
+
+_text(
+    "video.start",
+    VIDEO,
+    "Video prompt: from a start frame",
+    "When the video starts from a picture the author chose.",
+    "- The video starts from a picture: {start}. Its first frame is that picture, so "
+    "don't describe again how things look in it beyond saying who and what is where; "
+    "describe what moves and changes from there.",
+    (("start", "what the start picture is of"),),
+)
+
+_text(
+    "video.end",
+    VIDEO,
+    "Video prompt: to an end frame",
+    "When the video ends on a picture the author chose.",
+    "- It ends on a picture: {end}. Describe how things move from the start to that picture.",
+    (("end", "what the end picture is of"),),
+)
+
+_text(
+    "video.style.free",
+    VIDEO,
+    "Video prompt: no style set",
+    "When the story sets no picture style.",
+    "- Style: choose one that suits the story (say, cinematic live action or painted "
+    "animation) and name it in the prompt.",
+)
+
+_text(
+    "video.reply",
+    VIDEO,
+    "Video prompt: the reply",
+    "Ends the request. The program reads the JSON reply.",
+    'Reply with JSON only: {"prompt": "..."}',
 )
 
 

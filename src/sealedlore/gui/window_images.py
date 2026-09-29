@@ -115,15 +115,18 @@ class ImagesWindow:
                         "Play on; it appears here when it's done.",
                     )
                 )
-        return items
+        return items + self._videos_for(anchor)
 
     def refresh_images(self) -> None:
         self._load_images()
+        self._load_videos()
         if self.session is None:
             self.images_panel.set_images([], None, set())
             return
         on_path = {node.id for node in self.session.full_path()}
-        self.images_panel.set_images(self._images, self.session.pictures, on_path)
+        self.images_panel.set_images(
+            self._images, self.session.pictures, on_path, videos=self._videos
+        )
 
     def _refresh_image_views(self) -> None:
         """The Images tab now; the transcript once no passage is streaming into it."""

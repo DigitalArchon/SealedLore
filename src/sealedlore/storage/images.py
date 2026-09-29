@@ -23,6 +23,7 @@ from pathlib import Path, PurePosixPath
 
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, ImageRef
+from sealedlore.models.video import GeneratedVideo
 from sealedlore.storage.atomic import atomic_write_json, open_private, read_json, replace
 from sealedlore.storage.image_meta import MetadataError, strip_metadata
 from sealedlore.storage.paths import story_dir
@@ -30,6 +31,11 @@ from sealedlore.storage.paths import story_dir
 IMAGES_DIR = "images"
 REFS_DIR = "images/refs"
 IMAGES_FILE = "images.json"
+# Videos, their posters and last frames: under images/ so that every path
+# check, backup and memory chat that holds pictures holds them too.
+VIDEOS_DIR = "images/videos"
+VIDEOS_FILE = "videos.json"
+RECORD_FILES = (IMAGES_FILE, VIDEOS_FILE)
 
 MEDIA_TYPES = {
     ".png": "image/png",
@@ -44,7 +50,7 @@ def is_safe_relative(relative: str) -> bool:
 
     On Windows a colon is refused too: "images/a:b.png" names stream b.png of
     a file "a" (NTFS), and "images/C:x" a drive-relative path."""
-    if relative == IMAGES_FILE:
+    if relative in RECORD_FILES:
         return True
     path = PurePosixPath(relative)
     return (
@@ -124,6 +130,50 @@ def remove_generated_image(
     return kept
 
 
+# --- videos --------------------------------------------------------------------
+
+
+def load_videos(story_id: str, root: Path | None = None) -> list[GeneratedVideo]:
+    data = read_json(story_dir(story_id, root) / VIDEOS_FILE, [])
+    return [GeneratedVideo.model_validate(item) for item in data]
+
+
+def save_videos(story_id: str, videos: Iterable[GeneratedVideo], root: Path | None = None) -> None:
+    atomic_write_json(
+        story_dir(story_id, root) / VIDEOS_FILE, [video.model_dump() for video in videos]
+    )
+
+
+def put_video(story_id: str, record: GeneratedVideo, root: Path | None = None) -> None:
+    """Add a video's record to that story's videos.json, or replace it by id."""
+    videos = load_videos(story_id, root)
+    for index, video in enumerate(videos):
+        if video.id == record.id:
+            videos[index] = record
+            break
+    else:
+        videos.append(record)
+    save_videos(story_id, videos, root)
+
+
+def remove_video(story_id: str, video_id: str, root: Path | None = None) -> None:
+    """Drop a record and its files."""
+    videos = load_videos(story_id, root)
+    for video in videos:
+        if video.id == video_id:
+            for relative in (video.file, video.poster, video.last_frame):
+                if relative:
+                    try:
+                        story_path(story_id, relative, root).unlink(missing_ok=True)
+                    except ValueError:
+                        pass
+    save_videos(story_id, [v for v in videos if v.id != video_id], root)
+
+
+def is_video_file(relative: str) -> bool:
+    return relative.startswith(VIDEOS_DIR + "/") or relative == VIDEOS_FILE
+
+
 # --- reference pictures -------------------------------------------------------
 
 
@@ -159,8 +209,12 @@ def reference_files(bundle, root: Path | None = None) -> dict[str, bytes]:
     return found
 
 
-def all_image_files(story_id: str, root: Path | None = None) -> dict[str, bytes]:
-    """Everything under images/ and images.json, for an archive."""
+def all_image_files(
+    story_id: str, root: Path | None = None, *, videos: bool = True
+) -> dict[str, bytes]:
+    """Everything under images/, images.json and videos.json, for an archive.
+    `videos=False` leaves videos and their records out (a backup can go
+    without them: they are megabytes each)."""
     directory = story_dir(story_id, root)
     found: dict[str, bytes] = {}
     images = directory / IMAGES_DIR
@@ -168,9 +222,14 @@ def all_image_files(story_id: str, root: Path | None = None) -> dict[str, bytes]
         for path in sorted(images.rglob("*")):
             if path.is_file() and not path.name.endswith(".tmp"):
                 found[path.relative_to(directory).as_posix()] = path.read_bytes()
-    if (directory / IMAGES_FILE).is_file():
-        found[IMAGES_FILE] = (directory / IMAGES_FILE).read_bytes()
-    return found
+    for name in RECORD_FILES:
+        if (directory / name).is_file():
+            found[name] = (directory / name).read_bytes()
+    return found if videos else without_videos(found)
+
+
+def without_videos(files: dict[str, bytes]) -> dict[str, bytes]:
+    return {relative: data for relative, data in files.items() if not is_video_file(relative)}
 
 
 def clean_story_images(story_id: str, root: Path | None = None) -> list[str]:
@@ -185,6 +244,8 @@ def clean_story_images(story_id: str, root: Path | None = None) -> list[str]:
     for path in sorted(images.rglob("*")):
         if not path.is_file() or path.name.endswith(".tmp"):
             continue
+        if is_video_file(path.relative_to(directory).as_posix()):
+            continue  # stripped as they arrive (engine.videos)
         data = path.read_bytes()
         try:
             clean = strip_metadata(data)
@@ -201,5 +262,6 @@ def copy_image_files(source_id: str, target_id: str, root: Path | None = None) -
     target = story_dir(target_id, root)
     if (source / IMAGES_DIR).is_dir():
         shutil.copytree(source / IMAGES_DIR, target / IMAGES_DIR, dirs_exist_ok=True)
-    if (source / IMAGES_FILE).is_file():
-        shutil.copy2(source / IMAGES_FILE, target / IMAGES_FILE)
+    for name in RECORD_FILES:
+        if (source / name).is_file():
+            shutil.copy2(source / name, target / name)

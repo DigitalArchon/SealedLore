@@ -33,7 +33,7 @@ from sealedlore.models.summary import Summary
 from sealedlore.models.supporting import SupportingCast
 from sealedlore.storage.atomic import atomic_write_json
 from sealedlore.storage.image_meta import stripped_or_same
-from sealedlore.storage.images import IMAGES_FILE, is_safe_relative
+from sealedlore.storage.images import RECORD_FILES, is_safe_relative
 from sealedlore.storage.paths import is_safe_story_id, story_dir
 from sealedlore.storage.repository import StoryBundle, append_api_log, save_story_bundle
 
@@ -110,7 +110,7 @@ def _decoded_files(raw: Any) -> dict[str, bytes]:
             data = base64.b64decode(text, validate=True)
         except (binascii.Error, ValueError):
             continue
-        files[relative] = data if relative == IMAGES_FILE else stripped_or_same(data)
+        files[relative] = data if relative in RECORD_FILES else stripped_or_same(data)
     return files
 
 

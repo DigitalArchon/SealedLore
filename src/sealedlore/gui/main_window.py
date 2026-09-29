@@ -89,6 +89,7 @@ from sealedlore.gui.window_find import FindWindow
 from sealedlore.gui.window_images import ImagesWindow
 from sealedlore.gui.window_private import PrivateWindow
 from sealedlore.gui.window_text import TextSizeWindow
+from sealedlore.gui.window_videos import VideosWindow
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.ids import utc_now_iso
@@ -111,7 +112,7 @@ from sealedlore.storage.archive import (
     restore_archive,
     write_archive,
 )
-from sealedlore.storage.images import reference_files
+from sealedlore.storage.images import is_video_file, reference_files, without_videos
 from sealedlore.storage.paths import data_home, sample_stories, samples_dir, story_dir
 from sealedlore.storage.repository import (
     StoryBundle,
@@ -149,7 +150,9 @@ def _how_it_starts(story: Story) -> dict:
 KEPT_WARNING_SHARE = 0.2
 
 
-class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWindow, QMainWindow):
+class MainWindow(
+    ChatWindow, FindWindow, ImagesWindow, VideosWindow, PrivateWindow, TextSizeWindow, QMainWindow
+):
     generation_requested = Signal()
 
     def __init__(self, *, root: Path | None = None, use_mock: bool = False) -> None:
@@ -342,6 +345,7 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
         self.summaries_panel.edit_committed.connect(self._save_summary)
         self.inspector = ContextInspector()
         self._init_images()
+        self._init_videos()
         self._init_private()
 
         # Scene first, and the page a story opens on: playtesting found the
@@ -516,6 +520,7 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
         )
         self.export_menu.addAction(self.chapter_markdown_action)
         self._image_actions(story_menu)
+        self._video_menu_actions(story_menu)
         story_menu.addSeparator()
         self.usage_action = QAction("&Usage and cost…", self)
         self.usage_action.triggered.connect(self.show_usage)
@@ -1116,6 +1121,7 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
         self.refresh_panels()
         self.right_tabs.setCurrentWidget(self.scene_panel)
         self.refresh_images()
+        self._resume_videos()
         self._apply_background()
         self.reload_transcript()
         self.refresh_summaries()
@@ -1600,17 +1606,31 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
     def export_story_archive(self) -> None:
         if self.session is None:
             return
+        files = self.session.pictures.all_files()
+        video_bytes = sum(len(data) for name, data in files.items() if is_video_file(name))
+        if video_bytes:
+            # Videos are megabytes each, and base64 in a backup a third more.
+            box = QMessageBox(self)
+            box.setWindowTitle("Videos in the backup")
+            box.setText(
+                f"This story's videos come to {video_bytes / 1_000_000:.1f} MB. Put them in "
+                "the backup, or leave them out? Left out, the backup keeps everything else, "
+                "pictures included, and the videos stay here."
+            )
+            keep = box.addButton("With videos", QMessageBox.AcceptRole)
+            leave = box.addButton("Leave videos out", QMessageBox.AcceptRole)
+            box.addButton(QMessageBox.Cancel)
+            box.exec()
+            if box.clickedButton() is leave:
+                files = without_videos(files)
+            elif box.clickedButton() is not keep:
+                return
         path = self._save_path("Export story backup", ARCHIVE_SUFFIX, "SealedLore backups")
         if not path:
             return
         try:
             # From memory for a chat kept there: its log and its pictures.
-            write_archive(
-                path,
-                self.session.bundle_to_save(),
-                self._story_log(),
-                self.session.pictures.all_files(),
-            )
+            write_archive(path, self.session.bundle_to_save(), self._story_log(), files)
         except OSError as exc:
             self._warn_plain("Could not write the story backup", f"{path}: {exc.strerror or exc}")
             return
@@ -3398,6 +3418,7 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
             has_story and not busy and not (self.session and self.session.nodes)
         )
         self._update_image_controls()
+        self._update_video_controls()
         self._update_private_controls()
         if self.in_chat:
             # What only a story has; and nothing written for a memory-only chat.
@@ -3448,7 +3469,11 @@ class MainWindow(ChatWindow, FindWindow, ImagesWindow, PrivateWindow, TextSizeWi
             self.statusBar().showMessage("Stopping — closes when the current response ends")
             event.ignore()
             return
-        if not self._images_allow_close() or not self._private_allows_close():
+        if (
+            not self._images_allow_close()
+            or not self._private_allows_close()
+            or not self._videos_allow_close()
+        ):
             event.ignore()
             return
         self._wait_for_attestation()
