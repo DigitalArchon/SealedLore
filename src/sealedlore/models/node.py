@@ -112,6 +112,10 @@ class NodeMeta(BaseModel):
     # A simple chat's message the author keeps word for word: never folded
     # into a summary, but carried in full after the summary of its part.
     keep_full: bool = False
+    # On a passage: models caught reasoning at length unasked while it was
+    # written or read (engine/reasoning.py). The transcript says so under it,
+    # since that is why the passage was slow to start.
+    reasoning_caught: list[str] = Field(default_factory=list)
 
 
 class Node(BaseModel):

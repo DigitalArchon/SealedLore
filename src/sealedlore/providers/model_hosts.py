@@ -80,6 +80,8 @@ class ModelHosts:
     auto_first_token_ms: float | None = None
     auto_quantization: str | None = None
     hosts: tuple[Host, ...] = field(default_factory=tuple)
+    # The model maker's own host, when NanoGPT lists one ("zai", "moonshot").
+    official: str | None = None
 
     @property
     def available(self) -> tuple[Host, ...]:
@@ -125,6 +127,8 @@ def parse_model_hosts(model: str, data: Mapping[str, Any]) -> ModelHosts:
             )
         )
     auto_quantization = data.get("autoQuantization")
+    baseline = data.get("officialBaseline")
+    official = baseline.get("provider") if isinstance(baseline, Mapping) else None
     return ModelHosts(
         model=model,
         supported=data.get("supportsProviderSelection") is True,
@@ -132,6 +136,7 @@ def parse_model_hosts(model: str, data: Mapping[str, Any]) -> ModelHosts:
         auto_first_token_ms=_number(data.get("autoTtftMs")),
         auto_quantization=auto_quantization if isinstance(auto_quantization, str) else None,
         hosts=tuple(hosts),
+        official=official if isinstance(official, str) else None,
     )
 
 

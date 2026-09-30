@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QPushButton,
     QRadioButton,
     QTreeWidget,
     QTreeWidgetItem,
@@ -31,6 +32,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.routing import PRIORITY_LABELS
+from sealedlore.gui.bad_hosts import bad_hosts
 from sealedlore.gui.model_hosts import hosts_catalog
 from sealedlore.models.route import ModelRoute
 from sealedlore.providers.model_hosts import Host, ModelHosts
@@ -153,6 +155,13 @@ class RouteDialog(QDialog):
         self.status = QLabel()
         self.status.setObjectName("hintLabel")
         self.status.setWordWrap(True)
+        # Hosts marked bad (Help → Model trouble) are shown greyed with why,
+        # and can't be chosen until allowed again.
+        self.allow_button = QPushButton("Allow again")
+        self.allow_button.setToolTip("Let the selected host, marked bad, be chosen again")
+        self.allow_button.setEnabled(False)
+        self.allow_button.clicked.connect(self._allow_again)
+        self.table.itemSelectionChanged.connect(self._sync_allow)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Ok).setText("Use this route")
@@ -171,7 +180,10 @@ class RouteDialog(QDialog):
         layout.addWidget(intro)
         layout.addLayout(top)
         layout.addWidget(self.table, 1)
-        layout.addWidget(self.status)
+        under = QHBoxLayout()
+        under.addWidget(self.status, 1)
+        under.addWidget(self.allow_button, 0, Qt.AlignTop)
+        layout.addLayout(under)
         layout.addWidget(buttons)
 
         self.choices.buttonToggled.connect(lambda *_: self._sync())
@@ -214,6 +226,21 @@ class RouteDialog(QDialog):
     def _usable(self, host: Host) -> bool:
         return host.available and (host.fp8_or_better or not self.fp8.isChecked())
 
+    def _bad(self) -> dict:
+        return bad_hosts().marked(self.model)
+
+    def _sync_allow(self) -> None:
+        item = self.table.currentItem()
+        host_id = item.data(0, Qt.UserRole + 1) if item is not None else None
+        self.allow_button.setEnabled(bool(host_id) and host_id in self._bad())
+
+    def _allow_again(self) -> None:
+        item = self.table.currentItem()
+        host_id = item.data(0, Qt.UserRole + 1) if item is not None else None
+        if host_id:
+            bad_hosts().allow(self.model, host_id)
+            self._show_hosts()
+
     def _show_hosts(self) -> None:
         self.table.setSortingEnabled(False)
         self.table.clear()
@@ -235,10 +262,12 @@ class RouteDialog(QDialog):
             auto.setToolTip(0, "What the subscription's routing does now, as NanoGPT measures it")
             self.table.addTopLevelItem(auto)
             shown = [host for host in hosts.available if self._usable(host)]
+            bad = self._bad()
             for host in shown:
+                marked = bad.get(host.id)
                 row = _HostRow(
                     [
-                        host.name,
+                        f"{host.name} · marked bad" if marked else host.name,
                         host.quantization or "unknown",
                         host.privacy_label,
                         _seconds(host.first_token_ms),
@@ -254,6 +283,12 @@ class RouteDialog(QDialog):
                 row.setData(4, Qt.UserRole, host.tokens_per_second)
                 row.setData(5, Qt.UserRole, host.input_price)
                 row.setData(6, Qt.UserRole, host.output_price)
+                if marked is not None:
+                    when = (marked.at or "")[:10]
+                    why = f": {marked.reason}" if marked.reason else ""
+                    for column in range(len(HOST_COLUMNS)):
+                        row.setForeground(column, self.palette().placeholderText())
+                    row.setToolTip(0, f"Marked bad {when}{why}. Select it and press Allow again.")
                 self.table.addTopLevelItem(row)
             self.table.setSortingEnabled(True)
             self.table.sortByColumn(3, Qt.AscendingOrder)
@@ -275,8 +310,9 @@ class RouteDialog(QDialog):
         self.host.blockSignals(True)
         self.host.clear()
         hosts = self._hosts.available if self._hosts is not None else ()
+        bad = self._bad()
         for host in sorted(hosts, key=lambda h: (h.first_token_ms is None, h.first_token_ms or 0)):
-            if self._usable(host):
+            if self._usable(host) and host.id not in bad:
                 self.host.addItem(host.name, host.id)
         index = self.host.findData(current) if current else -1
         if index < 0 and current and not self._hosts:
@@ -292,7 +328,7 @@ class RouteDialog(QDialog):
             self.radios["subscription"].setChecked(True)
             return
         index = self.host.findData(host_id)
-        if index >= 0:
+        if index >= 0:  # a host marked bad isn't in the list
             self.host.setCurrentIndex(index)
             self.radios["host"].setChecked(True)
 

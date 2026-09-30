@@ -96,6 +96,18 @@ def encrypted_counterpart(model_id: str, ids) -> str | None:
     return next((i for i in ids if i.startswith("private/") and _key(i) == key), None)
 
 
+def private_alternatives(model_id: str, ids) -> list[str]:
+    """The other TEE and end-to-end encrypted versions of the same model:
+    what a private model can move to when its one host is slow (Help → Model
+    trouble). The encrypted twin first."""
+    if not model_id.startswith(("TEE/", "private/")):
+        return []
+    key = _key(model_id)
+    same = [i for i in ids if i != model_id and i.startswith(("TEE/", "private/"))]
+    same = [i for i in same if _key(i) == key]
+    return sorted(dict.fromkeys(same), key=lambda i: (not i.startswith("private/"), i))
+
+
 E2EE_NOTE = (
     "End-to-end encrypted: every message is sealed on this machine to a key only the "
     "model's attested enclave holds. nano-gpt relays ciphertext; it sees your account, "

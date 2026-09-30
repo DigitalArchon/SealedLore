@@ -14,6 +14,7 @@ part of the window, and what each feature does. The README's
 - [Running the app](#running-the-app)
 - [Getting around](#getting-around)
 - [Models](#models)
+- [When a model misbehaves](#when-a-model-misbehaves)
 - [Setting up a story](#setting-up-a-story)
 - [Drafting a story, and reviewing its settings](#drafting-a-story-and-reviewing-its-settings)
 - [Changing the prompts (advanced)](#changing-the-prompts-advanced)
@@ -450,8 +451,8 @@ possible**, which is also the fastest:
 - A model that reasons only when asked (Claude, DeepSeek) is asked for
   nothing. Asking such a model for "low" would switch its thinking on.
 - A model that reasons at length anyway is caught doing it, and asked for
-  its lowest level from then on. When that happens the status bar
-  says so, since that first reply may have been slow to start (Kimi K3
+  its lowest level from then on. When that happens a note under the
+  passage says so, since that reply may have been slow to start (Kimi K3
   thought for 25 seconds at its own default, and 5 at its lowest), and
   Settings → Generation lists the models caught. The check is repeated a
   week later, in case the model has changed.
@@ -534,6 +535,56 @@ simple chat, and belongs to that chat. Routes never apply to `TEE/` or
 role on its route, so the same model on two routes shows as two rows. Each
 host's privacy terms are its own; on NanoGPT's site your account can require
 hosts that keep nothing, which then applies to every route.
+
+## When a model misbehaves
+
+NanoGPT runs most open models on several hosts, and they don't all behave
+alike: one may be overloaded, one may have the model think far longer than
+it should whatever you ask, and some serve a model at lower precision than
+they claim. Hosts come and go, so SealedLore doesn't keep a list of good and
+bad ones. Instead, the **Model trouble** menu under Help has two checks you
+can run when something seems wrong.
+
+**Help → Model trouble → The model takes too long before it writes…**
+Choose which model to check (the story model, or the one behind the scene
+read, the plot and so on). It sends the same prompt to your current route and
+a few other hosts: the model maker's own, when NanoGPT lists it, and the
+cheapest at FP8 or better, since those are what NanoGPT's routing picks. Each
+gets three runs, since one reply can mislead. You can tick other hosts, and
+choose between a built-in test prompt (nothing of yours) and your story's last
+prompt. The report says which it is:
+
+- **The host reasons far more than the others**: it has the model think at
+  length whatever it's asked. Another host is better.
+- **The host is slow but reasons like the others**: it's overloaded.
+- **Every host reasons at length**: it's the model. A lower reasoning level
+  in Settings → Generation may help.
+- **Your route is as quick as the others**: the wait is likely your prompt.
+  Run the check again with it.
+
+**Help → Model trouble → The model's writing has got worse…** sends your
+story's last prompt to your current route and a few other hosts, once each,
+preferring hosts that keep nothing. The replies are shown side by side with
+the hosts hidden (Reply A, B, C…) until you pick the one you like best or
+press **Reveal hosts**.
+
+In both, **Use this host** sends that model's calls to the host from now on (a
+route, as Route… beside the model sets it), and **Mark as bad…** keeps a
+host from ever being offered when you choose one by hand. The route dialog
+shows it greyed with your reason, and **Allow again** takes the mark off.
+Marking a host bad doesn't stop NanoGPT's own routing from using it: asking
+NanoGPT to avoid a host bills the call pay-as-you-go, even on the
+subscription.
+
+What each check costs is shown before you run it: every host you pick is
+billed pay-as-you-go, even for a model your subscription includes. Your
+story's prompt only goes out after a warning saying how much of it there is
+and which hosts keep prompts. In a memory-only chat the warning also says that
+the hosts are not bound by that: the conversation will then exist on their
+servers. A private scene's prompt, or a TEE or encrypted model's, never goes
+to another host. Those models usually have one host, so the check offers
+their equally private alternatives on the built-in prompt instead, or says
+that trying other hosts would mean playing outside private mode.
 
 ## Setting up a story
 

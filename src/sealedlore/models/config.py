@@ -212,6 +212,14 @@ class ModelReasoning(BaseModel):
     unasked_at: str | None = None
 
 
+class BadHost(BaseModel):
+    """A host the author marked bad for one model (Help → Model trouble): it
+    is never offered as a host to choose, until allowed again."""
+
+    reason: str = ""
+    at: str | None = None
+
+
 class Config(BaseModel):
     @field_validator("text_scale")
     @classmethod
@@ -295,6 +303,10 @@ class Config(BaseModel):
     reasoning_side: ReasoningLevel = "least"
     # Per model: its listed reasoning levels and whether it reasons unasked.
     model_reasoning: dict[str, ModelReasoning] = Field(default_factory=dict)
+    # Per model, the hosts the author marked bad (by NanoGPT's host id). Only
+    # manual choice avoids them: nothing is sent to exclude them, since any
+    # provider field bills pay-as-you-go even on the subscription.
+    bad_hosts: dict[str, dict[str, BadHost]] = Field(default_factory=dict)
 
     # Listed prices per model, fetched from the endpoint's models list and
     # refreshed weekly. Used only when a response doesn't report its cost.

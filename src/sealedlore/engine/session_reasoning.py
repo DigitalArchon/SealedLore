@@ -19,11 +19,13 @@ from sealedlore.engine.reasoning import (
     level_for,
     listed,
     params_for,
+    reasoning_for,
     reasons_unasked,
 )
 from sealedlore.ids import utc_now_iso
 from sealedlore.models.config import ModelReasoning
-from sealedlore.models.generation import GenerationParams
+from sealedlore.models.generation import GenerationParams, ReasoningConfig
+from sealedlore.models.node import Node
 from sealedlore.providers.base import ChatRequest, ProviderError, StreamCompleted
 from sealedlore.providers.tee import is_tee
 
@@ -93,6 +95,11 @@ class ReasoningRuntime:
             facts = self.reasoning_facts(model)
         return params_for(self.config, kind, model, facts, **fixed)
 
+    def reasoning_sent(self, kind: CallKind, model: str) -> ReasoningConfig:
+        """What a call of `kind` to `model` would ask, from what is known now
+        (nothing is fetched: for the window's tools)."""
+        return reasoning_for(level_for(self.config, kind), model, self._known_reasoning(model))
+
     def story_params(self, model: str, **fixed: Any) -> GenerationParams:
         """A story-model turn's parameters: the author's generation settings
         and their story reasoning level."""
@@ -120,9 +127,16 @@ class ReasoningRuntime:
             self._caught_reasoning.append(model)
         self._save_config()
 
-    def reasoning_notices(self) -> list[str]:
+    def reasoning_notices(self, passage: Node | None = None) -> list[str]:
         """What to tell the author about models caught reasoning unasked since
-        last asked, once each."""
+        last asked, once each. With `passage`, they are kept on it too, for
+        the transcript to show under it."""
         with self._reasoning_lock:
             caught, self._caught_reasoning = self._caught_reasoning, []
-        return [caught_note(model) for model in dict.fromkeys(caught)]
+        models = list(dict.fromkeys(caught))
+        if models and passage is not None:
+            passage.meta.reasoning_caught = list(
+                dict.fromkeys([*passage.meta.reasoning_caught, *models])
+            )
+            self.save()
+        return [caught_note(model) for model in models]

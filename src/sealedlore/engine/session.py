@@ -605,6 +605,10 @@ class StorySession(
         """The model a role's calls go to, its fallbacks followed."""
         return self._role_in_use(role)[1]
 
+    def route_role(self, role: str) -> str:
+        """The role whose route a role's calls take, its fallbacks followed."""
+        return self._role_in_use(role)[0]
+
     def route_text(self, role: str) -> str | None:
         """The role's route as it is sent ("Fastest first word · FP8+"), or
         None when its calls go on NanoGPT's own routing or can't be routed."""
@@ -1830,9 +1834,10 @@ class StorySession(
             self._check_tee(self.last_result.node)
         if completed is not None and completed.finish_reason == "length":
             yield SessionNotice(cut_off_notice(request.params.max_tokens, completed))
-        # A model caught reasoning though asked for nothing: said at once, so
-        # the slow start reads as the model's, not the app's.
-        for note in self.reasoning_notices():
+        # A model caught reasoning though asked for nothing: said at once, and
+        # kept under the passage, so the slow start reads as the model's.
+        written = self.last_result.node if self.last_result is not None else None
+        for note in self.reasoning_notices(written):
             yield SessionNotice(note)
 
     def _finalize(

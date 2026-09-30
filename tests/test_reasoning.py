@@ -180,9 +180,15 @@ def test_a_model_that_reasons_unasked_is_caught_said_once_and_asked_for_low(
     assert len(caught) == 1 and "lowest reasoning level" in caught[0]
     assert load_config(root=tmp_path).model_reasoning["moonshotai/kimi-k3"].unasked_at
 
+    # Kept under the passage it slowed, for the transcript to show.
+    caught_on = [n for n in session.nodes if n.meta.reasoning_caught]
+    assert [n.meta.reasoning_caught for n in caught_on] == [["moonshotai/kimi-k3"]]
+    assert caught_on[0].kind == "assistant"
+
     notes = [e.text for e in session.send(turn()) if isinstance(e, SessionNotice)]
     assert provider.payloads[-1]["reasoning"] == {"enabled": True, "effort": "low"}
     assert not any("reasoned" in note for note in notes), "said once, not every turn"
+    assert session.nodes[-1].meta.reasoning_caught == []
 
 
 def test_a_little_reasoning_unasked_is_left_alone(tmp_path: Path, story, cast):

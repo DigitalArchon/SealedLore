@@ -30,6 +30,7 @@ from sealedlore.engine.tokens import TokenEstimator
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.config import ModelPrice, ProviderConfig
 from sealedlore.models.generation import GenerationParams, ReasoningConfig
+from sealedlore.models.node import Usage
 from sealedlore.providers.base import (
     ChatProvider,
     ChatRequest,
@@ -83,6 +84,12 @@ class SpeedTarget:
     route: dict[str, Any] = field(default_factory=dict)
     route_label: str = ""
     reasoning: ReasoningConfig = field(default_factory=ReasoningConfig)
+    # A prompt of its own, instead of the one short request (the Help tools'
+    # host checks, engine/host_check.py), with its own limit; `key` says which
+    # host and run a result belongs to.
+    messages: tuple[PromptMessage, ...] | None = None
+    max_tokens: int = MAX_TOKENS
+    key: str = ""
 
     @property
     def model(self) -> str:
@@ -118,6 +125,19 @@ class SpeedResult:
     finish_reason: str | None = None
     error: str | None = None
     stopped: bool = False
+    # The answer itself, the reasoning text's length (the reported count can
+    # lie: NanoGPT reported 0 while Sonnet 4.6's thinking streamed), and the
+    # prompt's size as billed.
+    text: str = ""
+    reasoning_chars: int = 0
+    prompt_tokens: int = 0
+    usage: Usage | None = None
+
+    @property
+    def reasoning_estimate(self) -> int:
+        """Tokens spent reasoning: the reported count or the streamed text at
+        ~4 characters a token, whichever is larger."""
+        return max(self.reasoning_tokens or 0, self.reasoning_chars // 4)
 
     @property
     def ok(self) -> bool:
@@ -253,8 +273,10 @@ def run_speed_test(
     attested: float | None = None,
     route: dict[str, Any] | None = None,
     reasoning: ReasoningConfig | None = None,
+    messages: Sequence[PromptMessage] | None = None,
+    max_tokens: int = MAX_TOKENS,
 ) -> SpeedResult:
-    """Send the one short request and time it. Never raises: a failure, an
+    """Send the one short request (or `messages`) and time it. Never raises: a failure, an
     empty answer and a Stop are results too. With `attest` off the enclave,
     if the model has one, was attested already (`attest_first`), in
     `attested` seconds."""
@@ -270,17 +292,21 @@ def run_speed_test(
             model=model,
             # The route as the role would send it (engine/routing.py).
             extra_body=dict(route or {}),
-            messages=[PromptMessage(role="user", parts=(ContentPart(text=PROMPT),))],
+            messages=list(messages)
+            if messages
+            else [PromptMessage(role="user", parts=(ContentPart(text=PROMPT),))],
             params=GenerationParams(
-                max_tokens=MAX_TOKENS, reasoning=reasoning or ReasoningConfig()
+                max_tokens=max_tokens, reasoning=reasoning or ReasoningConfig()
             ),
         )
         sent = clock()
         first_reasoning = first_text = last_text = None
+        reasoning_chars = 0
         chunks: list[str] = []
         completed = StreamCompleted()
         for event in provider.stream(request):
             if isinstance(event, ReasoningDelta):
+                reasoning_chars += len(event.text)
                 if first_reasoning is None and event.text:
                     first_reasoning = clock() - sent
             elif isinstance(event, TextDelta):
@@ -309,6 +335,9 @@ def run_speed_test(
             attest_seconds=attest_seconds,
             finish_reason=completed.finish_reason,
             error=f"It answered with no text{spent}.",
+            reasoning_chars=reasoning_chars,
+            prompt_tokens=completed.usage.prompt_tokens,
+            usage=completed.usage,
         )
     tokens, estimated = _answer_tokens(text, completed, first_reasoning is not None, estimator)
     # The first piece arrived *at* the first word, so the time from there to
@@ -335,4 +364,8 @@ def run_speed_test(
         cost=cost,
         cost_estimated=cost_estimated,
         finish_reason=completed.finish_reason,
+        text=text,
+        reasoning_chars=reasoning_chars,
+        prompt_tokens=usage.prompt_tokens,
+        usage=usage,
     )

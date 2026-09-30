@@ -72,6 +72,23 @@ def role_in_use(role: str, own: dict[str, str | None]) -> str:
     return role
 
 
+def config_role_model(config: Config, role: str) -> tuple[str, str]:
+    """(the role whose model and route a call uses, that model), from the
+    config alone: with no story open (Help → Model trouble)."""
+    provider = config.active_provider()
+    story_model = (provider.model if provider is not None else "") or ""
+    own = {
+        "summarisation": config.summarization_model,
+        "scene": config.scene_model,
+        "plot": config.plot_model,
+        "lore": config.lore_model,
+        "authoring": config.authoring_model,
+        "image_prompt": config.image_prompt_model,
+    }
+    used = role_in_use(role, own)
+    return used, (story_model if used == "story" else own[used] or story_model)
+
+
 def config_route(config: Config, role: str, model: str) -> dict[str, Any]:
     """`route_body` for a call made with no story open (a premise draft):
     the role's route, or its fallback's when its own model is blank."""

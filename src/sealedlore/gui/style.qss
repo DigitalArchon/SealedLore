@@ -301,6 +301,15 @@ QDockWidget::title {
   padding-top: 6px;
 }
 
+#messageNote {
+  color: @warning;
+  font-size: 13px;
+  background: @warning_bg;
+  border: 1px solid @warning_border;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
 #placeholder {
   color: @text_placeholder;
   padding: 48px 24px;

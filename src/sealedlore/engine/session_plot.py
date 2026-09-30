@@ -237,7 +237,8 @@ class PlotRuntime:
         """The reads after a passage (`_read_after_turn`), then a note for any
         model they caught reasoning though asked for nothing."""
         yield from self._read_after_turn()
-        for note in self.reasoning_notices():
+        passage = self.last_result.node if self.last_result is not None else None
+        for note in self.reasoning_notices(passage):
             yield SessionNotice(note)
 
     def _read_after_turn(self) -> Iterator[SessionNotice]:

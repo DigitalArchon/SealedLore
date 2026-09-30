@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.dice import chip_text
+from sealedlore.engine.reasoning import caught_note
 from sealedlore.gui import theme
 from sealedlore.gui.ref_images import pixmap_of, pixmap_within
 from sealedlore.gui.video_view import PendingVideoWidget, VideoItem, VideoMessageWidget
@@ -332,6 +333,18 @@ class MessageWidget(QFrame):
             self.usage = QLabel(line)
             self.usage.setObjectName("messageUsage")
             layout.addWidget(self.usage)
+
+    def add_note(self, text: str) -> None:
+        """A line under the passage that can't be missed: why it was slow."""
+        note = TextBody(text)
+        note.setTextFormat(Qt.PlainText)
+        note.setObjectName("messageNote")
+        note.setWordWrap(True)
+        index = self.layout_.indexOf(self.usage) if self.usage is not None else -1
+        if index < 0:
+            self.layout_.addWidget(note)
+        else:
+            self.layout_.insertWidget(index, note)
 
     def _add_variant_cycler(self, row: QHBoxLayout, position: int, count: int) -> None:
         """‹ 2 / 4 › — swiping between takes is moving along the tree (§2.2, §10)."""
@@ -1342,6 +1355,8 @@ class TranscriptView(QScrollArea):
             widget.setToolTip(
                 "The approved summary of a private scene: all any other model knows of it."
             )
+        for model in node.meta.reasoning_caught:
+            widget.add_note("⚠ " + caught_note(model))
         return widget
 
     # --- paging -------------------------------------------------------------

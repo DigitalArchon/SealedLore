@@ -39,7 +39,7 @@ from sealedlore.engine.plot_md import PLOT_SUFFIX, ParsedPlotFile, parse_plot_ma
 from sealedlore.engine.prompt import TurnRequest
 from sealedlore.engine.prompt_edits import texts_in_force
 from sealedlore.engine.reasoning import config_params, config_reasoning
-from sealedlore.engine.routing import HostPrice, config_route
+from sealedlore.engine.routing import HostPrice, config_role_model, config_route
 from sealedlore.engine.scene_update import SceneProposal
 from sealedlore.engine.session import (
     SessionNotice,
@@ -49,6 +49,7 @@ from sealedlore.engine.session import (
 from sealedlore.engine.tokens import TokenEstimator
 from sealedlore.engine.usage import usage_fields, usage_report
 from sealedlore.gui.attest_check import attestation_tests
+from sealedlore.gui.bad_hosts import bad_hosts
 from sealedlore.gui.banners import OverBudgetBanner, StalenessBanner
 from sealedlore.gui.branch_bar import BranchBar, opening_words
 from sealedlore.gui.cast_panel import CastPanel
@@ -59,6 +60,12 @@ from sealedlore.gui.inspector import ContextInspector
 from sealedlore.gui.lore_panel import LorePanel
 from sealedlore.gui.model_hosts import hosts_catalog
 from sealedlore.gui.model_picker import ModelCatalog, pick_model, pick_model_and_route
+from sealedlore.gui.model_trouble import (
+    TROUBLE_ROLE_NAMES,
+    ModelTroubleDialog,
+    TroubleContext,
+    TroubleRole,
+)
 from sealedlore.gui.plot_editor import PlotEditorWindow
 from sealedlore.gui.plot_panel import ClockDialog, PlotPanel
 from sealedlore.gui.prompt_editor import PromptEditorDialog
@@ -96,14 +103,18 @@ from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.ids import utc_now_iso
 from sealedlore.models.authoring import SettingsChange, SettingsReview
 from sealedlore.models.character import Character
+from sealedlore.models.config import on_nanogpt
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID, Node
+from sealedlore.models.route import ROUTE_ROLES, ModelRoute
 from sealedlore.models.scene import SceneState
 from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
 from sealedlore.providers.base import ChatProvider, UnconfiguredProvider
 from sealedlore.providers.embeddings import EmbeddingBackend, OpenAICompatibleEmbeddings
 from sealedlore.providers.mock import MockChatProvider
+from sealedlore.providers.model_hosts import Host
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
+from sealedlore.providers.tee import is_tee
 from sealedlore.storage.archive import (
     ARCHIVE_FORMAT,
     ARCHIVE_SUFFIX,
@@ -168,6 +179,8 @@ class MainWindow(
         # A settings file that can't be read must not keep the app from
         # starting: it is set aside and the author is told (below).
         self.config, config_notice = load_config_or_recover(root=root)
+        # Hosts marked bad (Help → Model trouble) live in the config.
+        bad_hosts().attach(self.config, lambda: save_config(self.config, root=self.root))
         self.session: StorySession | None = None
         self._provider: ChatProvider | None = None
         self._embeddings: EmbeddingBackend | None = None
@@ -558,6 +571,19 @@ class MainWindow(
         )
         samples_action.triggered.connect(self._open_samples)
         help_menu.addAction(samples_action)
+        trouble_menu = help_menu.addMenu("Model &trouble")
+        slow_action = QAction("The model takes too long before it writes…", self)
+        slow_action.setStatusTip(
+            "Time your current route against other hosts: is it the host, the model or the prompt?"
+        )
+        slow_action.triggered.connect(lambda: self.open_model_trouble("slow"))
+        trouble_menu.addAction(slow_action)
+        worse_action = QAction("The model's writing has got worse…", self)
+        worse_action.setStatusTip(
+            "Send your story's last prompt to a few hosts and compare the replies blind"
+        )
+        worse_action.triggered.connect(lambda: self.open_model_trouble("worse"))
+        trouble_menu.addAction(worse_action)
         about_action = QAction("&About SealedLore", self)
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
@@ -926,6 +952,8 @@ class MainWindow(
         self.show_map(False)
         self.close_find()
         if self.session is not None:
+            if self.session.memory_only:
+                bad_hosts().forget_session()
             self.session.close(wait_seconds=0)
             self.session.save()
         self.session = None
@@ -2469,6 +2497,91 @@ class MainWindow(
         self.refresh_panels()
 
     # --- authoring: drafting from a premise, reviewing settings ---------------
+
+    # --- Help → Model trouble -------------------------------------------------------
+
+    def _trouble_context(self) -> TroubleContext:
+        """Each distinct model and route as play uses them now, and whether the
+        story's last prompt may go to other hosts (and if not, why)."""
+        endpoint = self.config.active_provider()
+        session = self.session
+        roles: list[TroubleRole] = []
+        if session is not None and session.in_private:
+            # Nothing reaches the main endpoint while a scene is open.
+            span = session.open_span
+            model = span.model if span is not None else ""
+            roles = [
+                TroubleRole(
+                    "story", "Private model", model, {}, session.reasoning_sent("story", model)
+                )
+            ]
+        else:
+            groups: dict[tuple[str, str], list[str]] = {}
+            for role in ROUTE_ROLES:
+                if session is not None:
+                    used, model = session.route_role(role), session.role_model(role)
+                else:
+                    used, model = config_role_model(self.config, role)
+                if model:
+                    groups.setdefault((used, model), []).append(TROUBLE_ROLE_NAMES[role])
+            for (used, model), names in groups.items():
+                kind = "story" if used == "story" else "side"
+                if session is not None:
+                    route = session.route_for(used, model)
+                    reasoning = session.reasoning_sent(kind, model)
+                else:
+                    route = config_route(self.config, used, model)
+                    reasoning = config_reasoning(self.config, kind, model)
+                roles.append(TroubleRole(used, ", ".join(names), model, route, reasoning))
+        prompt, tokens, why = None, 0, ""
+        if session is None:
+            why = "Open a story first: this uses what its storyteller was last sent."
+        elif session.in_private:
+            why = "A private scene is open: nothing from it goes to any model but the private one."
+        elif is_tee(session.model):
+            why = "This chat's model is a TEE or encrypted model: its prompts go to no other host."
+        elif session.last_prompt is None:
+            why = "Send a turn first: this uses what the storyteller was last sent."
+        else:
+            prompt = tuple(session.last_prompt.messages)
+            tokens = session.last_prompt.budget.total
+        return TroubleContext(
+            endpoint=endpoint,
+            roles=roles,
+            on_nanogpt=endpoint is not None and on_nanogpt(endpoint.base_url),
+            prices=dict(self.config.model_prices),
+            story_prompt=prompt,
+            story_prompt_tokens=tokens,
+            story_prompt_why=why or TroubleContext.story_prompt_why,
+            memory_only=session is not None and session.memory_only,
+            private_ids=[m for m in (self.catalog.models or {}) if is_tee(m)],
+            use_host=self._use_host,
+        )
+
+    def open_model_trouble(self, mode: str) -> ModelTroubleDialog | None:
+        """Help → Model trouble: is it the host, the model, or the prompt?"""
+        if self._needs_provider():
+            return None
+        context = self._trouble_context()
+        if not context.roles:
+            self._warn_plain("No model to check", "Choose a story model in Settings first.")
+            return None
+        bad_hosts().keep = not context.memory_only
+        dialog = ModelTroubleDialog(context, mode, self)  # type: ignore[arg-type]
+        self._trouble_dialog = dialog
+        dialog.exec()
+        return dialog
+
+    def _use_host(self, role: str, model: str, host: Host) -> None:
+        """A host chosen in Help → Model trouble becomes the role's route."""
+        route = ModelRoute(priority="host", host=host.id, host_model=model, fp8=host.fp8_or_better)
+        if role == "story" and self.session is not None and self.session.story.chat:
+            self.session.story.defaults.main_route = route
+            self.session.save()
+        else:
+            self.config.model_routes[role] = route
+            save_config(self.config, root=self.root)
+        self._update_controls()
 
     def _needs_provider(self) -> bool:
         """True (after telling the author) when there is no endpoint to call."""

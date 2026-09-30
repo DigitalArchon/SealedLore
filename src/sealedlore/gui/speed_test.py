@@ -118,6 +118,8 @@ class _Run(QObject):
                 attested=attested,
                 route=target.route,
                 reasoning=target.reasoning,
+                messages=target.messages,
+                max_tokens=target.max_tokens,
             )
         except Exception as exc:  # noqa: BLE001 - shown, never fatal
             return SpeedResult(model=target.model, error=str(exc))
