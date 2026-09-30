@@ -672,7 +672,7 @@ someone not in the cast) is listed rather than guessed at.
 **Story → Review settings…** Say what isn't working, for example "too much
 action, not enough dialogue". The model reviews the story's settings (world,
 style, cast and supporting characters, lore, outcome mode, world activity,
-the models, the generation settings and the budget) and the instructions the
+the models and the budget, with your generation settings) and the instructions the
 storyteller actually receives. You choose how many exchanges
 from the story it sees as examples, from none to all of them: each is your turn
 and the reply to it. By default it sees the last three. The dialog shows about

@@ -126,6 +126,14 @@ Have fun!
 - **Costs**: per passage, per session and per story.
 - **Routes**: on NanoGPT, choose which host serves each model (the fastest,
   the cheapest, or one you pick), and see whether the choice was followed.
+- **Quick replies**: models are asked to reason as little as they allow by
+  default (Settings → Generation, for every story), and one caught thinking
+  at length anyway is noted under the passage and asked for less from then
+  on. When a model gets slow or its writing gets worse, the two checks under
+  Help → Model trouble → The model takes too long before it writes… and
+  Help → Model trouble → The model's writing has got worse… see whether its
+  host is to blame, compare other hosts, and let you switch host or mark a
+  bad one.
 - **Pictures and videos** of the story in its Media tab, the videos played in
   place, and a line above the story that always says where it is kept and
   which model and route it is on.
