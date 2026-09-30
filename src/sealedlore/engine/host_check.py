@@ -113,37 +113,25 @@ def choices(
 
 
 def default_picks(
-    candidates: Sequence[Candidate],
-    *,
-    floor: bool = True,
-    count: int = DEFAULT_OTHERS,
-    prefer_private: bool = False,
+    candidates: Sequence[Candidate], *, floor: bool = True, count: int = DEFAULT_OTHERS
 ) -> list[str]:
     """Which to try unless the author ticks otherwise: the current route,
-    the maker's own host (the reference, whatever its precision), then the
-    cheapest at FP8 or better, since NanoGPT's routing picks the cheapest.
-    `prefer_private` (the story's own prompt is going out) puts hosts that
-    keep nothing first."""
+    then hosts that keep nothing whenever any are listed (the author, Sept
+    30 2026: always the zero-retention ones), the maker's own first if it is
+    one, then the cheapest at FP8 or better, since NanoGPT's routing picks
+    the cheapest. With no such host, any host, the maker's own first,
+    whatever its precision: it is the reference."""
     picks = [c.key for c in candidates if c.current]
-    official = [c.key for c in candidates if c.official]
-    picks += official[:1]
+    hosts = [c for c in candidates if c.host is not None]
+    keeping_nothing = [c for c in hosts if c.host.privacy == "zdr"]
+    pool = keeping_nothing or hosts
+    official = [c for c in pool if c.official][:1]
     others = sorted(
-        (
-            c
-            for c in candidates
-            if c.host is not None
-            and not c.official
-            and (c.host.fp8_or_better or not floor)
-            and c.key not in picks
-        ),
-        key=lambda c: (
-            prefer_private and c.host.privacy != "zdr",
-            c.host.input_price is None,
-            c.host.input_price or 0.0,
-        ),
+        (c for c in pool if not c.official and (c.host.fp8_or_better or not floor)),
+        key=lambda c: (c.host.input_price is None, c.host.input_price or 0.0),
     )
-    picks += [c.key for c in others[: max(0, count - len(official[:1]))]]
-    return picks
+    chosen = [*official, *others][:count]
+    return picks + [c.key for c in chosen]
 
 
 # --- the built-in test prompt ---------------------------------------------------

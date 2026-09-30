@@ -104,12 +104,28 @@ def test_the_current_route_comes_first_and_hosts_marked_bad_are_left_out():
     assert found[1].route == {"provider": {"only": ["zai"], "allow_fallbacks": False}}
 
 
-def test_the_default_hosts_are_the_makers_own_then_the_cheapest_at_fp8_or_better():
+def test_the_default_hosts_keep_nothing_the_makers_own_then_the_cheapest_at_fp8_or_better():
     picks = default_picks(choices(HOSTS, {}, bad=set()), count=3)
     assert picks == ["", "zai", "sail", "morph"], "cheapfp4 is below the floor"
-    # With the story's own prompt going out, hosts that keep nothing first.
-    private = default_picks(choices(HOSTS, {}, bad=set()), count=4, prefer_private=True)
-    assert "scx" in private and "novita" not in private, "Novita keeps prompts"
+    # Always the hosts that keep nothing, when there are any (the author).
+    picks = default_picks(choices(HOSTS, {}, bad=set()), count=5)
+    assert "novita" not in picks and picks[-1] == "scx", "Novita keeps prompts"
+    keeping = ModelHosts(
+        model=GLM,
+        official="zai",
+        hosts=(host("zai", 1.47, privacy="no_training"), host("sail", 0.21)),
+    )
+    assert default_picks(choices(keeping, {}, bad=set())) == ["", "sail"], "not the maker's"
+    # No host keeps nothing: the maker's own first, then the cheapest.
+    none_private = ModelHosts(
+        model=GLM,
+        official="zai",
+        hosts=(
+            host("zai", 1.47, privacy="logs_training"),
+            host("novita", 0.82, privacy="no_training"),
+        ),
+    )
+    assert default_picks(choices(none_private, {}, bad=set())) == ["", "zai", "novita"]
 
 
 def test_the_built_in_prompt_is_a_real_turn_that_no_run_answers_from_anothers_cache():
@@ -288,7 +304,15 @@ def test_the_slow_check_names_the_host_and_can_route_to_the_best_or_mark_one_bad
     ctx = context()
     dialog = ModelTroubleDialog(ctx, "slow", runner=runner)
     picked = [c.key for c in dialog.picked()]
-    assert picked == ["", "zai", "morph", "sail", "novita"]
+    assert picked == ["", "zai", "morph", "sail", "scx"], "only hosts that keep nothing"
+    # Ticked first, the current route at the top; any column sorts.
+    shown = [dialog.hosts.topLevelItem(i) for i in range(dialog.hosts.topLevelItemCount())]
+    ticks = [item.checkState(0) == Qt.Checked for item in shown]
+    assert shown[0].data(0, Qt.UserRole) == "" and ticks == sorted(ticks, reverse=True)
+    dialog.hosts.sortByColumn(3, Qt.AscendingOrder)
+    prices = [dialog.hosts.topLevelItem(i).text(3) for i in range(len(shown))]
+    assert prices[-1] == "", "the current route has no price of its own: last"
+    assert prices[:-1] == sorted(prices[:-1], key=float), "by price, as numbers"
     assert "about $" in dialog.cost.text() and "pay-as-you-go" in dialog.cost.text()
     dialog.run()
     assert len(runner.targets) == 5 * 3

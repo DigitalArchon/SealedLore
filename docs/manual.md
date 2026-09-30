@@ -548,11 +548,13 @@ can run when something seems wrong.
 **Help → Model trouble → The model takes too long before it writes…**
 Choose which model to check (the story model, or the one behind the scene
 read, the plot and so on). It sends the same prompt to your current route and
-a few other hosts: the model maker's own, when NanoGPT lists it, and the
-cheapest at FP8 or better, since those are what NanoGPT's routing picks. Each
-gets three runs, since one reply can mislead. You can tick other hosts, and
-choose between a built-in test prompt (nothing of yours) and your story's last
-prompt. The report says which it is:
+a few other hosts. Whenever any host keeps nothing it is given, only those are
+ticked to begin with: the model maker's own if it is one, then the cheapest at
+FP8 or better, since those are what NanoGPT's routing picks. Each gets three
+runs, since one reply can mislead. The list shows the ticked hosts first and
+sorts by any column you click; tick others as you like, and choose between a
+built-in test prompt (nothing of yours) and your story's last prompt. The
+results sort the same way, the quickest first. The report says which it is:
 
 - **The host reasons far more than the others**: it has the model think at
   length whatever it's asked. Another host is better.
@@ -564,7 +566,8 @@ prompt. The report says which it is:
 
 **Help → Model trouble → The model's writing has got worse…** sends your
 story's last prompt to your current route and a few other hosts, once each,
-preferring hosts that keep nothing. The replies are shown side by side with
+chosen the same way (hosts that keep nothing, ticked first). The replies are
+shown side by side with
 the hosts hidden (Reply A, B, C…) until you pick the one you like best or
 press **Reveal hosts**.
 

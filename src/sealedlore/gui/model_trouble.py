@@ -132,6 +132,34 @@ class TroubleContext:
     use_host: Callable[[str, str, Host], None] | None = None
 
 
+# What a row sorts by in a column, when not its text: a number (None last).
+SORT_ROLE = Qt.UserRole + 1
+
+
+class _SortRow(QTreeWidgetItem):
+    """Sorts by the number behind a figure, unknowns last; the host list's
+    first column puts the current route first, then the ticked hosts, so the
+    author sees at once what will be tried (the author, Sept 30 2026)."""
+
+    def _key(self, column: int) -> tuple:
+        if column == 0:
+            current = self.data(0, Qt.UserRole) == ""
+            ticked = self.checkState(0) == Qt.Checked
+            return (0 if current else 1 if ticked else 2, self.text(0).lower())
+        value = self.data(column, SORT_ROLE)
+        if value is not None or self.text(column) == "":
+            return (value is None, value or 0.0)
+        return (False, self.text(column).lower())
+
+    def __lt__(self, other: QTreeWidgetItem) -> bool:
+        column = self.treeWidget().sortColumn() if self.treeWidget() else 0
+        mine, theirs = self._key(column), other._key(column)  # type: ignore[attr-defined]
+        try:
+            return mine < theirs
+        except TypeError:  # a number against a word: compare as text
+            return str(mine) < str(theirs)
+
+
 def _money(value: float) -> str:
     return f"${value:.3f}" if value < 1 else f"${value:.2f}"
 
@@ -186,6 +214,8 @@ class ModelTroubleDialog(QDialog):
         self.hosts.setRootIsDecorated(False)
         self.hosts.header().setSectionResizeMode(0, QHeaderView.Stretch)
         self.hosts.setMaximumHeight(190)
+        self.hosts.setSortingEnabled(True)
+        self.hosts.header().setSortIndicatorShown(True)
         self.hosts.itemChanged.connect(lambda *_: self._sync())
 
         self.builtin = QRadioButton(
@@ -242,6 +272,8 @@ class ModelTroubleDialog(QDialog):
         self.table.setHeaderLabels(list(COLUMNS))
         self.table.setRootIsDecorated(False)
         self.table.header().setSectionResizeMode(len(COLUMNS) - 1, QHeaderView.Stretch)
+        self.table.setSortingEnabled(True)
+        self.table.header().setSortIndicatorShown(True)
         self.table.itemSelectionChanged.connect(self._sync_actions)
         self.table.setVisible(mode == "slow")
         self.replies = QTabWidget()
@@ -370,9 +402,7 @@ class ModelTroubleDialog(QDialog):
             bad = bad_hosts().marked(role.model)
             self._candidates = choices(self._hosts, role.route, bad=bad)
             picks = default_picks(
-                self._candidates,
-                count=DEFAULT_OTHERS if self.mode == "slow" else 3,
-                prefer_private=self.mode == "worse",
+                self._candidates, count=DEFAULT_OTHERS if self.mode == "slow" else 3
             )
             if self._hosts is not None:
                 shown = len(self._candidates) - 1
@@ -385,10 +415,11 @@ class ModelTroubleDialog(QDialog):
                     "try. The check can still time it."
                 )
         self.hosts.blockSignals(True)
+        self.hosts.setSortingEnabled(False)
         self.hosts.clear()
         for candidate in self._candidates:
             host = candidate.host
-            item = QTreeWidgetItem(
+            item = _SortRow(
                 [
                     candidate.label,
                     (host.quantization or "unknown") if host else "",
@@ -398,11 +429,18 @@ class ModelTroubleDialog(QDialog):
                 ]
             )
             item.setData(0, Qt.UserRole, candidate.key)
+            if host is not None:
+                item.setData(3, SORT_ROLE, host.input_price)
+                item.setData(4, SORT_ROLE, host.output_price)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(0, Qt.Checked if candidate.key in picks else Qt.Unchecked)
             if candidate.current:
                 item.setFlags(item.flags() & ~Qt.ItemIsUserCheckable & ~Qt.ItemIsEnabled)
             self.hosts.addTopLevelItem(item)
+        # Ticked first, the current route at the top, until the author
+        # sorts by another column.
+        self.hosts.setSortingEnabled(True)
+        self.hosts.sortByColumn(0, Qt.AscendingOrder)
         self.hosts.blockSignals(False)
         for column in range(1, len(HOST_COLUMNS)):
             self.hosts.resizeColumnToContents(column)
@@ -559,12 +597,13 @@ class ModelTroubleDialog(QDialog):
     def _show_table(self) -> None:
         found = verdict(self._summaries)
         self.verdict.setText(found.text)
+        self.table.setSortingEnabled(False)
         self.table.clear()
         best_item = None
         for summary in self._summaries:
             reasoning = summary.reasoning
             worst = summary.worst_reasoning
-            item = QTreeWidgetItem(
+            item = _SortRow(
                 [
                     summary.candidate.label,
                     f"{_secs(summary.first_word)} (worst {_secs(summary.worst_first_word)})"
@@ -578,9 +617,20 @@ class ModelTroubleDialog(QDialog):
                 ]
             )
             item.setData(0, Qt.UserRole, summary.candidate.key)
+            for column, value in (
+                (1, summary.first_word),
+                (2, reasoning),
+                (3, summary.rate),
+                (4, len(summary.answered)),
+                (5, summary.cost),
+            ):
+                item.setData(column, SORT_ROLE, value)
             self.table.addTopLevelItem(item)
             if summary.candidate.key == found.best:
                 best_item = item
+        # Quickest first word first, until the author sorts by another column.
+        self.table.setSortingEnabled(True)
+        self.table.sortByColumn(1, Qt.AscendingOrder)
         for column in range(len(COLUMNS) - 1):
             self.table.resizeColumnToContents(column)
         if best_item is not None:
