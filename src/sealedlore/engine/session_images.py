@@ -29,7 +29,6 @@ from sealedlore.engine.video_prompt import (
     parse_video_prompt,
     seconds_words,
 )
-from sealedlore.models.generation import GenerationParams
 from sealedlore.models.image import GeneratedImage, ImageRef, RefUse
 from sealedlore.models.node import Node
 from sealedlore.models.video import GeneratedVideo
@@ -216,7 +215,7 @@ class ImageRuntime:
             # None in a private scene: its prompt is the private model's.
             extra_body=self.route_for("image_prompt", model),
             messages=prompt.messages,
-            params=GenerationParams(max_tokens=IMAGE_PROMPT_MAX_TOKENS, temperature=0.7),
+            params=self.side_params(model, max_tokens=IMAGE_PROMPT_MAX_TOKENS, temperature=0.7),
             use_cache_control=self._cache_control_for(model) and model == self.model,
             cache_ttl=self.config.cache_ttl,
         )

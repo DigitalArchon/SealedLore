@@ -30,7 +30,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 from urllib.parse import urlparse
 
-from sealedlore.engine.archival import render_chunk, split_path, summary_params
+from sealedlore.engine.archival import render_chunk, split_path
 from sealedlore.engine.chat import CONDENSED_LEAD as CHAT_CONDENSED_LEAD
 from sealedlore.engine.chat import (
     build_chat_handoff_messages,
@@ -53,7 +53,6 @@ from sealedlore.engine.prompt import (
 from sealedlore.engine.retrieval import lore_layout
 from sealedlore.engine.scene_state import log_on_path
 from sealedlore.ids import utc_now_iso
-from sealedlore.models.generation import GenerationParams
 from sealedlore.models.node import NARRATOR_SPEAKER_ID, Node, NodeMeta, Usage
 from sealedlore.models.private import PrivateKeep, PrivateSpan
 from sealedlore.models.summary import Summary
@@ -372,7 +371,7 @@ class PrivateRuntime:
         request = ChatRequest(
             model=span.model,
             messages=self._condense_messages(previous, self._private_text(chunk)),
-            params=summary_params(span.model, max_tokens=PRIVATE_CONDENSE_MAX_TOKENS),
+            params=self.side_params(span.model, max_tokens=PRIVATE_CONDENSE_MAX_TOKENS),
         )
         log_ref = self._log_turn(
             "request",
@@ -477,7 +476,7 @@ class PrivateRuntime:
             model=self.model,
             extra_body=self.route_for("story"),
             messages=build("\n\n".join(p for p in parts if p), words, texts=self.texts),
-            params=GenerationParams(max_tokens=HANDOFF_MAX_TOKENS),
+            params=self.side_params(self.model, max_tokens=HANDOFF_MAX_TOKENS),
         )
         log_ref = self._log("handoff_request", {"payload": self.provider.build_payload(request)})
         text, completed = self.provider.complete(request)
@@ -581,7 +580,7 @@ class PrivateRuntime:
         request = ChatRequest(
             model=span.model,
             messages=self._summary_messages(scene_text),
-            params=summary_params(span.model, max_tokens=PRIVATE_SUMMARY_MAX_TOKENS),
+            params=self.side_params(span.model, max_tokens=PRIVATE_SUMMARY_MAX_TOKENS),
         )
         log_ref = self._log_turn(
             "request",

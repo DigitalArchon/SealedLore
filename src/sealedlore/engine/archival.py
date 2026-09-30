@@ -29,10 +29,8 @@ from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.rules import render_history_node
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.character import Character
-from sealedlore.models.generation import GenerationParams, ReasoningConfig
 from sealedlore.models.node import Node
 from sealedlore.models.summary import Summary
-from sealedlore.providers.tee import is_tee
 
 # §5.2: the oldest ten *exchanges* — an author turn and the passage answering
 # it — go into one chapter summary.
@@ -357,22 +355,3 @@ def chapter_numbers(path_summaries: Sequence[Summary]) -> dict[str, int]:
         numbers[summary.id] = count + 1
         count += len(summary.merged_from) or 1
     return numbers
-
-
-# Low reasoning for a TEE model's summaries. GLM 5.3 reasons at length before a
-# summary it hardly needs to think about: live (Sept 26 2026) a private
-# scene's ~100-word exit summary took 37s on TEE/glm-5.3-flash (1,386 tokens)
-# and 107s on private/glm-5-3-flash (3,523 of its 4,000-token limit); with low
-# effort, 10s and 9s, and the summaries as good. Non-reasoning TEE models
-# (gemma-4-31b-it, deepseek-v3.2) were unaffected by it. Only TEE models: a
-# story's summariser is chosen for the job, and asking a hybrid model for
-# reasoning could switch it on.
-LIGHT_REASONING = ReasoningConfig(enabled=True, effort="low")
-
-
-def summary_params(model: str, *, max_tokens: int | None = None) -> GenerationParams:
-    """The generation parameters for a summary, condensing or merge call."""
-    params = GenerationParams() if max_tokens is None else GenerationParams(max_tokens=max_tokens)
-    if is_tee(model):
-        params.reasoning = LIGHT_REASONING.model_copy()
-    return params

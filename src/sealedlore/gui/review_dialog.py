@@ -450,6 +450,8 @@ class ReviewResultDialog(QDialog):
         frame.setObjectName("changeRow")
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(10, 8, 10, 8)
+        if change.kind == "generation":
+            return self._suggestion(frame, layout, change)
         label = describe(change)
         if self._read_only:
             label += "  ·  applied" if applied else "  ·  not applied"
@@ -475,6 +477,30 @@ class ReviewResultDialog(QDialog):
         if change.kind != "lore_disable":
             before = change.before if change.before is not None else current_value(bundle, change)
             layout.addWidget(_before_after(before, change.value))
+        return frame
+
+    def _suggestion(self, frame: QFrame, layout: QVBoxLayout, change: SettingsChange) -> QWidget:
+        """A generation setting: the author's for every story, so the review
+        only suggests it. No tick box: it is made by hand, or not at all."""
+        title = QLabel(f"Suggestion: {describe(change)}")
+        title.setTextFormat(Qt.PlainText)
+        title.setWordWrap(True)
+        layout.addWidget(title)
+        how = QLabel(
+            "Not applied here: generation settings are yours for every story. "
+            "Change it in File → Settings → Generation if you agree."
+        )
+        how.setTextFormat(Qt.PlainText)
+        how.setObjectName("hintLabel")
+        how.setWordWrap(True)
+        layout.addWidget(how)
+        if change.reason:
+            reason = QLabel(change.reason)
+            reason.setTextFormat(Qt.PlainText)
+            reason.setObjectName("hintLabel")
+            reason.setWordWrap(True)
+            layout.addWidget(reason)
+        layout.addWidget(_before_after(change.before, change.value))
         return frame
 
     def _tick(self, checked: bool) -> None:

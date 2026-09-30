@@ -101,8 +101,14 @@ class MockChatProvider(ChatProvider):
         }
         if self.usage.cost:
             raw["cost"] = self.usage.cost
-        completed = StreamCompleted(usage=self.usage, finish_reason="stop", raw_usage=raw)
+        completed = StreamCompleted(
+            usage=self.usage,
+            finish_reason="stop",
+            raw_usage=raw,
+            reasoning_tokens=len(self.reasoning or "") // 4,
+        )
         self._report_route(request, completed)
+        self._report_reasoning(request, completed)
         yield completed
 
 

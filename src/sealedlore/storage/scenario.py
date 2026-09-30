@@ -170,10 +170,10 @@ def fresh_playthrough(
     """The same setup as `source`, unplayed: a new story with a fresh id.
 
     Restart and "Duplicate settings" both come through here. Everything a
-    scenario carries comes along, and so do the model, budget and generation
-    settings a scenario file deliberately leaves out: same machine, same
-    author. Reviewed settings are in one of those two places, so a review's
-    changes survive a restart. `files` are the reference pictures, which
+    scenario carries comes along, and so do the model and budget a scenario
+    file deliberately leaves out: same machine, same author. Reviewed
+    settings are in one of those two places, so a review's changes survive a
+    restart. `files` are the reference pictures, which
     come along; pictures generated in play don't.
     """
     bundle = bundle_from_scenario(scenario_from_bundle(source, files), title=title)

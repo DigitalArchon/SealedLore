@@ -108,6 +108,10 @@ def build_chat_payload(
         if params.reasoning.effort:
             reasoning["effort"] = params.reasoning.effort
         payload["reasoning"] = reasoning
+    elif params.reasoning.effort == "none":
+        # DeepSeek's "no reasoning at all". An explicit {"enabled": false} is
+        # never sent: GLM 5.3 and Opus 5.5 refuse it (engine/reasoning.py).
+        payload["reasoning"] = {"effort": "none"}
 
     payload.update(provider_extra_body or {})
     payload.update(request.extra_body)

@@ -297,10 +297,13 @@ class PrivateModeProvider(OpenAICompatibleProvider):
     def sibling(self) -> PrivateModeProvider:
         if self._sibling is None:
             self._sibling = self._twin()
+        self._sibling.reasoning_watch = self.reasoning_watch
         return self._sibling
 
     def detached(self) -> PrivateModeProvider:
-        return self._twin()
+        twin = self._twin()
+        twin.reasoning_watch = self.reasoning_watch
+        return twin
 
     def _twin(self) -> PrivateModeProvider:
         return PrivateModeProvider(
@@ -443,7 +446,15 @@ def _missing_seal(error: ProviderError) -> bool:
 
 # --- the request body ------------------------------------------------------------------
 
-_GLM_EFFORT = {"low": "low", "minimal": "low", "medium": "high", "high": "high", "max": "max"}
+_GLM_EFFORT = {
+    "none": "low",
+    "minimal": "low",
+    "low": "low",
+    "medium": "high",
+    "high": "high",
+    "xhigh": "max",
+    "max": "max",
+}
 
 
 def shape_body(payload: dict[str, Any], request: ChatRequest, upstream: str) -> dict[str, Any]:
@@ -474,7 +485,7 @@ def shape_body(payload: dict[str, Any], request: ChatRequest, upstream: str) -> 
                 else ("high" if str(effort).lower() == "medium" else "xhigh")
             )
     elif upstream.startswith("gemma"):
-        # Low effort (engine/archival.LIGHT_REASONING, for summaries) means
+        # Low effort (a TEE model's "as low as possible", engine/reasoning.py) means
         # as little as the model allows: for Gemma, none unless it's the
         # :thinking model.
         light = str(effort).lower() in ("low", "minimal")

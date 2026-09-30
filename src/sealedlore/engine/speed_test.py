@@ -25,10 +25,11 @@ from typing import Any
 from urllib.parse import urlparse
 
 from sealedlore.engine.pricing import estimate_cost
+from sealedlore.engine.reasoning import CallKind
 from sealedlore.engine.tokens import TokenEstimator
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.config import ModelPrice, ProviderConfig
-from sealedlore.models.generation import GenerationParams
+from sealedlore.models.generation import GenerationParams, ReasoningConfig
 from sealedlore.providers.base import (
     ChatProvider,
     ChatRequest,
@@ -68,6 +69,9 @@ class Role:
     fallback: str | None = None
     route: dict[str, Any] = field(default_factory=dict)
     route_label: str = ""
+    # Whose reasoning level the role's calls take (engine/reasoning.py): the
+    # story model's turns, or every other call. The test sends what play does.
+    kind: CallKind = "side"
 
 
 @dataclass(frozen=True)
@@ -78,6 +82,7 @@ class SpeedTarget:
     roles: tuple[str, ...]
     route: dict[str, Any] = field(default_factory=dict)
     route_label: str = ""
+    reasoning: ReasoningConfig = field(default_factory=ReasoningConfig)
 
     @property
     def model(self) -> str:
@@ -126,18 +131,28 @@ class SpeedResult:
         return self.last_text - self.first_text
 
 
-def _endpoint_key(settings: ProviderConfig, route: dict[str, Any]) -> tuple[str, str, str]:
+def _endpoint_key(
+    settings: ProviderConfig, route: dict[str, Any], reasoning: ReasoningConfig
+) -> tuple[str, str, str, str]:
     parsed = urlparse(settings.base_url.strip())
     where = f"{parsed.scheme}://{(parsed.hostname or '').lower()}:{parsed.port}{parsed.path}"
-    return where.rstrip("/"), settings.model, json.dumps(route, sort_keys=True)
+    return (
+        where.rstrip("/"),
+        settings.model,
+        json.dumps(route, sort_keys=True),
+        reasoning.model_dump_json(),
+    )
 
 
-def plan_targets(roles: Sequence[Role]) -> list[SpeedTarget]:
+def plan_targets(
+    roles: Sequence[Role],
+    reasoning_for: Callable[[CallKind, str], ReasoningConfig] | None = None,
+) -> list[SpeedTarget]:
     """The distinct models to test, in the order their first use is listed,
     each with every role it serves. A blank role takes the model of the role
     it falls back to, and that role's route; one with no model and no
-    fallback is left out. The same model on two routes is two targets: the
-    comparison worth seeing."""
+    fallback is left out. The same model on two routes, or asked for two
+    reasoning levels, is two targets: the comparison worth seeing."""
     by_name = {role.name: role for role in roles}
 
     def resolved(role: Role, seen: tuple[str, ...] = ()) -> Role | None:
@@ -148,17 +163,25 @@ def plan_targets(roles: Sequence[Role]) -> list[SpeedTarget]:
             return None
         return resolved(parent, (*seen, role.name))
 
-    found: dict[tuple[str, str, str], tuple[ProviderConfig, list[str], Role]] = {}
+    found: dict[tuple[str, str, str, str], tuple[ProviderConfig, list[str], Role]] = {}
     for role in roles:
         source = resolved(role)
         if source is None or source.endpoint is None:
             continue
         settings = source.endpoint.model_copy(update={"model": source.model.strip()})
-        key = _endpoint_key(settings, source.route)
+        reasoning = reasoning_for(role.kind, settings.model) if reasoning_for else ReasoningConfig()
+        key = _endpoint_key(settings, source.route, reasoning)
         found.setdefault(key, (settings, [], source))[1].append(role.name)
     return [
-        SpeedTarget(settings, tuple(names), route=source.route, route_label=source.route_label)
-        for settings, names, source in found.values()
+        SpeedTarget(
+            settings,
+            tuple(names),
+            route=source.route,
+            route_label=source.route_label,
+            reasoning=reasoning,
+        )
+        for (*_key, reasoning_json), (settings, names, source) in found.items()
+        for reasoning in (ReasoningConfig.model_validate_json(reasoning_json),)
     ]
 
 
@@ -229,6 +252,7 @@ def run_speed_test(
     attest: bool = True,
     attested: float | None = None,
     route: dict[str, Any] | None = None,
+    reasoning: ReasoningConfig | None = None,
 ) -> SpeedResult:
     """Send the one short request and time it. Never raises: a failure, an
     empty answer and a Stop are results too. With `attest` off the enclave,
@@ -247,7 +271,9 @@ def run_speed_test(
             # The route as the role would send it (engine/routing.py).
             extra_body=dict(route or {}),
             messages=[PromptMessage(role="user", parts=(ContentPart(text=PROMPT),))],
-            params=GenerationParams(max_tokens=MAX_TOKENS),
+            params=GenerationParams(
+                max_tokens=MAX_TOKENS, reasoning=reasoning or ReasoningConfig()
+            ),
         )
         sent = clock()
         first_reasoning = first_text = last_text = None

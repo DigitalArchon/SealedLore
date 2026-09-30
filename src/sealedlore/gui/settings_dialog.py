@@ -28,6 +28,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.reasoning import LEVEL_LABELS, CallKind, reasoning_for, reasons_unasked
+from sealedlore.engine.reasoning import describe as describe_reasoning
 from sealedlore.engine.routing import describe, routable, route_body
 from sealedlore.engine.speed_test import Role, SpeedTarget, plan_targets
 from sealedlore.gui.attest_check import AttestationButton
@@ -59,7 +61,12 @@ from sealedlore.models.config import (
     recommended_models,
     require_https,
 )
-from sealedlore.models.generation import GenerationParams
+from sealedlore.models.generation import (
+    REASONING_LEVELS,
+    GenerationParams,
+    ReasoningConfig,
+    ReasoningLevel,
+)
 from sealedlore.models.route import ModelRoute
 from sealedlore.models.story import Story
 from sealedlore.providers.context_probe import detect_context
@@ -85,6 +92,14 @@ LORE_SELECTORS = (
     ("Jev before each turn", "jev"),
     ("Similarity and keywords", "similarity"),
 )
+
+
+def _note_label() -> QLabel:
+    label = QLabel()
+    label.setObjectName("hintLabel")
+    label.setWordWrap(True)
+    label.setTextFormat(Qt.PlainText)
+    return label
 
 
 def _scrolled(page: QWidget) -> QScrollArea:
@@ -132,8 +147,7 @@ class SettingsDialog(QDialog):
         self.tabs = QTabWidget()
         self.tabs.addTab(_scrolled(self._endpoint_tab()), "Endpoint")
         self.tabs.addTab(_scrolled(self._models_tab()), "Models")
-        if story is not None:
-            self.tabs.addTab(_scrolled(self._generation_tab()), "Generation")
+        self.tabs.addTab(_scrolled(self._generation_tab()), "Generation")
         # Always: most of it is app-wide, and it used to be reachable (and
         # saved) only while a story was open.
         self.tabs.addTab(_scrolled(self._context_tab()), "Context")
@@ -411,21 +425,29 @@ class SettingsDialog(QDialog):
         require_https(url)
         main = ProviderConfig(name="speed test", base_url=url, api_key=self.api_key.text())
 
-        def role(name: str, field: ModelField, fallback: str | None = None) -> Role:
+        def role(
+            name: str, field: ModelField, fallback: str | None = None, kind: CallKind = "side"
+        ) -> Role:
             # Each field's route, as its role sends it (engine/routing.py).
             model = field.text().strip()
             route = field.effective_route()
             return Role(
-                name, field.text(), main, fallback, route_body(route, model), describe(route)
+                name,
+                field.text(),
+                main,
+                fallback,
+                route_body(route, model),
+                describe(route),
+                kind=kind,
             )
 
-        roles = [role("Story", self.model)]
+        roles = [role("Story", self.model, kind="story")]
         own = (self.story.defaults.main_model or "").strip() if self.story is not None else ""
         if own and own != self.model.text().strip():
             # A chat's own route is its own; a story's model takes the Story route.
             route = self.story.defaults.main_route if self.story.chat else self.model.route
             body = route_body(route, own) if routable(url, own) else {}
-            roles.append(Role("This story", own, main, None, body, describe(route)))
+            roles.append(Role("This story", own, main, None, body, describe(route), kind="story"))
         roles += [
             role("Summarisation", self.summarization_model, "Story"),
             role("Authoring", self.authoring_model, "Story"),
@@ -436,8 +458,9 @@ class SettingsDialog(QDialog):
         ]
         private = self._private_test_settings()
         if private is not None and private.model.strip():
-            roles.append(Role("Private", private.model, private))
-        return plan_targets(roles)
+            roles.append(Role("Private", private.model, private, kind="story"))
+        # The levels as they stand in the Generation tab, saved or not.
+        return plan_targets(roles, reasoning_for=self._sent_to)
 
     def _test_speed(self) -> None:
         try:
@@ -478,8 +501,9 @@ class SettingsDialog(QDialog):
         return text
 
     def _generation_tab(self) -> QWidget:
-        assert self.story is not None
-        params = self.story.defaults.generation
+        """For every story: it was each story's own, and so could not be set
+        with no story open (the author, Sept 30 2026)."""
+        params = self.config.generation
         widget = QWidget()
         form = QFormLayout(widget)
 
@@ -492,13 +516,19 @@ class SettingsDialog(QDialog):
         self.stop = QLineEdit(", ".join(params.stop))
         self.stop.setPlaceholderText("comma-separated")
 
-        self.reasoning_enabled = QCheckBox("Request reasoning")
-        self.reasoning_enabled.setChecked(params.reasoning.enabled)
-        self.reasoning_effort = QComboBox()
-        self.reasoning_effort.addItems(["low", "medium", "high"])
-        if params.reasoning.effort:
-            self.reasoning_effort.setCurrentText(params.reasoning.effort)
+        self.reasoning_story = self._level_combo(self.config.reasoning_story)
+        self.reasoning_side = self._level_combo(self.config.reasoning_side)
+        self.reasoning_story_note = _note_label()
+        self.reasoning_side_note = _note_label()
+        self.reasoning_caught = _note_label()
+        self.reasoning_story.currentIndexChanged.connect(self._show_reasoning)
+        self.reasoning_side.currentIndexChanged.connect(self._show_reasoning)
+        self.model.textChanged.connect(self._show_reasoning)
 
+        sampling = QLabel("For the story model's passages and questions, in every story:")
+        sampling.setObjectName("hintLabel")
+        sampling.setWordWrap(True)
+        form.addRow(sampling)
         form.addRow("Temperature", self.temperature)
         form.addRow("Top p", self.top_p)
         form.addRow("Max tokens", self.max_tokens)
@@ -506,14 +536,66 @@ class SettingsDialog(QDialog):
         form.addRow("Frequency penalty", self.frequency_penalty)
         form.addRow("Seed", self.seed)
         form.addRow("Stop sequences", self.stop)
-        form.addRow(self.reasoning_enabled)
-        form.addRow("Reasoning effort", self.reasoning_effort)
-
         hint = QLabel("Negative values mean 'leave unset' — the field is then omitted.")
         hint.setObjectName("hintLabel")
         hint.setWordWrap(True)
         form.addRow(hint)
+
+        form.addRow("Story model reasoning", self.reasoning_story)
+        form.addRow(self.reasoning_story_note)
+        form.addRow("Other calls' reasoning", self.reasoning_side)
+        form.addRow(self.reasoning_side_note)
+        form.addRow(self.reasoning_caught)
+        self._show_reasoning()
         return widget
+
+    def _level_combo(self, level: str) -> QComboBox:
+        combo = QComboBox()
+        for value in REASONING_LEVELS:
+            combo.addItem(LEVEL_LABELS[value], value)
+        combo.setCurrentIndex(max(0, combo.findData(level)))
+        combo.setToolTip(
+            "As low as possible sends nothing to a model that reasons only when asked, "
+            "and its lowest level to one that reasons anyway. The other levels map to "
+            "the nearest one the model lists."
+        )
+        return combo
+
+    def _reasoning_levels(self) -> dict[str, ReasoningLevel]:
+        return {
+            "story": self.reasoning_story.currentData(),
+            "side": self.reasoning_side.currentData(),
+        }
+
+    def _sent_to(self, kind: CallKind, model: str) -> ReasoningConfig:
+        """What the level as it stands would send `model`, from what the
+        config knows of it (nothing is fetched here)."""
+        facts = self.config.model_reasoning.get(model)
+        return reasoning_for(self._reasoning_levels()[kind], model, facts)
+
+    def _show_reasoning(self) -> None:
+        story_model = self.model.text().strip()
+        if story_model:
+            self.reasoning_story_note.setText(
+                f"Sends {story_model}: {describe_reasoning(self._sent_to('story', story_model))}."
+            )
+        else:
+            self.reasoning_story_note.setText("")
+        self.reasoning_side_note.setText(
+            "For the scene and plot reads, summaries, the review, drafts and the picture "
+            "prompt writer."
+        )
+        caught = sorted(
+            model for model, facts in self.config.model_reasoning.items() if reasons_unasked(facts)
+        )
+        self.reasoning_caught.setText(
+            "Caught reasoning without being asked, so asked for their lowest level: "
+            + ", ".join(caught)
+            + "."
+            if caught
+            else ""
+        )
+        self.reasoning_caught.setVisible(bool(caught))
 
     def _context_tab(self) -> QWidget:
         """Budget and archival (§5). Shown with or without a story: only the
@@ -1127,23 +1209,21 @@ class SettingsDialog(QDialog):
         self.config.lore_selector = self.lore_selector.currentData()
         self.config.lore_model = self._role_model(self.lore_model)
 
+        stop = [item.strip() for item in self.stop.text().split(",") if item.strip()]
+        self.config.generation = GenerationParams(
+            temperature=_optional_double(self.temperature.value()),
+            top_p=_optional_double(self.top_p.value()),
+            max_tokens=_optional_int(self.max_tokens.value()),
+            presence_penalty=_optional_double(self.presence_penalty.value()),
+            frequency_penalty=_optional_double(self.frequency_penalty.value()),
+            seed=_optional_int(self.seed.value()),
+            stop=stop,
+        )
+        levels = self._reasoning_levels()
+        self.config.reasoning_story = levels["story"]
+        self.config.reasoning_side = levels["side"]
+
         if self.story is not None:
-            stop = [item.strip() for item in self.stop.text().split(",") if item.strip()]
-            self.story.defaults.generation = GenerationParams(
-                temperature=_optional_double(self.temperature.value()),
-                top_p=_optional_double(self.top_p.value()),
-                max_tokens=_optional_int(self.max_tokens.value()),
-                presence_penalty=_optional_double(self.presence_penalty.value()),
-                frequency_penalty=_optional_double(self.frequency_penalty.value()),
-                seed=_optional_int(self.seed.value()),
-                stop=stop,
-                reasoning=self.story.defaults.generation.reasoning.model_copy(
-                    update={
-                        "enabled": self.reasoning_enabled.isChecked(),
-                        "effort": self.reasoning_effort.currentText(),
-                    }
-                ),
-            )
             self.story.defaults.context_token_budget = self.budget.value()
             if provider.model and provider.model != self._model_at_open:
                 current = self.story.defaults.main_model or ""

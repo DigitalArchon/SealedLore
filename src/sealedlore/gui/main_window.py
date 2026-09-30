@@ -38,6 +38,7 @@ from sealedlore.engine.export import render_markdown
 from sealedlore.engine.plot_md import PLOT_SUFFIX, ParsedPlotFile, parse_plot_markdown
 from sealedlore.engine.prompt import TurnRequest
 from sealedlore.engine.prompt_edits import texts_in_force
+from sealedlore.engine.reasoning import config_params, config_reasoning
 from sealedlore.engine.routing import HostPrice, config_route
 from sealedlore.engine.scene_update import SceneProposal
 from sealedlore.engine.session import (
@@ -2499,6 +2500,7 @@ class MainWindow(
             texts=texts_in_force(self.config.prompt_edits),
             parent=self,
             route_for=lambda model: config_route(self.config, "authoring", model),
+            reasoning_for=lambda model: config_reasoning(self.config, "side", model),
         )
         accepted = dialog.exec() == GenerateDialog.Accepted
         self._remember_authoring_model(dialog.model_text())
@@ -3292,7 +3294,7 @@ class MainWindow(
         self.inspector.show_prompt(
             prompt,
             model=self.session.model,
-            params=self.session.story.defaults.generation,
+            params=config_params(self.session.config, "story", self.session.model),
             use_cache_control=self.session.uses_cache_control(),
             approximate=self.estimator.is_approximate,
             warnings=self._prompt_warnings(),

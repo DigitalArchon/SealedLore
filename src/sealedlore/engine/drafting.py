@@ -18,7 +18,7 @@ from sealedlore.engine.authoring import (
 )
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.ids import new_id, utc_now_iso
-from sealedlore.models.generation import GenerationParams
+from sealedlore.models.generation import GenerationParams, ReasoningConfig
 from sealedlore.models.story import NarrativePerson, NarrativeTense
 from sealedlore.providers.base import (
     ChatProvider,
@@ -42,8 +42,11 @@ class StoryDraft:
         tense: NarrativeTense | None = None,
         texts: PromptTexts = DEFAULT_TEXTS,
         route: dict | None = None,
+        reasoning: ReasoningConfig,
     ) -> None:
-        """`route`: the authoring role's (`routing.config_route`)."""
+        """`route`: the authoring role's (`routing.config_route`); `reasoning`:
+        what the author's level for other calls asks of `model`
+        (`reasoning.config_reasoning`)."""
         if not premise.strip():
             raise ValueError("write a premise first")
         self.provider = provider
@@ -57,7 +60,7 @@ class StoryDraft:
             model=model,
             extra_body=dict(route or {}),
             messages=build_generation_messages(premise, person=person, tense=tense, texts=texts),
-            params=GenerationParams(max_tokens=GENERATION_MAX_TOKENS),
+            params=GenerationParams(max_tokens=GENERATION_MAX_TOKENS, reasoning=reasoning),
         )
         self.text = ""
         self.completed: StreamCompleted | None = None

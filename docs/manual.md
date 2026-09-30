@@ -440,6 +440,27 @@ model ids, so on another endpoint set them to one it lists (Browse…).
 A model's reasoning is kept with its passage for you to read, and is never
 sent back: no later request, to any model, carries it.
 
+**How much models reason.** Settings → Generation holds the settings for
+every story: temperature, max tokens and the rest for the story model, and
+how much to ask models to reason, once for the story model's passages and
+questions and once for every other call (the scene and plot reads, chapters,
+the review, drafts, the picture prompt writer). Both start at **As low as
+possible**, which is also the fastest:
+
+- A model that reasons only when asked (Claude, DeepSeek) is asked for
+  nothing. Asking such a model for "low" would switch its thinking on.
+- A model that reasons at length anyway is caught doing it, and asked for
+  its lowest level from then on. When that happens the status bar
+  says so, since that first reply may have been slow to start (Kimi K3
+  thought for 25 seconds at its own default, and 5 at its lowest), and
+  Settings → Generation lists the models caught. The check is repeated a
+  week later, in case the model has changed.
+- TEE and end-to-end encrypted models start at their lowest level.
+
+**Low**, **Medium**, **High** and **Max** ask for that much, mapped to the
+nearest level the model offers; the note under each setting says what the
+story model will be sent.
+
 **Recommended models.** Left blank, the scene and plot models fall back to the
 story model, the most expensive place to run a small call on every turn. On
 NanoGPT a new setup starts with the ones that measured best, and Settings →
@@ -457,7 +478,8 @@ a model that reasons for the scene and a quick one for the plot (Browse…).
 
 **How fast is each one?** Settings → Models has **Test speed…**. It sends every
 model named there, and the private model, one short request, all at the same
-time, and shows for each:
+time, asking each for the reasoning its setting asks for in play, and shows for
+each:
 
 - **First word**: the wait before its answer begins, any reasoning included,
   since that is the wait you sit through.
@@ -629,7 +651,9 @@ Markdown, ready to report. **Story → Last review…** shows it again, and
 The review also sees the storyteller's model and the Generation settings. It
 gets the model's context size, output limit and price from your endpoint, so
 it can suggest "temperature 1.8 is why replies wander; try 1.0", or a different
-model when the complaint is about what the model can manage. A suggested model
+model when the complaint is about what the model can manage. Generation
+settings are yours for every story, so those are shown as suggestions with no
+box to tick: change them in Settings → Generation if you agree. A suggested model
 has to be one your endpoint actually lists. A custom length is always proposed
 as its wording, which selects Custom by itself. Changes that a hand-written
 style block would ignore aren't offered.

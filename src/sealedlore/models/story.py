@@ -13,7 +13,6 @@ from pydantic import BaseModel, Field
 
 from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.character import Character
-from sealedlore.models.generation import GenerationParams
 from sealedlore.models.image import ImageRef
 from sealedlore.models.node import AgencyMode, NpcScope, ResponseStyle
 from sealedlore.models.plot import Plot
@@ -81,7 +80,9 @@ class StoryDefaults(BaseModel):
     # a story's roles take theirs from `Config.model_routes`.
     main_route: ModelRoute | None = None
     summarization_model: str | None = None
-    generation: GenerationParams = Field(default_factory=GenerationParams)
+    # Generation settings (temperature, max tokens, reasoning) are the
+    # author's for every story (`Config.generation`); an older story.json's
+    # own `generation` is ignored on load.
 
 
 OpeningMode = Literal["generate", "as_written"]

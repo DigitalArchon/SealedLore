@@ -253,7 +253,8 @@ def test_settings_tabs_and_every_model_in_one_place(app, window: MainWindow):
     ):
         assert models.isAncestorOf(field)
     without_story = _settings(window)
-    assert "Generation" not in [
+    # Generation is for every story now, so it's there with no story open too.
+    assert "Generation" in [
         without_story.tabs.tabText(i) for i in range(without_story.tabs.count())
     ]
     # Every model can be chosen before any story is open: the summarisation
@@ -290,6 +291,35 @@ def test_the_summarisation_model_is_set_for_every_story(app, window: MainWindow)
     assert window.config.summarization_model is None
     assert story.defaults.summarization_model is None
     assert window.session.summarization_model == window.session.model
+
+
+def test_generation_is_for_every_story_and_says_what_reasoning_sends(app, window: MainWindow):
+    """The author (Sept 30 2026): generation settings were each story's own,
+    so they couldn't be set with no story open; and "off" with an effort
+    stored looked like low while sending nothing."""
+    from sealedlore.models.config import ModelReasoning
+
+    window.config.model_reasoning["moonshotai/kimi-k3"] = ModelReasoning(
+        reasons=True, efforts=["low", "high", "max"], unasked_at="2999-01-01T00:00:00+00:00"
+    )
+    dialog = _settings(window)
+    assert dialog.reasoning_story.currentData() == "least"
+    dialog.model.setText("anthropic/claude-sonnet-4.6")
+    assert "nothing" in dialog.reasoning_story_note.text()
+    dialog.model.setText("moonshotai/kimi-k3")
+    assert dialog.reasoning_story_note.text().endswith("low.")
+    assert "moonshotai/kimi-k3" in dialog.reasoning_caught.text()
+
+    dialog.temperature.setValue(0.8)
+    dialog.max_tokens.setValue(3000)
+    dialog.reasoning_story.setCurrentIndex(dialog.reasoning_story.findData("medium"))
+    assert dialog.reasoning_story_note.text().endswith("high."), "Kimi lists low/high/max"
+    dialog.reasoning_side.setCurrentIndex(dialog.reasoning_side.findData("high"))
+    dialog._save()
+    assert window.config.generation.temperature == 0.8
+    assert window.config.generation.max_tokens == 3000
+    assert (window.config.reasoning_story, window.config.reasoning_side) == ("medium", "high")
+    assert _settings(window, window.session.story).temperature.value() == 0.8
 
 
 def test_the_models_tab_saves_where_the_old_tabs_did(app, window: MainWindow):

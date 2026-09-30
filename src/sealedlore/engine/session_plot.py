@@ -79,7 +79,6 @@ from sealedlore.engine.validators import (
     mentions,
 )
 from sealedlore.models.character import Character
-from sealedlore.models.generation import GenerationParams
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import (
     DIRECTOR_SPEAKER_ID,
@@ -235,6 +234,13 @@ class PlotRuntime:
         return chronicle_at(self.path(), plot) if plot is not None else None
 
     def read_after_turn(self) -> Iterator[SessionNotice]:
+        """The reads after a passage (`_read_after_turn`), then a note for any
+        model they caught reasoning though asked for nothing."""
+        yield from self._read_after_turn()
+        for note in self.reasoning_notices():
+            yield SessionNotice(note)
+
+    def _read_after_turn(self) -> Iterator[SessionNotice]:
         """The scene read, then the chronicle read, after a passage.
 
         Neither uses the other's answer, so with a provider that can make a
@@ -306,7 +312,7 @@ class PlotRuntime:
                 held=held.name if held is not None else None,
                 texts=self.texts,
             ),
-            params=GenerationParams(max_tokens=CHRONICLE_MAX_TOKENS),
+            params=self.side_params(self.plot_model, max_tokens=CHRONICLE_MAX_TOKENS),
         )
         log_ref = self._log(
             "chronicle_request",
@@ -518,7 +524,7 @@ class PlotRuntime:
                 recent=render_chunk(verbatim[-4:], self.visible_cast(), texts=self.texts),
                 texts=self.texts,
             ),
-            params=GenerationParams(max_tokens=DIRECTOR_MAX_TOKENS),
+            params=self.side_params(self.plot_model, max_tokens=DIRECTOR_MAX_TOKENS),
         )
         log_ref = self._log(
             "variant_request",
@@ -763,7 +769,7 @@ class PlotRuntime:
             model=self.model,
             extra_body=self.route_for("story"),
             messages=prompt.messages,
-            params=GenerationParams(max_tokens=GAP_MAX_TOKENS),
+            params=self.side_params(self.model, max_tokens=GAP_MAX_TOKENS),
             use_cache_control=self.uses_cache_control(),
             cache_ttl=self.config.cache_ttl,
         )
@@ -861,7 +867,7 @@ class PlotRuntime:
                 engagement_line=engagement(history, user_node.content),
                 texts=self.texts,
             ),
-            params=GenerationParams(max_tokens=DIRECTOR_MAX_TOKENS),
+            params=self.side_params(self.plot_model, max_tokens=DIRECTOR_MAX_TOKENS),
         )
         log_ref = self._log(
             "director_request",

@@ -2921,17 +2921,20 @@ What you can change. Each change is one setting:
   a revelation, an event), propose setting it on that entry rather than a
   note.
 - kind "lore_disable": "target" is the entry's title.
-- kind "generation": field one of {generation_fields}.
-  The value is a number, true/false for "reasoning", one of {reasoning_efforts} for
-  "reasoning_effort", or null to leave it to the endpoint's default. Temperature
+- kind "generation": field one of {generation_fields}. These are the author's
+  settings for every story, so they are shown as suggestions for the author to
+  make by hand, never applied. The value is a number, one of {reasoning_efforts}
+  for "reasoning" (the story model's; "least" is as little as the model allows),
+  or null to leave it to the endpoint's default. Temperature
   (0 to 2) trades coherence for variety: high values wander, lose track of the
   scene and contradict what was established; very low ones turn flat and
   repetitive. top_p narrows word choice the same way; change one or the other,
   not both. The penalties (-2 to 2) push against repeating words and topics.
   "max_tokens" is only a ceiling that cuts a passage off mid-sentence when
   reached — passage length is set by the style's length settings, never by
-  lowering it. Reasoning makes replies slower and dearer; turn it off unless
-  the complaint is about the storyteller losing track of complex situations.
+  lowering it. Reasoning makes replies slower and dearer; suggest more than
+  "least" only when the complaint is about the storyteller losing track of
+  complex situations.
 - kind "model": field "main_model" (the storyteller) or "summarization_model"
   (writes chapter summaries; null means the storyteller's model). The value is
   an exact model id as the endpoint lists it, like the current one in

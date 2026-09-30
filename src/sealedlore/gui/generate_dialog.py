@@ -28,6 +28,7 @@ from sealedlore.engine.drafting import StoryDraft
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.gui.model_picker import Browse, ModelField
 from sealedlore.gui.worker import GenerationWorker
+from sealedlore.models.generation import ReasoningConfig
 from sealedlore.providers.base import ChatProvider
 
 PREMISE_EXAMPLE = (
@@ -48,11 +49,14 @@ class GenerateDialog(QDialog):
         texts: PromptTexts = DEFAULT_TEXTS,
         parent: QWidget | None = None,
         route_for: Callable[[str], dict] | None = None,
+        reasoning_for: Callable[[str], ReasoningConfig] | None = None,
     ) -> None:
-        """`route_for`: the authoring route for the model drafting."""
+        """`route_for`: the authoring route for the model drafting;
+        `reasoning_for`: what the author's reasoning level asks of it."""
         super().__init__(parent)
         self.setWindowTitle("New story from a premise")
         self._route_for = route_for or (lambda _model: {})
+        self._reasoning_for = reasoning_for or (lambda _model: ReasoningConfig())
         # The author's edits for every story: a draft has no story of its own yet.
         self.texts = texts
         self.setMinimumWidth(620)
@@ -168,6 +172,7 @@ class GenerateDialog(QDialog):
             tense=self.tense.currentData(),
             texts=self.texts,
             route=self._route_for(model),
+            reasoning=self._reasoning_for(model),
         )
         self._received = 0
         self._failure = None

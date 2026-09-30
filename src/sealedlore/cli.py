@@ -22,6 +22,7 @@ from sealedlore.engine.drafting import StoryDraft
 from sealedlore.engine.export import render_markdown
 from sealedlore.engine.prompt import TurnRequest
 from sealedlore.engine.prompt_edits import texts_in_force
+from sealedlore.engine.reasoning import config_params, config_reasoning
 from sealedlore.engine.response_style import PRESETS, label_for
 from sealedlore.engine.routing import config_route
 from sealedlore.engine.session import SessionNotice, StorySession
@@ -184,6 +185,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
         model,
         texts=texts_in_force(config.prompt_edits),
         route=config_route(config, "authoring", model),
+        reasoning=config_reasoning(config, "side", model),
     )
     print(f"Drafting with {draft.model}…", flush=True)
     try:
@@ -752,7 +754,7 @@ class Repl:
             ChatRequest(
                 model=self.session.model,
                 messages=prompt.messages,
-                params=self.session.story.defaults.generation,
+                params=config_params(self.session.config, "story", self.session.model),
                 use_cache_control=uses_cache,
             )
         )

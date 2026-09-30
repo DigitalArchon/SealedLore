@@ -121,6 +121,7 @@ class OpenAICompatibleProvider(ChatProvider):
         if self._sibling is None:
             self._sibling = OpenAICompatibleProvider(self.config)
         self._sibling.route_watch = self.route_watch
+        self._sibling.reasoning_watch = self.reasoning_watch
         return self._sibling
 
     def detached(self) -> OpenAICompatibleProvider:
@@ -130,6 +131,7 @@ class OpenAICompatibleProvider(ChatProvider):
         passage. The caller closes it."""
         detached = OpenAICompatibleProvider(self.config)
         detached.route_watch = self.route_watch
+        detached.reasoning_watch = self.reasoning_watch
         return detached
 
     def _get_client(self) -> httpx.Client:
@@ -293,6 +295,7 @@ class OpenAICompatibleProvider(ChatProvider):
         finish_reason: str | None = None
         response_id: str | None = None
         saw_done = False
+        reasoning_chars = 0
 
         with self._get_client().stream(
             "POST",
@@ -352,6 +355,7 @@ class OpenAICompatibleProvider(ChatProvider):
 
                     reasoning = delta.get("reasoning") or delta.get("reasoning_content")
                     if reasoning:
+                        reasoning_chars += len(reasoning)
                         yield ReasoningDelta(text=reasoning)
 
                     content = delta.get("content")
@@ -375,6 +379,17 @@ class OpenAICompatibleProvider(ChatProvider):
             raw_usage=usage_raw,
             response_id=response_id,
             sealed=self.sealed_replies,
+            reasoning_tokens=max(_reasoning_tokens(usage_raw), reasoning_chars // 4),
         )
         self._report_route(request, completed)
+        self._report_reasoning(request, completed)
         yield completed
+
+
+def _reasoning_tokens(usage: dict[str, Any]) -> int:
+    """The reply's reported reasoning tokens, wherever the endpoint put them."""
+    details = usage.get("completion_tokens_details")
+    count = details.get("reasoning_tokens") if isinstance(details, dict) else None
+    if not isinstance(count, int):
+        count = usage.get("reasoning_tokens")
+    return count if isinstance(count, int) and not isinstance(count, bool) else 0

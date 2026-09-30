@@ -25,7 +25,6 @@ from sealedlore.engine.archival import (
     plan_merge,
     source_chapters,
     summaries_tokens,
-    summary_params,
 )
 from sealedlore.models.summary import Summary
 from sealedlore.providers.base import ChatRequest, ProviderError
@@ -120,7 +119,7 @@ class MergeRuntime:
                 ),
                 texts=self.texts,
             ),
-            params=summary_params(model),
+            params=self.side_params(model),
         )
         return _MergeJob(
             run_ids=[summary.id for summary in run],

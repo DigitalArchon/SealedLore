@@ -60,6 +60,24 @@ def test_a_warned_change_starts_unticked_and_the_director_turn_counts(app, bundl
     assert len(dialog.selected_changes()) == 2 and dialog.apply_button.isEnabled()
 
 
+def test_a_generation_change_is_a_suggestion_with_no_box_to_tick(app, bundle):
+    """Generation settings are the author's for every story: the review only
+    suggests them (the author, Sept 30 2026)."""
+    from PySide6.QtWidgets import QLabel
+
+    suggestion = SettingsChange(
+        kind="generation", field="temperature", value=0.7, before=1.1, reason="Calmer."
+    )
+    notes = SettingsChange(kind="style", field="notes", value="Terse.")
+    dialog = ReviewResultDialog(review_with(suggestion, notes), bundle, model="m")
+    assert [c.id for c in dialog.selected_changes()] == [notes.id]
+    dialog._tick(True)
+    assert [c.id for c in dialog.selected_changes()] == [notes.id]
+    texts = [label.text() for label in dialog.findChildren(QLabel)]
+    assert any(text.startswith("Suggestion: Generation") for text in texts)
+    assert any("Settings → Generation" in text for text in texts)
+
+
 def test_a_past_review_is_shown_read_only_with_what_was_applied(app, bundle):
     a = SettingsChange(kind="style", field="pacing", value="slow")
     b = SettingsChange(kind="style", field="notes", value="x")

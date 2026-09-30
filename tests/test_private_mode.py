@@ -338,7 +338,7 @@ def test_each_model_family_is_shaped_as_the_router_takes_it():
     assert shaped("private/gemma4-31b", "gemma4-31b")["chat_template_kwargs"] == {
         "enable_thinking": False
     }
-    light = {"enabled": True, "effort": "low"}  # engine/archival.LIGHT_REASONING
+    light = {"enabled": True, "effort": "low"}  # "as low as possible" on TEE (engine/reasoning.py)
     assert shaped("private/gemma4-31b", "gemma4-31b", reasoning=light)["chat_template_kwargs"] == {
         "enable_thinking": False
     }
@@ -468,8 +468,9 @@ def test_a_private_scene_on_an_encrypted_model_is_sealed_end_to_end(fake, tmp_pa
     summary = session.summarise_private()
     assert summary == "They spoke quietly."
     assert session.open_span.summary_tee == "encrypted"
-    # The turn reasons as the model likes; the summary, lightly (live: 107s → 9s).
-    assert "reasoning_effort" not in fake.requests[0]
+    # "As low as possible" on an encrypted model is low, for the turn and the
+    # summary alike (live: a summary took 107s at its default, 9s at low).
+    assert fake.requests[0]["reasoning_effort"] == "low"
     assert fake.requests[-1]["reasoning_effort"] == "low"
 
     # The enclave read the scene; nothing on the wire, and no other model, did.
@@ -514,17 +515,3 @@ def test_an_encrypted_chat_never_moves_to_a_model_that_isnt():
     assert move_refusal("TEE/glm-5.3", "private/glm-5-3") is None, "a TEE chat may move up"
     assert "TEE" in move_refusal("TEE/glm-5.3", "anthropic/claude")
     assert move_refusal("anthropic/claude", "private/glm-5-3") is None
-
-
-def test_only_a_tee_models_summaries_ask_for_light_reasoning():
-    from sealedlore.engine.archival import LIGHT_REASONING, summary_params
-
-    for model in ("TEE/glm-5.3-flash", "private/glm-5-3", "TEE/gemma-4-31b-it"):
-        assert summary_params(model).reasoning == LIGHT_REASONING
-    for model in ("deepseek/deepseek-v4.1-flash", "anthropic/claude-sonnet-4.6", "local/model"):
-        assert not summary_params(model).reasoning.enabled
-    assert summary_params("TEE/x", max_tokens=4000).max_tokens == 4000
-    # Never shared: a change to one request's params can't leak into the next.
-    first = summary_params("TEE/x")
-    first.reasoning.effort = "high"
-    assert summary_params("TEE/x").reasoning.effort == "low"

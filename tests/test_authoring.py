@@ -30,6 +30,7 @@ from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.engine.usage import usage_report
 from sealedlore.models.authoring import SettingsChange
 from sealedlore.models.config import Config, ProviderConfig
+from sealedlore.models.generation import GenerationParams, ReasoningConfig
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.story import StyleDirectives
 from sealedlore.providers.mock import MockChatProvider
@@ -141,7 +142,9 @@ def test_a_draft_without_a_cast_is_refused():
 
 def test_a_story_draft_is_saved_with_its_call_logged(tmp_path: Path):
     provider = MockChatProvider([json.dumps(DRAFT)])
-    draft = StoryDraft(provider, "A winter at Hellsville", "anthropic/claude-opus-5")
+    draft = StoryDraft(
+        provider, "A winter at Hellsville", "anthropic/claude-opus-5", reasoning=ReasoningConfig()
+    )
     events = list(draft.stream())
     assert events and draft.text == json.dumps(DRAFT)
     assert provider.last_request.params.max_tokens >= 8000
@@ -164,7 +167,7 @@ def test_a_story_draft_is_saved_with_its_call_logged(tmp_path: Path):
 
 def test_an_empty_premise_is_refused():
     with pytest.raises(ValueError, match="premise"):
-        StoryDraft(MockChatProvider(), "   ", "m")
+        StoryDraft(MockChatProvider(), "   ", "m", reasoning=ReasoningConfig())
 
 
 # --- review: changes -------------------------------------------------------------------
@@ -477,31 +480,39 @@ MODELS = {SONNET.id: SONNET, "anthropic/claude-opus-5": ModelInfo(id="anthropic/
 
 
 def test_the_reviewer_sees_the_model_and_generation_settings(bundle: StoryBundle):
-    bundle.story.defaults.generation.temperature = 1.8
-    view = settings_view(bundle, model=SONNET.id, facts=SONNET)["model"]
+    cfg = Config(generation=GenerationParams(temperature=1.8), reasoning_story="low")
+    view = settings_view(bundle, model=SONNET.id, facts=SONNET, config=cfg)["model"]
     assert view["main_model"] == SONNET.id
     assert view["generation"]["temperature"] == 1.8
+    assert view["generation"]["reasoning"] == "low"
     assert view["endpoint_facts"]["max_output_tokens"] == 64_000
     assert view["endpoint_facts"]["usd_per_million_tokens"] == {"input": 3.0, "output": 15.0}
     assert settings_view(bundle)["model"]["endpoint_facts"] is None
 
 
-def test_generation_changes_apply_within_their_ranges(bundle: StoryBundle):
-    params = bundle.story.defaults.generation
+def test_generation_changes_are_checked_and_never_applied(bundle: StoryBundle):
+    """They are the author's settings for every story: the review only
+    suggests them, and the author makes them by hand in Settings."""
+    before = bundle.story.model_dump()
     for item in [
         change("generation", field="temperature", value=0.7),
         change("generation", field="top_p", value="0.9"),
         change("generation", field="frequency_penalty", value=0.3),
         change("generation", field="max_tokens", value=2000),
-        change("generation", field="reasoning", value=True),
-        change("generation", field="reasoning_effort", value="LOW"),
+        change("generation", field="reasoning", value="LOW"),
+        change("generation", field="reasoning", value="least"),
+        change("generation", field="temperature", value=None),
     ]:
         apply_change(bundle, item, models=MODELS, current_model=SONNET.id)
-    assert (params.temperature, params.top_p, params.frequency_penalty) == (0.7, 0.9, 0.3)
-    assert params.max_tokens == 2000
-    assert params.reasoning.enabled and params.reasoning.effort == "low"
-    apply_change(bundle, change("generation", field="temperature", value=None))
-    assert params.temperature is None  # back to the endpoint's default
+    assert bundle.story.model_dump() == before
+
+
+def test_a_generation_suggestions_before_is_the_authors_setting(bundle: StoryBundle):
+    cfg = Config(generation=GenerationParams(temperature=0.4), reasoning_story="high")
+    temperature = change("generation", field="temperature", value=0.9)
+    reasoning = change("generation", field="reasoning", value="least")
+    assert current_value(bundle, temperature, config=cfg) == 0.4
+    assert current_value(bundle, reasoning, config=cfg) == "high"
 
 
 @pytest.mark.parametrize(
@@ -511,7 +522,8 @@ def test_generation_changes_apply_within_their_ranges(bundle: StoryBundle):
         (change("generation", field="temperature", value="hot"), "number"),
         (change("generation", field="max_tokens", value=100), "mid-sentence"),
         (change("generation", field="max_tokens", value=100_000), "at most 64,000"),
-        (change("generation", field="reasoning", value="yes"), "true or false"),
+        (change("generation", field="reasoning", value="yes"), "reasoning must be one of"),
+        (change("generation", field="reasoning", value=True), "reasoning must be one of"),
         (change("generation", field="seed", value=1), "isn't a generation setting"),
         (change("story", field="context_token_budget", value=500_000), "at most 200,000"),
         (change("story", field="context_token_budget", value=100), "can't hold a turn"),
@@ -1067,7 +1079,6 @@ def test_a_fresh_playthrough_carries_every_reviewed_setting(bundle: StoryBundle)
         change("story", field="world_activity", value="eventful"),
         change("story", field="npc_scope", value="model_choice"),
         change("story", field="context_token_budget", value=12_000),
-        change("generation", field="temperature", value=0.7),
         change("opening", field="text", value="Begin at the gate."),
         change("character", target="Maela Orr", field="author_only", value=True),
         change("character", target="Serrik Vaun", field="playable", value=False),
@@ -1087,7 +1098,7 @@ def test_a_fresh_playthrough_carries_every_reviewed_setting(bundle: StoryBundle)
         "eventful",
         "model_choice",
     )
-    assert defaults.context_token_budget == 12_000 and defaults.generation.temperature == 0.7
+    assert defaults.context_token_budget == 12_000
     assert copy.story.setup.opening_text == "Begin at the gate."
     assert copy.cast[1].author_only and not copy.cast[0].is_player_available
     assert copy.supporting.characters[0].name == "Hollis"
@@ -1175,7 +1186,14 @@ def test_person_and_tense_are_fixed_once_the_story_has_begun(bundle: StoryBundle
 
 def test_a_premise_draft_is_written_in_the_person_and_tense_chosen(tmp_path: Path):
     provider = MockChatProvider([json.dumps(DRAFT)])
-    draft = StoryDraft(provider, "A winter at Hellsville", "m", person="second", tense="present")
+    draft = StoryDraft(
+        provider,
+        "A winter at Hellsville",
+        "m",
+        person="second",
+        tense="present",
+        reasoning=ReasoningConfig(),
+    )
     list(draft.stream())
     asked = provider.last_request.messages[-1].text
     assert 'second person and the present tense ("As you step inside' in asked

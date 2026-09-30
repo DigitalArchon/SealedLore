@@ -28,7 +28,6 @@ from sealedlore.engine.archival import (
     plan_chunk,
     render_chunk,
     split_path,
-    summary_params,
     swap_covered,
     turns_in,
 )
@@ -146,6 +145,7 @@ from sealedlore.engine.session_images import ImageRuntime
 from sealedlore.engine.session_merge import MergeRuntime, _close
 from sealedlore.engine.session_plot import PlotRuntime, SessionNotice
 from sealedlore.engine.session_private import PrivateRuntime
+from sealedlore.engine.session_reasoning import ReasoningRuntime
 from sealedlore.engine.tokens import TokenEstimator, updated_correction_factor
 from sealedlore.engine.validators import locate_quote, mentions
 from sealedlore.ids import new_id, utc_now_iso
@@ -154,7 +154,6 @@ from sealedlore.models.authoring import ReviewRecord, SettingsChange, SettingsRe
 from sealedlore.models.character import Character, CompetenceTier
 from sealedlore.models.config import Config, ModelPrice
 from sealedlore.models.embedding import EmbeddingCacheEntry
-from sealedlore.models.generation import GenerationParams
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import (
     DIRECTOR_SPEAKER_ID,
@@ -388,7 +387,22 @@ class _LorePick:
 LORE_PICK_WAIT_SECONDS = 60
 
 
-class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, PrivateRuntime):
+def _weak_watch(
+    method: Callable[[ChatRequest, StreamCompleted], None],
+) -> Callable[[ChatRequest, StreamCompleted], None]:
+    ref = weakref.WeakMethod(method)
+
+    def watch(request: ChatRequest, completed: StreamCompleted) -> None:
+        found = ref()
+        if found is not None:
+            found(request, completed)
+
+    return watch
+
+
+class StorySession(
+    PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, PrivateRuntime, ReasoningRuntime
+):
     def __init__(
         self,
         bundle: StoryBundle,
@@ -408,6 +422,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
         self._route_lock = threading.Lock()
         self._route_checks: dict[tuple[str, str], tuple[str, RouteCheck]] = {}
         self.host_price: Callable[[str, str], HostPrice | None] | None = None
+        self._init_reasoning()
         self.provider = provider
         # Optional by design: with no embeddings endpoint, retrieval falls back
         # to keywords silently (§7).
@@ -553,17 +568,12 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
 
     @provider.setter
     def provider(self, provider: ChatProvider) -> None:
-        """Every provider the session is given reports its routed replies here
-        (held weakly: a provider outlives the session that set it)."""
+        """Every provider the session is given reports its routed replies, and
+        replies that reasoned unasked, here (held weakly: a provider outlives
+        the session that set it)."""
         self._provider = provider
-        ref = weakref.WeakMethod(self._watch_route)
-
-        def watch(request: ChatRequest, completed: StreamCompleted) -> None:
-            method = ref()
-            if method is not None:
-                method(request, completed)
-
-        provider.route_watch = watch
+        provider.route_watch = _weak_watch(self._watch_route)
+        provider.reasoning_watch = _weak_watch(self._watch_reasoning)
 
     def _watch_route(self, request: ChatRequest, completed: StreamCompleted) -> None:
         """On whichever thread the reply came back: record what its bill says."""
@@ -935,7 +945,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
                     messages=build_pick_messages(
                         pick.node.content, pick.scene, pick.candidates, texts=self.texts
                     ),
-                    params=GenerationParams(max_tokens=PICK_MAX_TOKENS),
+                    params=self.side_params(pick.model, max_tokens=PICK_MAX_TOKENS),
                 )
                 pick.reply = client.complete(pick.request)
         except BaseException as exc:  # noqa: BLE001 - reported on the worker thread
@@ -1780,7 +1790,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
             model=model,
             extra_body=self.route_for("story", model),
             messages=prompt.messages,
-            params=self.story.defaults.generation,
+            params=self.story_params(model),
             use_cache_control=self._cache_control_for(model),
             cache_ttl=self.config.cache_ttl,
         )
@@ -1820,6 +1830,10 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
             self._check_tee(self.last_result.node)
         if completed is not None and completed.finish_reason == "length":
             yield SessionNotice(cut_off_notice(request.params.max_tokens, completed))
+        # A model caught reasoning though asked for nothing: said at once, so
+        # the slow start reads as the model's, not the app's.
+        for note in self.reasoning_notices():
+            yield SessionNotice(note)
 
     def _finalize(
         self,
@@ -2082,7 +2096,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
             model=self.summarization_model,
             extra_body=self.route_for("summarisation"),
             messages=messages,
-            params=summary_params(self.summarization_model),
+            params=self.side_params(self.summarization_model),
         )
         log_ref = self._log(
             "summary_request",
@@ -2135,7 +2149,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
                 earlier=earlier,
                 texts=self.texts,
             ),
-            params=GenerationParams(max_tokens=LEDGER_MAX_TOKENS),
+            params=self.side_params(self.summarization_model, max_tokens=LEDGER_MAX_TOKENS),
         )
         job = _LedgerJob(request=request, previous=previous)
         make_sibling = getattr(self.provider, "sibling", None)
@@ -2220,7 +2234,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
             model=self.summarization_model,
             extra_body=self.route_for("summarisation"),
             messages=messages,
-            params=summary_params(self.summarization_model),
+            params=self.side_params(self.summarization_model),
         )
         log_ref = self._log(
             "summary_request",
@@ -2433,7 +2447,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
             messages=build_extraction_messages(
                 prose, on_file=on_file, declined=supporting.dismissed, texts=self.texts
             ),
-            params=GenerationParams(),
+            params=self.side_params(self.summarization_model),
         )
         log_ref = self._log(
             "characters_request",
@@ -2489,7 +2503,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
                 supporting=self.visible_supporting(),
                 texts=self.texts,
             ),
-            params=GenerationParams(max_tokens=READ_MAX_TOKENS),
+            params=self.side_params(self.scene_model, max_tokens=READ_MAX_TOKENS),
         )
         log_ref = self._log(
             "scene_request",
@@ -2691,7 +2705,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
                 perspective=self.story.style.perspective,
                 texts=self.texts,
             ),
-            params=GenerationParams(max_tokens=READ_MAX_TOKENS),
+            params=self.side_params(self.scene_model, max_tokens=READ_MAX_TOKENS),
         )
         log_ref = self._log(
             "scene_request", {"node_id": node.id, "payload": self.provider.build_payload(request)}
@@ -2868,7 +2882,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
             model=self.summarization_model,
             extra_body=self.route_for("summarisation"),
             messages=build_inference_messages(character, self.story.world_bible),
-            params=GenerationParams(),
+            params=self.side_params(self.summarization_model),
         )
         log_ref = self._log(
             "competence_request",
@@ -3152,7 +3166,9 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
             model=model,
             extra_body=self.route_for("authoring", model),
             messages=messages,
-            params=GenerationParams(max_tokens=answer_tokens, temperature=REVIEW_TEMPERATURE),
+            params=self.side_params(
+                model, max_tokens=answer_tokens, temperature=REVIEW_TEMPERATURE
+            ),
         )
         log_ref = self._log(
             "review_request",
@@ -3176,6 +3192,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
             current_model=self.model,
             prompt_keys=prompt_keys,
             texts=self.texts,
+            config=self.config,
         )
         self.bundle.reviews.append(ReviewRecord(model=model, complaint=complaint, review=review))
         self.save()
@@ -3222,6 +3239,11 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
         )
         results: dict[str, str | None] = {}
         for change in ordered_for_apply(changes):
+            if change.kind == "generation":
+                # The author's settings for every story: suggested, and made
+                # by hand in Settings → Generation, never applied here.
+                results[change.id] = "a suggestion, made in Settings → Generation"
+                continue
             try:
                 apply_change(self.bundle, change)
                 results[change.id] = None
@@ -3379,7 +3401,7 @@ class StorySession(PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, Pri
             model=model,
             extra_body=self.route_for("story"),
             messages=prompt.messages,
-            params=self.story.defaults.generation,
+            params=self.story_params(model),
             use_cache_control=self._cache_control_for(model),
             cache_ttl=self.config.cache_ttl,
         )

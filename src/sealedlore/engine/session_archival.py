@@ -33,7 +33,6 @@ from sealedlore.engine.archival import (
     characters_in,
     plan_chunk,
     render_chunk,
-    summary_params,
     turns_in,
 )
 from sealedlore.engine.characters import build_extraction_messages, known_names, parse_suggestions
@@ -41,7 +40,6 @@ from sealedlore.engine.ledger import build_ledger_messages, check_ledger, ledger
 from sealedlore.engine.prompt import TurnRequest
 from sealedlore.engine.session_merge import _close
 from sealedlore.engine.session_plot import SessionNotice
-from sealedlore.models.generation import GenerationParams
 from sealedlore.models.node import NARRATOR_SPEAKER_ID, Node
 from sealedlore.models.summary import Summary
 from sealedlore.providers.base import ChatRequest, ProviderError
@@ -189,6 +187,8 @@ class ArchivalRuntime:
         model = self.summarization_model
         # Read here: the thread below must not touch the session.
         route = self.route_for("summarisation")
+        params = self.side_params(model)
+        ledger_params = self.side_params(model, max_tokens=LEDGER_MAX_TOKENS)
         on_path = list(self.split(history).summaries)
         previous_text = on_path[-1].content if on_path else None
         chapters = [
@@ -196,9 +196,7 @@ class ArchivalRuntime:
                 node_ids=[node.id for node in chunk],
                 fingerprint=_fingerprint(chunk),
                 summary=_Call(
-                    request=ChatRequest(
-                        model=model, messages=[], params=GenerationParams(), extra_body=route
-                    )
+                    request=ChatRequest(model=model, messages=[], params=params, extra_body=route)
                 ),
                 ledger=None,
             )
@@ -223,7 +221,7 @@ class ArchivalRuntime:
                         declined=supporting.dismissed,
                         texts=texts,
                     ),
-                    params=GenerationParams(),
+                    params=params,
                     extra_body=route,
                 )
             )
@@ -251,7 +249,7 @@ class ArchivalRuntime:
                             chat=self.story.chat,
                             texts=texts,
                         ),
-                        params=summary_params(model),
+                        params=params,
                         extra_body=route,
                     )
                     worker = None
@@ -266,7 +264,7 @@ class ArchivalRuntime:
                                     earlier=earlier if ledger_text is None else "",
                                     texts=texts,
                                 ),
-                                params=GenerationParams(max_tokens=LEDGER_MAX_TOKENS),
+                                params=ledger_params,
                                 extra_body=route,
                             )
                         )

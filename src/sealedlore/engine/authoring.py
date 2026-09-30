@@ -48,7 +48,7 @@ from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.authoring import AppFinding, SettingsChange, SettingsReview
 from sealedlore.models.character import Character, Competence, CompetenceTier
 from sealedlore.models.config import Config
-from sealedlore.models.generation import ReasoningEffort
+from sealedlore.models.generation import REASONING_LEVELS, GenerationParams
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import AgencyMode, Node, NpcScope, ResponseStyle
 from sealedlore.models.scenario import Scenario
@@ -77,7 +77,9 @@ WORLD_ACTIVITIES: tuple[str, ...] = get_args(WorldActivity)
 PERSONS: tuple[str, ...] = get_args(NarrativePerson)
 TENSES: tuple[str, ...] = get_args(NarrativeTense)
 OPENING_MODES: tuple[str, ...] = get_args(OpeningMode)
-REASONING_EFFORTS: tuple[str, ...] = get_args(ReasoningEffort)
+# The story model's reasoning levels (Settings → Generation), as the review
+# may suggest one; "least" is as little as the model allows.
+REASONING_EFFORTS: tuple[str, ...] = REASONING_LEVELS
 # The length presets a model may pick by name. "custom" is never picked on its
 # own: it means "use length_target", and without that wording it falls back to
 # the default — live, a review proposed "custom" and put its wording where
@@ -177,14 +179,17 @@ WHOLE_TEXT_FIELDS = {
     "opening": ("text",),
 }
 
-# Generation-tab parameters the review may change, with their allowed ranges.
+# Generation-tab parameters the review may suggest, with their allowed ranges.
+# They are the author's settings for every story, so a review only suggests
+# them: the author changes them by hand (Settings → Generation), and
+# `apply_change` checks one without applying it.
 GENERATION_RANGES: dict[str, tuple[float, float]] = {
     "temperature": (0.0, 2.0),
     "top_p": (0.0, 1.0),
     "presence_penalty": (-2.0, 2.0),
     "frequency_penalty": (-2.0, 2.0),
 }
-GENERATION_FIELDS = (*GENERATION_RANGES, "max_tokens", "reasoning", "reasoning_effort")
+GENERATION_FIELDS = (*GENERATION_RANGES, "max_tokens", "reasoning")
 # Below this a passage is cut off mid-sentence at any length setting.
 MIN_MAX_TOKENS = 256
 MAX_MAX_TOKENS = 200_000
@@ -626,7 +631,7 @@ def settings_view(
     settings, read-only.
     """
     story = bundle.story
-    params = story.defaults.generation
+    params = config.generation if config is not None else GenerationParams()
     style = story.style.model_dump(exclude={"detached"})
     if not story.style.detached:
         style.pop("custom_text", None)
@@ -643,14 +648,14 @@ def settings_view(
             "main_model": story.defaults.main_model or model,
             "summarization_model": story.defaults.summarization_model,
             "context_token_budget": story.defaults.context_token_budget,
+            # The author's, for every story: suggested, never applied.
             "generation": {
                 "temperature": params.temperature,
                 "top_p": params.top_p,
                 "max_tokens": params.max_tokens,
                 "presence_penalty": params.presence_penalty,
                 "frequency_penalty": params.frequency_penalty,
-                "reasoning": params.reasoning.enabled,
-                "reasoning_effort": params.reasoning.effort,
+                "reasoning": config.reasoning_story if config is not None else "least",
             },
             "endpoint_facts": facts.facts() if facts else None,
             "alternatives": [info.facts() for info in alternatives] or None,
@@ -1127,13 +1132,13 @@ def _number(value: object, what: str) -> float:
     return float(value)
 
 
-def _apply_generation(
-    bundle: StoryBundle, field: str | None, value: object, facts: ModelInfo | None
-) -> None:
-    params = bundle.story.defaults.generation
+def _check_generation(field: str | None, value: object, facts: ModelInfo | None) -> None:
+    """Whether a suggested generation setting is one the author could make:
+    raises ValueError if not. Nothing is changed: these are the author's
+    settings for every story, changed by hand."""
+    params = GenerationParams()
     if field in GENERATION_RANGES:
         if value is None:
-            setattr(params, field, None)
             return
         low, high = GENERATION_RANGES[field]
         number = _number(value, field.replace("_", " "))
@@ -1142,7 +1147,6 @@ def _apply_generation(
         setattr(params, field, number)
     elif field == "max_tokens":
         if value is None:
-            params.max_tokens = None
             return
         number = int(_number(value, "max tokens"))
         ceiling = (facts.max_output_tokens if facts else None) or MAX_MAX_TOKENS
@@ -1153,16 +1157,10 @@ def _apply_generation(
             )
         if number > ceiling:
             raise ValueError(f"the model writes at most {ceiling:,} tokens per reply")
-        params.max_tokens = number
     elif field == "reasoning":
-        if not isinstance(value, bool):
-            raise ValueError("reasoning must be true or false")
-        params.reasoning.enabled = value
-    elif field == "reasoning_effort":
         text = _text(value)
-        if text is not None and text.lower() not in REASONING_EFFORTS:
-            raise ValueError(f"“{text}” isn't one of {', '.join(REASONING_EFFORTS)}")
-        params.reasoning.effort = text.lower() if text else None  # type: ignore[assignment]
+        if text is None or text.lower() not in REASONING_EFFORTS:
+            raise ValueError(f"reasoning must be one of {', '.join(REASONING_EFFORTS)}")
     else:
         raise ValueError(f"“{field}” isn't a generation setting")
 
@@ -1208,7 +1206,7 @@ def apply_change(
     elif kind == "prompt":
         _apply_prompt(bundle, change.target, value)
     elif kind == "generation":
-        _apply_generation(bundle, field, value, facts)
+        _check_generation(field, value, facts)
     elif kind == "model":
         _apply_model(bundle, field, value, models)
     elif kind == "story" and field == "npc_scope" and (_text(value) or "").lower() == "selected":
@@ -1406,11 +1404,15 @@ def format_value(value: object) -> str:
 
 
 def current_value(
-    bundle: StoryBundle, change: SettingsChange, texts: PromptTexts | None = None
+    bundle: StoryBundle,
+    change: SettingsChange,
+    texts: PromptTexts | None = None,
+    config: Config | None = None,
 ) -> object:
     """What the setting holds now, for the before/after view. For a prompt
     text, the one in force: `texts` when given (the edits for every story
-    included), else this story's edits over the defaults."""
+    included), else this story's edits over the defaults. A generation
+    setting is the author's for every story, in `config`."""
     story = bundle.story
     if change.kind == "prompt":
         if change.target not in TEXTS:
@@ -1421,12 +1423,11 @@ def current_value(
     if change.kind in ("story", "model"):
         return getattr(story.defaults, change.field or "", None)
     if change.kind == "generation":
-        params = story.defaults.generation
+        if config is None:
+            return None
         if change.field == "reasoning":
-            return params.reasoning.enabled
-        if change.field == "reasoning_effort":
-            return params.reasoning.effort
-        return getattr(params, change.field or "", None)
+            return config.reasoning_story
+        return getattr(config.generation, change.field or "", None)
     if change.kind == "world":
         return story.world_bible
     if change.kind == "opening":
@@ -1563,6 +1564,8 @@ def review_markdown(
         lines.extend(["", "## Proposed changes"])
         for change in review.changes:
             mark = " (applied)" if change.id in applied_ids else ""
+            if change.kind == "generation":
+                mark = " (a suggestion: change it in Settings → Generation)"
             lines.extend(["", f"### {describe(change)}{mark}"])
             if change.reason:
                 lines.append(change.reason.strip())
@@ -1626,11 +1629,13 @@ def parse_review(
     current_model: str | None = None,
     prompt_keys: Collection[str] = (),
     texts: PromptTexts | None = None,
+    config: Config | None = None,
 ) -> SettingsReview:
     """The review from the model's reply, keeping only changes that apply.
 
     A prompt text may be changed only if the review was shown it
-    (`prompt_keys`); `texts` are the texts in force, for its "before".
+    (`prompt_keys`); `texts` are the texts in force, for its "before";
+    `config` holds the generation settings a suggestion's "before" is read from.
 
     Each proposal is tried on a copy of the bundle; one that can't be applied
     — a character that doesn't exist, a value outside its choices, a model the
@@ -1685,7 +1690,9 @@ def parse_review(
                 # Back to the default: shown as the default's text, and applied
                 # as a reset (writing the default is one).
                 change.value = TEXTS[change.target].default
-        before = current_value(bundle, change, texts) if change.kind != "lore_disable" else None
+        before = (
+            current_value(bundle, change, texts, config) if change.kind != "lore_disable" else None
+        )
         try:
             apply_change(trial, change, models=models, current_model=current_model)
         except ValueError as exc:

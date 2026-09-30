@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from sealedlore.models.generation import GenerationParams, ReasoningLevel
 from sealedlore.models.private import PrivateKeep
 from sealedlore.models.prompt_edit import PromptEdit
 from sealedlore.models.route import ModelRoute
@@ -197,6 +198,20 @@ class ModelPrice(BaseModel):
     fetched_at: str | None = None
 
 
+class ModelReasoning(BaseModel):
+    """What SealedLore knows about one model's reasoning: what the endpoint
+    lists (fetched with its prices, kept a week), and whether it reasoned
+    when nothing asked it to (engine/reasoning.py)."""
+
+    # None: not known (not listed, or not fetched yet).
+    reasons: bool | None = None
+    efforts: list[str] = Field(default_factory=list)
+    fetched_at: str | None = None
+    # When a reply reasoned though its request asked for nothing. For a week
+    # after, "as low as possible" asks this model for its lowest level.
+    unasked_at: str | None = None
+
+
 class Config(BaseModel):
     @field_validator("text_scale")
     @classmethod
@@ -268,6 +283,18 @@ class Config(BaseModel):
     # Blank means the story's own model; worth setting to a stronger one, since
     # these are occasional calls whose output the whole story then rests on.
     authoring_model: str | None = None
+
+    # The storyteller's sampling settings, for every story (Settings →
+    # Generation). They were each story's own, and so could not be set with
+    # no story open; the side calls keep their own fixed limits.
+    generation: GenerationParams = Field(default_factory=GenerationParams)
+    # How much to ask models to reason: the story model's turns (passages,
+    # questions, private turns), and every other call. "least" is as little
+    # as each model allows, which is also the fastest (engine/reasoning.py).
+    reasoning_story: ReasoningLevel = "least"
+    reasoning_side: ReasoningLevel = "least"
+    # Per model: its listed reasoning levels and whether it reasons unasked.
+    model_reasoning: dict[str, ModelReasoning] = Field(default_factory=dict)
 
     # Listed prices per model, fetched from the endpoint's models list and
     # refreshed weekly. Used only when a response doesn't report its cost.

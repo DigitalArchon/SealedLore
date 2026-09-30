@@ -50,6 +50,10 @@ class StreamCompleted:
     # Decrypted from an end-to-end encrypted reply (providers/private_mode.py):
     # only the attested enclave's key could have sealed it.
     sealed: bool = False
+    # How much the reply reasoned: the reported count, or the streamed
+    # reasoning text at ~4 characters a token, whichever is larger. The count
+    # alone lies: Sonnet 4.6 streamed its thinking while NanoGPT reported 0.
+    reasoning_tokens: int = 0
 
 
 StreamEvent = TextDelta | ReasoningDelta | StreamCompleted
@@ -80,6 +84,21 @@ class ChatProvider(ABC):
     # (`extra_body["provider"]`, engine/routing.py): NanoGPT names no host in
     # a reply, so the session reads its bill to say whether the route held.
     route_watch: Callable[[ChatRequest, StreamCompleted], None] | None = None
+
+    # Told of every reply that reasoned when its request asked for nothing
+    # (engine/reasoning.py); the session marks a model that reasoned at
+    # length, so the next request asks for its lowest level.
+    reasoning_watch: Callable[[ChatRequest, StreamCompleted], None] | None = None
+
+    def _report_reasoning(self, request: ChatRequest, completed: StreamCompleted) -> None:
+        watch = self.reasoning_watch
+        asked = request.params.reasoning
+        if watch is None or not completed.reasoning_tokens or asked.enabled or asked.effort:
+            return
+        try:
+            watch(request, completed)
+        except Exception:  # noqa: BLE001 - a report never costs the reply
+            pass
 
     def _report_route(self, request: ChatRequest, completed: StreamCompleted) -> None:
         watch = self.route_watch
