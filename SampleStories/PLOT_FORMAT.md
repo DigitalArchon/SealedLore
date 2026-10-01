@@ -286,7 +286,9 @@ never left the place it would have taken them from), it begins on-screen
 instead. An event sent to the storyteller without asking the director (its
 window closed, or "any time" with no trigger) that the prose still hasn't
 shown after six passages is taken as having happened, so the facts always
-reach an outcome.
+reach an outcome. One the director began that the prose still hasn't shown
+after six passages goes back to waiting, to be begun again when the moment
+suits.
 
 The director is a small extra call before a turn, made only while some event
 could happen or be foreshadowed. An optional event whose conditions are already

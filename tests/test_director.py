@@ -416,13 +416,23 @@ def test_an_event_sent_again_keeps_counting_and_is_settled(tmp_path: Path):
     assert "director_request" not in kinds(session, tmp_path)
 
 
-def test_an_event_the_director_began_is_left_to_the_director():
+def test_an_event_the_director_began_and_no_passage_showed_waits_again():
+    # The window is still open and the event has a quiet-moment pacing: no
+    # count takes it as happened. Live (Between Stars), one such event was
+    # never told, the director answered nothing for eight turns, and it could
+    # neither happen nor begin again; after the limit it goes back to waiting.
+    from sealedlore.engine.chronicle import release_unconfirmed
+
     p = plot()
     chronicle = initial_chronicle(p)
     chronicle.events["the_fall"].state = "directed"
-    # The window is still open and the event has a quiet-moment pacing: the
-    # director is asked again and says whether it happened, so no count
-    # settles it.
-    for _ in range(UNCONFIRMED_LIMIT + 1):
+    chronicle.events["the_fall"].variant = "In town"
+    for _ in range(UNCONFIRMED_LIMIT - 1):
         assert settle_unconfirmed(p, chronicle, [], node_id="n") == []
+        assert release_unconfirmed(p, chronicle) == []
     assert chronicle.events["the_fall"].state == "directed"
+    assert settle_unconfirmed(p, chronicle, [], node_id="n") == []
+    assert [e.id for e in release_unconfirmed(p, chronicle)] == ["the_fall"]
+    status = chronicle.events["the_fall"]
+    assert status.state == "pending" and status.variant is None
+    assert status.unconfirmed_passages == 0

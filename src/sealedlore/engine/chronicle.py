@@ -544,6 +544,42 @@ def settle_unconfirmed(
     return settled
 
 
+def release_unconfirmed(plot: Plot, chronicle: Chronicle) -> list[EventDef]:
+    """Put back an event the director began that `UNCONFIRMED_LIMIT` passages
+    never showed: it waits again, to be begun afresh at a fitting moment.
+
+    Left "directed", nothing ever sent it again. Live (Between Stars), "Pip
+    goes missing" was begun on a Director turn whose passage followed the
+    author's own three days instead; a later passage had Pip in the bay, the
+    director answered nothing for eight turns, and the theft could neither
+    happen nor begin. Taking it as happened would have been worse: the facts
+    would say Pip was stolen while the prose had him there. Run after
+    `settle_unconfirmed`, which settles the ones sent again without asking.
+    """
+    released: list[EventDef] = []
+    for event in plot.events:
+        status = chronicle.events.get(event.id)
+        if (
+            status is None
+            or status.state != "directed"
+            or status.unconfirmed_passages < UNCONFIRMED_LIMIT
+            or status.overdue
+            or begins_unasked(event)
+        ):
+            continue
+        chronicle.events[event.id] = status.model_copy(
+            update={
+                "state": "pending",
+                "variant": None,
+                "node_id": None,
+                "unconfirmed_passages": 0,
+                "forced_variant": None,
+            }
+        )
+        released.append(event)
+    return released
+
+
 @dataclass(frozen=True)
 class Armed:
     """An event the director may act on this turn, and how."""

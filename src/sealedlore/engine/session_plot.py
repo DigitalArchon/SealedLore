@@ -32,6 +32,7 @@ from sealedlore.engine.chronicle import (
     last_day,
     note_asked,
     note_skipped,
+    release_unconfirmed,
     resolve_due,
     resting,
     schedule,
@@ -410,6 +411,12 @@ class PlotRuntime:
             self._log(
                 "chronicle_settled",
                 {"request_log_ref": log_ref, "events": [event.id for event in settled]},
+            )
+        released = release_unconfirmed(plot, after)
+        if released:
+            self._log(
+                "chronicle_released",
+                {"request_log_ref": log_ref, "events": [event.id for event in released]},
             )
         node.meta.chronicle = after
         self.save()
