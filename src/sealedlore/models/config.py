@@ -244,9 +244,10 @@ class Config(BaseModel):
     lore_similarity_threshold: float = 0.45
     lore_token_cap: int = 2_000
     # Recall (engine/recall.py): the chapters a merged part stands for, or
-    # those and the archived exchanges, brought back into the tail by
-    # similarity to the lore query. "off" sends nothing. Chapters by default:
-    # Questions about merged chapters went 0.45-0.50 -> 0.56-0.67 (Oct 2026).
+    # those and the archived exchanges, brought back into the tail when a
+    # Question (or, with recall_in "everywhere", a turn) is about them.
+    # "off" sends nothing. Chapters by default: Questions about merged
+    # chapters went 0.45-0.50 -> 0.56-0.67 (Oct 2026).
     recall: Literal["off", "chapters", "exchanges"] = "chapters"
     # Where recall is used: an out-of-character Question only, or story turns
     # too. Measured (Oct 2026): it answered Questions about merged chapters
@@ -257,8 +258,11 @@ class Config(BaseModel):
     # default (Oct 2026): over three judges, 47 time errors against 57.
     plot_chapter_days: bool = True
     recall_k: int = Field(default=2, ge=1, le=8)
-    recall_threshold: float = 0.5
     recall_token_cap: int = Field(default=1_500, ge=100)
+    # What a Question recalled rides the next this many author turns on its
+    # branch, so play doesn't contradict what the author was just told (the
+    # author, Oct 2026). 0 turns it off.
+    recall_carry_turns: int = Field(default=3, ge=0, le=20)
     # A lorebook up to this share of the context budget is sent whole, in the
     # cached system block, instead of selected per turn (`lore_layout`). At
     # 25 entries (~3k tokens, 7% of 45k) whole cost less than retrieval; at 50

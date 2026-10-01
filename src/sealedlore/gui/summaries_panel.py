@@ -163,26 +163,28 @@ class SummariesPanel(QWidget):
 
     def set_recall(self, report: RecallReport | None) -> None:
         """What the last turn or Question recalled (Settings → Context → Recall
-        earlier detail); hidden after a turn that recalls nothing by setting."""
+        earlier detail), what a recent Question carried into the turn, and what
+        nearly was; hidden after a turn that recalls nothing by setting."""
         if report is None or not (report.items or report.near_misses or report.reason):
             self.recall_note.hide()
             return
 
         def named(items) -> str:
-            return ", ".join(
-                f"{item.label.split(',')[0]} ({report.scores.get(item.id, 0):.2f})"
-                for item in items
-            )
+            return ", ".join(item.label.split(",")[0] for item in items)
 
+        carried = [item for item in report.items if item.carried]
+        found = [item for item in report.items if not item.carried]
         bits = []
-        if report.items:
-            bits.append(f"Recalled for your last message: {named(report.items)}.")
-        elif report.reason:
-            bits.append(f"Nothing recalled for your last message ({report.reason}).")
-        else:
+        if found:
+            bits.append(f"Recalled for your last message: {named(found)}.")
+        if carried:
+            bits.append(f"Kept from a recent Question: {named(carried)}.")
+        if not report.items:
             bits.append("Nothing recalled for your last message.")
         if report.near_misses:
-            bits.append(f"Nearly: {named(report.near_misses)}.")
+            bits.append(f"Next in line: {named(report.near_misses)}.")
+        if report.reason:
+            bits.append(f"({report.reason[0].upper()}{report.reason[1:]}.)")
         self.recall_note.setText(" ".join(bits))
         self.recall_note.show()
 

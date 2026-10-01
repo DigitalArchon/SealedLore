@@ -28,3 +28,6 @@ class Aside(BaseModel):
     # wherever it is anchored (one asked before the scene's first message is
     # anchored to the story's last public passage).
     private_span: str | None = None
+    # What recall brought back for it (`RecallItem.id`s): carried into the
+    # turns that follow it (`RecallRuntime._carried`).
+    recalled: list[str] = Field(default_factory=list)

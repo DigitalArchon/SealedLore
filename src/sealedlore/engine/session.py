@@ -1194,8 +1194,11 @@ class StorySession(
         return self.estimator.estimate(text, self.model)
 
     def _recall_query(self, turn: TurnRequest, history: Sequence[Node]) -> str:
-        """Recall keys on what lore keys on: the turn and the last few messages."""
-        return query_text(turn.user_text, history, turns=self.config.lore_query_turns)
+        """Recall keys on the author's turn alone. Measured (Oct 2026) on 67
+        turns that refer back to a merged chapter: lore's query (the last few
+        messages and the turn) put the right chapter first 7 times, the turn
+        alone 16, and with keywords 28; the recent scene swamps the turn."""
+        return turn.user_text
 
     def _retrieve_for_turn(
         self, turn: TurnRequest, history: Sequence[Node]
@@ -3540,6 +3543,7 @@ class StorySession(
                         usage=usage,
                         request_log_ref=log_ref,
                         private_span=span.id if span is not None else None,
+                        recalled=[item.id for item in recall],
                     )
                 )
             self._log_turn(

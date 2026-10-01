@@ -56,7 +56,6 @@ def make_config() -> Config:
         # itself goes to the embeddings endpoint and into the tail.
         recall="exchanges",
         recall_in="everywhere",
-        recall_threshold=-1.0,
     )
 
 

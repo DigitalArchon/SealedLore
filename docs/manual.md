@@ -1295,15 +1295,21 @@ however long the story grows, and merging goes around it. A chapter you have
 edited by hand is merged like any other unless you keep it.
 
 **Recall.** A part is shorter than the chapters it stands for, so detail goes.
-When you ask a Question, the two chapters most like it are brought back into
-the storyteller's prompt in full, chosen by your embeddings model as lore is
-(the first time takes a few seconds while the chapters are read). **Recall
+When you ask a Question, the two chapters most about it are brought back into
+the storyteller's prompt in full. They are found by the words they and their
+archived passages share with your Question (rarer words count for more) and
+by your embeddings model; without an embeddings model the words alone do it.
+The first time takes a few seconds while the chapters are read. What a
+Question brought back stays in the storyteller's prompt for your next few
+turns on that branch (**Keep a Question's recall for**, Settings → Context;
+three by default), so the story keeps to what you were just told. **Recall
 earlier detail** (Settings → Context) can also search the archived passages
 themselves (slower the first time: about 25 seconds for a 250-exchange
-story), or recall in story turns as well. In testing, recall in turns
-sometimes brought an old state back as though it were current, so it is off
-there unless you choose it. **Story so far** shows what the last turn or
-Question recalled, with how close each match was.
+story), or recall for every story turn as well. In testing, turns seldom
+needed it, and it sometimes brought an old state back as though it were
+current, so it is off there unless you choose it. **Story so far** shows what
+the last turn or Question recalled, what it kept from a recent Question, and
+what came next in line.
 
 ## The terminal client
 

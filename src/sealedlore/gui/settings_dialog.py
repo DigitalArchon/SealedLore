@@ -692,10 +692,22 @@ class SettingsDialog(QDialog):
             "Merging condenses old chapters into a part, and detail goes. With recall, "
             "when you ask the storyteller a question (Speaking as → Question) the chapters a "
             "part stands for, or the archived passages themselves, come back into its prompt "
-            "if they are about it: two at most, chosen like lore by your embeddings model. "
-            "Passages are embedded the first time (about 25 seconds for a 250-exchange "
-            "story), chapters in a few. In story turns too, recall brought old states back "
-            "as if they were current in testing: use it there with care."
+            "if they are about it: two at most, found by the words they share with your "
+            "question and by your embeddings model. Passages are embedded the first time "
+            "(about 25 seconds for a 250-exchange story), chapters in a few. In story turns "
+            "too, recall brought old states back as if they were current in testing, and "
+            "turns rarely needed it: use it there with care."
+        )
+
+        self.recall_carry = QSpinBox()
+        self.recall_carry.setRange(0, 20)
+        self.recall_carry.setSpecialValueText("Off")
+        self.recall_carry.setSuffix(" turns")
+        self.recall_carry.setValue(self.config.recall_carry_turns)
+        self.recall_carry.setToolTip(
+            "What a Question recalled stays in the storyteller's prompt for this many of "
+            "your turns after it, on that branch, so the story keeps to what you were just "
+            "told. Off: only the Question sees it."
         )
 
         scope = QLabel(
@@ -714,6 +726,7 @@ class SettingsDialog(QDialog):
         form.addRow("Archive down to", self.archive_target)
         form.addRow("Summary length (words)", self.summary_words)
         form.addRow("Recall earlier detail", self.recall)
+        form.addRow("Keep a Question's recall for", self.recall_carry)
 
         hint = QLabel(
             "Archival summarises the oldest whole chunk of the story rather than "
@@ -1293,5 +1306,6 @@ class SettingsDialog(QDialog):
         self.config.archive_target_ratio = self.archive_target.value() / 100
         self.config.summary_target_words = self.summary_words.value()
         self.config.recall, self.config.recall_in = self.recall.currentData().split("|")
+        self.config.recall_carry_turns = self.recall_carry.value()
 
         self.accept()

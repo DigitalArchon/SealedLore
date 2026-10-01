@@ -611,6 +611,16 @@ _text(
 )
 
 _text(
+    "turn.recall.carried",
+    TURN,
+    "Recalled past: after a Question",
+    "Added under the recalled-past heading when some of it is there because the author "
+    "asked a Question about it in the last few turns (Settings → Context).",
+    "The author asked about some of this out of character a moment ago and was answered "
+    "from these accounts. Where it bears on the scene, keep to what they say.",
+)
+
+_text(
     "turn.scene_log",
     TURN,
     "Recent scenes: heading",
