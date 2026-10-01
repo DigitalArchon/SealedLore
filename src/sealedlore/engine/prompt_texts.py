@@ -1224,6 +1224,10 @@ _text(
 
 # --- The scene read ------------------------------------------------------
 
+# No time field (Oct 2026): the storyteller no longer gets the card's Time
+# after the opening (prompt.scene_time_shown), and replayed on 30 logged reads
+# of the long run, twice each, who arrived and left matched 60/60 without it.
+
 
 _text(
     "scene_read.system",
@@ -1243,7 +1247,6 @@ with one JSON object and nothing else:
 
 {
   "location": "where the scene is now, only if the passage moved it; else null",
-  "time_of_day": "only if the passage moved the time on; else null",
   "situation": "two sentences: what is going on and what is unresolved, only \
 if that changed; else null",
   "privacy": "public or private, or null if the passage does not change it",
@@ -1430,7 +1433,6 @@ Reply with one JSON object and nothing else:
 
 {
   "location": "where this is happening, as specifically as the prose supports",
-  "time_of_day": "the time, if the prose gives one, else null",
   "situation": "two or three sentences: what is going on, what is unresolved, \
 what everyone is in the middle of",
   "privacy": "private if nobody outside the scene could see or hear it, public \

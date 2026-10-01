@@ -308,7 +308,6 @@ def render_card(
     cast_by_id = {character.id: character for character in cast}
     lines = [
         f"Location: {scene.location or '(not recorded)'}",
-        f"Time: {scene.time_of_day or '(not recorded)'}",
         f"Situation: {scene.situation or '(not recorded)'}",
         f"Privacy: {scene.privacy or '(not recorded)'}",
     ]
