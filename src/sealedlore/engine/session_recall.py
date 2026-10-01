@@ -158,6 +158,7 @@ class RecallRuntime:
         """Recall for a turn or question about to be sent; keep the report for the UI.
         A story turn recalls only with `Config.recall_in` "everywhere"."""
         if not question and self.config.recall_in != "everywhere":
+            self.last_recall = None  # nothing to report for this turn
             return ()
         report = self.recall_for(query, history)
         self.last_recall = report

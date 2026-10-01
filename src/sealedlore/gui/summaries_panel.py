@@ -162,7 +162,8 @@ class SummariesPanel(QWidget):
     # --- population -------------------------------------------------------
 
     def set_recall(self, report: RecallReport | None) -> None:
-        """What the last turn recalled (Settings → Context → Recall earlier detail)."""
+        """What the last turn or Question recalled (Settings → Context → Recall
+        earlier detail); hidden after a turn that recalls nothing by setting."""
         if report is None or not (report.items or report.near_misses or report.reason):
             self.recall_note.hide()
             return
@@ -175,11 +176,11 @@ class SummariesPanel(QWidget):
 
         bits = []
         if report.items:
-            bits.append(f"Recalled for the last turn: {named(report.items)}.")
+            bits.append(f"Recalled for your last message: {named(report.items)}.")
         elif report.reason:
-            bits.append(f"Nothing recalled for the last turn ({report.reason}).")
+            bits.append(f"Nothing recalled for your last message ({report.reason}).")
         else:
-            bits.append("Nothing recalled for the last turn.")
+            bits.append("Nothing recalled for your last message.")
         if report.near_misses:
             bits.append(f"Nearly: {named(report.near_misses)}.")
         self.recall_note.setText(" ".join(bits))

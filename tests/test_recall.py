@@ -200,3 +200,7 @@ def test_by_default_only_a_question_recalls(session: StorySession):
     assert session.last_prompt.section(SECTION_RECALL) is None
     list(session.ask("What did Serrik promise the ferryman's daughter?"))
     assert session.last_prompt.section(SECTION_RECALL) is not None
+    assert session.last_recall.items
+    # The next turn recalls nothing, and says nothing about the question's.
+    list(session.send(turn("I walk on.")))
+    assert session.last_recall is None
