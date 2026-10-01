@@ -29,6 +29,7 @@ from sealedlore.engine.chronicle import (
     initial_chronicle,
     introduced,
     is_late,
+    last_day,
     note_asked,
     note_skipped,
     resolve_due,
@@ -691,7 +692,7 @@ class PlotRuntime:
         held = self._character(turn.controlled_character_id)
         dated = sorted(
             (
-                (event, variant, scheduled_minutes(event, days, chronicle.minutes))
+                (event, variant, scheduled_minutes(event, days, chronicle.minutes, chronicle))
                 for event, variant in gap
             ),
             key=lambda item: item[2],
@@ -745,7 +746,7 @@ class PlotRuntime:
                     kind="gap",
                     variant=variant.title or None,
                     text=account,
-                    why=f"skipped over: due by day {event.window[1] if event.window else '?'}",
+                    why=f"skipped over: due by day {last_day(event, chronicle) or '?'}",
                 )
             )
         return directions, failure

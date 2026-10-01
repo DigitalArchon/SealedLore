@@ -269,7 +269,9 @@ otherwise. `must happen: yes` or `no` overrides either default. Even a
 must-happen event is skipped if its own `requires:` no longer hold when its
 window closes. The story has moved past it: give the fall of a town
 `requires: town = standing`, and a story that burned the town some other way
-won't have it attacked again.
+won't have it attacked again. An event it requires that simply hasn't happened
+yet is different: the event waits for it, and its window runs on to the day
+that event happens, so one late event doesn't take everything after it with it.
 
 **Skipped over.** When the story jumps well past an event's window (more than
 three days), the event isn't started as a scene that late. The storyteller's

@@ -307,12 +307,64 @@ def happen(
         set_place(chronicle, place)
 
 
-def scheduled_minutes(event: EventDef, days: dict[str, int], now: int) -> int:
+def prerequisites_day(event: EventDef, chronicle: Chronicle) -> int | None:
+    """The day the last of the events this one requires happened, if any did."""
+    found: list[int] = []
+    for condition in event.requires:
+        if condition.event_id is None or not condition.happened:
+            continue
+        status = chronicle.events.get(condition.event_id)
+        if status is not None and status.state == "happened" and status.at_minutes is not None:
+            found.append(day_of(status.at_minutes))
+    return max(found) if found else None
+
+
+def last_day(event: EventDef, chronicle: Chronicle) -> int | None:
+    """The last day of an event's window, moved on to the day the events it
+    requires happened, if that was later: it can't have been due before them.
+
+    Live (Between Stars), Ossareth ran late, and "Master Soliss arrives",
+    which requires it, reached the end of its window first; it was missed, and
+    everything after it in the story with it.
+    """
+    if event.window is None:
+        return None
+    after = prerequisites_day(event, chronicle)
+    return max(event.window[1], after) if after is not None else event.window[1]
+
+
+def waiting_on_events(conditions: Sequence[Condition], chronicle: Chronicle) -> bool:
+    """Whether the conditions fail only for events that can still happen.
+
+    `X happened` with X pending, foreshadowed or passed on (overdue or not)
+    may yet hold; a fact, a place, `X not happened` once X has happened, or an
+    event that was missed say the story has moved past it.
+    """
+    failing = [condition for condition in conditions if not holds([condition], chronicle)]
+    if not failing:
+        return False
+    for condition in failing:
+        if condition.event_id is None or not condition.happened:
+            return False
+        status = chronicle.events.get(condition.event_id)
+        if status is None or status.state not in ("pending", "led_in", "directed"):
+            return False
+    return True
+
+
+def scheduled_minutes(
+    event: EventDef, days: dict[str, int], now: int, chronicle: Chronicle | None = None
+) -> int:
     """When an event resolved offscreen happened: its own day, not the day a
-    time skip found it (a skip from day 1 to 39 dated a day-31 fall to day 39)."""
+    time skip found it (a skip from day 1 to 39 dated a day-31 fall to day 39),
+    and never before the events it requires."""
     start = opens_on(event, days)
     if start is None:
         return now
+    if chronicle is not None:
+        after = prerequisites_day(event, chronicle)
+        if after is not None:
+            start = max(start, after)
     return min(now, (start - 1) * MINUTES_PER_DAY + 22 * 60)
 
 
@@ -339,7 +391,8 @@ GAP_DAYS = 3
 
 def is_late(event: EventDef, chronicle: Chronicle) -> bool:
     """Whether the story is more than `GAP_DAYS` past this event's window."""
-    return event.window is not None and day_of(chronicle.minutes) > event.window[1] + GAP_DAYS
+    end = last_day(event, chronicle)
+    return end is not None and day_of(chronicle.minutes) > end + GAP_DAYS
 
 
 def force(
@@ -358,7 +411,7 @@ def force(
             variant,
             node_id=node_id,
             revealed=False,
-            at_minutes=scheduled_minutes(event, days, chronicle.minutes),
+            at_minutes=scheduled_minutes(event, days, chronicle.minutes, chronicle),
         )
         return
     status = chronicle.events.setdefault(event.id, EventStatus())
@@ -392,13 +445,17 @@ def resolve_due(
         start = opens_on(event, days)
         if start is None or day < start:
             continue
-        closed = event.window is not None and day > event.window[1]
+        end = last_day(event, chronicle)
+        closed = end is not None and day > end
         # Its own conditions no longer hold: the story has moved past it. A
         # must-happen fall of a town the author's story already burned would
         # otherwise be forced, setting the town back to "under attack" (live).
+        # Unless all that fails is an event that can still happen: it waits
+        # for that, and its window runs on from the day it does (`last_day`).
         if closed and not holds(event.requires, chronicle):
-            status.state = "missed"
-            result.changed = True
+            if not waiting_on_events(event.requires, chronicle):
+                status.state = "missed"
+                result.changed = True
             continue
         fitting = eligible(event, chronicle)
         onscreen = [variant for variant in fitting if not variant.offscreen]
@@ -410,7 +467,7 @@ def resolve_due(
                 offscreen[0],
                 node_id=node_id,
                 revealed=False,
-                at_minutes=scheduled_minutes(event, days, chronicle.minutes),
+                at_minutes=scheduled_minutes(event, days, chronicle.minutes, chronicle),
             )
             result.happened.append(event)
             result.changed = True
@@ -478,7 +535,8 @@ def settle_unconfirmed(
         if status is None or status.state != "directed" or event.id in confirmed:
             continue
         status.unconfirmed_passages += 1
-        closed = event.window is not None and day > event.window[1]
+        end = last_day(event, chronicle)
+        closed = end is not None and day > end
         if (closed or begins_unasked(event)) and status.unconfirmed_passages >= UNCONFIRMED_LIMIT:
             variant = variant_named(event, status.variant) or event.variants[0]
             happen(chronicle, event, variant, node_id=node_id, revealed=True)

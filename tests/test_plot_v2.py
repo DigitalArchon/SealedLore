@@ -1297,3 +1297,84 @@ def test_a_new_name_in_a_public_crowd_is_not_already_there():
     assert shortcuts_kept(passage, shortcut, scene, [JANE]) == []
     scene.privacy = "private"
     assert shortcuts_kept(passage, shortcut, scene, [JANE]) == [shortcut]
+
+
+# --- an event waits for the events it requires ---------------------------------------
+
+CHAIN = """\
+---
+title: Chain
+start: day 1, 09:00
+---
+# World
+Cold.
+
+# Characters
+## Ann
+- role: player
+- present: yes
+
+# Facts
+- road: open (open, closed) — whether the road north is open
+
+# Timeline
+## The crossing
+- when: day 2–3
+- must happen: yes
+
+Ann's guide reaches the far side of the pass.
+
+## The arrival
+- when: day 4–5
+- requires: the crossing happened, road = open
+- must happen: yes
+
+The guide arrives at the gate.
+"""
+
+
+def test_a_late_prerequisite_holds_an_event_rather_than_missing_it():
+    # Live (Between Stars): Ossareth was passed on and ran late, "Master
+    # Soliss arrives" (which requires it) was missed at its window's close,
+    # and everything after it in the story could never happen.
+    from sealedlore.engine.chronicle import happen, is_late, last_day, resolve_due
+
+    p = plot(CHAIN)
+    days = {"the_crossing": 3, "the_arrival": 5}
+    chronicle = initial_chronicle(p)
+    chronicle.events["the_crossing"].state = "directed"
+    chronicle.minutes = clock_minutes(8, 9, 0)  # the arrival's window closed on day 5
+    resolve_due(p, chronicle, days, node_id=None)
+    assert chronicle.events["the_arrival"].state == "pending"
+    assert not chronicle.events["the_arrival"].overdue
+
+    # The crossing happens on day 8: the arrival is due from then, not "late".
+    crossing = p.event("the_crossing")
+    happen(chronicle, crossing, crossing.variants[0], node_id=None, revealed=True)
+    arrival = p.event("the_arrival")
+    assert last_day(arrival, chronicle) == 8 and not is_late(arrival, chronicle)
+    result = resolve_due(p, chronicle, days, node_id=None)
+    assert chronicle.events["the_arrival"].state == "pending" and not result.gap
+    chronicle.minutes = clock_minutes(9, 9, 0)
+    resolve_due(p, chronicle, days, node_id=None)
+    assert chronicle.events["the_arrival"].overdue
+
+
+def test_a_prerequisite_that_can_no_longer_happen_still_misses_it():
+    from sealedlore.engine.chronicle import resolve_due
+
+    p = plot(CHAIN)
+    days = {"the_crossing": 3, "the_arrival": 5}
+    chronicle = initial_chronicle(p)
+    chronicle.events["the_crossing"].state = "missed"
+    chronicle.minutes = clock_minutes(8, 9, 0)
+    resolve_due(p, chronicle, days, node_id=None)
+    assert chronicle.events["the_arrival"].state == "missed"
+
+    # Waiting on an event, but a fact has moved on too: missed, as before.
+    chronicle = initial_chronicle(p)
+    chronicle.events["the_crossing"].state = "directed"
+    chronicle.facts["road"] = "closed"
+    chronicle.minutes = clock_minutes(8, 9, 0)
+    resolve_due(p, chronicle, days, node_id=None)
+    assert chronicle.events["the_arrival"].state == "missed"
