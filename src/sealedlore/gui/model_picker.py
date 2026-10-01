@@ -62,6 +62,24 @@ SHORT_ROUTES = {
     "price": "⚡ Cheapest",
 }
 
+
+def route_label(route: ModelRoute | None) -> tuple[str, str]:
+    """A route button's text and tooltip: "Route…" for the subscription's
+    routing, else the route in short."""
+    if route is None:
+        return (
+            "Route…",
+            "Subscription routing: NanoGPT chooses the host. Click to choose the fastest, "
+            "the cheapest or one host instead (billed pay-as-you-go).",
+        )
+    text = f"⚡ {route.host}" if route.priority == "host" else SHORT_ROUTES[route.priority]
+    return (
+        text,
+        f"Route: {describe(route)}. Billed pay-as-you-go, even on the subscription. "
+        "Click to change it.",
+    )
+
+
 COLUMNS = ("Model", "Name", "Privacy", "Context", "In $/M", "Out $/M", "Reasoning", "Hosts")
 
 
@@ -611,22 +629,9 @@ class ModelField(QWidget):
         self.route_button.setVisible(shown)
         if not shown:
             return
-        route = self.effective_route()
-        if route is None:
-            self.route_button.setText("Route…")
-            self.route_button.setToolTip(
-                "Subscription routing: NanoGPT chooses the host. Click to choose the fastest, "
-                "the cheapest or one host instead (billed pay-as-you-go)."
-            )
-            return
-        if route.priority == "host":
-            self.route_button.setText(f"⚡ {route.host}")
-        else:
-            self.route_button.setText(SHORT_ROUTES[route.priority])
-        self.route_button.setToolTip(
-            f"Route: {describe(route)}. Billed pay-as-you-go, even on the subscription. "
-            "Click to change it."
-        )
+        text, tip = route_label(self.effective_route())
+        self.route_button.setText(text)
+        self.route_button.setToolTip(tip)
 
     def _edit_route(self) -> None:
         endpoint = self._endpoint()

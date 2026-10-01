@@ -530,7 +530,9 @@ was slower and less accurate.
 
 Each role has its own route, so a free storyteller and a fast paid scene read
 can be the same model. A simple chat's route is chosen with its model in New
-simple chat, and belongs to that chat. Routes never apply to `TEE/` or
+simple chat, and belongs to that chat. The storyteller's route, a story's or
+a chat's, can also be changed at the bottom left, beside the model (a host
+that keeps failing, say). Routes never apply to `TEE/` or
 `private/` models, whose enclave is their host. Test speed… measures each
 role on its route, so the same model on two routes shows as two rows. Each
 host's privacy terms are its own; on NanoGPT's site your account can require

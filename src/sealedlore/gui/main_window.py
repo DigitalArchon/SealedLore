@@ -17,6 +17,7 @@ from PySide6.QtCore import QFile, Qt, QThread, QTimer, QUrl, Signal
 from PySide6.QtGui import QAction, QCursor, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QDockWidget,
     QFileDialog,
     QInputDialog,
@@ -39,7 +40,14 @@ from sealedlore.engine.plot_md import PLOT_SUFFIX, ParsedPlotFile, parse_plot_ma
 from sealedlore.engine.prompt import TurnRequest
 from sealedlore.engine.prompt_edits import texts_in_force
 from sealedlore.engine.reasoning import config_params, config_reasoning
-from sealedlore.engine.routing import HostPrice, config_role_model, config_route
+from sealedlore.engine.routing import (
+    HostPrice,
+    config_role_model,
+    config_route,
+    routable,
+    route_body,
+)
+from sealedlore.engine.routing import describe as describe_route
 from sealedlore.engine.scene_update import SceneProposal
 from sealedlore.engine.session import (
     SessionNotice,
@@ -59,7 +67,12 @@ from sealedlore.gui.generate_dialog import GenerateDialog
 from sealedlore.gui.inspector import ContextInspector
 from sealedlore.gui.lore_panel import LorePanel
 from sealedlore.gui.model_hosts import hosts_catalog
-from sealedlore.gui.model_picker import ModelCatalog, pick_model, pick_model_and_route
+from sealedlore.gui.model_picker import (
+    ModelCatalog,
+    pick_model,
+    pick_model_and_route,
+    route_label,
+)
 from sealedlore.gui.model_trouble import (
     TROUBLE_ROLE_NAMES,
     ModelTroubleDialog,
@@ -71,6 +84,7 @@ from sealedlore.gui.plot_panel import ClockDialog, PlotPanel
 from sealedlore.gui.prompt_editor import PromptEditorDialog
 from sealedlore.gui.ref_images import load_plot_pictures
 from sealedlore.gui.review_dialog import ReviewRequestDialog, ReviewResultDialog
+from sealedlore.gui.route_dialog import RouteDialog
 from sealedlore.gui.scene_panel import ScenePanel
 from sealedlore.gui.session_line import SessionLine
 from sealedlore.gui.settings_dialog import SettingsDialog
@@ -402,6 +416,13 @@ class MainWindow(
         self.model_button.setAutoRaise(True)
         self.model_button.clicked.connect(self.choose_story_model)
         bar.add_left(self.model_button)
+        # Which host serves it, beside it (see choose_story_route).
+        self.route_button = QToolButton()
+        self.route_button.setObjectName("modelButton")
+        self.route_button.setAutoRaise(True)
+        self.route_button.clicked.connect(self.choose_story_route)
+        self.route_button.hide()
+        bar.add_left(self.route_button)
         # The plot's clock, for stories with one: one click from a correction.
         self.clock_button = QToolButton()
         self.clock_button.setObjectName("clockButton")
@@ -2651,9 +2672,8 @@ class MainWindow(
     def _use_host(self, role: str, model: str, host: Host) -> None:
         """A host chosen in Help → Model trouble becomes the role's route."""
         route = ModelRoute(priority="host", host=host.id, host_model=model, fp8=host.fp8_or_better)
-        if role == "story" and self.session is not None and self.session.story.chat:
-            self.session.story.defaults.main_route = route
-            self.session.save()
+        if role == "story":
+            self._set_story_route(route)
         else:
             self.config.model_routes[role] = route
             save_config(self.config, root=self.root)
@@ -3022,6 +3042,7 @@ class MainWindow(
         # The line above the transcript says the same things, and more; an
         # attestation finishing refreshes only this.
         self.session_line.show_session(self.session, tee_state=self._tee_state)
+        self._refresh_route_button()
         private = self._private_model_text()
         if private is not None:
             self.model_button.setText(private)
@@ -3072,6 +3093,74 @@ class MainWindow(
         self.statusBar().showMessage(
             f"Storyteller model: {chosen}. The next turn re-sends the whole prompt once.", 8000
         )
+
+    # --- the storyteller's route -------------------------------------------------
+
+    def _story_route_endpoint(self) -> str | None:
+        """The endpoint the storyteller's route applies on, or None when it
+        has none: a model NanoGPT can't route (another endpoint, a TEE or
+        encrypted model), a model with one host, or a private scene or part."""
+        if self.session is None or self.in_private or self.use_mock:
+            return None
+        provider = self.config.active_provider()
+        model = self.session.model
+        if provider is None or not routable(provider.base_url, model):
+            return None
+        hosts = self._hosts_of(model)
+        return provider.base_url if hosts is None or len(hosts) >= 2 else None
+
+    def _story_route(self) -> ModelRoute | None:
+        """The storyteller's route as it applies to its model now (a host
+        chosen for another model is the subscription's routing): a chat's
+        own, or the story role's in Settings → Models."""
+        story = self.session.story
+        route = story.defaults.main_route if story.chat else self.config.model_routes.get("story")
+        return route if route_body(route, self.session.model) else None
+
+    def _set_story_route(self, route: ModelRoute | None) -> None:
+        """A chat's route is its own; a story's is the storyteller's in the
+        settings, for every story, as Settings → Models sets it."""
+        if self.session is not None and self.session.story.chat:
+            self.session.story.defaults.main_route = route
+            self.session.save()
+            return
+        if route is None:
+            self.config.model_routes.pop("story", None)
+        else:
+            self.config.model_routes["story"] = route
+        save_config(self.config, root=self.root)
+
+    def _refresh_route_button(self) -> None:
+        shown = self._story_route_endpoint() is not None
+        self.route_button.setVisible(shown)
+        if shown:
+            text, tip = route_label(self._story_route())
+            if not self.in_chat:
+                tip += " It is the storyteller's route in every story (Settings → Models)."
+            self.route_button.setText(text)
+            self.route_button.setToolTip(tip)
+            self.route_button.setEnabled(not self._busy)
+
+    def choose_story_route(self) -> None:
+        """The route button: which host serves the storyteller's model, one
+        click from another when a host lets it down, as the model button is."""
+        endpoint = self._story_route_endpoint()
+        if endpoint is None or self._busy:
+            return
+        dialog = RouteDialog(endpoint, self.session.model, self._story_route(), self)
+        try:
+            if dialog.exec() != QDialog.Accepted:
+                return
+            route = dialog.route()
+        finally:
+            dialog.deleteLater()
+        if route == self._story_route():
+            return
+        self._set_story_route(route)
+        self._fetch_host_prices()
+        self._reassemble_inspector()
+        self._update_controls()
+        self.statusBar().showMessage(f"Storyteller route: {describe_route(route)}.", 8000)
 
     def _set_default_model(self, model: str | None) -> None:
         """Make `model` the provider's default too, as saving Settings does.

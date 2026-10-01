@@ -19,7 +19,11 @@ from sealedlore.engine.prompt import TurnRequest  # noqa: E402
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.gui.setup_dialog import SetupDialog  # noqa: E402
 from sealedlore.models.node import CHAT_USER_ID  # noqa: E402
-from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
+from sealedlore.storage.repository import (  # noqa: E402
+    StoryBundle,
+    load_story_bundle,
+    save_story_bundle,
+)
 from tests.conftest import make_exchange  # noqa: E402
 
 
@@ -658,3 +662,73 @@ def test_a_new_chat_takes_its_own_route(app, window, monkeypatch, tmp_path):
     window.catalog.models = None
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
     window.close_story()
+
+
+def test_the_storytellers_route_can_be_changed_beside_its_model(app, window, monkeypatch, tmp_path):
+    """A route chosen only in New chat or Settings couldn't be swapped when a
+    host let the storyteller down. The route button beside the model button
+    changes it: a story's is the storyteller's in the settings, a chat's its
+    own and never the settings'."""
+    import sealedlore.gui.main_window as main_window_module
+    from sealedlore.engine.catalog import ModelInfo
+    from sealedlore.models.config import ProviderConfig
+    from sealedlore.models.route import ModelRoute
+
+    nano = ProviderConfig(name="nano", base_url="https://nano-gpt.com/api/v1", model="z-ai/glm-5.3")
+    window.config.providers = [nano]
+    window.config.active_provider_name = "nano"
+    monkeypatch.setattr(window, "use_mock", False)
+    monkeypatch.setattr(window, "_fetch_host_prices", lambda: None)  # no network
+    hosts = {"z-ai/glm-5.3": ModelInfo(id="z-ai/glm-5.3", hosts=("a", "b"))}
+    monkeypatch.setattr(window.catalog, "models", hosts)
+    seen: list[ModelRoute | None] = []
+    chosen: list[ModelRoute | None] = []
+
+    class Dialog:  # the real one fetches the model's hosts
+        def __init__(self, endpoint, model, route, parent):
+            seen.append(route)
+
+        def exec(self):  # noqa: A003 - Qt naming
+            return main_window_module.QDialog.Accepted
+
+        def route(self):
+            return chosen[-1]
+
+        def deleteLater(self):  # noqa: N802 - Qt naming
+            pass
+
+    monkeypatch.setattr(main_window_module, "RouteDialog", Dialog)
+
+    # An ordinary story: the storyteller's route, for every story.
+    window.session.story.defaults.main_model = "z-ai/glm-5.3"
+    window._update_controls()
+    assert not window.route_button.isHidden() and window.route_button.text() == "Route…"
+    chosen.append(ModelRoute(priority="latency"))
+    window.choose_story_route()
+    assert seen == [None]
+    assert window.config.model_routes["story"] == ModelRoute(priority="latency")
+    assert window.session.route_for("story")["provider"]["sort"] == "latency"
+    assert window.route_button.text() == "⚡ Fastest start"
+    chosen.append(None)
+    window.choose_story_route()
+    assert "story" not in window.config.model_routes
+
+    # A chat: its own route, never the settings.
+    make_chat(window, monkeypatch, model="z-ai/glm-5.3")
+    session = window.session
+    window._update_controls()
+    assert window.route_button.text() == "Route…"
+    config_before = window.config.model_dump_json()
+    chosen.append(ModelRoute(priority="host", host="b", host_model="z-ai/glm-5.3"))
+    window.choose_story_route()
+    assert session.story.defaults.main_route == chosen[-1]
+    assert window.route_button.text() == "⚡ b"
+    assert session.route_for("story")["provider"]["order"] == ["b"]
+    assert window.config.model_dump_json() == config_before, "the chat's route reached the settings"
+    reloaded = load_story_bundle(session.story.id, root=tmp_path)
+    assert reloaded.story.defaults.main_route == chosen[-1]
+
+    # A model with one host, or a TEE model: no route to change.
+    hosts["z-ai/glm-5.3"] = ModelInfo(id="z-ai/glm-5.3", hosts=("a",))
+    window._update_controls()
+    assert window.route_button.isHidden()
