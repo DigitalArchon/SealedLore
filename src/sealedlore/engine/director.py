@@ -313,7 +313,12 @@ def render_direction_block(
 def render_story_time_block(
     plot: Plot, chronicle: Chronicle, texts: PromptTexts = DEFAULT_TEXTS
 ) -> str:
-    """The clock, and the events the author's character knows of."""
+    """The events the author's character knows of, and the clock only if the
+    story-time text asks for it (`{now}`, not by default: `plot.story_time`).
+
+    Nothing at all when there is nothing to say.
+    """
+    clock = "{now}" in texts["plot.story_time"]
     known = [
         (event, status)
         for event in plot.events
@@ -321,11 +326,16 @@ def render_story_time_block(
         and status.state == "happened"
         and status.revealed
     ]
+    if not known and not clock:
+        return ""
     lines = [texts.fill("plot.story_time", now=format_clock(chronicle.minutes))]
     if known:
+        if not clock:
+            lines.append("")  # after the heading, as the clock line had it
         lines.append(texts["plot.story_time.known"])
         for event, status in known:
-            when = f" ({format_clock(status.at_minutes)})" if status.at_minutes is not None else ""
+            dated = clock and status.at_minutes is not None
+            when = f" ({format_clock(status.at_minutes)})" if dated else ""
             # The aftermath rides along for good: a reveal is one passage, and
             # arriving at the ruins sixteen turns later, the storyteller had
             # lost "the dead still walk its streets" and invented the rest.

@@ -269,7 +269,9 @@ def test_a_directed_event_reaches_the_tail_and_happens(tmp_path: Path):
     prompt = session.last_prompt
     assert "The horde breaks the gate." in prompt.section(SECTION_DIRECTION).text
     assert "Begin what the story direction sets out" in prompt.section(SECTION_REMINDER).text
-    assert "Day 3 · 21:00" in prompt.section(SECTION_STORY_TIME).text
+    # The storyteller isn't told the day and time (measured, Oct 2026).
+    # Nothing known yet, so no story-time section at all.
+    assert prompt.section(SECTION_STORY_TIME) is None
     user_node = session.path()[-2]
     assert [d.kind for d in user_node.meta.direction] == ["begin"]
 

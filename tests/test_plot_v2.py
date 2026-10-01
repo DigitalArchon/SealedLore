@@ -22,6 +22,7 @@ from sealedlore.engine.chronicle_read import parse_read
 from sealedlore.engine.director import render_story_time_block
 from sealedlore.engine.plot_md import parse_plot_markdown
 from sealedlore.engine.prompt import SECTION_DIRECTION, TurnRequest
+from sealedlore.engine.prompt_texts import PromptTexts
 from sealedlore.engine.scene_update import SceneDelta
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
@@ -333,7 +334,20 @@ def test_revealed_aftermath_stays_in_story_time():
     status = chronicle.events["the_raid"]
     status.state, status.revealed, status.at_minutes = "happened", True, clock_minutes(3, 22, 0)
     block = render_story_time_block(p, chronicle)
+    assert "- The raid: The mill was stripped bare" in block
+    # No clock and no dates unless the text asks for the clock ({now}).
+    assert "Day 3" not in block and "It is now" not in block
+    clocked = PromptTexts({"plot.story_time": "# STORY TIME\n\nIt is now {now} of the story."})
+    block = render_story_time_block(p, chronicle, texts=clocked)
+    assert "It is now Day 3 · 18:00 of the story." in block
     assert "The raid (Day 3 · 22:00): The mill was stripped bare" in block
+
+
+def test_no_story_time_block_when_nothing_is_known():
+    # Measured (Oct 2026): "It is now Day N" every turn made GLM 5.3 work out
+    # days and hours wrongly, and Sonnet 4.6 no better; it is off by default.
+    p = plot()
+    assert render_story_time_block(p, initial_chronicle(p)) == ""
 
 
 # --- the read ------------------------------------------------------------------

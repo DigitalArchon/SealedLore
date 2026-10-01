@@ -1770,12 +1770,21 @@ _text(
     "the story reaches them):",
 )
 
+# No clock by default (Oct 2026, design/plots.md "The clock line"): "It is now
+# Day N" every turn, and each known event dated, against neither, on the master
+# Between Stars run with its clock rebuilt right, chapter days in both, 40
+# blind pairs, three judges. Sonnet 4.6 a tie (wins 10-10, 11-9, 7-13; time
+# errors 7-7, 10-11, 20-18); GLM 5.3 worse with it on every judge (wins 3-16,
+# 4-13, 7-12; time errors 11-3, 13-7, 33-18): it worked days and hours out
+# from the clock and got them wrong ("when I scanned you on day fifty-five").
 _text(
     "plot.story_time",
     PLOT,
     "Story time",
-    "In the tail of a story with a plot: the clock.",
-    "# STORY TIME\n\nIt is now {now} of the story.",
+    "Heads the events the author's character knows of, in the tail of a story with a plot. "
+    'Put {now} in it to tell the storyteller the day and time too ("It is now {now} of the '
+    'story."): the events are then dated as well.',
+    "# STORY TIME",
     (("now", "the story's clock"),),
 )
 
