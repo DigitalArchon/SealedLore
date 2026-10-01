@@ -301,7 +301,8 @@ def test_a_plot_storys_chapters_carry_their_days_when_asked(session: StorySessio
     a3.meta.chronicle = Chronicle(minutes=clock_minutes(5, 20, 0))
     a5 = next(n for n in session.nodes if n.id == "a5")
     a5.meta.chronicle = Chronicle(minutes=clock_minutes(9, 7, 0))
-    assert session.chapter_days() == ()  # off unless asked
+    session.config.plot_chapter_days = False
+    assert session.chapter_days() == ()  # the author may turn it off
     session.config.plot_chapter_days = True
     days = dict(session.chapter_days())
     one, two, three = (by_content(session, f"Main chapter {n}.") for n in ("one", "two", "three"))

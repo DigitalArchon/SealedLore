@@ -645,6 +645,14 @@ class SettingsDialog(QDialog):
             "call per chapter."
         )
 
+        self.plot_chapter_days = QCheckBox("Head a plot story's chapters with their days")
+        self.plot_chapter_days.setChecked(self.config.plot_chapter_days)
+        self.plot_chapter_days.setToolTip(
+            "In a story with a plot, each chapter summary is headed with the story days it "
+            'covers, from the plot\'s clock ("Chapter 4 · days 12–15"), so the storyteller '
+            "can tell how long ago things happened. Never in a story without a plot."
+        )
+
         self.chunk_turns = QSpinBox()
         self.chunk_turns.setRange(2, 100)
         self.chunk_turns.setValue(self.config.archive_chunk_turns)
@@ -701,6 +709,7 @@ class SettingsDialog(QDialog):
         form.addRow("Context budget", self.budget)
         form.addRow(self.auto_archive)
         form.addRow(self.story_ledger)
+        form.addRow(self.plot_chapter_days)
         form.addRow("Turns per chapter", self.chunk_turns)
         form.addRow("Archive down to", self.archive_target)
         form.addRow("Summary length (words)", self.summary_words)
@@ -1279,6 +1288,7 @@ class SettingsDialog(QDialog):
         # App-wide, whether or not a story is open.
         self.config.auto_archive = self.auto_archive.isChecked()
         self.config.story_ledger = self.story_ledger.isChecked()
+        self.config.plot_chapter_days = self.plot_chapter_days.isChecked()
         self.config.archive_chunk_turns = self.chunk_turns.value()
         self.config.archive_target_ratio = self.archive_target.value() / 100
         self.config.summary_target_words = self.summary_words.value()

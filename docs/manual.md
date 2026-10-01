@@ -828,7 +828,9 @@ at that point.
 
 The scene's **Time** is your starting time: it goes into the opening, and from
 then on the story's own prose says what time it is. In a story with a plot the
-plot's clock keeps the time instead. The field is shown only where it is used.
+plot's clock keeps the time instead, and each chapter summary is headed with
+the story days it covers ("Chapter 4 · days 12–15"; Settings → Context can
+turn that off). The field is shown only where it is used.
 
 **Who knows what.** Each scene records who can know what happens in it:
 everyone, in time, or only those present. When a scene ends,

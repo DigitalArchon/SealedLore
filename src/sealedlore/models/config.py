@@ -253,8 +253,9 @@ class Config(BaseModel):
     # far better, and in turns it brought old states back as present.
     recall_in: Literal["questions", "everywhere"] = "questions"
     # A plot story's chapter headings carry the days they span, from the
-    # plot's clock ("Chapter 4 · days 12–15"). Never without a plot.
-    plot_chapter_days: bool = False
+    # plot's clock ("Chapter 4 · days 12–15"). Never without a plot. On by
+    # default (Oct 2026): over three judges, 47 time errors against 57.
+    plot_chapter_days: bool = True
     recall_k: int = Field(default=2, ge=1, le=8)
     recall_threshold: float = 0.5
     recall_token_cap: int = Field(default=1_500, ge=100)
