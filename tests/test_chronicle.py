@@ -16,7 +16,12 @@ from sealedlore.engine.chronicle import (
     format_duration,
     initial_chronicle,
 )
-from sealedlore.engine.chronicle_read import MAX_UNQUOTED_MINUTES, parse_read
+from sealedlore.engine.chronicle_read import (
+    MAX_UNQUOTED_MINUTES,
+    _names_day,
+    _stated_span,
+    parse_read,
+)
 from sealedlore.engine.plot_md import parse_plot_markdown
 from sealedlore.engine.prompt import TurnRequest
 from sealedlore.engine.session import SessionNotice, StorySession
@@ -292,6 +297,62 @@ def test_a_day_number_needs_a_quote_that_names_it():
     delta = parse_read(read(2, "days", quote="Day three dawns cold.")[:-1] + ', "day": 3}')
     after = delta.applied_to(before, plot(), passage="Day three dawns cold.", author_turn="")
     assert after.minutes // 1440 == 2
+
+
+@pytest.mark.parametrize(
+    ("text", "days"),
+    [
+        ("Twenty-one days later.", 21),
+        ("Forty days pass.", 40),
+        ("A few more days pass.", 3),
+        ("A hundred days pass.", 100),
+        ("One hundred and twenty days later.", 120),
+        ("A week and a half goes by.", 10.5),
+        ("Two and a half weeks pass.", 17.5),
+        ("Another day passes.", 1),
+        ("a couple of nights", 2),
+        ("It took 3 days.", 3),
+    ],
+)
+def test_a_stated_span_reads_its_number_whole(text, days):
+    # Live, "fifty-one days" was read as "one day", and "thirty days" not at all.
+    span = _stated_span(text)
+    assert span is not None and span[0] == round(days * 1440)
+
+
+def test_a_count_of_days_is_not_a_day_number():
+    # Live, the storyteller's "fifty-one days into a new life" set the story to day 51.
+    assert not _names_day("fifty-one days into a new life", 51)
+    assert not _names_day("thirty days", 30)
+    assert not _names_day("the thirty-first day", 1)
+    assert not _names_day("day thirty one", 30)
+    assert _names_day("On day 58, the Cortina docked.", 58)
+    assert _names_day("Day thirty-one dawned grey.", 31)
+    assert _names_day("the thirty-eighth evening", 38)
+    assert _names_day("the 31st morning", 31)
+
+
+def test_the_authors_skip_and_day_stand_whatever_else_the_turn_names():
+    # The branch run of Between Stars, day 51: the read said thirty days and
+    # day 81, and both were refused (the turn's "fifty-one days" read as one
+    # day, the day not in the read's quote). The clock ended 29 days short.
+    before = initial_chronicle(plot())
+    turn = (
+        "The next thirty days blur into a rhythm of station life. Andar and Myla learn each "
+        "other again across the distance fifty-one days carved between them. By day 81, the "
+        "tension has become almost ordinary."
+    )
+    passage = "Thirty days settled into a rhythm that had no right to be called one."
+    delta = parse_read(read(30, "days", quote="Thirty days settled")[:-1] + ', "day": 81}')
+    after = delta.applied_to(
+        before, plot(), passage=passage, author_turn=turn, author_states_facts=True
+    )
+    assert after.minutes // 1440 + 1 == 81
+    assert not delta.refused
+    # An in-character turn is not the author's statement of the day.
+    delta = parse_read(read(30, "days", quote="Thirty days settled")[:-1] + ', "day": 81}')
+    after = delta.applied_to(before, plot(), passage=passage, author_turn=turn)
+    assert after.elapsed == 30 * 1440 and any("day 81" in r for r in delta.refused)
 
 
 def test_the_authors_own_skip_needs_no_quote():

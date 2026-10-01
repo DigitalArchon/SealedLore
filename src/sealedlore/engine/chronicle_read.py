@@ -65,66 +65,132 @@ _ORDINAL_ENDS = {
 }
 
 
-def _number_words(n: int) -> tuple[str, ...]:
-    """Cardinal and ordinal spellings of 1–999, hyphenated and not."""
+def _cardinal(n: int) -> str:
+    """1–999 in words, hyphenated: "fifty-one", "one hundred and five"."""
     if n < 20:
-        words = _ONES[n]
-    elif n < 100:
-        words = _TENS[n // 10] + ("" if n % 10 == 0 else "-" + _ONES[n % 10])
-    elif n < 1000:
-        rest = n % 100
-        words = (
-            _ONES[n // 100] + " hundred" + ("" if not rest else " and " + _number_words(rest)[0])
-        )
-    else:
-        return ()
-    head, _, last = words.rpartition("-" if "-" in words else " ")
+        return _ONES[n]
+    if n < 100:
+        return _TENS[n // 10] + ("" if n % 10 == 0 else "-" + _ONES[n % 10])
+    rest = n % 100
+    return _ONES[n // 100] + " hundred" + (" and " + _cardinal(rest) if rest else "")
+
+
+def _spellings(n: int) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Cardinal and ordinal spellings of 1–999, hyphenated and not, longest first."""
+    if not 0 < n < 1000:
+        return (), ()
+    words = _cardinal(n)
+    head, sep, last = words.rpartition("-" if "-" in words else " ")
     if last.endswith("y"):
         ordinal_last = last[:-1] + "ieth"
     else:
         ordinal_last = _ORDINAL_ENDS.get(last, last + "th")
-    ordinal = (head + ("-" if "-" in words else " ") if head else "") + ordinal_last
-    return tuple({form for w in (words, ordinal) for form in (w, w.replace("-", " "))})
+    ordinal = head + sep + ordinal_last
+
+    def forms(text: str) -> tuple[str, ...]:
+        return tuple(sorted({text, text.replace("-", " ")}, key=len, reverse=True))
+
+    return forms(words), forms(ordinal)
 
 
-def _names_day(quote: str, day: int) -> bool:
-    """Whether a quote names this day number, in digits or in words.
+_DAY_PARTS = "day|morning|afternoon|evening|night|dawn|dusk"
+# After a number word, the word that would make it a bigger number:
+# "day thirty one" is not day thirty.
+_NO_UNIT_AFTER = r"(?![\w-])(?!\s+(?:" + "|".join(_ONES[1:10]) + r")\b)"
 
-    Live (Mistral): "day 70" quoting "Five weeks pass." was taken as named.
+
+def _names_day(text: str, day: int) -> bool:
+    """Whether the text names this as the story's day: "day 31", "Day thirty-one",
+    "the thirty-first morning".
+
+    A count of days is not a day number. Live, the storyteller's "fifty-one
+    days into a new life" set the story to day 51, and Mistral's "day 70"
+    quoting "Five weeks pass." was taken as named before that.
     """
-    if re.search(rf"(?<!\d){day}(?:st|nd|rd|th)?(?!\d)", quote):
-        return True
-    return any(
-        re.search(rf"\b{re.escape(form)}\b", quote, re.IGNORECASE) for form in _number_words(day)
+    cardinals, ordinals = _spellings(day)
+    cardinal = "|".join([str(day), *map(re.escape, cardinals)])
+    ordinal = "|".join([rf"{day}(?:st|nd|rd|th)", *map(re.escape, ordinals)])
+    patterns = (
+        rf"\bday\s+(?:number\s+)?(?:{cardinal}){_NO_UNIT_AFTER}",
+        rf"(?<![\w-])(?:{ordinal})\s+(?:{_DAY_PARTS})\b",
     )
+    return any(re.search(pattern, text, re.IGNORECASE) for pattern in patterns)
 
 
-_SPAN_NUMBER = {
+_WORD_VALUES = {
     **{word: n for n, word in enumerate(_ONES) if n},
-    "a": 1,
-    "an": 1,
-    "a single": 1,
+    **{word: n * 10 for n, word in enumerate(_TENS) if n > 1},
+}
+# How many a phrase means where it isn't a number.
+_SPAN_QUANTITY = {
     "a couple of": 2,
+    "a couple": 2,
+    "a single": 1,
+    "a dozen": 12,
     "a few": 3,
     "few": 3,
     "several": 4,
+    "another": 1,
+    "an": 1,
+    "a": 1,
 }
+
+
+def _alternatives(words: Sequence[str]) -> str:
+    return "|".join(sorted(map(re.escape, words), key=len, reverse=True))
+
+
+_UNDER_HUNDRED = (
+    rf"(?:(?:{_alternatives(_TENS[2:])})(?:[-\s](?:{_alternatives(_ONES[1:10])}))?"
+    rf"|{_alternatives(_ONES[1:20])})"
+)
+_COUNT = (
+    rf"(?:(?:a|{_alternatives(_ONES[1:10])})\s+hundred(?:\s+and\s+{_UNDER_HUNDRED})?"
+    rf"|{_UNDER_HUNDRED})"
+)
+_HALF = r"(\s+and\s+a\s+half)?"
+# Never inside a bigger number: "fifty-one days" is not "one day" (live, a
+# Director turn's "fifty-one days" cut a thirty-day skip to one day).
 _SPAN = re.compile(
-    r"\b(\d+|"
-    + "|".join(sorted(map(re.escape, _SPAN_NUMBER), key=len, reverse=True))
-    + r")\s+(minute|hour|day|night|week|month|year)s?\b",
+    rf"(?<![\w-])(\d+|{_COUNT}|{_alternatives(_SPAN_QUANTITY)}){_HALF}"
+    r"(?:\s+(?:more|further|long|full|whole|short))?"
+    rf"\s+(minute|hour|day|night|week|month|year)s?{_HALF}\b",
     re.IGNORECASE,
 )
 
 
+def _count(phrase: str) -> int:
+    """The number a matched count means: "21", "twenty-one", "a hundred", "a few"."""
+    phrase = " ".join(phrase.lower().split())
+    if phrase.isdigit():
+        return int(phrase)
+    if phrase in _SPAN_QUANTITY:
+        return _SPAN_QUANTITY[phrase]
+    total = 0
+    for word in phrase.replace("-", " ").split():
+        if word == "hundred":
+            total = (total or 1) * 100
+        elif word in _WORD_VALUES:
+            total += _WORD_VALUES[word]
+        elif word == "a":
+            total += 1
+    return total
+
+
 def _stated_span(text: str) -> tuple[int, str] | None:
-    """The longest stretch of time a Director or Narration turn states, and its sentence."""
+    """The longest stretch of time a Director or Narration turn states, and its sentence.
+
+    The longest, because it is a ceiling on the read's own count: a turn that
+    names a longer time it isn't skipping ("fifty-one days apart") only makes
+    the ceiling generous, never wrong.
+    """
     best: tuple[int, str] | None = None
     for match in _SPAN.finditer(text):
-        count = match.group(1).lower()
-        number = int(count) if count.isdigit() else _SPAN_NUMBER[count]
-        unit = match.group(2).lower()
-        minutes = number * _UNITS["day" if unit == "night" else unit]
+        unit = match.group(3).lower()
+        per = _UNITS["day" if unit == "night" else unit]
+        # "two and a half weeks", "a week and a half"
+        half = per // 2 if match.group(2) or match.group(4) else 0
+        minutes = _count(match.group(1)) * per + half
         if best is None or minutes > best[0]:
             start = max(text.rfind(end, 0, match.start()) for end in ".!?\n") + 1
             stops = [i for i in (text.find(end, match.end()) for end in ".!?\n") if i >= 0]
@@ -293,10 +359,16 @@ class ChronicleDelta:
             self.refused.append("a time of day that would skip most of a day")
             minutes = before.minutes + elapsed
         # A day the text names outright wins, if it is quoted and not past.
+        # The author's own Director or Narration turn naming it counts too:
+        # live, "By day 81" in the turn was refused because the read quoted
+        # the passage's "Thirty days settled…" for the time.
         if self.day is not None:
             within = ends_at if ends_at is not None else minutes % MINUTES_PER_DAY
             named = (self.day - 1) * MINUTES_PER_DAY + within
-            if not quoted or not _names_day(quote, self.day):
+            named_in = [quote] if quoted else []
+            if author_states_facts:
+                named_in.append(author_turn)
+            if not any(_names_day(text, self.day) for text in named_in):
                 self.refused.append(f"day {self.day} with nothing in the text naming it")
             elif named < before.minutes:
                 self.refused.append(f"day {self.day} is in the past")
