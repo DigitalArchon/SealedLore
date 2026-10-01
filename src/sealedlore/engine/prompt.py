@@ -27,6 +27,7 @@ from dataclasses import dataclass, field, replace
 from sealedlore.engine.budget import BudgetReport, HistoryItem, select_history_items
 from sealedlore.engine.characters import render_supporting_block
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
+from sealedlore.engine.recall import RecallItem, render_recall_block
 from sealedlore.engine.response_style import for_turn
 from sealedlore.engine.rules import (
     render_author_turn,
@@ -64,6 +65,7 @@ SECTION_STANDING_LORE = "system.lore"
 SECTION_CAST = "system.cast"
 SECTION_SUMMARIES = "summaries"
 SECTION_HISTORY = "history"
+SECTION_RECALL = "tail.recall"
 SECTION_LORE = "tail.lore"
 SECTION_SUPPORTING = "tail.supporting"
 SECTION_SCENE_LOG = "tail.scene_log"
@@ -126,6 +128,9 @@ class AssemblyOptions:
     # The texts in force: the defaults, with the author's edits over them
     # (engine/prompt_texts.py).
     texts: PromptTexts = DEFAULT_TEXTS
+    # A plot story's chapters, by summary id, with the story days each spans
+    # from the plot's clock (`Config.plot_chapter_days`); empty otherwise.
+    chapter_days: tuple[tuple[str, tuple[int, int]], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -249,6 +254,7 @@ def assemble_prompt(
     turn: TurnRequest,
     summaries: Sequence[Summary] = (),
     lore: Sequence[LoreEntry] = (),
+    recall: Sequence[RecallItem] = (),
     standing_lore: Sequence[LoreEntry] = (),
     supporting: Sequence[Character] = (),
     on_file: Sequence[Character] = (),
@@ -276,6 +282,8 @@ def assemble_prompt(
     length = for_turn(story.style, turn.response_style, turn.length_hint, texts)
 
     tail_specs = [
+        # The story's own past, fuller than its chapters (engine/recall.py).
+        (SECTION_RECALL, render_recall_block(recall, texts)),
         (SECTION_LORE, render_lore_block(lore, texts)),
         # In the tail, never the system block: which cards apply changes with
         # every turn, and a new card must not cost a cache miss.
@@ -363,6 +371,7 @@ def assemble_question(
     earlier: Sequence[tuple[str, str]] = (),
     summaries: Sequence[Summary] = (),
     lore: Sequence[LoreEntry] = (),
+    recall: Sequence[RecallItem] = (),
     standing_lore: Sequence[LoreEntry] = (),
     supporting: Sequence[Character] = (),
     on_file: Sequence[Character] = (),
@@ -385,6 +394,8 @@ def assemble_question(
     cast_by_id = {character.id: character for character in cast}
     texts = (options or AssemblyOptions()).texts
     tail_specs = [
+        # The story's own past, fuller than its chapters (engine/recall.py).
+        (SECTION_RECALL, render_recall_block(recall, texts)),
         (SECTION_LORE, render_lore_block(lore, texts)),
         # In the tail, never the system block: which cards apply changes with
         # every turn, and a new card must not cost a cache miss.
@@ -532,7 +543,9 @@ def _assemble(
 
     # --- 2. archived summaries: change only when a chunk is archived --------
     if summaries_text is None:
-        summaries_text = render_summaries_block(summaries, options.texts)
+        summaries_text = render_summaries_block(
+            summaries, options.texts, dict(options.chapter_days) or None
+        )
     summaries_tokens = 0
     if summaries_text:
         system.texts.append(summaries_text)

@@ -22,15 +22,16 @@ no summary silently describing events that never happened on this branch.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
-from sealedlore.engine.rules import render_history_node
+from sealedlore.engine.rules import narration_phrase, render_history_node
 from sealedlore.engine.validators import mentions
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.character import Character
-from sealedlore.models.node import Node
+from sealedlore.models.node import DIRECTOR_SPEAKER_ID, Node
+from sealedlore.models.story import StyleDirectives
 from sealedlore.models.summary import Summary
 
 # §5.2: the oldest ten *exchanges* — an author turn and the passage answering
@@ -104,6 +105,8 @@ def plan_chunk(
     turns: int = ARCHIVE_CHUNK_TURNS,
     keep_turns: int = MIN_VERBATIM_TURNS,
     allow_partial: bool = False,
+    boundaries: Collection[str] = (),
+    reach: int = 0,
 ) -> list[Node]:
     """The oldest run of nodes to archive next, or empty if archival can't help.
 
@@ -119,10 +122,24 @@ def plan_chunk(
     to prevent. When a full chunk isn't available the honest answer is to leave
     the history alone and say the budget can't hold a chapter yet. The author
     can still archive a short chunk deliberately.
+
+    `boundaries` are passages after which a scene closed, and `reach` how
+    far from `turns` a chunk may end to finish on one: the nearest within
+    `turns ± reach` (the shorter on a tie) ends the chunk instead, so a
+    chapter is a scene or several rather than cutting one in two. A chunk so
+    ended is still whole. Without one in reach it ends at `turns` as before.
     """
     ends = [index for index, node in enumerate(verbatim) if node.kind == "assistant"]
     available = len(ends) - max(keep_turns, 0)
     wanted = max(turns, 0)
+    if boundaries and reach > 0 and wanted > 0:
+        closes = [
+            count
+            for count in range(max(wanted - reach, 1), min(wanted + reach, available) + 1)
+            if verbatim[ends[count - 1]].id in boundaries
+        ]
+        if closes:
+            wanted = min(closes, key=lambda count: (abs(count - wanted), count))
     if available < wanted:
         if not allow_partial or available < MIN_MANUAL_TURNS:
             return []
@@ -216,6 +233,56 @@ def characters_in(text: str, cast: Sequence[Character]) -> list[Character]:
     return [character for character in cast if mentions(text, character)]
 
 
+def chapter_target_words(prose_words: int, share: float, low: int, high: int) -> int:
+    """A chapter's length as a share of the prose it stands for, within bounds.
+
+    A fixed target compressed a chunk of 1,900 words and one of 5,200 to the
+    same length (the long test run: every chapter 270-410 words, at a target
+    of 250)."""
+    return max(low, min(high, round(prose_words * share)))
+
+
+def _played(nodes: Sequence[Node], cast: Sequence[Character]) -> list[str]:
+    """Who the author played in these turns, in the order first played."""
+    by_id = {character.id: character.name for character in cast}
+    names: list[str] = []
+    for node in nodes:
+        if node.kind != "user":
+            continue
+        name = by_id.get(node.meta.controlled_character_id or "") or by_id.get(node.speaker_id)
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def summary_guide(
+    nodes: Sequence[Node],
+    cast: Sequence[Character],
+    style: StyleDirectives,
+    texts: PromptTexts = DEFAULT_TEXTS,
+) -> list[str]:
+    """What the summariser is told of how the chunk is written: the person and
+    tense and whose turns are the author's (who "you" or "I" is), and how to
+    read the author's Director turns and OOC notes, when the chunk has them."""
+    lines: list[str] = []
+    played = _played(nodes, cast)
+    if played:
+        word = {"first": "I", "second": "you"}.get(style.person or "")
+        lines.append(
+            texts.fill(
+                "chapters.who",
+                narration=narration_phrase(style.person, style.tense),
+                held=" and ".join(played),
+                you=texts.fill("chapters.who.you", word=word) if word else "",
+            )
+        )
+    if any(node.kind == "user" and node.speaker_id == DIRECTOR_SPEAKER_ID for node in nodes):
+        lines.append(texts["chapters.directions"])
+    if any(node.kind == "user" and node.ooc and node.ooc.strip() for node in nodes):
+        lines.append(texts["chapters.ooc"])
+    return lines
+
+
 def build_summary_messages(
     nodes: Sequence[Node],
     cast: Sequence[Character],
@@ -224,12 +291,14 @@ def build_summary_messages(
     target_words: int = SUMMARY_TARGET_WORDS,
     chat: bool = False,
     texts: PromptTexts = DEFAULT_TEXTS,
+    style: StyleDirectives | None = None,
 ) -> list[PromptMessage]:
     """The summariser call for one chunk.
 
     The immediately preceding summary travels with it so the summariser keeps
     the same names and doesn't re-establish facts the record already holds.
     A simple chat's is plain (engine/chat.py): no story, no characters.
+    `style`, when given, adds `summary_guide`'s lines.
     """
     if chat:
         from sealedlore.engine.chat import build_chat_summary_messages
@@ -243,6 +312,8 @@ def build_summary_messages(
     names = ", ".join(character.name for character in characters_in(prose, cast))
     if names:
         body.append(texts.fill("chapters.names", names=names))
+    if style is not None:
+        body.extend(summary_guide(nodes, cast, style, texts))
 
     body.append("The prose to compress:\n\n" + prose)
     body.append(texts.fill("chapters.length", words=str(target_words)))

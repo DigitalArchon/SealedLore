@@ -48,6 +48,7 @@ SECTION_LABELS = {
     "system.cast": "Cast",
     "summaries": "Chapters",
     "history": "Recent story",
+    "tail.recall": "Recalled past",
     "tail.lore": "Lore for this turn",
     "tail.supporting": "Supporting characters",
     "tail.scene_log": "Recent scenes",

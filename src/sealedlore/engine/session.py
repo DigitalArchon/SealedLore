@@ -66,6 +66,7 @@ from sealedlore.engine.characters import (
 )
 from sealedlore.engine.chronicle import (
     chronicle_at,
+    day_of,
 )
 from sealedlore.engine.competence import build_inference_messages, parse_tiers
 from sealedlore.engine.dice import explain, roll_for
@@ -96,6 +97,7 @@ from sealedlore.engine.prompt import (
 )
 from sealedlore.engine.prompt_edits import texts_in_force
 from sealedlore.engine.prompt_texts import PromptTexts
+from sealedlore.engine.recall import RecallItem
 from sealedlore.engine.retrieval import (
     LoreLayout,
     RetrievalReport,
@@ -148,6 +150,7 @@ from sealedlore.engine.session_plot import PlotRuntime, SessionNotice
 from sealedlore.engine.session_private import PrivateRuntime
 from sealedlore.engine.session_reasoning import ReasoningRuntime
 from sealedlore.engine.session_rebuild import RebuildRuntime
+from sealedlore.engine.session_recall import RecallRuntime
 from sealedlore.engine.tokens import TokenEstimator, updated_correction_factor
 from sealedlore.engine.validators import locate_quote, mentions
 from sealedlore.ids import new_id, utc_now_iso
@@ -407,6 +410,7 @@ class StorySession(
     MergeRuntime,
     ArchivalRuntime,
     RebuildRuntime,
+    RecallRuntime,
     ImageRuntime,
     PrivateRuntime,
     ReasoningRuntime,
@@ -677,7 +681,33 @@ class StorySession(
             cache_exchanges_outside_prefix=self.config.cache_exchanges_outside_prefix,
             cast_token_cap=self.config.cast_token_cap,
             texts=self.texts,
+            chapter_days=self.chapter_days(),
         )
+
+    def chapter_days(self) -> tuple[tuple[str, tuple[int, int]], ...]:
+        """The story days each chapter on the path spans, from a plot's clock.
+
+        Only for a plot story with `Config.plot_chapter_days`: there the
+        storyteller already reads "it is now day N" from the same clock, so a
+        chapter's days can't contradict it. Without a plot, a clock read from
+        prose made the passages worse (CLAUDE.md, "Story time without a
+        plot"). Read from the snapshots on archived messages, so it changes
+        only when the summary block does."""
+        plot = self.story.plot
+        if plot is None or not self.config.plot_chapter_days:
+            return ()
+        path = self.path()
+        position = {node.id: index for index, node in enumerate(path)}
+        days: list[tuple[str, tuple[int, int]]] = []
+        for summary in self.split(path).summaries:
+            first = position.get(summary.covered_node_ids[0]) if summary.covered_node_ids else None
+            last = position.get(summary.covered_node_ids[-1]) if summary.covered_node_ids else None
+            if first is None or last is None:
+                continue
+            start = chronicle_at(path[:first], plot).minutes if first else plot.start_minutes
+            end = chronicle_at(path[: last + 1], plot).minutes
+            days.append((summary.id, (day_of(start), day_of(end))))
+        return tuple(days)
 
     def uses_cache_control(self) -> bool:
         return self._cache_control_for(self.model)
@@ -739,6 +769,7 @@ class StorySession(
         *,
         history_nodes: Sequence[Node] | None = None,
         lore: Sequence[LoreEntry] | None = None,
+        recall: Sequence[RecallItem] = (),
     ) -> AssembledPrompt:
         # Only the summaries that match this path are sent, and only the nodes
         # they don't already cover. On a branch that forks below the summarised
@@ -777,6 +808,7 @@ class StorySession(
             turn=turn,
             summaries=split.summaries,
             lore=lore,
+            recall=recall,
             standing_lore=self.lore_layout().standing,
             supporting=self.supporting_for(turn.user_text, nodes),
             on_file=self.visible_supporting(),
@@ -1063,15 +1095,15 @@ class StorySession(
 
         try:
             vectors = self.ensure_lore_vectors()
-            result = self.embeddings.embed([query], as_query=True)
+            target = self.query_vector(query)
         except ProviderError as exc:
             return keywords_only(str(exc))
-        if not result.vectors:
+        if target is None:
             return keywords_only("endpoint returned no vector")
 
         scored = [(entry_id, vector) for entry_id, vector in vectors.items()]
         try:
-            similarities = cosine_scores(result.vectors[0], [vector for _, vector in scored])
+            similarities = cosine_scores(target, [vector for _, vector in scored])
         except ValueError as exc:
             # A model change mid-story can leave cached vectors of another
             # width; drop them and let the next turn re-embed.
@@ -1125,8 +1157,8 @@ class StorySession(
                 pending.append(entry)
 
         if pending and self.embeddings is not None:
-            result = self.embeddings.embed([embedding_text(entry) for entry in pending])
-            for entry, vector in zip(pending, result.vectors, strict=True):
+            vectors_in = self.embed_in_batches([embedding_text(entry) for entry in pending])
+            for entry, vector in zip(pending, vectors_in, strict=True):
                 row = EmbeddingCacheEntry(
                     # Keyed by the model *we asked for*, not the name the
                     # endpoint echoes back: a proxy that renames the model
@@ -1150,13 +1182,20 @@ class StorySession(
         return vectors
 
     def _prune_embeddings(self, live_hashes: set[str]) -> None:
-        """Drop vectors for text no entry holds any more, so the file can shrink."""
+        """Drop vectors for text no entry holds any more, so the file can shrink.
+        Recall's vectors are its own to prune (session_recall)."""
         self.bundle.embeddings = [
-            row for row in self.bundle.embeddings if row.content_hash in live_hashes
+            row
+            for row in self.bundle.embeddings
+            if row.kind != "lore" or row.content_hash in live_hashes
         ]
 
     def _count_lore_tokens(self, text: str) -> int:
         return self.estimator.estimate(text, self.model)
+
+    def _recall_query(self, turn: TurnRequest, history: Sequence[Node]) -> str:
+        """Recall keys on what lore keys on: the turn and the last few messages."""
+        return query_text(turn.user_text, history, turns=self.config.lore_query_turns)
 
     def _retrieve_for_turn(
         self, turn: TurnRequest, history: Sequence[Node]
@@ -1274,7 +1313,8 @@ class StorySession(
             yield SessionNotice(text)
         yield from self.archive_if_due(turn, history)
         lore = self._retrieve_for_turn(turn, history)
-        prompt = self.assemble(turn, history_nodes=history, lore=lore)
+        recall = self._recall_for_turn(self._recall_query(turn, history), history)
+        prompt = self.assemble(turn, history_nodes=history, lore=lore, recall=recall)
         yield from self._generate(prompt, turn, parent=user_node)
         # Only reached when the stream ran to its end: a Stop closes this
         # generator at the yield above, and a stopped passage isn't read.
@@ -1743,7 +1783,8 @@ class StorySession(
             yield SessionNotice(text)
         yield from self.archive_if_due(turn, history)
         lore = self._retrieve_for_turn(turn, history)
-        prompt = self.assemble(turn, history_nodes=history, lore=lore)
+        recall = self._recall_for_turn(self._recall_query(turn, history), history)
+        prompt = self.assemble(turn, history_nodes=history, lore=lore, recall=recall)
         yield from self._generate(prompt, turn, parent=user_node)
         taken = index_nodes(self.nodes).get(self.story.active_leaf_id or "")
         if previous is not None and taken is not None and taken.parent_id == user_node.id:
@@ -1777,7 +1818,8 @@ class StorySession(
             else:
                 turn = self._directed(turn, user_node.meta.direction, [*history, user_node])
                 lore = self._retrieve_for_turn(turn, history)
-                prompt = self.assemble(turn, history_nodes=history, lore=lore)
+                recall = self._recall_for_turn(self._recall_query(turn, history), history)
+                prompt = self.assemble(turn, history_nodes=history, lore=lore, recall=recall)
                 yield from self._generate(prompt, turn, parent=user_node)
         finally:
             index = index_nodes(self.nodes)
@@ -3395,6 +3437,7 @@ class StorySession(
         lore: Sequence[LoreEntry] | None = None,
         history: Sequence[Node] | None = None,
         options: AssemblyOptions | None = None,
+        recall: Sequence[RecallItem] = (),
     ) -> AssembledPrompt:
         """The prompt for an aside at the current leaf. Like `assemble`, never embeds.
 
@@ -3421,6 +3464,7 @@ class StorySession(
             ],
             summaries=split.summaries,
             lore=lore,
+            recall=recall,
             standing_lore=self.lore_layout().standing,
             supporting=self.supporting_for(question, history),
             on_file=self.visible_supporting(),
@@ -3451,11 +3495,14 @@ class StorySession(
         lore = self.retrieve(
             self._question_as_turn(question), history, allow_network=span is None
         ).entries
+        # The question itself is what to recall for: "what did she promise him?"
+        recall = self._recall_for_turn(question, history) if span is None else ()
         prompt = self.assemble_question(
             question,
             lore=lore,
             history=history,
             options=self.private_options() if span is not None else None,
+            recall=recall,
         )
         request = ChatRequest(
             model=model,

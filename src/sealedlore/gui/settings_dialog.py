@@ -107,6 +107,14 @@ def _scrolled(page: QWidget) -> QScrollArea:
     return FormScroll(page)
 
 
+# Settings → Context → Recall earlier detail (engine/recall.py).
+RECALL_CHOICES = (
+    ("Off", "off"),
+    ("Chapters merged into a part", "chapters"),
+    ("Those, and the archived passages", "exchanges"),
+)
+
+
 class SettingsDialog(QDialog):
     def __init__(
         self,
@@ -655,6 +663,20 @@ class SettingsDialog(QDialog):
         self.summary_words.setSingleStep(25)
         self.summary_words.setValue(self.config.summary_target_words)
 
+        self.recall = QComboBox()
+        for label, value in RECALL_CHOICES:
+            self.recall.addItem(label, value)
+        self.recall.setCurrentIndex(
+            next(i for i, (_, value) in enumerate(RECALL_CHOICES) if value == self.config.recall)
+        )
+        self.recall.setToolTip(
+            "Merging condenses old chapters into a part, and detail goes. With recall on, "
+            "the chapters a part stands for (or the archived passages themselves) are "
+            "brought back into a turn's prompt when it is about them, a few at most, "
+            "chosen like lore by your embeddings model. Each costs prompt tokens on the "
+            "turns that use it."
+        )
+
         scope = QLabel(
             "The context budget belongs to the open story; the rest applies to every story."
             if self.story is not None
@@ -669,6 +691,7 @@ class SettingsDialog(QDialog):
         form.addRow("Turns per chapter", self.chunk_turns)
         form.addRow("Archive down to", self.archive_target)
         form.addRow("Summary length (words)", self.summary_words)
+        form.addRow("Recall earlier detail", self.recall)
 
         hint = QLabel(
             "Archival summarises the oldest whole chunk of the story rather than "
@@ -1246,5 +1269,6 @@ class SettingsDialog(QDialog):
         self.config.archive_chunk_turns = self.chunk_turns.value()
         self.config.archive_target_ratio = self.archive_target.value() / 100
         self.config.summary_target_words = self.summary_words.value()
+        self.config.recall = self.recall.currentData()
 
         self.accept()

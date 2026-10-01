@@ -594,6 +594,22 @@ _text(
     "the roster says so.",
 )
 
+# Recall (engine/recall.py, Oct 2026): fuller accounts of the story's own past,
+# chosen by similarity like lore. Framed as the past, so a recalled chapter
+# isn't taken for the present scene (the timeline errors lore taught us).
+_text(
+    "turn.recall",
+    TURN,
+    "Recalled past: heading",
+    "Heads the earlier chapters or passages recalled for this turn, first in the tail.",
+    "# EARLIER IN THE STORY, IN MORE DETAIL\n\n"
+    "Fuller accounts of things that already happened, from the story's own record, "
+    "chosen by similarity and not necessarily relevant. They are the past, in the order "
+    "they happened: everything since stands, and the story so far and the recent story "
+    "say where things are now. Use a detail when the scene calls for it. It never "
+    "overrides the roster below.",
+)
+
 _text(
     "turn.scene_log",
     TURN,
@@ -1872,6 +1888,51 @@ _text(
     "In the summariser's and the merger's requests: the cast members the text names.",
     "Characters appearing below: {names}. Use these names exactly.",
     (("names", "the cast members named, comma-separated"),),
+)
+
+# Who is who in the chunk (arm A of the Oct 2026 archive A/B): the summariser
+# was told nothing of the story's person or of who the author plays, and had
+# to work out who "you" is from the turns' name headings.
+_text(
+    "chapters.who",
+    CHAPTERS,
+    "Writing a chapter: who the author plays",
+    "In the summariser's request when the story's style is given: how the prose is "
+    "narrated and whose turns are the author's.",
+    "The story is told {narration}. The author plays {held}: a turn headed with "
+    "that name is the author's, and what it says happened, happened.{you}",
+    (
+        ("narration", 'the person and tense, e.g. "in the past tense, in the third person"'),
+        ("held", "who the author played in these turns"),
+        ("you", 'the sentence on who "you" or "I" is, or nothing'),
+    ),
+)
+
+_text(
+    "chapters.who.you",
+    CHAPTERS,
+    'Writing a chapter: who "you" is',
+    "Inside the line on who the author plays, for a first- or second-person story.",
+    ' In the prose, "{word}" is always the character the author played in the turn '
+    "just before it, never anyone else.",
+    (("word", "you or I"),),
+)
+
+_text(
+    "chapters.directions",
+    CHAPTERS,
+    "Writing a chapter: the author's directions",
+    "In the summariser's request when the text holds a Director turn.",
+    "A turn headed [Director …] is the author's instruction to the storyteller, not an "
+    "event: record only what the prose then shows happening, never the instruction itself.",
+)
+
+_text(
+    "chapters.ooc",
+    CHAPTERS,
+    "Writing a chapter: the author's facts",
+    "In the summariser's request when the text holds an out-of-character note.",
+    "A note under [OOC …] is a fact the author has set for the story: keep it as a fact.",
 )
 
 _text(

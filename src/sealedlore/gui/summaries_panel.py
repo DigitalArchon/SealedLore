@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.archival import chapter_number
+from sealedlore.engine.recall import RecallReport
 from sealedlore.models.summary import Summary
 
 
@@ -135,6 +136,13 @@ class SummariesPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
+        # What recall brought back for the last turn, with scores and near
+        # misses: without them the threshold can't be tuned (as for lore).
+        self.recall_note = QLabel()
+        self.recall_note.setObjectName("hintLabel")
+        self.recall_note.setWordWrap(True)
+        self.recall_note.setTextFormat(Qt.PlainText)
+        self.recall_note.hide()
         # A simple chat's kept messages, when they take much of the budget.
         self.kept_warning = QLabel()
         self.kept_warning.setObjectName("hintLabel")
@@ -147,10 +155,35 @@ class SummariesPanel(QWidget):
         layout.addWidget(self.editor, 1)
         layout.addLayout(edit_row)
         layout.addLayout(chapter_row)
+        layout.addWidget(self.recall_note)
 
         self._update_buttons()
 
     # --- population -------------------------------------------------------
+
+    def set_recall(self, report: RecallReport | None) -> None:
+        """What the last turn recalled (Settings → Context → Recall earlier detail)."""
+        if report is None or not (report.items or report.near_misses or report.reason):
+            self.recall_note.hide()
+            return
+
+        def named(items) -> str:
+            return ", ".join(
+                f"{item.label.split(',')[0]} ({report.scores.get(item.id, 0):.2f})"
+                for item in items
+            )
+
+        bits = []
+        if report.items:
+            bits.append(f"Recalled for the last turn: {named(report.items)}.")
+        elif report.reason:
+            bits.append(f"Nothing recalled for the last turn ({report.reason}).")
+        else:
+            bits.append("Nothing recalled for the last turn.")
+        if report.near_misses:
+            bits.append(f"Nearly: {named(report.near_misses)}.")
+        self.recall_note.setText(" ".join(bits))
+        self.recall_note.show()
 
     def set_kept_warning(self, text: str | None) -> None:
         self.kept_warning.setText(text or "")

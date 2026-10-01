@@ -289,3 +289,25 @@ def test_the_scene_time_goes_only_into_an_unplotted_storys_opening(story, cast):
     # A plot story's time is the plot clock's, never the card's.
     story.plot = Plot()
     assert "Time:" not in scene_text([])
+
+
+def test_a_plot_storys_chapters_carry_their_days_when_asked(session: StorySession):
+    from sealedlore.engine.chronicle import clock_minutes
+    from sealedlore.engine.prompt import SECTION_SUMMARIES
+    from sealedlore.models.plot import Chronicle, Plot
+
+    session.story.plot = Plot(start_minutes=clock_minutes(3, 8, 0))
+    a3 = next(n for n in session.nodes if n.id == "a3")
+    a3.meta.chronicle = Chronicle(minutes=clock_minutes(5, 20, 0))
+    a5 = next(n for n in session.nodes if n.id == "a5")
+    a5.meta.chronicle = Chronicle(minutes=clock_minutes(9, 7, 0))
+    assert session.chapter_days() == ()  # off unless asked
+    session.config.plot_chapter_days = True
+    days = dict(session.chapter_days())
+    one, two, three = (by_content(session, f"Main chapter {n}.") for n in ("one", "two", "three"))
+    assert days == {one.id: (3, 3), two.id: (3, 5), three.id: (5, 9)}
+    text = session.assemble(turn()).section(SECTION_SUMMARIES).text
+    assert "## Chapter 2 · days 3–5" in text and "## Chapter 1 · day 3" in text
+    # Never without a plot.
+    session.story.plot = None
+    assert session.chapter_days() == ()

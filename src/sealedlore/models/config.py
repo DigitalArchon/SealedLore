@@ -243,6 +243,16 @@ class Config(BaseModel):
     # Retune per model — the Lore panel shows the scores to tune against.
     lore_similarity_threshold: float = 0.45
     lore_token_cap: int = 2_000
+    # Recall (engine/recall.py): the chapters a merged part stands for, or
+    # those and the archived exchanges, brought back into the tail by
+    # similarity to the lore query. "off" sends nothing.
+    recall: Literal["off", "chapters", "exchanges"] = "off"
+    # A plot story's chapter headings carry the days they span, from the
+    # plot's clock ("Chapter 4 · days 12–15"). Never without a plot.
+    plot_chapter_days: bool = False
+    recall_k: int = Field(default=2, ge=1, le=8)
+    recall_threshold: float = 0.5
+    recall_token_cap: int = Field(default=1_500, ge=100)
     # A lorebook up to this share of the context budget is sent whole, in the
     # cached system block, instead of selected per turn (`lore_layout`). At
     # 25 entries (~3k tokens, 7% of 45k) whole cost less than retrieval; at 50

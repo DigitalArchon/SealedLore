@@ -18,7 +18,7 @@ it.
 
 from __future__ import annotations
 
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import Literal
 
 from sealedlore.engine.ledger import render_ledger_block
@@ -198,7 +198,13 @@ def render_cast_block(
     return texts["storyteller.cast_header"] + "\n\n" + "\n\n".join(sheets)
 
 
-def render_summaries_block(summaries: Sequence[Summary], texts: PromptTexts = DEFAULT_TEXTS) -> str:
+def render_summaries_block(
+    summaries: Sequence[Summary],
+    texts: PromptTexts = DEFAULT_TEXTS,
+    days: Mapping[str, tuple[int, int]] | None = None,
+) -> str:
+    """`days`, by summary id: the story days a chapter spans, from a plot's
+    clock, put in its heading ("Chapter 4 · days 12–15")."""
     if not summaries:
         return ""
     entries = []
@@ -207,6 +213,9 @@ def render_summaries_block(summaries: Sequence[Summary], texts: PromptTexts = DE
         marker = " (revised by the author)" if summary.hand_edited else ""
         last = first + summary.chapters - 1
         heading = f"Chapter {first}" if last == first else f"Chapters {first}–{last}"
+        span = (days or {}).get(summary.id)
+        if span is not None:
+            heading += f" · day {span[0]}" if span[0] == span[1] else f" · days {span[0]}–{span[1]}"
         entries.append(f"## {heading}{marker}\n\n{summary.content.strip()}")
         first = last + 1
     ledger = render_ledger_block(summaries, texts)

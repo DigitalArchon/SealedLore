@@ -52,6 +52,10 @@ def make_config() -> Config:
         lore_selector="picker",
         lore_whole_share=0.01,
         suggest_characters=True,
+        # Recall at its widest, every candidate taken: the archived prose
+        # itself goes to the embeddings endpoint and into the tail.
+        recall="exchanges",
+        recall_threshold=-1.0,
     )
 
 

@@ -1215,6 +1215,7 @@ class MainWindow(
         )
         self.status_strip.set_archive(len(split.summaries))
         self.summaries_panel.set_kept_warning(self._kept_warning())
+        self.summaries_panel.set_recall(self.session.last_recall)
 
         self._refresh_over_budget()
 
