@@ -965,7 +965,10 @@ Shift+Enter starts a new line.
 
 *Question* asks the model something out of character ("why did nobody
 react?") and gets a plain answer rather than more story. It appears in the
-transcript as a question and is never sent as part of the story.
+transcript as a question and is never sent as part of the story. Ask about
+something long past ("what did Marcus promise Elena?") and the chapters that a
+merged part stands for are searched too, so detail the merge condensed away
+can still be answered (see [Parts](#the-context-budget-and-archiving)).
 
 Every message's ⋯ menu has **Delete from here…**, which removes it and
 everything after it, after confirming. Deleting a reply leaves your turn in place, so Regenerate can take
@@ -1288,6 +1291,17 @@ its chapters sent instead until the next merge. Tick **Keep as written** on a
 chapter in **Story so far** to keep it out of every merge: it is sent as it is
 however long the story grows, and merging goes around it. A chapter you have
 edited by hand is merged like any other unless you keep it.
+
+**Recall.** A part is shorter than the chapters it stands for, so detail goes.
+When you ask a Question, the two chapters most like it are brought back into
+the storyteller's prompt in full, chosen by your embeddings model as lore is
+(the first time takes a few seconds while the chapters are read). **Recall
+earlier detail** (Settings → Context) can also search the archived passages
+themselves (slower the first time: about 25 seconds for a 250-exchange
+story), or recall in story turns as well. In testing, recall in turns
+sometimes brought an old state back as though it were current, so it is off
+there unless you choose it. **Story so far** shows what the last turn or
+Question recalled, with how close each match was.
 
 ## The terminal client
 
