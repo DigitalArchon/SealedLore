@@ -278,7 +278,10 @@ three days), the event isn't started as a scene that late. The storyteller's
 model is asked, in one extra call, how each skipped-over event went in the
 time that passed, fitted to what the story says about that time. The next
 passage then treats it as the past, and the account is kept for the rest of
-the story. If the story shows an event can't have happened yet (the character
+the story. A Director or Narration turn that says time goes by ("Three weeks
+pass.", "By day 40, the snow has come.") moves the clock before anything is
+written, so the passage that tells the skip already knows what happened in it;
+a day given as a plan ("they must be ready by day 40") doesn't. If the story shows an event can't have happened yet (the character
 never left the place it would have taken them from), it begins on-screen
 instead. An event sent to the storyteller without asking the director (its
 window closed, or "any time" with no trigger) that the prose still hasn't

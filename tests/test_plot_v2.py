@@ -1378,3 +1378,85 @@ def test_a_prerequisite_that_can_no_longer_happen_still_misses_it():
     chronicle.minutes = clock_minutes(8, 9, 0)
     resolve_due(p, chronicle, days, node_id=None)
     assert chronicle.events["the_arrival"].state == "missed"
+
+
+# --- the author's own skip moves the clock before the passage ------------------------
+
+
+def read_api_log_refusals(session: StorySession, tmp_path: Path) -> list[str]:
+    log = read_api_log(session.story.id, root=tmp_path)
+    return [r for e in log if e["kind"] == "chronicle_refused" for r in e["refused"]]
+
+
+def test_a_director_skip_settles_the_skipped_events_before_its_passage(tmp_path):
+    # Live (Between Stars): "Three weeks pass" was written knowing nothing of
+    # the plot, and the next turn fitted five events into weeks the passage
+    # had already told without them.
+    from sealedlore.models.node import DIRECTOR_SPEAKER_ID
+
+    reply = json.dumps({"accounts": [{"event": "the_raid", "account": GAP_ACCOUNT}]})
+    session = make_session(
+        tmp_path,
+        [
+            PASSAGE,
+            read(place=("The Mill", "Ann pushed through the mill door.")),
+            # The Director turn: the gap first, then the director, then the skip.
+            reply,
+            director(),
+            "Five days went by in sweeping and mending, and in what the raid had left.",
+            read(minutes=2 * 1440),  # the read undercounts the author's five days
+        ],
+    )
+    list(session.send(turn(session, "I go into the mill.")))
+    start = session.chronicle.minutes  # day 3, 18:10
+
+    ann = session.cast[0].id
+    skip = TurnRequest(
+        speaker_id=DIRECTOR_SPEAKER_ID,
+        user_text="Five days pass at the mill. Ann mends the roof.",
+        controlled_character_id=ann,
+    )
+    list(session.send(skip))
+    user_node = session.path()[-2]
+    assert user_node.meta.chronicle.minutes == start + 5 * 1440
+    assert user_node.meta.chronicle.elapsed_quote == "Five days pass at the mill."
+    # The skip's own passage was told what happened in it.
+    direction = session.last_prompt.section(SECTION_DIRECTION).text
+    assert GAP_ACCOUNT in direction
+    status = session.chronicle.events["the_raid"]
+    assert status.state == "happened" and status.account == GAP_ACCOUNT
+    # The gap request quoted the author's skip as what the story says of it.
+    log = [e for e in read_api_log(session.story.id, root=tmp_path) if e["kind"] == "gap_request"]
+    assert "Five days pass at the mill." in json.dumps(log[0]["payload"])
+    # The read counted from before the skip, and can't end short of it.
+    reads = [
+        e for e in read_api_log(session.story.id, root=tmp_path) if e["kind"] == "chronicle_request"
+    ]
+    payload = json.dumps(reads[-1]["payload"], ensure_ascii=False)
+    assert "THE CLOCK, before the author's turn: Day 3 · 18:10" in payload
+    # Day 8, the day the author's five days reached, at whatever hour.
+    assert session.chronicle.minutes == clock_minutes(8, 0, 0)
+    assert any("moved the clock" in r for r in read_api_log_refusals(session, tmp_path))
+
+
+def test_an_in_character_turn_or_a_count_moves_no_clock(tmp_path):
+    from sealedlore.engine.chronicle_read import stated_skip
+
+    session = make_session(tmp_path, [PASSAGE, read()])
+    list(session.send(turn(session, "Five days pass, I think, as I sit here.")))
+    assert session.path()[-2].meta.chronicle is None or (
+        session.path()[-2].meta.chronicle.elapsed == 0
+    )
+    now = clock_minutes(51, 9, 0)
+    assert stated_skip("They are fifty-one days apart.", now) is None
+    assert stated_skip("The burn takes three hours.", now) is None
+    assert stated_skip("On day 1 she arrived.", now) is None
+    # A day said as a plan is not where the clock is.
+    assert stated_skip("Sisko sets the launch for day 60.", now) is None
+    assert stated_skip("They must be ready by day 60.", now) is None
+    assert stated_skip("The fleet is expected by day 60.", now) is None
+    assert stated_skip("It is now day 65, 14:20.", now)[0] == clock_minutes(65, 9, 0)
+    assert stated_skip("Two days pass. By day 58 he has read it. By day 62, nothing.", now)[
+        0
+    ] == clock_minutes(62, 9, 0)
+    assert stated_skip("A few more days pass.", now)[0] == now + 3 * 1440

@@ -186,17 +186,77 @@ def _stated_span(text: str) -> tuple[int, str] | None:
     """
     best: tuple[int, str] | None = None
     for match in _SPAN.finditer(text):
-        unit = match.group(3).lower()
-        per = _UNITS["day" if unit == "night" else unit]
-        # "two and a half weeks", "a week and a half"
-        half = per // 2 if match.group(2) or match.group(4) else 0
-        minutes = _count(match.group(1)) * per + half
+        minutes = _span_minutes(match)
         if best is None or minutes > best[0]:
-            start = max(text.rfind(end, 0, match.start()) for end in ".!?\n") + 1
-            stops = [i for i in (text.find(end, match.end()) for end in ".!?\n") if i >= 0]
-            sentence = text[start : min(stops) + 1 if stops else len(text)].strip()
-            best = (minutes, sentence)
+            best = (minutes, _sentence_around(text, match))
     return best
+
+
+def _span_minutes(match: re.Match[str]) -> int:
+    unit = match.group(3).lower()
+    per = _UNITS["day" if unit == "night" else unit]
+    # "two and a half weeks", "a week and a half"
+    half = per // 2 if match.group(2) or match.group(4) else 0
+    return _count(match.group(1)) * per + half
+
+
+def _sentence_around(text: str, match: re.Match[str]) -> str:
+    start = max(text.rfind(end, 0, match.start()) for end in ".!?\n") + 1
+    stops = [i for i in (text.find(end, match.end()) for end in ".!?\n") if i >= 0]
+    return text[start : min(stops) + 1 if stops else len(text)].strip()
+
+
+# A sentence that says time goes by, not one that merely counts it ("fifty-one
+# days apart", "the burn takes three hours").
+_PASSING = re.compile(
+    r"\b(?:pass(?:es|ed|ing)?|later|go(?:es)? by|went by|gone by|blur(?:s|red)?|"
+    r"slip(?:s|ped)? (?:by|past)|elapse[sd]?|forward|skip|jump|the next|the following)\b",
+    re.IGNORECASE,
+)
+# A day said as now: "By day 81", "On the morning of day 35", "It is now day
+# 65", "Day 5 dawns". Not a plan: "set for day 40", "ready by day 60".
+_NAMED_DAY = re.compile(
+    rf"(?:^|\b(?:by|on|of|is|now)\s+|,\s*)day\s+(?:number\s+)?(\d+|{_COUNT})(?![\w-])",
+    re.IGNORECASE,
+)
+_FUTURE = re.compile(
+    r"\b(?:will|would|must|should|shall|plans?|planned|expect(?:s|ed)?|scheduled|due|"
+    r"until|before|deadline|hopes?|intends?|aims?|going to)\b",
+    re.IGNORECASE,
+)
+
+
+def stated_skip(text: str, now: int) -> tuple[int, str] | None:
+    """Where a Director or Narration turn moves the clock to, before anything
+    is written: the latest day it names as now, ahead of now ("By day 81"),
+    else the first stretch it says goes by ("Three weeks pass."), and the
+    sentence.
+
+    Moved before the director runs, a skip's events are known to the passage
+    that tells the skip, rather than fitted in a turn later against prose
+    that never mentioned them (live, five events in one Between Stars run,
+    the first boarding with Myla aboard among them).
+    """
+    today = now // MINUTES_PER_DAY + 1
+    ahead: list[tuple[int, str]] = []
+    for found in re.finditer(r"[^.!?\n]+", text):
+        sentence = found.group(0).strip()
+        if _FUTURE.search(sentence):
+            continue
+        for match in _NAMED_DAY.finditer(sentence):
+            if (day := _count(match.group(1))) > today:
+                ahead.append((day, sentence))
+    if ahead:
+        # The day it names, at the hour the story was at: the read after the
+        # passage says the hour, and a midnight clock carried on into
+        # afternoon scenes.
+        day, sentence = max(ahead, key=lambda item: item[0])
+        return (day - 1) * MINUTES_PER_DAY + now % MINUTES_PER_DAY, sentence
+    for match in _SPAN.finditer(text):
+        sentence = _sentence_around(text, match)
+        if _PASSING.search(sentence):
+            return now + _span_minutes(match), sentence
+    return None
 
 
 def render_facts(plot: Plot, chronicle: Chronicle, *, watched_only: bool = False) -> str:
@@ -296,6 +356,7 @@ class ChronicleDelta:
         places: Sequence[str] = (),
         author_states_facts: bool = False,
         scene_location: str = "",
+        at_least: int | None = None,
     ) -> Chronicle:
         """The chronicle after this passage, keeping only what the text supports.
 
@@ -305,6 +366,10 @@ class ChronicleDelta:
         pass. Jane settles into Hellsville" left her place unrecorded (the
         passage never showed an arrival), and the fall then resolved as if
         she had never been there while she stood in the town.
+
+        `at_least`: the start of the day the author's own skip moved the clock
+        to before the passage, which the director has already acted on; the
+        read may land at any hour of it or later, never before it.
 
         `scene_location` is the scene card's location after this passage (the
         scene read is applied first). While it still names the place they
@@ -374,6 +439,13 @@ class ChronicleDelta:
                 self.refused.append(f"day {self.day} is in the past")
             else:
                 minutes = named
+        # The author's stated skip, which the director has already acted on.
+        if at_least is not None and minutes < at_least:
+            self.refused.append(
+                f"a passage ending at {format_clock(minutes)} where the author's turn "
+                f"moved the clock to {format_clock(at_least)} at least"
+            )
+            minutes = at_least
         after.minutes = minutes
         after.elapsed = minutes - before.minutes
         after.elapsed_quote = quote

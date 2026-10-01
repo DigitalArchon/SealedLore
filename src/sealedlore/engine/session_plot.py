@@ -46,6 +46,7 @@ from sealedlore.engine.chronicle import set_fact as change_fact
 from sealedlore.engine.chronicle_read import READ_MAX_TOKENS as CHRONICLE_MAX_TOKENS
 from sealedlore.engine.chronicle_read import build_read_messages as build_chronicle_messages
 from sealedlore.engine.chronicle_read import parse_read as parse_chronicle
+from sealedlore.engine.chronicle_read import stated_skip
 from sealedlore.engine.director import (
     DIRECTOR_MAX_TOKENS,
     GAP_MAX_TOKENS,
@@ -87,6 +88,7 @@ from sealedlore.models.node import (
     Node,
 )
 from sealedlore.models.plot import (
+    MINUTES_PER_DAY,
     Chronicle,
     Direction,
     EventDef,
@@ -124,6 +126,9 @@ class _ChronicleRead:
     request: ChatRequest
     log_ref: str
     author_states_facts: bool
+    # The least the clock may end at: the author's own stated skip, already
+    # moved before the passage was written (`direct_turn`).
+    at_least: int | None = None
 
 
 class PlotRuntime:
@@ -296,6 +301,18 @@ class PlotRuntime:
         path = self._path_to(node.id)
         before = chronicle_at(path[:-1], plot)
         author = path[-2] if len(path) > 1 and path[-2].kind == "user" else None
+        # The author's turn moved the clock before the passage (`direct_turn`):
+        # the read still counts from before the turn, as its prompt says, and
+        # may not end before the day the turn moved it to.
+        skipped = (
+            author.meta.chronicle.elapsed
+            if author is not None and author.meta.chronicle is not None
+            else 0
+        )
+        at_least = None
+        if skipped > 0:
+            at_least = before.minutes - before.minutes % MINUTES_PER_DAY
+            before.minutes -= skipped
         author_text = (
             render_chunk([author], self.cast, texts=self.texts) if author is not None else ""
         )
@@ -329,6 +346,7 @@ class PlotRuntime:
             log_ref=log_ref,
             author_states_facts=author is not None
             and author.speaker_id in (DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID),
+            at_least=at_least,
         )
 
     def update_chronicle_after_turn(
@@ -383,6 +401,7 @@ class PlotRuntime:
             places=pending.places,
             author_states_facts=pending.author_states_facts,
             scene_location=self.story.scene.location or "",
+            at_least=pending.at_least,
         )
         settled = settle_unconfirmed(
             plot, after, [event_id for event_id, _ in delta.happened], node_id=node.id
@@ -565,6 +584,7 @@ class PlotRuntime:
         chronicle.source = "story"
         # Conditions are about the character the author now holds.
         switched = take_viewpoint(chronicle, turn.controlled_character_id)
+        skipped = self._author_skip(user_node, chronicle)
         resolution = resolve_due(plot, chronicle, days, node_id=user_node.id)
         fired = list(resolution.happened)
         gap = list(resolution.gap)
@@ -589,7 +609,9 @@ class PlotRuntime:
                     f"Couldn't ask how the skipped-over events went ({failure}); "
                     "the storyteller is given the plot's own words for them."
                 )
-        changed = switched or resolution.changed or bool(resolution.undecided) or bool(gap)
+        changed = (
+            switched or skipped or resolution.changed or bool(resolution.undecided) or bool(gap)
+        )
         candidates = held_for_answer(
             armed(plot, chronicle, days, mentioned=self._places_mentioned(user_node, history)),
             user_node.content,
@@ -672,6 +694,26 @@ class PlotRuntime:
             yield SessionNotice("Plot: the director was consulted.")
         return self._directed(turn, directions, [*history, user_node])
 
+    @staticmethod
+    def _author_skip(user_node: Node, chronicle: Chronicle) -> bool:
+        """Move the clock to where a Director or Narration turn says time goes.
+
+        The author's own statement, so the director, the due events and any
+        skipped-over ones are settled against it before the passage telling
+        the skip is written. Recorded as the turn's `elapsed`, which the read
+        after the passage counts back from. Returns whether it moved.
+        """
+        if user_node.speaker_id not in (DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID):
+            return False
+        skip = stated_skip(user_node.content, chronicle.minutes)
+        if skip is None or skip[0] <= chronicle.minutes:
+            return False
+        target, sentence = skip
+        chronicle.elapsed = target - chronicle.minutes
+        chronicle.elapsed_quote = sentence
+        chronicle.minutes = target
+        return True
+
     def _fit_gap(
         self,
         gap: Sequence[tuple[EventDef, EventVariant]],
@@ -698,12 +740,11 @@ class PlotRuntime:
             key=lambda item: item[2],
         )
         ids = [item_id for event, variant, _ in dated for item_id in introduced(event, variant)]
-        # The passage that covered the skip, and the author's turn that asked for it.
-        skipped = (
-            render_chunk(list(history[-2:]), self.visible_cast(), texts=self.texts)
-            if history
-            else ""
-        )
+        # What the story says of the skipped time: the author's turn that
+        # skips it, when the clock was moved on it (`_author_skip`), else the
+        # passage that covered the skip and the turn that asked for it.
+        told = [user_node] if chronicle.elapsed else list(history[-2:])
+        skipped = render_chunk(told, self.visible_cast(), texts=self.texts) if told else ""
         question = build_gap_request(
             dated,
             held_name=held.name if held else None,
