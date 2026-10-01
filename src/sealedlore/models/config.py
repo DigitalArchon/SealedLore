@@ -35,9 +35,10 @@ RECOMMENDED_MODELS: dict[str, str] = {
     # tried on judged reads, only those that reason kept the roster right
     # when someone came or went, and this one was the quickest of them.
     "scene_model": "z-ai/glm-5.3",
-    # The plot's reads and its director, which runs before the turn: the
-    # steadiest answers of those tried, and the shortest wait. A model that
-    # reads well can still begin events too readily, as the scene model does.
+    # The plot's director, which runs before the turn: the steadiest answers
+    # of those tried, and the shortest wait. A model that reads well can still
+    # begin events too readily, as the scene model does; the plot's clock read
+    # runs on the scene model.
     "plot_model": "mistralai/mistral-medium-3.1",
     "lore_model": "deepseek/deepseek-v4.1-flash",
 }
@@ -403,8 +404,9 @@ class Config(BaseModel):
     # facts the passage changed; the Plot panel shows it with an Undo. Off,
     # the clock and facts stand still unless the author sets them.
     plot_reads: bool = True
-    # The model for that read, and for the director that runs events. Blank
-    # means the scene model, then the story's summarisation model.
+    # The model for the director that runs events (the read above runs on the
+    # scene model). Blank means the scene model, then the story's
+    # summarisation model.
     plot_model: str | None = None
     # Whether the Plot tab and the notices name upcoming events. Off, the
     # author sees the clock and what has happened, nothing still to come.

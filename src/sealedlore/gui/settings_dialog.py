@@ -335,16 +335,17 @@ class SettingsDialog(QDialog):
         self.scene_model.setPlaceholderText("same as the story's summarisation model")
         self.scene_model.setToolTip(
             "Reads the scene after every passage: about 2k tokens in and 150 out, on "
-            "every turn. It needs a model that reasons: fast ones that don't miss about "
-            "half the arrivals and departures. Use recommended models fills in the one "
-            "that measured best."
+            "every turn, and in a story with a plot the plot's clock and facts beside "
+            "it. It needs a model that reasons: fast ones that don't miss about half "
+            "the arrivals and departures. Use recommended models fills in the one that "
+            "measured best."
         )
         form.addRow("Scene model", self.scene_model)
 
         self.plot_reads = QCheckBox("Keep a plot's clock and facts after every passage")
         self.plot_reads.setChecked(self.config.plot_reads)
         self.plot_reads.setToolTip(
-            "Only for stories with a plot. After each passage, a small model reads how "
+            "Only for stories with a plot. After each passage, the scene model reads how "
             "much story time passed and which of the plot's facts changed, and the Plot "
             "tab follows (with an Undo). Off, they change only when you set them."
         )
@@ -352,10 +353,9 @@ class SettingsDialog(QDialog):
         self.plot_model = self._routed_field(self.config.plot_model or fresh.get("plot_model", ""))
         self.plot_model.setPlaceholderText("same as the scene model")
         self.plot_model.setToolTip(
-            "Keeps a plot's clock and facts after every passage, and decides when its "
-            "events happen. Small calls on every turn of a plotted story, one of them "
-            "before the passage starts, so a quick, steady model is right here. Use "
-            "recommended models fills in the one that measured best."
+            "Decides when a plot's events happen: a small call before the passage "
+            "starts, on the turns an event could begin, so a quick, steady model is "
+            "right here. Use recommended models fills in the one that measured best."
         )
         form.addRow("Plot model", self.plot_model)
 

@@ -1,6 +1,6 @@
 """The chronicle read: after each passage, how much time passed and what facts changed.
 
-One call on a small model (`Config.plot_model`), made by
+One call on the scene model (`Config.scene_model`), made by
 `StorySession.update_chronicle_after_turn` on stories with a plot. Pure here:
 building the messages, parsing the reply, and holding the reply to account.
 

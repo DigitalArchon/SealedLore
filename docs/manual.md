@@ -428,8 +428,8 @@ model ids, so on another endpoint set them to one it lists (Browse…).
 | Story model | Settings → Models | the story model for new stories | starts as `anthropic/claude-sonnet-4.6` |
 | This story's model | the status-bar model button | this story's storyteller | Settings → Models → Story model |
 | Summarisation model | Settings → Models | chapters, merges, for every story (and the open one, when changed with it open) | the story model |
-| Scene model | Settings → Models | the scene read after each passage | the summarisation model |
-| Plot model | Settings → Models | the plot's clock, facts and director | the scene model |
+| Scene model | Settings → Models | the scene read after each passage, and a plot's clock and facts | the summarisation model |
+| Plot model | Settings → Models | the plot's director (the clock and facts are read by the scene model) | the scene model |
 | Authoring model | Settings → Models | drafting from a premise, settings reviews | the story model |
 | Lore model ★ | Settings → Models | picking lore for a large lorebook | the scene model |
 | Image prompt writer | Settings → Models, or the Image dialog | writing the picture's prompt | the story model |

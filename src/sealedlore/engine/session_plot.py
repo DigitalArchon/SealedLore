@@ -216,7 +216,8 @@ class PlotRuntime:
 
     @property
     def plot_model(self) -> str:
-        """The model that keeps the plot's clock and facts, and directs its events."""
+        """The model that directs the plot's events and settles overdue ones.
+        The clock read after each passage runs on the scene model."""
         return self.config.plot_model or self.scene_model
 
     def attach_plot(self, plot: Plot) -> None:
@@ -320,9 +321,13 @@ class PlotRuntime:
         held = self._character(node.meta.controlled_character_id)
         take_viewpoint(before, node.meta.controlled_character_id)
         places = self.plot_places()
+        # On the scene model, beside the scene read: on 72 judged reads GLM 5.3
+        # read as well as Mistral Medium 3.1 or better (1 wrong to both judges
+        # against 4), and after the passage its slower answer costs no wait.
+        # The director, before the passage, stays on the plot model.
         request = ChatRequest(
-            model=self.plot_model,
-            extra_body=self.route_for("plot"),
+            model=self.scene_model,
+            extra_body=self.route_for("scene"),
             messages=build_chronicle_messages(
                 plot=plot,
                 chronicle=before,
@@ -332,7 +337,7 @@ class PlotRuntime:
                 held=held.name if held is not None else None,
                 texts=self.texts,
             ),
-            params=self.side_params(self.plot_model, max_tokens=CHRONICLE_MAX_TOKENS),
+            params=self.side_params(self.scene_model, max_tokens=CHRONICLE_MAX_TOKENS),
         )
         log_ref = self._log(
             "chronicle_request",
@@ -365,7 +370,7 @@ class PlotRuntime:
             return
         node, before, log_ref = pending.node, pending.before, pending.log_ref
 
-        yield SessionNotice(f"Reading the clock and facts with {self.plot_model}…")
+        yield SessionNotice(f"Reading the clock and facts with {self.scene_model}…")
         try:
             if fetched is None:
                 text, completed = self.provider.complete(pending.request)
@@ -377,7 +382,7 @@ class PlotRuntime:
                 "chronicle_response",
                 {"request_log_ref": log_ref, "text": text, "usage": completed.raw_usage},
             )
-            self.unreported_usage.append(self.priced(completed.usage, self.plot_model))
+            self.unreported_usage.append(self.priced(completed.usage, self.scene_model))
             delta = parse_chronicle(text)
         except (ProviderError, ValueError) as exc:
             begun = self._confirm_by_introductions(node, before, plot)
