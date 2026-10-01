@@ -635,3 +635,40 @@ def test_a_refused_enclave_gets_nothing_from_a_private_scene(tmp_path: Path):
     assert len(private.payloads) == 1
     session.discard_private()
     assert session.tee_block is None, "ending the scene lifts it"
+
+
+@pytest.mark.parametrize("keep", ["memory", "disk"])
+def test_a_questions_recall_carries_nothing_from_a_private_scene(tmp_path: Path, keep: str):
+    """What a Question recalled rides the turns after it (Oct 2026). A
+    Question asked in the scene recalls nothing and is never carried; one
+    asked after it carries public chapters only, and nothing of the scene
+    reaches another model or the embeddings endpoint on the way."""
+    session, main, held = build(tmp_path, keep=keep)
+    session.config.recall_in = "questions"  # turns get only what a Question carries
+    session.config.summary_merge_ratio = 0.005
+    session.config.summary_merge_keep = 1
+    for i in range(12):
+        play(session, turn(held, f"Early step {i}: the lamplighter's ledger."))
+    session.merge_now()
+    assert any(s.merged_from for s in session.split(session.path()).summaries)
+
+    private = enter(session, keep)
+    for _event in session.ask(f"Where is the lamplighter's ledger? {MARKER}"):
+        pass
+    in_scene = session.bundle.asides[-1]
+    assert in_scene.private_span is not None and in_scene.recalled == []
+    play(session, turn(held, f"{MARKER} hides the ledger."))
+    private.responses = ["They talked, and parted as friends."]
+    for _event in session.close_private(session.summarise_private()):
+        pass
+
+    for _event in session.ask("Where is the lamplighter's ledger?"):
+        pass
+    asked = session.bundle.asides[-1]
+    assert asked.private_span is None and asked.recalled
+    for i in range(3):
+        play(session, turn(held, f"After the scene, step {i}."))
+        assert session.last_recall is not None and session.last_recall.items
+        assert all(item.carried for item in session.last_recall.items)
+        assert all(MARKER not in item.text for item in session.last_recall.items)
+    assert MARKER not in everything_sent(main, session.embeddings)
