@@ -11,6 +11,7 @@ from collections.abc import Mapping, Sequence
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -25,14 +26,25 @@ from sealedlore.engine.archival import chapter_number
 from sealedlore.models.summary import Summary
 
 
-def chapter_title(position: int, summary: Summary, *, on_path: bool, in_part: bool = False) -> str:
+def chapter_title(
+    position: int,
+    summary: Summary,
+    *,
+    on_path: bool,
+    in_part: bool = False,
+    rebuilding: bool = False,
+) -> str:
     """`position` is the chapter number (a part's first); `in_part`, a chapter a
     part on the path stands in for."""
     badges = []
-    if summary.stale:
+    if rebuilding:
+        badges.append("rebuilding…")
+    elif summary.stale:
         badges.append("stale")
     if summary.hand_edited:
         badges.append("your words")
+    if summary.keep_as_written:
+        badges.append("kept as written")
     if in_part:
         badges.append("merged into a part")
     elif not on_path:
@@ -46,6 +58,7 @@ def chapter_title(position: int, summary: Summary, *, on_path: bool, in_part: bo
 class SummariesPanel(QWidget):
     archive_requested = Signal()
     rebuild_requested = Signal(str)
+    keep_toggled = Signal(str, bool)
     edit_committed = Signal(str, str)
     # The first message of a chapter on this path, to scroll the transcript to
     # (double-click). The left dock's own chapter list did only this, twice over.
@@ -55,6 +68,8 @@ class SummariesPanel(QWidget):
         super().__init__()
         self._summaries: list[Summary] = []
         self._on_path: set[str] = set()
+        self._in_parts: set[str] = set()
+        self._rebuilding: set[str] = set()
         self._loading = False
 
         caption = QLabel(
@@ -87,8 +102,16 @@ class SummariesPanel(QWidget):
         self.revert_button = QPushButton("Revert")
         self.revert_button.clicked.connect(self._reload_editor)
         self.rebuild_button = QPushButton("Rebuild")
-        self.rebuild_button.setToolTip("Summarise the same messages again")
+        self.rebuild_button.setToolTip(
+            "Summarise the same messages again, in the background: you can keep playing"
+        )
         self.rebuild_button.clicked.connect(self._rebuild)
+        self.keep_box = QCheckBox("Keep as written")
+        self.keep_box.setToolTip(
+            "Never merge this chapter into a part: it is sent as it is however long the "
+            "story grows. Older chapters are merged around it."
+        )
+        self.keep_box.toggled.connect(self._on_keep_toggled)
         self.archive_button = QPushButton("Archive now")
         self.archive_button.clicked.connect(self.archive_requested)
 
@@ -105,6 +128,7 @@ class SummariesPanel(QWidget):
         chapter_row.setContentsMargins(0, 0, 0, 0)
         chapter_row.setSpacing(6)
         chapter_row.addWidget(self.rebuild_button)
+        chapter_row.addWidget(self.keep_box)
         chapter_row.addStretch(1)
         chapter_row.addWidget(self.archive_button)
 
@@ -139,6 +163,7 @@ class SummariesPanel(QWidget):
         on_path_ids: set[str],
         archivable_turns: int,
         numbers: Mapping[str, int] | None = None,
+        rebuilding: set[str] | frozenset[str] = frozenset(),
     ) -> None:
         """Repopulate, keeping the selected chapter where it still exists.
 
@@ -149,6 +174,7 @@ class SummariesPanel(QWidget):
         selected = self.selected_id()
         self._summaries = list(summaries)
         self._on_path = set(on_path_ids)
+        self._rebuilding = set(rebuilding)
 
         self._loading = True
         self.chapters.clear()
@@ -158,6 +184,7 @@ class SummariesPanel(QWidget):
             if summary.id in self._on_path
             for chapter_id in summary.merged_from
         }
+        self._in_parts = in_parts
         for summary in self._summaries:
             item = QListWidgetItem(
                 chapter_title(
@@ -165,6 +192,7 @@ class SummariesPanel(QWidget):
                     summary,
                     on_path=summary.id in self._on_path,
                     in_part=summary.id in in_parts,
+                    rebuilding=summary.id in self._rebuilding,
                 )
             )
             item.setData(Qt.UserRole, summary.id)
@@ -223,8 +251,15 @@ class SummariesPanel(QWidget):
         bits = [f"Written by {summary.model}" if summary.model else "Writer not recorded"]
         if summary.hand_edited:
             bits.append("edited by you")
-        if summary.stale:
+        if summary.id in self._rebuilding:
+            bits.append("being rebuilt in the background; this text is sent until it's in")
+        elif summary.stale:
             bits.append("stale: a message it covers has been edited")
+        if summary.id in self._in_parts:
+            bits.append(
+                "merged into a part: the part is sent instead, and editing or rebuilding "
+                "this chapter takes the part apart until the next merge"
+            )
         if summary.id not in self._on_path:
             bits.append("not part of the branch you are on")
         return " · ".join(bits)
@@ -239,10 +274,21 @@ class SummariesPanel(QWidget):
 
     def _update_buttons(self) -> None:
         summary = self.selected()
+        rebuilding = summary is not None and summary.id in self._rebuilding
         self.editor.setEnabled(summary is not None)
         self.save_button.setEnabled(self._is_dirty())
         self.revert_button.setEnabled(self._is_dirty())
-        self.rebuild_button.setEnabled(summary is not None)
+        self.rebuild_button.setEnabled(summary is not None and not self._rebuilding)
+        # A part is merged already; keeping applies to a chapter.
+        self.keep_box.setEnabled(summary is not None and not summary.merged_from and not rebuilding)
+        self.keep_box.blockSignals(True)
+        self.keep_box.setChecked(bool(summary and summary.keep_as_written))
+        self.keep_box.blockSignals(False)
+
+    def _on_keep_toggled(self, checked: bool) -> None:
+        summary = self.selected()
+        if summary is not None and not self._loading:
+            self.keep_toggled.emit(summary.id, checked)
 
     def _commit(self) -> None:
         summary = self.selected()

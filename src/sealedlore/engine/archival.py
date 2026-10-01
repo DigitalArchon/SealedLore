@@ -27,6 +27,7 @@ from dataclasses import dataclass
 
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.rules import render_history_node
+from sealedlore.engine.validators import mentions
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.character import Character
 from sealedlore.models.node import Node
@@ -203,20 +204,16 @@ def render_chunk(
 
 
 def characters_in(text: str, cast: Sequence[Character]) -> list[Character]:
-    """The cast members this prose actually names, by name or alias.
+    """The cast members this prose actually names, by name, alias or a
+    distinctive part of one (`validators.mentions`).
 
     Only these are given to the summariser. Handing it the whole cast invites
     it to account for the ones who weren't there — the first live run produced
     "Nils Carrow did not appear in this section", which is a statement about
-    presence that the record has no business making (§3.4).
+    presence that the record has no business making (§3.4). A plain substring
+    test found "Ann" in "announcer" and missed "Elena" for Elena Ruiz.
     """
-    lowered = text.lower()
-    found: list[Character] = []
-    for character in cast:
-        labels = [character.name, *character.aliases]
-        if any(label and label.lower() in lowered for label in labels):
-            found.append(character)
-    return found
+    return [character for character in cast if mentions(text, character)]
 
 
 def build_summary_messages(
@@ -281,22 +278,27 @@ def plan_merge(
     Only once the summary block is over its share of the budget, and never the
     newest `keep`: the recent past is where the story needs its detail. An
     existing part leads the run and is merged again with what follows it, so a
-    long story keeps one part, not a growing stack of them. A stale or
-    hand-edited summary ends the run: the author's words and a record waiting
-    for a rebuild are not the merger's to rewrite.
+    long story keeps one part, not a growing stack of them.
+
+    The merge goes around a chapter the author keeps as written, and around a
+    stale one (merging it would bury the edit in a part with the old text),
+    taking the oldest run between them that has something to merge. Before,
+    such a chapter ended the run, and one near the start stopped merging for
+    good. A hand-edited chapter is merged like any other (the author's call).
     """
     if not over_threshold:
         return []
     candidates = list(path_summaries[: max(len(path_summaries) - max(keep, 1), 0)])
     run: list[Summary] = []
     for summary in candidates:
-        if summary.stale or summary.hand_edited:
-            break
+        if summary.stale or summary.keep_as_written:
+            if len(run) >= 2:
+                return run
+            run = []
+            continue
         run.append(summary)
     # Merging one chapter into itself, or a part with nothing new, saves nothing.
-    if len(run) < 2:
-        return []
-    return run
+    return run if len(run) >= 2 else []
 
 
 def source_chapters(run: Sequence[Summary]) -> list[str]:

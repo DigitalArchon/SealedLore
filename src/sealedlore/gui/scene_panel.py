@@ -86,6 +86,7 @@ class ScenePanel(QWidget):
         form.setContentsMargins(0, 0, 0, 0)
         form.addRow("Location", self.location)
         form.addRow("Time", self.time_of_day)
+        self._form = form
         form.addRow("Situation", self.situation)
         form.addRow("Who can know", self.privacy)
 
@@ -189,8 +190,13 @@ class ScenePanel(QWidget):
         supporting: Sequence[Character] = (),
         held_id: str | None = None,
         log: Sequence[SceneLogEntry] = (),
+        show_time: bool = True,
     ) -> None:
+        """`show_time` is whether the Time line reaches the storyteller
+        (`prompt.scene_time_shown`); where it doesn't, the field is hidden
+        rather than left looking as though it did something."""
         self._scene = scene
+        self._form.setRowVisible(self.time_of_day, show_time)
         self._cast = cast
         self._loading = True
         self._others_touched = False

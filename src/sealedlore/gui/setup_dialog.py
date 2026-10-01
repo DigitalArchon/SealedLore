@@ -368,6 +368,8 @@ class SetupDialog(QDialog):
         form.addRow("Location", self.location)
         form.addRow("Time", self.time_of_day)
         form.addRow("Situation", self.situation)
+        # A plot story's time is the plot clock's (prompt.scene_time_shown).
+        form.setRowVisible(self.time_of_day, self.story.plot is None)
         layout.addLayout(form)
 
         # A new story's cast is usually made after its Setup (the author's

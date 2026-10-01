@@ -11,9 +11,11 @@ from sealedlore.engine.prompt import TurnRequest
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS
 from sealedlore.engine.session import SessionNotice, StorySession
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
+from sealedlore.models.node import Node, NodeMeta
 from sealedlore.providers.base import ChatRequest, StreamCompleted
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage.repository import StoryBundle, read_api_log, save_story_bundle
+from sealedlore.tree import link_child
 from tests.conftest import make_exchange
 from tests.test_ledger import ledger
 from tests.test_session import FILLER, make_config
@@ -145,3 +147,48 @@ def test_preparing_leaves_the_last_turns_prompt_for_the_inspector(session: Story
     assert session._archive_job is not None
     # The prompt the turn really sent, not the measurement taken after it.
     assert "I wait." in session.last_prompt.section("tail.author_turn").text
+
+
+def test_chapters_for_a_branch_the_author_left_are_kept_for_it(session: StorySession):
+    """They used to be thrown away, and the branch paid for them again."""
+    list(session.send(turn()))
+    job = session._archive_job
+    assert job is not None and job.done.wait(5)
+    main_leaf = session.story.active_leaf_id
+    first = job.chapters[0].node_ids
+    # A branch rewritten from inside the first chapter, and the author on it.
+    fork = next(n for n in session.nodes if n.id == first[3])
+    rewritten = Node(
+        id="rewritten",
+        kind="user",
+        speaker_id="char-serrik",
+        content="I go the other way.",
+        meta=NodeMeta(controlled_character_id="char-serrik"),
+    )
+    link_child(fork, rewritten)
+    session.bundle.nodes.append(rewritten)
+    session.story.active_leaf_id = rewritten.id
+
+    said = notices(session.adopt_archival(session.path()))
+    assert any("kept for it" in text for text in said)
+    assert session._archive_job is None
+    assert session.summaries[0].covered_node_ids == first
+    # Nothing applies on the branch the author is on...
+    assert not session.split().summaries
+    # ...and on going back, the chapters are there, nothing sent again.
+    session.story.active_leaf_id = main_leaf
+    assert session.split().summaries[0].covered_node_ids == first
+
+
+def test_a_finished_job_for_another_branch_frees_the_slot(session: StorySession):
+    list(session.send(turn()))
+    job = session._archive_job
+    assert job is not None and job.done.wait(5)
+    fork = next(n for n in session.nodes if n.id == job.chapters[0].node_ids[1])
+    rewritten = Node(id="other", kind="user", speaker_id="char-serrik", content="Elsewhere.")
+    link_child(fork, rewritten)
+    session.bundle.nodes.append(rewritten)
+    session.story.active_leaf_id = rewritten.id
+    session.prepare_archival()
+    assert session._archive_job is not job
+    assert session.summaries

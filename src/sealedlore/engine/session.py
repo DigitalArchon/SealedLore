@@ -92,6 +92,7 @@ from sealedlore.engine.prompt import (
     assemble_chat,
     assemble_prompt,
     assemble_question,
+    scene_time_shown,
 )
 from sealedlore.engine.prompt_edits import texts_in_force
 from sealedlore.engine.prompt_texts import PromptTexts
@@ -146,6 +147,7 @@ from sealedlore.engine.session_merge import MergeRuntime, _close
 from sealedlore.engine.session_plot import PlotRuntime, SessionNotice
 from sealedlore.engine.session_private import PrivateRuntime
 from sealedlore.engine.session_reasoning import ReasoningRuntime
+from sealedlore.engine.session_rebuild import RebuildRuntime
 from sealedlore.engine.tokens import TokenEstimator, updated_correction_factor
 from sealedlore.engine.validators import locate_quote, mentions
 from sealedlore.ids import new_id, utc_now_iso
@@ -401,7 +403,13 @@ def _weak_watch(
 
 
 class StorySession(
-    PlotRuntime, MergeRuntime, ArchivalRuntime, ImageRuntime, PrivateRuntime, ReasoningRuntime
+    PlotRuntime,
+    MergeRuntime,
+    ArchivalRuntime,
+    RebuildRuntime,
+    ImageRuntime,
+    PrivateRuntime,
+    ReasoningRuntime,
 ):
     def __init__(
         self,
@@ -1261,6 +1269,9 @@ class StorySession(
         self._attach(user_node, parent=history[-1] if history else None)
 
         turn = yield from self.direct_turn(turn, user_node, history)
+        # A rebuild the author asked for goes in before this turn's prompt.
+        for text in self.adopt_rebuild():
+            yield SessionNotice(text)
         yield from self.archive_if_due(turn, history)
         lore = self._retrieve_for_turn(turn, history)
         prompt = self.assemble(turn, history_nodes=history, lore=lore)
@@ -1727,6 +1738,9 @@ class StorySession(
             yield from self._private_turn(turn, user_node, history=history)
             return
         turn = self._directed(turn, user_node.meta.direction, [*history, user_node])
+        # A rebuild the author asked for goes in before this turn's prompt.
+        for text in self.adopt_rebuild():
+            yield SessionNotice(text)
         yield from self.archive_if_due(turn, history)
         lore = self._retrieve_for_turn(turn, history)
         prompt = self.assemble(turn, history_nodes=history, lore=lore)
@@ -2225,8 +2239,7 @@ class StorySession(
             raise ValueError("the nodes this summary covers are no longer in the story")
         chunk = [index[node_id] for node_id in summary.covered_node_ids]
 
-        position = self.bundle.summaries.index(summary)
-        previous = self.bundle.summaries[position - 1] if position > 0 else None
+        previous = self.previous_on_branch(summary)
         messages = build_summary_messages(
             chunk,
             self.visible_cast(),
@@ -2266,16 +2279,58 @@ class StorySession(
         summary.hand_edited = False
         summary.stale = False
         summary.edited_at = utc_now_iso()
+        self.drop_parts_over(summary.id)
         self.save()
         return summary
 
+    def scene_time_shown(self) -> bool:
+        """Whether the scene card's Time reaches the next prompt here."""
+        split = self.split()
+        return scene_time_shown(self.story, split.verbatim, split.summaries)
+
+    def previous_on_branch(self, summary: Summary) -> Summary | None:
+        """The record just before `summary` on its own branch: what it was
+        (or would be) written to continue from.
+
+        Not its neighbour in summaries.json, where every branch's chapters are
+        interleaved as they were made: a rebuild on one branch was given
+        another's chapter as "already recorded". None when nothing on its
+        branch is summarised right up to its first message.
+        """
+        if not summary.covered_node_ids:
+            return None
+        first = next((n for n in self.nodes if n.id == summary.covered_node_ids[0]), None)
+        if first is None or first.parent_id is None:
+            return None
+        split = self.split(self._path_to(first.parent_id))
+        if split.verbatim or not split.summaries:
+            return None
+        return split.summaries[-1]
+
     def edit_summary(self, summary_id: str, content: str) -> Summary:
-        """The author's own words win: hand-edited, and no longer stale (§5.2)."""
+        """The author's own words win: hand-edited, and no longer stale (§5.2).
+
+        A part merged from this chapter no longer says what it says, so it
+        goes and its chapters stand in: before, the edit never reached a
+        prompt while the part stood in for it."""
         summary = self.summary_by_id(summary_id)
         summary.content = content.strip()
         summary.hand_edited = True
         summary.stale = False
         summary.edited_at = utc_now_iso()
+        self.drop_parts_over(summary.id)
+        self.save()
+        return summary
+
+    def set_keep_as_written(self, summary_id: str, keep: bool) -> Summary:
+        """Keep a chapter out of merges, or let it be merged again.
+
+        Kept, it is sent as it is however long the story grows, and a part
+        merged from it goes so that it stands on its own."""
+        summary = self.summary_by_id(summary_id)
+        summary.keep_as_written = keep
+        if keep:
+            self.drop_parts_over(summary.id)
         self.save()
         return summary
 
@@ -3588,6 +3643,10 @@ class StorySession(
                         "dropped": "not adopted: the story was closed",
                     },
                 )
+        rebuild = self._rebuild_job
+        if rebuild is not None:
+            rebuild.done.wait(wait_seconds)
+            self._drop_rebuild("not adopted: the story was closed")
         if self._memory_pictures is not None:
             # A memory-only chat's pictures go with it.
             self._memory_pictures.close()

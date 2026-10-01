@@ -9,8 +9,9 @@ Now the chapters are written on a thread of their own, from a snapshot, while
 the author plays: started after a passage once the next prompt would be near
 the budget (`PREPARE_AT`), or at the latest when a turn finds it over. Nothing
 in the session changes until `adopt_archival`, on the worker thread, when
-archival is due; a chapter whose nodes are no longer the next run on the path,
-or whose text was edited meanwhile, is dropped. A turn that finds the budget
+archival is due; a chapter whose text was edited meanwhile, or whose branch's
+record no longer runs up to it, is dropped. One for a branch the author has
+left is kept for that branch. A turn that finds the budget
 over and the chapters not ready does not wait: its oldest prose falls out of
 the window for that turn, as it always has when archival couldn't help.
 
@@ -151,9 +152,17 @@ class ArchivalRuntime:
         `force` starts it whatever the prompt's size (a turn found it over).
         Never blocks, and does nothing while a job is out.
         """
-        if not self.can_archive_in_background() or self._archive_job is not None:
+        if not self.can_archive_in_background():
             return False
         history = self.path()
+        job = self._archive_job
+        if job is not None and job.done.is_set() and not self._job_on_path(job, history):
+            # Written for a branch the author has left: keeping it costs this
+            # branch's prompt nothing, and it frees the slot for this branch.
+            for _ in self.adopt_archival(history):
+                pass
+        if self._archive_job is not None:
+            return False
         prompt = self._measure(history)
         budget = self.story.defaults.context_token_budget
         if not force and prompt.full_total < PREPARE_AT * budget:
@@ -229,7 +238,8 @@ class ArchivalRuntime:
         first_ledger = ledger_on(on_path)
         earlier = "" if first_ledger else "\n\n".join(s.content for s in on_path)
         target_words = self.config.summary_target_words
-        use_ledger = self.config.story_ledger and not self.story.chat
+        chat = self.story.chat
+        use_ledger = self.config.story_ledger and not chat
         clients = [self.provider.detached(), self.provider.detached()]
 
         def run() -> None:
@@ -246,7 +256,7 @@ class ArchivalRuntime:
                             cast,
                             previous=previous,
                             target_words=target_words,
-                            chat=self.story.chat,
+                            chat=chat,
                             texts=texts,
                         ),
                         params=params,
@@ -298,35 +308,80 @@ class ArchivalRuntime:
         threading.Thread(target=run, name="archival", daemon=True).start()
         return job
 
+    @staticmethod
+    def _job_on_path(job: _ArchiveJob, history: Sequence[Node]) -> bool:
+        ids = {node.id for node in history}
+        return any(ids.issuperset(chapter.node_ids) for chapter in job.chapters)
+
+    def _continues_its_branch(self, chapter: _Chapter) -> bool:
+        """Whether a chapter written in the background still stands: its
+        messages are all there, unedited, and its branch is summarised right
+        up to its first one (so it continues the record it was written after).
+
+        Whether that branch is the one being read doesn't matter: a chapter is
+        tied to its exact messages and is used wherever they are on the path.
+        A branch switch before adoption used to throw the chapters away, and
+        the branch paid for them again when the author went back.
+        """
+        by_id = {node.id: node for node in self.nodes}
+        nodes = [by_id.get(node_id) for node_id in chapter.node_ids]
+        if any(node is None for node in nodes):
+            return False
+        if _fingerprint(nodes) != chapter.fingerprint:  # type: ignore[arg-type]
+            return False
+        if any(s.covered_node_ids[:1] == chapter.node_ids[:1] for s in self.bundle.summaries):
+            return False  # archived meanwhile
+        parent = nodes[0].parent_id  # type: ignore[union-attr]
+        before = self._path_to(parent) if parent is not None else []
+        if self.split(before).verbatim:
+            return False
+        # Its messages are a run of one path, in order, as when written.
+        tail = self._path_to(chapter.node_ids[-1])
+        return [n.id for n in tail[len(before) :]] == chapter.node_ids
+
     def adopt_archival(self, history: Sequence[Node]) -> Iterator[SessionNotice]:
         """Put the chapters written in the background into the story. Worker thread only.
 
-        Each must still be the next run on the path, unedited; the first that
-        isn't ends it, and the rest are dropped (they continued from it).
+        Each must still continue its branch's record, unedited
+        (`_continues_its_branch`); the first that doesn't ends it, and the
+        rest are dropped (they continued from it). Chapters for a branch the
+        author has left are kept for it.
         """
         job = self._archive_job
         if job is None or not job.done.is_set():
             return
         self._archive_job = None
         by_id = {node.id: node for node in self.nodes}
+        on_path_ids = {node.id for node in history}
         adopted: list[Summary] = []
         archived: list[Node] = []
+        scanned: list[Node] = []
+        elsewhere = 0
         for chapter in job.ready:
-            verbatim = list(self.split(history).verbatim)
-            run = verbatim[: len(chapter.node_ids)]
-            nodes = [by_id.get(i) for i in chapter.node_ids]
-            if [n.id for n in run] != chapter.node_ids or _fingerprint(run) != chapter.fingerprint:
+            if not self._continues_its_branch(chapter):
                 break
             summary = self._record_chapter(chapter)
             adopted.append(summary)
-            archived.extend(n for n in nodes if n is not None)
-        if adopted:
+            scanned.extend(by_id[i] for i in chapter.node_ids)
+            if on_path_ids.issuperset(chapter.node_ids):
+                archived.extend(by_id[i] for i in chapter.node_ids)
+            else:
+                elsewhere += 1
+        if adopted and archived:
             prompt = self._measure(history)
+            here = len(adopted) - elsewhere
             yield SessionNotice(
-                f"Archived {turns_in(archived)} turns into {len(adopted)} "
-                f"chapter{'s' if len(adopted) != 1 else ''}, written in the background — "
+                f"Archived {turns_in(archived)} turns into {here} "
+                f"chapter{'s' if here != 1 else ''}, written in the background — "
                 f"prompt now ~{prompt.full_total:,} tokens."
             )
+        if elsewhere:
+            yield SessionNotice(
+                f"{elsewhere} chapter{'s' if elsewhere != 1 else ''} written in the background "
+                f"belong{'s' if elsewhere == 1 else ''} to the branch you left; "
+                f"{'it is' if elsewhere == 1 else 'they are'} kept for it."
+            )
+        if adopted:
             problems = [c.ledger_problem for c in job.ready[: len(adopted)] if c.ledger_problem]
             if problems:
                 yield SessionNotice(
@@ -346,7 +401,7 @@ class ArchivalRuntime:
             if chapter.ledger is not None:
                 self._log_dropped("ledger", chapter.ledger, reason)
         if job.scan is not None and adopted:
-            yield from self._adopt_scan(job.scan, archived)
+            yield from self._adopt_scan(job.scan, scanned)
         elif job.scan is not None:
             self._log_dropped("characters", job.scan, reason)
 

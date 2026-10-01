@@ -826,6 +826,10 @@ The scene is saved with each passage, so switching to another take or branch,
 taking a turn back, or deleting messages puts the roster back to what it was
 at that point.
 
+The scene's **Time** is your starting time: it goes into the opening, and from
+then on the story's own prose says what time it is. In a story with a plot the
+plot's clock keeps the time instead. The field is shown only where it is used.
+
 **Who knows what.** Each scene records who can know what happens in it:
 everyone, in time, or only those present. When a scene ends,
 where it was, who was there, and what it amounted to go into **Recent scenes**,
@@ -1266,6 +1270,24 @@ each one as it lands. If the budget is too small to hold the story even fully
 archived, it says that instead of spending every turn trying: a long story's
 fixed parts — the rules, world, cast and the chapter summaries themselves — can
 be several thousand tokens before a word of recent prose is added.
+
+**Editing what has been archived.** Any message can be edited, archived or
+not. An edit to a message that is still sent word for word simply goes as it
+is. An edit to an archived message, or another take swapped in under a
+chapter, marks that chapter stale, and a banner names it. Nothing is rebuilt
+until you press **Rebuild affected summaries** (or **Rebuild** in **Story so
+far**), so make all your edits first. The rebuild runs in the background while
+you keep playing: the old summary is sent until the new one is in, and the
+mark goes then. If you edit the same chapter's messages again meanwhile, that
+summary isn't used and the chapter stays marked for another rebuild.
+
+**Parts.** Once the chapter summaries take a fifth of the budget, the oldest
+are merged into one part at about half their length; the newest three stay as
+they are. Edit or rebuild a chapter inside a part and the part is taken apart,
+its chapters sent instead until the next merge. Tick **Keep as written** on a
+chapter in **Story so far** to keep it out of every merge: it is sent as it is
+however long the story grows, and merging goes around it. A chapter you have
+edited by hand is merged like any other unless you keep it.
 
 ## The terminal client
 

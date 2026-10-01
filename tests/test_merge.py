@@ -75,12 +75,73 @@ def test_nothing_is_merged_under_the_threshold_or_short_of_two():
     assert plan_merge(run, over_threshold=True, keep=3) == run[:3]
 
 
-def test_a_stale_or_hand_edited_chapter_ends_the_run():
+def test_a_hand_edited_chapter_is_merged_like_any_other():
     run = chapters(make_exchange(16), 6)
-    run[2].hand_edited = True
+    run[0].hand_edited = True
+    assert plan_merge(run, over_threshold=True, keep=3) == run[:3]
+
+
+def test_the_merge_goes_around_a_kept_or_stale_chapter():
+    run = chapters(make_exchange(16), 6)
+    run[2].keep_as_written = True
     assert plan_merge(run, over_threshold=True, keep=1) == run[:2]
-    run[1].stale = True
+    # One at the very start used to stop merging for good.
+    run = chapters(make_exchange(16), 6)
+    run[0].keep_as_written = True
+    assert plan_merge(run, over_threshold=True, keep=1) == run[1:5]
+    run[0].keep_as_written = False
+    run[0].stale = True
+    assert plan_merge(run, over_threshold=True, keep=1) == run[1:5]
+    # Nothing between two of them worth merging: on to the next run.
+    run = chapters(make_exchange(16), 6)
+    run[0].stale = True
+    run[2].keep_as_written = True
+    assert plan_merge(run, over_threshold=True, keep=1) == run[3:5]
+    run[4].stale = True
     assert plan_merge(run, over_threshold=True, keep=1) == []
+
+
+def test_a_part_alone_between_kept_chapters_is_not_merged_again():
+    run = chapters(make_exchange(16), 4)
+    part = Summary(covered_node_ids=[], content="The part.", merged_from=["x", "y"])
+    assert plan_merge([part, run[0]], over_threshold=True, keep=1) == []
+    run[0].keep_as_written = True
+    assert plan_merge([part, run[0], run[1], run[2], run[3]], over_threshold=True, keep=1) == (
+        [run[1], run[2]]
+    )
+
+
+def test_editing_a_chapter_inside_a_part_puts_its_chapters_back(session: StorySession):
+    run = list(session.split().summaries)
+    part = session.merge_now()
+    assert part is not None and session.split().summaries[0] is part
+    # Before, the edit was saved and never reached a prompt: the part stood in.
+    session.edit_summary(run[1].id, "Serrik kept his sword after all.")
+    assert part not in session.summaries
+    split = session.split()
+    assert [s.id for s in split.summaries[:3]] == [s.id for s in run[:3]]
+    text = session.assemble(turn()).section(SECTION_SUMMARIES).text
+    assert "Serrik kept his sword after all." in text
+
+
+def test_a_part_the_author_wrote_stays_but_is_marked(session: StorySession):
+    run = list(session.split().summaries)
+    part = session.merge_now()
+    session.edit_summary(part.id, "The author's own account.")
+    session.edit_summary(run[0].id, "Changed.")
+    assert part in session.summaries and part.stale
+
+
+def test_keeping_a_chapter_takes_it_out_of_its_part(session: StorySession):
+    run = list(session.split().summaries)
+    part = session.merge_now()
+    session.set_keep_as_written(run[0].id, True)
+    assert part not in session.summaries
+    assert session.split().summaries[0].id == run[0].id
+    # The next merge goes around it.
+    session.provider.responses = ["Merged again."]
+    again = session.merge_now()
+    assert again is not None and again.merged_from == [s.id for s in run[1:3]]
 
 
 def test_a_part_is_numbered_by_the_chapters_it_stands_for():

@@ -290,11 +290,13 @@ def render_scene_block(
     supporting: Sequence[Character] = (),
     texts: PromptTexts = DEFAULT_TEXTS,
     not_placed: Collection[str] = (),
+    show_time: bool = True,
 ) -> str:
     """Scene framing plus the presence roster (§3.4).
 
     `not_placed` is cast the opening places (`prompt.not_placed_at_start`):
-    listed apart, never as elsewhere.
+    listed apart, never as elsewhere. `show_time` is
+    `prompt.scene_time_shown`: the card's Time line only where it helps.
 
     Location, time and situation come from the scene read after each passage
     (`source == "story"`) or from the author's hand, and are labelled by
@@ -306,7 +308,7 @@ def render_scene_block(
         (label, value)
         for label, value in (
             ("Location", scene.location),
-            ("Time", scene.time_of_day),
+            ("Time", scene.time_of_day if show_time else None),
             ("Situation", scene.situation),
         )
         if value

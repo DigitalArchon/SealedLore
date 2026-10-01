@@ -224,6 +224,23 @@ def not_placed_at_start(
     return [character_id for character_id in cast_by_id if character_id not in placed]
 
 
+def scene_time_shown(
+    story: Story, history_nodes: Sequence[Node], summaries: Sequence[Summary] = ()
+) -> bool:
+    """Whether the scene card's Time line goes into the prompt.
+
+    Only before a story without a plot has begun: the author's starting time
+    is the author's to set. After that the scene read kept it, and in the
+    long test story it said "Station time: morning" for 114 passages in a row
+    while days went by (the author, Oct 2026: not proving useful). A plot
+    story's time is the plot clock's (`# STORY TIME`), never the card's: the
+    two disagreed.
+    """
+    if story.plot is not None:
+        return False
+    return not summaries and not any(node.kind == "assistant" for node in history_nodes)
+
+
 def assemble_prompt(
     *,
     story: Story,
@@ -275,6 +292,7 @@ def assemble_prompt(
                 supporting=on_file,
                 texts=texts,
                 not_placed=not_placed_at_start(story, cast_by_id, history_nodes, summaries),
+                show_time=scene_time_shown(story, history_nodes, summaries),
             ),
         ),
         # After the scene it has to happen in, and close to the end: the
@@ -382,6 +400,7 @@ def assemble_question(
                 supporting=on_file,
                 texts=texts,
                 not_placed=not_placed_at_start(story, cast_by_id, history_nodes, summaries),
+                show_time=scene_time_shown(story, history_nodes, summaries),
             ),
         ),
         (SECTION_QUESTION, rendered or render_question(question, earlier, texts)),

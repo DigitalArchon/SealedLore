@@ -2,7 +2,8 @@
 
 Editing a message that a chapter summary covers leaves the two disagreeing,
 and this is how the author finds out. It never blocks the edit and never
-rebuilds anything on its own — those are both explicit requirements.
+rebuilds anything on its own — those are both explicit requirements. The
+rebuild it offers runs in the background (engine/session_rebuild.py).
 """
 
 from __future__ import annotations
@@ -49,7 +50,13 @@ class StalenessBanner(QFrame):
         layout.addLayout(actions)
         self.hide()
 
-    def show_stale(self, summaries: Sequence[Summary], *, positions: Sequence[int] = ()) -> None:
+    def show_stale(
+        self,
+        summaries: Sequence[Summary],
+        *,
+        positions: Sequence[int] = (),
+        rebuilding: bool = False,
+    ) -> None:
         if not summaries:
             self.hide()
             return
@@ -57,13 +64,23 @@ class StalenessBanner(QFrame):
             named = ", ".join(f"Chapter {position}" for position in positions)
         else:
             named = f"{len(summaries)} chapters"
+        self.rebuild_button.setEnabled(not rebuilding)
+        if rebuilding:
+            self.message.setText(
+                f"Rebuilding {named} in the background. Keep playing: the old summaries are "
+                "sent until the new ones are in."
+            )
+            self.show()
+            return
         if len(summaries) == 1:
             head = f"{named} covers text you have since edited, so its summary is out of date."
         else:
             head = f"{named} cover text you have since edited, so their summaries are out of date."
         self.message.setText(
-            f"{head} The edit itself is saved and the story is intact. Rebuilding costs a "
-            "summariser call, and either way the cached prompt prefix is lost for the next turn."
+            f"{head} The edit itself is saved and the story is intact. Nothing is rebuilt "
+            "until you ask, so make any other edits first. Rebuilding runs in the background "
+            "and costs a summariser call per chapter; each new summary changes the cached "
+            "prompt prefix once."
         )
         self.show()
 

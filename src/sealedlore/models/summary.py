@@ -34,6 +34,10 @@ class Summary(BaseModel):
     # (engine/ledger.py). None while the ledger is off; a part carries its
     # last chapter's.
     ledger: str | None = None
+    # The author's "Keep as written": never merged into a part. Merging goes
+    # around it, as it goes around a chat's kept messages. Being hand-edited
+    # alone doesn't keep a chapter out of a merge (the author's call).
+    keep_as_written: bool = False
 
     @property
     def chapters(self) -> int:

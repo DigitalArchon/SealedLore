@@ -162,6 +162,10 @@ def _how_it_starts(story: Story) -> dict:
 KEPT_WARNING_SHARE = 0.2
 
 
+# How often the window looks for a finished background rebuild.
+REBUILD_POLL_MS = 700
+
+
 class MainWindow(
     ChatWindow, FindWindow, ImagesWindow, VideosWindow, PrivateWindow, TextSizeWindow, QMainWindow
 ):
@@ -216,6 +220,11 @@ class MainWindow(
         self._streaming_job = True
         self._staleness_dismissed = False
         self._counted_summaries: set[tuple[str, str]] = set()
+        # A rebuild the author asked for runs in the background; this looks
+        # for it to finish and puts it in whenever nothing else is running.
+        self._rebuild_timer = QTimer(self)
+        self._rebuild_timer.setInterval(REBUILD_POLL_MS)
+        self._rebuild_timer.timeout.connect(self._poll_rebuild)
 
         # The transcript shows the story as written, or as the storyteller is sent it.
         self._storyteller_view = False
@@ -355,6 +364,7 @@ class MainWindow(
         self.summaries_panel = SummariesPanel()
         self.summaries_panel.archive_requested.connect(self.archive_now)
         self.summaries_panel.rebuild_requested.connect(self._rebuild_summary)
+        self.summaries_panel.keep_toggled.connect(self._keep_as_written)
         self.summaries_panel.chapter_chosen.connect(self._scroll_to_node)
         self.summaries_panel.edit_committed.connect(self._save_summary)
         self.inspector = ContextInspector()
@@ -1201,6 +1211,7 @@ class MainWindow(
             on_path_ids={summary.id for summary in split.summaries},
             archivable_turns=turns_in(self.session.next_chunk(allow_partial=True)),
             numbers=chapter_numbers(split.summaries),
+            rebuilding=self.session.rebuilding_ids(),
         )
         self.status_strip.set_archive(len(split.summaries))
         self.summaries_panel.set_kept_warning(self._kept_warning())
@@ -1208,8 +1219,13 @@ class MainWindow(
         self._refresh_over_budget()
 
         stale = [summary for summary in split.summaries if summary.stale]
+        rebuilding = self.session.rebuilding_ids()
         if stale and not self._staleness_dismissed:
-            self.staleness.show_stale(stale, positions=self._chapter_numbers(stale))
+            self.staleness.show_stale(
+                stale,
+                positions=self._chapter_numbers(stale),
+                rebuilding=any(summary.id in rebuilding for summary in stale),
+            )
         else:
             self.staleness.hide()
 
@@ -2119,6 +2135,23 @@ class MainWindow(
         assert self.session is not None
         self.session.provider = self._current_provider()
         self._staleness_dismissed = False
+        if self.session.can_rebuild_in_background():
+            # Off the worker entirely: the author plays on, and the old
+            # chapters are sent until the new ones are in (_poll_rebuild).
+            try:
+                started = self.session.start_rebuild(summary_ids)
+            except ValueError as exc:
+                self.statusBar().showMessage(str(exc), 8000)
+                return
+            if started:
+                self._rebuild_timer.start()
+                self.statusBar().showMessage(
+                    "Rebuilding in the background — keep playing; the new summaries go in "
+                    "when they're written",
+                    8000,
+                )
+            self.refresh_summaries()
+            return
         self._start(
             lambda: self._rebuild_job(summary_ids),
             streaming=False,
@@ -2130,6 +2163,48 @@ class MainWindow(
         for summary_id in summary_ids:
             self.session.rebuild_summary(summary_id, force=True)
             yield SessionNotice(f"Rebuilt chapter summary ({summary_id[:8]})")
+
+    def _poll_rebuild(self) -> None:
+        """Put a finished rebuild in, once nothing else is writing the story.
+
+        A turn started meanwhile takes it in itself, before its prompt."""
+        session = self.session
+        if session is None or not session.rebuilding_ids():
+            self._rebuild_timer.stop()
+            if session is not None:
+                self.refresh_summaries()
+            return
+        if self._busy or not session.rebuild_ready():
+            return
+        notices = session.adopt_rebuild()
+        if not session.rebuilding_ids():
+            self._rebuild_timer.stop()
+        for usage in session.unreported_usage:
+            self.status_strip.add_cost(usage)
+        session.unreported_usage.clear()
+        self._absorb_summary_costs()
+        self._refresh_story_cost()
+        self.reload_transcript()
+        self.refresh_summaries()
+        self._reassemble_inspector()
+        if notices:
+            self.statusBar().showMessage(" ".join(notices), 12000)
+
+    def _keep_as_written(self, summary_id: str, keep: bool) -> None:
+        if self.session is None or self._busy:
+            return
+        try:
+            self.session.set_keep_as_written(summary_id, keep)
+        except KeyError:
+            return
+        self.refresh_summaries()
+        self._reassemble_inspector()
+        self.statusBar().showMessage(
+            "Kept as written: never merged into a part"
+            if keep
+            else "This chapter may be merged with others again",
+            5000,
+        )
 
     def _save_summary(self, summary_id: str, content: str) -> None:
         if self.session is None:
@@ -3118,6 +3193,7 @@ class MainWindow(
             supporting=[c for c in session.supporting if c.id not in hidden],
             held_id=session.story.held_character_id,
             log=session.scene_log_on_path(),
+            show_time=session.scene_time_shown(),
         )
         self.scene_panel.show_changes(
             session.story.scene, passage=len(session.path()), can_undo=session.scene_changed_here()

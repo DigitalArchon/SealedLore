@@ -159,7 +159,7 @@ class MergeRuntime:
             or completed.finish_reason == "length"
             or any(summary is None for summary in run)
             or [summary.content for summary in run if summary] != job.contents
-            or any(summary.stale for summary in run if summary)
+            or any(summary.stale or summary.keep_as_written for summary in run if summary)
         ):
             # Paid for all the same, so it counts.
             self.unreported_usage.append(usage)
@@ -180,6 +180,16 @@ class MergeRuntime:
         self.bundle.summaries.append(part)
         self.save()
         return part
+
+    def drop_parts_over(self, chapter_id: str) -> list[Summary]:
+        """A chapter changed (edited, rebuilt or kept as written): every part
+        merged from it no longer says what it says. Those parts go and their
+        chapters stand in until the next merge, as for an edit to a message
+        under a part; one the author has edited stays, marked stale."""
+        parts = [s for s in self.bundle.summaries if chapter_id in s.merged_from]
+        for part in parts:
+            part.stale = True
+        return self.drop_stale_parts()
 
     def drop_stale_parts(self) -> list[Summary]:
         """Parts made stale by an edit go; their chapters stand in until the next merge.
