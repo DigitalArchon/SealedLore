@@ -118,8 +118,11 @@ Have fun!
   the character's skills.
 - **Length and style**: length presets with measured word counts, a per-turn
   override, and a style block you can edit by hand.
-- **Long stories**: old prose summarised into chapters in the background, and
-  a prompt laid out for prompt caching.
+- **Long stories**: old prose summarised into chapters in the background and
+  merged into parts as the story grows, with a prompt laid out for prompt
+  caching. Edit any chapter or rebuild it in the background; ask a Question
+  about something long merged and its chapters come back, for the Question
+  and the next few turns.
 - **Takes and branches**: regenerate any passage in place, or rewrite any
   earlier message as a named branch; a map shows them all.
 - **Drafting**: a whole story drafted from a premise.
@@ -269,8 +272,10 @@ must be `https://` (plain `http://` is accepted only for `localhost`).
 - **The chat endpoint** gets every prompt: the world, cast, lore, the recent
   story and your turn, and the side calls made from the story (chapter
   summaries, scene and plot reads, reviews, picture prompts).
-- **The embeddings endpoint**, off by default, gets the lore entries and a
-  query built from the last few passages.
+- **The embeddings endpoint**, off by default, gets the lore entries, the
+  chapters merged into parts (and the archived passages, if recall is set to
+  search them), a query built from the last few passages, and your Question
+  or turn when recall searches for it.
 - **Pictures** go to the picture endpoint (Settings → Images; by default the
   chat endpoint): the prompt you approved and the reference pictures you
   chose.
