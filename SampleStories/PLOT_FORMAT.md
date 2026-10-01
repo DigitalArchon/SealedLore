@@ -295,5 +295,11 @@ could happen or be foreshadowed. An optional event whose conditions are already
 met keeps the director asking every turn until it happens, so tight
 `requires:` lines save calls and time.
 
+You can write an event yourself: a Director or Narration turn that tells it
+("The next day, the Dominion attack again.") counts it as happened, with what
+it sets and brings, so it isn't scheduled again later. It has to be told in
+your own turn, not only in the storyteller's passage. If the program misses one,
+mark it happened in the Plot tab.
+
 Each event happens at most once per playthrough. Every branch keeps its own
 clock, facts and events.

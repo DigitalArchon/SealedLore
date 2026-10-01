@@ -1474,3 +1474,108 @@ def test_an_in_character_turn_or_a_count_moves_no_clock(tmp_path):
         0
     ] == clock_minutes(62, 9, 0)
     assert stated_skip("A few more days pass.", now)[0] == now + 3 * 1440
+
+
+# --- an event the author writes themselves ------------------------------------------
+
+
+def test_an_event_the_authors_director_turn_tells_has_happened():
+    # Live (the author's own Between Stars story): the author wrote the
+    # Jem'Hadar boarding in a Director turn, and the plot would have
+    # scheduled it again, since only a passed-on event could be confirmed.
+    from sealedlore.engine.chronicle_read import authors_candidates
+
+    p = plot()
+    before = initial_chronicle(p)
+    before.place, before.visited = "The Mill", ["The Mill"]
+    offered = authors_candidates(p, before)
+    assert list(offered) == ["the_raid", "the_cellar"]
+    turn = "Night falls. Raiders hit the mill, and Mara, a trader, limps in to warn Ann."
+    claim = [{"event": "the_raid", "quote": "Raiders hit the mill, and Mara, a trader, limps in"}]
+    delta = parse_read(read(happened=claim))
+    after = delta.applied_to(
+        before,
+        p,
+        passage="Ann barred the door.",
+        author_turn=turn,
+        author_states_facts=True,
+        authors_events=offered,
+    )
+    status = after.events["the_raid"]
+    assert status.state == "happened" and status.variant == "Ann at the mill"
+    assert after.facts["raided"] == "yes"
+    assert set(offered["the_raid"].brings) <= set(after.brought_in)
+
+    # The sentence must be the author's, not the storyteller's.
+    delta = parse_read(read(happened=claim))
+    after = delta.applied_to(
+        before,
+        p,
+        passage="Raiders hit the mill, and Mara, a trader, limps in to warn Ann.",
+        author_turn="Night falls.",
+        author_states_facts=True,
+        authors_events=offered,
+    )
+    assert after.events["the_raid"].state == "pending" and delta.refused
+
+    # An in-character turn is not the author's statement of an event.
+    delta = parse_read(read(happened=claim))
+    after = delta.applied_to(
+        before, p, passage="Ann barred the door.", author_turn=turn, authors_events=offered
+    )
+    assert after.events["the_raid"].state == "pending"
+
+
+def test_only_a_director_turn_offers_the_read_the_plots_events(tmp_path):
+    from sealedlore.models.node import DIRECTOR_SPEAKER_ID
+
+    session = make_session(
+        tmp_path,
+        [
+            PASSAGE,
+            read(place=("The Mill", "Ann pushed through the mill door.")),
+            director(),
+            "Ann waited.",
+            read(),
+        ],
+    )
+    list(session.send(turn(session, "I go into the mill.")))
+    ann = session.cast[0].id
+    list(
+        session.send(
+            TurnRequest(
+                speaker_id=DIRECTOR_SPEAKER_ID,
+                user_text="An hour passes quietly.",
+                controlled_character_id=ann,
+            )
+        )
+    )
+    log = read_api_log(session.story.id, root=tmp_path)
+    reads = [json.dumps(e["payload"]) for e in log if e["kind"] == "chronicle_request"]
+    assert "EVENTS THE AUTHOR'S TURN MAY HAVE TOLD" not in reads[0]
+    assert "EVENTS THE AUTHOR'S TURN MAY HAVE TOLD" in reads[1]
+    assert "the_raid: The raid." in reads[1]
+
+
+def test_the_authors_events_have_their_own_field_in_the_reply():
+    # Under "happened", whose quotes are the passage's, GLM 5.3 quoted the
+    # passage for the author's own events 4 times in 5; in a field of its
+    # own it quoted the author's turn.
+    from sealedlore.engine.chronicle_read import authors_candidates
+
+    p = plot()
+    before = initial_chronicle(p)
+    before.place, before.visited = "The Mill", ["The Mill"]
+    reply = json.loads(read())
+    reply["author_told"] = [{"event": "the_raid", "quote": "Raiders hit the mill."}]
+    delta = parse_read(json.dumps(reply))
+    assert delta.author_told == [("the_raid", "Raiders hit the mill.")]
+    after = delta.applied_to(
+        before,
+        p,
+        passage="Ann barred the door.",
+        author_turn="Raiders hit the mill. Ann bars the door.",
+        author_states_facts=True,
+        authors_events=authors_candidates(p, before),
+    )
+    assert after.events["the_raid"].state == "happened"

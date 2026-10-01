@@ -16,12 +16,19 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
-from sealedlore.engine.chronicle import advance, format_clock, happen, set_fact, set_place
+from sealedlore.engine.chronicle import (
+    advance,
+    eligible,
+    format_clock,
+    happen,
+    set_fact,
+    set_place,
+)
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.validators import locate_quote
 from sealedlore.messages import ContentPart, PromptMessage
-from sealedlore.models.plot import MINUTES_PER_DAY, Chronicle, Plot
+from sealedlore.models.plot import MINUTES_PER_DAY, Chronicle, EventVariant, Plot
 
 # Room for a reasoning model to think first: a cap only limits, it costs nothing
 # unused. Live (GLM 5.3), 899 of 900 tokens went on reasoning and the reply was
@@ -286,6 +293,35 @@ def expected_events(plot: Plot, chronicle: Chronicle) -> str:
     return "\n".join(lines)
 
 
+def authors_candidates(plot: Plot, chronicle: Chronicle) -> dict[str, EventVariant]:
+    """Events the author's own Director or Narration turn could have brought
+    about: still to happen, their own conditions holding, with a way to go
+    on-screen that fits (the first is the one taken). Their window doesn't
+    matter: an author can write an event early."""
+    found: dict[str, EventVariant] = {}
+    for event in plot.events:
+        status = chronicle.events.get(event.id)
+        if status is None or status.state not in ("pending", "led_in"):
+            continue
+        onscreen = [variant for variant in eligible(event, chronicle) if not variant.offscreen]
+        if onscreen:
+            found[event.id] = onscreen[0]
+    return found
+
+
+def render_authors_candidates(plot: Plot, candidates: dict[str, EventVariant]) -> str:
+    lines: list[str] = []
+    for event_id, variant in candidates.items():
+        event = plot.event(event_id)
+        if event is None:
+            continue
+        what = " ".join(
+            " ".join(part.split()) for part in (event.tell, variant.tell) if part.strip()
+        )
+        lines.append(f"- {event.id}: {event.title}. {what}".rstrip())
+    return "\n".join(lines)
+
+
 def build_read_messages(
     *,
     plot: Plot,
@@ -294,6 +330,7 @@ def build_read_messages(
     passage: str,
     places: Sequence[str] = (),
     held: str | None = None,
+    authors_events: str = "",
     texts: PromptTexts = DEFAULT_TEXTS,
 ) -> list[PromptMessage]:
     """Only what the read has to judge: the clock, the place among `places`
@@ -312,6 +349,10 @@ def build_read_messages(
     expected = expected_events(plot, chronicle)
     if expected:
         body.append("EVENTS EXPECTED IN THIS PASSAGE:\n" + expected)
+    if authors_events.strip():
+        # Only on a Director or Narration turn (`authors_candidates`), in the
+        # user message, so every other read is sent as before.
+        body.append(texts["plot.chronicle_read.authors_events"] + "\n" + authors_events)
     if author_turn.strip():
         body.append("THE AUTHOR'S TURN:\n\n" + author_turn.strip())
     body.append("THE LATEST PASSAGE:\n\n" + passage.strip())
@@ -342,6 +383,11 @@ class ChronicleDelta:
     facts: list[ProposedFact] = field(default_factory=list)
     # (event id, quote) for events the passage shows beginning.
     happened: list[tuple[str, str]] = field(default_factory=list)
+    # (event id, quote) for events the author's own turn tells (offered only
+    # on a Director or Narration turn, `authors_candidates`). Its own field:
+    # under "happened", whose quotes come from the passage, GLM 5.3 quoted
+    # the passage for them 4 times in 5 (the author's Between Stars story).
+    author_told: list[tuple[str, str]] = field(default_factory=list)
     # What the read claimed and couldn't back up, for the log and the notice.
     refused: list[str] = field(default_factory=list)
 
@@ -357,6 +403,7 @@ class ChronicleDelta:
         author_states_facts: bool = False,
         scene_location: str = "",
         at_least: int | None = None,
+        authors_events: dict[str, EventVariant] | None = None,
     ) -> Chronicle:
         """The chronicle after this passage, keeping only what the text supports.
 
@@ -488,9 +535,30 @@ class ChronicleDelta:
         # Events first: what they set is where the passage started from, and
         # a fact the passage shows moving on ("under attack", then "fallen")
         # overrides it below.
-        for event_id, event_quote in self.happened:
+        offered = authors_events or {}
+        for event_id, event_quote in [*self.author_told, *self.happened]:
             event = plot.event(event_id)
             status = after.events.get(event_id)
+            if (
+                event is not None
+                and status is not None
+                and status.state in ("pending", "led_in")
+                and event_id in offered
+                and author_states_facts
+            ):
+                # The author wrote it themselves: their own turn must tell it.
+                if locate_quote(author_turn, event_quote) is None:
+                    self.refused.append(f"{event_id}: no sentence in the author's turn tells it")
+                    continue
+                happen(
+                    after,
+                    event,
+                    offered[event_id],
+                    node_id=node_id,
+                    revealed=True,
+                    quote=event_quote,
+                )
+                continue
             if event is None or status is None or status.state != "directed":
                 self.refused.append(f"{event_id} wasn't expected in this passage")
                 continue
@@ -579,10 +647,12 @@ def parse_read(text: str) -> ChronicleDelta:
         if name and value:
             facts.append(ProposedFact(name, value, _clean(item.get("quote"))))
     happened: list[tuple[str, str]] = []
-    raw_events = data.get("happened")
-    for item in raw_events if isinstance(raw_events, list) else []:
-        if isinstance(item, dict) and _clean(item.get("event")):
-            happened.append((_clean(item.get("event")), _clean(item.get("quote"))))
+    author_told: list[tuple[str, str]] = []
+    for key, found in (("happened", happened), ("author_told", author_told)):
+        raw_events = data.get(key)
+        for item in raw_events if isinstance(raw_events, list) else []:
+            if isinstance(item, dict) and _clean(item.get("event")):
+                found.append((_clean(item.get("event")), _clean(item.get("quote"))))
     place: str | None = None
     place_quote = ""
     raw_place = data.get("place")
@@ -600,6 +670,7 @@ def parse_read(text: str) -> ChronicleDelta:
         place=place,
         place_quote=place_quote,
         happened=happened,
+        author_told=author_told,
         elapsed=elapsed,
         elapsed_quote=quote,
         ends_at=_time_of_day(data.get("ends_at")),

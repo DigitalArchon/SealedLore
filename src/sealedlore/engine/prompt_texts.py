@@ -1544,6 +1544,24 @@ Events
 )
 
 
+# Only on a Director or Narration turn, in the read's user message: the author
+# writing an event themselves (the Jem'Hadar boarding in their own Between
+# Stars story) was never recognised, and the plot scheduled it again.
+_text(
+    "plot.chronicle_read.authors_events",
+    PLOT,
+    "The chronicle read: events the author may have written",
+    "Added to the read after a Director or Narration turn: the plot's events that could "
+    "happen now, in case the author's own turn told one. The program accepts one only with "
+    "a sentence it finds in the author's turn.",
+    """\
+EVENTS THE AUTHOR'S TURN MAY HAVE TOLD (the author can write the story's events
+themselves). Add to your reply "author_told": a list of those the AUTHOR'S TURN
+itself tells happening or having happened (not planned, hoped for or still to
+come), each with the sentence copied exactly from THE AUTHOR'S TURN, never from
+the passage: [{"event": "event id", "quote": "..."}]. None: "author_told": [].""",
+)
+
 _text(
     "plot.director",
     PLOT,

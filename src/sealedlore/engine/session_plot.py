@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 import threading
 from collections.abc import Generator, Iterator, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from sealedlore.engine.archival import (
     render_chunk,
@@ -45,9 +45,13 @@ from sealedlore.engine.chronicle import (
 from sealedlore.engine.chronicle import describe_changes as describe_chronicle
 from sealedlore.engine.chronicle import set_fact as change_fact
 from sealedlore.engine.chronicle_read import READ_MAX_TOKENS as CHRONICLE_MAX_TOKENS
+from sealedlore.engine.chronicle_read import (
+    authors_candidates,
+    render_authors_candidates,
+    stated_skip,
+)
 from sealedlore.engine.chronicle_read import build_read_messages as build_chronicle_messages
 from sealedlore.engine.chronicle_read import parse_read as parse_chronicle
-from sealedlore.engine.chronicle_read import stated_skip
 from sealedlore.engine.director import (
     DIRECTOR_MAX_TOKENS,
     GAP_MAX_TOKENS,
@@ -130,6 +134,9 @@ class _ChronicleRead:
     # The least the clock may end at: the author's own stated skip, already
     # moved before the passage was written (`direct_turn`).
     at_least: int | None = None
+    # On a Director or Narration turn, the events it may have told, and the
+    # way each would go (`authors_candidates`).
+    authors_events: dict[str, EventVariant] = field(default_factory=dict)
 
 
 class PlotRuntime:
@@ -321,6 +328,11 @@ class PlotRuntime:
         held = self._character(node.meta.controlled_character_id)
         take_viewpoint(before, node.meta.controlled_character_id)
         places = self.plot_places()
+        states = author is not None and author.speaker_id in (
+            DIRECTOR_SPEAKER_ID,
+            NARRATOR_SPEAKER_ID,
+        )
+        offered = authors_candidates(plot, before) if states else {}
         # On the scene model, beside the scene read: on 72 judged reads GLM 5.3
         # read as well as Mistral Medium 3.1 or better (1 wrong to both judges
         # against 4), and after the passage its slower answer costs no wait.
@@ -335,6 +347,7 @@ class PlotRuntime:
                 passage=node.content,
                 places=places,
                 held=held.name if held is not None else None,
+                authors_events=render_authors_candidates(plot, offered),
                 texts=self.texts,
             ),
             params=self.side_params(self.scene_model, max_tokens=CHRONICLE_MAX_TOKENS),
@@ -350,9 +363,9 @@ class PlotRuntime:
             places=places,
             request=request,
             log_ref=log_ref,
-            author_states_facts=author is not None
-            and author.speaker_id in (DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID),
+            author_states_facts=states,
             at_least=at_least,
+            authors_events=offered,
         )
 
     def update_chronicle_after_turn(
@@ -408,6 +421,7 @@ class PlotRuntime:
             author_states_facts=pending.author_states_facts,
             scene_location=self.story.scene.location or "",
             at_least=pending.at_least,
+            authors_events=pending.authors_events,
         )
         settled = settle_unconfirmed(
             plot, after, [event_id for event_id, _ in delta.happened], node_id=node.id
