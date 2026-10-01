@@ -55,6 +55,7 @@ def make_config() -> Config:
         # Recall at its widest, every candidate taken: the archived prose
         # itself goes to the embeddings endpoint and into the tail.
         recall="exchanges",
+        recall_in="everywhere",
         recall_threshold=-1.0,
     )
 

@@ -131,6 +131,7 @@ def session(tmp_path: Path, story, cast) -> StorySession:
     save_story_bundle(bundle, root=tmp_path)
     config = make_config()
     config.recall = "chapters"
+    config.recall_in = "everywhere"
     config.recall_threshold = 0.1
     return StorySession(
         bundle,
@@ -189,3 +190,13 @@ def test_a_question_recalls_for_the_question(session: StorySession):
     list(session.ask("What did Maela find in the chapel?"))
     section = session.last_prompt.section(SECTION_RECALL)
     assert section is not None and "map of the tunnels" in section.text
+
+
+def test_by_default_only_a_question_recalls(session: StorySession):
+    """Measured: Questions about merged chapters were answered far better with
+    recall; in story turns it brought old states back as if current."""
+    session.config.recall_in = "questions"
+    list(session.send(turn("I ask the ferryman's daughter about her brother and my promise.")))
+    assert session.last_prompt.section(SECTION_RECALL) is None
+    list(session.ask("What did Serrik promise the ferryman's daughter?"))
+    assert session.last_prompt.section(SECTION_RECALL) is not None

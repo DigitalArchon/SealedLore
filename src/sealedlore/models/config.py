@@ -245,8 +245,13 @@ class Config(BaseModel):
     lore_token_cap: int = 2_000
     # Recall (engine/recall.py): the chapters a merged part stands for, or
     # those and the archived exchanges, brought back into the tail by
-    # similarity to the lore query. "off" sends nothing.
-    recall: Literal["off", "chapters", "exchanges"] = "off"
+    # similarity to the lore query. "off" sends nothing. Chapters by default:
+    # Questions about merged chapters went 0.45-0.50 -> 0.56-0.67 (Oct 2026).
+    recall: Literal["off", "chapters", "exchanges"] = "chapters"
+    # Where recall is used: an out-of-character Question only, or story turns
+    # too. Measured (Oct 2026): it answered Questions about merged chapters
+    # far better, and in turns it brought old states back as present.
+    recall_in: Literal["questions", "everywhere"] = "questions"
     # A plot story's chapter headings carry the days they span, from the
     # plot's clock ("Chapter 4 · days 12–15"). Never without a plot.
     plot_chapter_days: bool = False

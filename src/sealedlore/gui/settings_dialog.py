@@ -107,11 +107,14 @@ def _scrolled(page: QWidget) -> QScrollArea:
     return FormScroll(page)
 
 
-# Settings → Context → Recall earlier detail (engine/recall.py).
+# Settings → Context → Recall earlier detail (engine/recall.py): what is
+# recalled and where, as "Config.recall|Config.recall_in" (a combo's data is
+# a string: PySide6 returns None from currentData() for a tuple).
 RECALL_CHOICES = (
-    ("Off", "off"),
-    ("Chapters merged into a part", "chapters"),
-    ("Those, and the archived passages", "exchanges"),
+    ("Off", "off|questions"),
+    ("Questions: merged chapters", "chapters|questions"),
+    ("Questions: chapters and passages", "exchanges|questions"),
+    ("Questions and turns: chapters and passages", "exchanges|everywhere"),
 )
 
 
@@ -666,15 +669,25 @@ class SettingsDialog(QDialog):
         self.recall = QComboBox()
         for label, value in RECALL_CHOICES:
             self.recall.addItem(label, value)
+        current = f"{self.config.recall}|{self.config.recall_in}"
         self.recall.setCurrentIndex(
-            next(i for i, (_, value) in enumerate(RECALL_CHOICES) if value == self.config.recall)
+            next(
+                (i for i, (_, value) in enumerate(RECALL_CHOICES) if value == current),
+                next(
+                    i
+                    for i, (_, value) in enumerate(RECALL_CHOICES)
+                    if value.split("|")[0] == self.config.recall
+                ),
+            )
         )
         self.recall.setToolTip(
-            "Merging condenses old chapters into a part, and detail goes. With recall on, "
-            "the chapters a part stands for (or the archived passages themselves) are "
-            "brought back into a turn's prompt when it is about them, a few at most, "
-            "chosen like lore by your embeddings model. Each costs prompt tokens on the "
-            "turns that use it."
+            "Merging condenses old chapters into a part, and detail goes. With recall, "
+            "when you ask the storyteller a question (Speaking as → Question) the chapters a "
+            "part stands for, or the archived passages themselves, come back into its prompt "
+            "if they are about it: two at most, chosen like lore by your embeddings model. "
+            "Passages are embedded the first time (about 25 seconds for a 250-exchange "
+            "story), chapters in a few. In story turns too, recall brought old states back "
+            "as if they were current in testing: use it there with care."
         )
 
         scope = QLabel(
@@ -1269,6 +1282,6 @@ class SettingsDialog(QDialog):
         self.config.archive_chunk_turns = self.chunk_turns.value()
         self.config.archive_target_ratio = self.archive_target.value() / 100
         self.config.summary_target_words = self.summary_words.value()
-        self.config.recall = self.recall.currentData()
+        self.config.recall, self.config.recall_in = self.recall.currentData().split("|")
 
         self.accept()

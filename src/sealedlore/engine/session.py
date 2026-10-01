@@ -3496,7 +3496,7 @@ class StorySession(
             self._question_as_turn(question), history, allow_network=span is None
         ).entries
         # The question itself is what to recall for: "what did she promise him?"
-        recall = self._recall_for_turn(question, history) if span is None else ()
+        recall = self._recall_for_turn(question, history, question=True) if span is None else ()
         prompt = self.assemble_question(
             question,
             lore=lore,
