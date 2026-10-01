@@ -62,6 +62,10 @@ SECTION_LABELS = {
 }
 
 
+# The section list's first row: the request body, not a section.
+WHOLE_REQUEST = "Whole request (JSON)"
+
+
 class ContextInspector(QWidget):
     def __init__(self) -> None:
         super().__init__()
@@ -169,8 +173,22 @@ class ContextInspector(QWidget):
             marker.section_name: f"break · {marker.segment_tokens:,}"
             for marker in prompt.breakpoints
         }
+        # The reader's row is kept when the prompt is assembled again.
+        current = self.sections.currentItem()
+        kept = current.data(0, Qt.UserRole) if current is not None else None
+        self.sections.blockSignals(True)
         self.sections.clear()
         self._section_text.clear()
+        # The whole request comes first: once a section was chosen, nothing
+        # in the list went back to it.
+        whole = QTreeWidgetItem([WHOLE_REQUEST, f"{tilde}{budget.total:,}", ""])
+        whole.setToolTip(0, "The request body as it is sent to the endpoint")
+        whole.setTextAlignment(1, Qt.AlignRight | Qt.AlignVCenter)
+        font = whole.font(0)
+        font.setBold(True)
+        whole.setFont(0, font)
+        self.sections.addTopLevelItem(whole)
+        select = whole
         for section in prompt.sections:
             marker = breakpoint_by_section.get(section.name, "")
             label = SECTION_LABELS.get(section.name, section.name)
@@ -180,6 +198,8 @@ class ContextInspector(QWidget):
             item.setTextAlignment(1, Qt.AlignRight | Qt.AlignVCenter)
             self.sections.addTopLevelItem(item)
             self._section_text[section.name] = section.text
+            if section.name == kept:
+                select = item
 
         payload = build_chat_payload(
             ChatRequest(
@@ -192,7 +212,9 @@ class ContextInspector(QWidget):
         )
         self._payload_json = json.dumps(payload, indent=2, ensure_ascii=False)
         self._messages = prompt.messages
-        self.payload.setPlainText(self._payload_json)
+        self.sections.setCurrentItem(select)
+        self.sections.blockSignals(False)
+        self._show_section_text(select)
         self._set_copyable(True)
 
     def prompt_text(self) -> str:
@@ -217,8 +239,6 @@ class ContextInspector(QWidget):
         QTimer.singleShot(1500, lambda: button.setText(label))
 
     def _show_section_text(self, current: QTreeWidgetItem | None) -> None:
-        if current is None:
-            self.payload.setPlainText(self._payload_json)
-            return
-        text = self._section_text.get(current.data(0, Qt.UserRole))
+        name = current.data(0, Qt.UserRole) if current is not None else None
+        text = self._section_text.get(name) if name else None
         self.payload.setPlainText(text if text else self._payload_json)

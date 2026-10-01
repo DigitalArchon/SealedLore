@@ -1174,6 +1174,28 @@ def test_the_prompt_tab_points_out_notes_that_say_who_plays_whom(app, window: Ma
     assert "Style notes say who plays whom (1 sentence)" in window.inspector.summary.text()
 
 
+def test_the_prompt_tab_goes_back_to_the_whole_request(app, window: MainWindow):
+    """The author: the whole request showed first, but once a section was
+    chosen nothing in the list went back to it. Its own row comes first, and
+    a section chosen stays chosen when the prompt is assembled again."""
+    from sealedlore.gui.inspector import WHOLE_REQUEST
+
+    window._reassemble_inspector()
+    inspector = window.inspector
+    whole = inspector.sections.topLevelItem(0)
+    assert whole.text(0) == WHOLE_REQUEST and inspector.sections.currentItem() is whole
+    request = inspector.payload.toPlainText()
+    assert request == inspector._payload_json and request.startswith("{")
+    section = inspector.sections.topLevelItem(1)
+    name = section.data(0, 0x0100)
+    inspector.sections.setCurrentItem(section)
+    assert inspector.payload.toPlainText() != request
+    window._reassemble_inspector()  # every row is made again
+    assert inspector.sections.currentItem().data(0, 0x0100) == name
+    inspector.sections.setCurrentItem(inspector.sections.topLevelItem(0))
+    assert inspector.payload.toPlainText() == request
+
+
 def test_setup_sets_the_style_before_the_story_begins(app, window: MainWindow, monkeypatch):
     """The author (Sept 2026): a new story's style could only be set once it had
     begun, its opening already written. Setup has the Style form; it edits a
