@@ -1890,51 +1890,6 @@ _text(
     (("names", "the cast members named, comma-separated"),),
 )
 
-# Who is who in the chunk (arm A of the Oct 2026 archive A/B): the summariser
-# was told nothing of the story's person or of who the author plays, and had
-# to work out who "you" is from the turns' name headings.
-_text(
-    "chapters.who",
-    CHAPTERS,
-    "Writing a chapter: who the author plays",
-    "In the summariser's request when the story's style is given: how the prose is "
-    "narrated and whose turns are the author's.",
-    "The story is told {narration}. The author plays {held}: a turn headed with "
-    "that name is the author's, and what it says happened, happened.{you}",
-    (
-        ("narration", 'the person and tense, e.g. "in the past tense, in the third person"'),
-        ("held", "who the author played in these turns"),
-        ("you", 'the sentence on who "you" or "I" is, or nothing'),
-    ),
-)
-
-_text(
-    "chapters.who.you",
-    CHAPTERS,
-    'Writing a chapter: who "you" is',
-    "Inside the line on who the author plays, for a first- or second-person story.",
-    ' In the prose, "{word}" is always the character the author played in the turn '
-    "just before it, never anyone else.",
-    (("word", "you or I"),),
-)
-
-_text(
-    "chapters.directions",
-    CHAPTERS,
-    "Writing a chapter: the author's directions",
-    "In the summariser's request when the text holds a Director turn.",
-    "A turn headed [Director …] is the author's instruction to the storyteller, not an "
-    "event: record only what the prose then shows happening, never the instruction itself.",
-)
-
-_text(
-    "chapters.ooc",
-    CHAPTERS,
-    "Writing a chapter: the author's facts",
-    "In the summariser's request when the text holds an out-of-character note.",
-    "A note under [OOC …] is a fact the author has set for the story: keep it as a fact.",
-)
-
 _text(
     "chapters.length",
     CHAPTERS,
