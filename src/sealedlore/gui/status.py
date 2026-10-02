@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QObject, QSize, Qt, QTimer
-from PySide6.QtGui import QPainter
+from PySide6.QtCore import QEvent, QObject, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QMouseEvent, QPainter
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -28,6 +28,24 @@ SECTION_COLOURS = {
 }
 
 
+DISMISS_TIP = "Click to dismiss."
+
+
+class _Notice(QLabel):
+    """The notice text: a click puts the controls under it back at once
+    (the author: the reminder after changing the storyteller's model hid
+    the model and route buttons for seconds)."""
+
+    clicked = Signal()
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt naming
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+
 class NoticeStatusBar(QStatusBar):
     """A status bar whose messages swap with its widgets instead of hiding them.
 
@@ -37,7 +55,8 @@ class NoticeStatusBar(QStatusBar):
     again, drawn over the message text until it times out. So the message
     here is a page of our own: the left-hand widgets on one page, the notice
     on the other, and QStatusBar's own message is never used. Qt's status
-    tips (hovering a menu item) arrive through `route_status_tips`.
+    tips (hovering a menu item) arrive through `route_status_tips`. A click
+    on the notice dismisses it.
     """
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -47,10 +66,12 @@ class NoticeStatusBar(QStatusBar):
         self._widgets = QWidget()
         self._row = QHBoxLayout(self._widgets)
         self._row.setContentsMargins(0, 0, 0, 0)
-        self._notice = QLabel()
+        self._notice = _Notice()
         self._notice.setObjectName("statusLabel")
         self._notice.setTextFormat(Qt.PlainText)
         self._notice.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self._notice.setCursor(Qt.PointingHandCursor)
+        self._notice.clicked.connect(self.clearMessage)
         self._stack.addWidget(self._widgets)
         self._stack.addWidget(self._notice)
         super().addWidget(self._stack, 1)
@@ -68,7 +89,7 @@ class NoticeStatusBar(QStatusBar):
             self.clearMessage()
             return
         self._notice.setText(text)
-        self._notice.setToolTip(text)
+        self._notice.setToolTip(f"{text}\n\n{DISMISS_TIP}")
         self._stack.setCurrentWidget(self._notice)
         self.messageChanged.emit(text)
         if timeout > 0:

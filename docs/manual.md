@@ -914,6 +914,10 @@ or reasoning. In the terminal: `sealedlore export <id> <file> [--markdown]`,
 `sealedlore import <backup>` and `sealedlore scenario import <scenario.json>`
 (the terminal keeps the two apart, and has no plot-file import).
 
+**Notices.** A notice in the status bar covers the controls on its left
+(the model, its route, the budget) for a few seconds. Click it to dismiss it
+at once.
+
 **Costs.** Each passage shows its tokens, cache use and cost; the status bar
 shows the session and whole-story spend, and **Story → Usage and cost…** breaks
 it down. Where the endpoint doesn't report a call's cost (NanoGPT often

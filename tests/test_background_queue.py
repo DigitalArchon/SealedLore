@@ -12,6 +12,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
+from PySide6.QtCore import Qt  # noqa: E402
+from PySide6.QtTest import QTest  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
@@ -117,4 +119,27 @@ def test_a_notice_stays_clear_of_the_status_widgets(app, tmp_path: Path, story, 
     app.processEvents()
     assert bar.currentMessage() == ""
     assert label.isVisible() and window.model_button.isVisible()
+    window.close()
+
+
+def test_a_click_on_a_notice_dismisses_it(app, tmp_path: Path, story, cast):
+    """The reminder after changing the storyteller's model covered the model
+    and route buttons for seconds; a click gives them back at once."""
+    save_story_bundle(StoryBundle(story=story, cast=cast), root=tmp_path)
+    window = MainWindow(root=tmp_path, use_mock=True)
+    window.open_story(story.id)
+    window.show()
+    app.processEvents()
+    bar = window.statusBar()
+
+    bar.showMessage("The next turn sends the whole prompt again.", 12000)
+    app.processEvents()
+    assert not window.model_button.isVisible()
+    assert "Click to dismiss" in bar._notice.toolTip()
+
+    QTest.mouseClick(bar._notice, Qt.LeftButton)
+    app.processEvents()
+    assert bar.currentMessage() == ""
+    assert window.model_button.isVisible()
+    assert not bar._timer.isActive()
     window.close()
