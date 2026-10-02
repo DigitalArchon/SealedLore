@@ -34,6 +34,9 @@ dependencies = [
     # End-to-end encrypted private models (providers/private_mode.py): Tinfoil's
     # own attestation and EHBP client, pinned exactly: it holds the plaintext.
     "tinfoil==0.14.0",
+    # API keys in the system keychain (storage/keychain.py): the Secret
+    # Service on Linux, Credential Manager on Windows.
+    "keyring>=25",
 ]
 
 [project.urls]

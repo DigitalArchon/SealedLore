@@ -14,3 +14,7 @@ PySide6-Addons==6.11.2
 # (providers/private_mode.py). It pulls in sigstore, cryptography and the
 # OpenAI client; all pinned by hash below like everything else.
 tinfoil==0.14.0
+# API keys in the system keychain (storage/keychain.py), as the author's
+# DAToolkit does: on Linux through SecretStorage and jeepney (pure Python;
+# cryptography is tinfoil's already).
+keyring==25.7.0

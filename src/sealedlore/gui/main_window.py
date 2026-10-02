@@ -129,6 +129,7 @@ from sealedlore.providers.mock import MockChatProvider
 from sealedlore.providers.model_hosts import Host
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
 from sealedlore.providers.tee import is_tee
+from sealedlore.storage import keychain
 from sealedlore.storage.archive import (
     ARCHIVE_FORMAT,
     ARCHIVE_SUFFIX,
@@ -3606,9 +3607,14 @@ class MainWindow(
             image_catalog=self.image_catalog,
             video_catalog=self.video_catalog,
             fetch_models=not self.use_mock,
+            root=self.root,
         )
         if dialog.exec() == SettingsDialog.Accepted:
             save_config(self.config, root=self.root)
+            if keychain.last_problem and self.config.key_storage == "keychain":
+                self.statusBar().showMessage(
+                    f"API keys are in config.json for now: {keychain.last_problem}.", 20000
+                )
             self._discard_provider()
             if self.session is not None:
                 # Undo restores the story's settings wholesale; after a save
@@ -3725,6 +3731,7 @@ class MainWindow(
         if not self._tokenizer_warming:
             self._tokenizer_warming = True
             QTimer.singleShot(WARM_UP_DELAY_MS, self, self._warm_tokenizer)
+            QTimer.singleShot(WARM_UP_DELAY_MS, self, self._move_keys_to_keychain)
 
     def _warm_tokenizer(self) -> None:
         """tiktoken reads its vocabulary on first use (~0.25s, holding the
@@ -3733,6 +3740,18 @@ class MainWindow(
         window's first paint. A story opened meanwhile waits for the rest of
         the load (tiktoken loads an encoding once)."""
         threading.Thread(target=lambda: self.estimator.raw_count("warm up"), daemon=True).start()
+
+    def _move_keys_to_keychain(self) -> None:
+        """Keys an older config.json holds in plain text go into the keychain
+        once the window is up (opening it costs ~60 ms), and the author is
+        told. With no keychain they stay, as Settings says."""
+        if not keychain.keys_in_file(self.config):
+            return
+        save_config(self.config, root=self.root)
+        if not keychain.keys_in_file(self.config):
+            self.statusBar().showMessage(
+                f"Your API keys were moved out of config.json into {keychain.where()}.", 15000
+            )
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt naming
         # The editor's unsaved file gets its own say before the app goes.

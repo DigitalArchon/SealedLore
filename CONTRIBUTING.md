@@ -57,8 +57,11 @@ clock, no GUI. Every prompt text the program sends is an entry in
 `engine/prompt_texts.py`; renderers take the texts and hold no wording of
 their own.
 
-Storage is flat JSON with atomic writes (`storage/atomic.py`), and the config
-is plain JSON with no keyring. These are decisions, not oversights. Every
+Storage is flat JSON with atomic writes (`storage/atomic.py`). API keys live
+in the system keychain through `keyring` (`storage/keychain.py`); the rest of
+the app sees them in `Config` as before, since only `repository.load_config`
+and `save_config` know. Tests run on an in-memory keychain (conftest), never
+the real one. These are decisions, not oversights. Every
 httpx client comes from `providers/http.py:make_client`, which refuses
 redirects off HTTPS and keeps a proxy from carrying loopback traffic: never
 construct `httpx.Client` directly.

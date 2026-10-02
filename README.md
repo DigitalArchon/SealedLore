@@ -222,8 +222,10 @@ Windows offers weaker privacy on the machine itself (see
    protocol works; the defaults assume [NanoGPT](https://nano-gpt.com)
    (`https://nano-gpt.com/api/v1`), and [OpenRouter](https://openrouter.ai)
    (`https://openrouter.ai/api/v1`) or a local server on `localhost` work the
-   same way. The key is stored in plain text in the data folder and used for
-   nothing else. NanoGPT is the recommended endpoint: it also serves the
+   same way. The key is kept in the system keychain (GNOME Keyring or
+   KWallet on Linux, Credential Manager on Windows), or in plain text in the
+   data folder on a computer without one; Settings says which under each key
+   field. It is used for nothing else. NanoGPT is the recommended endpoint: it also serves the
    end-to-end encrypted models that private scenes and chats use. Make an
    account at [nano-gpt.com](https://nano-gpt.com/), or through the
    developer's [referral link](https://nano-gpt.com/r/mackztyf). It applies to
@@ -285,8 +287,9 @@ must be `https://` (plain `http://` is accepted only for `localhost`).
   sends the enclave's GPU evidence to NVIDIA and fetches Intel's public
   certificates; nothing from your story goes to either. A `private/` model is
   end-to-end encrypted, so NanoGPT relays only ciphertext.
-- **On disk**, settings (the API key included, in plain text) and stories
-  live in a data folder only your user can read. Each story keeps every
+- **On disk**, settings and stories live in a data folder only your user
+  can read. API keys go to the system keychain, or into that folder's
+  `config.json` in plain text where there is no keychain or you choose it. Each story keeps every
   request and reply in its `api_log.jsonl`, so a story backup carries every
   prompt sent for it. An "in memory" private scene keeps its messages off
   the disk (only a content-free record of each call is kept, for the cost);

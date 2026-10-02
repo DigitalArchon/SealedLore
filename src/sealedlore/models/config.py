@@ -239,6 +239,12 @@ class Config(BaseModel):
 
     providers: list[ProviderConfig] = Field(default_factory=list)
     active_provider_name: str | None = None
+    # Where API keys are kept (storage/keychain.py): "keychain" is the system
+    # keychain when the machine has one, else config.json in plain text;
+    # "file" is config.json by choice (the CLI, test setups).
+    key_storage: Literal["keychain", "file"] = "keychain"
+    # The keys config.json leaves blank because the keychain holds them.
+    keychain_slots: list[str] = Field(default_factory=list)
     # Lore retrieval (§7). Unconfigured means keyword matching only, silently.
     embedding_provider: EmbeddingProviderConfig | None = None
     lore_retrieval_k: int = 3

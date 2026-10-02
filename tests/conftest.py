@@ -36,6 +36,36 @@ def _wheel_guard_style_first():
     app.clipboard().clear()
 
 
+class MemoryKeychain:
+    """A keychain in memory (storage/keychain.py): no test ever reads or
+    writes the real one."""
+
+    priority = 5
+
+    def __init__(self) -> None:
+        self.store: dict[tuple[str, str], str] = {}
+
+    def get_password(self, service: str, name: str) -> str | None:
+        return self.store.get((service, name))
+
+    def set_password(self, service: str, name: str, value: str) -> None:
+        self.store[(service, name)] = value
+
+    def delete_password(self, service: str, name: str) -> None:
+        del self.store[(service, name)]
+
+
+@pytest.fixture(autouse=True)
+def memory_keychain():
+    from sealedlore.storage import keychain
+
+    backend = MemoryKeychain()
+    keychain.use_backend(backend)
+    keychain.last_problem = None
+    yield backend
+    keychain.use_backend(MemoryKeychain())
+
+
 @pytest.fixture
 def estimator() -> TokenEstimator:
     """Deterministic and offline: tests must never reach for tiktoken's download."""

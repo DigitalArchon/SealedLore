@@ -345,6 +345,7 @@ cryptography==50.0.1 \
     #   pyhpke
     #   pyopenssl
     #   rfc3161-client
+    #   secretstorage
     #   sigstore
     #   tinfoil
     #   tinfoil-ehbp
@@ -394,6 +395,24 @@ idna==3.20 \
     #   httpx
     #   httpx2
     #   requests
+jaraco-classes==3.4.0 \
+    --hash=sha256:47a024b51d0239c0dd8c8540c6c7f484be3b8fcf0b2d85c13825780d3b3f3acd \
+    --hash=sha256:f662826b6bed8cace05e7ff873ce0f9283b5c924470fe664fff1c2f00f581790
+    # via keyring
+jaraco-context==6.1.2 \
+    --hash=sha256:bf8150b79a2d5d91ae48629d8b427a8f7ba0e1097dd6202a9059f29a36379535 \
+    --hash=sha256:f1a6c9d391e661cc5b8d39861ff077a7dc24dc23833ccee564b234b81c82dfe3
+    # via keyring
+jaraco-functools==4.6.0 \
+    --hash=sha256:880c577ec9720b3a052d5bc611fb9f2269b3d87902ef42440df443b88e443280 \
+    --hash=sha256:99e3dc0060c5cbe8fcd1cdb36258e2a65ca40f1566b2033b12abb1bb44dd3c30
+    # via keyring
+jeepney==0.9.0 \
+    --hash=sha256:97e5714520c16fc0a45695e5365a2e11b81ea79bba796e26f9f1d178cb182683 \
+    --hash=sha256:cf0e9e845622b81e4a28df94c40345400256ec608d0e55bb8a3feaa9163f5732
+    # via
+    #   keyring
+    #   secretstorage
 jiter==0.17.0 \
     --hash=sha256:00b5a98df3e3a3e8cf7b619f4ac2f8bf975bbf3d95d02c5d17b8dbfe5c8b8245 \
     --hash=sha256:00d783a779c5664e16dbad5e3a3c3a75e128b07dd5f4765159658d9210a50ca5 \
@@ -515,6 +534,10 @@ jiter==0.17.0 \
     --hash=sha256:fe15ddf316f1f1f643347d3a474e74ce61880c79a11ec5dca53df20c071bd3e8 \
     --hash=sha256:ffa0380ad091de7d3fc33e17a97ff479851ee18a0a2a3ee56ff3215cdc886656
     # via openai
+keyring==25.7.0 \
+    --hash=sha256:be4a0b195f149690c166e850609a477c532ddbfbaed96a404d4e43f8d5e2689f \
+    --hash=sha256:fe01bd85eb3f8fb3dd0405defdeac9a5b4f6f0439edbb3149577f244a2e8245b
+    # via -r requirements.in
 markdown-it-py==4.2.0 \
     --hash=sha256:04a21681d6fbb623de53f6f364d352309d4094dd4194040a10fd51833e418d49 \
     --hash=sha256:9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a
@@ -523,6 +546,12 @@ mdurl==0.1.2 \
     --hash=sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8 \
     --hash=sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba
     # via markdown-it-py
+more-itertools==11.1.0 \
+    --hash=sha256:48e8f4d9e7e5878571ecf6f2b4e57634f93cd474cc8cfbd2376f2d11b396e30d \
+    --hash=sha256:4b65538ae22f6fed0ce4874efd317463a7489796a0939fa66824dd542125a192
+    # via
+    #   jaraco-classes
+    #   jaraco-functools
 numpy==2.5.3 \
     --hash=sha256:012e66aca395d795496446e52aeeb5866312a5d4d3f27da270e5a0b43f70dc5c \
     --hash=sha256:09d5a423c71ad5feb5625844ad58050e35df43871004b52ac9c0ad44a56775be \
@@ -938,6 +967,10 @@ rich==15.0.0 \
     --hash=sha256:33bd4ef74232fb73fe9279a257718407f169c09b78a87ad3d296f548e27de0bb \
     --hash=sha256:edd07a4824c6b40189fb7ac9bc4c52536e9780fbbfbddf6f1e2502c31b068c36
     # via sigstore
+secretstorage==3.5.0 \
+    --hash=sha256:0ce65888c0725fcb2c5bc0fdb8e5438eece02c523557ea40ce0703c266248137 \
+    --hash=sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be
+    # via keyring
 securesystemslib==1.5.1 \
     --hash=sha256:4b8d00abd93707ead10b69eb2b8582376a1364de3b0a71077de534c2ef4985e0 \
     --hash=sha256:ada8bdf817da29ece4ba91654f6a162ce7cfbadbc3ae3f840f7313f9d22675de

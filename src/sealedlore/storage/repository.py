@@ -26,6 +26,7 @@ from sealedlore.models.prompt_edit import PromptEdit
 from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
 from sealedlore.models.supporting import SupportingCast
+from sealedlore.storage import keychain
 from sealedlore.storage.atomic import (
     append_jsonl,
     atomic_write_json,
@@ -63,30 +64,101 @@ class StoryBundle(BaseModel):
     notices: list[str] = Field(default_factory=list, exclude=True)
 
 
-# The API key lives in config.json in plain text (a hard constraint), so the
-# file at least belongs to its owner alone.
+# API keys may still be in config.json (no keychain, or kept there by
+# choice: storage/keychain.py), so the file belongs to its owner alone.
 CONFIG_FILE_MODE = 0o600
 
 
 def save_config(config: Config, root: Path | None = None) -> None:
+    """Written with each key the keychain holds left blank. A key the
+    keychain refuses stays in the file this time, never lost; the next save
+    tries again (`keychain.last_problem` says why)."""
     ensure_data_home(root)
-    atomic_write_json(config_file(root), config.model_dump(), mode=CONFIG_FILE_MODE)
+    atomic_write_json(config_file(root), _as_written(config, root), mode=CONFIG_FILE_MODE)
+
+
+def _as_written(config: Config, root: Path | None) -> dict[str, Any]:
+    reachable = keychain.problem() is None
+    use = config.key_storage == "keychain" and reachable
+    listed = set(config.keychain_slots)
+    present: set[str] = set()
+    kept: list[str] = []
+    keychain.last_problem = None if use or config.key_storage == "file" else keychain.problem()
+    for slot, holder in keychain.slots(config):
+        present.add(slot)
+        value = holder.api_key
+        if slot in listed and not value and not keychain.known(slot, root):
+            kept.append(slot)  # still there, out of reach: never lost
+        elif not use:
+            if slot in listed and reachable:
+                keychain.remove(slot, root)  # emptied, or moved to the file by choice
+        elif value:
+            try:
+                keychain.write(slot, root, value)
+            except keychain.KeychainError as exc:
+                keychain.last_problem = f"the keychain refused the key ({exc})"
+                continue
+            kept.append(slot)
+        elif slot in listed:
+            keychain.remove(slot, root)  # the author emptied the field
+    if reachable:
+        for slot in listed - present:
+            keychain.remove(slot, root)  # a provider renamed or gone
+    config.keychain_slots = kept
+    written = config.model_copy(deep=True)
+    for slot, holder in keychain.slots(written):
+        if slot in kept:
+            holder.api_key = ""
+    return written.model_dump()
+
+
+def _fill_keys(config: Config, root: Path | None) -> str | None:
+    """Each key the keychain holds, put back; what went wrong, if anything."""
+    missing: list[str] = []
+    for slot, holder in keychain.slots(config):
+        if slot not in config.keychain_slots or holder.api_key:
+            continue
+        try:
+            value = keychain.read(slot, root)
+        except keychain.KeychainError as exc:
+            return (
+                f"Your API keys are kept in {keychain.where()}, which couldn't be read "
+                f"({exc}). Unlock it and restart, or enter the keys again in Settings."
+            )
+        if value is None:
+            missing.append(slot)
+        else:
+            holder.api_key = value
+    if missing:
+        return (
+            f"{keychain.where().capitalize()} has no key for {', '.join(missing)}: "
+            "enter it again in Settings."
+        )
+    return None
+
+
+def _load_config(root: Path | None) -> tuple[Config, str | None]:
+    data = read_json(config_file(root), default=None)
+    config = Config() if data is None else Config.model_validate(data)
+    return config, _fill_keys(config, root)
 
 
 def load_config(root: Path | None = None) -> Config:
-    data = read_json(config_file(root), default=None)
-    return Config() if data is None else Config.model_validate(data)
+    """With its keys, from the keychain where they are kept there. A key the
+    keychain can't give back is left blank."""
+    return _load_config(root)[0]
 
 
 def load_config_or_recover(root: Path | None = None) -> tuple[Config, str | None]:
     """The config, or the defaults with a note when the file can't be read.
 
     A hand edit gone wrong, or a torn write, must not keep the app from
-    starting: the broken file is set aside as `config.json.broken` (the key
-    is still in it, to copy back by hand) and the settings start over.
+    starting: the broken file is set aside as `config.json.broken` (any key
+    still in it can be copied back by hand) and the settings start over.
+    A keychain that couldn't give the keys back is noted too.
     """
     try:
-        return load_config(root=root), None
+        return _load_config(root)
     except (ValueError, OSError) as exc:
         path = config_file(root)
         aside = path.with_name(path.name + ".broken")

@@ -7,6 +7,8 @@ the story, and the archival knobs sit across both.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
@@ -79,6 +81,8 @@ from sealedlore.providers.context_probe import detect_context
 from sealedlore.providers.images import parse_image_models
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
 from sealedlore.providers.tee import move_refusal
+from sealedlore.storage import keychain
+from sealedlore.storage.paths import config_file
 
 UNSET = -1.0
 UNSET_INT = -1
@@ -135,10 +139,15 @@ class SettingsDialog(QDialog):
         image_catalog: ImageCatalog | None = None,
         video_catalog: VideoCatalog | None = None,
         fetch_models: bool = False,
+        root: Path | None = None,
     ) -> None:
         """`fetch_models`: load the endpoint's model list on opening (the
-        window, never a test), to know which models have a choice of host."""
+        window, never a test), to know which models have a choice of host.
+        `root`: the data folder, to say where config.json is."""
         super().__init__(parent)
+        self._root = root
+        # One under each key field: where that key will be kept.
+        self._key_notes: list[QLabel] = []
         self.image_catalog = image_catalog
         self.video_catalog = video_catalog
         self._fetch_models = fetch_models
@@ -209,6 +218,16 @@ class SettingsDialog(QDialog):
         self.base_url = QLineEdit(provider.base_url if provider else DEFAULT_BASE_URL)
         self.api_key = QLineEdit(provider.api_key if provider else "")
         self.api_key.setEchoMode(QLineEdit.Password)
+        self.key_storage = QComboBox()
+        self.key_storage.addItem("System keychain", "keychain")
+        self.key_storage.addItem("config.json, in plain text", "file")
+        self.key_storage.setCurrentIndex(max(0, self.key_storage.findData(self.config.key_storage)))
+        self.key_storage.setToolTip(
+            "Every API key on these pages: the system keychain when this computer has "
+            "one, or SealedLore's config.json in plain text. Plain text is for the "
+            "command line and test setups."
+        )
+        self.key_storage.currentIndexChanged.connect(self._sync_key_notes)
 
         self.cache_mode = QComboBox()
         self.cache_mode.addItems(["auto", "on", "off"])
@@ -226,6 +245,8 @@ class SettingsDialog(QDialog):
         form.addRow("Name", self.provider_name)
         form.addRow("Base URL", self.base_url)
         form.addRow("API key", self.api_key)
+        form.addRow("Keep API keys in", self.key_storage)
+        form.addRow(self._key_note())
         form.addRow("Prompt caching", self.cache_mode)
         form.addRow("Cache lifetime", self.cache_ttl)
 
@@ -238,6 +259,32 @@ class SettingsDialog(QDialog):
         hint.setWordWrap(True)
         form.addRow(hint)
         return widget
+
+    def _key_place(self) -> str:
+        """Where a key typed here goes, as the choice stands."""
+        path = config_file(self._root)
+        if self.key_storage.currentData() == "file":
+            return f"Saved in plain text in {path}."
+        problem = keychain.problem()
+        if problem is not None:
+            return f"{problem.capitalize()}, so it is saved in plain text in {path}."
+        if keychain.last_problem:
+            return (
+                f"Kept in {keychain.where()}, but {keychain.last_problem}, so for now it is in "
+                f"plain text in {path}."
+            )
+        return f"Saved in {keychain.where()}, not in config.json."
+
+    def _key_note(self) -> QLabel:
+        label = _note_label()
+        label.setText(self._key_place())
+        self._key_notes.append(label)
+        return label
+
+    def _sync_key_notes(self) -> None:
+        text = self._key_place()
+        for label in self._key_notes:
+            label.setText(text)
 
     def _route_endpoint(self) -> str | None:
         """The endpoint as typed, for the model fields' routes."""
@@ -850,6 +897,7 @@ class SettingsDialog(QDialog):
         self.private_tee.setChecked(self.config.private_verify_tee)
         form.addRow("Base URL", self.private_url)
         form.addRow("API key", self.private_key)
+        form.addRow(self._key_note())
         form.addRow("Model", self.private_model)
         # Before choosing it: does this model's enclave attest? (The author:
         # rather than start a scene and have it refused.)
@@ -913,6 +961,7 @@ class SettingsDialog(QDialog):
         self.image_key.setPlaceholderText("same as the chat key (same host only)")
         form.addRow("Address", self.image_url)
         form.addRow("API key", self.image_key)
+        form.addRow(self._key_note())
         form.addRow("Service", self.image_api)
         self._image_models = parse_image_models({"data": self.config.image_models})
         # Typed, or chosen with Browse… from a searchable table, as the text
@@ -990,6 +1039,7 @@ class SettingsDialog(QDialog):
         )
         form.addRow("Address", self.video_url)
         form.addRow("API key", self.video_key)
+        form.addRow(self._key_note())
         form.addRow("Service", self.video_api)
         form.addRow("Video model", self.video_model)
         self.video_key_note = QLabel()
@@ -1107,6 +1157,7 @@ class SettingsDialog(QDialog):
         form.addRow(self.embeddings_enabled)
         form.addRow("Base URL", self.embed_base_url)
         form.addRow("API key", self.embed_api_key)
+        form.addRow(self._key_note())
         form.addRow("Model", self.embed_model)
         form.addRow("Dimensions", self.embed_dimensions)
         form.addRow("Query prefix", self.query_prefix)
@@ -1190,6 +1241,7 @@ class SettingsDialog(QDialog):
             self.config.providers.append(provider)
         provider.base_url = url
         provider.api_key = self.api_key.text()
+        self.config.key_storage = self.key_storage.currentData()
         provider.model = self.model.text().strip()
         self.config.active_provider_name = name
         summariser = self.summarization_model.text().strip()

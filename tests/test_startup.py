@@ -27,7 +27,7 @@ from sealedlore.storage.repository import (
 
 SOURCE_ROOT = Path(__file__).resolve().parents[1] / "src" / "sealedlore"
 # Loaded by the one function that needs them, never by a module as it is imported.
-ON_FIRST_USE = ("numpy", "tiktoken", "tinfoil")
+ON_FIRST_USE = ("numpy", "tiktoken", "tinfoil", "keyring")
 # Modules of a package, likewise: QtMultimedia loads FFmpeg (~20 MB of
 # libraries) and is needed only once a video is shown or played.
 MODULES_ON_FIRST_USE = ("PySide6.QtMultimedia", "PySide6.QtMultimediaWidgets")

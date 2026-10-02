@@ -1392,8 +1392,16 @@ endpoint must be `https://` (plain `http://` is accepted only for
   token vocabulary from OpenAI's public file store; the AppImage bundles it.
   No data about you is sent.
 
-On disk: settings, including the API key in plain text, are in
-`config.json` in the data folder (Help → About SealedLore shows where). The
+On disk: settings are in `config.json` in the data folder (Help → About
+SealedLore shows where). API keys are kept in the system keychain (GNOME
+Keyring or KWallet through the Secret Service on Linux, Credential Manager
+on Windows) and left blank in `config.json`. A computer without a keychain
+keeps them in `config.json` in plain text, and so does choosing "config.json,
+in plain text" under File → Settings → Endpoint → Keep API keys in (for the
+command line or a test setup: `sealedlore configure --key-storage file`).
+The note under each key field says where that key goes. A key already in
+`config.json` from an older version moves into the keychain the first time
+the window opens. The
 folder and everything the app writes in it are readable by your user only.
 Each story keeps every request and reply in its `api_log.jsonl`, so a story
 backup (Story → Export → Story backup…) carries every prompt sent for it; a

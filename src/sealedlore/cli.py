@@ -49,9 +49,10 @@ from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError, 
 from sealedlore.providers.embeddings import OpenAICompatibleEmbeddings
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
+from sealedlore.storage import keychain
 from sealedlore.storage.archive import ArchiveError, import_archive, write_archive
 from sealedlore.storage.images import all_image_files, reference_files
-from sealedlore.storage.paths import stories_dir
+from sealedlore.storage.paths import config_file, stories_dir
 from sealedlore.storage.repository import (
     StoryBundle,
     copy_story,
@@ -154,9 +155,25 @@ def cmd_configure(args: argparse.Namespace) -> int:
                     setattr(config, field, model)
         config.providers.append(provider)
     config.active_provider_name = name
+    if args.key_storage is not None:
+        config.key_storage = args.key_storage
     save_config(config, root=root)
     print(f"Saved provider {name!r} -> {provider.base_url} (model: {provider.model or 'unset'})")
+    if provider.api_key:
+        print(f"API key: {key_place(config, f'provider:{name}', root)}")
     return 0
+
+
+def key_place(config: Config, slot: str, root: Path | None) -> str:
+    """Where a saved key went, for the author to know."""
+    if slot in config.keychain_slots:
+        return f"kept in {keychain.where()}"
+    why = (
+        "by choice (--key-storage file)"
+        if config.key_storage == "file"
+        else (keychain.last_problem or keychain.problem() or "")
+    )
+    return f"kept in plain text in {config_file(root)}" + (f": {why}" if why else "")
 
 
 def cmd_new(args: argparse.Namespace) -> int:
@@ -885,6 +902,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     configure.add_argument("--base-url", default=DEFAULT_BASE_URL)
     configure.add_argument("--api-key")
     configure.add_argument("--model")
+    configure.add_argument(
+        "--key-storage",
+        choices=["keychain", "file"],
+        help="where every API key is kept: the system keychain (the default, when "
+        "there is one) or config.json in plain text",
+    )
     configure.set_defaults(func=cmd_configure)
 
     new = subparsers.add_parser("new", help="create a story")
