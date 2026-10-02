@@ -333,6 +333,14 @@ class PrivateModeProvider(OpenAICompatibleProvider):
         finally:
             plain.close()
 
+    def fetch_reasoning_defaults(self) -> dict[str, dict[str, Any]] | None:
+        """As the plain provider: a public listing, nothing sealed."""
+        plain = OpenAICompatibleProvider(self.config)
+        try:
+            return plain.fetch_reasoning_defaults()
+        finally:
+            plain.close()
+
     # --- one request ---------------------------------------------------------------
 
     def _get_client(self) -> httpx.Client:

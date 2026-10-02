@@ -85,7 +85,7 @@ from sealedlore.engine.lore_pick import (
     pick_candidates,
     scene_line,
 )
-from sealedlore.engine.pricing import estimate_cost, parse_price
+from sealedlore.engine.pricing import estimate_cost
 from sealedlore.engine.prompt import (
     AssembledPrompt,
     AssemblyOptions,
@@ -2465,16 +2465,13 @@ class StorySession(
         if model in self._price_misses or self.in_private:
             # In a private scene the main endpoint isn't called, not even for a price.
             return cached
-        try:
-            listing = self.provider.fetch_model_prices()
-        except ProviderError:
-            self._price_misses.add(model)
-            return cached
-        entry = listing.get(model)
-        price = parse_price(entry) if entry else None
+        # The one listing fetch of the session, shared with reasoning.
+        prices = self.listed_prices()
+        price = prices.get(model) if prices is not None else None
         if price is None:
             self._price_misses.add(model)
             return cached
+        price = price.model_copy()
         price.fetched_at = utc_now_iso()
         if self.memory_only:
             # Kept for this session only: an entry under the chat's model

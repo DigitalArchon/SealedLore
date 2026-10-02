@@ -16,7 +16,7 @@ from typing import Any
 
 import httpx
 
-from sealedlore.models.config import ProviderConfig
+from sealedlore.models.config import ProviderConfig, on_nanogpt
 from sealedlore.providers.base import (
     ChatProvider,
     ChatRequest,
@@ -34,6 +34,7 @@ from sealedlore.providers.private_catalog import (
     offers_private_mode,
     private_entries,
 )
+from sealedlore.providers.reasoning_defaults import fetch_reasoning_defaults
 from sealedlore.providers.tee import is_private_mode
 from sealedlore.providers.wire import build_chat_payload, cache_headers
 
@@ -221,6 +222,13 @@ class OpenAICompatibleProvider(ChatProvider):
             # The end-to-end encrypted models, listed apart (private_catalog).
             listing.update(private_entries(fetch_private_ids(self.config.base_url), listing))
         return listing
+
+    def fetch_reasoning_defaults(self) -> dict[str, dict[str, Any]] | None:
+        """NanoGPT states each model's default reasoning in its web listing;
+        no other endpoint is known to."""
+        if not on_nanogpt(self.config.base_url):
+            return None
+        return fetch_reasoning_defaults(self.config.base_url)
 
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}

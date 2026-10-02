@@ -207,6 +207,14 @@ class ModelReasoning(BaseModel):
     # None: not known (not listed, or not fetched yet).
     reasons: bool | None = None
     efforts: list[str] = Field(default_factory=list)
+    # What it does when a request says nothing, as NanoGPT's web listing states
+    # it (providers/reasoning_defaults.py): reasons or not, and at what effort.
+    # None: not stated, which is most models.
+    reasons_by_default: bool | None = None
+    default_effort: str | None = None
+    # The defaults were looked for (an endpoint without them counts): facts
+    # from before they were read are fetched again.
+    defaults_checked: bool = False
     fetched_at: str | None = None
     # When a reply reasoned though its request asked for nothing. For a week
     # after, "as low as possible" asks this model for its lowest level.

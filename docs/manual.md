@@ -448,8 +448,15 @@ questions and once for every other call (the scene and plot reads, chapters,
 the review, drafts, the picture prompt writer). Both start at **As low as
 possible**, which is also the fastest:
 
-- A model that reasons only when asked (Claude, DeepSeek) is asked for
-  nothing. Asking such a model for "low" would switch its thinking on.
+- A model that reasons only when asked (Claude Sonnet 4.6, DeepSeek) is
+  asked for nothing. Asking such a model for "low" would switch its
+  thinking on.
+- On NanoGPT, which says what each model does when it isn't told, a model
+  that reasons by default (Kimi K3 and Opus 5.5, for example) is asked for
+  its lowest level from the first request. One whose default already is its
+  lowest (GLM 5.3) is sent nothing. The note under the story model's
+  setting says what that model does left to itself, once SealedLore has
+  read it.
 - A model that reasons at length anyway is caught doing it, and asked for
   its lowest level from then on. When that happens a note under the
   passage says so, since that reply may have been slow to start (Kimi K3

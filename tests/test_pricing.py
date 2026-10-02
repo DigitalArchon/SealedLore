@@ -120,7 +120,8 @@ def test_a_reported_cost_is_left_alone(session: StorySession):
     list(session.send(turn()))
     usage = session.nodes[-1].meta.usage
     assert usage.cost == 0.5 and not usage.cost_estimated
-    assert session.provider.fetches == 0
+    # No price looked up (the listing itself is read for reasoning).
+    assert session.config.model_prices == {}
 
 
 def test_a_reported_zero_is_free_not_unpriced(session: StorySession):
@@ -130,7 +131,7 @@ def test_a_reported_zero_is_free_not_unpriced(session: StorySession):
     list(session.send(turn()))
     usage = session.nodes[-1].meta.usage
     assert usage.cost == 0 and not usage.cost_estimated
-    assert session.provider.fetches == 0
+    assert session.config.model_prices == {}
 
 
 def test_a_model_with_no_listed_price_stays_unpriced_and_is_not_asked_twice(session: StorySession):

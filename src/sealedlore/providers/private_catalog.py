@@ -10,7 +10,7 @@ made from its `TEE/` counterpart's: the id with dots as dashes
 from __future__ import annotations
 
 import copy
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any
 from urllib.parse import urlparse
 
@@ -37,6 +37,14 @@ def offers_private_mode(base_url: str) -> bool:
 
 def _key(model_id: str) -> str:
     return model_id.split("/", 1)[-1].lower().replace(".", "-")
+
+
+def tee_counterpart(model_id: str, ids: Iterable[str]) -> str | None:
+    """The `TEE/` model among `ids` that a `private/` model is."""
+    if not model_id.startswith("private/"):
+        return None
+    key = _key(model_id)
+    return next((i for i in ids if i.startswith("TEE/") and _key(i) == key), None)
 
 
 def private_entries(

@@ -1,5 +1,6 @@
 """The session's side of reasoning levels (engine/reasoning.py): what each
-model lists, which models reason unasked, and each request's parameters.
+model lists and does by default, which models reason unasked, and each
+request's parameters.
 
 Every request the engine builds takes its `params` from `story_params` (the
 story model's own turns) or `side_params` (everything else);
@@ -12,6 +13,7 @@ import threading
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from sealedlore.engine.pricing import parse_price
 from sealedlore.engine.reasoning import (
     EXCESSIVE_REASONING,
     CallKind,
@@ -23,18 +25,18 @@ from sealedlore.engine.reasoning import (
     reasons_unasked,
 )
 from sealedlore.ids import utc_now_iso
-from sealedlore.models.config import ModelReasoning
+from sealedlore.models.config import ModelPrice, ModelReasoning
 from sealedlore.models.generation import GenerationParams, ReasoningConfig
 from sealedlore.models.node import Node
 from sealedlore.providers.base import ChatRequest, ProviderError, StreamCompleted
-from sealedlore.providers.tee import is_tee
+from sealedlore.providers.private_catalog import tee_counterpart
 
 # How long a model's listed reasoning levels are kept before they're fetched again.
 LISTING_DAYS = 7
 
 
 def _fresh(facts: ModelReasoning) -> bool:
-    if not facts.fetched_at:
+    if not facts.fetched_at or not facts.defaults_checked:
         return False
     try:
         fetched = datetime.fromisoformat(facts.fetched_at.replace("Z", "+00:00"))
@@ -53,6 +55,11 @@ class ReasoningRuntime:
         # A memory-only chat's: it teaches the config nothing.
         self._session_reasoning: dict[str, ModelReasoning] = {}
         self._reasoning_misses: set[str] = set()
+        # Both listings, read once a session into each model's facts and
+        # prices (the two are ~2.7 MB; nothing else of them is kept).
+        self._listing_lock = threading.Lock()
+        self._listed: dict[str, ModelReasoning] | None = None
+        self._listed_prices: dict[str, ModelPrice] | None = None
         # Models caught reasoning unasked since the notices were last said.
         self._caught_reasoning: list[str] = []
 
@@ -68,14 +75,11 @@ class ReasoningRuntime:
             return known
         if model in self._reasoning_misses or self.in_private:
             return known
-        try:
-            listing = self.provider.fetch_model_prices()
-        except ProviderError:
-            listing = {}
-        found = listed(listing.get(model))
+        found = self._listing().get(model)
         if found is None:
             self._reasoning_misses.add(model)
             return known
+        found = found.model_copy()
         found.fetched_at = utc_now_iso()
         found.unasked_at = known.unasked_at if known is not None else None
         with self._reasoning_lock:
@@ -83,17 +87,59 @@ class ReasoningRuntime:
         self._save_config()
         return found
 
+    def _read_listing(self) -> None:
+        """Every listed model's facts and prices, fetched on first need in
+        the session; a failed fetch is tried again by the next model to
+        need it. A `private/` model takes its `TEE/` counterpart's default,
+        as it takes its prices. Defaults that couldn't be read leave the
+        facts unchecked, so a later session tries again."""
+        with self._listing_lock:
+            if self._listed is not None:
+                return
+            try:
+                listing = self.provider.fetch_model_prices()
+            except ProviderError:
+                return
+            try:
+                defaults = self.provider.fetch_reasoning_defaults()
+                checked = True
+            except ProviderError:
+                defaults, checked = None, False
+            defaults = defaults or {}
+            facts_by_model: dict[str, ModelReasoning] = {}
+            prices: dict[str, ModelPrice] = {}
+            for model, entry in listing.items():
+                own = defaults.get(model)
+                if own is None:
+                    twin = tee_counterpart(model, defaults)
+                    own = defaults.get(twin) if twin else None
+                facts = listed(entry, own)
+                if facts is not None:
+                    facts.defaults_checked = checked
+                    facts_by_model[model] = facts
+                price = parse_price(entry) if entry else None
+                if price is not None:
+                    prices[model] = price
+            self._listed, self._listed_prices = facts_by_model, prices
+
+    def _listing(self) -> dict[str, ModelReasoning]:
+        self._read_listing()
+        return self._listed or {}
+
+    def listed_prices(self) -> dict[str, ModelPrice] | None:
+        """The listing's prices, read with the facts; None when it couldn't
+        be fetched."""
+        self._read_listing()
+        return self._listed_prices
+
     def _known_reasoning(self, model: str) -> ModelReasoning | None:
         with self._reasoning_lock:
             return self._reasoning_store().get(model) or self.config.model_reasoning.get(model)
 
     def _params(self, kind: CallKind, model: str, fixed: dict[str, Any]) -> GenerationParams:
-        """The listing is fetched only when the level needs it: "as low as
-        possible" sends an unmarked model nothing, whatever it lists."""
-        facts = self._known_reasoning(model)
-        if level_for(self.config, kind) != "least" or is_tee(model) or reasons_unasked(facts):
-            facts = self.reasoning_facts(model)
-        return params_for(self.config, kind, model, facts, **fixed)
+        """Every level needs the listing now, "as low as possible" for the
+        model's default: fetched once a session, kept a week per model."""
+        return params_for(self.config, kind, model, self.reasoning_facts(model), **fixed)
 
     def reasoning_sent(self, kind: CallKind, model: str) -> ReasoningConfig:
         """What a call of `kind` to `model` would ask, from what is known now

@@ -28,7 +28,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from sealedlore.engine.reasoning import LEVEL_LABELS, CallKind, reasoning_for, reasons_unasked
+from sealedlore.engine.reasoning import (
+    LEVEL_LABELS,
+    CallKind,
+    default_note,
+    reasoning_for,
+    reasons_unasked,
+)
 from sealedlore.engine.reasoning import describe as describe_reasoning
 from sealedlore.engine.routing import describe, routable, route_body
 from sealedlore.engine.speed_test import Role, SpeedTarget, plan_targets
@@ -567,8 +573,9 @@ class SettingsDialog(QDialog):
         combo.setCurrentIndex(max(0, combo.findData(level)))
         combo.setToolTip(
             "As low as possible sends nothing to a model that reasons only when asked, "
-            "and its lowest level to one that reasons anyway. The other levels map to "
-            "the nearest one the model lists."
+            "and its lowest level to one that reasons anyway (NanoGPT says which models "
+            "do; any other is noticed from its replies). The other levels map to the "
+            "nearest one the model lists."
         )
         return combo
 
@@ -587,9 +594,9 @@ class SettingsDialog(QDialog):
     def _show_reasoning(self) -> None:
         story_model = self.model.text().strip()
         if story_model:
-            self.reasoning_story_note.setText(
-                f"Sends {story_model}: {describe_reasoning(self._sent_to('story', story_model))}."
-            )
+            sent = describe_reasoning(self._sent_to("story", story_model))
+            own = default_note(self.config.model_reasoning.get(story_model))
+            self.reasoning_story_note.setText(f"Sends {story_model}: {sent}. {own}".rstrip())
         else:
             self.reasoning_story_note.setText("")
         self.reasoning_side_note.setText(

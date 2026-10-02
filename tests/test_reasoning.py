@@ -11,6 +11,9 @@ import pytest
 from sealedlore.engine.prompt import TurnRequest
 from sealedlore.engine.reasoning import (
     config_params,
+    default_note,
+    default_reasoning,
+    listed,
     nearest,
     reasoning_for,
     reasons_unasked,
@@ -20,8 +23,10 @@ from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.models.config import Config, ModelReasoning, ProviderConfig
 from sealedlore.models.generation import GenerationParams, ReasoningConfig
 from sealedlore.models.node import Usage
-from sealedlore.providers.base import ChatRequest
+from sealedlore.providers.base import ChatRequest, ProviderError
 from sealedlore.providers.mock import MockChatProvider
+from sealedlore.providers.openai_compat import OpenAICompatibleProvider
+from sealedlore.providers.reasoning_defaults import defaults_url, trim
 from sealedlore.providers.wire import build_chat_payload
 from sealedlore.storage.repository import StoryBundle, load_config, save_story_bundle
 
@@ -56,6 +61,108 @@ def test_a_model_caught_reasoning_unasked_gets_its_lowest_listed_level():
     # Nothing listed: low, which endpoints commonly take.
     unlisted = marked(ModelReasoning())
     assert reasoning_for("least", "m", unlisted, now=NOW).effort == "low"
+
+
+# NanoGPT's web listing, as it read on Oct 2 2026 (trimmed to what is read).
+WEB = {
+    "z-ai/glm-5.3": {"defaultSettings": {"reasoning_effort": "low"}},
+    "z-ai/glm-5.3-flash": {
+        "defaultSettings": {"reasoning_effort": "max", "thinking": {"type": "enabled"}}
+    },
+    "TEE/glm-5.3": {
+        "defaultSettings": {"reasoning_effort": "max", "thinking": {"type": "enabled"}}
+    },
+    "moonshotai/kimi-k3": {"defaultSettings": {"reasoning_effort": "max"}},
+    "anthropic/claude-opus-5.5": {
+        "defaultSettings": {
+            "reasoning_effort": "high",
+            "thinking": {"type": "adaptive", "effort": "high"},
+        }
+    },
+    "anthropic/claude-sonnet-4.6": {"defaultSettings": {}},
+    "qwen/qwen3.8-27b-uncensored": {
+        "defaultSettings": {"reasoning_effort": "none", "thinking": {"type": "disabled"}}
+    },
+    "xiaomi/mimo-v2.6-pro": {"defaultThinkingEnabled": True, "defaultSettings": {}},
+    "inception/mercury-2.5-preview": {"defaultReasoningEffort": "medium", "defaultSettings": {}},
+}
+
+
+def test_the_web_listing_says_whether_a_model_reasons_by_default():
+    assert default_reasoning(WEB["z-ai/glm-5.3"]) == (True, "low")
+    assert default_reasoning(WEB["z-ai/glm-5.3-flash"]) == (True, "max")
+    assert default_reasoning(WEB["anthropic/claude-opus-5.5"]) == (True, "high")
+    assert default_reasoning(WEB["qwen/qwen3.8-27b-uncensored"]) == (False, None)
+    assert default_reasoning(WEB["xiaomi/mimo-v2.6-pro"]) == (True, None)
+    assert default_reasoning(WEB["inception/mercury-2.5-preview"]) == (True, "medium")
+    # Saying nothing is not saying no: most models state no default.
+    assert default_reasoning(WEB["anthropic/claude-sonnet-4.6"]) == (None, None)
+    assert default_reasoning(None) == (None, None)
+    assert default_reasoning({"defaultSettings": "junk"}) == (None, None)
+
+
+def test_a_model_that_reasons_by_default_is_asked_for_its_lowest_from_the_start():
+    """Kimi K3 thought ~900 tokens unasked, ~56 at low: no slow first turn
+    to catch it on any more."""
+    kimi = listed(KIMI_ENTRY, WEB["moonshotai/kimi-k3"])
+    assert reasoning_for("least", "moonshotai/kimi-k3", kimi, now=NOW) == ReasoningConfig(
+        enabled=True, effort="low"
+    )
+    opus = listed({"reasoning_efforts": SONNET.efforts}, WEB["anthropic/claude-opus-5.5"])
+    assert reasoning_for("least", "anthropic/claude-opus-5.5", opus, now=NOW).effort == "low"
+
+
+def test_a_default_that_is_already_the_lowest_is_left_alone():
+    """GLM 5.3 thinks at low by default; sent low it once thought 187 tokens
+    where it thought 9 unasked."""
+    glm = listed({"reasoning_efforts": ["low", "high", "max"]}, WEB["z-ai/glm-5.3"])
+    assert reasoning_for("least", "z-ai/glm-5.3", glm, now=NOW) == NOTHING
+
+
+def test_no_default_or_nothing_to_ask_for_instead_sends_nothing():
+    off = listed({"reasoning_efforts": ["none", "high"]}, WEB["qwen/qwen3.8-27b-uncensored"])
+    assert reasoning_for("least", "qwen/x", off, now=NOW) == NOTHING
+    # Thinks by default but lists no level: nothing known to ask for.
+    mimo = listed({}, WEB["xiaomi/mimo-v2.6-pro"])
+    assert reasoning_for("least", "xiaomi/mimo-v2.6-pro", mimo, now=NOW) == NOTHING
+    # The defaults don't touch a chosen level.
+    kimi = listed(KIMI_ENTRY, WEB["moonshotai/kimi-k3"])
+    assert reasoning_for("medium", "moonshotai/kimi-k3", kimi, now=NOW).effort == "high"
+
+
+def test_the_settings_note_says_what_a_model_does_left_to_itself():
+    assert default_note(listed(KIMI_ENTRY, WEB["moonshotai/kimi-k3"])) == (
+        "Left to itself, it reasons at max."
+    )
+    assert default_note(listed({}, WEB["qwen/qwen3.8-27b-uncensored"])) == (
+        "It reasons only when asked."
+    )
+    assert default_note(listed({}, None)) == ""
+
+
+def test_only_the_web_listing_fields_that_are_read_are_kept():
+    entry = {
+        "name": "GLM 5.3",
+        "description": "long text",
+        "defaultSettings": {"temperature": 1, "reasoning_effort": "low", "thinking": None},
+        "defaultThinkingEnabled": True,
+    }
+    assert trim(entry) == {
+        "defaultThinkingEnabled": True,
+        "defaultSettings": {"reasoning_effort": "low", "thinking": None},
+    }
+    assert defaults_url("https://nano-gpt.com/api/v1") == "https://nano-gpt.com/api/models"
+
+
+def test_only_nanogpt_is_asked_for_defaults():
+    """Any other endpoint says nothing, and nothing is fetched for it."""
+    provider = OpenAICompatibleProvider(
+        ProviderConfig(name="o", base_url="https://openrouter.ai/api/v1", model="m")
+    )
+    try:
+        assert provider.fetch_reasoning_defaults() is None
+    finally:
+        provider.close()
 
 
 def test_the_mark_lapses_after_a_week_so_a_changed_model_is_checked_again():
@@ -120,16 +227,25 @@ def test_the_story_models_turns_take_the_authors_settings_and_other_calls_their_
 
 
 class ListedMock(MockChatProvider):
-    """A mock with a models list, counting how often it is fetched."""
+    """A mock with a models list (and NanoGPT's defaults when given),
+    counting how often each is fetched."""
 
-    def __init__(self, *args, listing: dict | None = None, **kwargs):
+    def __init__(self, *args, listing: dict | None = None, defaults=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fetches = 0
+        self.default_fetches = 0
         self.listing = listing or {}
+        self.defaults = defaults
 
     def fetch_model_prices(self):
         self.fetches += 1
         return self.listing
+
+    def fetch_reasoning_defaults(self):
+        self.default_fetches += 1
+        if isinstance(self.defaults, Exception):
+            raise self.defaults
+        return self.defaults
 
 
 KIMI_ENTRY = {
@@ -203,15 +319,15 @@ def test_a_little_reasoning_unasked_is_left_alone(tmp_path: Path, story, cast):
     assert session.config.model_reasoning == {}
 
 
-def test_a_model_that_doesnt_reason_unasked_is_never_asked_and_nothing_is_fetched(
-    tmp_path: Path, story, cast
-):
+def test_a_model_that_doesnt_reason_unasked_is_never_asked(tmp_path: Path, story, cast):
+    """Listed with no default, it is sent nothing; the listing is read once
+    a session, not once a request."""
     provider = ListedMock(["Reply."], listing={"moonshotai/kimi-k3": KIMI_ENTRY})
     session = make_session(tmp_path, story, cast, provider)
     list(session.send(turn()))
     list(session.send(turn()))
     assert all("reasoning" not in payload for payload in provider.payloads)
-    assert provider.fetches == 0
+    assert provider.fetches == 1
 
 
 def test_a_chosen_level_fetches_the_listing_once_and_maps_to_it(tmp_path: Path, story, cast):
@@ -226,6 +342,69 @@ def test_a_chosen_level_fetches_the_listing_once_and_maps_to_it(tmp_path: Path, 
         "high",
         "max",
     ]
+
+
+GLM_ENTRY = {"capabilities": {"reasoning": True}, "reasoning_efforts": ["low", "high", "max"]}
+
+
+def test_the_listings_are_read_once_a_session_for_every_model(tmp_path: Path, story, cast):
+    provider = ListedMock(
+        ["Reply."] * 4,
+        listing={"moonshotai/kimi-k3": KIMI_ENTRY, "z-ai/glm-5.3": GLM_ENTRY},
+        defaults=WEB,
+    )
+    session = make_session(tmp_path, story, cast, provider)
+    list(session.send(turn()))
+    assert provider.payloads[0]["reasoning"] == {"enabled": True, "effort": "low"}, (
+        "Kimi K3 reasons at max by default: asked for low from the first turn"
+    )
+    assert session.side_params("z-ai/glm-5.3").reasoning == NOTHING
+    assert (provider.fetches, provider.default_fetches) == (1, 1)
+    saved = load_config(root=tmp_path).model_reasoning["moonshotai/kimi-k3"]
+    assert (saved.reasons_by_default, saved.default_effort, saved.defaults_checked) == (
+        True,
+        "max",
+        True,
+    )
+
+
+def test_an_encrypted_model_takes_its_tee_twins_default(tmp_path: Path, story, cast):
+    provider = ListedMock(["Reply."], listing={"private/glm-5-3": GLM_ENTRY}, defaults=WEB)
+    session = make_session(tmp_path, story, cast, provider)
+    facts = session.reasoning_facts("private/glm-5-3")
+    assert (facts.reasons_by_default, facts.default_effort) == (True, "max")
+
+
+def test_defaults_that_couldnt_be_read_are_tried_again_next_session(tmp_path: Path, story, cast):
+    provider = ListedMock(
+        ["Reply."], listing={"moonshotai/kimi-k3": KIMI_ENTRY}, defaults=ProviderError("down")
+    )
+    session = make_session(tmp_path, story, cast, provider)
+    list(session.send(turn()))
+    assert "reasoning" not in provider.payloads[0], "the turn still goes, as before"
+    assert not load_config(root=tmp_path).model_reasoning["moonshotai/kimi-k3"].defaults_checked
+
+    provider = ListedMock(["Reply."], listing={"moonshotai/kimi-k3": KIMI_ENTRY}, defaults=WEB)
+    story.active_leaf_id = None
+    session = make_session(tmp_path, story, cast, provider)
+    session.config.model_reasoning = load_config(root=tmp_path).model_reasoning
+    list(session.send(turn()))
+    assert provider.default_fetches == 1
+    assert provider.payloads[0]["reasoning"] == {"enabled": True, "effort": "low"}
+
+
+def test_facts_saved_before_defaults_were_read_are_fetched_again(tmp_path: Path, story, cast):
+    """A week-fresh entry from before this change has no default: read again."""
+    from sealedlore.ids import utc_now_iso
+
+    provider = ListedMock(["Reply."], listing={"moonshotai/kimi-k3": KIMI_ENTRY}, defaults=WEB)
+    old = KIMI.model_copy(update={"fetched_at": utc_now_iso()})
+    session = make_session(
+        tmp_path, story, cast, provider, model_reasoning={"moonshotai/kimi-k3": old}
+    )
+    list(session.send(turn()))
+    assert provider.fetches == 1
+    assert provider.payloads[0]["reasoning"] == {"enabled": True, "effort": "low"}
 
 
 def test_a_memory_only_chat_is_caught_for_the_session_only(tmp_path: Path, story, cast):

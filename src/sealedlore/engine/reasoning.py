@@ -14,14 +14,22 @@ works for every model:
   its first word) and ~50 when asked for low (5-6s).
 - An explicit "off" is refused by some (GLM 5.3: HTTP 400; Opus 5.5: 400 or
   a disguised 503), so it is never sent.
-- The listing can't tell the two kinds apart: Sonnet 4.6 and Kimi K3 both
-  list "low" first. So "as low as possible" sends nothing, and a model that
+- The `/models` listing can't tell the two kinds apart: Sonnet 4.6 and Kimi
+  K3 both list "low" first. NanoGPT's web listing can (Oct 2 2026): it states
+  a model's default (`default_reasoning`; Kimi K3 max, GLM 5.3 low, Sonnet
+  4.6 none). So "as low as possible" sends a model that reasons by default its
+  lowest listed level from the first request, unless that lowest is its
+  default (GLM 5.3: sent low, it once thought 187 tokens where it thought 9
+  unasked), and sends nothing otherwise.
+- Most models state no default, and a reply can still surprise: a model that
   reasons at length anyway (`EXCESSIVE_REASONING`, from the reply itself) is
   marked and asked for its lowest listed level from then on, for a week.
   Kept by model, not host, since the author's own calls are the measurement.
 
 A TEE or encrypted model starts at low: its GLM took 37s (TEE) and 107s
-(encrypted) over a 100-word summary at its default, 10s and 9s at low.
+(encrypted) over a 100-word summary at its default, 10s and 9s at low. That
+stays a rule of its own: 20 of the 25 TEE models state no default, among them
+DeepSeek V3.2, which went from 14s to 3s at low.
 """
 
 from __future__ import annotations
@@ -107,6 +115,14 @@ def _effort(effort: str) -> ReasoningConfig:
     return ReasoningConfig(enabled=True, effort=effort)  # type: ignore[arg-type]
 
 
+def _reasons_above_least(facts: ModelReasoning | None) -> bool:
+    """It reasons when nothing is sent, and lists a level below its default.
+    With no levels listed there is nothing known to ask for instead."""
+    if facts is None or not facts.reasons_by_default or not facts.efforts:
+        return False
+    return facts.default_effort != lowest(facts)
+
+
 def reasoning_for(
     level: ReasoningLevel,
     model: str,
@@ -116,7 +132,7 @@ def reasoning_for(
 ) -> ReasoningConfig:
     """What to send `model` for the author's `level`."""
     if level == "least":
-        if is_tee(model) or reasons_unasked(facts, now):
+        if is_tee(model) or reasons_unasked(facts, now) or _reasons_above_least(facts):
             return _effort(lowest(facts))
         return ReasoningConfig()
     if facts is not None and facts.reasons is False and not facts.efforts:
@@ -157,17 +173,61 @@ def config_reasoning(config: Config, kind: CallKind, model: str) -> ReasoningCon
     return reasoning_for(level_for(config, kind), model, config.model_reasoning.get(model))
 
 
-def listed(entry: dict[str, Any] | None) -> ModelReasoning | None:
-    """A model's reasoning as its models-list entry gives it."""
+def listed(
+    entry: dict[str, Any] | None, defaults: dict[str, Any] | None = None
+) -> ModelReasoning | None:
+    """A model's reasoning as its models-list entry gives it, with its default
+    from NanoGPT's web listing when there is one (`defaults`)."""
     if not isinstance(entry, dict):
         return None
     capabilities = entry.get("capabilities")
     reasons = capabilities.get("reasoning") if isinstance(capabilities, dict) else None
     efforts = entry.get("reasoning_efforts")
+    by_default, default_effort = default_reasoning(defaults)
     return ModelReasoning(
         reasons=reasons if isinstance(reasons, bool) else None,
         efforts=[e for e in efforts if isinstance(e, str)] if isinstance(efforts, list) else [],
+        reasons_by_default=by_default,
+        default_effort=default_effort,
     )
+
+
+def default_reasoning(entry: dict[str, Any] | None) -> tuple[bool | None, str | None]:
+    """(whether it reasons when nothing is sent, at what effort) as NanoGPT's
+    web listing states it (providers/reasoning_defaults.py); (None, None) when
+    it says nothing. The page starts a model with `defaultSettings`: an effort,
+    a `thinking` type, rarely a `reasoning` object or a top-level flag."""
+    if not isinstance(entry, dict):
+        return None, None
+    settings = entry.get("defaultSettings")
+    settings = settings if isinstance(settings, dict) else {}
+    thinking = settings.get("thinking")
+    kind = thinking.get("type") if isinstance(thinking, dict) else None
+    reasoning = settings.get("reasoning")
+    reasoning = reasoning if isinstance(reasoning, dict) else {}
+    effort = (
+        settings.get("reasoning_effort")
+        or reasoning.get("effort")
+        or entry.get("defaultReasoningEffort")
+    )
+    if effort == "none" or kind == "disabled" or reasoning.get("enabled") is False:
+        return False, None
+    if isinstance(effort, str) and effort in EFFORT_SCALE:
+        return True, effort
+    if kind in ("enabled", "adaptive") or entry.get("defaultThinkingEnabled") is True:
+        return True, None
+    return None, None
+
+
+def default_note(facts: ModelReasoning | None) -> str:
+    """What a model does left to itself, for the Settings note; "" unknown."""
+    if facts is None or facts.reasons_by_default is None:
+        return ""
+    if not facts.reasons_by_default:
+        return "It reasons only when asked."
+    if facts.default_effort:
+        return f"Left to itself, it reasons at {facts.default_effort}."
+    return "Left to itself, it reasons."
 
 
 def describe(config: ReasoningConfig) -> str:

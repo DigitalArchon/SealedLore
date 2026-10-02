@@ -125,6 +125,12 @@ class ChatProvider(ABC):
         """The endpoint's models list, id → entry, for pricing. Empty if unsupported."""
         return {}
 
+    def fetch_reasoning_defaults(self) -> dict[str, dict[str, Any]] | None:
+        """What each model does about reasoning when a request says nothing
+        (providers/reasoning_defaults.py), id → its fields; None for an
+        endpoint that doesn't say. Raises ProviderError."""
+        return None
+
     def cancel(self) -> None:
         """Stop, from any thread: the request in flight, or the next one to start.
 
