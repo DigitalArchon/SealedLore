@@ -54,9 +54,9 @@ APPDIR="$BUILD/SealedLore.AppDir"
 SRC="$BUILD/source"
 DIST="$REPO/dist"
 
-PYTHON_APPIMAGE="python3.12.14-cp312-cp312-manylinux_2_28_x86_64.AppImage"
+PYTHON_APPIMAGE="python3.12.15-cp312-cp312-manylinux_2_28_x86_64.AppImage"
 PYTHON_URL="https://github.com/niess/python-appimage/releases/download/python3.12/$PYTHON_APPIMAGE"
-PYTHON_SHA256="cefdd1b6e08dfb6c977d4233a4177ed3ee55a526991a122c8d92263f5901544f"
+PYTHON_SHA256="929ce69b45955bfc74af81fd65a65c3ad240593c99b3574466a94ebf0f987ebf"
 DEBIAN_POOL="https://deb.debian.org/debian/pool/main"
 DEBIAN_LIBS=(
     # path in the pool                                              sha256

@@ -49,7 +49,7 @@ licensed under the GNU Lesser General Public License, version 2.1 or later
 
 ## The Python runtime
 
-CPython 3.12.14, relocatable build from python-appimage
+CPython 3.12.15, relocatable build from python-appimage
 (<https://github.com/niess/python-appimage>, `manylinux_2_28`), in
 `opt/python3.12`. Its licence, the Python Software Foundation License, and
 the notices of the code it includes are in
