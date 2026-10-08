@@ -53,7 +53,9 @@ secondary AI model follows the story to track when triggers are met: for
 example, being at a set place at a set time, or how you respond to a certain
 person. Things can also happen off screen: if you fail to meet an objective
 by a certain date, a town can be overrun in the background, or a character
-you would have met may be dead instead, and consequences may follow.
+you would have met may be dead instead, and consequences may follow. A time
+skip or an event you write yourself in a Direction turn moves the plot along
+with it.
 
 The plot file editor (File → Plot file editor…) lets you write your own
 plots and share them, with reference pictures for their characters, places
@@ -129,10 +131,13 @@ Have fun!
 - **Costs**: per passage, per session and per story.
 - **Routes**: on NanoGPT, choose which host serves each model (the fastest,
   the cheapest, or one you pick), and see whether the choice was followed.
+  The storyteller's host can be changed beside its model, mid-story or
+  mid-chat.
 - **Quick replies**: models are asked to reason as little as they allow by
-  default (Settings → Generation, for every story), and one caught thinking
-  at length anyway is noted under the passage and asked for less from then
-  on. When a model gets slow or its writing gets worse, the two checks under
+  default (Settings → Generation, for every story). A model that NanoGPT
+  lists as reasoning by default is asked for less from its first request;
+  one caught thinking at length anyway is noted under the passage and asked
+  for less from then on. When a model gets slow or its writing gets worse, the two checks under
   Help → Model trouble → The model takes too long before it writes… and
   Help → Model trouble → The model's writing has got worse… see whether its
   host is to blame, compare other hosts, and let you switch host or mark a
