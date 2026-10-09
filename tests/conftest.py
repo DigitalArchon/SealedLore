@@ -34,6 +34,42 @@ def _wheel_guard_style_first():
     # violation after every test has passed, so the run fails. The real
     # Windows platform doesn't; any QMimeData does, not only ours.
     app.clipboard().clear()
+    _delete_widgets(app.topLevelWidgets())
+
+
+def _delete_widgets(widgets) -> None:
+    from PySide6.QtCore import QEvent
+    from PySide6.QtWidgets import QApplication
+
+    for widget in widgets:
+        widget.deleteLater()
+    QApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+
+@pytest.fixture(autouse=True)
+def _delete_the_tests_windows():
+    """Deletes the windows and dialogs a test made and left behind. Tests
+    build them with no parent, and one kept alive by a connected lambda
+    outlives the test: PySide6 6.12.0 then deletes it twice at interpreter
+    exit and the run segfaults after every test has passed (CI, Oct 2026).
+    The app gives every dialog its window as parent. Only what the test
+    made: a module fixture's window (test_readme_labels) is older."""
+    try:
+        from PySide6.QtWidgets import QApplication
+    except ImportError:
+        yield
+        return
+    from shiboken6 import getCppPointer
+
+    def address(widget) -> int:
+        return getCppPointer(widget)[0]
+
+    app = QApplication.instance()
+    before = {address(w) for w in app.topLevelWidgets()} if app else set()
+    yield
+    app = QApplication.instance()
+    if app is not None:
+        _delete_widgets([w for w in app.topLevelWidgets() if address(w) not in before])
 
 
 class MemoryKeychain:

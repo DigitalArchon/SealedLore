@@ -30,7 +30,10 @@ dependencies = [
     "httpx>=0.27",
     "tiktoken>=0.7",
     "numpy>=1.26",
-    "PySide6>=6.6",
+    # Below 6.12: 6.12.0 drops a reference to None on every call that
+    # returns nothing, which aborts Python 3.11 (None is immortal from 3.12
+    # on), and deletes a widget twice at exit. The AppImage locks 6.11.2.
+    "PySide6>=6.6,<6.12",
     # End-to-end encrypted private models (providers/private_mode.py): Tinfoil's
     # own attestation and EHBP client, pinned exactly: it holds the plaintext.
     "tinfoil==0.14.0",
