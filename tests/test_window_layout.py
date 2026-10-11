@@ -72,8 +72,17 @@ def test_on_a_laptop_the_stories_list_is_wide_enough_to_read(app, window: MainWi
     assert window.inspector_dock.width() >= INSPECTOR_WIDTHS[0]
     # The composer keeps its two rows: who is in play on one line.
     composer = window.composer
-    assert composer.held.geometry().top() == composer.scope.geometry().top()
-    assert composer.length.geometry().top() == composer.ooc_toggle.geometry().top()
+    assert _same_line(composer.held, composer.scope)
+    assert _same_line(composer.length, composer.ooc_toggle)
+    assert not _same_line(composer.held, composer.length)
+
+
+def _same_line(a: QWidget, b: QWidget) -> bool:
+    """A line centres its controls, and a button may be a pixel or two
+    shorter than a combo (on CI's fonts, 22px beside 24): on one line, their
+    heights overlap."""
+    first, second = a.geometry(), b.geometry()
+    return first.top() <= second.bottom() and second.top() <= first.bottom()
 
 
 def test_the_docks_grow_with_the_window_until_a_separator_is_dragged(app, window: MainWindow):
