@@ -313,3 +313,39 @@ def test_on_windows_a_private_scene_is_kept_out_of_screen_capture(app, window, m
     window.session.discard_private()
     window._sync_private_ui()
     assert calls == [(window, True), (window, False)]
+
+
+def test_a_scene_on_a_retired_model_says_to_choose_another(app, window, monkeypatch):
+    """nano-gpt retired private/glm-5-3-flash (Oct 2026). Its enclave is
+    Tinfoil's router, so it would attest; the relay's list says it's gone."""
+    from tests.test_private_mode import retired_setup
+
+    provider, attested, _ = retired_setup(["private/glm-5-3"])
+    window.private_provider_factory = lambda _settings: provider
+    window.config.private_provider = ProviderConfig(
+        name="private",
+        base_url="https://nano-gpt.com/api/v1",
+        api_key="k",
+        model="private/glm-5-3-flash",
+    )
+    said: list[tuple[str, bool]] = []
+    monkeypatch.setattr(window, "_say_model_retired", lambda m, chat: said.append((m, chat)))
+    reattest: list[str] = []
+    monkeypatch.setattr(window, "_offer_reattest", lambda reason, chat: reattest.append(reason))
+
+    window.composer.private_toggle.click()
+    wait_for(app, lambda: window._tee_thread is None and said)
+    assert said == [("private/glm-5-3-flash", False)] and attested == []
+    assert "no longer offered" in window._private_model_text()
+    assert "no longer offered" in window.session.tee_block
+
+    # Sending says it again, never "enclave refused", and nothing is sent.
+    window.composer.input.setPlainText(f"{MARKER} hello")
+    window.send_turn()
+    assert len(said) == 2 and reattest == []
+    assert not window.session.span_nodes(window.session.open_span)
+
+    # Nothing was written in it: ending it simply ends it.
+    window._end_without_model()
+    assert not window.session.in_private
+    assert window._retired_model is None and window.session.tee_block is None

@@ -213,6 +213,7 @@ class ChatWindow:
         if old is not None:
             old.close()
         self.session.tee_block = None  # the new model's own attestation decides
+        self._retired_model = None
         self._tee_state = ""
         self._sync_chat_ui()
         self._attest_chat()

@@ -18,8 +18,9 @@ from sealedlore.providers.tee import TeeRefused, is_private_mode, is_tee
 
 @dataclass(frozen=True)
 class AttestationCheck:
-    # "full", "partial", "encrypted", "refused", or "error" (the check itself
-    # couldn't run, e.g. no network: not the enclave's fault).
+    # "full", "partial", "encrypted", "refused", "retired" (nano-gpt no longer
+    # offers the private/ model), or "error" (the check itself couldn't run,
+    # e.g. no network: not the enclave's fault).
     outcome: str
     headline: str
     detail: str = ""
@@ -41,6 +42,14 @@ def check_attestation(settings: ProviderConfig) -> AttestationCheck:
 
         provider = PrivateModeProvider(settings)
         try:
+            # The enclave is Tinfoil's router whatever the model, so a retired
+            # model would attest: ask the list first.
+            if provider.still_offered(model) is False:
+                return AttestationCheck(
+                    "retired",
+                    "✗ No longer offered by NanoGPT's Private Mode",
+                    "Choose another private model.",
+                )
             attestation = provider.attest()
         except ProviderError as exc:
             return AttestationCheck("refused", f"✗ Refused: {exc}", "Nothing would be sent to it.")

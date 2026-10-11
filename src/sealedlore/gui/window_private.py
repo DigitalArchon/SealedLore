@@ -21,7 +21,7 @@ from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.config import ProviderConfig
 from sealedlore.providers.base import ChatProvider
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
-from sealedlore.providers.private_mode import PrivateModeProvider
+from sealedlore.providers.private_mode import ModelRetired, PrivateModeProvider
 from sealedlore.providers.tee import TeeClient, is_private_mode, is_tee
 from sealedlore.storage.repository import save_config
 
@@ -69,6 +69,9 @@ class PrivateWindow:
         self._tee_thread: QThread | None = None
         self._tee_worker: GenerationWorker | None = None
         self._tee_state = ""
+        # The private/ model nano-gpt no longer offers, found when it was
+        # attested: sends then say so, not "enclave refused".
+        self._retired_model: str | None = None
         self._capture_hidden = False
         self.composer.private_keep.setCurrentIndex(
             max(self.composer.private_keep.findData(self.config.private_keep), 0)
@@ -314,15 +317,22 @@ class PrivateWindow:
         span_id = span.id if span is not None else None
         result: list = []
         failure: list[str] = []
+        retired: list[str] = []
         tee: TeeClient | None = None
         self._tee_settings = settings
+        self._retired_model = None
         if is_private_mode(settings.model):
             # The sealing provider attests before it sends anything itself.
             self.session.tee_block = None
             sealed = self.session.private_provider if span is not None else self._current_provider()
             if not isinstance(sealed, PrivateModeProvider):
                 return  # a test's stand-in
-            attest = sealed.attest
+
+            def attest():
+                # The enclave is Tinfoil's router whatever the model, so a
+                # model nano-gpt has retired would attest: ask its list first.
+                sealed.check_offered(settings.model)
+                return sealed.attest()
         else:
             tee = TeeClient(settings.base_url, settings.api_key, settings.model)
             attest = tee.attest
@@ -332,6 +342,8 @@ class PrivateWindow:
         def job():
             try:
                 result.append(attest())
+            except ModelRetired as exc:
+                retired.append(exc.model)
             except Exception as exc:  # shown, never fatal
                 failure.append(str(exc))
             return
@@ -342,14 +354,19 @@ class PrivateWindow:
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.finished.connect(thread.quit)
-        thread.finished.connect(lambda: self._on_attested(span_id, tee, result, failure))
+        thread.finished.connect(lambda: self._on_attested(span_id, tee, result, failure, retired))
         self._tee_worker, self._tee_thread = worker, thread
         self._tee_state = "checking…"
         self._refresh_model_button()
         thread.start()
 
     def _on_attested(
-        self, span_id: str | None, tee: TeeClient | None, result: list, failure: list
+        self,
+        span_id: str | None,
+        tee: TeeClient | None,
+        result: list,
+        failure: list,
+        retired: list | None = None,
     ) -> None:
         self._tee_worker, self._tee_thread = None, None
         span = self.session.open_span if self.session is not None else None
@@ -361,6 +378,9 @@ class PrivateWindow:
         ):
             if tee is not None:
                 tee.close()
+            return
+        if retired:
+            self._on_model_retired(retired[0], for_chat)
             return
         attestation = result[0] if result else None
         if attestation is not None:
@@ -438,8 +458,62 @@ class PrivateWindow:
                 "Waiting for the enclave's attestation: send again in a moment.", 6000
             )
             return False
-        self._offer_reattest(block, for_chat=self.session.open_span is None)
+        for_chat = self.session.open_span is None
+        if self._retired_model:
+            self._say_model_retired(self._retired_model, for_chat)
+        else:
+            self._offer_reattest(block, for_chat=for_chat)
         return False
+
+    def _on_model_retired(self, model: str, for_chat: bool) -> None:
+        """nano-gpt has retired the private/ model: nothing can be sent to it
+        (its preflight would refuse it), so say so and where to choose another."""
+        self._retired_model = model
+        self.session.tee_block = f"{model} is no longer offered by NanoGPT's Private Mode"
+        self._tee_state = "⚠ no longer offered"
+        self._refresh_model_button()
+        self._say_model_retired(model, for_chat)
+
+    def _say_model_retired(self, model: str, for_chat: bool) -> None:
+        if for_chat:
+            QMessageBox.warning(
+                self,
+                "Model no longer available",
+                f"{model} is no longer offered by NanoGPT's Private Mode, so nothing can "
+                "be sent to it.\n\nChoose another end-to-end encrypted model with the model "
+                "button below the message box.",
+            )
+            return
+        box = QMessageBox(
+            QMessageBox.Warning,
+            "Model no longer available",
+            self._say(
+                f"{model} is no longer offered by NanoGPT's Private Mode, so nothing can be "
+                "sent to it.\n\nEnd the private scene, then choose another private model "
+                "under Settings → Private."
+            ),
+            QMessageBox.NoButton,
+            self,
+        )
+        leave = box.addButton(self._say("End the scene"), QMessageBox.DestructiveRole)
+        box.addButton("Keep it open", QMessageBox.RejectRole)
+        box.exec()
+        clicked = box.clickedButton()
+        box.deleteLater()
+        if clicked is leave and not self._busy:
+            self._end_without_model()
+
+    def _end_without_model(self) -> None:
+        """End a scene whose model is gone: there's no one to write its
+        summary, so a scene with messages ends without one (asked first)."""
+        session = self.session
+        if session is None or not session.in_private:
+            return
+        if session.span_nodes(session.open_span):
+            self._confirm_discard_private()
+            return
+        session.discard_private()
+        self._after_private_ended(self._say("The private scene ended; nothing was written in it."))
 
     def _on_encryption_attested(self, attestation, failure: list[str], for_chat: bool) -> None:
         """An end-to-end encrypted model's attestation: nothing is sealed to
@@ -600,6 +674,7 @@ class PrivateWindow:
 
     def _after_private_ended(self, message: str) -> None:
         self._tee_state = ""
+        self._retired_model = None
         if self.session is not None:
             self.session.tee_block = None
         self._sync_private_ui()

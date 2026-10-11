@@ -76,16 +76,23 @@ def private_entries(
     return entries
 
 
-def fetch_private_ids(base_url: str, *, timeout: float = 30.0) -> list[str]:
-    """The relay's list of Private Mode models (public; no key sent)."""
+def fetch_private_ids(
+    base_url: str, *, timeout: float = 30.0, client: httpx.Client | None = None
+) -> list[str]:
+    """The relay's list of Private Mode models (public; no key sent). Empty
+    when it can't be read."""
     parsed = urlparse(base_url)
     url = f"{parsed.scheme}://{parsed.netloc}{RELAY_MODELS_PATH}"
-    with make_client(url) as client:
-        try:
-            response = client.get(url, timeout=timeout)
-            data = response.json() if response.status_code < 400 else {}
-        except (httpx.HTTPError, ValueError):
-            return []
+    own = client is None
+    client = client or make_client(url)
+    try:
+        response = client.get(url, timeout=timeout)
+        data = response.json() if response.status_code < 400 else {}
+    except (httpx.HTTPError, ValueError):
+        return []
+    finally:
+        if own:
+            client.close()
     items = data.get("data") if isinstance(data, dict) else None
     return [
         item["id"]
@@ -94,6 +101,17 @@ def fetch_private_ids(base_url: str, *, timeout: float = 30.0) -> list[str]:
         and isinstance(item.get("id"), str)
         and item["id"].startswith("private/")
     ]
+
+
+def offered(model_id: str, ids: Iterable[str]) -> bool | None:
+    """Whether the relay's list (`fetch_private_ids`) still has `model_id`:
+    nano-gpt retires Private Mode models (private/glm-5-3-flash, Oct 2026).
+    None when the list is empty, which is a list that couldn't be read."""
+    ids = list(ids)
+    if not ids:
+        return None
+    key = _key(model_id)
+    return any(_key(i) == key for i in ids)
 
 
 def encrypted_counterpart(model_id: str, ids) -> str | None:

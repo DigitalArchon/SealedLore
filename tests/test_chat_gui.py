@@ -732,3 +732,28 @@ def test_the_storytellers_route_can_be_changed_beside_its_model(app, window, mon
     hosts["z-ai/glm-5.3"] = ModelInfo(id="z-ai/glm-5.3", hosts=("a",))
     window._update_controls()
     assert window.route_button.isHidden()
+
+
+def test_an_encrypted_chat_on_a_retired_model_says_to_choose_another(app, window, monkeypatch):
+    monkeypatch.setattr(window, "_attest_chat", lambda: None)
+    make_chat(window, monkeypatch, model="private/glm-5-3-flash")
+    session = window.session
+    session.provider.responses = ["Should never be sent."]
+    warned: list[str] = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda _p, title, text, *a: warned.append(text))
+    reattest: list[str] = []
+    monkeypatch.setattr(window, "_offer_reattest", lambda reason, chat: reattest.append(reason))
+
+    window._on_attested(None, None, [], [], ["private/glm-5-3-flash"])
+    assert len(warned) == 1
+    assert "no longer offered" in warned[0] and "model button" in warned[0]
+    assert "no longer offered" in window._private_model_text()
+
+    window.composer.input.setPlainText("Hello")
+    window.send_turn()
+    assert len(warned) == 2 and reattest == []
+    assert session.provider.requests == [] and session.path() == []
+
+    # Another model: its own attestation decides, and the warning is gone.
+    window._chat_model_changed()
+    assert session.tee_block is None and window._retired_model is None

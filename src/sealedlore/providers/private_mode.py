@@ -55,6 +55,7 @@ from sealedlore.models.private import Attestation
 from sealedlore.providers.base import ChatRequest, ProviderError, StreamEvent
 from sealedlore.providers.http import make_client
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
+from sealedlore.providers.private_catalog import fetch_private_ids, offered
 from sealedlore.providers.tee import is_private_mode
 from sealedlore.providers.wire import to_wire_messages
 
@@ -90,6 +91,20 @@ ALLOWED_FIELDS = frozenset(
 # The router-only field that scopes the enclave's prompt cache: sealed with
 # the body, never seen by nano-gpt.
 CACHE_SECRET_FIELD = "user_cache_secret"
+
+
+class ModelRetired(ProviderError):
+    """nano-gpt no longer offers this Private Mode model. Attesting says
+    nothing about it (the enclave is Tinfoil's router, whatever the model),
+    so without this a retired model attested fine and its first message came
+    back as a bare preflight refusal."""
+
+    def __init__(self, model: str, **kwargs: Any) -> None:
+        super().__init__(
+            f"{model} is no longer offered by NanoGPT's Private Mode; choose another private model",
+            **kwargs,
+        )
+        self.model = model
 
 
 @dataclass(frozen=True)
@@ -325,6 +340,18 @@ class PrivateModeProvider(OpenAICompatibleProvider):
         """Attest now (a worker thread): the window shows what was proved."""
         return self.enclave.current().attestation
 
+    def still_offered(self, model: str) -> bool | None:
+        """Whether nano-gpt's Private Mode list still has `model` (public: no
+        key sent). None when the list couldn't be read: nothing is known, and
+        the preflight still refuses a model that's gone."""
+        ids = fetch_private_ids(self.config.base_url, client=self._preflight_client)
+        return offered(model, ids)
+
+    def check_offered(self, model: str) -> None:
+        """Raise `ModelRetired` if nano-gpt has retired `model` (a worker thread)."""
+        if self.still_offered(model) is False:
+            raise ModelRetired(model)
+
     def fetch_model_prices(self) -> dict[str, dict[str, Any]]:
         """The endpoint's public model list, on a plain client: nothing sealed."""
         plain = OpenAICompatibleProvider(self.config)
@@ -374,12 +401,15 @@ class PrivateModeProvider(OpenAICompatibleProvider):
             if self._preflight_client is None:
                 client.close()
         if response.status_code >= 400:
-            error = ProviderError(
+            if self.still_offered(model) is False:
+                # Every path's backstop (a resumed scene, a summary, Test speed…):
+                # say why, not just that it was refused.
+                raise ModelRetired(model, status_code=response.status_code, body=response.text)
+            raise ProviderError(
                 f"nano-gpt refused the Private Mode request (HTTP {response.status_code})",
                 status_code=response.status_code,
                 body=response.text,
             )
-            raise error
         try:
             data = response.json()
         except ValueError as exc:

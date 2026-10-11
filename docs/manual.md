@@ -1197,6 +1197,12 @@ column and the label beside the model field say which kind a model is: "🔐
 End-to-end encrypted", or "TEE" (and, for a TEE model with an encrypted
 version, its name).
 
+NanoGPT retires Private Mode models from time to time. If the model you
+chose is no longer offered, the app says so when the scene or chat begins
+(and Test attestation shows "✗ No longer offered"), and nothing is sent to
+it. For a private scene, end the scene and choose another model under
+Settings → Private; for a chat, choose another with the model button.
+
 What NanoGPT still sees: your account, which model, when, how large the
 request and reply are, and the usage and cost. NanoGPT reserves a charge for
 up to 32,768 output tokens before each reply and refunds the unused part, so

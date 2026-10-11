@@ -152,7 +152,9 @@ class AttestationButton(QWidget):
         # run to several lines, and would crowd the form).
         self.result.setText(check.headline)
         self.result.setToolTip(check.detail)
-        self.result.setObjectName("warningLabel" if check.outcome == "refused" else "hintLabel")
+        self.result.setObjectName(
+            "warningLabel" if check.outcome in ("refused", "retired") else "hintLabel"
+        )
         self.result.style().unpolish(self.result)
         self.result.style().polish(self.result)
         self.result.show()

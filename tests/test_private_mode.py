@@ -30,6 +30,7 @@ from sealedlore.providers.private_mode import (
     ENCLAVE_URL_HEADER,
     MAX_AGE_SECONDS,
     Enclave,
+    ModelRetired,
     PrivateModeProvider,
     Verified,
     attestation_record,
@@ -541,3 +542,82 @@ def test_the_encryption_stack_is_pinned_exactly_and_alike_everywhere():
         assert re.search(rf"^{re.escape(pin)}$", wanted, re.MULTILINE), (
             f"requirements.in must name {pin}, or a relock takes a newer one"
         )
+
+
+def retired_setup(listed: list[str], preflight_status: int = 400):
+    """A provider whose relay lists `listed` and whose preflight answers
+    `preflight_status`; the attestation is recorded, never run."""
+    attested: list[str] = []
+    seen: list[str] = []
+
+    def relay(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": i} for i in listed]})
+        if preflight_status >= 400:
+            return httpx.Response(preflight_status, json={"error": {"message": "nope"}})
+        return httpx.Response(200, json={"cacheScope": SCOPE, "upstreamModel": "glm-5-3"})
+
+    def verifier(relay_url: str, secret: str) -> Verified:
+        attested.append(relay_url)
+        raise AssertionError("not attested in these tests")
+
+    provider = PrivateModeProvider(
+        ProviderConfig(name="nano", base_url=BASE, api_key="sk-test"),
+        enclave=Enclave(RELAY, verifier=verifier),
+        preflight_client=httpx.Client(transport=httpx.MockTransport(relay)),
+    )
+    return provider, attested, seen
+
+
+def test_a_model_off_the_relays_list_is_known_to_be_retired():
+    from sealedlore.providers.private_catalog import offered
+
+    listed = ["private/glm-5-3", "private/gemma4-31b:thinking"]
+    assert offered("private/glm-5-3", listed) is True
+    assert offered("private/glm-5.3", listed) is True, "nano-gpt's dotted alias"
+    assert offered("private/glm-5-3-flash", listed) is False
+    assert offered("private/gemma4-31b", listed) is False, ":thinking is its own model"
+    assert offered("private/glm-5-3-flash", []) is None, "a list that couldn't be read"
+
+    provider, attested, seen = retired_setup(listed)
+    with pytest.raises(ModelRetired, match="no longer offered.*choose another private model"):
+        provider.check_offered("private/glm-5-3-flash")
+    provider.check_offered("private/glm-5-3")
+    assert seen == ["/api/v1/private/tinfoil/models"] * 2, "the public list, on the relay"
+    assert attested == []
+
+
+def test_a_preflight_refusal_for_a_retired_model_says_so():
+    """Every path's backstop: a resumed scene, a summary, Test speed…"""
+    provider, _, _ = retired_setup(["private/glm-5-3"])
+    with pytest.raises(ModelRetired) as caught:
+        provider._preflight("private/glm-5-3-flash", 10)
+    assert caught.value.status_code == 400
+    # Still listed: the refusal is nano-gpt's own, said as before.
+    with pytest.raises(
+        ProviderError, match=r"refused the Private Mode request \(HTTP 400\)"
+    ) as plain:
+        provider._preflight("private/glm-5-3", 10)
+    assert not isinstance(plain.value, ModelRetired)
+    # The list couldn't be read: nothing is claimed about the model.
+    unread, _, _ = retired_setup([])
+    with pytest.raises(ProviderError) as unknown:
+        unread._preflight("private/glm-5-3-flash", 10)
+    assert not isinstance(unknown.value, ModelRetired)
+
+
+def test_test_attestation_reports_a_retired_model_instead_of_attesting_it(monkeypatch):
+    from sealedlore.engine.attestation_check import check_attestation
+
+    monkeypatch.setattr(PrivateModeProvider, "still_offered", lambda self, model: False)
+
+    def attest(self):
+        raise AssertionError("a retired model isn't attested")
+
+    monkeypatch.setattr(PrivateModeProvider, "attest", attest)
+    check = check_attestation(
+        ProviderConfig(name="n", base_url=BASE, api_key="k", model="private/glm-5-3-flash")
+    )
+    assert check.outcome == "retired" and not check.usable
+    assert "No longer offered" in check.headline and "another" in check.detail
