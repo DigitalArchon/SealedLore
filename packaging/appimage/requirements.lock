@@ -778,7 +778,9 @@ pygments==2.21.0 \
 pyhpke==0.6.5 \
     --hash=sha256:8dac22eb143cd83b8066213b8ad0ecc9d5326ef41f930197197f3bbb5c99cb93 \
     --hash=sha256:e8d794724e43053fe04e8971be55033225d6da904effc748b303cece763a3f3c
-    # via tinfoil-ehbp
+    # via
+    #   -r requirements.in
+    #   tinfoil-ehbp
 pyjwt==2.15.0 \
     --hash=sha256:7a3742debf6b879e912dbb9819ceec1594be812452b78c5f2e2dfc56564954f8 \
     --hash=sha256:b11c5f9791d7bf51c2b39a81ed669f6b2dbbd669df2942f6c60167e9e3d1abe4
@@ -1073,7 +1075,9 @@ tinfoil==0.14.0 \
 tinfoil-ehbp==0.3.2 \
     --hash=sha256:9428f0c28a540528b534dd0fec9eeb4b632edc424a84d0dacf8d56d8d658ee1f \
     --hash=sha256:b3ba148797d1638ccbb6fed63958c9a89af6c8d9b09d9fc4f185c1f681e45005
-    # via tinfoil
+    # via
+    #   -r requirements.in
+    #   tinfoil
 truststore==0.10.4 \
     --hash=sha256:9d91bd436463ad5e4ee4aba766628dd6cd7010cf3e2461756b3303710eebc301 \
     --hash=sha256:adaeaecf1cbb5f4de3b1959b42d41f6fab57b2b1666adb59e89cb0b53361d981

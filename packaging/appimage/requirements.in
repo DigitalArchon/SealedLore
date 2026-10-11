@@ -12,8 +12,12 @@ PySide6-Essentials==6.11.2
 PySide6-Addons==6.11.2
 # End-to-end encrypted private models: Tinfoil's attestation and EHBP client
 # (providers/private_mode.py). It pulls in sigstore, cryptography and the
-# OpenAI client; all pinned by hash below like everything else.
+# OpenAI client; all pinned by hash below like everything else. The EHBP
+# library and its HPKE are named too: tinfoil accepts any tinfoil-ehbp>=0.3.0,
+# so a relock would otherwise take a newer one nobody has read.
 tinfoil==0.14.0
+tinfoil-ehbp==0.3.2
+pyhpke==0.6.5
 # API keys in the system keychain (storage/keychain.py), as the author's
 # DAToolkit does: on Linux through SecretStorage and jeepney (pure Python;
 # cryptography is tinfoil's already).

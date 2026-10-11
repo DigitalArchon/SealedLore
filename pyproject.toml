@@ -36,7 +36,12 @@ dependencies = [
     "PySide6>=6.6,<6.12",
     # End-to-end encrypted private models (providers/private_mode.py): Tinfoil's
     # own attestation and EHBP client, pinned exactly: it holds the plaintext.
+    # tinfoil asks only for tinfoil-ehbp>=0.3.0, so the library that seals and
+    # opens the bodies, and the HPKE under it, are pinned here too, at the
+    # AppImage lock's versions (tests/test_private_mode.py checks they agree).
     "tinfoil==0.14.0",
+    "tinfoil-ehbp==0.3.2",
+    "pyhpke==0.6.5",
     # API keys in the system keychain (storage/keychain.py): the Secret
     # Service on Linux, Credential Manager on Windows.
     "keyring>=25",

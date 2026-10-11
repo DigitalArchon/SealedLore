@@ -515,3 +515,29 @@ def test_an_encrypted_chat_never_moves_to_a_model_that_isnt():
     assert move_refusal("TEE/glm-5.3", "private/glm-5-3") is None, "a TEE chat may move up"
     assert "TEE" in move_refusal("TEE/glm-5.3", "anthropic/claude")
     assert move_refusal("anthropic/claude", "private/glm-5-3") is None
+
+
+ENCRYPTION_STACK = ("tinfoil", "tinfoil-ehbp", "pyhpke")
+
+
+def test_the_encryption_stack_is_pinned_exactly_and_alike_everywhere():
+    """A source install (pip install -e .) reads pyproject.toml, not the
+    AppImage lock, and tinfoil accepts any tinfoil-ehbp>=0.3.0: unpinned, a
+    source install took 0.4.0 the day it came out, a new request framing
+    nobody here had read."""
+    import re
+    import tomllib
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    deps = tomllib.loads((root / "pyproject.toml").read_text())["project"]["dependencies"]
+    lock = (root / "packaging/appimage/requirements.lock").read_text()
+    wanted = (root / "packaging/appimage/requirements.in").read_text()
+    for name in ENCRYPTION_STACK:
+        locked = re.search(rf"^{re.escape(name)}==(\S+)", lock, re.MULTILINE)
+        assert locked, f"{name} is not in the AppImage lock"
+        pin = f"{name}=={locked.group(1)}"
+        assert pin in deps, f"pyproject.toml must pin {pin} exactly"
+        assert re.search(rf"^{re.escape(pin)}$", wanted, re.MULTILINE), (
+            f"requirements.in must name {pin}, or a relock takes a newer one"
+        )
