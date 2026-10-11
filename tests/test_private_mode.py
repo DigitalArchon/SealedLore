@@ -621,3 +621,29 @@ def test_test_attestation_reports_a_retired_model_instead_of_attesting_it(monkey
     )
     assert check.outcome == "retired" and not check.usable
     assert "No longer offered" in check.headline and "another" in check.detail
+
+
+def sealed_setup(enclave: FakeEnclave, listed: list[str]) -> PrivateModeProvider:
+    """A provider that works end to end against `enclave`, on a relay that
+    lists `listed`: for the window's tests of a scene moved to another model."""
+
+    def relay(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": i} for i in listed]})
+        return httpx.Response(200, json={"cacheScope": SCOPE, "upstreamModel": "glm-5-3"})
+
+    return PrivateModeProvider(
+        ProviderConfig(name="nano", base_url=BASE, api_key="sk-test"),
+        enclave=Enclave(RELAY, verifier=lambda relay_url, secret: record(enclave)),
+        transport_factory=lambda key: EHBPTransport.from_public_key_hex(
+            key, inner=httpx.MockTransport(enclave.handler)
+        ),
+        preflight_client=httpx.Client(transport=httpx.MockTransport(relay)),
+    )
+
+
+def test_a_retired_model_says_what_is_offered_instead():
+    provider, _, _ = retired_setup(["private/glm-5-3", "private/kimi-k3"])
+    with pytest.raises(ModelRetired) as caught:
+        provider.check_offered("private/glm-5-3-flash")
+    assert caught.value.offered == ["private/glm-5-3", "private/kimi-k3"]

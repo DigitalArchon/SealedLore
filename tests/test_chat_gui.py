@@ -744,7 +744,9 @@ def test_an_encrypted_chat_on_a_retired_model_says_to_choose_another(app, window
     reattest: list[str] = []
     monkeypatch.setattr(window, "_offer_reattest", lambda reason, chat: reattest.append(reason))
 
-    window._on_attested(None, None, [], [], ["private/glm-5-3-flash"])
+    from sealedlore.providers.private_mode import ModelRetired
+
+    window._on_attested(None, None, [], [], [ModelRetired("private/glm-5-3-flash")])
     assert len(warned) == 1
     assert "no longer offered" in warned[0] and "model button" in warned[0]
     assert "no longer offered" in window._private_model_text()

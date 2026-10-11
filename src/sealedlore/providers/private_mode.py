@@ -43,7 +43,7 @@ import json
 import secrets
 import threading
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
@@ -99,12 +99,14 @@ class ModelRetired(ProviderError):
     so without this a retired model attested fine and its first message came
     back as a bare preflight refusal."""
 
-    def __init__(self, model: str, **kwargs: Any) -> None:
+    def __init__(self, model: str, offered: Sequence[str] = (), **kwargs: Any) -> None:
         super().__init__(
             f"{model} is no longer offered by NanoGPT's Private Mode; choose another private model",
             **kwargs,
         )
         self.model = model
+        # What the relay's list does offer: what a scene may move to.
+        self.offered = list(offered)
 
 
 @dataclass(frozen=True)
@@ -348,9 +350,11 @@ class PrivateModeProvider(OpenAICompatibleProvider):
         return offered(model, ids)
 
     def check_offered(self, model: str) -> None:
-        """Raise `ModelRetired` if nano-gpt has retired `model` (a worker thread)."""
-        if self.still_offered(model) is False:
-            raise ModelRetired(model)
+        """Raise `ModelRetired`, with what is offered instead, if nano-gpt has
+        retired `model` (a worker thread)."""
+        ids = fetch_private_ids(self.config.base_url, client=self._preflight_client)
+        if offered(model, ids) is False:
+            raise ModelRetired(model, ids)
 
     def fetch_model_prices(self) -> dict[str, dict[str, Any]]:
         """The endpoint's public model list, on a plain client: nothing sealed."""

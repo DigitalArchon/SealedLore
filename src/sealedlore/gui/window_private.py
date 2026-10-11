@@ -12,7 +12,7 @@ from __future__ import annotations
 import sys
 
 from PySide6.QtCore import QThread
-from PySide6.QtWidgets import QCheckBox, QMessageBox
+from PySide6.QtWidgets import QCheckBox, QInputDialog, QMessageBox
 
 from sealedlore.engine.session_plot import SessionNotice
 from sealedlore.gui.private_dialogs import FitDialog, PrivateSummaryDialog, chat_words
@@ -22,7 +22,7 @@ from sealedlore.models.config import ProviderConfig
 from sealedlore.providers.base import ChatProvider
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
 from sealedlore.providers.private_mode import ModelRetired, PrivateModeProvider
-from sealedlore.providers.tee import TeeClient, is_private_mode, is_tee
+from sealedlore.providers.tee import TeeClient, is_private_mode, is_tee, move_refusal
 from sealedlore.storage.repository import save_config
 
 # On the model button while a TEE/ model runs unchecked (Settings → Private).
@@ -72,6 +72,10 @@ class PrivateWindow:
         # The private/ model nano-gpt no longer offers, found when it was
         # attested: sends then say so, not "enclave refused".
         self._retired_model: str | None = None
+        # What nano-gpt offers instead (the list the retired check read), and
+        # whether the scene's summary waits on the chosen model's attestation.
+        self._offered_instead: list[str] = []
+        self._summarise_after_attest = False
         self._capture_hidden = False
         self.composer.private_keep.setCurrentIndex(
             max(self.composer.private_keep.findData(self.config.private_keep), 0)
@@ -317,7 +321,7 @@ class PrivateWindow:
         span_id = span.id if span is not None else None
         result: list = []
         failure: list[str] = []
-        retired: list[str] = []
+        retired: list[ModelRetired] = []
         tee: TeeClient | None = None
         self._tee_settings = settings
         self._retired_model = None
@@ -343,7 +347,7 @@ class PrivateWindow:
             try:
                 result.append(attest())
             except ModelRetired as exc:
-                retired.append(exc.model)
+                retired.append(exc)
             except Exception as exc:  # shown, never fatal
                 failure.append(str(exc))
             return
@@ -380,7 +384,7 @@ class PrivateWindow:
                 tee.close()
             return
         if retired:
-            self._on_model_retired(retired[0], for_chat)
+            self._on_model_retired(retired[0].model, for_chat, retired[0].offered)
             return
         attestation = result[0] if result else None
         if attestation is not None:
@@ -447,9 +451,10 @@ class PrivateWindow:
             else:
                 self.end_private()
 
-    def _tee_allows_send(self) -> bool:
+    def _tee_allows_send(self, *, ending: bool = False) -> bool:
         """Before anything is sent to a TEE/ model: wait out its attestation,
-        and say so when it was refused (the session refuses regardless)."""
+        and say so when it was refused (the session refuses regardless).
+        `ending`: the scene's summary is what would be sent."""
         block = self.session.tee_block if self.session is not None else None
         if not block:
             return True
@@ -460,21 +465,23 @@ class PrivateWindow:
             return False
         for_chat = self.session.open_span is None
         if self._retired_model:
-            self._say_model_retired(self._retired_model, for_chat)
+            self._say_model_retired(self._retired_model, for_chat, ending=ending)
         else:
             self._offer_reattest(block, for_chat=for_chat)
         return False
 
-    def _on_model_retired(self, model: str, for_chat: bool) -> None:
+    def _on_model_retired(self, model: str, for_chat: bool, offered: list[str]) -> None:
         """nano-gpt has retired the private/ model: nothing can be sent to it
         (its preflight would refuse it), so say so and where to choose another."""
         self._retired_model = model
+        self._offered_instead = list(offered)
+        self._summarise_after_attest = False
         self.session.tee_block = f"{model} is no longer offered by NanoGPT's Private Mode"
         self._tee_state = "⚠ no longer offered"
         self._refresh_model_button()
         self._say_model_retired(model, for_chat)
 
-    def _say_model_retired(self, model: str, for_chat: bool) -> None:
+    def _say_model_retired(self, model: str, for_chat: bool, *, ending: bool = False) -> None:
         if for_chat:
             QMessageBox.warning(
                 self,
@@ -484,24 +491,108 @@ class PrivateWindow:
                 "button below the message box.",
             )
             return
+        session = self.session
+        written = bool(session.span_nodes(session.open_span))
+        summarise = ending and written
+        choices = self._scene_model_choices(model)
+        if not choices:
+            then = "End the private scene" + (" without a summary" if written else "")
+            text = (
+                f"{then}; NanoGPT offers no other end-to-end encrypted model to carry it "
+                "on. Choose another for new scenes under Settings → Private."
+            )
+        elif summarise:
+            text = (
+                "Choose another end-to-end encrypted model to write the scene's summary, "
+                "or end it without one. New scenes use the model under Settings → Private."
+            )
+        else:
+            text = (
+                "Carry the scene on with another end-to-end encrypted model (it also writes "
+                "the summary when the scene ends), or end it. New scenes use the model "
+                "under Settings → Private."
+            )
         box = QMessageBox(
             QMessageBox.Warning,
             "Model no longer available",
             self._say(
                 f"{model} is no longer offered by NanoGPT's Private Mode, so nothing can be "
-                "sent to it.\n\nEnd the private scene, then choose another private model "
-                "under Settings → Private."
+                f"sent to it.\n\n{text}"
             ),
             QMessageBox.NoButton,
             self,
         )
-        leave = box.addButton(self._say("End the scene"), QMessageBox.DestructiveRole)
+        another = (
+            box.addButton(
+                "Summarise with another model…" if summarise else "Use another model…",
+                QMessageBox.AcceptRole,
+            )
+            if choices
+            else None
+        )
+        leave = box.addButton(
+            "End without a summary…" if written else self._say("End the scene"),
+            QMessageBox.DestructiveRole,
+        )
         box.addButton("Keep it open", QMessageBox.RejectRole)
         box.exec()
         clicked = box.clickedButton()
         box.deleteLater()
-        if clicked is leave and not self._busy:
+        if self._busy:
+            return
+        if another is not None and clicked is another:
+            self._choose_scene_model(model, choices, summarise=summarise)
+        elif clicked is leave:
             self._end_without_model()
+
+    def _scene_model_choices(self, retired: str) -> list[str]:
+        """The models nano-gpt still offers that the open scene may move to:
+        as private as its own (`move_refusal`), from the list the retired
+        check read (public, no key; nothing more is fetched in a scene)."""
+        span = self.session.open_span if self.session is not None else None
+        if span is None:
+            return []
+        return [
+            model
+            for model in self._offered_instead
+            if model != retired and move_refusal(span.model, model) is None
+        ]
+
+    def _choose_scene_model(self, retired: str, choices: list[str], *, summarise: bool) -> None:
+        """Move the scene to a model the author picks, attest it, and, when
+        the author was ending the scene, have it write the summary."""
+        session = self.session
+        model, ok = QInputDialog.getItem(
+            self,
+            "Another private model",
+            self._say(
+                f"Instead of {retired}, the private scene's messages go to:"
+                + ("\n(it writes the scene's summary)" if summarise else "")
+            ),
+            choices,
+            0,
+            False,
+        )
+        if not ok or not model or self._busy or session is None or not session.in_private:
+            return
+        # The scene's own endpoint and key, not whatever Settings says now.
+        base = getattr(session.private_provider, "config", None) or self._private_settings()
+        if base is None:
+            return
+        settings = base.model_copy(update={"model": model})
+        session.switch_private_model(provider=self._make_private_provider(settings), model=model)
+        self._retired_model = None
+        self._tee_state = ""
+        self._summarise_after_attest = summarise
+        self._sync_private_ui()
+        self.statusBar().showMessage(
+            self._say(
+                f"The private scene is now on {model}"
+                + (": its summary follows once it is attested." if summarise else ".")
+            ),
+            10000,
+        )
+        self._attest_or_say_not(settings)
 
     def _end_without_model(self) -> None:
         """End a scene whose model is gone: there's no one to write its
@@ -518,6 +609,7 @@ class PrivateWindow:
     def _on_encryption_attested(self, attestation, failure: list[str], for_chat: bool) -> None:
         """An end-to-end encrypted model's attestation: nothing is sealed to
         it until one succeeds, so a failure costs nothing but the next try."""
+        summarise, self._summarise_after_attest = self._summarise_after_attest, False
         if attestation is not None:
             older = "  ⚠ older release" if attestation.latest_release else ""
             self._tee_state = f"end-to-end encrypted{older}"
@@ -527,6 +619,8 @@ class PrivateWindow:
                 "sees the account, the model, timing, sizes and usage.",
                 15000,
             )
+            if summarise and not for_chat and not self._busy:
+                self.end_private()  # the author was ending the scene
             return
         self._tee_state = "⚠ not attested"
         self._refresh_model_button()
@@ -552,7 +646,7 @@ class PrivateWindow:
                 self._say("The private scene ended; nothing was written in it.")
             )
             return
-        if not self._tee_allows_send():
+        if not self._tee_allows_send(ending=True):
             return  # the summary would go to a model not yet (or never) attested
         if session.private_provider is None:
             answer = QMessageBox.question(
@@ -703,6 +797,10 @@ class PrivateWindow:
             return
         settings = self._private_settings()
         if settings is not None:
+            # The scene's own model: every request names it (span.model), so it
+            # is what must be attested and still offered, whatever Settings →
+            # Private names for new scenes now.
+            settings = settings.model_copy(update={"model": span.model})
             session.resume_private(self._make_private_provider(settings))
             self._attest_or_say_not(settings)
         else:

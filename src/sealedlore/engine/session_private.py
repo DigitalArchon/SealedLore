@@ -154,6 +154,35 @@ class PrivateRuntime:
         """Back into a scene kept on disk, after the app was closed in it."""
         self.private_provider = provider
 
+    def switch_private_model(self, *, provider: ChatProvider, model: str) -> None:
+        """Carry the open scene on, and write its summary, with another model:
+        nano-gpt retired the one it began on (Oct 2026), and without this a
+        scene with messages could only end with nothing carried over. Only to a
+        model as private as the scene's (`tee.move_refusal`): the scene's text
+        goes to it. Earlier messages keep their own `meta.model`."""
+        from sealedlore.providers.tee import move_refusal
+
+        span = self.open_span
+        if span is None:
+            raise ValueError("no private scene is open")
+        if move_refusal(span.model, model):
+            raise ValueError(f"{model} isn't as private as {span.model}, the scene's model")
+        old, old_tee = self.private_provider, self.private_tee
+        for client in (old, old_tee):
+            close = getattr(client, "close", None)
+            if callable(close) and client is not provider:
+                try:
+                    close()
+                except Exception:  # noqa: BLE001 - a socket already gone
+                    pass
+        span.model = model
+        # The old model's enclave proved nothing about the new one's.
+        span.attestation = None
+        self.private_provider = provider
+        self.private_tee = None
+        self.tee_block = None
+        self.save()
+
     def recover_private_spans(self) -> None:
         """On load: a memory-only scene still open was never written down.
 

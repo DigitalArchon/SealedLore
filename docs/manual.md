@@ -1200,8 +1200,11 @@ version, its name).
 NanoGPT retires Private Mode models from time to time. If the model you
 chose is no longer offered, the app says so when the scene or chat begins
 (and Test attestation shows "✗ No longer offered"), and nothing is sent to
-it. For a private scene, end the scene and choose another model under
-Settings → Private; for a chat, choose another with the model button.
+it. A private scene can carry on with another end-to-end encrypted model
+NanoGPT still offers (**Use another model…**, or **Summarise with another
+model…** when you end it), which then writes the scene's summary; new scenes
+use the model under Settings → Private, so choose another there too. For a
+chat, choose another with the model button.
 
 What NanoGPT still sees: your account, which model, when, how large the
 request and reply are, and the usage and cost. NanoGPT reserves a charge for

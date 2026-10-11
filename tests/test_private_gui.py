@@ -3,6 +3,7 @@ locked, the summary approved on the way out. Offscreen, mocks only."""
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from pathlib import Path
@@ -329,7 +330,7 @@ def test_a_scene_on_a_retired_model_says_to_choose_another(app, window, monkeypa
         model="private/glm-5-3-flash",
     )
     said: list[tuple[str, bool]] = []
-    monkeypatch.setattr(window, "_say_model_retired", lambda m, chat: said.append((m, chat)))
+    monkeypatch.setattr(window, "_say_model_retired", lambda m, chat, **_: said.append((m, chat)))
     reattest: list[str] = []
     monkeypatch.setattr(window, "_offer_reattest", lambda reason, chat: reattest.append(reason))
 
@@ -349,3 +350,103 @@ def test_a_scene_on_a_retired_model_says_to_choose_another(app, window, monkeypa
     window._end_without_model()
     assert not window.session.in_private
     assert window._retired_model is None and window.session.tee_block is None
+
+
+def test_a_scene_whose_model_was_retired_is_summarised_by_another(app, window, monkeypatch):
+    """A scene with messages on a model nano-gpt has since retired: the
+    author picks another as private, it is attested, and it writes the
+    summary. Before, the only way out was to end with nothing carried over."""
+    from sealedlore.providers.private_mode import ModelRetired
+    from tests.test_private_mode import FakeEnclave, sealed_setup, sse
+
+    window.composer.private_toggle.click()
+    send(app, window, f"I whisper {MARKER}.")
+    span = window.session.open_span
+    span.model = "private/glm-5-3-flash"  # as begun, before nano-gpt retired it
+
+    enclave = FakeEnclave()
+    enclave.reply = sse("They spoke in private.")
+    made: list[str] = []
+    sealed = sealed_setup(enclave, ["private/glm-5-3", "private/kimi-k3"])
+    window.private_provider_factory = lambda settings: made.append(settings.model) or sealed
+
+    buttons: list[list[str]] = []
+    picks = ["Keep it open", "Summarise with another model…"]
+
+    def answer(box):
+        buttons.append([b.text() for b in box.buttons()])
+        want = picks.pop(0)
+        next(b for b in box.buttons() if b.text() == want).click()
+        return 0
+
+    monkeypatch.setattr(QMessageBox, "exec", answer)
+    offered: list[list[str]] = []
+    monkeypatch.setattr(
+        window_private.QInputDialog,
+        "getItem",
+        staticmethod(lambda *a: (offered.append(list(a[3])) or "private/glm-5-3", True)),
+    )
+
+    class Approve:
+        APPROVE, AGAIN, BACK, DISCARD = "approve", "again", "back", "discard"
+
+        def __init__(self, summary, parent=None, *, note=None, chat=False):
+            self.choice = self.APPROVE
+            self._summary = summary
+
+        def exec(self):
+            return 1
+
+        def text(self):
+            return self._summary
+
+    monkeypatch.setattr(window_private, "PrivateSummaryDialog", Approve)
+
+    # Found retired when the scene was resumed: keep it open for now.
+    retired = ModelRetired("private/glm-5-3-flash", ["private/glm-5-3", "private/kimi-k3"])
+    window._on_attested(span.id, None, [], [], [retired])
+    assert "Use another model…" in buttons[0] and window.session.in_private
+
+    # Ending it: another model writes the summary.
+    window.composer.private_toggle.click()
+    wait_for(app, lambda: not window._busy and not window.session.in_private)
+    assert "Summarise with another model…" in buttons[1]
+    assert "End without a summary…" in buttons[1]
+    assert offered == [["private/glm-5-3", "private/kimi-k3"]], "only as private, still offered"
+    assert made == ["private/glm-5-3"]
+    assert span.model == "private/glm-5-3" and span.summary_tee == "encrypted"
+    leaf = window.session.full_path()[-1]
+    assert leaf.meta.private_summary_of == span.id
+    assert "They spoke in private." in leaf.content
+    # The scene's text went sealed to the new model, and nowhere else.
+    assert MARKER in json.dumps(enclave.requests[-1])
+    assert all(MARKER.encode() not in body for body in enclave.wire)
+    assert window._retired_model is None
+
+
+def test_a_scene_moves_only_to_a_model_as_private(app, window, monkeypatch):
+    window.composer.private_toggle.click()
+    window.session.open_span.model = "private/glm-5-3-flash"
+    with pytest.raises(ValueError, match="isn't as private"):
+        window.session.switch_private_model(provider=window.private_mock, model="TEE/glm-5.3")
+    assert window.session.open_span.model == "private/glm-5-3-flash"
+
+
+def test_a_resumed_scene_is_checked_on_its_own_model(app, window, monkeypatch):
+    """Every request in a scene names span.model: resuming one must attest
+    and check that model, not the one Settings → Private names now."""
+    window.composer.private_toggle.click()
+    window.session.open_span.model = "private/glm-5-3-flash"
+    window.config.private_provider = ProviderConfig(
+        name="private", base_url="https://nano-gpt.com/api/v1", api_key="k", model="private/kimi-k3"
+    )
+    made: list[str] = []
+    window.private_provider_factory = lambda settings: (
+        made.append(settings.model) or window.private_mock
+    )
+    attested: list[str] = []
+    monkeypatch.setattr(
+        window, "_attest_or_say_not", lambda settings: attested.append(settings.model)
+    )
+    window._resume_private()
+    assert made == attested == ["private/glm-5-3-flash"]
