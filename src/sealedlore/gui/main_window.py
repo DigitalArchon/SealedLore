@@ -109,6 +109,7 @@ from sealedlore.gui.welcome import setup_missing, welcome_html
 from sealedlore.gui.window_chat import ChatWindow
 from sealedlore.gui.window_find import FindWindow
 from sealedlore.gui.window_images import ImagesWindow
+from sealedlore.gui.window_layout import LayoutWindow
 from sealedlore.gui.window_private import PrivateWindow
 from sealedlore.gui.window_text import TextSizeWindow
 from sealedlore.gui.window_videos import VideosWindow
@@ -179,10 +180,19 @@ KEPT_WARNING_SHARE = 0.2
 
 # How often the window looks for a finished background rebuild.
 REBUILD_POLL_MS = 700
+# The centre column's margin at each side, clear of the docks.
+CENTRE_MARGIN = 10
 
 
 class MainWindow(
-    ChatWindow, FindWindow, ImagesWindow, VideosWindow, PrivateWindow, TextSizeWindow, QMainWindow
+    ChatWindow,
+    FindWindow,
+    ImagesWindow,
+    VideosWindow,
+    PrivateWindow,
+    TextSizeWindow,
+    LayoutWindow,
+    QMainWindow,
 ):
     generation_requested = Signal()
 
@@ -294,7 +304,9 @@ class MainWindow(
         self.composer.held_character_changed.connect(self._on_held_changed)
 
         centre_layout = QVBoxLayout()
-        centre_layout.setContentsMargins(0, 0, 0, 0)
+        # Clear of the docks' edges: at 0 the session line, the captions and
+        # the composer sat on the separators.
+        centre_layout.setContentsMargins(CENTRE_MARGIN, 8, CENTRE_MARGIN, 10)
         centre_layout.setSpacing(10)
         # How the open story or chat is set up, always in view (read-only).
         self.session_line = SessionLine()
@@ -311,7 +323,7 @@ class MainWindow(
         self.branch_bar.delete_requested.connect(self._delete_branch)
         # Wraps under a large text size rather than widening the window.
         self._build_find()
-        self.top_row = WrapRow()
+        self.top_row = WrapRow(spacing=6, group_spacing=12)
         self.top_row.add_group([self.view_toggle])
         self.top_row.add_group([self.find_button])
         self.top_row.add_group([self.branch_bar], right=True, whole=True)
@@ -406,6 +418,7 @@ class MainWindow(
         right.setAllowedAreas(Qt.RightDockWidgetArea | Qt.LeftDockWidgetArea)
         self.addDockWidget(Qt.RightDockWidgetArea, right)
         self.resizeDocks([left, right], [240, 420], Qt.Horizontal)
+        self._init_layout(left, right)
 
         self.status_strip = StatusStrip()
         bar = NoticeStatusBar()
@@ -3786,5 +3799,6 @@ class MainWindow(
             self.session.close()
             self.session.save()
         self._discard_provider()
+        self._remember_layout()
         save_config(self.config, root=self.root)
         super().closeEvent(event)

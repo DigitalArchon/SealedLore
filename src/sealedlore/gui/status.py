@@ -65,7 +65,9 @@ class NoticeStatusBar(QStatusBar):
         self._stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self._widgets = QWidget()
         self._row = QHBoxLayout(self._widgets)
-        self._row.setContentsMargins(0, 0, 0, 0)
+        self._row.setContentsMargins(4, 2, 0, 2)
+        # The model, route and clock buttons each stand apart.
+        self._row.setSpacing(8)
         self._notice = _Notice()
         self._notice.setObjectName("statusLabel")
         self._notice.setTextFormat(Qt.PlainText)

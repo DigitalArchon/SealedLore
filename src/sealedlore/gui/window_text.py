@@ -178,7 +178,9 @@ class TextSizeWindow:
         centre = self.centralWidget()
         if centre is None:
             return
+        margins = centre.layout().contentsMargins()
         wanted = max(self.composer.sizeHint().width(), self.top_row.sizeHint().width())
+        wanted += margins.left() + margins.right()
         screen = self.screen()
         if screen is not None:
             centre.setMinimumWidth(0)

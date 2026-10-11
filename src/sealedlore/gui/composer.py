@@ -269,8 +269,10 @@ class Composer(QWidget):
         # second is how this one turn is shaped: length, outcome mode, and the
         # dice controls when this turn will be rolled. Each wraps when the
         # window is narrower than it (a larger text size), a caption staying
-        # with its control.
-        who = WrapRow()
+        # with its control, and groups stand further apart than a caption from
+        # its control: at one gap for both, "Myla Veran ▾  SPEAKING AS" read
+        # as one group.
+        who = WrapRow(spacing=6, group_spacing=12)
         captions = [self._caption(text) for text in ("Playing", "Speaking as", "Model voices")]
         who.add_group([captions[0], self.held])
         who.add_group([captions[1], self.speaker])
@@ -278,7 +280,7 @@ class Composer(QWidget):
         # What a simple chat has none of (set_chat_mode): who is in play.
         self._who_widgets = [*captions, self.held, self.speaker, self.scope]
 
-        shape = WrapRow()
+        shape = WrapRow(spacing=6, group_spacing=12)
         self.length_caption = self._caption("Length")
         shape.add_group([self.length_caption, self.length])
         self.agency_caption = self._caption("Outcome")
@@ -288,7 +290,7 @@ class Composer(QWidget):
 
         controls = QVBoxLayout()
         controls.setContentsMargins(0, 0, 0, 0)
-        controls.setSpacing(6)
+        controls.setSpacing(8)
         controls.addLayout(who)
         controls.addLayout(shape)
 
@@ -322,7 +324,7 @@ class Composer(QWidget):
         self.image_button.clicked.connect(self.image_requested)
 
         buttons = QVBoxLayout()
-        buttons.setSpacing(6)
+        buttons.setSpacing(8)
         buttons.addWidget(self.send_button)
         buttons.addWidget(self.stop_button)
         buttons.addWidget(self.regenerate_button)
@@ -341,7 +343,7 @@ class Composer(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(10)
         layout.addWidget(self.controls_host)
         layout.addWidget(self.ooc)
         layout.addLayout(entry)

@@ -10,6 +10,9 @@ Within a line it behaves like a box layout: spare width goes to members whose
 size policy expands (a compact combo, up to its maximum width), a short line
 squeezes them toward their minimum, and groups added with `right=True` sit
 at the line's right end.
+
+Groups stand further apart than the members of a group (`group_spacing`), so
+a caption reads with its own control and not the one before it.
 """
 
 from __future__ import annotations
@@ -33,10 +36,18 @@ class _Group:
 
 
 class WrapRow(QLayout):
-    def __init__(self, parent: QWidget | None = None, *, spacing: int = 8, line_spacing: int = 6):
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        *,
+        spacing: int = 8,
+        line_spacing: int = 6,
+        group_spacing: int | None = None,
+    ):
         super().__init__(parent)
         self._groups: list[_Group] = []
         self._spacing = spacing
+        self._group_spacing = spacing if group_spacing is None else group_spacing
         self._line_spacing = line_spacing
         # The width the last layout pass had, and the height it took.
         self._width_given = 0
@@ -93,7 +104,7 @@ class WrapRow(QLayout):
     def sizeHint(self) -> QSize:  # noqa: N802 - Qt naming
         """Everything on one line."""
         groups = self._visible()
-        width = sum(self._width(g, "hint") for g in groups) + self._spacing * max(
+        width = sum(self._width(g, "hint") for g in groups) + self._group_spacing * max(
             0, len(groups) - 1
         )
         return QSize(width, self._line_height(groups)) + self._margins()
@@ -156,9 +167,9 @@ class WrapRow(QLayout):
         # squeezed line each had always fitted.
         for group in self._visible():
             need = self._width(group, "hint" if group.whole else "min")
-            if lines and used + self._spacing + need <= width:
+            if lines and used + self._group_spacing + need <= width:
                 lines[-1].append(group)
-                used += self._spacing + need
+                used += self._group_spacing + need
             else:
                 lines.append([group])
                 used = need
@@ -172,7 +183,13 @@ class WrapRow(QLayout):
 
     def _place_line(self, line: list[_Group], x: int, y: int, width: int, height: int) -> None:
         items = [item for group in line for item in group.shown]
-        gaps = self._spacing * (len(items) - 1)
+        # The gap after each item: wider where a group ends.
+        after = [
+            self._spacing if n < len(group.shown) - 1 else self._group_spacing
+            for group in line
+            for n in range(len(group.shown))
+        ]
+        gaps = sum(after[:-1])
         widths = [item.sizeHint().width() for item in items]
         extra = width - gaps - sum(widths)
         grows = [
@@ -211,7 +228,7 @@ class WrapRow(QLayout):
             hint = item.sizeHint().height()
             h = min(height, max(hint, item.minimumSize().height()))
             item.setGeometry(QRect(x, y + (height - h) // 2, widths[i], h))
-            x += widths[i] + self._spacing
+            x += widths[i] + after[i]
 
 
 _GROWS = (QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)

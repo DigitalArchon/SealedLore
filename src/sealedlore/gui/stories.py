@@ -1,25 +1,42 @@
 """The story list (left dock).
 
-It shares the dock with the branch and chapter navigator (navigator.py), in a
-splitter below it.
+Each row is a story's title, over up to two lines, and under it, smaller and
+dimmer, how many messages it has (`_StoryRow`). Cut to one line, the author's
+titles ("Between Stars: The Long Way Home", "Test · Sonnet 4.6 · Between Stars
+long run") all read "Between Stars: T…" or "Test · Sonnet 4.6 …".
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QPoint, Qt, Signal
-from PySide6.QtGui import QBrush, QKeySequence, QShortcut
+from PySide6.QtCore import QModelIndex, QPoint, QRect, QSize, Qt, Signal
+from PySide6.QtGui import (
+    QBrush,
+    QFont,
+    QFontMetrics,
+    QKeySequence,
+    QPainter,
+    QPalette,
+    QShortcut,
+    QTextLayout,
+    QTextOption,
+)
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QListView,
     QListWidget,
     QListWidgetItem,
     QMenu,
     QPushButton,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
     QVBoxLayout,
     QWidget,
 )
 
+from sealedlore.gui import theme
 from sealedlore.storage.atomic import read_json
 from sealedlore.storage.paths import is_safe_story_id, stories_dir
 
@@ -44,10 +61,12 @@ class StoryListPanel(QWidget):
         self.list = QListWidget()
         self.list.setObjectName("storyList")
         self.list.setSelectionMode(QAbstractItemView.SingleSelection)
-        # A long title is cut with "…" (the tooltip has it whole), rather than
-        # a horizontal scrollbar under a dock this narrow.
+        # A long title wraps to a second line and is cut with "…" after it
+        # (the tooltip has it whole), rather than a horizontal scrollbar
+        # under a dock this narrow. Rows are measured again at each width.
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.list.setTextElideMode(Qt.ElideRight)
+        self.list.setResizeMode(QListView.Adjust)
+        self.list.setItemDelegate(_StoryRow(self.list))
         self.list.itemActivated.connect(self._activate)
         self.list.itemDoubleClicked.connect(self._activate)
         self.list.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -151,3 +170,133 @@ class StoryListPanel(QWidget):
         story_id = item.data(Qt.UserRole)
         if story_id:
             self.story_activated.emit(story_id)
+
+
+# Lines a title may take before it is cut with "…".
+TITLE_LINES = 2
+# The count's size beside the title's, and the space between them.
+META_SCALE = 0.86
+META_GAP = 2
+
+
+class _StoryRow(QStyledItemDelegate):
+    """A row of the story list: the item's text is "Title\nN messages"; the
+    title wraps to `TITLE_LINES`, the rest is drawn smaller and dimmer.
+
+    The row's box (padding, divider, selection) is the stylesheet's
+    (`QListWidget::item`), drawn by the style; only the text is drawn here."""
+
+    def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex) -> QSize:  # noqa: N802
+        opt = self._option(option, index)
+        view = option.widget
+        width = view.viewport().width() if view is not None else option.rect.width()
+        # The style's box around one line of text: padding and divider.
+        opt.text = "X"
+        box = super().sizeHint(opt, index)
+        opt.rect = QRect(0, 0, width, box.height())
+        text = self._text_rect(opt)
+        title, meta = self._parts(index)
+        lines = self._title_lines(title, opt.font, text.width())
+        height = box.height() - QFontMetrics(opt.font).height()
+        height += len(lines) * QFontMetrics(opt.font).lineSpacing()
+        if meta:
+            height += META_GAP + QFontMetrics(self._meta_font(opt.font)).lineSpacing()
+        return QSize(width, height)
+
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: QModelIndex) -> None:
+        opt = self._option(option, index)
+        title, meta = self._parts(index)
+        opt.text = ""
+        widget = option.widget
+        style = widget.style() if widget is not None else None
+        if style is None:
+            return
+        style.drawControl(QStyle.CE_ItemViewItem, opt, painter, widget)
+        rect = self._text_rect(opt)
+        selected = bool(opt.state & QStyle.State_Selected)
+        foreground = index.data(Qt.ForegroundRole)
+        if foreground is not None:
+            ink = QBrush(foreground).color()
+        elif selected:
+            ink = theme.colour("text_selected")
+        else:
+            ink = opt.palette.color(QPalette.Text)
+        painter.save()
+        painter.setFont(opt.font)
+        painter.setPen(ink)
+        metrics = QFontMetrics(opt.font)
+        y = rect.top()
+        for line in self._title_lines(title, opt.font, rect.width()):
+            painter.drawText(
+                QRect(rect.left(), y, rect.width(), metrics.height()),
+                Qt.AlignLeft | Qt.AlignVCenter,
+                line,
+            )
+            y += metrics.lineSpacing()
+        if meta:
+            font = self._meta_font(opt.font)
+            small = QFontMetrics(font)
+            painter.setFont(font)
+            painter.setPen(ink if foreground is not None else theme.colour("text_dim"))
+            painter.drawText(
+                QRect(rect.left(), y + META_GAP, rect.width(), small.height()),
+                Qt.AlignLeft | Qt.AlignVCenter,
+                small.elidedText(meta, Qt.ElideRight, rect.width()),
+            )
+        painter.restore()
+
+    def _option(self, option: QStyleOptionViewItem, index: QModelIndex) -> QStyleOptionViewItem:
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        return opt
+
+    @staticmethod
+    def _text_rect(opt: QStyleOptionViewItem) -> QRect:
+        widget = opt.widget
+        if widget is None:
+            return opt.rect
+        return widget.style().subElementRect(QStyle.SE_ItemViewItemText, opt, widget)
+
+    @staticmethod
+    def _parts(index: QModelIndex) -> tuple[str, str]:
+        text = str(index.data(Qt.DisplayRole) or "")
+        title, _, meta = text.partition("\n")
+        return title, meta.replace("\n", " · ")
+
+    @staticmethod
+    def _meta_font(font: QFont) -> QFont:
+        small = QFont(font)
+        if font.pixelSize() > 0:
+            small.setPixelSize(max(1, round(font.pixelSize() * META_SCALE)))
+        else:
+            small.setPointSizeF(font.pointSizeF() * META_SCALE)
+        return small
+
+    @staticmethod
+    def _title_lines(title: str, font: QFont, width: int) -> list[str]:
+        """The title as it wraps at `width`, cut with "…" past TITLE_LINES."""
+        if width <= 0:
+            return [title]
+        layout = QTextLayout(title, font)
+        layout.setTextOption(QTextOption(Qt.AlignLeft))
+        option = layout.textOption()
+        option.setWrapMode(QTextOption.WrapAtWordBoundaryOrAnywhere)
+        layout.setTextOption(option)
+        starts: list[int] = []
+        layout.beginLayout()
+        while True:
+            line = layout.createLine()
+            if not line.isValid():
+                break
+            line.setLineWidth(width)
+            starts.append(line.textStart())
+        layout.endLayout()
+        starts = starts or [0]
+        lines = [
+            title[start : (starts[n + 1] if n + 1 < len(starts) else len(title))].rstrip()
+            for n, start in enumerate(starts[:TITLE_LINES])
+        ]
+        if len(starts) > TITLE_LINES:
+            rest = title[starts[TITLE_LINES - 1] :]
+            lines[-1] = QFontMetrics(font).elidedText(rest, Qt.ElideRight, width)
+        return lines

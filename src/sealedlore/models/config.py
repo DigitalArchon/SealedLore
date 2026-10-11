@@ -229,6 +229,20 @@ class BadHost(BaseModel):
     at: str | None = None
 
 
+class WindowLayout(BaseModel):
+    """The main window as the author last left it (gui/window_layout.py).
+
+    The size is the unmaximised one, so leaving full screen gives it back. A
+    dock width of 0 has never been set by hand: the window shares its width
+    out by proportion instead."""
+
+    width: int = 0
+    height: int = 0
+    maximized: bool = False
+    stories_width: int = 0
+    inspector_width: int = 0
+
+
 class Config(BaseModel):
     @field_validator("text_scale")
     @classmethod
@@ -395,6 +409,8 @@ class Config(BaseModel):
     ui_font: str = ""
     story_font: str = ""
     mono_font: str = ""
+    # The window's size and dock widths at the last close; None until then.
+    window: WindowLayout | None = None
     # Most supporting cards sent in one turn's tail.
     supporting_limit: int = 8
     # How far back a supporting character counts as still around. Sharing the

@@ -31,9 +31,10 @@ QDockWidget::title {
   color: @text_dim;
 }
 
+/* Padding here never reached the layout: the centre's margins are set in
+   code (main_window.CENTRE_MARGIN). */
 #centre {
   background: @window;
-  padding: 12px;
 }
 
 /* --- transcript ----------------------------------------------------- */
@@ -460,6 +461,11 @@ QListWidget::item {
   border-bottom: 1px solid @list_divider;
 }
 
+/* A story's row is two or three lines already (stories._StoryRow). */
+#storyList::item {
+  padding: 6px 8px;
+}
+
 QListWidget::item:selected, QTreeWidget::item:selected {
   background: @selection;
   color: @text_selected;
@@ -566,8 +572,9 @@ QProgressBar::chunk {
   border-radius: 3px;
 }
 
-/* The storyteller's model, clickable (main_window.choose_story_model). */
-#modelButton {
+/* The storyteller's model, clickable (main_window.choose_story_model); its
+   route and the plot's clock beside it look the same. */
+#modelButton, #clockButton {
   background: transparent;
   border: 1px solid @control_border;
   border-radius: 4px;
@@ -576,12 +583,12 @@ QProgressBar::chunk {
   font-size: 12px;
 }
 
-#modelButton:hover {
+#modelButton:hover, #clockButton:hover {
   background: @button;
   color: @text_bright;
 }
 
-#modelButton:disabled {
+#modelButton:disabled, #clockButton:disabled {
   color: @text_disabled;
 }
 

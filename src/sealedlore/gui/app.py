@@ -136,6 +136,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     window = MainWindow(root=options.data_dir, use_mock=options.mock)
     if options.story:
         window.open_story(options.story)
+    window.place_on_screen()
     window.show()
     return app.exec()
 

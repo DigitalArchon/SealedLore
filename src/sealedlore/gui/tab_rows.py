@@ -48,14 +48,14 @@ class TabRows(QWidget):
         bar.setObjectName("tabRows")
         bar_layout = QVBoxLayout(bar)
         bar_layout.setContentsMargins(0, 0, 0, 0)
-        bar_layout.setSpacing(4)
+        bar_layout.setSpacing(6)
         # Each row fills the width on its own, so a shorter second row has no
         # empty cell at its end.
         self._rows: list[QHBoxLayout] = []
         for _ in range(ROWS):
             row = QHBoxLayout()
             row.setContentsMargins(0, 0, 0, 0)
-            row.setSpacing(4)
+            row.setSpacing(6)
             bar_layout.addLayout(row)
             self._rows.append(row)
         self._stack = QStackedWidget()
@@ -64,7 +64,7 @@ class TabRows(QWidget):
         pages = QWidget()
         pages_layout = QVBoxLayout(pages)
         pages_layout.setContentsMargins(0, 0, 0, 0)
-        pages_layout.setSpacing(6)
+        pages_layout.setSpacing(10)
         pages_layout.addWidget(bar)
         pages_layout.addWidget(self._stack, 1)
         # The pages, or the empty state in their place.
@@ -73,7 +73,8 @@ class TabRows(QWidget):
         self._empty: QWidget | None = None
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        # Clear of the dock's edges, as the Stories list is.
+        layout.setContentsMargins(8, 8, 8, 0)
         layout.addWidget(self._outer)
 
     # --- the QTabWidget subset --------------------------------------------

@@ -361,6 +361,9 @@ archiving, rebuilding summaries.
 
 - **Left dock**: the Stories list (right-click for Open folder, Duplicate and
   Delete).
+- The docks share the window's width as it changes size, until you drag the
+  line between a dock and the story; from then on their widths are yours.
+  The window's size and those widths are kept for the next launch.
 - **Above the transcript**, a line always says how the open story or chat is
   set up: a story or a simple chat, saved on disk or **in memory only, not
   saved**, its model and how private that is, the endpoint, the route, and a
