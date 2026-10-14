@@ -518,6 +518,9 @@ def plan_art(
     already drawn, and nothing that has failed too often, is asked again."""
     jobs: list[ArtJob] = []
     visited = {pid for places in world.visited.values() for pid in places}
+    if world.start is not None:
+        visited.add(world.start)  # an imported map's start: where the story is before a passage
+    shown = set(world.seen) | visited
     drawn_land = {patch.place_id for patch in art.terrain}
     planned: list[TerrainPatch] = []
 
@@ -579,9 +582,13 @@ def plan_art(
     subjects: list[tuple[str, str, str, str, Literal["place", "thing"]]] = [
         (p.id, p.name, _what(p), p.state, "place")
         for p in world.places.values()
-        if p.kind in SPRITE_KINDS
+        if p.kind in SPRITE_KINDS and p.id in shown  # nothing under the fog is drawn
     ]
-    subjects += [(t.id, t.name, _thing_words(t), t.state, "thing") for t in world.things.values()]
+    subjects += [
+        (t.id, t.name, _thing_words(t), t.state, "thing")
+        for t in world.things.values()
+        if t.carried_by or t.at in shown
+    ]
     for subject_id, name, words, state, subject in subjects:
         if art.sprite_for(subject_id, state) is not None:
             continue

@@ -27,6 +27,7 @@ from sealedlore.models.story import (
     StyleDirectives,
     WorldActivity,
 )
+from sealedlore.models.world import WorldDelta
 
 SCENARIO_FORMAT = "sealedlore-scenario"
 SCENARIO_VERSION = 1
@@ -52,6 +53,10 @@ class Scenario(BaseModel):
     # The map that grows as the story goes (models/world.py): a choice for the
     # story, so a new playthrough keeps it.
     world_map: bool = False
+    # A map drawn up beforehand (a plot file's `# Map`): its places, ways and
+    # things, fixed from the start, and where the story begins on it.
+    world_base: WorldDelta | None = None
+    world_start: str | None = None
     cast: list[Character] = Field(default_factory=list)
     lore: list[LoreEntry] = Field(default_factory=list)
     # Cards the story built up for people it introduced. Suggestions and

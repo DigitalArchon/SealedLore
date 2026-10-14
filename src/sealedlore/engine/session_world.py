@@ -60,7 +60,17 @@ class WorldRuntime:
 
     def world(self, node_id: str | None = None) -> WorldMap:
         """The map at a message (the leaf by default), on its path."""
-        return world_at(self.path() if node_id is None else self._path_to(node_id))
+        return self._world_on(self.path() if node_id is None else self._path_to(node_id))
+
+    def _world_on(self, path) -> WorldMap:
+        """The map at the end of `path`: the story's imported map under it,
+        less what the plot is keeping hidden at that point."""
+        return world_at(
+            path,
+            self.story.world_base,
+            start=self.story.world_start,
+            hidden=self.hidden_ids(path) if self.story.plot is not None else (),
+        )
 
     def _prepare_world_read(self) -> _WorldRead | None:
         """The map read's request for the latest passage, logged; None when
@@ -74,7 +84,7 @@ class WorldRuntime:
         if not node.content.strip():
             return None
         path = self._path_to(node.id)
-        before = world_at(path[:-1])
+        before = self._world_on(path[:-1])
         author = path[-2] if len(path) > 1 and path[-2].kind == "user" else None
         held = self._character(node.meta.controlled_character_id)
         author_text = author.content if author is not None else ""

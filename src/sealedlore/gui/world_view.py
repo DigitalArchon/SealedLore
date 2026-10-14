@@ -264,10 +264,23 @@ class WorldView(QWidget):
         self.fit()
 
     def here(self) -> str | None:
-        return self.world.where.get(self.held or "")
+        """Where the author's character is: as the story last put them, or an
+        imported map's start before it has."""
+        return self.world.where.get(self.held or "") or self.world.start
 
     def _visited(self) -> set[str]:
-        return set(self.world.visited.get(self.held or "", []))
+        visited = set(self.world.visited.get(self.held or "", []))
+        if self.world.start is not None and not visited:
+            visited.add(self.world.start)
+        return visited
+
+    def _shown(self) -> set[str]:
+        """What shows through the fog: what the story has seen or told of,
+        and where the character has been."""
+        been = self._visited() | ({self.here()} - {None})
+        # Stand somewhere and you see what is in it: the farmhouse in the farm.
+        around = {p.id for p in self.world.places.values() if p.inside in been}
+        return set(self.world.seen) | been | around
 
     def _build(self) -> None:
         self.scene.clear()
@@ -306,9 +319,10 @@ class WorldView(QWidget):
             self.scene.addItem(item)
         pen = QPen(QColor("#e8dfc4"), 1.5, Qt.DashLine)
         pen.setCosmetic(True)
+        shown = self._shown()
         for link in world.links:
             a, b = position(world, link.a), position(world, link.b)
-            if a is None or b is None:
+            if a is None or b is None or link.a not in shown or link.b not in shown:
                 continue
             line = QGraphicsLineItem(a[0], -a[1], b[0], -b[1])
             line.setPen(pen)
@@ -325,7 +339,7 @@ class WorldView(QWidget):
             people.setdefault(place_id, []).append(who)
         for place in world.places.values():
             spot = position(world, place.id)
-            if spot is None:
+            if spot is None or place.id not in shown:
                 continue
             sprite = self.art.sprite_for(place.id, place.state) or self.art.sprite_for(place.id)
             pixmap = sprite_pixmap(sprite.id, sprite.svg, SPRITE_SIZE) if sprite else None
@@ -424,7 +438,7 @@ class WorldView(QWidget):
                 self.view.resetTransform()
                 self.view.fitInView(rect, Qt.KeepAspectRatio)
             return
-        seen = self._visited() or set(self.world.places)
+        seen = self._visited() or self._shown()
         spots = [position(self.world, pid) for pid in seen]
         spots = [s for s in spots if s is not None]
         if not spots:

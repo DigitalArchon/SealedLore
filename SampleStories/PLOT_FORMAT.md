@@ -20,8 +20,8 @@ the importer can point at it.
 ## How the file is laid out
 
 - Top-level sections are `# Headings`: World (or World info, Setting),
-  Opening (or Start), Characters (or Cast), Places, Lore, Facts, Timeline and
-  Events (or Optional events). All are optional, and they can come in any
+  Opening (or Start), Characters (or Cast), Places, Lore, Map, Facts,
+  Timeline and Events (or Optional events). All are optional, and they can come in any
   order. Any other `#` heading is reported and ignored.
 - Inside a section, each item is a `## Heading`. An event's variants are
   `### Headings`.
@@ -125,6 +125,44 @@ particular character whoever is held, put their name first:
 is only read from the prose while the author holds them, so progress they
 make off-screen (a search told as cutaways while the author plays someone
 else) is better kept in a fact that the events set.
+
+## Map
+
+A story can come with a map drawn up beforehand, so it starts in map mode
+with the country already laid out (`Doomsville with a map.md` is a worked
+example). Each `## Place` under `# Map` is somewhere on it:
+
+```markdown
+# Map
+- unit: km                 # what at: and size: count in: km (default), miles or m
+- start: The farmhouse     # where the story begins on the map
+
+## Hellsville
+- kind: settlement         # region | settlement | site | area | route | building | room | vehicle
+- at: 0, 8                 # east, north: from the map's origin, or from the place it is in
+- size: 1.5                # how wide; blank takes a size for its kind
+- known: yes               # on the map from the start; otherwise under fog until the story finds it
+- way: The north road | south, five miles   # a way to another place, in words; one line each
+- thing: The town's stores | rationed       # a thing that starts here; one line each
+A small walled town...
+
+## The diner
+- kind: building
+- in: Hellsville           # inside another place on the map
+- at: -0.18, -0.25         # from Hellsville's middle
+```
+
+- Places stand where the file puts them, and never move. A place with no
+  `at:` is placed by the program from its ways and what it is in.
+- A map place named like a place or lore entry (under `# Places` or `# Lore`)
+  is that entry. If the entry is `hidden: yes`, the place, and everything in
+  it, stays off the map, and away from every model, until an event reveals
+  it.
+- Ways are words, as the story would say them; they show on the map and help
+  the map read follow the story. The program doesn't measure them.
+- Everywhere the story goes beyond the map, the storyteller decides what is
+  there and the map grows to take it in, as it does for a story with no map.
+- A map turns the story's map on (Story → Setup → About).
 
 ## Pictures
 

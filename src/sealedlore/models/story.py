@@ -20,6 +20,7 @@ from sealedlore.models.private import Attestation, PrivatePrompt, PrivateSpan
 from sealedlore.models.prompt_edit import PromptEdit
 from sealedlore.models.route import ModelRoute
 from sealedlore.models.scene import SceneLogEntry, SceneState
+from sealedlore.models.world import WorldDelta
 
 NarrativePerson = Literal["first", "second", "third"]
 NarrativeTense = Literal["past", "present"]
@@ -129,6 +130,10 @@ class Story(BaseModel):
     title: str
     created_at: str = Field(default_factory=utc_now_iso)
     updated_at: str = Field(default_factory=utc_now_iso)
+    # A map drawn up beforehand (a plot file's `# Map`, models/world.py): the
+    # base every branch's map grows from, and where the story starts on it.
+    world_base: WorldDelta | None = None
+    world_start: str | None = None
     # Stable setting/world material for the system block (§6.1); never
     # turn-specific, or it would invalidate the cache prefix every turn.
     world_bible: str | None = None

@@ -651,7 +651,8 @@ stand, and, with spoilers on, the events still to come.
 SealedLore (every plot file in `SampleStories/` but the format guide) are
 listed under **New story from a sample** in the File menu, in the AppImage as
 well: File → New story from a sample → Doomsville is the same as importing
-`Doomsville.md`. Rather than
+`Doomsville.md`, and **Doomsville with a map** is the same story with a map
+drawn up beforehand (a `# Map` section: see "The map"). Rather than
 write the format by hand, **File → Plot file editor…** writes it for you: the
 world, opening, characters, places, lore, facts and events each get a form,
 conditions and what an event brings or sets are picked from what the file
@@ -874,6 +875,12 @@ miles north", "around back", inside the town), and stays there: once the
 story has been somewhere, that is where it is. Walk off the edge of the map
 and the storyteller decides what you find there; the map grows to take it in,
 and it is part of the map from then on.
+
+A plot file can bring a map drawn up beforehand (`# Map`, in the format
+guide): its places stand where the file puts them from the first passage, the
+places you haven't found yet are under fog, and a place the plot keeps hidden
+stays off the map until the plot reveals it. **Doomsville with a map**, among
+the samples, starts this way.
 
 The map is drawn in the background (Settings → Models → **Map art model**;
 untick **Draw the map** to keep it plain): the land around each place the

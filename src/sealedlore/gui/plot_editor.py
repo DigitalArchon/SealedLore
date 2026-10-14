@@ -47,6 +47,7 @@ from sealedlore.engine.plot_file import (
     FACT,
     FRONT,
     LORE,
+    MAP,
     NOTES,
     OPENING,
     PLACE,
@@ -65,6 +66,8 @@ from sealedlore.gui.plot_editor_pages import (
     CharacterPage,
     EntryPage,
     FactPage,
+    MapPage,
+    MapPlacePage,
     OpeningPage,
     Page,
     StoryPage,
@@ -77,6 +80,8 @@ from sealedlore.models.plot_file import (
     EntryDoc,
     EventDoc,
     FactDoc,
+    MapDoc,
+    MapPlaceDoc,
     PictureDoc,
     PlotDocument,
     VariantDoc,
@@ -95,11 +100,12 @@ _HEADERS: list[tuple[str, str]] = [
     (CHARACTER, "Characters"),
     (PLACE, "Places"),
     (LORE, "Lore"),
+    (MAP, "Map"),
     (FACT, "Facts"),
     (TIMELINE, "Timeline"),
     (OPTIONAL, "Optional events"),
 ]
-_LISTS = (CHARACTER, PLACE, LORE, FACT, TIMELINE, OPTIONAL)
+_LISTS = (CHARACTER, PLACE, LORE, MAP, FACT, TIMELINE, OPTIONAL)
 CHECK_DELAY_MS = 250
 
 
@@ -167,6 +173,8 @@ class PlotEditorWindow(QMainWindow):
             PLACE: EntryPage(is_place=True, folder=self._folder, save_first=self.save),
             LORE: EntryPage(is_place=False, folder=self._folder, save_first=self.save),
             FACT: FactPage(),
+            "map_settings": MapPage(),
+            MAP: MapPlacePage(),
             EVENT: WayPage(is_event=True),
             "variant": WayPage(is_event=False),
         }
@@ -271,6 +279,8 @@ class PlotEditorWindow(QMainWindow):
             return document.lore
         if section == FACT:
             return document.facts
+        if section == MAP:
+            return document.map.places if document.map is not None else []
         return document.events
 
     def _label(self, section: str, item) -> str:
@@ -292,7 +302,7 @@ class PlotEditorWindow(QMainWindow):
             header.setFont(0, font)
             self.tree.addTopLevelItem(header)
             headers[section] = header
-        for section in (CHARACTER, PLACE, LORE, FACT):
+        for section in (CHARACTER, PLACE, LORE, MAP, FACT):
             for index, item in enumerate(self._items(section)):
                 row = QTreeWidgetItem([self._label(section, item)])
                 row.setData(0, REF_ROLE, (section, index, -1))
@@ -348,6 +358,13 @@ class PlotEditorWindow(QMainWindow):
             if index in (FRONT, WORLD, OPENING):
                 page = self._pages[index]
                 page.load(self.document, self.document)
+                self.pages.setCurrentWidget(page)
+            elif index == MAP:
+                # The map's own settings; a map comes into being when edited.
+                if self.document.map is None:
+                    self.document.map = MapDoc()
+                page = self._pages["map_settings"]
+                page.load(self.document.map, self.document)
                 self.pages.setCurrentWidget(page)
             else:
                 self.pages.setCurrentWidget(self.empty_page)
@@ -419,6 +436,8 @@ class PlotEditorWindow(QMainWindow):
             self.document.rename_event(old, new)
         elif kind == CHARACTER:
             self.document.rename_character(old, new)
+        elif kind == MAP:
+            self.document.rename_map_place(old, new)
 
     def _add(self) -> None:
         ref = self.current_ref()
@@ -439,6 +458,11 @@ class PlotEditorWindow(QMainWindow):
         elif section == LORE:
             self.document.lore.append(EntryDoc(name="New entry"))
             select = (LORE, len(self.document.lore) - 1, -1)
+        elif section == MAP:
+            if self.document.map is None:
+                self.document.map = MapDoc()
+            self.document.map.places.append(MapPlaceDoc(name="New place"))
+            select = (MAP, len(self.document.map.places) - 1, -1)
         elif section == FACT:
             self.document.facts.append(FactDoc(name="new_fact", initial="no"))
             select = (FACT, len(self.document.facts) - 1, -1)

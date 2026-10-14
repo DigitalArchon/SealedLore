@@ -73,6 +73,8 @@ def scenario_from_bundle(bundle: StoryBundle, files: Mapping[str, bytes] | None 
         npc_scope=story.defaults.npc_scope,
         world_activity=story.defaults.world_activity,
         world_map=story.defaults.world_map,
+        world_base=story.world_base,
+        world_start=story.world_start,
         cast=cast,
         lore=lore,
         supporting=supporting,
@@ -154,6 +156,8 @@ def bundle_from_scenario(
     story.defaults.npc_scope = scenario.npc_scope
     story.defaults.world_activity = scenario.world_activity
     story.defaults.world_map = scenario.world_map
+    story.world_base = scenario.world_base
+    story.world_start = scenario.world_start
     story.defaults.main_model = main_model
     return StoryBundle(
         story=story,

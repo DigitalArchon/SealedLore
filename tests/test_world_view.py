@@ -185,3 +185,21 @@ def test_art_coming_back_redraws_the_map(window):
     window.show_world(True)
     window._art_signal.drawn.emit()
     assert window._art_timer.isActive()
+
+
+def test_under_fog_only_what_the_story_found_and_what_is_around_it_shows(app):
+    farm = WorldPlace(id="farm", name="The farm", kind="site", x=0.0, y=0.0, size=400)
+    house = WorldPlace(id="house", name="Farmhouse", kind="building", inside="farm", x=0.0, y=50.0)
+    town = WorldPlace(id="town", name="Hellsville", kind="settlement", x=0.0, y=8000.0)
+    diner = WorldPlace(id="diner", name="Diner", kind="building", inside="town", x=0.0, y=8000.0)
+    hills = WorldPlace(id="hills", name="The hills", kind="area", x=4000.0, y=8000.0)
+    world = WorldMap(
+        places={p.id: p for p in (farm, house, town, diner, hills)},
+        seen=["town"],
+        visited={"Jane": ["farm"]},
+        where={"Jane": "farm"},
+    )
+    view = WorldView()
+    view.set_world(world, WorldArt(), "Jane", keep_view=False)
+    shown = {item.place.name for item in view._items}
+    assert shown == {"The farm", "Farmhouse", "Hellsville"}  # not the diner, not the hills

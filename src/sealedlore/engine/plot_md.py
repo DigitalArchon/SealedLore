@@ -33,6 +33,7 @@ from sealedlore.models.plot import (
 from sealedlore.models.scenario import Scenario
 from sealedlore.models.scene import SceneState
 from sealedlore.models.story import Perspective, StyleDirectives, WorldActivity
+from sealedlore.models.world import PlaceKind, WorldDelta, WorldLink, WorldPlace, WorldThing
 
 PLOT_SUFFIX = ".md"
 
@@ -54,6 +55,7 @@ _SECTIONS = {
     "timeline": "timeline",
     "events": "events",
     "optional events": "events",
+    "map": "map",
 }
 
 _OPENING_FIELDS = {"mode", "location", "time", "situation"}
@@ -69,8 +71,15 @@ _CHARACTER_FIELDS = {
     "picture",
 }
 _PLACE_FIELDS = {"keywords", "always", "hidden", "picture"}
-# The one setting that may be given more than once: a line per picture.
+# `# Map`: its own settings, and each place's.
+_MAP_FIELDS = {"unit", "start"}
+_MAP_PLACE_FIELDS = {"kind", "at", "size", "in", "known", "way", "thing"}
+# The settings that may be given more than once: a line per picture, and on
+# a map's place a line per way out and per thing there.
 PICTURE = "picture"
+WAY = "way"
+THING = "thing"
+REPEATED = frozenset({PICTURE, WAY, THING})
 # What a picture line may name. The app reads these and no others.
 PICTURE_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif")
 _EVENT_FIELDS = {
@@ -98,7 +107,9 @@ _VARIANT_FIELDS = {
     "reveals",
     "at",
 }
-_ALL_FIELDS = _OPENING_FIELDS | _CHARACTER_FIELDS | _PLACE_FIELDS | _EVENT_FIELDS
+_ALL_FIELDS = (
+    _OPENING_FIELDS | _CHARACTER_FIELDS | _PLACE_FIELDS | _EVENT_FIELDS | _MAP_PLACE_FIELDS
+)
 
 _ROLES = {"player", "storyteller", "supporting", "author"}
 
@@ -196,6 +207,8 @@ class _Fields:
     prose: str
     # Every `- picture:` line, in order: (line number, value).
     pictures: list[tuple[int, str]] = field(default_factory=list)
+    # Every line of each setting that may be given more than once (`REPEATED`).
+    repeated: dict[str, list[tuple[int, str]]] = field(default_factory=dict)
 
 
 def _norm(value: str) -> str:
@@ -390,6 +403,7 @@ class _Parser:
         """
         values: dict[str, tuple[int, str]] = {}
         pictures: list[tuple[int, str]] = []
+        repeated: dict[str, list[tuple[int, str]]] = {PICTURE: pictures}
         lines = block.lines
         index = 0
         current: str | None = None
@@ -398,8 +412,8 @@ class _Parser:
             match = _FIELD.match(line)
             if match and _key(match.group(1)) in known:
                 current = _key(match.group(1))
-                if current == PICTURE:
-                    pictures.append((number, match.group(2).strip()))
+                if current in REPEATED:
+                    repeated.setdefault(current, []).append((number, match.group(2).strip()))
                     index += 1
                     continue
                 if current in values:
@@ -414,7 +428,7 @@ class _Parser:
                 break
             elif current is not None and line.startswith(("  ", "\t")) and line.strip():
                 # An indented line continues the field above it.
-                held = pictures if current == PICTURE else None
+                held = repeated.get(current) if current in REPEATED else None
                 line_number, value = held[-1] if held is not None else values[current]
                 joined = (line_number, f"{value} {line.strip()}".strip())
                 if held is not None:
@@ -430,7 +444,7 @@ class _Parser:
             else:
                 break
             index += 1
-        return _Fields(values, _prose(lines[index:]), pictures)
+        return _Fields(values, _prose(lines[index:]), pictures, repeated)
 
     def body(self, block: _Block, known: set[str]) -> _Fields:
         """`fields`, with any sub-headings under the item kept in its prose.
@@ -444,7 +458,7 @@ class _Parser:
             parts.append(f"{'#' * child.level} {child.title}")
             if text := child.text():
                 parts.append(text)
-        return _Fields(found.values, "\n\n".join(parts), found.pictures)
+        return _Fields(found.values, "\n\n".join(parts), found.pictures, found.repeated)
 
     def keep_pictures(self, found: _Fields, kind: str, owner_id: str, name: str) -> None:
         """Note an item's picture lines for whoever imports the file."""
@@ -907,6 +921,146 @@ class _Parser:
             entries.append(entry)
         return entries
 
+    def world_map(self, block: _Block | None) -> tuple[WorldDelta | None, str | None]:
+        """`# Map`: a map drawn up beforehand (models/world.py). Its places
+        stand where the file puts them, fixed from the start; `at:` is east,
+        north in the map's `unit` (km unless it says), from the place it is
+        `in:` or from the map's origin. Returns the map and its start."""
+        if block is None:
+            return None, None
+        head = self.fields(block, _MAP_FIELDS)
+        unit_line, unit_name = head.values.get("unit", (block.line, "km"))
+        unit = _MAP_UNITS.get(_norm(unit_name))
+        if unit is None:
+            self.error(unit_line, f"`unit` is m, km or miles, not “{unit_name}”.")
+            unit = 1000.0
+        delta = WorldDelta()
+        by_name: dict[str, WorldPlace] = {}
+        read: list[tuple[_Block, _Fields, WorldPlace, tuple[float, float] | None, str]] = []
+        for child in block.children:
+            found = self.body(child, _MAP_PLACE_FIELDS)
+            values = found.values
+            if _norm(child.title) in by_name:
+                self.error(child.line, f"Two places on the map are called “{child.title}”.")
+                continue
+            kind = None
+            if "kind" in values:
+                line, text = values["kind"]
+                kind = _norm(text)
+                if kind not in _MAP_KINDS:
+                    self.error(
+                        line, f"`kind` is one of {', '.join(sorted(_MAP_KINDS))}, not “{text}”."
+                    )
+                    kind = None
+            at = None
+            if "at" in values:
+                line, text = values["at"]
+                parts = [p.strip() for p in text.replace(";", ",").split(",")]
+                try:
+                    if len(parts) != 2:
+                        raise ValueError
+                    at = (float(parts[0]), float(parts[1]))
+                except ValueError:
+                    self.error(
+                        line, f"`at` is two numbers, east and north (“1.5, -2”), not “{text}”."
+                    )
+            size = None
+            if "size" in values:
+                line, text = values["size"]
+                try:
+                    size = float(text) * unit
+                    if size <= 0:
+                        raise ValueError
+                except ValueError:
+                    self.error(
+                        line, f"`size` is how wide it is, a number of {unit_name}, not “{text}”."
+                    )
+                    size = None
+            entry = self.lore_entries.get(_norm(child.title))
+            place = WorldPlace(
+                name=child.title,
+                kind=kind,  # type: ignore[arg-type]
+                what=found.prose,
+                lore_id=entry.id if entry is not None else None,
+                size=size,
+            )
+            if "known" in values and self.flag(*values["known"], "known"):
+                if entry is not None and entry.plot_hidden:
+                    self.note(
+                        values["known"][0],
+                        f"“{child.title}” is hidden in the plot, so it isn't known "
+                        "until it is revealed.",
+                    )
+                else:
+                    delta.seen.append(place.id)
+            by_name[_norm(child.title)] = place
+            inside = values.get("in", (0, ""))[1]
+            read.append((child, found, place, at, inside))
+        for _child, found, place, _at, inside in read:
+            if not inside:
+                continue
+            parent = by_name.get(_norm(inside))
+            if parent is None or parent is place:
+                self.error(found.values["in"][0], f"“{inside}” isn't a place on the map.")
+                continue
+            place.inside = parent.id
+        # Positions, parents first: a place `in:` another is placed from it.
+        at_of = {place.id: at for _c, _f, place, at, _i in read}
+        places = {place.id: place for _c, _f, place, _a, _i in read}
+
+        def position(place: WorldPlace, depth: int = 0) -> None:
+            if place.x is not None or depth > len(places):
+                return
+            at = at_of.get(place.id)
+            parent = places.get(place.inside or "")
+            if parent is not None:
+                position(parent, depth + 1)
+            if at is None:
+                return  # placed by the program from its ways and its parent
+            x, y = at[0] * unit, at[1] * unit
+            if parent is not None and parent.x is not None:
+                x, y = parent.x + x, parent.y + y  # type: ignore[operator]
+            place.x, place.y = x, y
+
+        for place in places.values():
+            position(place)
+        for _child, found, place, _at, _inside in read:
+            for line, text in found.repeated.get(WAY, []):
+                target, _, words = text.partition("|")
+                other = by_name.get(_norm(target))
+                if other is None or other is place:
+                    self.error(line, f"“{target.strip()}” isn't another place on the map.")
+                    continue
+                direction, distance = _way_words(words)
+                delta.links = [k for k in delta.links if {k.a, k.b} != {place.id, other.id}]
+                delta.links.append(
+                    WorldLink(a=place.id, b=other.id, direction=direction, distance=distance)
+                )
+            for line, text in found.repeated.get(THING, []):
+                name, _, state = text.partition("|")
+                if not name.strip():
+                    self.error(line, "A `thing` needs a name.")
+                    continue
+                delta.things.append(WorldThing(name=name.strip(), at=place.id, state=state.strip()))
+            if found.pictures:
+                self.note(
+                    found.pictures[0][0],
+                    "Map places take no pictures; put them on the place under # Places.",
+                )
+        delta.places = list(places.values())
+        start = None
+        if "start" in head.values:
+            line, name = head.values["start"]
+            found_start = by_name.get(_norm(name))
+            if found_start is None:
+                self.error(line, f"`start` names “{name}”, which isn't a place on the map.")
+            else:
+                start = found_start.id
+        if not delta.places:
+            self.note(block.line, "The # Map section has no places.")
+            return None, None
+        return delta, start
+
     def opening(self, block: _Block | None, scene: SceneState) -> tuple[str, str]:
         if block is None:
             return "", "generate"
@@ -961,6 +1115,7 @@ class _Parser:
         self.name_clashes(cast + supporting)
         places = self.places(sections.get("places"))
         lore = [*places, *self.places(sections.get("lore"), are_places=False)]
+        world_base, world_start = self.world_map(sections.get("map"))
 
         facts = self.facts(sections.get("facts"))
         ids = self.event_ids([sections.get("timeline"), sections.get("events")])
@@ -1018,6 +1173,9 @@ class _Parser:
             lore=lore,
             supporting=supporting,
             plot=plot,
+            world_map=world_base is not None,
+            world_base=world_base,
+            world_start=world_start,
         )
         agency = self.literal(front, "agency", get_args(AgencyMode))
         if agency:
@@ -1041,6 +1199,36 @@ class _Parser:
         return ParsedPlotFile(
             scenario, sorted(self.problems, key=lambda p: p.line), list(self.pictures)
         )
+
+
+_MAP_UNITS = {
+    "m": 1.0,
+    "metre": 1.0,
+    "metres": 1.0,
+    "meter": 1.0,
+    "meters": 1.0,
+    "km": 1000.0,
+    "kilometre": 1000.0,
+    "kilometres": 1000.0,
+    "kilometer": 1000.0,
+    "kilometers": 1000.0,
+    "mile": 1609.344,
+    "miles": 1609.344,
+}
+_MAP_KINDS = frozenset(PlaceKind.__args__)  # type: ignore[attr-defined]
+
+
+def _way_words(words: str) -> tuple[str | None, str | None]:
+    """A way's words as (direction, distance): "north, five miles" is both;
+    one part is a distance if it measures, else a direction."""
+    from sealedlore.engine.world_layout import metres
+
+    parts = [p.strip() for p in words.split(",") if p.strip()]
+    if not parts:
+        return None, None
+    if len(parts) == 1:
+        return (None, parts[0]) if metres(parts[0]) is not None else (parts[0], None)
+    return parts[0], ", ".join(parts[1:])
 
 
 def _first_sentence(text: str) -> str:

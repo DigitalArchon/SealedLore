@@ -18,7 +18,7 @@ read getting wrong is checked here rather than asked for:
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Sequence
 from typing import Any
 
 from sealedlore.engine.jsonreply import extract_json
@@ -350,10 +350,13 @@ def describe_delta(world: WorldMap, delta: WorldDelta) -> str:
 # --- Folding ------------------------------------------------------------------
 
 
-def applied(world: WorldMap, delta: WorldDelta) -> WorldMap:
+def applied(world: WorldMap, delta: WorldDelta, *, base: bool = False) -> WorldMap:
     """`world` with `delta` applied (a new map; `world` is left alone).
     Places come placed (`place_delta`); one that somehow isn't is placed here
-    by the same rule, so the map is the same however often it is folded."""
+    by the same rule, so the map is the same however often it is folded.
+
+    A passage's places, and the places it puts people or ways between, are
+    seen; an imported map (`base`) shows only the places it says are known."""
     out = world.model_copy(deep=True)
     known = {**world.places, **{p.id: p for p in delta.places}}
     unplaced = [
@@ -379,6 +382,14 @@ def applied(world: WorldMap, delta: WorldDelta) -> WorldMap:
     for thing in delta.things:
         out.things[thing.id] = thing.model_copy(deep=True)
     out.conflicts.extend(delta.conflicts)
+    seen = list(delta.seen)
+    if not base:
+        seen += [p.id for p in delta.places]
+        seen += list(delta.where.values())
+        seen += [end for link in delta.links for end in (link.a, link.b)]
+    for place_id in seen:
+        if place_id not in out.seen:
+            out.seen.append(place_id)
     return out
 
 
@@ -393,10 +404,41 @@ def place_delta(world: WorldMap, delta: WorldDelta, held: str | None) -> None:
             delta.conflicts.append(note)
 
 
-def world_at(path: Sequence[Node]) -> WorldMap:
-    """The map at the end of `path`: every passage's delta, in order."""
+def world_at(
+    path: Sequence[Node],
+    base: WorldDelta | None = None,
+    *,
+    start: str | None = None,
+    hidden: Collection[str] = (),
+) -> WorldMap:
+    """The map at the end of `path`: an imported map (`base`) if the story
+    has one, then every passage's delta, in order. A place linked to a plot
+    entry in `hidden` (`WorldPlace.lore_id`) is left out, with its ways, the
+    things in it and anyone placed there: the plot keeps it from every model
+    until it is revealed, and from the author's map too."""
     world = WorldMap()
+    if base is not None:
+        world = applied(world, base, base=True)
+    world.start = start if start in world.places else None
+    if world.start is not None and world.start not in world.seen:
+        world.seen.append(world.start)  # where the story begins is never under fog
     for node in path:
         if node.meta.world is not None:
             world = applied(world, node.meta.world)
+    gone = {p.id for p in world.places.values() if p.lore_id is not None and p.lore_id in hidden}
+    if not gone:
+        return world
+    inside = True
+    while inside:  # anything inside a hidden place is hidden with it
+        more = {p.id for p in world.places.values() if p.inside in gone and p.id not in gone}
+        gone |= more
+        inside = bool(more)
+    world.places = {k: v for k, v in world.places.items() if k not in gone}
+    world.links = [k for k in world.links if k.a not in gone and k.b not in gone]
+    world.where = {who: pid for who, pid in world.where.items() if pid not in gone}
+    world.things = {k: t for k, t in world.things.items() if t.at not in gone}
+    world.seen = [pid for pid in world.seen if pid not in gone]
+    world.visited = {who: [p for p in ps if p not in gone] for who, ps in world.visited.items()}
+    if world.start in gone:
+        world.start = None
     return world

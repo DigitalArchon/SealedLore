@@ -37,6 +37,9 @@ def normalised(scenario: Scenario) -> dict:
     """The scenario with every generated id replaced by the name it stands for."""
     names = {c.id: c.name for c in (*scenario.cast, *scenario.supporting)}
     names.update({entry.id: entry.title for entry in scenario.lore})
+    if scenario.world_base is not None:
+        names.update({place.id: place.name for place in scenario.world_base.places})
+        names.update({thing.id: thing.name for thing in scenario.world_base.things})
 
     def walk(value):
         if isinstance(value, dict):
@@ -48,7 +51,11 @@ def normalised(scenario: Scenario) -> dict:
     return walk(scenario.model_dump())
 
 
-@pytest.mark.parametrize("path", [SAMPLES / "Doomsville.md", EXTENDED], ids=["sample", "extended"])
+@pytest.mark.parametrize(
+    "path",
+    [SAMPLES / "Doomsville.md", SAMPLES / "Doomsville with a map.md", EXTENDED],
+    ids=["sample", "mapped", "extended"],
+)
 def test_a_sample_survives_reading_and_writing(path: Path):
     text = path.read_text(encoding="utf-8")
     read = read_plot_document(text)

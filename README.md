@@ -252,8 +252,9 @@ Windows offers weaker privacy on the machine itself (see
    billed pay-as-you-go (see the manual's Models section).
 
 3. **Start from a sample.** File → New story from a sample → Doomsville (a
-   survivor at a farmhouse, with a plot), or **Try a sample…** on the start
-   page. Setup opens first; Save, then choose who you are playing and the
+   survivor at a farmhouse, with a plot), or Doomsville with a map (the same
+   story with the map on and the country around Hellsville drawn up), or
+   **Try a sample…** on the start page. Setup opens first; Save, then choose who you are playing and the
    opening is written. Or File → New story from a premise… and describe a
    story in a sentence or two.
 

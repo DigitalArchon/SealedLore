@@ -29,6 +29,9 @@ class WorldPlace(BaseModel):
     # The place it is part of (a room in a building), by id.
     inside: str | None = None
     what: str = ""
+    # A place of an imported map named like a plot place or lore entry: kept
+    # from every model while the plot keeps that entry hidden.
+    lore_id: str | None = None
     # A change to the place itself the story showed ("blown up", "flooded"):
     # its art is redrawn for it, as an edit of the last (engine/world_art.py).
     state: str = ""
@@ -72,9 +75,15 @@ class WorldDelta(BaseModel):
     # A stated distance that disagrees with the one the map already had: the
     # map keeps the first, and says so here.
     conflicts: list[str] = Field(default_factory=list)
+    # Places the story has now seen or told of. An imported map's places are
+    # under fog until then (only its `known` ones are seen from the start);
+    # a passage's own places, and any it names, are seen as it applies.
+    seen: list[str] = Field(default_factory=list)
 
     def empty(self) -> bool:
-        return not (self.places or self.links or self.where or self.things or self.conflicts)
+        return not (
+            self.places or self.links or self.where or self.things or self.conflicts or self.seen
+        )
 
 
 class WorldMap(BaseModel):
@@ -89,6 +98,11 @@ class WorldMap(BaseModel):
     # what the fog lifts from.
     visited: dict[str, list[str]] = Field(default_factory=dict)
     conflicts: list[str] = Field(default_factory=list)
+    # Places the story has seen or told of: what shows through the fog.
+    seen: list[str] = Field(default_factory=list)
+    # An imported map's starting place: where the author's character is
+    # before any passage says otherwise.
+    start: str | None = None
 
 
 # --- The map's art (engine/world_art.py), kept in world_art.json -------------
