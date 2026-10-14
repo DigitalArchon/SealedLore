@@ -2334,7 +2334,8 @@ _text(
 # the world bible's lore as the setting. With the change in what the plan
 # shows, the old words gone and the ground's look instead, Qwen drew the
 # fire 6 times in 6; "no writing of any kind" cut its labels on the barn
-# from 2 of 3 to 1 of 3, not on the station (3 of 3, named things labelled)
+# from 2 of 3 to 1 of 3, not on the station (3 of 3, named things labelled).
+# Qwen is the default since; Nano Banana Pro the premium choice
 # (SealedLoreDocs design/map.md, Oct 15 2026).
 _text(
     "map.picture.isometric",

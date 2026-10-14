@@ -51,6 +51,67 @@ RECOMMENDED_MODELS: dict[str, str] = {
 }
 
 
+class RecommendedModel(BaseModel):
+    """One model offered beside a field, with what it is good and bad at."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    label: str
+    note: str
+
+
+# The image models offered under Recommended beside a field (Settings →
+# Images, the portraits dialog), the default first. Measured in
+# SealedLoreDocs design/images.md and design/map.md (Oct 15 2026).
+RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
+    "portrait_model": (
+        # Three Doomsville characters on nine models: it followed every
+        # detail of the description, and it takes reference pictures.
+        RecommendedModel(
+            id="flux-2-klein-9b",
+            label="FLUX.2 klein 9B",
+            note="Follows a character's description closely, about $0.01 a portrait, and "
+            "can be given a character's earlier pictures to keep them the same.",
+        ),
+        RecommendedModel(
+            id="z-image-turbo",
+            label="Z Image Turbo",
+            note="As good or better for a single portrait (about $0.012), but it can't be "
+            "given reference pictures, so it can't keep a character the same from one "
+            "picture to the next.",
+        ),
+        RecommendedModel(
+            id="bytedance/seedream-v5.0-flash",
+            label="Seedream 5.0 Flash (premium)",
+            note="The most finished portraits of those tried, and up to ten reference "
+            "pictures, at about $0.027 a portrait: nearly three times the default.",
+        ),
+    ),
+    "map_isometric_model": (
+        # With the clearer prompt it showed the change 6/6 and kept the layout.
+        RecommendedModel(
+            id="qwen-image",
+            label="Qwen Image",
+            note="Keeps the map's layout and shows what has changed, at about $0.02 a view "
+            "(free within a NanoGPT subscription's daily allowance). Now and then it "
+            "writes a name on a place.",
+        ),
+        RecommendedModel(
+            id="nano-banana-pro-edit",
+            label="Nano Banana Pro (premium)",
+            note="The most faithful of the 13 models tried, with no writing on the picture, "
+            "at about $0.14 a view: seven times Qwen's.",
+        ),
+    ),
+}
+
+
+def recommended_image_model(role: str, model: str) -> RecommendedModel | None:
+    """The recommendation for `model` in a role, or None if it isn't one."""
+    return next((r for r in RECOMMENDED_IMAGE_MODELS.get(role, ()) if r.id == model), None)
+
+
 def on_nanogpt(base_url: str) -> bool:
     """The endpoint is NanoGPT's (whose model ids and routes these are)."""
     host = (urlparse(base_url.strip()).hostname or "").lower()
@@ -470,10 +531,11 @@ class Config(BaseModel):
     map_picture_daily_limit: int = 40
     # The isometric view of the local map (Map → Isometric), painted from the
     # program's own render of the plan when the author asks, never on its
-    # own. Nano Banana Pro edit was the one of 13 that kept the layout, drew
-    # isometric and showed a change (a barn burning), at $0.14 a view
-    # (SealedLoreDocs design/map.md, Oct 15 2026).
-    map_isometric_model: str = "nano-banana-pro-edit"
+    # own. Qwen Image with the clearer prompt kept the layout and showed the
+    # change 6/6, at $0.02 a view; Nano Banana Pro edit, the most faithful
+    # of 13, is the premium choice at $0.14 (the author's call, Oct 15 2026;
+    # RECOMMENDED_IMAGE_MODELS, SealedLoreDocs design/map.md).
+    map_isometric_model: str = "qwen-image"
 
     # Pictures (engine/image_prompt.py, providers/images.py). The image model
     # takes reference pictures: Seedream 5.0 Pro was the author's pick for

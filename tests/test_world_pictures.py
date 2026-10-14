@@ -232,7 +232,7 @@ def test_the_isometric_view_is_painted_only_when_asked_from_the_plan(session, tm
 
     session.config.map_pictures = False  # the press is the approval
     model, _price, problem = session.isometric_offer()
-    assert model == "nano-banana-pro-edit" and problem is None
+    assert model == "qwen-image" and problem is None
     assert session.map_picture_jobs() == []  # nothing painted on its own
     assert session.start_isometric("farm", lambda: png(16, 12))
     session._isometric_thread.join(10)
@@ -240,7 +240,7 @@ def test_the_isometric_view_is_painted_only_when_asked_from_the_plan(session, tm
     view = art.picture_for("isometric", "farm")
     assert view is not None and view.state == isometric_state(session.world(), "farm")
     payload = FakeImages.sent[-1]
-    assert payload["model"] == "nano-banana-pro-edit"
+    assert payload["model"] == "qwen-image"
     assert "Redraw this game map as an isometric view" in payload["prompt"]
     assert "data:image/png;base64" in json.dumps(payload)  # the plan's picture went with it
     log_file = tmp_path / "stories" / session.story.id / "api_log.jsonl"

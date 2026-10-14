@@ -10,6 +10,7 @@ leaves out.
 from __future__ import annotations
 
 import inspect
+import textwrap
 import weakref
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -23,6 +24,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMenu,
     QPushButton,
     QToolButton,
     QTreeWidget,
@@ -36,7 +38,7 @@ from sealedlore.engine.routing import describe, routable, route_body
 from sealedlore.gui.fields import line_edit, set_field_text
 from sealedlore.gui.route_dialog import RouteDialog
 from sealedlore.gui.worker import GenerationWorker
-from sealedlore.models.config import ProviderConfig
+from sealedlore.models.config import ProviderConfig, RecommendedModel
 from sealedlore.models.route import ModelRoute
 from sealedlore.providers.base import ChatProvider
 from sealedlore.providers.private_catalog import encrypted_counterpart, privacy_label
@@ -501,6 +503,39 @@ class ModelPickerDialog(QDialog):
             self.accept()
 
 
+def recommended_button(
+    choices: tuple[RecommendedModel, ...], choose: Callable[[str], None]
+) -> QToolButton | None:
+    """ "Recommended ▾": the models recommended for a role, each with its
+    note under its name; choosing one puts it in the field."""
+    if not choices:
+        return None
+    button = QToolButton()
+    button.setText("Recommended")
+    button.setToolTip("Models recommended for this, with what each is good at")
+    button.setPopupMode(QToolButton.InstantPopup)
+    menu = QMenu(button)
+    menu.setToolTipsVisible(True)
+    for index, choice in enumerate(choices):
+        label = choice.label + (" (default)" if index == 0 else "")
+        action = menu.addAction(label)
+        action.setToolTip(choice.note)
+        action.setStatusTip(choice.note)
+        action.triggered.connect(lambda _checked=False, model=choice.id: choose(model))
+        # The note itself, readable without hovering: a disabled line under it.
+        note = menu.addAction(_wrapped(choice.note))
+        note.setEnabled(False)
+        if index < len(choices) - 1:
+            menu.addSeparator()
+    button.setMenu(menu)
+    return button
+
+
+def _wrapped(text: str, width: int = 64) -> str:
+    """A note broken into lines for a menu entry, which never wraps itself."""
+    return "\n".join(textwrap.wrap(text, width))
+
+
 class ModelField(QWidget):
     """A model id: typed, or chosen from the endpoint's list with Browse…."""
 
@@ -514,12 +549,14 @@ class ModelField(QWidget):
         route_endpoint: RouteEndpoint | None = None,
         browse_route: BrowseRoute | None = None,
         hosts_of: Callable[[str], tuple[str, ...] | None] | None = None,
+        recommended: tuple[RecommendedModel, ...] = (),
     ) -> None:
         """`route_endpoint` (held weakly) gives the field a route: NanoGPT's
         host for its model, chosen from the label beside it; `browse_route`
         is then Browse…, and returns the route with the model. `hosts_of`
         (held weakly): a model's hosts from the endpoint's list, None while
-        unknown; a model with fewer than two has no route."""
+        unknown; a model with fewer than two has no route. `recommended`:
+        offered under Recommended beside the field, each with its note."""
         super().__init__()
         self.route: ModelRoute | None = None
         self._route_endpoint = _weak(route_endpoint) if route_endpoint else None
@@ -542,12 +579,15 @@ class ModelField(QWidget):
         self.route_button = QToolButton()
         self.route_button.setObjectName("routeButton")
         self.route_button.clicked.connect(self._edit_route)
+        self.recommended_button = recommended_button(recommended, self.setText)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
         layout.addWidget(self.edit, 1)
         layout.addWidget(self.privacy)
         layout.addWidget(self.route_button)
+        if self.recommended_button is not None:
+            layout.addWidget(self.recommended_button)
         layout.addWidget(self.button)
         self.edit.textChanged.connect(self._show_privacy)
         self.edit.textChanged.connect(lambda _text: self._show_route())

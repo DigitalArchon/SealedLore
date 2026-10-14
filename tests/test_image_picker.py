@@ -123,3 +123,22 @@ def test_the_picture_dialog_and_settings_choose_through_it(app, catalog, monkeyp
     sizes = [dialog.image_size.itemText(i) for i in range(dialog.image_size.count())]
     assert sizes == ["1k", "2k", "4k"], "sizes follow the chosen model"
     dialog.deleteLater()
+
+
+def test_recommended_image_models_are_offered_beside_the_field_with_their_notes(app):
+    """Recommended ▾ beside an image model field: the default first, each
+    with its note readable in the menu; choosing one fills the field."""
+    from sealedlore.gui.model_picker import ModelField
+    from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS, recommended_image_model
+
+    choices = RECOMMENDED_IMAGE_MODELS["map_isometric_model"]
+    assert choices[0].id == Config().map_isometric_model == "qwen-image"
+    assert recommended_image_model("map_isometric_model", "nano-banana-pro-edit") is not None
+    field = ModelField("", recommended=choices)
+    actions = [a for a in field.recommended_button.menu().actions() if not a.isSeparator()]
+    assert actions[0].text() == "Qwen Image (default)"
+    assert not actions[1].isEnabled() and "changed" in actions[1].text()  # the note
+    premium = next(a for a in actions if a.text().startswith("Nano Banana Pro"))
+    premium.trigger()
+    assert field.text() == "nano-banana-pro-edit"
+    assert ModelField("").recommended_button is None

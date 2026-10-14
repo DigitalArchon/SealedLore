@@ -910,8 +910,9 @@ settings and a scenario file keep the art and the pictures. Story pictures
 (Image…) still show you every request first.
 
 On the local map, **Isometric** shows the area painted in isometric by an
-image model (Settings → Images → **Isometric view model**, Nano Banana Pro
-unless you choose another). It is painted from the map itself, only when you
+image model (Settings → Images → **Isometric view model**: Qwen Image unless
+you choose another; **Recommended** beside it offers Nano Banana Pro, the most
+faithful, at about seven times the price). It is painted from the map itself, only when you
 press **Paint it**, which gives the model and its price; it counts with the
 day's map pictures. The 2D map is the story's truth: the painting matches it
 closely, not exactly. Once the story changes something there (the barn

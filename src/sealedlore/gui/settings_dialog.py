@@ -60,6 +60,7 @@ from sealedlore.models.config import (
     DEFAULT_EMBEDDING_MODEL,
     DEFAULT_STORY_MODEL,
     MEDIA_API_LABELS,
+    RECOMMENDED_IMAGE_MODELS,
     RECOMMENDED_MODELS,
     Config,
     EmbeddingProviderConfig,
@@ -67,6 +68,7 @@ from sealedlore.models.config import (
     ProviderConfig,
     _same_host,
     on_nanogpt,
+    recommended_image_model,
     recommended_models,
     require_https,
 )
@@ -1066,6 +1068,7 @@ class SettingsDialog(QDialog):
         self.map_isometric_model = ModelField(
             self.config.map_isometric_model,
             self._browse_image_models if self.image_catalog is not None else None,
+            recommended=RECOMMENDED_IMAGE_MODELS["map_isometric_model"],
         )
         form.addRow("Isometric view model", self.map_isometric_model)
         self.map_isometric_note = QLabel()
@@ -1085,10 +1088,12 @@ class SettingsDialog(QDialog):
             if info is not None and not info.accepts_images
             else ""
         )
+        known = recommended_image_model("map_isometric_model", model)
         self.map_isometric_note.setText(
             "Map → Isometric paints the local map in isometric from the map itself, only when "
             "you ask, counted with the map pictures above (needs no tick). "
             f"{model or 'No model'}: {price}.{takes}"
+            + (f" {known.note}" if known is not None else "")
         )
 
     def _sync_map_picture_note(self, *_args) -> None:
