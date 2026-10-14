@@ -480,7 +480,12 @@ story model will be sent.
 story model, the most expensive place to run a small call on every turn. On
 NanoGPT a new setup starts with the ones that measured best, and Settings →
 Models has **Use recommended models** to fill them in on a setup you already
-have (nothing changes until you press Save):
+have (nothing changes until you press Save). **Recommended** beside the story,
+scene, plot, lore, map and map art fields lists the models measured for that
+job, the recommended one first, each with a note on what it is good at and
+what it costs (for the story, Claude Opus 5.5 as the premium choice: the
+better storyteller on every blind judge, at about twice Sonnet's price).
+Choosing one only fills in the field.
 
 | For | Model | Why |
 |---|---|---|

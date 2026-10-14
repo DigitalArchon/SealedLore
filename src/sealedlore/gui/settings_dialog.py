@@ -63,13 +63,14 @@ from sealedlore.models.config import (
     MEDIA_API_LABELS,
     RECOMMENDED_IMAGE_MODELS,
     RECOMMENDED_MODELS,
+    RECOMMENDED_TEXT_MODELS,
     Config,
     EmbeddingProviderConfig,
     MediaEndpoint,
     ProviderConfig,
     _same_host,
     on_nanogpt,
-    recommended_image_model,
+    recommended_model,
     recommended_models,
     require_https,
 )
@@ -294,8 +295,9 @@ class SettingsDialog(QDialog):
         """The endpoint as typed, for the model fields' routes."""
         return self.base_url.text().strip() or None
 
-    def _routed_field(self, text: str) -> ModelField:
-        """A role's model field, with its route beside it (NanoGPT only)."""
+    def _routed_field(self, text: str, role: str = "") -> ModelField:
+        """A role's model field, with its route beside it (NanoGPT only) and
+        the models measured for it under Recommended."""
         browse = self._browse_route if self._catalog is not None else None
         return ModelField(
             text,
@@ -303,6 +305,7 @@ class SettingsDialog(QDialog):
             route_endpoint=self._route_endpoint,
             browse_route=browse,
             hosts_of=self._hosts_of,
+            recommended=RECOMMENDED_TEXT_MODELS.get(role, ()),
         )
 
     def _hosts_of(self, model: str) -> tuple[str, ...] | None:
@@ -340,7 +343,9 @@ class SettingsDialog(QDialog):
 
         # A new setup starts on Sonnet 4.6 rather than a blank field: one
         # thing fewer before the first story.
-        self.model = self._routed_field((provider.model if provider else "") or DEFAULT_STORY_MODEL)
+        self.model = self._routed_field(
+            (provider.model if provider else "") or DEFAULT_STORY_MODEL, "story"
+        )
         self.model.setPlaceholderText(DEFAULT_STORY_MODEL)
         self.model.setToolTip("The storyteller: writes every passage.")
         # Only a model the author changes here becomes the open story's: saving
@@ -387,7 +392,7 @@ class SettingsDialog(QDialog):
         # (models/config.py); one already saved keeps what it has, blanks too.
         fresh = recommended_models(self.base_url.text()) if provider is None else {}
         self.scene_model = self._routed_field(
-            self.config.scene_model or fresh.get("scene_model", "")
+            self.config.scene_model or fresh.get("scene_model", ""), "scene_model"
         )
         self.scene_model.setPlaceholderText("same as the story's summarisation model")
         self.scene_model.setToolTip(
@@ -407,7 +412,9 @@ class SettingsDialog(QDialog):
             "tab follows (with an Undo). Off, they change only when you set them."
         )
         form.addRow(self.plot_reads)
-        self.plot_model = self._routed_field(self.config.plot_model or fresh.get("plot_model", ""))
+        self.plot_model = self._routed_field(
+            self.config.plot_model or fresh.get("plot_model", ""), "plot_model"
+        )
         self.plot_model.setPlaceholderText("same as the scene model")
         self.plot_model.setToolTip(
             "Decides when a plot's events happen: a small call before the passage "
@@ -416,7 +423,7 @@ class SettingsDialog(QDialog):
         )
         form.addRow("Plot model", self.plot_model)
 
-        self.lore_model = self._routed_field(self.config.lore_model)
+        self.lore_model = self._routed_field(self.config.lore_model, "lore_model")
         self.lore_model.setPlaceholderText("blank: same as the scene model")
         self.lore_model.setToolTip(
             "Picks lore after each passage when a lorebook is too large to send whole and "
@@ -426,7 +433,9 @@ class SettingsDialog(QDialog):
         )
         form.addRow("Lore model", self.lore_model)
 
-        self.map_model = self._routed_field(self.config.map_model or fresh.get("map_model", ""))
+        self.map_model = self._routed_field(
+            self.config.map_model or fresh.get("map_model", ""), "map_model"
+        )
         self.map_model.setPlaceholderText("same as the scene model")
         self.map_model.setToolTip(
             "Keeps the map of a story that has it on (Story → Setup): after each passage it "
@@ -435,7 +444,7 @@ class SettingsDialog(QDialog):
         )
         form.addRow("Map model", self.map_model)
         self.map_art_model = self._routed_field(
-            self.config.map_art_model or fresh.get("map_art_model", "")
+            self.config.map_art_model or fresh.get("map_art_model", ""), "map_art_model"
         )
         self.map_art_model.setPlaceholderText("same as the map model")
         self.map_art_model.setToolTip(
@@ -1059,7 +1068,7 @@ class SettingsDialog(QDialog):
         info = next((m for m in self._image_models if m.id == model), None)
         each = info.price(portrait_size(info)) if info else None
         price = f"${each:.3f} a portrait listed" if each else "price not listed"
-        known = recommended_image_model("portrait_model", model)
+        known = recommended_model("portrait_model", model)
         self.portrait_note.setText(
             "A portrait of each character from their card, offered when a story starts and "
             "on the Cast page; every prompt is shown to you first. "
@@ -1119,7 +1128,7 @@ class SettingsDialog(QDialog):
             if info is not None and not info.accepts_images
             else ""
         )
-        known = recommended_image_model("map_isometric_model", model)
+        known = recommended_model("map_isometric_model", model)
         self.map_isometric_note.setText(
             "Map → Isometric paints the local map in isometric from the map itself, only when "
             "you ask, counted with the map pictures above (needs no tick). "

@@ -125,15 +125,15 @@ def test_the_picture_dialog_and_settings_choose_through_it(app, catalog, monkeyp
     dialog.deleteLater()
 
 
-def test_recommended_image_models_are_offered_beside_the_field_with_their_notes(app):
+def test_recommended_models_are_offered_beside_the_field_with_their_notes(app):
     """Recommended ▾ beside an image model field: the default first, each
     with its note readable in the menu; choosing one fills the field."""
     from sealedlore.gui.model_picker import ModelField
-    from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS, recommended_image_model
+    from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS, recommended_model
 
     choices = RECOMMENDED_IMAGE_MODELS["map_isometric_model"]
     assert choices[0].id == Config().map_isometric_model == "qwen-image"
-    assert recommended_image_model("map_isometric_model", "nano-banana-pro-edit") is not None
+    assert recommended_model("map_isometric_model", "nano-banana-pro-edit") is not None
     field = ModelField("", recommended=choices)
     actions = [a for a in field.recommended_button.menu().actions() if not a.isSeparator()]
     assert actions[0].text() == "Qwen Image (default)"
@@ -142,3 +142,34 @@ def test_recommended_image_models_are_offered_beside_the_field_with_their_notes(
     premium.trigger()
     assert field.text() == "nano-banana-pro-edit"
     assert ModelField("").recommended_button is None
+
+
+def test_the_text_model_fields_offer_what_was_measured_for_them(app):
+    """Settings → Models: the measured models beside each role (the
+    defaults unchanged, first)."""
+    from sealedlore.gui.settings_dialog import SettingsDialog
+    from sealedlore.models.config import (
+        DEFAULT_STORY_MODEL,
+        RECOMMENDED_MODELS,
+        RECOMMENDED_TEXT_MODELS,
+    )
+
+    dialog = SettingsDialog(Config(), None)
+    for role, field in (
+        ("story", dialog.model),
+        ("scene_model", dialog.scene_model),
+        ("plot_model", dialog.plot_model),
+        ("lore_model", dialog.lore_model),
+        ("map_model", dialog.map_model),
+        ("map_art_model", dialog.map_art_model),
+    ):
+        assert field.recommended_button is not None, role
+        first = RECOMMENDED_TEXT_MODELS[role][0].id
+        assert first == (DEFAULT_STORY_MODEL if role == "story" else RECOMMENDED_MODELS[role])
+    premium = next(
+        a for a in dialog.model.recommended_button.menu().actions() if "(premium)" in a.text()
+    )
+    premium.trigger()
+    assert dialog.model.text() == "anthropic/claude-opus-5.5"
+    assert dialog.summarization_model.recommended_button is None  # nothing measured
+    dialog.reject()

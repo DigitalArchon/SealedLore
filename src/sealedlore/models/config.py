@@ -59,6 +59,8 @@ class RecommendedModel(BaseModel):
     id: str
     label: str
     note: str
+    # Shown after the label in brackets: "default", "recommended", "premium".
+    tag: str = ""
 
 
 # The image models offered under Recommended beside a field (Settings →
@@ -70,6 +72,7 @@ RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
         # detail of the description, and it takes reference pictures.
         RecommendedModel(
             id="flux-2-klein-9b",
+            tag="default",
             label="FLUX.2 klein 9B",
             note="Follows a character's description closely, about $0.01 a portrait, and "
             "can be given a character's earlier pictures to keep them the same.",
@@ -90,7 +93,8 @@ RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
         ),
         RecommendedModel(
             id="bytedance/seedream-v5.0-flash",
-            label="Seedream 5.0 Flash (premium)",
+            label="Seedream 5.0 Flash",
+            tag="premium",
             note="The most finished portraits of those tried, and up to ten reference "
             "pictures, at about $0.027 a portrait: nearly three times the default.",
         ),
@@ -99,6 +103,7 @@ RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
         # With the clearer prompt it showed the change 6/6 and kept the layout.
         RecommendedModel(
             id="qwen-image",
+            tag="default",
             label="Qwen Image",
             note="Keeps the map's layout and shows what has changed, at about $0.02 a view "
             "(free within a NanoGPT subscription's daily allowance). Now and then it "
@@ -106,7 +111,8 @@ RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
         ),
         RecommendedModel(
             id="nano-banana-pro-edit",
-            label="Nano Banana Pro (premium)",
+            label="Nano Banana Pro",
+            tag="premium",
             note="The most faithful of the 13 models tried, with no writing on the picture, "
             "at about $0.14 a view: seven times Qwen's.",
         ),
@@ -114,9 +120,121 @@ RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
 }
 
 
-def recommended_image_model(role: str, model: str) -> RecommendedModel | None:
-    """The recommendation for `model` in a role, or None if it isn't one."""
-    return next((r for r in RECOMMENDED_IMAGE_MODELS.get(role, ()) if r.id == model), None)
+# The text models offered under Recommended beside Settings → Models' fields,
+# from what was measured (SealedLoreDocs design/*.md). The defaults are
+# unchanged: DEFAULT_STORY_MODEL and RECOMMENDED_MODELS come first.
+RECOMMENDED_TEXT_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
+    "story": (
+        RecommendedModel(
+            id=DEFAULT_STORY_MODEL,
+            label="Claude Sonnet 4.6",
+            tag="default",
+            note="Best on price for quality of those measured, about $0.023 a turn on a warm "
+            "cache, and it keeps the rules: no held character written and no shortcut in 128 "
+            "judged passages.",
+        ),
+        RecommendedModel(
+            id="anthropic/claude-opus-5.5",
+            label="Claude Opus 5.5",
+            tag="premium",
+            note="The better storyteller on every blind judge (ranked first 13-21 times of 32 "
+            "against Sonnet's 0-4): more specific detail, and it answers you fully. About "
+            "twice Sonnet's cost a turn ($0.047), and it counts about half as many tokens "
+            "again as the app estimates.",
+        ),
+        RecommendedModel(
+            id="z-ai/glm-5.3",
+            label="GLM 5.3",
+            note="Included in a NanoGPT subscription, and the model most of SealedLore's own "
+            "testing plays on. Not ranked against Sonnet or Opus; sent its lowest reasoning "
+            "level.",
+        ),
+    ),
+    "scene_model": (
+        RecommendedModel(
+            id=RECOMMENDED_MODELS["scene_model"],
+            label="GLM 5.3",
+            tag="recommended",
+            note="A scene read needs a model that reasons: 89 of 94 rosters right and 32 of 36 "
+            "comings and goings on judged reads, where every model that doesn't reason got "
+            "72-76 whatever its size. Included in a NanoGPT subscription.",
+        ),
+        RecommendedModel(
+            id="deepseek/deepseek-v4-pro:thinking",
+            label="DeepSeek V4 Pro, thinking",
+            note="As accurate as GLM 5.3 when it thinks, at two to three times the wait.",
+        ),
+    ),
+    "plot_model": (
+        RecommendedModel(
+            id=RECOMMENDED_MODELS["plot_model"],
+            label="Mistral Medium 3.1",
+            tag="recommended",
+            note="The steadiest director on repeats, about 1s before the turn, at about a "
+            "third of Medium 3.5's price. Not the scene model: GLM 5.3 reads well but begins "
+            "events too readily.",
+        ),
+        RecommendedModel(
+            id="mistralai/mistral-medium-3.5",
+            label="Mistral Medium 3.5",
+            tag="premium",
+            note="Measured best, but priced per call.",
+        ),
+    ),
+    "lore_model": (
+        RecommendedModel(
+            id=RECOMMENDED_MODELS["lore_model"],
+            label="DeepSeek V4.1 Flash",
+            tag="recommended",
+            note="Picks the lore each turn needs, after the passage: tied with nano-gpt's Jev "
+            "and well ahead of similarity alone in live play, and included in a NanoGPT "
+            "subscription.",
+        ),
+        RecommendedModel(
+            id="mistralai/mistral-medium-3.5",
+            label="Mistral Medium 3.5",
+            tag="premium",
+            note="Ranked first most often in live play (13-15 times of 32 against DeepSeek's "
+            "7-9), with the fewest contradictions of the lore, but outside the subscription.",
+        ),
+    ),
+    "map_model": (
+        RecommendedModel(
+            id=RECOMMENDED_MODELS["map_model"],
+            label="DeepSeek V4.1 Flash",
+            tag="recommended",
+            note="As accurate as GLM 5.3 on judged replays, about 4s a read, and no slower on "
+            "a long story.",
+        ),
+        RecommendedModel(
+            id="z-ai/glm-5.3",
+            label="GLM 5.3",
+            note="As accurate, but on a long story it reasoned thousands of tokens a read.",
+        ),
+    ),
+    "map_art_model": (
+        RecommendedModel(
+            id=RECOMMENDED_MODELS["map_art_model"],
+            label="GLM 5.3 Flash",
+            tag="recommended",
+            note="The best free sprite model: judged second only to Kimi K3, about 5.5s a "
+            "sprite at its lowest reasoning level, which SealedLore sends.",
+        ),
+        RecommendedModel(
+            id="moonshotai/kimi-k3",
+            label="Kimi K3",
+            tag="premium",
+            note="Judged best for the map's drawings, but slower and paid.",
+        ),
+    ),
+}
+
+
+def recommended_model(role: str, model: str) -> RecommendedModel | None:
+    """The recommendation for `model` in a role (a Config field name, or
+    "story"), or None if it isn't one."""
+    choices = RECOMMENDED_IMAGE_MODELS.get(role) or RECOMMENDED_TEXT_MODELS.get(role, ())
+    return next((r for r in choices if r.id == model), None)
 
 
 def on_nanogpt(base_url: str) -> bool:

@@ -35,7 +35,7 @@ from sealedlore.gui.model_picker import ModelField
 from sealedlore.gui.ref_images import thumbnail_of
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.character import Character
-from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS, recommended_image_model
+from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS, recommended_model
 from sealedlore.providers.images import ImageModelInfo
 
 THUMB_SIDE = 64
@@ -237,7 +237,7 @@ class PortraitsDialog(QDialog):
         info = self.model_info()
         each = info.price(portrait_size(info)) if info is not None else None
         count = sum(row.wanted() for row in self.rows)
-        known = recommended_image_model("portrait_model", model)
+        known = recommended_model("portrait_model", model)
         price = f"about ${each:.3f} a portrait" if each else "price not listed"
         self.model_note.setText(
             f"{model or 'No model'}: {price}." + (f" {known.note}" if known is not None else "")

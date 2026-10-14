@@ -517,7 +517,7 @@ def recommended_button(
     menu = QMenu(button)
     menu.setToolTipsVisible(True)
     for index, choice in enumerate(choices):
-        label = choice.label + (" (default)" if index == 0 else "")
+        label = choice.label + (f" ({choice.tag})" if choice.tag else "")
         action = menu.addAction(label)
         action.setToolTip(choice.note)
         action.setStatusTip(choice.note)
