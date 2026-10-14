@@ -1854,6 +1854,13 @@ _text(
 # 8 position errors to 2. The program holds every entry to its quote. A
 # place's "state" was added after (the author: a barn blown up is drawn blown
 # up), not replayed.
+# "The place is the most specific one on the map" (Oct 15 2026): live, John
+# ran to the burning barn and stood thirty feet out, read as "the farm", and
+# the map kept him at the farmhouse door. Replayed on 104 logged reads (four
+# Doomsville-with-a-map chains and the author's play), one take an arm, the
+# 55 that differed judged blind by two Claude judges: preferred 18-14 and
+# 20-12 (23 ties each), errors 28 -> 22 and 40 -> 25. It invents a sub-place
+# now and then ("The porch" for the porch step), which the judges counted.
 
 _text(
     "map_read.system",
@@ -1939,6 +1946,9 @@ Who is where
 - Someone still travelling at the end of the passage is on the route: add the
   road or route as a place (kind "route") if it is not on the map.
 - Moving within a place counts: from the inn to the north gate is a move.
+- The place is the most specific one on the map: at a building's door, in its
+  yard or just outside it (in front of the barn, a few yards from it) is at
+  that building; out in the open, the place they are in.
 - Only people shown there. Someone talked about, sent for, or heard over a
   channel has not moved.
 
@@ -2073,7 +2083,8 @@ Setting: {setting}.""",
 )
 
 # Not measured; asked as the sprites' changes are, which kept them the same
-# object (the author: a barn blown up is drawn blown up).
+# object (the author: a barn blown up is drawn blown up). "fire" is offered
+# here, not in map.layout's list of fills, so the measured prompt stands.
 _text(
     "map.layout.change",
     MAP,
@@ -2082,7 +2093,8 @@ _text(
     "edit of its last plan, which is in the conversation before it.",
     """\
 Now lay out the same {place}, {change}. Keep what still stands where it was, show what \
-changed, and reply in the same format.""",
+changed (what fell as rubble, walls gone where they are gone, anything still burning as an area \
+with "fill": "fire"), and reply in the same format.""",
     (("place", "The place"), ("change", "What happened to it")),
 )
 

@@ -254,6 +254,24 @@ def test_land_along_a_way_never_counts_as_its_first_place_s_own():
     assert "terrain:farm" in keys and road.key not in keys
 
 
+def test_a_building_the_story_changed_is_planned_anew_though_nobody_went_in():
+    """The barn blown up while Jane stood in the yard: its plan is drawn in
+    its new state (an edit of the old, with fire offered), so the local map
+    shows the ruin; an unchanged building nobody entered gets none."""
+    world = doomsville()
+    barn = next(p for p in world.places.values() if p.kind == "building" and p.id != "house")
+    world.places[barn.id] = barn.model_copy(update={"state": "blown up and burning"})
+    keys = [j.key for j in plan_art(world, WorldArt(), here="house", setting="x")]
+    assert f"layout:{barn.id}:blown up and burning" in keys
+    before = PlaceLayout(place_id=barn.id, rows=["#"], spec={"features": []})
+    jobs = plan_art(world, WorldArt(layouts={barn.id: {"": before}}), here="house", setting="x")
+    job = next(j for j in jobs if j.key == f"layout:{barn.id}:blown up and burning")
+    assert '"fill": "fire"' in job.messages[-1].text
+    world.places[barn.id] = barn  # unchanged again: no plan of its own
+    keys = [j.key for j in plan_art(world, WorldArt(), here="house", setting="x")]
+    assert not any(k.startswith(f"layout:{barn.id}") for k in keys)
+
+
 def test_land_is_drawn_round_the_local_area_not_the_country_it_is_in():
     """The caves in the hills: land round the caves (the hills are wider
     than a local area), never a 12 km patch of hills that would cover the

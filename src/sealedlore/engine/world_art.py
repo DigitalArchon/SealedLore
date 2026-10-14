@@ -74,6 +74,7 @@ TILES: dict[str, str] = {
     "W": "window",
     "%": "fence or barricade",
     ":": "rubble",
+    "*": "fire",
     "s": "sand",
     " ": "nothing: space, or the dark of rock",
 }
@@ -93,6 +94,7 @@ FILLS: dict[str, str] = {
     "trees": "T",
     "brush": ",",
     "rubble": ":",
+    "fire": "*",
     "floor": "_",
     "ground": ".",
     "dark": " ",
@@ -870,6 +872,16 @@ def plan_art(
             wanted[area.id] = area
         if place.kind == "building":
             wanted[pid] = place
+    # A building the story changed, standing in one of those plans, is drawn
+    # anew in its state though nobody has been inside: the local map shows
+    # it open in its plan (live, a barn blown up and burning stayed an
+    # intact roof on the farm's plan for three passages).
+    for area in list(wanted.values()):
+        if area.kind == "building":
+            continue
+        for child in world.places.values():
+            if child.inside == area.id and child.kind == "building" and child.state:
+                wanted.setdefault(child.id, child)
     for pid, place in wanted.items():
         if art.layout_for(pid, place.state) is not None:
             continue

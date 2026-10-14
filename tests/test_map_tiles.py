@@ -78,3 +78,17 @@ def test_a_town_s_wall_is_not_roofed_over(app):
     ring[6] = "#....#___#" + "." * 19 + "#"
     ring[7] = "#....##+##" + "." * 19 + "#"
     assert building_boxes(ring) == [(5, 9, 5, 7)]  # the house inside, not the wall
+
+
+def test_fire_reads_as_fire_even_drawn_small(app):
+    """A plan's "fire" (the story's barn burning) is embers with flames on
+    them: orange however small the plan is drawn."""
+    from sealedlore.engine.world_art import FILLS
+
+    assert FILLS["fire"] == "*"
+    image = render_tiles(("....", ".**.", ".**.", "...."), "snow", roofs=True, seed=1, cleared=())
+    small = image.scaled(4, 4)
+    hot = small.pixelColor(1, 1)
+    assert hot.red() > 140 and hot.blue() < 90
+    cold = small.pixelColor(0, 0)
+    assert cold.blue() > 150  # the snow round it stays snow

@@ -279,7 +279,15 @@ class _PlanItem(QGraphicsPixmapItem):
         self.rows = tuple(layout.rows)
         self.roofs = True
         self.cleared: tuple[tuple[int, int, int, int], ...] = ()
+        # Boxes of the buildings in it drawn open for their changed state,
+        # where people at them stand at the front (`_stand`).
+        self.fronts: tuple[tuple[int, int, int, int], ...] = ()
         self.ground = ""
+        # A building the story changed, its plan drawn in that state: shown
+        # open on the local map, in place of its roof, at any zoom.
+        self.changed = bool(
+            place.kind == "building" and place.state and layout.state == place.state
+        )
         # What stands in it, held here as well as by the scene (see WorldView).
         self.dressed: list[QGraphicsItem] = []
         self.setTransformationMode(Qt.FastTransformation)
@@ -287,6 +295,19 @@ class _PlanItem(QGraphicsPixmapItem):
         self.setScale(self.tile / TILE)
         self.setPos(self.west, -self.north)
         self.setZValue(2)
+
+    def fit_to(self, rect: QRectF) -> None:
+        """Lie over `rect` (scene units): its width, centred down it. A
+        building's plan goes over the box its parent's plan drew for it,
+        whatever size the map gives the building (`_fit_in_parents`)."""
+        columns = max((len(r) for r in self.rows), default=1)
+        self.tile = rect.width() / columns
+        self.width_m = rect.width()
+        self.height_m = self.tile * len(self.rows)
+        self.west = rect.left()
+        self.north = -(rect.top() + (rect.height() - self.height_m) / 2)
+        self.setScale(self.tile / TILE)
+        self.setPos(self.west, -self.north)
 
     def render(
         self, ground: str, roofs: bool, cleared: tuple[tuple[int, int, int, int], ...]
@@ -510,6 +531,10 @@ class WorldView(QWidget):
         # item go with its Python wrapper, so the land vanished once built.
         self._items: list[_PlaceItem] = []
         self._plans: dict[str, _PlanItem] = {}
+        # Plans shown only for a changed state (see `_PlanItem.changed`).
+        self._changed_only: set[str] = set()
+        # Building plan -> (its parent's plan, the box drawn for it there).
+        self._boxes: dict[str, tuple[str, tuple[int, int, int, int]]] = {}
         self._links: list[QGraphicsLineItem] = []
         self._land: list[QGraphicsPixmapItem] = []
         self.people: list[_PersonItem] = []
@@ -664,13 +689,16 @@ class WorldView(QWidget):
     # --- building the scene ------------------------------------------------------
 
     def _build(self) -> None:
-        self.scene.clear()
-        self.scene.setSceneRect(QRectF())  # set below from what is drawn
+        # Forget the old items before the scene deletes them: clearing moves
+        # the scrollbars, and the scroll handler (`_scrolled`) walked plans
+        # Qt had already deleted.
         self._items = []
         self._plans = {}
         self._links = []
         self._land = []
         self.people = []
+        self.scene.clear()
+        self.scene.setSceneRect(QRectF())  # set below from what is drawn
         if not self.world.places:
             self.title.setText("Map")
             self.hint.setText(
@@ -738,9 +766,45 @@ class WorldView(QWidget):
             if layout is None or rect is None or not layout.rows:
                 continue
             plan = _PlanItem(place, layout, rect)
+            # Inner plans over outer ones: a building's over its farm's.
+            plan.setZValue(2 + 0.1 * min(len(containers(self.world, [place.id])), 9))
             plan.setVisible(False)
             self.scene.addItem(plan)
             self._plans[place.id] = plan
+        self._fit_in_parents()
+
+    def _fit_in_parents(self) -> None:
+        """Each building's plan over the box its parent's plan drew for it
+        (found by its name there), and that box kept as the one to open
+        (`_boxes`). Live, a farm plan drawn when a building's box was at
+        least 5 tiles wide left a strip of roof beside the barn once the
+        program asked for 4: the box drawn is the one that counts."""
+        self._boxes = {}
+        world = self.world
+        depth = {pid: len(containers(world, [pid])) for pid in self._plans}
+        for pid in sorted(self._plans, key=lambda p: depth[p]):
+            plan = self._plans[pid]
+            parent = self._plans.get(plan.place.inside or "")
+            if parent is None or plan.place.kind != "building":
+                continue
+            names = {_key(n) for n in (plan.place.name, *plan.place.aliases)}
+            spot = next(
+                (xy for label, xy in parent.layout.labels.items() if _key(label) in names), None
+            )
+            if spot is None:
+                continue
+            box = next(
+                (
+                    b
+                    for b in building_boxes(parent.rows)
+                    if b[0] <= spot[0] <= b[1] and b[2] <= spot[1] <= b[3]
+                ),
+                None,
+            )
+            if box is None:
+                continue
+            plan.fit_to(parent.box_rect(box))
+            self._boxes[pid] = (parent.place.id, box)
 
     def _build_places(self) -> None:
         world = self.world
@@ -809,6 +873,8 @@ class WorldView(QWidget):
         port = self.view.mapToScene(self.view.viewport().rect()).boundingRect()
         near = port.adjusted(-port.width(), -port.height(), port.width(), port.height())
         shown_plans: set[str] = set()
+        # Shown only because the story changed them: nobody stands inside.
+        self._changed_only: set[str] = set()
         for pid, plan in self._plans.items():
             if level != "local" or not plan.rect().intersects(near):
                 continue  # the region and the world draw places, not plans
@@ -820,6 +886,9 @@ class WorldView(QWidget):
                 show = on_screen >= INTERIOR_SHOWN_AT or (
                     inside and (parent_shown or on_screen >= PLAN_MIN_PX)
                 )
+                if not show and plan.changed and parent_shown:
+                    show = True
+                    self._changed_only.add(pid)
             else:
                 show = on_screen >= PLAN_MIN_PX
             if show:
@@ -834,16 +903,22 @@ class WorldView(QWidget):
                     f["place_id"]: (f["x"], f["x"] + f["w"] - 1, f["y"], f["y"] + f["h"] - 1)
                     for f in fixed_in_plan(self.world, plan.place)
                 }
+                # The boxes this plan actually drew win (`_fit_in_parents`).
+                fixed.update({c: box for c, (par, box) in self._boxes.items() if par == pid})
                 opened = tuple(sorted(box for child, box in fixed.items() if child in shown_plans))
+                fronts = tuple(
+                    sorted(box for child, box in fixed.items() if child in self._changed_only)
+                )
                 ground = self._ground_for(plan.place, str(plan.layout.spec.get("ground", "")))
                 dressed = plan.childItems()
                 if (
                     not dressed
                     or plan.roofs != roofs
                     or plan.cleared != opened
+                    or plan.fronts != fronts
                     or plan.ground != ground
                 ):
-                    self._dress_plan(plan, ground, roofs, opened)
+                    self._dress_plan(plan, ground, roofs, opened, fronts)
             plan.setVisible(show)
         here = self.here()
         for item in self._items:
@@ -889,9 +964,11 @@ class WorldView(QWidget):
         ground: str,
         roofs: bool,
         opened: tuple[tuple[int, int, int, int], ...],
+        fronts: tuple[tuple[int, int, int, int], ...] = (),
     ) -> None:
         """Render a plan and stand everything in it: pictured buildings on
         cleared ground, the marked things, names, and the people."""
+        plan.fronts = fronts
         for child in list(plan.childItems()):
             self.scene.removeItem(child)
         plan.dressed = []
@@ -912,7 +989,10 @@ class WorldView(QWidget):
         roofed = [b for b in houses if b not in opened] if roofs else []
         self._marked(plan, rows, layout.objects, roofed)
         spots = {_key(name): (x, y) for name, (x, y) in layout.labels.items()}
+        own = {_key(n) for n in (plan.place.name, *plan.place.aliases)}
         for name, (x, y) in layout.labels.items():
+            if _key(name) in own:
+                continue  # the plan's own place: its parent or the card names it
             tag = _TagItem(name.split("(")[0].strip())
             tag.setParentItem(plan)
             plan.dressed.append(tag)
@@ -920,7 +1000,7 @@ class WorldView(QWidget):
             if box is not None:  # a building's name on its roof, or its far wall
                 x, y = (box[0] + box[1]) / 2, box[2] + (0.6 if box in roofed else -0.4)
             tag.centre_on(x * TILE + TILE / 2, y * TILE)
-        self._stand(plan, self._people_in(plan.place.id), spots, roofed, rows)
+        self._stand(plan, self._people_in(plan.place.id), spots, [*roofed, *fronts], rows)
 
     def _ground_for(self, place: WorldPlace, ground: str) -> str:
         """A plan's open ground as the land it stands on has it: live, a barn's
@@ -939,7 +1019,11 @@ class WorldView(QWidget):
         """(who, where) for everyone the story has at this place or somewhere
         inside it, but not in a place inside it whose own plan is shown (they
         stand in that). Before a passage has placed the author's character,
-        they are at an imported map's start, as `here()` has them."""
+        they are at an imported map's start, as `here()` has them. Nobody
+        stands in a building drawn open only for its changed state: they are
+        at its front, in the plan around it."""
+        if place_id in self._changed_only:
+            return []
         where = dict(self.world.where)
         here = self.here()
         if self.held and self.held not in where and here is not None:
@@ -954,7 +1038,12 @@ class WorldView(QWidget):
                     break
                 seen.add(spot)
                 plan = self._plans.get(spot)
-                if plan is not None and plan.isVisible() and spot != at:
+                if (
+                    plan is not None
+                    and plan.isVisible()
+                    and spot != at
+                    and spot not in self._changed_only
+                ):
                     break  # stands in that plan, drawn closer
                 spot = self.world.places[spot].inside if spot in self.world.places else None
         return out
@@ -989,9 +1078,10 @@ class WorldView(QWidget):
         roofed: list[tuple[int, int, int, int]],
         rows: tuple[str, ...],
     ) -> None:
-        """Everyone where the plan marks their place; outside a roofed
-        building, at its front; otherwise in the middle. Several in one spot
-        stand side by side."""
+        """Everyone where the plan marks their place; at a roofed building,
+        or one drawn open for its changed state (`roofed` has both), at its
+        front; otherwise in the middle. Several in one spot stand side by
+        side."""
         width = max((len(r) for r in rows), default=1)
         groups: dict[tuple[float, float], list[str]] = {}
         for who, at in people:

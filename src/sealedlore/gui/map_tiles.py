@@ -207,10 +207,14 @@ ROOF = ("#7d2f2c", "#a3453b", "#c4614d")
 STONE = ("#5c5e66", "#7a7c84", "#9fa1a8")
 GLASS = ("#5e8fb8", "#a9d4ee")
 SHADOW = QColor(20, 24, 40, 70)
+# Fire: its edge, its body and its heart; the ground under it, embers.
+FLAME = ("#b8321c", "#f07a1e", "#ffd24a")
+EMBER = (176, 52, 22, 225)
 
 # Tile kinds, by the characters of engine/world_art.TILES.
 OPEN, BRUSH, TREES, ROCK, WATER, ROAD = ".", ",", "T", "^", "~", "="
 WALL, DOOR, FLOOR, WINDOW, FENCE, RUBBLE, SAND, VOID = "#", "+", "_", "W", "%", ":", "s", " "
+FIRE = "*"  # something burning: scorched ground with flames standing on it
 BUILT = frozenset({WALL, DOOR, WINDOW})
 
 
@@ -469,6 +473,28 @@ def rock_sprite(variant: int, small: bool) -> QImage:
     return _outlined(image)
 
 
+@lru_cache(maxsize=8)
+def flame_sprite(variant: int) -> QImage:
+    """A tongue of fire: dark red at its edge, orange, a yellow heart."""
+    w, h = 10, 13 + variant % 3
+    image = _image(w, h)
+    p = QPainter(image)
+    p.setPen(Qt.NoPen)
+    lean = (variant % 3) - 1
+    for colour, inset, top in ((FLAME[0], 0, 0), (FLAME[1], 2, 3), (FLAME[2], 3, 7)):
+        p.setBrush(_c(colour))
+        p.drawEllipse(inset, top + 3, w - 2 * inset, h - top - 3)
+        p.drawPolygon(
+            [
+                QPoint(inset + 1, top + 6),
+                QPoint(w // 2 + lean, top),
+                QPoint(w - inset - 1, top + 6),
+            ]
+        )
+    p.end()
+    return image
+
+
 def _outlined(image: QImage) -> QImage:
     """A one-pixel dark outline around the opaque part, as the sprites have."""
     w, h = image.width(), image.height()
@@ -604,7 +630,9 @@ def render_tiles(
             ch = OPEN if (x, y) in clear else grid.at(x, y)
             v = _variant(x, y, seed)
             under = (
-                OPEN if ch in (OPEN, BRUSH, TREES, ROCK, RUBBLE, FENCE, "") or ch.isdigit() else ch
+                OPEN
+                if ch in (OPEN, BRUSH, TREES, ROCK, RUBBLE, FENCE, FIRE, "") or ch.isdigit()
+                else ch
             )
             if ch == VOID and look_name != "space" and look_name != "floor":
                 under = OPEN
@@ -619,6 +647,17 @@ def render_tiles(
                 p.drawImage(x * TILE, y * TILE, ground_tile(look_name, under, v))
             if ch == TREES:  # the forest floor is in shade
                 p.fillRect(x * TILE, y * TILE, TILE, TILE, QColor(30, 50, 40, 40))
+            elif ch == FIRE:  # embers, so fire reads as fire even drawn small
+                p.fillRect(x * TILE, y * TILE, TILE, TILE, QColor(*EMBER))
+                ember = _rng("ember", x, y, seed)
+                for _ in range(5):
+                    p.fillRect(
+                        x * TILE + ember.randrange(TILE - 2),
+                        y * TILE + ember.randrange(TILE - 2),
+                        2,
+                        2,
+                        _c(FLAME[2] if ember.random() < 0.4 else FLAME[1]),
+                    )
 
     # 2. Edges: water gets a bank, a road frays into the ground around it.
     for y in range(grid.h):
@@ -665,6 +704,16 @@ def render_tiles(
                 )
             elif ch == ROCK:
                 standing.append((base, cx + rng.randint(-2, 2), rock_sprite(v % 2, False), True))
+            elif ch == FIRE:
+                for _ in range(1 + v % 2):
+                    standing.append(
+                        (
+                            base - rng.randrange(6),
+                            cx + rng.randint(-4, 4),
+                            flame_sprite(rng.randrange(3)),
+                            False,
+                        )
+                    )
             elif ch == RUBBLE:
                 for _ in range(2):
                     standing.append(

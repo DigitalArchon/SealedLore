@@ -12,7 +12,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtWidgets import QApplication, QGraphicsSimpleTextItem  # noqa: E402
 
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.gui.map_art import picture_sprite, pixel_art, tile_image  # noqa: E402
@@ -169,6 +169,67 @@ def test_the_local_map_is_the_area_s_plan_with_the_building_s_inside_at_closer_z
     # Out to the region: the plans give way to the farm's picture.
     view.go_region()
     assert shown_plans(view) == [] and "The farm" in visible_names(view)
+
+
+def test_a_building_the_story_changed_shows_its_new_plan_open_on_the_local_map(app):
+    """Live, a barn blown up and burning stayed an intact roof on the farm's
+    plan. Its plan drawn in that state now takes the roof's place at the
+    local zoom, over the box the farm's plan drew for it (5 tiles wide,
+    though the program now asks for 4), and whoever is at the barn stands at
+    its front, not inside the fire."""
+    view = WorldView()
+    view.resize(900, 700)
+    farm = WorldPlace(id="farm", name="The farm", kind="site", x=0.0, y=0.0, size=400)
+    barn = WorldPlace(
+        id="barn",
+        name="The barn",
+        kind="building",
+        inside="farm",
+        x=0.0,
+        y=50.0,
+        state="blown up and burning",
+    )
+    world = WorldMap(
+        places={"farm": farm, "barn": barn}, where={"Jane": "barn"}, visited={"Jane": ["farm"]}
+    )
+    farm_plan = PlaceLayout(
+        place_id="farm",
+        rows=["." * 40] * 6
+        + ["." * 18 + "#####" + "." * 17]
+        + ["." * 18 + "#___#" + "." * 17]
+        + ["." * 18 + "##+##" + "." * 17]
+        + ["." * 40] * 15,
+        labels={"The barn": [20, 7]},
+        spec={"ground": "snow"},
+    )
+    intact = PlaceLayout(
+        place_id="barn", rows=["#" * 40] + ["#" + "_" * 38 + "#"] * 22 + ["#" * 40]
+    )
+    ruin = PlaceLayout(
+        place_id="barn",
+        state="blown up and burning",
+        rows=[":" * 40] * 10 + ["::***" + ":" * 35] * 4 + [":" * 40] * 10,
+        labels={"Barn": [20, 12]},
+    )
+    # Its plan for an earlier state only: still the roof.
+    view.set_world(world, WorldArt(layouts={"farm": {"": farm_plan}, "barn": {"": intact}}), "Jane")
+    assert shown_plans(view) == ["The farm"]
+    # Drawn in its new state: open at the local zoom, no roof left over it.
+    art = WorldArt(layouts={"farm": {"": farm_plan}, "barn": {"": intact, barn.state: ruin}})
+    view.set_world(world, art, "Jane", keep_view=False)
+    assert view.level() == "local"
+    assert shown_plans(view) == ["The barn", "The farm"]
+    farm_item, barn_item = view._plans["farm"], view._plans["barn"]
+    assert farm_item.cleared == ((18, 22, 6, 8),)  # the box as drawn, all of it
+    assert barn_item.rect().width() == pytest.approx(farm_item.box_rect((18, 22, 6, 8)).width())
+    assert barn_item.zValue() > farm_item.zValue()
+    # Jane stands at its front in the farm's plan, and nobody inside the ruin.
+    jane = next(p for p in view.people if p.name == "Jane")
+    assert jane.parentItem() is farm_item and jane.pos().y() > 9 * 16
+    assert [p.name for p in view.people] == ["Jane"]
+    # The ruin's own plan doesn't name itself again over the farm's label.
+    tags = [t.text() for t in barn_item.childItems() if isinstance(t, QGraphicsSimpleTextItem)]
+    assert "Barn" not in tags
 
 
 def test_with_no_local_plan_the_region_shows_and_says_why(app):
