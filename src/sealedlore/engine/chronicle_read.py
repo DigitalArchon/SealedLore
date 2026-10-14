@@ -184,6 +184,12 @@ def _count(phrase: str) -> int:
     return total
 
 
+# Shared with the map's layout (engine/world_layout.py), where distances are
+# said in the same words ("twenty-one miles", "a few hours on foot").
+COUNT_PATTERN = rf"(?:\d+(?:\.\d+)?|{_COUNT}|{_alternatives(_SPAN_QUANTITY)})"
+count_of = _count
+
+
 def _stated_span(text: str) -> tuple[int, str] | None:
     """The longest stretch of time a Director or Narration turn states, and its sentence.
 

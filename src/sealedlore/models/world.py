@@ -29,6 +29,13 @@ class WorldPlace(BaseModel):
     # The place it is part of (a room in a building), by id.
     inside: str | None = None
     what: str = ""
+    # Where it is on the map, in metres east (x) and north (y) of the first
+    # place, and how wide: set by the program when the place first appears
+    # (engine/world_layout.py) and never moved after. Once the story has been
+    # somewhere, that is where it is.
+    x: float | None = None
+    y: float | None = None
+    size: float | None = None
 
 
 class WorldLink(BaseModel):

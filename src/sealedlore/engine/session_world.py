@@ -18,6 +18,7 @@ from sealedlore.engine.world import (
     build_world_read_messages,
     describe_delta,
     parse_world_reply,
+    place_delta,
     resolve_reply,
     world_at,
 )
@@ -147,6 +148,8 @@ class WorldRuntime:
             return
         people = [*self.visible_cast(self._path_to(node.id)), *self.visible_supporting()]
         delta, refused = resolve_reply(pending.before, reply, source=pending.source, people=people)
+        held = self._character(node.meta.controlled_character_id)
+        place_delta(pending.before, delta, held.name if held is not None else None)
         if refused:
             self._log("world_refused", {"request_log_ref": log_ref, "refused": refused})
         node.meta.world = None if delta.empty() else delta

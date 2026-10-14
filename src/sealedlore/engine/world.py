@@ -25,6 +25,7 @@ from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.scene_state import same_person
 from sealedlore.engine.validators import locate_quote
+from sealedlore.engine.world_layout import geometry_conflicts, moves, place_new
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.character import Character
 from sealedlore.models.node import Node
@@ -225,6 +226,9 @@ def resolve_reply(
         if a is None or b is None or a == b:
             refused.append(f"link {label}: a place not on the map")
             continue
+        if _is_vehicle(world, delta, a) or _is_vehicle(world, delta, b):
+            refused.append(f"link {label}: a vehicle moves, so it has no fixed link")
+            continue
         direction = _text(entry.get("direction")) or None
         words = _DIRECTIONS.findall(direction or "")
         if direction and words and not any(w.lower() in quote.lower() for w in words):
@@ -278,6 +282,11 @@ def resolve_reply(
         thing.state = _text(entry.get("state")) or thing.state
         delta.things = [t for t in delta.things if t.id != thing.id] + [thing]
     return delta, refused
+
+
+def _is_vehicle(world: WorldMap, delta: WorldDelta, place_id: str) -> bool:
+    place = next((p for p in delta.places if p.id == place_id), None) or world.places.get(place_id)
+    return place is not None and place.kind == "vehicle"
 
 
 def _would_loop(world: WorldMap, delta: WorldDelta, place_id: str, inside: str) -> bool:
@@ -335,10 +344,23 @@ def describe_delta(world: WorldMap, delta: WorldDelta) -> str:
 
 
 def applied(world: WorldMap, delta: WorldDelta) -> WorldMap:
-    """`world` with `delta` applied (a new map; `world` is left alone)."""
+    """`world` with `delta` applied (a new map; `world` is left alone).
+    Places come placed (`place_delta`); one that somehow isn't is placed here
+    by the same rule, so the map is the same however often it is folded."""
     out = world.model_copy(deep=True)
+    known = {**world.places, **{p.id: p for p in delta.places}}
+    unplaced = [
+        p.model_copy(deep=True)
+        for p in delta.places
+        if (p.x is None or p.y is None) and not moves(known, p)
+    ]
+    if unplaced:
+        place_new(world, unplaced, delta.links, None)
+        fixed = {p.id: p for p in unplaced}
+    else:
+        fixed = {}
     for place in delta.places:
-        out.places[place.id] = place.model_copy(deep=True)
+        out.places[place.id] = fixed.get(place.id) or place.model_copy(deep=True)
     for link in delta.links:
         out.links = [k for k in out.links if {k.a, k.b} != {link.a, link.b}]
         out.links.append(link.model_copy())
@@ -351,6 +373,17 @@ def applied(world: WorldMap, delta: WorldDelta) -> WorldMap:
         out.things[thing.id] = thing.model_copy(deep=True)
     out.conflicts.extend(delta.conflicts)
     return out
+
+
+def place_delta(world: WorldMap, delta: WorldDelta, held: str | None) -> None:
+    """Give the delta's new places their positions, for good, and note any
+    stated distance the map's established places disagree with. `held`: the
+    author's character, beside whom a place with nothing else to go on sits."""
+    near = world.where.get(held or "")
+    place_new(world, delta.places, delta.links, near)
+    for note in geometry_conflicts(world, delta.links):
+        if note not in delta.conflicts:
+            delta.conflicts.append(note)
 
 
 def world_at(path: Sequence[Node]) -> WorldMap:
