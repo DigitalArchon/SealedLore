@@ -476,6 +476,11 @@ def terrain_messages(
     ]
 
 
+def _covers(patch: TerrainPatch, x: float, y: float) -> bool:
+    half = patch.side / 2
+    return abs(x - patch.x) <= half and abs(y - patch.y) <= half
+
+
 def _top(world: WorldMap, place_id: str) -> WorldPlace | None:
     place = world.places.get(place_id)
     seen: set[str] = set()
@@ -501,6 +506,7 @@ def plan_art(
     jobs: list[ArtJob] = []
     visited = {pid for places in world.visited.values() for pid in places}
     drawn_land = {patch.place_id for patch in art.terrain}
+    planned: list[TerrainPatch] = []
 
     def failed(key: str) -> bool:
         return art.failures.get(key, 0) >= MAX_FAILURES
@@ -512,14 +518,22 @@ def plan_art(
             return 0.0
         return ((here_spot[0] - spot[0]) ** 2 + (here_spot[1] - spot[1]) ** 2) ** 0.5
 
-    for top_id in {
-        (_top(world, pid) or world.places[pid]).id for pid in visited if pid in world.places
-    }:
+    tops = {(_top(world, pid) or world.places[pid]).id for pid in visited if pid in world.places}
+    # Nearest the story first, so where it is now gets the land it stands on.
+    for top_id in sorted(tops, key=lambda pid: (distance(pid), world.places[pid].name)):
         top = world.places[top_id]
         patch = terrain_patch(top)
         key = f"terrain:{top.id}"
         if patch is None or top.id in drawn_land or failed(key):
             continue
+        # Land already drawn is established: a place standing on it (the
+        # barn behind the farmhouse) gets no second, different version.
+        drawn = [*art.terrain, *planned]
+        if any(_covers(other, top.x, top.y) for other in drawn):  # type: ignore[arg-type]
+            continue
+        planned.append(
+            TerrainPatch(place_id=top.id, x=patch[0], y=patch[1], side=patch[2], rows=[])
+        )
         jobs.append(
             ArtJob(
                 key,

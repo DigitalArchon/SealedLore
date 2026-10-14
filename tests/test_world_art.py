@@ -320,3 +320,17 @@ def test_a_backup_and_a_copy_carry_the_art(tmp_path: Path, story, cast):
     list(session.send(turn()))
     copy = copy_story(session.story.id, title="Copy", root=tmp_path)
     assert len(load_world_art(copy.story.id, tmp_path).layouts) == 1
+
+
+def test_land_already_drawn_is_never_drawn_again_under_a_neighbour():
+    farm = WorldPlace(id="farm", name="Farmhouse", kind="building", x=0.0, y=0.0)
+    barn = WorldPlace(id="barn", name="Barn", kind="building", x=60.0, y=0.0)
+    town = WorldPlace(id="town", name="Hellsville", kind="settlement", x=0.0, y=8000.0)
+    world = WorldMap(
+        places={"farm": farm, "barn": barn, "town": town},
+        visited={"Jane": ["farm", "barn", "town"]},
+    )
+    keys = [j.key for j in plan_art(world, WorldArt(), here="farm", setting="x")]
+    land = [k for k in keys if k.startswith("terrain:")]
+    assert "terrain:town" in land
+    assert len([k for k in land if k in ("terrain:farm", "terrain:barn")]) == 1

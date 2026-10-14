@@ -1957,23 +1957,6 @@ If the passage changes nothing, reply with empty lists.""",
 )
 
 
-# Not yet sent: measured first (SealedLoreDocs design/map.md). It frames
-# the map as established fact to keep to, and leaves what lies beyond it to
-# the storyteller, which is how the map grows.
-_text(
-    "map.context",
-    MAP,
-    "The map here: heading",
-    "Heads the local map in the tail: where the author's character is, the places around, "
-    "the ways out with the distances the story gave, and the things here.",
-    """\
-What the story has established about where things are. Keep to it: these
-places, how they lie and how far apart they are, are as the story told them.
-Anywhere not on it is unmapped; when the story goes there, decide what is
-found, and it becomes part of the map.""",
-)
-
-
 # The map's art (engine/world_art.py). Measured in SealedLoreDocs
 # design/map.md: a text model writing a small SVG that code turns into pixel
 # art read at a glance 16-17 times in 20 for the best models, where pixel
