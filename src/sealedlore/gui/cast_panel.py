@@ -78,6 +78,7 @@ class CastPanel(QWidget):
         self.list.setObjectName("castList")
         # Each name beside its portrait, small.
         self.list.setIconSize(QSize(LIST_ICON, LIST_ICON))
+        self.list.setMinimumHeight(LIST_ICON * 3)
         self._icons: dict[str, QIcon] = {}
         self._icons_store: object = None
         self.list.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -107,10 +108,12 @@ class CastPanel(QWidget):
         splitter = QSplitter(Qt.Vertical)
         splitter.addWidget(top)
         splitter.addWidget(self._build_editor())
-        # The list is a handful of names; the sheet under it is the long part.
+        # The list is a handful of names; the sheet under it, with the
+        # portrait at its top, is the long part: on a 768px laptop the list
+        # at 220 left only the top of the portrait in view.
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([220, 560])
+        splitter.setSizes([150, 630])
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -275,6 +278,8 @@ class CastPanel(QWidget):
 
         caption = QLabel("SUGGESTED FROM THE STORY")
         caption.setObjectName("composerCaption")
+        caption.setToolTip(self.suggestion_hint.text())
+        self.scan_button.setToolTip(self.scan_button.toolTip() + ". " + self.suggestion_hint.text())
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
         header.addWidget(caption)
@@ -401,7 +406,9 @@ class CastPanel(QWidget):
             self.suggestion_list.addItem(item)
         has_any = bool(self._suggestions)
         self.suggestion_list.setVisible(has_any)
-        self.suggestion_hint.setVisible(not has_any)
+        # Said in the caption's tooltip rather than a line of its own: the
+        # list above and the portrait below want the room.
+        self.suggestion_hint.setVisible(False)
         if has_any:
             self.suggestion_list.setCurrentRow(0)
         self._sync_suggestion_buttons()
