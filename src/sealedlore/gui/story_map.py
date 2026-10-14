@@ -1,4 +1,4 @@
-"""The story map: every branch of the story on one diagram (Map, above the
+"""The branch map: every branch of the story on one diagram (Branches, above the
 transcript; Esc or Back to the story returns).
 
 A timeline of branches, not a tree of messages: one lane per branch, like a
@@ -336,7 +336,7 @@ class StoryMap(QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("storyMap")
-        title = QLabel("Story map")
+        title = QLabel("Branches")
         title.setObjectName("emptyTitle")
         hint = QLabel(
             "Each lane is a branch, the story running down the page. Click a lane or its "

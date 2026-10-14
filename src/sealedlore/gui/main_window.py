@@ -113,6 +113,7 @@ from sealedlore.gui.window_layout import LayoutWindow
 from sealedlore.gui.window_private import PrivateWindow
 from sealedlore.gui.window_text import TextSizeWindow
 from sealedlore.gui.window_videos import VideosWindow
+from sealedlore.gui.window_world import WorldWindow
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.ids import utc_now_iso
@@ -187,6 +188,7 @@ CENTRE_MARGIN = 10
 class MainWindow(
     ChatWindow,
     FindWindow,
+    WorldWindow,
     ImagesWindow,
     VideosWindow,
     PrivateWindow,
@@ -323,13 +325,15 @@ class MainWindow(
         self.branch_bar.delete_requested.connect(self._delete_branch)
         # Wraps under a large text size rather than widening the window.
         self._build_find()
+        self._build_world()
         self.top_row = WrapRow(spacing=6, group_spacing=12)
         self.top_row.add_group([self.view_toggle])
-        self.top_row.add_group([self.find_button])
+        self.top_row.add_group([self.find_button, self.world_button])
         self.top_row.add_group([self.branch_bar], right=True, whole=True)
         centre_layout.addLayout(self.top_row)
         centre_layout.addWidget(self.find_bar)
-        # The story map shares the transcript's place (Map, on the branch bar).
+        # The branch map shares the transcript's place (Branches, on the branch
+        # bar), as the story's map does (Map, beside Find: window_world.py).
         self.story_map = StoryMap()
         self.story_map.back_requested.connect(lambda: self.show_map(False))
         self.story_map.select_requested.connect(self._select_from_map)
@@ -342,6 +346,7 @@ class MainWindow(
         self.centre_stack = PageStack()
         self.centre_stack.addWidget(self.transcript)
         self.centre_stack.addWidget(self.story_map)
+        self.centre_stack.addWidget(self.world_view)
         centre_layout.addWidget(self.centre_stack, 1)
         centre_layout.addWidget(self.composer)
 
@@ -652,6 +657,12 @@ class MainWindow(
             self.stop_generation()
         elif self.map_shown():
             self.show_map(False)
+        elif self.world_shown():
+            # In a place, Esc goes up to the whole map first.
+            if self.world_view.place_id is not None:
+                self.world_view.open_place(None)
+            else:
+                self.show_world(False)
         elif self.find_open():
             self.close_find()
 
@@ -1081,6 +1092,8 @@ class MainWindow(
         self.reload_transcript()
         self._reassemble_inspector()
         self._update_controls()
+        # The map turned on or off: its button, and what it lacks drawn.
+        self._sync_world()
         # The opening, the starting scene and the suggested character are only
         # read when a story begins; changed on one already under way, they
         # used to be saved with nothing to show for it.
@@ -1205,6 +1218,7 @@ class MainWindow(
         self._sync_chat_ui()
         self._attest_chat()
         self._update_controls()
+        self._sync_world()
 
     def refresh_panels(self) -> None:
         if self.session is None:
@@ -1360,6 +1374,8 @@ class MainWindow(
         self._show_nodes(self.session.full_path())
         self.refresh_branch_bar()
         self._refresh_find()
+        # The leaf moved (a branch, a take, an edit): the map is the path's.
+        self.refresh_world(keep_view=True)
 
     def _show_nodes(self, nodes: list[Node]) -> None:
         assert self.session is not None
@@ -1529,6 +1545,8 @@ class MainWindow(
     def show_map(self, on: bool) -> None:
         """Every branch on one diagram, in the transcript's place."""
         on = bool(on and self.session is not None and not self.session.in_private)
+        if self.world_shown():
+            self.show_world(False)
         leaving = not on and self.map_shown()
         self.centre_stack.setCurrentWidget(self.story_map if on else self.transcript)
         self.composer.setVisible(not on)
@@ -2503,6 +2521,7 @@ class MainWindow(
             QTimer.singleShot(0, lambda: self.transcript.scroll_to_node(focus))
         self.refresh_summaries()
         self.refresh_retrieval()
+        self._sync_world()
         if self._streaming_job:
             # The kept prompt is exactly what was sent, so show that.
             self.refresh_inspector()

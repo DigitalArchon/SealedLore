@@ -653,7 +653,14 @@ def finish(
     rows, _objects, _labels = rasterise(spec, TERRAIN_TILES, TERRAIN_TILES)
     x, y, side = job.patch  # type: ignore[misc]
     return TerrainPatch(
-        place_id=job.subject_id, x=x, y=y, side=side, rows=rows, model=model, made_at=made_at
+        place_id=job.subject_id,
+        x=x,
+        y=y,
+        side=side,
+        rows=rows,
+        ground=str(spec.get("ground") or ""),
+        model=model,
+        made_at=made_at,
     )
 
 

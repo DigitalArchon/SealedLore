@@ -15,6 +15,7 @@ from collections.abc import Sequence
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QButtonGroup,
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -242,6 +243,17 @@ class SetupDialog(QDialog):
             _hint(
                 "How much happens that you didn't start: people acting on their own aims, "
                 "someone arriving, an earlier choice catching up."
+            )
+        )
+        self.world_map = QCheckBox("Keep a map of the story")
+        self.world_map.setChecked(self.story.defaults.world_map)
+        form.addRow("Map", self.world_map)
+        form.addRow(
+            _hint(
+                "After each passage a small model notes the places the story goes to, how "
+                "they connect, who is where and the things that matter, and the map grows "
+                "with the story (Map, above the story). One more small call after every "
+                "passage; the map's pictures are drawn in the background."
             )
         )
         self.image_style = line_edit(self.story.image_style)
@@ -478,6 +490,7 @@ class SetupDialog(QDialog):
         setup.description = self.description.toPlainText().strip() or None
         story.defaults.agency_mode = self.agency.currentData()
         story.defaults.world_activity = self.world_activity.currentData()
+        story.defaults.world_map = self.world_map.isChecked()
         story.style = self.style
         story.image_style = self.image_style.text().strip()
         story.private_prompt.mode = self.private_mode.currentData()

@@ -179,6 +179,11 @@ class PrivateWindow:
         self.branch_bar.setEnabled(self.session is not None and not self._busy and not private)
         if private and self.map_shown():
             self.show_map(False)
+        if private and self.world_shown():
+            self.show_world(False)
+        self.world_button.setEnabled(
+            self.session is not None and self.session.map_on and not self._busy and not private
+        )
         for widget in (self.stories, self.branch_bar):
             widget.setToolTip(
                 self._say(

@@ -52,9 +52,9 @@ class BranchBar(QWidget):
         self.hint.setObjectName("hintLabel")
         self.map_button = QToolButton()
         self.map_button.setObjectName("viewToggleButton")
-        self.map_button.setText("Map")
+        self.map_button.setText("Branches")
         self.map_button.setCheckable(True)
-        self.map_button.setToolTip("Every branch of the story as a map (Esc to go back)")
+        self.map_button.setToolTip("Every branch of the story on one diagram (Esc to go back)")
         self.map_button.toggled.connect(self.map_toggled)
         # Wraps under a large text size rather than widening the window.
         layout = WrapRow(self)

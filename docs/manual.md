@@ -370,9 +370,10 @@ archiving, rebuilding summaries.
   private scene when one is open. Hover over it for the whole of it,
   including, for a story, every other call's model and route. It can't be
   changed there; it is only for reference.
-- **Above the transcript**, on the right: **Branch** names the branch you are
-  reading; its menu switches to another, renames or deletes it, and **Map**
-  shows every branch at once.
+- **Above the transcript**: **Find**; **Map**, the map of the story, for a
+  story that keeps one (see "The map"); and on the right, **Branch** names the
+  branch you are reading: its menu switches to another, renames or deletes
+  it, and **Branches** shows every branch at once.
 - **Right dock**, "Inspector", its pages as two rows of buttons: **Scene**
   (who is here and where the story is; a story opens on it, so you can check
   it at a glance), **Cast** (sheets, skills, supporting characters), **Plot** (the clock, facts and events; shown only for a
@@ -862,9 +863,43 @@ all the fields for you to approve, for when the card has drifted.
 | Normal (default) | people pursue their own aims, anyone with a stake acts on it, earlier choices catch up |
 | Eventful | most passages bring something: an arrival, news, a complication |
 
+## The map
+
+A story can keep a map that grows as it goes: tick **Keep a map of the story**
+on Story → Setup → About. After each passage a small model (Settings → Models
+→ **Map model**) notes the places the story went to or described, how they
+connect, who is where and the things that matter, each held to a sentence of
+the story. A place is put on the map once, where the story said it is ("five
+miles north", "around back", inside the town), and stays there: once the
+story has been somewhere, that is where it is. Walk off the edge of the map
+and the storyteller decides what you find there; the map grows to take it in,
+and it is part of the map from then on.
+
+The map is drawn in the background (Settings → Models → **Map art model**;
+untick **Draw the map** to keep it plain): the land around each place the
+story reaches, the ground plan of each place you have been, and a small
+picture of each place and thing. Each is drawn once and kept. When the story
+changes something (a barn blown up, a truck burnt out), it is drawn again as
+it now is, as an edit of how it looked, so it is still the same barn. A
+branch shows the map as it stands on that branch.
+
+**Map**, above the transcript, shows it in the transcript's place: the land
+the story has reached, fog over everything else, and each place with its
+picture, lit where you have been, dimmed where the story only told of it,
+ringed where you are now, with who is there under its name. Hover a place
+for what the story said of it. Scroll to zoom (places inside others appear as
+you zoom in), drag to move; **Fit** shows everywhere you have been and
+**Here** where you are. Double-click a place to open its ground plan, with the
+things marked on it and the people there; **Up to the map** or Esc goes back,
+and Esc again, or **Back to the story**, returns.
+
+The map is for you: the storyteller isn't sent it. Measured, a map read from
+the story's own prose made passages contradict the story more, not less,
+wherever the prose had contradicted itself.
+
 ## Branches, takes and export
 
-![The story map: Main and a named branch as lanes running down the page](screenshots/story-map.png)
+![The branch map: Main and a named branch as lanes running down the page](screenshots/story-map.png)
 
 Every Regenerate keeps the old take: `‹ 2 / 3 ›` on a passage switches
 between takes, in place. A take is another version of that one passage, so the
@@ -888,7 +923,7 @@ renames or deletes the one you are on (Main can't be deleted; pictures are
 kept). The first message of a branch says "Branch … starts here". Regenerating
 never makes a branch.
 
-**Map**, beside the Branch button, shows every branch of the story on one
+**Branches**, beside the Branch button, shows every branch of the story on one
 diagram in place of the transcript, running top to bottom: a lane per branch
 down the message numbers, each leaving the lane it split from where it split,
 with its name, length and the opening words of the message it began with.

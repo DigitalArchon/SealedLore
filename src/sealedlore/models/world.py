@@ -143,6 +143,9 @@ class TerrainPatch(BaseModel):
     y: float
     side: float
     rows: list[str]
+    # What its open ground is (snow, grass, dirt, sand, rock, space): how the
+    # view colours it.
+    ground: str = ""
     model: str = ""
     made_at: str = ""
 

@@ -43,6 +43,8 @@ class FindWindow:
             return
         if self.map_shown():
             self.show_map(False)
+        if self.world_shown():
+            self.show_world(False)
         self.find_bar.open()
         if self.find_bar.field.text().strip():
             self._on_find_changed(self.find_bar.field.text())
