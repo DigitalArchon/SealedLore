@@ -183,32 +183,24 @@ _WHOLE_MILES_FROM = 8000.0
 _METRES_A_MILE = 1609.0
 
 
-def established(world: WorldMap, base: WorldDelta) -> WorldMap:
-    """The map as the plot file drew it: its places, things and ways, with the
-    file's own words for each place, where the plot isn't hiding them. Where
-    people are is the story's (the reads'), lifted to the nearest place of the
-    file. Read from prose, the rest is the map's own guess, and a guess sent to
-    the storyteller binds it (SealedLoreDocs design/map.md)."""
+def established(world: WorldMap, base: WorldDelta | None) -> WorldMap:
+    """The map as the storyteller is told it. A plot file's places keep the
+    file's own words (a read's later words for them were the moment's), and
+    its ways stand: a way the story gave between two of the file's places is
+    left out, since the file already says where they are. Everything the
+    story added is as the reads found it. The plot's hidden places are
+    already gone (`world_at`)."""
+    if base is None:
+        return world
     own = {p.id: p for p in base.places}
     places = {
-        k: p.model_copy(update={"what": own[k].what}) for k, p in world.places.items() if k in own
+        k: p.model_copy(update={"what": own[k].what}) if k in own else p
+        for k, p in world.places.items()
     }
-    where = {}
-    for who, at in world.where.items():
-        seen: set[str] = set()
-        while at is not None and at not in places and at in world.places and at not in seen:
-            seen.add(at)
-            at = world.places[at].inside
-        if at in places:
-            where[who] = at
-    owned = {t.id for t in base.things}
-    return WorldMap(
-        places=places,
-        links=[k for k in base.links if k.a in places and k.b in places],
-        where=where,
-        things={k: t for k, t in world.things.items() if k in owned},
-        start=world.start if world.start in places else None,
-    )
+    links = [k for k in base.links if k.a in places and k.b in places] + [
+        k for k in world.links if not (k.a in own and k.b in own)
+    ]
+    return world.model_copy(update={"places": places, "links": links})
 
 
 def _chain(world: WorldMap, place_id: str | None) -> list[WorldPlace]:
@@ -223,11 +215,14 @@ def _chain(world: WorldMap, place_id: str | None) -> list[WorldPlace]:
     return out
 
 
-def _how_far(world: WorldMap, here: str, there: str) -> str:
-    """ "8.0 km / 5 miles north", from where the map put them; nothing for a
+def _how_far(world: WorldMap, here: str | None, there: str, fixed: Collection[str]) -> str:
+    """ "8.0 km / 5 miles north", from where a plot file put them. Nothing for
+    a place the story added (where the program put it is a guess), nor for a
     road, which is a line and not a spot."""
+    if here is None or there not in fixed or world.places[there].kind == "route":
+        return ""
     a, b = position(world, here), position(world, there)
-    if a is None or b is None or world.places[there].kind == "route":
+    if a is None or b is None:
         return ""
     dx, dy = b[0] - a[0], b[1] - a[1]
     distance = math.hypot(dx, dy)
@@ -241,32 +236,39 @@ def _how_far(world: WorldMap, here: str, there: str) -> str:
     return f"{far} {_COMPASS[round(angle / 45) % 8]}"
 
 
-def _around(world: WorldMap, here: str, place: WorldPlace) -> str:
-    where = _how_far(world, here, place.id)
+def _around(world: WorldMap, here: str | None, place: WorldPlace, fixed: Collection[str]) -> str:
+    where = _how_far(world, here, place.id, fixed)
     head = f"{place.name} ({place.kind or 'place'}" + (f", {where}" if where else "") + ")"
     what = " ".join(place.what.split())
     return f"{head}: {what}" if what else head
 
 
 def render_map_context(
-    world: WorldMap, held: str | None, texts: PromptTexts = DEFAULT_TEXTS
+    world: WorldMap,
+    held: str | None,
+    texts: PromptTexts = DEFAULT_TEXTS,
+    *,
+    fixed: Collection[str] = (),
 ) -> str:
     """The local map for the storyteller's tail: where the author's character
     is (the start before any read), what is inside it, what else is around
-    it at each level up with how far and which way, the ways between them,
-    and the things here. `world` is `established`. Empty without a place."""
+    it at each level up, the ways between them, and the things here. `world`
+    is `established`; `fixed` are the places a plot file put, whose distance
+    and bearing are given, from the nearest of them the character is in.
+    Empty without a place."""
     here_id = world.where.get(held or "") or world.start
     chain = _chain(world, here_id)
     if not chain:
         return ""
     here = chain[0]
+    origin = next((p.id for p in chain if p.id in fixed), None)
     lines = [SECTION_MAP_HEADING, texts["map.context"], ""]
     lines.append(f"{held} is at: " + here.name + "".join(f", in {o.name}" for o in chain[1:]))
     if here.what:
         lines.append("  " + " ".join(here.what.split()))
     inside = [p for p in world.places.values() if p.inside == here.id][:MAP_LIST_LIMIT]
     if inside:
-        lines.append("Inside it: " + "; ".join(_around(world, here.id, p) for p in inside))
+        lines.append("Inside it: " + "; ".join(_around(world, origin, p, fixed) for p in inside))
     shown = {p.id for p in chain} | {p.id for p in inside}
     for level, outer in enumerate([*chain[1:], None]):
         parent = outer.id if outer is not None else None
@@ -277,7 +279,7 @@ def render_map_context(
         ][:MAP_LIST_LIMIT]
         if around:
             label = f"Also in {outer.name}" if outer is not None else "Elsewhere on the map"
-            lines.append(f"{label}: " + "; ".join(_around(world, here.id, p) for p in around))
+            lines.append(f"{label}: " + "; ".join(_around(world, origin, p, fixed) for p in around))
             shown |= {p.id for p in around}
     ways = [
         f"- from {place_name(world, k.a)} to {place_name(world, k.b)}"
@@ -321,6 +323,19 @@ def _entries(reply: dict[str, Any], field: str) -> list[dict[str, Any]]:
 
 def _text(value: Any) -> str:
     return " ".join(str(value).split()) if value is not None else ""
+
+
+# What a read writes when the passage said nothing ("unknown" went into a way,
+# live): no words at all, or it reaches the storyteller as a fact.
+_NOTHING_SAID = re.compile(
+    r"^(unknown|unclear|unspecified|not (stated|given|specified|known)|none|n/?a|-+|\?+)$",
+    re.IGNORECASE,
+)
+
+
+def _said(value: Any) -> str | None:
+    text = _text(value)
+    return None if not text or _NOTHING_SAID.match(text.strip(" .")) else text
 
 
 def resolve_reply(
@@ -397,11 +412,11 @@ def resolve_reply(
         if _is_vehicle(world, delta, a) or _is_vehicle(world, delta, b):
             refused.append(f"link {label}: a vehicle moves, so it has no fixed link")
             continue
-        direction = _text(entry.get("direction")) or None
+        direction = _said(entry.get("direction"))
         words = _DIRECTIONS.findall(direction or "")
         if direction and words and not any(w.lower() in quote.lower() for w in words):
             direction = None  # a direction its own quote doesn't carry is a guess
-        distance = _text(entry.get("distance")) or None
+        distance = _said(entry.get("distance"))
         old = next(
             (link for link in [*world.links, *delta.links] if {link.a, link.b} == {a, b}),
             None,

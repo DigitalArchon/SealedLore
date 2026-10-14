@@ -75,19 +75,20 @@ class WorldRuntime:
         )
 
     def map_context(self, path, held_id: str | None) -> str:
-        """The local map for the storyteller at the end of `path`, for a story
-        whose map came from its plot file: what the file established, and
-        where the held character is. Empty otherwise, and in a private scene.
-        A map read from prose isn't sent (SealedLoreDocs design/map.md): it
-        bound the storyteller to its own mistakes."""
-        base = self.story.world_base
-        if not self.map_on or self.in_private or base is None:
+        """The local map for the storyteller at the end of `path`, whenever
+        the story keeps a map (the author's call: playing without one saves
+        the tokens). A plot file's places in its own words, with distances;
+        what the story added, as the reads found it. Never in a private
+        scene. Measured in SealedLoreDocs design/map.md."""
+        if not self.map_on or self.in_private:
             return ""
+        base = self.story.world_base
         held = self._character(held_id) if held_id else None
         return render_map_context(
             established(self._world_on(path), base),
             held.name if held is not None else None,
             self.texts,
+            fixed={p.id for p in base.places} if base is not None else (),
         )
 
     def _prepare_world_read(self) -> _WorldRead | None:

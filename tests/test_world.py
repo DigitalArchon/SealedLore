@@ -381,3 +381,28 @@ def test_a_new_playthrough_keeps_the_map_on(story, cast):
     scenario = scenario_from_bundle(StoryBundle(story=story, cast=cast))
     assert scenario.world_map
     assert bundle_from_scenario(scenario).story.defaults.world_map
+
+
+def test_a_way_the_passage_gave_no_words_for_has_none():
+    from sealedlore.engine.world import applied, resolve_reply, world_at
+
+    world = world_at([])
+    source = "She crossed the frozen yard to the farmhouse."
+    reply = {
+        "places": [
+            {"name": "frozen yard", "quote": "the frozen yard"},
+            {"name": "farmhouse", "quote": "the farmhouse"},
+        ],
+        "links": [
+            {
+                "from": "frozen yard",
+                "to": "farmhouse",
+                "direction": "Unknown",
+                "distance": "n/a",
+                "quote": "crossed the frozen yard to the farmhouse",
+            }
+        ],
+    }
+    delta, _ = resolve_reply(world, reply, source=source, people=[])
+    (way,) = applied(world, delta).links
+    assert way.direction is None and way.distance is None

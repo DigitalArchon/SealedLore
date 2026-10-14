@@ -292,7 +292,7 @@ def test_in_town_the_file_s_own_words_stand_over_the_reads(tmp_path: Path):
     assert "The clinic (building, 380 m east): Elena Ruiz's clinic, in what was the" in text
 
 
-def test_no_section_without_a_map_from_the_file_or_with_the_map_off(tmp_path: Path):
+def test_the_map_stays_in_the_tail_and_off_with_the_map(tmp_path: Path):
     session, jane = mapped_session(tmp_path)
     system = session.assemble(
         TurnRequest(speaker_id=jane.id, user_text="x", controlled_character_id=jane.id)
@@ -300,6 +300,42 @@ def test_no_section_without_a_map_from_the_file_or_with_the_map_off(tmp_path: Pa
     assert "THE MAP HERE" not in system.text  # the tail only: the cache prefix holds
     session.story.defaults.world_map = False
     assert map_section(session, jane) == ""
-    session.story.defaults.world_map = True
-    session.story.world_base = None  # a map grown from the prose alone
-    assert map_section(session, jane) == ""
+
+
+def test_a_map_grown_from_the_story_is_sent_in_its_words_without_distances(tmp_path: Path):
+    from sealedlore.models.world import WorldLink, WorldPlace
+
+    session, jane = mapped_session(tmp_path)
+    session.story.world_base = None  # plain Doomsville: the story grows the map
+    house = WorldPlace(id="h", name="farmhouse", kind="building", what="grey", x=0.0, y=0.0)
+    barn = WorldPlace(id="b", name="barn", kind="building", what="a broken door", x=20.0, y=5.0)
+    kitchen = WorldPlace(id="k", name="kitchen", kind="room", inside="h", x=0.0, y=0.0)
+    session.nodes[-1].meta = NodeMeta(
+        world=WorldDelta(
+            places=[house, barn, kitchen],
+            links=[WorldLink(a="h", b="b", direction="west", distance="twenty yards")],
+            where={"Jane": "k"},
+        )
+    )
+    text = map_section(session, jane)
+    assert "Jane is at: kitchen, in farmhouse" in text
+    assert "barn (building): a broken door" in text  # where code put it is a guess
+    assert "- from farmhouse to barn: west, twenty yards" in text
+
+
+def test_the_story_never_re_measures_two_places_of_the_file(tmp_path: Path):
+    from sealedlore.models.world import WorldLink
+
+    session, jane = mapped_session(tmp_path)
+    world = world_at([], session.story.world_base)
+    creek, town = place(world, "The creek crossing"), place(world, "Hellsville")
+    session.nodes[-1].meta = NodeMeta(
+        world=WorldDelta(
+            links=[WorldLink(a=creek.id, b=town.id, distance="some two miles or more")],
+            where={"Jane": creek.id},
+        )
+    )
+    text = map_section(session, jane)
+    assert "Jane is at: The creek crossing" in text
+    assert "two miles or more" not in text  # the file says where both are
+    assert "Hellsville (settlement, 5.4 km / 3.4 miles north)" in text
