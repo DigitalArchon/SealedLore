@@ -898,7 +898,9 @@ building standing on the ground where the story put it. They are drawn in the
 background without asking each time, up to the limit set there for each story
 each day, and each one's prompt and cost are kept in the story's log. A place
 the story changes is drawn again from its last picture, so it stays the same
-place. Story pictures (Image…) still show you every request first.
+place. Each place you have been gets a postcard too, a picture of the whole
+place, shown on its card under **Here**: click it to see it whole. Story
+pictures (Image…) still show you every request first.
 
 A story that keeps a map makes it part of the window: the Inspector, beside
 the story, takes half the window with **Map** as its first page, and the

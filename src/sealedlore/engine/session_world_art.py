@@ -201,11 +201,11 @@ class WorldArtRuntime:
                 listing = list_image_models(client.base_url, api=client.api)
                 info = next((m for m in listing if m.id == self.config.map_picture_model), None)
                 self._picture_model_info = info
-            size = picture_size(info)
+            sizes = {False: picture_size(info), True: picture_size(info, landscape=True)}
             for job in jobs:
                 if self._art_stop:
                     return
-                self._picture_one(job, client, size)
+                self._picture_one(job, client, sizes[job.subject == "postcard"])
         finally:
             client.close()
 

@@ -21,8 +21,9 @@ from collections.abc import Callable
 from html import escape
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPixmap, QTransform
+from PySide6.QtGui import QBrush, QColor, QFont, QImage, QPainter, QPen, QPixmap, QTransform
 from PySide6.QtWidgets import (
+    QDialog,
     QFrame,
     QGraphicsItem,
     QGraphicsLineItem,
@@ -30,6 +31,7 @@ from PySide6.QtWidgets import (
     QGraphicsScene,
     QGraphicsSimpleTextItem,
     QGraphicsView,
+    QHBoxLayout,
     QLabel,
     QScrollArea,
     QToolButton,
@@ -59,6 +61,8 @@ _OPEN_GROUND = frozenset({"snow", "grass", "dirt", "sand"})
 # A scene's people, in art pixels (the tileset's scale) before the view's zoom.
 PERSON_HEIGHT = 20
 AVATAR_HEIGHT = 26
+# A postcard's thumbnail on a place's card.
+POSTCARD_THUMB = (176, 100)
 # Places with no picture of their own (land, not a thing on it): a mark only.
 _MARK_COLOURS = {
     "region": "#c9b98a",
@@ -292,13 +296,27 @@ class WorldView(QWidget):
         self.side.setTextFormat(Qt.RichText)
         self.side.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.side.setContentsMargins(0, 0, 6, 0)
+        # The place's postcard, when one is drawn: click it to see it whole.
+        self.postcard_button = QToolButton()
+        self.postcard_button.setObjectName("postcardButton")
+        self.postcard_button.setAutoRaise(True)
+        self.postcard_button.setToolTip("The place's postcard: click to see it whole")
+        self.postcard_button.clicked.connect(self._show_postcard)
+        self.postcard_button.hide()
+        self._postcard: tuple[str, bytes] | None = None
+        inner = QWidget()
+        row = QHBoxLayout(inner)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(10)
+        row.addWidget(self.postcard_button, 0, Qt.AlignTop)
+        row.addWidget(self.side, 1)
         self.card = QScrollArea()
         self.card.setObjectName("worldMapCard")
-        self.card.setWidget(self.side)
+        self.card.setWidget(inner)
         self.card.setWidgetResizable(True)
         self.card.setFrameShape(QFrame.NoFrame)
         self.card.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.card.setMaximumHeight(120)
+        self.card.setMaximumHeight(130)
         self.card.hide()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -572,6 +590,46 @@ class WorldView(QWidget):
                 + "<br>".join(escape(f"{t.name}, by {t.carried_by}") for t in carried)
             )
         self.side.setText("<br><br>".join(side))
+        self._set_postcard(place)
+
+    def _set_postcard(self, place: WorldPlace) -> None:
+        picture = self.art.picture_for("postcard", place.id, place.state) or self.art.picture_for(
+            "postcard", place.id
+        )
+        data = self.picture_reader(picture.file) if picture and self.picture_reader else None
+        image = QImage.fromData(data) if data else QImage()
+        if image.isNull():
+            self._postcard = None
+            self.postcard_button.hide()
+            return
+        self._postcard = (place.name, data)
+        width, height = POSTCARD_THUMB
+        thumb = image.scaled(width, height, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.postcard_button.setIcon(QPixmap.fromImage(thumb))
+        self.postcard_button.setIconSize(thumb.size())
+        self.postcard_button.show()
+
+    def _show_postcard(self) -> None:
+        if self._postcard is None:
+            return
+        name, data = self._postcard
+        dialog = QDialog(self)
+        dialog.setWindowTitle(name)
+        label = QLabel()
+        image = QImage.fromData(data)
+        screen = self.screen()
+        if screen is not None:
+            room = screen.availableGeometry()
+            image = image.scaled(
+                int(room.width() * 0.8),
+                int(room.height() * 0.8),
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation,
+            )
+        label.setPixmap(QPixmap.fromImage(image))
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(label)
+        dialog.exec()
 
     def _picture_image(self, subject: str, subject_id: str, state: str | None, height: int):
         """A map picture, cut out and shrunk to `height`: in this state, else

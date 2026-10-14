@@ -13,8 +13,9 @@ and characters read well at map size; whole scenes and repaints don't keep
 the story's geography, so the program's tileset stays the ground.
 
 What comes first: the author's character, then whoever is with them, the
-rest of the cast the story has placed, then places shown on the map, nearest
-first, then things. A place or thing the story changed is drawn from its
+rest of the cast the story has placed; then the postcard of where the story
+is; then places shown on the map, nearest first; then things; then the other
+postcards. A place or thing the story changed is drawn from its
 last picture (when the model takes pictures), so it stays the same barn.
 """
 
@@ -48,7 +49,7 @@ class Person:
 @dataclass(frozen=True)
 class PictureJob:
     key: str
-    subject: Literal["person", "place", "thing"]
+    subject: Literal["person", "place", "thing", "postcard"]
     subject_id: str
     name: str
     prompt: str
@@ -68,18 +69,25 @@ def looks_of(summary: str | None, description: str | None) -> str:
     return cut[: end + 1] if end > LOOKS_CHARS // 2 else cut.rstrip() + "…"
 
 
-def picture_size(model: ImageModelInfo | None) -> str:
-    """The smallest square size the model lists at 512 or more (the view
-    shrinks it anyway), else its first; "1024x1024" when it isn't listed."""
+def picture_size(model: ImageModelInfo | None, *, landscape: bool = False) -> str:
+    """For a sprite, the smallest square size the model lists at 512 or more
+    (the view shrinks it anyway); for a postcard, the widest landscape size
+    up to 1360 across. Else the model's first size; "1024x1024" (a postcard
+    "1024x768") when it isn't listed."""
     sizes = list(model.resolutions) if model is not None else []
-    squares = []
+    shapes = []
     for size in sizes:
         parts = size.replace("*", "x").split("x")
-        if len(parts) == 2 and parts[0] == parts[1] and parts[0].isdigit():
-            squares.append((int(parts[0]), size))
-    big_enough = sorted(s for s in squares if s[0] >= 512)
+        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+            shapes.append((int(parts[0]), int(parts[1]), size))
+    if landscape:
+        wide = sorted(s for s in shapes if s[0] > s[1] and s[0] <= 1360)
+        if wide:
+            return wide[-1][2]
+        return sizes[0] if sizes else "1024x768"
+    big_enough = sorted(s for s in shapes if s[0] == s[1] and s[0] >= 512)
     if big_enough:
-        return big_enough[0][1]
+        return big_enough[0][2]
     return sizes[0] if sizes else "1024x1024"
 
 
@@ -137,12 +145,12 @@ def plan_pictures(
     if world.start is not None:
         shown.add(world.start)
     subjects: list[tuple[Literal["place", "thing"], str, str, str, str | None, int]] = [
-        ("place", p.id, p.name, p.what, p.id, 1)
+        ("place", p.id, p.name, p.what, p.id, 2)
         for p in world.places.values()
         if p.kind in SPRITE_KINDS and p.id in shown
     ]
     subjects += [
-        ("thing", t.id, t.name, "", world.where.get(t.carried_by or "") or t.at, 2)
+        ("thing", t.id, t.name, "", world.where.get(t.carried_by or "") or t.at, 3)
         for t in world.things.values()
         if t.carried_by or t.at in shown
     ]
@@ -171,5 +179,60 @@ def plan_pictures(
                 PictureJob(key, subject, subject_id, name, prompt, state, reference, from_picture),
             )
         )
+    # Postcards: each place the author's character has been (not a road or a
+    # vehicle), where they are now first.
+    been = set(world.visited.get(held or "", []))
+    if world.start is not None and not been:
+        been.add(world.start)
+    for place_id in been:
+        place = world.places.get(place_id)
+        if place is None or place.kind in ("route", "vehicle"):
+            continue
+        state = place.state
+        if art.picture_for("postcard", place_id, state) is not None:
+            continue
+        key = f"picture:postcard:{place_id}" + (f":{state}" if state else "")
+        if failed(key):
+            continue
+        last = art.picture_for("postcard", place_id)
+        if last is not None and edits:
+            prompt = texts.fill(
+                "map.picture.postcard.change",
+                place=place.name,
+                change=state or "as it was before",
+            )
+            reference, from_picture = last.file, last.id
+        else:
+            inside = [p.name for p in world.places.values() if p.inside == place_id][:6]
+            what = (place.what or place.kind or "").rstrip(".") + "."
+            prompt = texts.fill(
+                "map.picture.postcard",
+                place=place.name,
+                view="seen inside" if place.kind == "room" else "seen from outside",
+                what=what + (f" ({state})" if state else ""),
+                inside=f"In it: {', '.join(inside)}. " if inside else "",
+                setting=setting,
+            )
+            reference, from_picture = None, None
+        here_now = place_id == here or place_id == _container(world, here, place_id)
+        jobs.append(
+            (
+                (1 if here_now else 4, 0, far(place_id), place.name),
+                PictureJob(
+                    key, "postcard", place_id, place.name, prompt, state, reference, from_picture
+                ),
+            )
+        )
     jobs.sort(key=lambda pair: pair[0])
     return [job for _, job in jobs[:limit]]
+
+
+def _container(world: WorldMap, inner: str | None, outer: str) -> str | None:
+    """`outer` when `inner` is somewhere inside it, else None."""
+    seen: set[str] = set()
+    while inner is not None and inner in world.places and inner not in seen:
+        if inner == outer:
+            return outer
+        seen.add(inner)
+        inner = world.places[inner].inside
+    return None

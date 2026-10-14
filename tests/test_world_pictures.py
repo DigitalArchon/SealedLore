@@ -91,10 +91,10 @@ def test_a_changed_place_is_drawn_from_its_last_picture_and_nothing_twice():
         ]
     )
     jobs = plan_pictures(world, art, people=[], held="Jane", setting="", edits=True, limit=20)
-    assert "barn" not in {j.subject_id for j in jobs}  # drawn already
+    assert ("place", "barn") not in {(j.subject, j.subject_id) for j in jobs}  # drawn already
     world.places["barn"].state = "blown up"
     jobs = plan_pictures(world, art, people=[], held="Jane", setting="", edits=True, limit=20)
-    (change,) = [j for j in jobs if j.subject_id == "barn"]
+    (change,) = [j for j in jobs if (j.subject, j.subject_id) == ("place", "barn")]
     assert change.reference == "images/map/b.png" and "blown up" in change.prompt
     # A model that takes no picture draws it afresh.
     (fresh,) = [
@@ -102,12 +102,12 @@ def test_a_changed_place_is_drawn_from_its_last_picture_and_nothing_twice():
         for j in plan_pictures(
             world, art, people=[], held="Jane", setting="", edits=False, limit=20
         )
-        if j.subject_id == "barn"
+        if (j.subject, j.subject_id) == ("place", "barn")
     ]
     assert fresh.reference is None
     art.failures[change.key] = 2
     jobs = plan_pictures(world, art, people=[], held="Jane", setting="", edits=True, limit=20)
-    assert "barn" not in {j.subject_id for j in jobs}  # failed too often
+    assert ("place", "barn") not in {(j.subject, j.subject_id) for j in jobs}  # failed twice
 
 
 def test_someone_the_story_has_not_placed_gets_no_avatar_yet():
@@ -206,3 +206,19 @@ def test_pictures_are_drawn_kept_stripped_and_logged_within_the_daily_limit(sess
 def test_off_until_turned_on(session):
     session.config.map_pictures = False
     assert session.map_picture_jobs() == [] and not session.start_map_pictures()
+
+
+def test_each_place_you_have_been_gets_a_postcard_where_you_are_first():
+    jobs = plan_pictures(
+        farm(), WorldArt(), people=PEOPLE, held="Jane", setting="snow", edits=True, limit=30
+    )
+    order = [(j.subject, j.subject_id) for j in jobs]
+    cards = [o for o in order if o[0] == "postcard"]
+    assert set(cards) == {("postcard", "farm"), ("postcard", "barn")}  # not the town: never been
+    # Where the story is now (the barn, and the farm it is in) right after the people.
+    assert order[3:5] == [("postcard", "barn"), ("postcard", "farm")]
+    barn = next(j for j in jobs if j.subject == "postcard" and j.subject_id == "barn")
+    assert "full-bleed" in barn.prompt and "white background" not in barn.prompt
+    assert "postcard" not in barn.prompt  # the word drew a card with a frame and lettering
+    info = ImageModelInfo(id="m", name="m", resolutions=("1024x1024", "1360x768", "1024x768"))
+    assert picture_size(info, landscape=True) == "1360x768"

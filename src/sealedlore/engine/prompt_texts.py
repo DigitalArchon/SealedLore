@@ -2207,6 +2207,42 @@ _text(
 )
 
 
+# A place's postcard: a picture of the whole place, shown on its card when
+# the author's character has been there. Qwen Image's whole scenes were its
+# richest pictures (SealedLoreDocs design/map.md: "a real game-artist look")
+# but kept no story geography, so a postcard is an illustration, never the
+# map. Live on the barn (Oct 2026): "a picture postcard of" drew a card with
+# a frame and a garbled sign, and so did saying "not a card, frame or border"
+# (naming it invites it); "a game map of" drew a framed map with a title;
+# "seen from outside … full-bleed scene" drew the scene alone.
+_text(
+    "map.picture.postcard",
+    MAP,
+    "Map pictures: a place's postcard",
+    "Asks for a picture of a whole place the story has been, shown on its card.",
+    "{place}, {view}: {what} {inside}The story's setting: {setting}. Detailed 16-bit "
+    "pixel art, three-quarter top-down view in the style of Stardew Valley, full-bleed "
+    "scene, atmospheric light, no text.",
+    (
+        ("place", "The place's name"),
+        ("view", "\"seen from outside\", or for a room \"seen inside\""),
+        ("what", "What the story said of it"),
+        ("inside", "What is in it, as a sentence, or nothing"),
+        ("setting", "The story's setting, briefly"),
+    ),
+)
+
+_text(
+    "map.picture.postcard.change",
+    MAP,
+    "Map pictures: a changed place's postcard",
+    "Asks for a new postcard of a place the story changed, given the old one.",
+    "The same place as in the picture given, {place}, but now {change}. Keep the same "
+    "view, style and layout; show what changed. Full-bleed scene, no text.",
+    (("place", "The place's name"), ("change", "Its state now, as the story put it")),
+)
+
+
 # The local map in the storyteller's tail (engine/world.py,
 # `render_map_context`), for a story whose map came from its plot file.
 # Measured in SealedLoreDocs design/map.md: read from prose, the map bound the

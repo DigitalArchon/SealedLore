@@ -258,3 +258,24 @@ def test_the_map_opens_where_the_story_is_with_everyone_there_standing_in_it(app
     assert people["Jane"].pos().y() < 4 * 16  # inside, where the plan marks the barn
     view.region_button.click()
     assert view.place_id is None and view.region_button.isChecked()
+
+
+def test_a_place_s_postcard_shows_on_its_card(app):
+    from sealedlore.models.world import MapPicture
+    from tests.test_world_pictures import png
+
+    world = town()
+    art = WorldArt(
+        pictures=[
+            MapPicture(
+                subject="postcard", subject_id="diner", name="Diner", file="images/map/p.png"
+            )
+        ]
+    )
+    view = WorldView()
+    view.picture_reader = lambda path: png() if path == "images/map/p.png" else None
+    view.set_world(world, art, "Jane", keep_view=False)
+    view.open_place("diner")
+    assert not view.postcard_button.isHidden()
+    view.open_place("farm")
+    assert view.postcard_button.isHidden()  # none drawn for the farmhouse
