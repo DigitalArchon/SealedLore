@@ -196,3 +196,33 @@ def test_the_mapped_sample_imports_with_its_map():
     start = next(p for p in base.places if p.id == parsed.scenario.world_start)
     assert start.name == "The farmhouse"
     assert json.loads(base.model_dump_json())  # it serialises
+
+
+def test_a_read_never_rewrites_what_a_place_of_the_map_is():
+    # Live, reads rewrote the author's places with the moment's words: the
+    # diner became "at the far end of the street, south of where Jane stood".
+    world = world_at([], scenario().world_base)
+    town = place(world, "Hellsville")
+    town.what = "A small walled town."
+    source = "Hellsville's gate shuddered under each blow, the barricade burning."
+    delta, _ = resolve_reply(
+        world,
+        {
+            "places": [
+                {
+                    "name": "Hellsville",
+                    "kind": "building",
+                    "inside": "Farm",
+                    "what": "The gate shuddered under each blow",
+                    "state": "the barricade burning",
+                    "quote": "gate shuddered under each blow",
+                }
+            ]
+        },
+        source=source,
+        people=[],
+    )
+    after = applied(world, delta).places[town.id]
+    assert after.what == "A small walled town." and after.kind == "settlement"
+    assert after.inside is None  # never moved into the farm
+    assert after.state == "the barricade burning"  # what the passage did to it

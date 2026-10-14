@@ -206,10 +206,20 @@ def resolve_reply(
             pending = next((p for p in delta.places if p.id == existing), None)
             old = pending or world.places[existing]
             changed = old.model_copy(deep=True)
-            changed.what = _text(entry.get("what")) or changed.what
+            # What a place is, its kind and where it is stand once known (an
+            # imported map's are the author's): a later passage's words for it
+            # were the moment's ("where four people have set an ambush", "at the
+            # far end of the street, south of where Jane stood"). What a passage
+            # does to it is its state.
+            changed.what = changed.what or _text(entry.get("what"))
             changed.state = _text(entry.get("state")) or changed.state
-            changed.kind = kind or changed.kind  # type: ignore[assignment]
-            if inside is not None and not _would_loop(world, delta, changed.id, inside):
+            changed.kind = changed.kind or kind  # type: ignore[assignment]
+            if (
+                changed.inside is None
+                and changed.x is None  # a placed place has its spot: never moved
+                and inside is not None
+                and not _would_loop(world, delta, changed.id, inside)
+            ):
                 changed.inside = inside
             delta.places = [p for p in delta.places if p.id != existing] + [changed]
         else:
