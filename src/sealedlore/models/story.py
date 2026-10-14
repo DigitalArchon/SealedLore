@@ -71,6 +71,9 @@ class StoryDefaults(BaseModel):
     agency_mode: AgencyMode = "contested"
     npc_scope: NpcScope = "all"
     world_activity: WorldActivity = DEFAULT_WORLD_ACTIVITY
+    # The map that grows as the story goes (models/world.py): off unless the
+    # author turns it on, since its read is one more call after every passage.
+    world_map: bool = False
     # The author's testing (Sept 2026): Sonnet 4.5/4.6 storytelling degrades
     # quickly past ~60k tokens of context, so 60k is the ceiling as well as
     # the default. Existing stories keep what they were saved with.

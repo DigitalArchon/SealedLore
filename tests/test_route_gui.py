@@ -141,7 +141,13 @@ def test_settings_keeps_each_roles_route(app, tmp_path, story, cast):
     # The speed test measures each role on its route: GLM twice.
     targets = {t.label: t.roles for t in dialog.speed_targets()}
     assert targets[GLM] == ("Story", "Summarisation", "Authoring", "Image prompt writer")
-    assert targets[f"{GLM} · Fastest first word · FP8+ · paid"] == ("Scene", "Plot")
+    # The map's roles fall back to the scene model, and with it its route.
+    assert targets[f"{GLM} · Fastest first word · FP8+ · paid"] == (
+        "Scene",
+        "Plot",
+        "Map",
+        "Map art",
+    )
     dialog._save()
     assert window.config.model_routes == {"scene": ModelRoute(priority="latency")}
 

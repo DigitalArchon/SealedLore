@@ -422,6 +422,25 @@ class SettingsDialog(QDialog):
         )
         form.addRow("Lore model", self.lore_model)
 
+        self.map_model = self._routed_field(self.config.map_model or fresh.get("map_model", ""))
+        self.map_model.setPlaceholderText("same as the scene model")
+        self.map_model.setToolTip(
+            "Keeps the map of a story that has it on (Story → Setup): after each passage it "
+            "reads the places the story went to or described, how they connect, who is "
+            "where and the things that matter. A quick model is right here."
+        )
+        form.addRow("Map model", self.map_model)
+        self.map_art_model = self._routed_field(
+            self.config.map_art_model or fresh.get("map_art_model", "")
+        )
+        self.map_art_model.setPlaceholderText("same as the map model")
+        self.map_art_model.setToolTip(
+            "Draws the map: a small picture of each place and thing, and the layout of each "
+            "place, in the background. Use recommended models fills in the one that drew best "
+            "of the free models."
+        )
+        form.addRow("Map art model", self.map_art_model)
+
         self.image_prompt_model = self._routed_field(self.config.image_prompt_model or "")
         self.image_prompt_model.setPlaceholderText("same as the story's model")
         self.image_prompt_model.setToolTip(
@@ -465,6 +484,8 @@ class SettingsDialog(QDialog):
             "plot": self.plot_model,
             "lore": self.lore_model,
             "image_prompt": self.image_prompt_model,
+            "map": self.map_model,
+            "map_art": self.map_art_model,
         }
         for role, field in self._route_fields.items():
             field.set_route(self.config.model_routes.get(role))
@@ -519,6 +540,8 @@ class SettingsDialog(QDialog):
             role("Plot", self.plot_model, "Scene"),
             role("Lore", self.lore_model, "Scene"),
             role("Image prompt writer", self.image_prompt_model, "Story"),
+            role("Map", self.map_model, "Scene"),
+            role("Map art", self.map_art_model, "Map"),
         ]
         private = self._private_test_settings()
         if private is not None and private.model.strip():
@@ -1305,6 +1328,8 @@ class SettingsDialog(QDialog):
         self.config.scene_model = self._role_model(self.scene_model) or None
         self.config.plot_reads = self.plot_reads.isChecked()
         self.config.plot_model = self._role_model(self.plot_model) or None
+        self.config.map_model = self._role_model(self.map_model) or None
+        self.config.map_art_model = self._role_model(self.map_art_model) or None
         self.config.cache_control_mode = self.cache_mode.currentText()  # type: ignore[assignment]
         self.config.cache_ttl = self.cache_ttl.currentData()
 

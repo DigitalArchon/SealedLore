@@ -30,6 +30,7 @@ from sealedlore.engine.prompt_texts import (
     CHARACTERS,
     DEFAULT_TEXTS,
     LORE,
+    MAP,
     PICTURES,
     PLOT,
     PRIVATE,
@@ -774,7 +775,17 @@ def render_exchange(
 # author's choice, Sept 2026), since they are long and seldom the cause. A
 # simple chat's and the review's own are never offered.
 REVIEW_PROMPT_GROUPS = (STORYTELLER, TURN)
-REVIEW_SIDE_GROUPS = (QUESTIONS, SCENE_READ, PLOT, CHAPTERS, CHARACTERS, LORE, PRIVATE, PICTURES)
+REVIEW_SIDE_GROUPS = (
+    QUESTIONS,
+    SCENE_READ,
+    PLOT,
+    MAP,
+    CHAPTERS,
+    CHARACTERS,
+    LORE,
+    PRIVATE,
+    PICTURES,
+)
 
 
 def review_prompt_keys(*, side: bool = False) -> list[str]:

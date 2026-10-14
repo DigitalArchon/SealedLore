@@ -29,6 +29,8 @@ ROUTE_ROLES: dict[str, str | None] = {
     "plot": "scene",
     "lore": "scene",
     "image_prompt": "story",
+    "map": "scene",
+    "map_art": "map",
 }
 
 

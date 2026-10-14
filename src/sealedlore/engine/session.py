@@ -151,6 +151,7 @@ from sealedlore.engine.session_private import PrivateRuntime
 from sealedlore.engine.session_reasoning import ReasoningRuntime
 from sealedlore.engine.session_rebuild import RebuildRuntime
 from sealedlore.engine.session_recall import RecallRuntime
+from sealedlore.engine.session_world import WorldRuntime
 from sealedlore.engine.tokens import TokenEstimator, updated_correction_factor
 from sealedlore.engine.validators import locate_quote, mentions
 from sealedlore.ids import new_id, utc_now_iso
@@ -407,6 +408,7 @@ def _weak_watch(
 
 class StorySession(
     PlotRuntime,
+    WorldRuntime,
     MergeRuntime,
     ArchivalRuntime,
     RebuildRuntime,
@@ -638,6 +640,8 @@ class StorySession(
             "lore": self.config.lore_model,
             "authoring": self.config.authoring_model,
             "image_prompt": self.config.image_prompt_model,
+            "map": self.config.map_model,
+            "map_art": self.config.map_art_model,
         }
         role = role_in_use(role, own)
         if role == "summarisation" and self.story.chat and is_tee(self.model):

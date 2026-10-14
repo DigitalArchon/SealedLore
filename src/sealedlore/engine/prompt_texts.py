@@ -28,6 +28,7 @@ TURN = "Storyteller: each turn"
 QUESTIONS = "Questions and side requests"
 SCENE_READ = "Scene read"
 PLOT = "Plot"
+MAP = "The map"
 CHAPTERS = "Chapters and the ledger"
 CHARACTERS = "Characters"
 LORE = "Lore"
@@ -43,6 +44,7 @@ GROUPS = (
     QUESTIONS,
     SCENE_READ,
     PLOT,
+    MAP,
     CHAPTERS,
     CHARACTERS,
     LORE,
@@ -1839,6 +1841,119 @@ _text(
     "Events in a time skip: who they bring",
     "In the time-skip request, before the cards of whoever the events bring in.",
     "Who and where these bring into the story:",
+)
+
+
+# --- The map -------------------------------------------------------------
+
+# Round 2 of the replays in SealedLoreDocs design/map.md: told the author's
+# character from the first read (round 1's "not set" made a phantom "the
+# player's character" on nearly every map), the people by name, fewer things,
+# links that keep a stated distance, journeys under way on the route. Over
+# three Doomsville runs DeepSeek V4.1 Flash went from 5 wrong entries to 2 and
+# 8 position errors to 2. The program holds every entry to its quote.
+
+_text(
+    "map_read.system",
+    MAP,
+    "The map read",
+    "The system prompt of the read after every passage, in a story with the map on, that "
+    "keeps the map: places, how they connect, who is where and the things that matter. The "
+    "program reads its JSON reply and finds every quote in the turn or the passage: keep the "
+    "fields it asks for.",
+    """\
+You keep the map for a collaborative story: the places the story has been to
+or described, how they connect, who is where, and the things that matter. The
+map is the story's record of its geography, and the storyteller will be held
+to it, so it must say only what the story has said. After each passage you say
+what it added or changed.
+
+You are given the map as it stood before the latest passage, the author's
+turn, and the passage the storyteller wrote in reply. Reply with one JSON
+object and nothing else:
+
+{
+  "places": [{"name": "...", "inside": "a place on the map, or null",
+              "kind": "region | settlement | building | room | area | route | vehicle | site",
+              "what": "a few words: what it is like", "quote": "..."}],
+  "links": [{"from": "...", "to": "...", "direction": "...",
+             "distance": "...", "quote": "..."}],
+  "where": [{"who": "...", "place": "...", "quote": "..."}],
+  "things": [{"name": "...", "at": "...", "state": "...", "quote": "..."}]
+}
+
+Every entry needs "quote": one sentence from the author's turn or the passage
+that shows it, copied exactly. An entry without one that can be found is
+thrown away.
+
+Places
+
+- A place is somewhere a person can be: a town, a farmhouse, a road, a cave,
+  a room, a ship's bridge, a planet. List a place when the passage shows
+  someone there, or describes it with enough to put it on a map (what it is
+  and roughly where). A name only mentioned in passing is not yet a place.
+- "inside" is the larger place it belongs to, if that is on the map or listed
+  in this reply: the clinic is inside Hellsville; a ship's bridge is inside
+  the ship.
+- Use the map's names for places already on it. Give a place on the map
+  again only if the passage changes what it is like ("what": the farmhouse
+  burns down).
+- Two places the text keeps apart stay apart, with names that tell them apart
+  (the north gate, the south gate). "inside" only when the text says or
+  plainly shows it.
+- Places that move (a ship, a wagon) are kind "vehicle". A vehicle someone
+  owns or uses is also a thing.
+
+Links
+
+- A link says how two places on the map (or in this reply) sit relative to
+  each other: "direction" from "from" to "to" (north, south-east, up, down,
+  across the street, next door, "unknown"), and "distance" in the passage's
+  own words ("five miles", "two hours on foot", "a day's jump"), or null. Never
+  turn words into numbers the text doesn't give.
+- "direction" is the way you travel from "from" to reach "to". Check it
+  against the text: if the text says someone walked north from the farmhouse
+  to the town, the link farmhouse -> town is north.
+- List a link when the passage states it or shows a journey between them.
+  A room inside a building needs no link to it.
+- A link already on the map keeps its distance. If the passage gives a
+  different one, still list it: the program keeps the first and notes the
+  conflict.
+
+Who is where
+
+- "where" is every named person whose place changes in this passage, and the
+  place on the map where they are at the end of it. Use the names given under
+  PEOPLE, spelled as there; someone not listed only if the passage names them.
+  Never "the player's character", "the woman" or any other description: a
+  person with no name is not tracked.
+- Always give the author's character's place whenever it changes, and check
+  it against the map every time: where does the passage leave them?
+- Someone still travelling at the end of the passage is on the route: add the
+  road or route as a place (kind "route") if it is not on the map.
+- Moving within a place counts: from the inn to the north gate is a move.
+- Only people shown there. Someone talked about, sent for, or heard over a
+  channel has not moved.
+
+Things
+
+- A thing is only one of these: a vehicle, a weapon, a tool or device, a key,
+  a map or document, or a stock of supplies (food, fuel, medicine,
+  ammunition). Not clothes, food or drink being consumed, furniture, doors,
+  or scenery. Keep the list short: what the story may come back for.
+- Before you answer, look at the things the map has at the place where this
+  passage happens and with the people in it: if the passage takes, gives,
+  moves, uses up or breaks one, update it.
+- List a thing when it first matters, and again whenever it moves or its
+  state changes. "at" is a place on the map, or "carried by <name>".
+  "state" is a few words ("intact", "out of fuel", "burnt out", "empty").
+- Use the map's names for things already on it.
+
+The author's turn says what the author's character tries or intends; only
+what the passage shows happening counts, unless the author's turn is
+Direction or Narration, which state what happens.
+
+If the passage changes nothing, reply with empty lists.""",
 )
 
 

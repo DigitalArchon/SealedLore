@@ -41,6 +41,13 @@ RECOMMENDED_MODELS: dict[str, str] = {
     # runs on the scene model.
     "plot_model": "mistralai/mistral-medium-3.1",
     "lore_model": "deepseek/deepseek-v4.1-flash",
+    # The map read after each passage: as accurate as GLM 5.3 on judged
+    # replays, ~4s a read, and no slowdown on a long story, where GLM 5.3
+    # reasoned thousands of tokens a read (SealedLoreDocs design/map.md).
+    "map_model": "deepseek/deepseek-v4.1-flash",
+    # The map's sprites and local layouts: second only to a paid model on
+    # blind judging, at ~5.5s a sprite, sent its lowest reasoning level.
+    "map_art_model": "z-ai/glm-5.3-flash",
 }
 
 
@@ -441,6 +448,15 @@ class Config(BaseModel):
     # Whether the Plot tab and the notices name upcoming events. Off, the
     # author sees the clock and what has happened, nothing still to come.
     show_plot_spoilers: bool = False
+
+    # The map (models/world.py), in stories that turn it on: after each
+    # passage a small model reads the places it went to or described, how
+    # they connect, who is where and the things that matter. Blank means the
+    # scene model.
+    map_model: str | None = None
+    # The model that draws the map: sprites and the layout of each place, in
+    # the background. Blank means the map model.
+    map_art_model: str | None = None
 
     # Pictures (engine/image_prompt.py, providers/images.py). The image model
     # takes reference pictures: Seedream 5.0 Pro was the author's pick for

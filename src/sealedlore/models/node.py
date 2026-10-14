@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.plot import Chronicle, Direction
 from sealedlore.models.scene import SceneShortcut, SceneState
+from sealedlore.models.world import WorldDelta
 
 NodeKind = Literal["user", "assistant"]
 AgencyMode = Literal["fiat", "plausible", "contested", "dice"]
@@ -88,6 +89,10 @@ class NodeMeta(BaseModel):
     # The plot's clock, facts and events after this node (models/plot.py),
     # kept the same way as `scene`. Only on stories with a plot.
     chronicle: Chronicle | None = None
+    # On a passage, in a story with the map on: what the passage added to it
+    # or changed (models/world.py). The map anywhere is these, applied in
+    # order along the path.
+    world: WorldDelta | None = None
     # On a passage, for a lorebook too big to send whole: the entries the lore
     # model picked for the passage after it (`Config.lore_selector` "picker"),
     # read in the background. None = not picked; [] = picked, and none needed.

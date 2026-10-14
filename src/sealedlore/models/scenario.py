@@ -49,6 +49,9 @@ class Scenario(BaseModel):
     agency_mode: AgencyMode = "contested"
     npc_scope: NpcScope = "all"
     world_activity: WorldActivity = DEFAULT_WORLD_ACTIVITY
+    # The map that grows as the story goes (models/world.py): a choice for the
+    # story, so a new playthrough keeps it.
+    world_map: bool = False
     cast: list[Character] = Field(default_factory=list)
     lore: list[LoreEntry] = Field(default_factory=list)
     # Cards the story built up for people it introduced. Suggestions and

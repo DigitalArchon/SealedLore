@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 import threading
-from collections.abc import Generator, Iterator, Sequence
+from collections.abc import Callable, Generator, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 
 from sealedlore.engine.archival import (
@@ -257,10 +257,11 @@ class PlotRuntime:
             yield SessionNotice(note)
 
     def _read_after_turn(self) -> Iterator[SessionNotice]:
-        """The scene read, then the chronicle read, after a passage.
+        """The scene read, then the chronicle read and the map read
+        (session_world.py), after a passage.
 
-        Neither uses the other's answer, so with a provider that can make a
-        second call alongside (`sibling()`), the chronicle's request goes out
+        None uses another's answer, so with a provider that can make more
+        calls alongside (`sibling()`), each of the others goes out on its own
         while the scene is read: live, the two in series were ~3.3s of
         background work after every passage, about half of it waiting for the
         second call to start. Only the network call leaves this thread; the
@@ -271,29 +272,50 @@ class PlotRuntime:
         if self.story.chat:  # a simple chat is read by nobody
             return
         make_sibling = getattr(self.provider, "sibling", None)
-        pending = self._prepare_chronicle_read() if callable(make_sibling) else None
-        if pending is None or self.config.scene_reads != "every_turn":
+        if not callable(make_sibling):
             yield from self.update_scene_after_turn()
-            yield from self.update_chronicle_after_turn(pending)
+            yield from self.update_chronicle_after_turn()
+            yield from self.update_world_after_turn()
             return
-        side = make_sibling()
-        box: dict[str, object] = {}
+        # The reads that can go out beside the scene read, each with what
+        # applies its answer: the clock read, then the map (session_world.py).
+        side_reads: list[tuple[object, Callable[..., Iterator[SessionNotice]]]] = []
+        chronicle = self._prepare_chronicle_read()
+        if chronicle is not None:
+            side_reads.append((chronicle, self.update_chronicle_after_turn))
+        world = self._prepare_world_read()
+        if world is not None:
+            side_reads.append((world, self.update_world_after_turn))
+        if not side_reads or self.config.scene_reads != "every_turn":
+            yield from self.update_scene_after_turn()
+            for pending, finish in side_reads:
+                yield from finish(pending)
+            return
+        boxes: list[dict[str, object]] = []
+        threads: list[threading.Thread] = []
+        for pending, _finish in side_reads:
+            side = make_sibling()
+            box: dict[str, object] = {}
 
-        def call() -> None:
-            try:
-                box["reply"] = side.complete(pending.request)
-            except BaseException as exc:  # noqa: BLE001 - re-raised on this thread below
-                box["error"] = exc
+            def call(side=side, box: dict[str, object] = box, pending=pending) -> None:
+                try:
+                    box["reply"] = side.complete(pending.request)  # type: ignore[attr-defined]
+                except BaseException as exc:  # noqa: BLE001 - re-raised on this thread below
+                    box["error"] = exc
 
-        thread = threading.Thread(target=call, name="chronicle-read", daemon=True)
-        thread.start()
+            thread = threading.Thread(target=call, name="side-read", daemon=True)
+            thread.start()
+            boxes.append(box)
+            threads.append(thread)
         try:
             yield from self.update_scene_after_turn()
         finally:
-            # A Stop closes this generator and cancels both providers, which
-            # ends the call; don't leave without it.
-            thread.join()
-        yield from self.update_chronicle_after_turn(pending, box)
+            # A Stop closes this generator and cancels every provider, which
+            # ends the calls; don't leave without them.
+            for thread in threads:
+                thread.join()
+        for (pending, finish), box in zip(side_reads, boxes, strict=True):
+            yield from finish(pending, box)
 
     def _prepare_chronicle_read(self) -> _ChronicleRead | None:
         """The chronicle read's request for the latest passage, logged; None if

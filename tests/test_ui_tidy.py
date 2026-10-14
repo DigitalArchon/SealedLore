@@ -342,7 +342,13 @@ def test_recommended_models_are_offered_never_imposed(app, window: MainWindow, m
     from sealedlore.models import config as config_module
     from sealedlore.models.config import Config, recommended_models
 
-    table = {"scene_model": "small/scene", "plot_model": "small/plot", "lore_model": "small/lore"}
+    table = {
+        "scene_model": "small/scene",
+        "plot_model": "small/plot",
+        "lore_model": "small/lore",
+        "map_model": "small/map",
+        "map_art_model": "small/map-art",
+    }
     for field, model in table.items():
         monkeypatch.setitem(config_module.RECOMMENDED_MODELS, field, model)
     assert recommended_models("https://nano-gpt.com/api/v1") == table
@@ -361,6 +367,8 @@ def test_recommended_models_are_offered_never_imposed(app, window: MainWindow, m
     assert dialog.scene_model.text() == "small/scene"
     assert dialog.plot_model.text() == "small/plot"
     assert dialog.lore_model.text() == "small/lore"
+    assert dialog.map_model.text() == "small/map"
+    assert dialog.map_art_model.text() == "small/map-art"
     assert window.config.scene_model is None  # not until Save
     dialog._save()
     assert window.config.scene_model == "small/scene"

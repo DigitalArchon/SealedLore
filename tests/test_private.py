@@ -63,6 +63,8 @@ def build(tmp_path: Path, *, keep: str = "memory"):
     bundle = bundle_from_scenario(parse_plot_markdown(PLOT).scenario)
     bundle.story.defaults.main_model = "anthropic/claude-sonnet-4.6"
     bundle.story.defaults.context_token_budget = 2_500
+    # The map's read is one of the side calls the scene must never reach.
+    bundle.story.defaults.world_map = True
     bundle.lore += [
         LoreEntry(title=f"Entry {i}", content=f"Old lore number {i} about the town.")
         for i in range(12)
