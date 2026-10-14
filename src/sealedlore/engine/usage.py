@@ -45,6 +45,7 @@ KIND_LABELS: dict[str, str] = {
     "image_prompt_response": "Image prompts",
     # Priced per picture: the reply's cost, or the listed price (marked).
     "image_response": "Images",
+    "map_picture_response": "Map pictures",
     "video_prompt_response": "Video prompts",
     # What the endpoint charged for the video (NanoGPT: on accepting it).
     "video_response": "Videos",

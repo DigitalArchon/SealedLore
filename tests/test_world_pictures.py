@@ -1,0 +1,208 @@
+"""Map pictures from an image model (engine/world_pictures.py,
+engine/session_world_art.py): what is asked for, in what order, and how a
+picture is kept. No network: the image endpoint is a stand-in."""
+
+from __future__ import annotations
+
+import json
+import struct
+import zlib
+from pathlib import Path
+
+import pytest
+
+from sealedlore.engine import session_world_art
+from sealedlore.engine.session import StorySession
+from sealedlore.engine.tokens import TokenEstimator, fallback_counter
+from sealedlore.engine.world_pictures import Person, looks_of, picture_size, plan_pictures
+from sealedlore.models.character import Character
+from sealedlore.models.config import Config, MediaEndpoint, ProviderConfig
+from sealedlore.models.node import NodeMeta
+from sealedlore.models.world import (
+    MapPicture,
+    WorldArt,
+    WorldDelta,
+    WorldMap,
+    WorldPlace,
+    WorldThing,
+)
+from sealedlore.providers.images import ImageModelInfo, ImageReply
+from sealedlore.providers.mock import MockChatProvider
+from sealedlore.storage.repository import StoryBundle, save_story_bundle
+from tests.conftest import make_exchange
+
+
+def png(width: int = 8, height: int = 8) -> bytes:
+    """A small white PNG with a red square in it, and a text chunk to strip."""
+    rows = b""
+    for y in range(height):
+        rows += b"\0" + b"".join(
+            b"\xb3\x38\x4a" if 2 <= x < 6 and 2 <= y < 6 else b"\xff\xff\xff" for x in range(width)
+        )
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+        )
+
+    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"tEXt", b"Comment\0secret camera")
+        + chunk(b"IDAT", zlib.compress(rows))
+        + chunk(b"IEND", b"")
+    )
+
+
+def farm() -> WorldMap:
+    farm = WorldPlace(id="farm", name="The farm", kind="site", x=0.0, y=0.0, size=400)
+    barn = WorldPlace(id="barn", name="The barn", kind="building", inside="farm", x=60.0, y=0.0)
+    town = WorldPlace(id="town", name="Hellsville", kind="settlement", x=0.0, y=8000.0)
+    return WorldMap(
+        places={"farm": farm, "barn": barn, "town": town},
+        where={"Jane": "barn", "Ben": "barn", "Marcus Webb": "town"},
+        visited={"Jane": ["farm", "barn"]},
+        seen=["town"],
+        things={"truck": WorldThing(id="truck", name="Pickup truck", at="barn")},
+    )
+
+
+PEOPLE = [Person("Marcus Webb", "Runs the town."), Person("Ben", "A hermit."), Person("Jane", "")]
+
+
+def test_you_first_then_who_is_with_you_then_the_rest_then_places_and_things():
+    jobs = plan_pictures(
+        farm(), WorldArt(), people=PEOPLE, held="Jane", setting="snow", edits=True, limit=20
+    )
+    order = [(j.subject, j.subject_id) for j in jobs]
+    assert order[:3] == [("person", "Jane"), ("person", "Ben"), ("person", "Marcus Webb")]
+    assert ("place", "barn") in order and ("thing", "truck") in order
+    assert order.index(("place", "barn")) < order.index(("place", "town"))  # nearest first
+    assert order.index(("place", "town")) < order.index(("thing", "truck"))
+    assert "Jane" in jobs[0].prompt and "white background" in jobs[0].prompt
+
+
+def test_a_changed_place_is_drawn_from_its_last_picture_and_nothing_twice():
+    world = farm()
+    art = WorldArt(
+        pictures=[
+            MapPicture(subject="place", subject_id="barn", name="The barn", file="images/map/b.png")
+        ]
+    )
+    jobs = plan_pictures(world, art, people=[], held="Jane", setting="", edits=True, limit=20)
+    assert "barn" not in {j.subject_id for j in jobs}  # drawn already
+    world.places["barn"].state = "blown up"
+    jobs = plan_pictures(world, art, people=[], held="Jane", setting="", edits=True, limit=20)
+    (change,) = [j for j in jobs if j.subject_id == "barn"]
+    assert change.reference == "images/map/b.png" and "blown up" in change.prompt
+    # A model that takes no picture draws it afresh.
+    (fresh,) = [
+        j
+        for j in plan_pictures(
+            world, art, people=[], held="Jane", setting="", edits=False, limit=20
+        )
+        if j.subject_id == "barn"
+    ]
+    assert fresh.reference is None
+    art.failures[change.key] = 2
+    jobs = plan_pictures(world, art, people=[], held="Jane", setting="", edits=True, limit=20)
+    assert "barn" not in {j.subject_id for j in jobs}  # failed too often
+
+
+def test_someone_the_story_has_not_placed_gets_no_avatar_yet():
+    jobs = plan_pictures(
+        farm(), WorldArt(), people=[Person("Elena Ruiz", "")], held="Jane", setting="", edits=True
+    )
+    assert "Elena Ruiz" not in {j.subject_id for j in jobs}
+
+
+def test_sizes_and_looks():
+    info = ImageModelInfo(id="m", name="m", resolutions=("256*256", "512*512", "1024*1024"))
+    assert picture_size(info) == "512*512"
+    assert picture_size(None) == "1024x1024"
+    assert looks_of("Short.", None) == "Short."
+    assert len(looks_of("A sentence here. " * 60, None)) <= 421
+
+
+class FakeImages:
+    """Stands in for ImageClient: records what it was sent."""
+
+    sent: list[dict] = []
+
+    def __init__(self, base_url, api_key, *, api=None, **_):
+        self.base_url, self.api = base_url, api or "nanogpt"
+
+    def generate(self, payload):
+        FakeImages.sent.append(payload)
+        return ImageReply(images=[png()], raw={}, cost=None)
+
+    def cancel(self):
+        pass
+
+    def close(self):
+        pass
+
+
+@pytest.fixture
+def session(tmp_path: Path, monkeypatch, story, cast):
+    FakeImages.sent = []
+    monkeypatch.setattr(session_world_art, "ImageClient", FakeImages)
+    monkeypatch.setattr(session_world_art, "list_image_models", lambda *a, **k: [])
+    nodes = make_exchange(1)
+    nodes[-1].meta = NodeMeta(
+        world=WorldDelta(places=list(farm().places.values()), where={"Jane": "barn"})
+    )
+    story.defaults.world_map = True
+    jane = Character(name="Jane", summary="A survivor in a heavy coat.")
+    bundle = StoryBundle(story=story, cast=[*cast, jane], nodes=nodes)
+    bundle.story.active_leaf_id = nodes[-1].id
+    bundle.story.held_character_id = jane.id
+    save_story_bundle(bundle, root=tmp_path)
+    config = Config(
+        providers=[
+            ProviderConfig(name="nano", base_url="https://nano-gpt.com/api/v1", api_key="k")
+        ],
+        active_provider_name="nano",
+        scene_reads="manual",
+        map_art=True,
+        map_pictures=True,
+        map_picture_daily_limit=2,
+        image_endpoint=MediaEndpoint(),
+    )
+    return StorySession(
+        bundle,
+        config,
+        MockChatProvider(["x"] * 20),
+        root=tmp_path,
+        estimator=TokenEstimator(counter=fallback_counter),
+        learn_corrections=False,
+    )
+
+
+def run_pictures(session) -> None:
+    assert session.start_map_pictures()
+    session._picture_thread.join(10)
+
+
+def test_pictures_are_drawn_kept_stripped_and_logged_within_the_daily_limit(session, tmp_path):
+    run_pictures(session)
+    art = session.map_art_copy()
+    assert len(art.pictures) == 2 and len(FakeImages.sent) == 2  # the limit, not every job
+    first = art.pictures[0]
+    assert (first.subject, first.subject_id) == ("person", "Jane")
+    assert "heavy coat" in first.prompt
+    data = session.pictures.read(first.file)
+    assert data is not None and b"secret camera" not in data  # stripped like any picture
+    assert session.map_pictures_left_today() == 0
+    assert not session.start_map_pictures()  # nothing more today
+    log_file = tmp_path / "stories" / session.story.id / "api_log.jsonl"
+    log = [json.loads(line) for line in log_file.read_text().splitlines()]
+    kinds = [entry["kind"] for entry in log]
+    assert kinds.count("map_picture_request") == 2 and kinds.count("map_picture_response") == 2
+    assert any(first.prompt in json.dumps(e) for e in log if e["kind"] == "map_picture_request")
+
+
+def test_off_until_turned_on(session):
+    session.config.map_pictures = False
+    assert session.map_picture_jobs() == [] and not session.start_map_pictures()

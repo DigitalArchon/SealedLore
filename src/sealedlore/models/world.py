@@ -145,6 +145,26 @@ class PlaceLayout(BaseModel):
     made_at: str = ""
 
 
+class MapPicture(BaseModel):
+    """A picture an image model drew for the map (`Config.map_pictures`): a
+    person's avatar, a place or a thing standing on the map (the view cuts it
+    out of its plain background and shrinks it to the map's scale), or a
+    place's postcard. The file is in the story's pictures, under images/map/."""
+
+    id: str = Field(default_factory=new_id)
+    subject: Literal["person", "place", "thing", "postcard"]
+    # A place's or thing's id; a person's name.
+    subject_id: str
+    name: str
+    # As for sprites: the state it shows, drawn from the picture before it.
+    state: str = ""
+    file: str
+    from_picture: str | None = None
+    prompt: str = ""
+    model: str = ""
+    made_at: str = ""
+
+
 class TerrainPatch(BaseModel):
     """The land around a place the story reached, as tiles: a square `side`
     metres wide centred on (`x`, `y`). The map grows by these: the first time
@@ -172,6 +192,20 @@ class WorldArt(BaseModel):
     terrain: list[TerrainPatch] = Field(default_factory=list)
     # Jobs that failed, by key, and how often: one that keeps failing is let be.
     failures: dict[str, int] = Field(default_factory=dict)
+    pictures: list[MapPicture] = Field(default_factory=list)
+    # Pictures asked for, by UTC day ("2026-10-14"), against the daily limit.
+    pictures_by_day: dict[str, int] = Field(default_factory=dict)
+
+    def picture_for(
+        self, subject: str, subject_id: str, state: str | None = None
+    ) -> MapPicture | None:
+        """The latest picture of this subject in `state` (any state when None)."""
+        found = [
+            p
+            for p in self.pictures
+            if p.subject == subject and p.subject_id == subject_id and state in (None, p.state)
+        ]
+        return found[-1] if found else None
 
     def sprite_for(self, subject_id: str, state: str | None = None) -> WorldSprite | None:
         """The sprite of a place or thing in `state` (any state when None),

@@ -461,6 +461,13 @@ class Config(BaseModel):
     # the background after each map read. Off, the map is kept and shown
     # plainly, with no calls for art.
     map_art: bool = True
+    # Map pictures from an image model (Settings → Images): avatars, buildings,
+    # things and postcards, drawn in the background under a standing approval
+    # (the author, Oct 2026), off until turned on. Story pictures still ask
+    # each time. The limit is per story and day; the subscription allows ~100.
+    map_pictures: bool = False
+    map_picture_model: str = "qwen-image"
+    map_picture_daily_limit: int = 40
 
     # Pictures (engine/image_prompt.py, providers/images.py). The image model
     # takes reference pictures: Seedream 5.0 Pro was the author's pick for

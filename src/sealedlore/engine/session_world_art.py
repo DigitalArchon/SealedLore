@@ -8,6 +8,12 @@ Each piece is checked, kept and saved as it comes back, so nothing waits for
 the art and nothing done is lost if the story is closed meanwhile. A
 provider without `detached` (the scripted mock) draws inline.
 
+Map pictures from an image model (`Config.map_pictures`, the author's
+standing approval: engine/world_pictures.py) go on a thread of their own,
+one at a time, each counted against the story's daily limit before it is
+sent, logged with its prompt, and its file stripped of hidden data like any
+picture.
+
 Never in a private scene or a chat, and never two runs at once.
 """
 
@@ -15,6 +21,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 from sealedlore.engine.world_art import (
     LAYOUT_MAX_TOKENS,
@@ -25,9 +32,28 @@ from sealedlore.engine.world_art import (
     plan_art,
     setting_of,
 )
-from sealedlore.ids import utc_now_iso
-from sealedlore.models.world import WorldArt
+from sealedlore.engine.world_pictures import (
+    MAP_PICTURES_DIR,
+    Person,
+    PictureJob,
+    looks_of,
+    picture_size,
+    plan_pictures,
+)
+from sealedlore.ids import new_id, utc_now_iso
+from sealedlore.models.world import MapPicture, WorldArt
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError
+from sealedlore.providers.images import (
+    ImageClient,
+    ImageModelInfo,
+    build_image_payload,
+    data_url,
+    list_image_models,
+    loggable_payload,
+    parse_image_models,
+)
+from sealedlore.storage.image_meta import MetadataError, picture_kind, strip_metadata
+from sealedlore.storage.images import MEDIA_TYPES
 from sealedlore.storage.world_art import load_world_art, save_world_art
 
 # Pieces drawn at once in the background: enough to keep up with a passage,
@@ -41,6 +67,9 @@ class WorldArtRuntime:
     _art_thread: threading.Thread | None = None
     _art_clients: list[ChatProvider] | None = None
     _art_stop = False
+    _picture_thread: threading.Thread | None = None
+    _picture_client: ImageClient | None = None
+    _picture_model_info: ImageModelInfo | None = None
     # Called (on the art thread) after each piece is kept: the window's cue to
     # redraw the map.
     on_map_art: Callable[[], None] | None = None
@@ -85,16 +114,174 @@ class WorldArtRuntime:
             setting=setting_of(self.story.world_bible, self.story.title),
             texts=self.texts,
             limit=limit,
+            sprites=not self.map_pictures_on,
         )
+
+    # --- pictures from an image model -------------------------------------------
+
+    @property
+    def map_pictures_on(self) -> bool:
+        """The author has turned map pictures on and there is somewhere to
+        send them; never in a private scene."""
+        if not (self.map_on and self.config.map_art and self.config.map_pictures):
+            return False
+        media = self.config.images()
+        return self.open_span is None and media is not None and bool(media.api_key)
+
+    def map_pictures_left_today(self, art: WorldArt | None = None) -> int:
+        art = art or self.map_art_copy()
+        return max(0, self.config.map_picture_daily_limit - art.pictures_by_day.get(_today(), 0))
+
+    def map_picture_jobs(self, limit: int = 6) -> list[PictureJob]:
+        """What the map at the leaf still needs from the image model."""
+        if not self.map_pictures_on:
+            return []
+        art = self.map_art_copy()
+        room = self.map_pictures_left_today(art)
+        if room <= 0:
+            return []
+        info = self._picture_model()
+        held = self._character(self.story.held_character_id)
+        people = [
+            Person(c.name, looks_of(c.summary, c.full_description))
+            for c in (*self.visible_cast(), *self.visible_supporting())
+        ]
+        return plan_pictures(
+            self.world(),
+            art,
+            people=people,
+            held=held.name if held is not None else None,
+            setting=setting_of(self.story.world_bible, self.story.title),
+            edits=info is not None and info.accepts_images,
+            texts=self.texts,
+            limit=min(limit, room),
+        )
+
+    def _picture_model(self) -> ImageModelInfo | None:
+        """The map picture model's listing entry, from the config's copy of the
+        listing (Settings fetches it); None when it isn't there."""
+        model = self.config.map_picture_model
+        if self._picture_model_info is not None and self._picture_model_info.id == model:
+            return self._picture_model_info
+        found = next(
+            (m for m in parse_image_models({"data": self.config.image_models}) if m.id == model),
+            None,
+        )
+        self._picture_model_info = found
+        return found
+
+    def start_map_pictures(self) -> bool:
+        """Draw what the map needs from the image model, in the background."""
+        thread = self._picture_thread
+        if thread is not None and thread.is_alive():
+            return False
+        jobs = self.map_picture_jobs()
+        media = self.config.images()
+        if not jobs or media is None:
+            return False
+        client = ImageClient(media.base_url, media.api_key, api=media.api)
+        self._picture_client = client
+        self._art_stop = False
+        info = self._picture_model()
+        thread = threading.Thread(
+            target=self._picture_all,
+            args=(jobs, client, info),
+            name="map-pictures",
+            daemon=True,
+        )
+        self._picture_thread = thread
+        thread.start()
+        return True
+
+    def _picture_all(
+        self, jobs: list[PictureJob], client: ImageClient, info: ImageModelInfo | None
+    ) -> None:
+        try:
+            if info is None:  # not in the config's listing: ask the endpoint once
+                listing = list_image_models(client.base_url, api=client.api)
+                info = next((m for m in listing if m.id == self.config.map_picture_model), None)
+                self._picture_model_info = info
+            size = picture_size(info)
+            for job in jobs:
+                if self._art_stop:
+                    return
+                self._picture_one(job, client, size)
+        finally:
+            client.close()
+
+    def _picture_one(self, job: PictureJob, client: ImageClient, size: str) -> None:
+        model = self.config.map_picture_model
+        art = self.world_art
+        with self._lock():
+            if self.map_pictures_left_today(art) <= 0:
+                return
+            day = _today()
+            art.pictures_by_day[day] = art.pictures_by_day.get(day, 0) + 1
+            self._save_art(art)
+        references: list[str] = []
+        names: list[str] = []
+        if job.reference:
+            data = self.pictures.read(job.reference)
+            try:
+                data = strip_metadata(data) if data is not None else None
+            except MetadataError:
+                data = None  # never sent unstripped: drawn afresh instead
+            if data is not None:
+                references.append(data_url(data, MEDIA_TYPES[picture_kind(data)]))
+                names.append(f"{job.name}: {job.reference}")
+        payload = build_image_payload(model, job.prompt, size, 1, references, api=client.api)
+        log_ref = self._log(
+            "map_picture_request",
+            {"job": job.key, "payload": loggable_payload(payload, names)},
+        )
+        try:
+            reply = client.generate(payload)
+            data = strip_metadata(reply.images[0])
+        except (ProviderError, MetadataError, IndexError) as exc:
+            if self._art_stop:
+                return
+            with self._lock():
+                art.failures[job.key] = art.failures.get(job.key, 0) + 1
+                self._save_art(art)
+            self._log("map_picture_error", {"request_log_ref": log_ref, "error": str(exc)[:300]})
+            return
+        info = self._picture_model_info
+        cost = reply.cost
+        usage: dict = {"cost": cost or 0.0, "cost_reported": cost is not None}
+        if cost is None and info is not None and info.price(size) is not None:
+            usage = {"cost": info.price(size), "cost_estimated": True}
+        self._log("map_picture_response", {"request_log_ref": log_ref, "usage": usage})
+        picture_id = new_id()
+        relative = f"{MAP_PICTURES_DIR}/{picture_id}{picture_kind(data) or '.png'}"
+        self.pictures.write(relative, data)
+        picture = MapPicture(
+            id=picture_id,
+            subject=job.subject,
+            subject_id=job.subject_id,
+            name=job.name,
+            state=job.state,
+            file=relative,
+            from_picture=job.from_picture,
+            prompt=job.prompt,
+            model=model,
+            made_at=utc_now_iso(),
+        )
+        with self._lock():
+            art.pictures.append(picture)
+            self._save_art(art)
+        callback = self.on_map_art
+        if callback is not None:
+            callback()
 
     def start_map_art(self) -> bool:
         """Draw what the map needs, in the background. False when there is
         nothing to draw, a run is under way, or the map can't be drawn now."""
+        pictures = self.start_map_pictures()
         if self.map_art_running:
-            return False
+            return pictures
         jobs = self.map_art_jobs()
         if not jobs:
-            return False
+            return pictures
         model = self.map_art_model
         requests = [self._art_request(job, model) for job in jobs]
         detached = getattr(self.provider, "detached", None)
@@ -122,9 +309,12 @@ class WorldArtRuntime:
                 client.cancel()
             except Exception:  # noqa: BLE001 - stopping must never fail
                 pass
-        thread = self._art_thread
-        if thread is not None and wait_seconds > 0:
-            thread.join(wait_seconds)
+        client = self._picture_client
+        if client is not None:
+            client.cancel()
+        for thread in (self._art_thread, self._picture_thread):
+            if thread is not None and wait_seconds > 0:
+                thread.join(wait_seconds)
 
     def _art_request(self, job: ArtJob, model: str) -> ChatRequest:
         tokens = SPRITE_MAX_TOKENS if job.kind == "sprite" else LAYOUT_MAX_TOKENS
@@ -191,3 +381,8 @@ class WorldArtRuntime:
     def _save_art(self, art: WorldArt) -> None:
         if not self.memory_only:
             save_world_art(self.story.id, art, self.root)
+
+
+def _today() -> str:
+    """The UTC day, as the daily limit counts it."""
+    return datetime.now(UTC).date().isoformat()

@@ -120,3 +120,74 @@ def tile_image(rows: tuple[str, ...], ground: str = "") -> QImage:
 @lru_cache(maxsize=256)
 def tile_pixmap(rows: tuple[str, ...], ground: str = "") -> QPixmap:
     return QPixmap.fromImage(tile_image(rows, ground))
+
+
+# --- Pictures from an image model (engine/world_pictures.py) -----------------
+
+# How close to white (or to the corner's colour) counts as the background.
+_NEAR_WHITE = 226
+_NEAR_CORNER = 60
+
+
+def _cut_out(image: QImage) -> QImage | None:
+    """The picture with its plain background taken away (flooded in from the
+    edges: near-white, or the colour of its corner), cropped to what is left.
+    None when nothing is left."""
+    image = image.convertToFormat(QImage.Format_ARGB32)
+    w, h = image.width(), image.height()
+    corner = image.pixelColor(1, 1)
+
+    def background(c: QColor) -> bool:
+        if c.red() > _NEAR_WHITE and c.green() > _NEAR_WHITE and c.blue() > _NEAR_WHITE:
+            return True
+        return (
+            abs(c.red() - corner.red())
+            + abs(c.green() - corner.green())
+            + abs(c.blue() - corner.blue())
+            < _NEAR_CORNER
+        )
+
+    clear = QColor(0, 0, 0, 0)
+    seen = bytearray(w * h)
+    todo = [(x, 0) for x in range(w)] + [(x, h - 1) for x in range(w)]
+    todo += [(0, y) for y in range(h)] + [(w - 1, y) for y in range(h)]
+    while todo:
+        x, y = todo.pop()
+        if not (0 <= x < w and 0 <= y < h) or seen[y * w + x]:
+            continue
+        seen[y * w + x] = 1
+        if not background(image.pixelColor(x, y)):
+            continue
+        image.setPixelColor(x, y, clear)
+        todo += [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+    left, top, right, bottom = w, h, -1, -1
+    for y in range(h):
+        for x in range(w):
+            if image.pixelColor(x, y).alpha():
+                left, right = min(left, x), max(right, x)
+                top, bottom = min(top, y), max(bottom, y)
+    if right < 0:
+        return None
+    return image.copy(left, top, right - left + 1, bottom - top + 1)
+
+
+@lru_cache(maxsize=256)
+def picture_sprite(key: str, data: bytes, height: int) -> QImage | None:
+    """A map picture cut out of its background and shrunk to `height` pixels
+    of the map's art, its edge hard (no half-clear fringe). `key` names it
+    for the cache (the picture's id)."""
+    image = QImage.fromData(data)
+    if image.isNull():
+        return None
+    work = image.scaled(256, 256, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    cut = _cut_out(work)
+    if cut is None:
+        return None
+    small = cut.scaledToHeight(max(4, height), Qt.SmoothTransformation)
+    small = small.convertToFormat(QImage.Format_ARGB32)
+    for y in range(small.height()):
+        for x in range(small.width()):
+            colour = small.pixelColor(x, y)
+            colour.setAlpha(255 if colour.alpha() > 128 else 0)
+            small.setPixelColor(x, y, colour)
+    return small

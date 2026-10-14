@@ -890,6 +890,16 @@ changes something (a barn blown up, a truck burnt out), it is drawn again as
 it now is, as an edit of how it looked, so it is still the same barn. A
 branch shows the map as it stands on that branch.
 
+With **Draw map pictures with an image model** ticked (Settings → Images, off
+until you tick it; Qwen Image unless you choose another), an image model draws
+the map's people, buildings and things instead: everyone's avatar from what
+their card says of them (you first, then whoever is with you), and each
+building standing on the ground where the story put it. They are drawn in the
+background without asking each time, up to the limit set there for each story
+each day, and each one's prompt and cost are kept in the story's log. A place
+the story changes is drawn again from its last picture, so it stays the same
+place. Story pictures (Image…) still show you every request first.
+
 A story that keeps a map makes it part of the window: the Inspector, beside
 the story, takes half the window with **Map** as its first page, and the
 Stories list steps aside (View → Stories list brings it back). **Map**, above

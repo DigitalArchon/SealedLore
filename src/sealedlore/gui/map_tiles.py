@@ -563,9 +563,12 @@ def render_tiles(
     *,
     roofs: bool = False,
     seed: int = 0,
+    cleared: Sequence[tuple[int, int, int, int]] = (),
 ) -> QImage:
     """`rows` drawn, `TILE` pixels a tile. `roofs` draws each closed building
-    from outside, roofed; otherwise its floor and furniture show (a plan)."""
+    from outside, roofed; otherwise its floor and furniture show (a plan).
+    `cleared` buildings (their boxes) are left as open ground: a picture of
+    the building stands there instead (gui/world_view.py)."""
     grid = _Grid(rows)
     look_name = ground if ground in LOOKS else ""
     look = LOOKS[look_name]
@@ -573,13 +576,17 @@ def render_tiles(
     p = QPainter(image)
     roofed: set[tuple[int, int]] = set()
     houses = _buildings(grid) if roofs else []
+    clear: set[tuple[int, int]] = set()
+    for x0, x1, y0, y1 in cleared:
+        clear |= {(x, y) for x in range(x0, x1 + 1) for y in range(y0, y1 + 1)}
+    houses = [house for house in houses if not house <= clear]
     for house in houses:
         roofed |= house
 
     # 1. The ground under everything.
     for y in range(grid.h):
         for x in range(grid.w):
-            ch = grid.at(x, y)
+            ch = OPEN if (x, y) in clear else grid.at(x, y)
             v = _variant(x, y, seed)
             under = (
                 OPEN if ch in (OPEN, BRUSH, TREES, ROCK, RUBBLE, FENCE, "") or ch.isdigit() else ch
@@ -611,6 +618,8 @@ def render_tiles(
     for y in range(grid.h):
         for x in range(grid.w):
             ch = grid.at(x, y)
+            if (x, y) in clear:
+                continue
             if ch in BUILT and (x, y) not in roofed:
                 _wall(p, grid, x, y, ch, look)
             elif ch == FENCE:
@@ -622,7 +631,7 @@ def render_tiles(
     standing: list[tuple[int, int, QImage, bool]] = []
     for y in range(grid.h):
         for x in range(grid.w):
-            ch = grid.at(x, y)
+            ch = OPEN if (x, y) in clear else grid.at(x, y)
             v = _variant(x, y, seed, 97)
             rng = _rng("stand", x, y, seed)
             cx, base = x * TILE + TILE // 2, y * TILE + TILE
@@ -865,9 +874,14 @@ def _roof(p: QPainter, grid: _Grid, house: set[tuple[int, int]], look: Look) -> 
 
 
 @lru_cache(maxsize=48)
-def tiles_pixmap(rows: tuple[str, ...], ground: str = "", roofs: bool = False) -> QPixmap:
+def tiles_pixmap(
+    rows: tuple[str, ...],
+    ground: str = "",
+    roofs: bool = False,
+    cleared: tuple[tuple[int, int, int, int], ...] = (),
+) -> QPixmap:
     """`render_tiles`, kept: a scene is drawn again on every redraw of the view."""
-    return QPixmap.fromImage(render_tiles(rows, ground, roofs=roofs))
+    return QPixmap.fromImage(render_tiles(rows, ground, roofs=roofs, cleared=cleared))
 
 
 def building_boxes(rows: Sequence[str]) -> list[tuple[int, int, int, int]]:

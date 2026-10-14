@@ -2145,6 +2145,68 @@ Setting: {setting}.""",
 )
 
 
+# Map pictures from an image model (engine/world_pictures.py), under the
+# standing approval of Settings → Images → Draw map pictures. Measured in
+# SealedLoreDocs design/map.md ("The look"): on a plain white background,
+# Z Image Turbo and Qwen Image give sprites the program cuts out cleanly, and
+# characters read well at map size. The style line is the measured one, with
+# the white background named; the setting line is new.
+_text(
+    "map.picture.style",
+    MAP,
+    "Map pictures: the style",
+    "Ends every map picture's prompt: the look, and the plain background the program "
+    "cuts the picture out of.",
+    "16-bit pixel art game sprite, seen from a three-quarter top-down view like Stardew "
+    "Valley, crisp pixels, limited palette, clean dark outlines, centred, on a plain flat "
+    "white background with nothing else on it, no text, no UI, no border, no ground shadow.",
+)
+
+_text(
+    "map.picture.person",
+    MAP,
+    "Map pictures: a person",
+    "Asks for a character's avatar on the map, from what their card says of them.",
+    "A single game character sprite: {who}. {looks} Full body, standing, facing the "
+    "viewer, chibi proportions. The story's setting: {setting}. {style}",
+    (
+        ("who", "The character's name"),
+        ("looks", "What their card says of them, shortened"),
+        ("setting", "The story's setting, briefly"),
+        ("style", "map.picture.style"),
+    ),
+)
+
+_text(
+    "map.picture.place",
+    MAP,
+    "Map pictures: a place or a thing",
+    "Asks for a place (a building, a site) or a thing to stand on the map.",
+    "A single game sprite of {what}, the whole of it in view. The story's setting: "
+    "{setting}. {style}",
+    (
+        ("what", "The place or thing and what the story said of it"),
+        ("setting", "The story's setting, briefly"),
+        ("style", "map.picture.style"),
+    ),
+)
+
+_text(
+    "map.picture.change",
+    MAP,
+    "Map pictures: a change",
+    "Asks for the picture of a place or thing the story changed (a barn blown up), given "
+    "its last picture, so it stays the same one.",
+    "The same {what} as in the picture given, but now {change}. Keep it recognisably the "
+    "same, in the same style, size and view. {style}",
+    (
+        ("what", "The place or thing"),
+        ("change", "Its state now, as the story put it"),
+        ("style", "map.picture.style"),
+    ),
+)
+
+
 # The local map in the storyteller's tail (engine/world.py,
 # `render_map_context`), for a story whose map came from its plot file.
 # Measured in SealedLoreDocs design/map.md: read from prose, the map bound the

@@ -94,6 +94,7 @@ class WorldWindow:
         if session is None or not self.world_shown():
             return
         held = session._character(session.story.held_character_id)
+        self.world_view.picture_reader = session.pictures.read
         self.world_view.set_world(
             session.world(),
             session.map_art_copy(),

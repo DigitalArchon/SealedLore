@@ -17,6 +17,7 @@ Everything here is read from the session; the view never changes the story.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from html import escape
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
@@ -38,7 +39,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.world_layout import extent, position, size_of
 from sealedlore.gui import text_size
-from sealedlore.gui.map_art import FOG, sprite_pixmap
+from sealedlore.gui.map_art import FOG, picture_sprite, sprite_pixmap
 from sealedlore.gui.map_tiles import (
     TILE,
     building_boxes,
@@ -57,6 +58,7 @@ ZOOM_STEP = 1.25
 _OPEN_GROUND = frozenset({"snow", "grass", "dirt", "sand"})
 # A scene's people, in art pixels (the tileset's scale) before the view's zoom.
 PERSON_HEIGHT = 20
+AVATAR_HEIGHT = 26
 # Places with no picture of their own (land, not a thing on it): a mark only.
 _MARK_COLOURS = {
     "region": "#c9b98a",
@@ -308,6 +310,8 @@ class WorldView(QWidget):
         self.world = WorldMap()
         self.art = WorldArt()
         self.held: str | None = None
+        # Reads a map picture's file from the story (the window sets it).
+        self.picture_reader: Callable[[str], bytes | None] | None = None
         self.place_id: str | None = None
         self._items: list[_PlaceItem] = []
         self.people: list[_PersonItem] = []
@@ -464,8 +468,10 @@ class WorldView(QWidget):
             spot = position(world, place.id)
             if spot is None or place.id not in shown:
                 continue
-            sprite = self.art.sprite_for(place.id, place.state) or self.art.sprite_for(place.id)
-            pixmap = sprite_pixmap(sprite.id, sprite.svg, SPRITE_SIZE) if sprite else None
+            pixmap = self._picture_pixmap("place", place.id, place.state, SPRITE_SIZE)
+            if pixmap is None:
+                sprite = self.art.sprite_for(place.id, place.state) or self.art.sprite_for(place.id)
+                pixmap = sprite_pixmap(sprite.id, sprite.svg, SPRITE_SIZE) if sprite else None
             item = _PlaceItem(
                 place,
                 pixmap,
@@ -519,10 +525,20 @@ class WorldView(QWidget):
             rows = tuple(layout.rows)
             ground = self._ground_for(place, str(layout.spec.get("ground", "")))
             roofs = not self.inside_button.isChecked()
-            item = QGraphicsPixmapItem(tiles_pixmap(rows, ground, roofs))
+            # A building with a picture stands there as drawn, on cleared ground.
+            pictured = self._pictured_buildings(rows, layout.labels) if roofs else {}
+            item = QGraphicsPixmapItem(tiles_pixmap(rows, ground, roofs, tuple(pictured)))
             item.setTransformationMode(Qt.FastTransformation)
             item.setShapeMode(QGraphicsPixmapItem.BoundingRectShape)
             self.scene.addItem(item)
+            for (x0, x1, _y0, y1), image in pictured.items():
+                building = QGraphicsPixmapItem(QPixmap.fromImage(image))
+                building.setTransformationMode(Qt.FastTransformation)
+                building.setPos(
+                    (x0 + x1 + 1) * TILE / 2 - image.width() / 2, (y1 + 1) * TILE - image.height()
+                )
+                building.setZValue(2)
+                self.scene.addItem(building)
             boxes = building_boxes(rows) if roofs else []
             self._marked(rows, layout.objects, boxes)
             spots = {_key(name): (x, y) for name, (x, y) in layout.labels.items()}
@@ -556,6 +572,53 @@ class WorldView(QWidget):
                 + "<br>".join(escape(f"{t.name}, by {t.carried_by}") for t in carried)
             )
         self.side.setText("<br><br>".join(side))
+
+    def _picture_image(self, subject: str, subject_id: str, state: str | None, height: int):
+        """A map picture, cut out and shrunk to `height`: in this state, else
+        the latest. None when there is none (or its file can't be read)."""
+        picture = self.art.picture_for(subject, subject_id, state) or self.art.picture_for(
+            subject, subject_id
+        )
+        if picture is None or self.picture_reader is None:
+            return None
+        data = self.picture_reader(picture.file)
+        return picture_sprite(picture.id, data, height) if data else None
+
+    def _picture_pixmap(self, subject: str, subject_id: str, state: str, size: int):
+        image = self._picture_image(subject, subject_id, state, size)
+        if image is None:
+            return None
+        if image.width() > size:  # a wide building: it fits the same square
+            image = image.scaledToWidth(size, Qt.SmoothTransformation)
+        return QPixmap.fromImage(image)
+
+    def _place_named(self, name: str) -> WorldPlace | None:
+        key = _key(name)
+        for place in self.world.places.values():
+            if key in {_key(n) for n in (place.name, *place.aliases)}:
+                return place
+        return None
+
+    def _pictured_buildings(self, rows: tuple[str, ...], labels: dict) -> dict:
+        """Each building in the plan the story's place has a picture of: its
+        box, and the picture shrunk to stand on it."""
+        found: dict = {}
+        boxes = building_boxes(rows)
+        for name, (x, y) in labels.items():
+            place = self._place_named(name)
+            box = next((b for b in boxes if b[0] <= x <= b[1] and b[2] <= y <= b[3]), None)
+            if place is None or box is None or box in found:
+                continue
+            x0, x1, y0, y1 = box
+            height = (y1 - y0 + 2) * TILE
+            image = self._picture_image("place", place.id, place.state, height)
+            if image is None:
+                continue
+            widest = (x1 - x0 + 3) * TILE
+            if image.width() > widest:
+                image = image.scaledToWidth(widest, Qt.SmoothTransformation)
+            found[box] = image
+        return found
 
     def _ground_for(self, place: WorldPlace, ground: str) -> str:
         """A plan's open ground as the land it stands on has it: live, a barn's
@@ -635,12 +698,13 @@ class WorldView(QWidget):
             names.sort(key=lambda n: n != self.held)
             for i, name in enumerate(names):
                 offset = (i - (len(names) - 1) / 2) * 14
-                figure = _PersonItem(name, person_sprite(name), held=name == self.held)
+                avatar = self._picture_image("person", name, None, AVATAR_HEIGHT)
+                figure = _PersonItem(name, avatar or person_sprite(name), held=name == self.held)
                 figure.setPos(x + offset, y)
                 self.scene.addItem(figure)
                 self.people.append(figure)
                 tag = _TagItem(name.split()[0], bold=name == self.held)
-                tag.centre_on(x + offset, y - PERSON_HEIGHT - 6)
+                tag.centre_on(x + offset, y - figure.image.height() - 6)
                 self.scene.addItem(tag)
 
     def _update_detail(self) -> None:

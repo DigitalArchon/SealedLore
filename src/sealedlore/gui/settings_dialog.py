@@ -1028,7 +1028,50 @@ class SettingsDialog(QDialog):
         hint.setObjectName("hintLabel")
         hint.setWordWrap(True)
         form.addRow(hint)
+        self._map_pictures_rows(form)
         return widget
+
+    def _map_pictures_rows(self, form: QFormLayout) -> None:
+        """Map pictures: a standing approval (the author's call, Oct 2026),
+        unlike story pictures, which ask each time."""
+        form.addRow(QLabel("<b>Map pictures</b>"))
+        self.map_pictures = QCheckBox("Draw map pictures with an image model")
+        self.map_pictures.setChecked(self.config.map_pictures)
+        self.map_pictures.setToolTip(
+            "For a story that keeps a map: everyone's avatar, the buildings and things on "
+            "it, drawn in the background as the story goes, without asking each time"
+        )
+        form.addRow(self.map_pictures)
+        self.map_picture_model = ModelField(
+            self.config.map_picture_model,
+            self._browse_image_models if self.image_catalog is not None else None,
+        )
+        form.addRow("Map picture model", self.map_picture_model)
+        self.map_picture_limit = QSpinBox()
+        self.map_picture_limit.setRange(1, 500)
+        self.map_picture_limit.setValue(self.config.map_picture_daily_limit)
+        self.map_picture_limit.setSuffix(" a day, per story")
+        form.addRow("At most", self.map_picture_limit)
+        self.map_picture_note = QLabel()
+        self.map_picture_note.setObjectName("hintLabel")
+        self.map_picture_note.setWordWrap(True)
+        form.addRow(self.map_picture_note)
+        self.map_picture_model.textChanged.connect(self._sync_map_picture_note)
+        self.map_picture_limit.valueChanged.connect(self._sync_map_picture_note)
+        self._sync_map_picture_note()
+
+    def _sync_map_picture_note(self, *_args) -> None:
+        model = self.map_picture_model.text().strip()
+        info = next((m for m in self._image_models if m.id == model), None)
+        prices = sorted({p for p in (info.per_image.values() if info else ()) if p})
+        price = f"${prices[0]:.3f} a picture listed" if prices else "price not listed"
+        limit = self.map_picture_limit.value()
+        self.map_picture_note.setText(
+            "Drawn without asking each time: each prompt is kept in the story's log with "
+            f"what it cost. {model or 'No model'}: {price}, so at most "
+            + (f"${prices[0] * limit:.2f}" if prices else f"{limit} pictures")
+            + " a day for a story (less on a subscription that includes the model)."
+        )
 
     def _media_fields(self, endpoint: MediaEndpoint) -> tuple[QLineEdit, QLineEdit, QComboBox]:
         """An address, a key and the service it speaks, for pictures or video."""
@@ -1286,6 +1329,11 @@ class SettingsDialog(QDialog):
         self.config.image_size = self.image_size.currentText().strip() or self.config.image_size
         self.config.image_count = self.image_count.value()
         self.config.image_prompt_model = self.image_prompt_model.text().strip() or None
+        self.config.map_pictures = self.map_pictures.isChecked()
+        self.config.map_picture_model = (
+            self.map_picture_model.text().strip() or self.config.map_picture_model
+        )
+        self.config.map_picture_daily_limit = self.map_picture_limit.value()
         images = MediaEndpoint(
             base_url=self.image_url.text().strip(),
             api_key=self.image_key.text().strip(),

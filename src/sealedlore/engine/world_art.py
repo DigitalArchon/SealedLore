@@ -511,11 +511,13 @@ def plan_art(
     setting: str,
     texts: PromptTexts = DEFAULT_TEXTS,
     limit: int = 12,
+    sprites: bool = True,
 ) -> list[ArtJob]:
     """What the map still needs drawn, nearest the story first: the land
     around and the layout of every place the story has been, then sprites of
     places and things, a changed thing redrawn from its last sprite. Nothing
-    already drawn, and nothing that has failed too often, is asked again."""
+    already drawn, and nothing that has failed too often, is asked again.
+    `sprites` off: an image model draws them instead (engine/world_pictures.py)."""
     jobs: list[ArtJob] = []
     visited = {pid for places in world.visited.values() for pid in places}
     if world.start is not None:
@@ -582,12 +584,12 @@ def plan_art(
     subjects: list[tuple[str, str, str, str, Literal["place", "thing"]]] = [
         (p.id, p.name, _what(p), p.state, "place")
         for p in world.places.values()
-        if p.kind in SPRITE_KINDS and p.id in shown  # nothing under the fog is drawn
+        if sprites and p.kind in SPRITE_KINDS and p.id in shown  # nothing under the fog
     ]
     subjects += [
         (t.id, t.name, _thing_words(t), t.state, "thing")
         for t in world.things.values()
-        if t.carried_by or t.at in shown
+        if sprites and (t.carried_by or t.at in shown)
     ]
     for subject_id, name, words, state, subject in subjects:
         if art.sprite_for(subject_id, state) is not None:
