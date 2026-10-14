@@ -121,7 +121,7 @@ class WorldWindow:
         """The window laid out for a map or not, and the map's art under way.
         After a story opens or closes, a job finishes, or Setup is saved."""
         session = self.session
-        on = session is not None and session.map_on and not session.in_private
+        on = session is not None and session.map_on
         if on != self.map_layout:
             self._set_map_layout(on)
         # Usable while the model writes: the map only reads the story.
@@ -129,8 +129,13 @@ class WorldWindow:
         self.world_button.setEnabled(on)
         if not on:
             return
+        # A private scene pauses the map where it stood (the author, Oct 15
+        # 2026): shown as the story was when the scene began, nothing drawn or
+        # painted, nothing from the scene read into it. The approved summary
+        # is read like any passage, and the map catches up from it.
+        self.world_view.set_paused(session.in_private)
         session.on_map_art = self._art_signal.drawn.emit
-        if not self._busy:
+        if not self._busy and not session.in_private:
             # Whatever the map still lacks (a story opened, the setting just
             # turned on, art that failed before) is drawn now, in the background.
             session.start_map_art()
@@ -142,8 +147,6 @@ class WorldWindow:
         self.map_layout = on
         index = self.right_tabs.indexOf(self.world_view)
         self.right_tabs.setTabVisible(index, on)
-        # The Stories list steps aside for the map, and comes back after.
-        self.stories_dock.setVisible(not on)
         if on:
             self.right_tabs.setCurrentWidget(self.world_view)
         self._sync_world_button()

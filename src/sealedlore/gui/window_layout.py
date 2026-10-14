@@ -8,12 +8,18 @@ cut every title. Now the docks take their share of the window's width, by
 proportion, every time it changes size, until the author drags a separator;
 from then on the widths are theirs, and both they and the window's size are
 kept in the config (`Config.window`) for the next launch.
+
+The Stories list is put away while a story is open (the author, Oct 15
+2026: more room for the story, as a story with a map first did), unless the
+author brings it back (Stories above the transcript, or View → Stories
+list): that choice is kept for every story (`Config.stories_list`). With no
+story open it is always shown, since it is how a story is opened.
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, Qt, QTimer
-from PySide6.QtWidgets import QDockWidget, QStyle
+from PySide6.QtCore import QEvent, Qt, QTimer, Signal
+from PySide6.QtWidgets import QDockWidget, QStyle, QToolButton
 
 from sealedlore.models.config import WindowLayout
 
@@ -32,8 +38,13 @@ INSPECTOR_SHARE = 0.27
 # minimum, the dock jumped wider when a story opened and filled the forms.
 INSPECTOR_WIDTHS = (380, 480)
 # A story that keeps a map gives the Inspector, with the map on it, half the
-# window (the author's call); the Stories list steps aside (window_world.py).
+# window (the author's call).
 MAP_SHARE = 0.5
+# With the Stories list put away (as it is while a story is open, unless the
+# author brings it back) the Inspector takes the room it left: the author
+# wanted the pages beside the story less cramped and more graphical.
+INSPECTOR_ALONE_SHARE = 0.38
+INSPECTOR_ALONE_WIDTHS = (380, 720)
 
 
 def _clamp(value: float, bounds: tuple[int, int]) -> int:
@@ -66,6 +77,17 @@ def share_width(
     return want_s, want_i
 
 
+class StoriesDock(QDockWidget):
+    """The Stories list's dock: its close button is the author putting the
+    list away (`closed`), as View → Stories list is."""
+
+    closed = Signal()
+
+    def closeEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        super().closeEvent(event)
+        self.closed.emit()
+
+
 class LayoutWindow:
     def _init_layout(self, stories: QDockWidget, inspector: QDockWidget) -> None:
         """Called from `_build_ui` once both docks are in place."""
@@ -80,6 +102,55 @@ class LayoutWindow:
         self._share_timer.setSingleShot(True)
         self._share_timer.setInterval(0)
         self._share_timer.timeout.connect(self._share_docks)
+
+    # --- the Stories list ---------------------------------------------------
+
+    def _build_stories_button(self) -> None:
+        """Stories, above the transcript: the list back, or away again."""
+        self.stories_button = QToolButton()
+        self.stories_button.setObjectName("viewToggleButton")
+        self.stories_button.setText("Stories")
+        self.stories_button.setCheckable(True)
+        self.stories_button.setToolTip(
+            "Show or hide the list of stories (View → Stories list). It is put away while "
+            "a story is open, to give the story the room, unless you bring it back."
+        )
+        self.stories_button.toggled.connect(self._choose_stories_list)
+
+    def _init_stories_list(self) -> None:
+        """Called once the dock and View's action exist."""
+        self.stories_list_action.triggered.connect(self._choose_stories_list)
+        self.stories_dock.closed.connect(lambda: self._choose_stories_list(False))
+        self.stories_dock.visibilityChanged.connect(lambda _shown: self._sync_stories_button())
+        self._sync_stories_list()
+
+    def _choose_stories_list(self, shown: bool) -> None:
+        """The author shows or hides the list. With a story open that is
+        their choice for every story from now on (`Config.stories_list`);
+        with none open the list is how stories are opened, so it stays."""
+        if getattr(self, "session", None) is not None:
+            self.config.stories_list = bool(shown)
+            self.stories_dock.setVisible(bool(shown))
+        else:
+            self.stories_dock.setVisible(True)
+        self._sync_stories_button()
+        self._reshare_docks()
+
+    def _sync_stories_list(self) -> None:
+        """The list as it should be now: shown with no story open, else as
+        the author last chose (put away unless they brought it back)."""
+        shown = getattr(self, "session", None) is None or self.config.stories_list
+        self.stories_dock.setVisible(shown)
+        self._sync_stories_button()
+        self._reshare_docks()
+
+    def _sync_stories_button(self) -> None:
+        shown = not self.stories_dock.isHidden()
+        if self.stories_button.isChecked() != shown:
+            self.stories_button.blockSignals(True)
+            self.stories_button.setChecked(shown)
+            self.stories_button.blockSignals(False)
+        self.stories_button.setEnabled(getattr(self, "session", None) is not None)
 
     def place_on_screen(self) -> None:
         """Size the window for its screen before it is first shown (the
@@ -159,23 +230,29 @@ class LayoutWindow:
         centre = self.centralWidget()
         separator = self.style().pixelMetric(QStyle.PM_DockWidgetSeparatorExtent, None, self)
         centre_min = max(centre.minimumWidth(), centre.minimumSizeHint().width())
-        if getattr(self, "map_layout", False) and not self._docks_dragged:
-            want_i = max(round(width * MAP_SHARE), INSPECTOR_WIDTHS[0])
-            if stories.isVisible():  # brought back by hand: it takes its share from the story
-                want_s = _clamp(width * STORIES_SHARE, STORIES_WIDTHS)
-                widths = share_width(
-                    width,
-                    centre_min,
-                    2 * separator,
-                    (want_s, stories.minimumSizeHint().width()),
-                    (want_i, inspector.minimumSizeHint().width()),
-                )
-                self.resizeDocks([stories, inspector], list(widths), Qt.Horizontal)
-            else:
-                want_i = min(want_i, max(INSPECTOR_WIDTHS[0], width - centre_min - separator))
-                self.resizeDocks([inspector], [want_i], Qt.Horizontal)
-            return
+        on_map = getattr(self, "map_layout", False)
         if not stories.isVisible():
+            if self._docks_dragged:
+                return  # the author's width
+            if on_map:
+                want_i = max(round(width * MAP_SHARE), INSPECTOR_WIDTHS[0])
+            else:
+                want_i = _clamp(width * INSPECTOR_ALONE_SHARE, INSPECTOR_ALONE_WIDTHS)
+            want_i = min(want_i, max(INSPECTOR_WIDTHS[0], width - centre_min - separator))
+            self.resizeDocks([inspector], [want_i], Qt.Horizontal)
+            return
+        if on_map and not self._docks_dragged:
+            # Brought back by hand: the list takes its share from the story.
+            want_i = max(round(width * MAP_SHARE), INSPECTOR_WIDTHS[0])
+            want_s = _clamp(width * STORIES_SHARE, STORIES_WIDTHS)
+            widths = share_width(
+                width,
+                centre_min,
+                2 * separator,
+                (want_s, stories.minimumSizeHint().width()),
+                (want_i, inspector.minimumSizeHint().width()),
+            )
+            self.resizeDocks([stories, inspector], list(widths), Qt.Horizontal)
             return
         saved = self.config.window
         if self._docks_set_by_hand and saved and not self._docks_dragged:

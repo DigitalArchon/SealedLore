@@ -109,7 +109,7 @@ from sealedlore.gui.welcome import setup_missing, welcome_html
 from sealedlore.gui.window_chat import ChatWindow
 from sealedlore.gui.window_find import FindWindow
 from sealedlore.gui.window_images import ImagesWindow
-from sealedlore.gui.window_layout import LayoutWindow
+from sealedlore.gui.window_layout import LayoutWindow, StoriesDock
 from sealedlore.gui.window_private import PrivateWindow
 from sealedlore.gui.window_text import TextSizeWindow
 from sealedlore.gui.window_videos import VideosWindow
@@ -328,8 +328,9 @@ class MainWindow(
         # Wraps under a large text size rather than widening the window.
         self._build_find()
         self._build_world()
+        self._build_stories_button()
         self.top_row = WrapRow(spacing=6, group_spacing=12)
-        self.top_row.add_group([self.view_toggle])
+        self.top_row.add_group([self.stories_button, self.view_toggle])
         self.top_row.add_group([self.find_button, self.world_button])
         self.top_row.add_group([self.branch_bar], right=True, whole=True)
         centre_layout.addLayout(self.top_row)
@@ -363,7 +364,7 @@ class MainWindow(
         self.stories.duplicate_story_requested.connect(self.duplicate_entire_story)
         self.stories.delete_requested.connect(self.delete_story)
         self.stories.open_folder_requested.connect(self._open_story_folder)
-        left = QDockWidget("Stories", self)
+        left = StoriesDock("Stories", self)
         left.setObjectName("storiesDock")
         left.setWidget(self.stories)
         left.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
@@ -429,6 +430,7 @@ class MainWindow(
         self.resizeDocks([left, right], [240, 420], Qt.Horizontal)
         self._init_layout(left, right)
         self._init_world_dock()
+        self._init_stories_list()
 
         self.status_strip = StatusStrip()
         bar = NoticeStatusBar()
@@ -1047,6 +1049,7 @@ class MainWindow(
             self.session.close(wait_seconds=0)
             self.session.save()
         self.session = None
+        self._sync_stories_list()
         self.setWindowTitle("SealedLore")
         self.status_strip.reset_session_cost()
         self.status_strip.set_budget(None)
@@ -1253,6 +1256,7 @@ class MainWindow(
         self._attest_chat()
         self._update_controls()
         self._sync_world()
+        self._sync_stories_list()
         # A story opens on its map where the story is now, not where the last left it.
         self.refresh_world(keep_view=False)
 

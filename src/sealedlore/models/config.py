@@ -479,6 +479,10 @@ class Config(BaseModel):
     mono_font: str = ""
     # The window's size and dock widths at the last close; None until then.
     window: WindowLayout | None = None
+    # Whether the Stories list shows while a story is open: put away by
+    # default, for the story's room (the author, Oct 15 2026); Stories above
+    # the transcript or View → Stories list brings it back, and that sticks.
+    stories_list: bool = False
     # Most supporting cards sent in one turn's tail.
     supporting_limit: int = 8
     # How far back a supporting character counts as still around. Sharing the

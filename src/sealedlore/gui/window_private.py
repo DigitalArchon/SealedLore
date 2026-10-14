@@ -179,12 +179,10 @@ class PrivateWindow:
         self.branch_bar.setEnabled(self.session is not None and not self._busy and not private)
         if private and self.map_shown():
             self.show_map(False)
-        # The map is paused with the rest: the window gives its room back.
-        map_on = self.session is not None and self.session.map_on and not private
-        if map_on != self.map_layout:
-            self._set_map_layout(map_on)
-        self.world_button.setVisible(map_on)
-        self.world_button.setEnabled(map_on)
+        # The story's map stays where it is, paused (the author, Oct 15 2026):
+        # nothing from the scene reaches it, and it catches up from the
+        # approved summary (`_sync_world`).
+        self._sync_world()
         for widget in (self.stories, self.branch_bar):
             widget.setToolTip(
                 self._say(

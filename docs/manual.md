@@ -360,7 +360,10 @@ archiving, rebuilding summaries.
 ## Getting around
 
 - **Left dock**: the Stories list (right-click for Open folder, Duplicate and
-  Delete).
+  Delete). It is put away while a story or chat is open, to give the story
+  the room; **Stories**, above the transcript, or View → Stories list brings
+  it back, and it then stays until you put it away again. With nothing open
+  it is always there.
 - The docks share the window's width as it changes size, until you drag the
   line between a dock and the story; from then on their widths are yours.
   The window's size and those widths are kept for the next launch.
@@ -919,9 +922,13 @@ closely, not exactly. Once the story changes something there (the barn
 burns), the view says it is out of date and offers to paint it again.
 
 A story that keeps a map makes it part of the window: the Inspector, beside
-the story, takes half the window with **Map** as its first page, and the
-Stories list steps aside (View → Stories list brings it back). **Map**, above
-the transcript, goes to it.
+the story, takes half the window with **Map** as its first page. **Map**,
+above the transcript, goes to it.
+
+During a private scene the map stays in the window but is paused: it shows
+the story as it was when the scene began, nothing from the scene is read into
+it, and nothing is drawn or painted. Once you approve the scene's summary, the
+summary is read like any passage and the map catches up.
 
 It is one map, read at three levels by zooming; **Local**, **Region** and
 **World** jump to each. **Local** is the area you are in (the

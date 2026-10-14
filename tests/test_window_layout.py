@@ -12,7 +12,7 @@ from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QApplication, QLabel, QWidget
 
 from sealedlore.gui.main_window import CENTRE_MARGIN, MainWindow
-from sealedlore.gui.window_layout import INSPECTOR_WIDTHS, share_width
+from sealedlore.gui.window_layout import INSPECTOR_ALONE_SHARE, INSPECTOR_WIDTHS, share_width
 from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.models.config import WindowLayout
 from sealedlore.storage.repository import (
@@ -39,10 +39,50 @@ def window(app, tmp_path: Path, story, cast):
     window = MainWindow(root=tmp_path, use_mock=True)
     window.resize(1366, 768)
     window.show()
+    # These measure the widths shared with the list beside the story.
+    window.config.stories_list = True
     window.open_story(story.id)
     settle(app)
     yield window
     window.close()
+
+
+@pytest.fixture
+def alone(app, tmp_path: Path, story, cast):
+    """A window opened on a story as a new setup has it: the list put away."""
+    save_story_bundle(StoryBundle(story=story, cast=cast, nodes=make_exchange(2)), root=tmp_path)
+    window = MainWindow(root=tmp_path, use_mock=True)
+    window.resize(1366, 768)
+    window.show()
+    settle(app)
+    assert not window.stories_dock.isHidden(), "with no story open, the list opens one"
+    window.open_story(story.id)
+    settle(app)
+    yield window
+    window.close()
+
+
+def test_a_story_open_puts_the_stories_list_away_and_the_inspector_takes_the_room(
+    app, alone: MainWindow
+):
+    """The author (Oct 15 2026): the story gets the room, for every kind of
+    story and chat; the list comes back when asked, and stays."""
+    assert alone.stories_dock.isHidden() and not alone.stories_button.isChecked()
+    assert alone.inspector_dock.width() >= round(1366 * INSPECTOR_ALONE_SHARE) - 40
+    alone.stories_button.click()
+    settle(app)
+    assert not alone.stories_dock.isHidden() and alone.config.stories_list
+    alone.stories_list_action.trigger()  # View → Stories list puts it away again
+    settle(app)
+    assert alone.stories_dock.isHidden() and not alone.config.stories_list
+    assert not alone.stories_button.isChecked()
+    alone.stories_button.click()
+    alone.stories_dock.close()  # its own close button counts too
+    assert not alone.config.stories_list
+    alone._close_story()
+    settle(app)
+    assert not alone.stories_dock.isHidden(), "nothing open: the list is how one opens"
+    assert not alone.stories_button.isEnabled()
 
 
 def test_the_docks_take_what_they_want_when_there_is_room():

@@ -748,6 +748,13 @@ QToolTip {
   border: 1px solid @private_input_border;
 }
 
+#mapPaused {
+  background: @private_bg;
+  border-left: 3px solid @private_mark;
+  color: @private_text;
+  padding: 6px 8px;
+}
+
 #message[private="true"] {
   border-left: 3px solid @private_mark;
   background: @private_bg;

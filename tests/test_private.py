@@ -674,3 +674,28 @@ def test_a_questions_recall_carries_nothing_from_a_private_scene(tmp_path: Path,
         assert all(item.carried for item in session.last_recall.items)
         assert all(MARKER not in item.text for item in session.last_recall.items)
     assert MARKER not in everything_sent(main, session.embeddings)
+
+
+def test_the_map_catches_up_from_the_approved_summary_and_nothing_else(tmp_path: Path):
+    """The map pauses for the scene (the author, Oct 15 2026): no map read,
+    drawing or painting while it is open, and once the summary is approved
+    the map read is sent the summary, never the scene."""
+    from sealedlore.engine.prompt_texts import DEFAULT_TEXTS
+
+    session, main, held = build(tmp_path)
+    opening = DEFAULT_TEXTS["map_read.system"][:60]
+    play(session, turn(held, "I walk down the street."))
+    reads_before = sum(opening in json.dumps(p) for p in main.payloads)
+    assert reads_before == 1
+    private = enter(session)
+    play(session, turn(held, f"I whisper {MARKER} to her."))
+    assert sum(opening in json.dumps(p) for p in main.payloads) == reads_before
+    assert session.map_art_jobs() == [] and session.map_picture_jobs() == []
+    assert session.isometric_offer()[2] is not None
+    private.responses = ["They agreed to meet at dawn by the old well."]
+    for _event in session.close_private(session.summarise_private()):
+        pass
+    reads = [p for p in main.payloads if opening in json.dumps(p)]
+    assert len(reads) == reads_before + 1
+    assert "meet at dawn by the old well" in json.dumps(reads[-1])
+    assert MARKER not in json.dumps(main.payloads)

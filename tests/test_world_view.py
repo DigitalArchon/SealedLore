@@ -505,7 +505,7 @@ def test_turning_the_map_off_gives_the_room_back(window):
     window.session.story.defaults.world_map = False
     window._sync_world()
     assert window.world_button.isHidden() and not window.world_shown()
-    assert not window.stories_dock.isHidden()
+    assert window.stories_dock.isHidden()  # put away with any story open, map or not
     assert not window.right_tabs.isTabVisible(window.right_tabs.indexOf(window.world_view))
 
 

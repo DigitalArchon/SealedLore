@@ -534,6 +534,8 @@ def test_with_no_story_open_the_window_says_so_and_offers_a_start(app, tmp_path:
         assert window.composer.input.placeholderText() == NO_STORY_PLACEHOLDER
         empty_width = tabs.width()
 
+        # The list kept beside the story, so only the forms could move the dock.
+        window.config.stories_list = True
         window.open_story(story.id)
         settle(app)
         assert not tabs.is_empty_shown()

@@ -111,6 +111,12 @@ WORLD_KINDS = frozenset({"settlement", "region", "site"})
 # A place inside another is shown once its parent is this many pixels wide.
 CHILD_SHOWN_AT = 160
 ZOOM_STEP = 1.25
+# Over the map while a private scene is open.
+PAUSED_NOTE = (
+    "Paused for the private scene. The map shows the story as it was when the scene "
+    "began, and nothing from the scene reaches it. It catches up from the scene's "
+    "summary once you approve it."
+)
 # A place's label under its picture: its width at the default text size (it
 # grows with the font), and the gap between picture and name.
 LABEL_WIDTH = 176
@@ -487,6 +493,11 @@ class WorldView(QWidget):
         progress_row.addStretch(1)
         self.progress_label.hide()
         self.progress.hide()
+        # Paused for a private scene (`set_paused`).
+        self.pause_note = QLabel(PAUSED_NOTE)
+        self.pause_note.setObjectName("mapPaused")
+        self.pause_note.setWordWrap(True)
+        self.pause_note.hide()
         self._drew = False  # a run has finished since this map was shown
         self.view = _WorldGraphics()
         self.scene = QGraphicsScene(self)
@@ -545,6 +556,7 @@ class WorldView(QWidget):
         layout.setSpacing(8)
         layout.addLayout(header)
         layout.addLayout(progress_row)
+        layout.addWidget(self.pause_note)
         layout.addWidget(self.hint)
         layout.addWidget(self.stack, 1)
         layout.addWidget(self.card)
@@ -1366,6 +1378,11 @@ class WorldView(QWidget):
             else:
                 hint += " The local map isn't drawn: Draw the map is off (Settings → Models)."
         return hint
+
+    def set_paused(self, paused: bool) -> None:
+        """A private scene is open: the map stands as the story was when it
+        began, and says so."""
+        self.pause_note.setVisible(paused)
 
     def set_progress(self, done: int, total: int) -> None:
         """The drawing under way: `done` of `total` pieces (art and
