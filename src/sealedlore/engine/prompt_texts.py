@@ -3054,6 +3054,74 @@ _text(
 )
 
 
+# --- Portraits (engine/portraits.py) ----------------------------------------
+
+# A portrait of each character, offered when a story starts and on the Cast
+# page (the author, Oct 15 2026). The writer describes only what can be seen:
+# Recraft wrote "Evan Stevens, Bandit … 4 years after the end of the world,
+# Canada" on a portrait whose prompt carried the name, the role and that line
+# (the author: such words give an image model nothing to draw, so it ignores
+# them or writes them). The fallback leaves the setting out for that reason:
+# it is the world bible's words, not a picture. Nine models on three
+# Doomsville characters with these descriptions: SealedLoreDocs design/images.md.
+_text(
+    "portraits.system",
+    PICTURES,
+    "Portraits: the writer's instructions",
+    "The system prompt of the call that writes a portrait prompt for each character, from "
+    "their cards and the setting, for the author to approve before anything is drawn.",
+    "You write prompts for an image model that draws a portrait of each character in a "
+    "story, so the author can see who is who. For each character below, write one prompt "
+    "of {words} words for a head-and-shoulders portrait in this style: {style}. Describe "
+    "what the picture shows, not who they are: apparent age, build, face, skin, hair, "
+    "eyes, expression, what they wear and carry, and a little of their world behind them, "
+    "out of focus. Every phrase must be something the camera can see: no names, roles, "
+    'history, dates or story facts (not "a bandit", not "four years after the end of the '
+    'world", but "frost on a stubbled jaw", "a snowbound road behind"). An image model '
+    "can only ignore such words or write them on the picture. Keep to their card; where it "
+    "says nothing of their looks, choose plain details that fit who they are and the "
+    "setting, and keep the characters distinct from one another. End each prompt with: "
+    "{no_writing}\n\n"
+    'Reply with JSON only: {"portraits": [{"name": "the character\'s name as given", '
+    '"prompt": "the prompt"}]}',
+    (
+        ("words", "How long each prompt is"),
+        ("style", "The story's picture style, or the portrait default"),
+        ("no_writing", "Portraits: no writing"),
+    ),
+)
+
+_text(
+    "portraits.style",
+    PICTURES,
+    "Portraits: the style when the story has none",
+    "The picture style a portrait is drawn in when the story's own (Setup → Pictures) is blank.",
+    "Photorealistic portrait photograph, head and shoulders, natural light, sharp focus",
+)
+
+_text(
+    "portraits.no_writing",
+    PICTURES,
+    "Portraits: no writing",
+    "The sentence each portrait prompt ends with.",
+    "No writing of any kind in the picture.",
+)
+
+_text(
+    "portraits.fallback",
+    PICTURES,
+    "Portraits: a prompt with no writer",
+    "A character's portrait prompt when the writer's reply left them out or failed: built "
+    "from their card, for the author to edit before anything is drawn.",
+    "{style}. {looks} {no_writing}",
+    (
+        ("style", "The picture style"),
+        ("looks", "What the character's card says of them"),
+        ("no_writing", "Portraits: no writing"),
+    ),
+)
+
+
 # --- Video -----------------------------------------------------------------
 # A video prompt is not a picture prompt: a picture is one frozen moment, a
 # video is a few seconds of one continuous shot, so the writer is told the

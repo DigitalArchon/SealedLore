@@ -789,6 +789,13 @@ named characters who aren't on file yet:
 
 **Move to cast** and **Move to supporting** switch a character between the two.
 
+A selected character's **portrait** is shown large at the top of their sheet,
+with their other pictures small under the sheet. The portrait is simply their
+first picture: **Make portrait** under the others puts another first, **Choose
+a file…** takes one from your computer, and **Draw a portrait…** has an image
+model draw one (see Pictures → Portraits). Click the portrait to see it whole.
+Each name in the list has its portrait beside it, small.
+
 Two checkboxes on a cast sheet decide who writes that character:
 
 - **Available to play** on (the default) — you can play them, and the model
@@ -1160,6 +1167,33 @@ an address, a key, and the service it is (NanoGPT, OpenRouter, WaveSpeed, or
 any OpenAI-compatible `/images/generations`; worked out from the address
 unless you choose). Left blank, the address is the chat endpoint's, and its
 key is used only when the address is the chat endpoint's own host.
+
+### Portraits
+
+**Story → Draw portraits…**, **Draw a portrait…** on a cast sheet, or the box
+in the Start dialog (shown when some of the characters have no picture yet)
+gives each character a portrait drawn from their card. The prompt writer
+(Settings → Models → Image prompt writer, blank for the story model) writes a
+prompt for each, describing only what a camera would see, never a name; the
+**Portraits** dialog shows every one. Change any you like, untick anyone you
+don't want drawn, choose the model and see the price, then **Draw**. Nothing
+is drawn before that. From the Start dialog, the opening runs while the
+portraits are drawn. Each portrait becomes the character's first picture and
+is kept in Media with its prompt and cost. Characters the plot hasn't brought
+in yet are never offered: their portrait would tell a model about them early.
+
+The portrait model is Settings → Images → **Portrait model**; **Recommended**
+beside it lists the models measured for portraits, with what each is good at:
+
+- **FLUX.2 klein 9B** (the default, about $0.01): follows a character's
+  description closely, and can be given their earlier pictures to keep them
+  the same in later pictures.
+- **Z Image Turbo** (about $0.012) and **Recraft V4.1 Flash** (about $0.008):
+  as good or better for a single portrait, Recraft's the most striking, but
+  neither can be given reference pictures, so they can't keep a character the
+  same from one picture to the next.
+- **Seedream 5.0 Flash** (premium, about $0.027): the most finished, with up to
+  ten reference pictures, at nearly three times the default's price.
 
 ## Videos
 

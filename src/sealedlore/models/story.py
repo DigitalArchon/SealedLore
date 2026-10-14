@@ -168,6 +168,10 @@ class Story(BaseModel):
     # (storage.images.clean_story_images). False for a story made before
     # that was done on the way in, which is cleaned once when it next opens.
     images_cleaned: bool = False
+    # Portraits drawn for this story (GeneratedImage ids, `portrait_of`) that
+    # have become their character's first picture: each is taken in once, so
+    # one the author removes from the card stays removed.
+    portraits_taken: list[str] = Field(default_factory=list)
     # Private scenes played in this story, oldest first (models/private.py),
     # and how the private model is told to write.
     private_spans: list[PrivateSpan] = Field(default_factory=list)

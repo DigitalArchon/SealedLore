@@ -28,7 +28,6 @@ from PySide6.QtGui import QIcon, QImage, QImageReader, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
-    QHBoxLayout,
     QInputDialog,
     QLabel,
     QListWidget,
@@ -40,6 +39,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.plot_md import ParsedPlotFile, PlotProblem
+from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.ids import new_id
 from sealedlore.models.image import ImageRef
 from sealedlore.storage.image_meta import MetadataError, picture_kind, strip_metadata
@@ -239,10 +239,16 @@ class RefImageStrip(QWidget):
 
     changed = Signal()
 
-    def __init__(self, pictures: StoryPictures, owner_word: str = "them") -> None:
+    def __init__(
+        self, pictures: StoryPictures, owner_word: str = "them", *, after_portrait: bool = False
+    ) -> None:
+        """`after_portrait`: the first picture is the owner's portrait, shown
+        large elsewhere (gui/portrait_view.py); the strip shows the others,
+        and Make portrait puts the chosen one first."""
         super().__init__()
         self._pictures = pictures
         self._refs: list[ImageRef] | None = None
+        self._after_portrait = after_portrait
 
         self.list = QListWidget()
         self.list.setObjectName("refImageList")
@@ -271,16 +277,28 @@ class RefImageStrip(QWidget):
         self.caption_button.clicked.connect(lambda: self._edit_caption(self.list.currentItem()))
         self.remove_button = QPushButton("Remove")
         self.remove_button.clicked.connect(self._remove)
-        self.hint = QLabel("No pictures. Add one to keep their look in generated images.")
+        self.portrait_button = QPushButton("Make portrait")
+        self.portrait_button.setToolTip("Show this one large, as their portrait")
+        self.portrait_button.clicked.connect(self._make_portrait)
+        self.portrait_button.setVisible(after_portrait)
+        self.hint = QLabel(
+            "No other pictures. Add more to keep their look in generated images."
+            if after_portrait
+            else "No pictures. Add one to keep their look in generated images."
+        )
         self.hint.setObjectName("hintLabel")
         self.hint.setWordWrap(True)
 
-        buttons = QHBoxLayout()
-        buttons.setContentsMargins(0, 0, 0, 0)
-        buttons.addWidget(self.add_button)
-        buttons.addWidget(self.caption_button)
-        buttons.addWidget(self.remove_button)
-        buttons.addStretch(1)
+        # Wraps rather than widen the form: the Inspector is only as narrow
+        # as its widest row (gui/fields.py, FormScroll).
+        buttons = WrapRow(spacing=6, group_spacing=6)
+        for button in (
+            self.add_button,
+            self.caption_button,
+            self.remove_button,
+            self.portrait_button,
+        ):
+            buttons.add_group([button])
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -295,15 +313,16 @@ class RefImageStrip(QWidget):
         self._refs = refs
         self.list.clear()
         store = self._pictures()
-        for ref in refs or []:
+        shown = (refs or [])[1:] if self._after_portrait else (refs or [])
+        for ref in shown:
             item = QListWidgetItem(ref.caption or "(no caption)")
             item.setData(Qt.UserRole, ref.id)
             item.setToolTip(ref.caption or ref.file)
             if store is not None:
                 item.setIcon(QIcon(thumbnail_of(store.read(ref.file))))
             self.list.addItem(item)
-        self.list.setVisible(bool(refs))
-        self.hint.setVisible(refs is not None and not refs)
+        self.list.setVisible(bool(shown))
+        self.hint.setVisible(refs is not None and not shown)
         self.add_button.setEnabled(refs is not None and store is not None)
         self._sync_buttons()
 
@@ -311,6 +330,7 @@ class RefImageStrip(QWidget):
         selected = self.list.currentItem() is not None
         self.caption_button.setEnabled(selected)
         self.remove_button.setEnabled(selected)
+        self.portrait_button.setEnabled(selected)
 
     def _ref(self, item: QListWidgetItem | None) -> ImageRef | None:
         if item is None or self._refs is None:
@@ -349,6 +369,33 @@ class RefImageStrip(QWidget):
             ref.caption = text.strip()
             self.set_refs(self._refs)
             self.changed.emit()
+
+    def _make_portrait(self) -> None:
+        ref = self._ref(self.list.currentItem())
+        if ref is None or self._refs is None:
+            return
+        self._refs.remove(ref)
+        self._refs.insert(0, ref)
+        self.set_refs(self._refs)
+        self.changed.emit()
+
+    def add_portrait(self) -> None:
+        """Choose a file to be the owner's portrait: it goes first."""
+        store = self._pictures()
+        if self._refs is None or store is None:
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Choose a portrait", str(Path.home()), PICTURE_FILTER
+        )
+        if not path:
+            return
+        try:
+            self._refs.insert(0, import_reference(Path(path), store, "portrait"))
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "Couldn't add", str(exc))
+            return
+        self.set_refs(self._refs)
+        self.changed.emit()
 
     def _remove(self) -> None:
         ref = self._ref(self.list.currentItem())

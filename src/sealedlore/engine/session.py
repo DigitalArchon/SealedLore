@@ -147,6 +147,7 @@ from sealedlore.engine.session_archival import LEDGER_MAX_TOKENS, ArchivalRuntim
 from sealedlore.engine.session_images import ImageRuntime
 from sealedlore.engine.session_merge import MergeRuntime, _close
 from sealedlore.engine.session_plot import PlotRuntime, SessionNotice
+from sealedlore.engine.session_portraits import PortraitRuntime
 from sealedlore.engine.session_private import PrivateRuntime
 from sealedlore.engine.session_reasoning import ReasoningRuntime
 from sealedlore.engine.session_rebuild import RebuildRuntime
@@ -416,6 +417,7 @@ class StorySession(
     RebuildRuntime,
     RecallRuntime,
     ImageRuntime,
+    PortraitRuntime,
     PrivateRuntime,
     ReasoningRuntime,
 ):

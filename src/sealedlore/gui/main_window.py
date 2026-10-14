@@ -379,6 +379,7 @@ class MainWindow(
         self.cast_panel.dismiss_requested.connect(self._dismiss_suggestion)
         self.cast_panel.scan_requested.connect(self.scan_for_characters)
         self.cast_panel.infer_requested.connect(self.infer_competence)
+        self.cast_panel.portrait_requested.connect(self._draw_portrait_of)
         self.scene_panel = ScenePanel()
         self.scene_panel.changed.connect(self._on_scene_changed)
         self.scene_panel.update_requested.connect(self.update_scene_from_story)
@@ -1037,6 +1038,16 @@ class MainWindow(
         self._close_story()
         self.stories.refresh()
 
+    def _draw_portrait_of(self, character_id: str) -> None:
+        """Draw a portrait…, on a character's card."""
+        if self.session is None:
+            return
+        character = next(
+            (c for c in self.session.portrait_candidates() if c.id == character_id), None
+        )
+        if character is not None:
+            self.draw_portraits([character])
+
     def _close_story(self) -> None:
         """Back to the no-story state the window starts in."""
         self.show_map(False)
@@ -1154,9 +1165,15 @@ class MainWindow(
         if self.session is None or self._busy or self.session.nodes:
             return
         story = self.session.story
-        dialog = StartDialog(story, self.session.cast, parent=self)
+        offered = (
+            self.session.without_portraits() if self.session.config.images() is not None else []
+        )
+        dialog = StartDialog(story, self.session.cast, parent=self, without_portraits=offered)
         if dialog.exec() != StartDialog.Accepted:
             return
+        if dialog.portraits_wanted():
+            # Before the opening: drawn in the background while it runs.
+            self.draw_portraits(offered)
         held = dialog.held_character_id()
         # Before holding: pinning resets the roster the held character joins.
         if (pinned := dialog.pinned()) is not None:
@@ -1240,6 +1257,8 @@ class MainWindow(
         self._counted_summaries.clear()
         self._staleness_dismissed = False
         self._resume_private()
+        # Portraits drawn while another story was open.
+        self.session.take_portraits()
         self.refresh_panels()
         self.right_tabs.setCurrentWidget(
             self.world_view if self.session.map_on else self.scene_panel
@@ -2560,6 +2579,8 @@ class MainWindow(
         self.refresh_summaries()
         self.refresh_retrieval()
         self._sync_world()
+        # Portraits that came back while the worker owned the story.
+        self._take_portraits()
         if self._streaming_job:
             # The kept prompt is exactly what was sent, so show that.
             self.refresh_inspector()

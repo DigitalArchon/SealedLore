@@ -18,7 +18,9 @@ from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 
 from sealedlore.gui.image_dialog import ImageDialog, ImageViewer, save_picture_as
 from sealedlore.gui.image_jobs import ImageCatalog, ImageJobs
+from sealedlore.gui.image_picker import pick_image_model
 from sealedlore.gui.images_panel import ImagesPanel
+from sealedlore.gui.portraits_dialog import PortraitsDialog
 from sealedlore.gui.ref_images import PICTURE_FILTER, picture_bytes, picture_bytes_of
 from sealedlore.gui.transcript import PendingPicture
 from sealedlore.gui.winprivacy import exclude_from_capture
@@ -63,6 +65,12 @@ class ImagesWindow:
         )
         self.image_action.triggered.connect(lambda: self.generate_image())
         story_menu.addAction(self.image_action)
+        self.portraits_action = QAction("Draw &portraits…", self)
+        self.portraits_action.setStatusTip(
+            "A portrait of each character from their card; you see every prompt first"
+        )
+        self.portraits_action.triggered.connect(lambda: self.draw_portraits())
+        story_menu.addAction(self.portraits_action)
 
     def _background_actions(self, view_menu) -> None:
         """Called from `_build_actions`: the View menu's background entries (a
@@ -80,6 +88,13 @@ class ImagesWindow:
         has_story = self.session is not None
         busy = self._busy
         self.image_action.setEnabled(has_story and not busy)
+        self.portraits_action.setEnabled(
+            has_story
+            and not busy
+            and not self.session.story.chat
+            and not self.session.in_private
+            and bool(self.session.portrait_candidates())
+        )
         self.background_action.setEnabled(has_story and not busy)
         self.clear_background_action.setEnabled(
             has_story and not busy and bool(self.session and self.session.story.background_image)
@@ -188,6 +203,70 @@ class ImagesWindow:
         )
         self._refresh_image_views()
 
+    # --- portraits ---------------------------------------------------------------
+
+    def draw_portraits(self, characters: list | None = None) -> bool:
+        """Offer a portrait of each character (`characters`; by default those
+        with no picture, else everyone the models may see): every prompt is
+        shown before anything is drawn. True when drawing began."""
+        session = self.session
+        if session is None or session.story.chat:
+            return False
+        if self._busy:
+            self.statusBar().showMessage(
+                "Portraits can be drawn once the story's current job is done.", 6000
+            )
+            return False
+        if session.in_private:
+            self.statusBar().showMessage("Portraits wait until the private scene ends.", 6000)
+            return False
+        if session.config.images() is None:
+            self._warn_plain("No endpoint", "Set up an image endpoint in Settings first.")
+            return False
+        characters = characters or session.without_portraits() or session.portrait_candidates()
+        if not characters:
+            return False
+        dialog = PortraitsDialog(
+            session,
+            characters,
+            catalog=self.image_catalog,
+            browse=lambda current: pick_image_model(self.image_catalog, current, self),
+            parent=self,
+        )
+        accepted = dialog.exec()
+        # The writer's call, paid whether or not anything is drawn.
+        for usage in session.unreported_usage:
+            self.status_strip.add_cost(usage)
+        session.unreported_usage.clear()
+        self._refresh_story_cost()
+        if not accepted:
+            return False
+        if dialog.chosen_model() != self.config.portrait_model:
+            self.config.portrait_model = dialog.chosen_model()
+            save_config(self.config, root=self.root)
+        requests = dialog.requests()
+        for request in requests:
+            client = session.image_client()
+            if client is None:
+                return False
+            self.image_jobs.start(request, client, session.pictures)
+        self.statusBar().showMessage(
+            f"Drawing {len(requests)} portrait{'' if len(requests) == 1 else 's'} in the "
+            "background: each goes on its character's card when done.",
+            8000,
+        )
+        self._refresh_image_views()
+        return bool(requests)
+
+    def _take_portraits(self) -> None:
+        """Portraits drawn for the open story go on their cards."""
+        if self.session is None or self._busy:
+            return  # the worker owns the story; taken when it is done
+        names = self.session.take_portraits()
+        if names:
+            self.refresh_panels()
+            self.statusBar().showMessage(f"Portrait ready: {', '.join(names)}.", 8000)
+
     def _on_image_jobs_changed(self) -> None:
         count = len(self.image_jobs.pending())
         self.status_strip.set_pictures(count)
@@ -215,6 +294,8 @@ class ImagesWindow:
             self._refresh_story_cost()
             self._refresh_image_views()
             self.statusBar().showMessage("Picture ready.", 8000)
+            if any(record.portrait_of for record in records):
+                self._take_portraits()
         else:
             self.statusBar().showMessage(
                 "A picture for another story is ready; it's in that story's Media tab.", 8000

@@ -13,8 +13,8 @@ The model suggests them; nothing joins either tier without the author's say.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtGui import QFont, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -38,12 +38,15 @@ from PySide6.QtWidgets import (
 from sealedlore.engine.dice import TIER_ORDER
 from sealedlore.gui import theme
 from sealedlore.gui.fields import FormScroll, set_field_text
-from sealedlore.gui.ref_images import RefImageStrip, StoryPictures
+from sealedlore.gui.portrait_view import PortraitView
+from sealedlore.gui.ref_images import RefImageStrip, StoryPictures, thumbnail_of
 from sealedlore.models.character import Character
 from sealedlore.models.supporting import CharacterSuggestion
 
 HEADER_ROLE = Qt.UserRole + 1
 MODEL_MARK = "  ✦"
+# The portraits beside the names in the list.
+LIST_ICON = 28
 # Past this many skills the table scrolls rather than pushing the form down.
 SKILL_ROWS_VISIBLE = 8
 
@@ -58,6 +61,8 @@ class CastPanel(QWidget):
     dismiss_requested = Signal(str)
     scan_requested = Signal()
     infer_requested = Signal(str)
+    # A portrait of this character drawn by an image model (character id).
+    portrait_requested = Signal(str)
 
     def __init__(self, pictures: StoryPictures | None = None) -> None:
         super().__init__()
@@ -71,6 +76,10 @@ class CastPanel(QWidget):
 
         self.list = QListWidget()
         self.list.setObjectName("castList")
+        # Each name beside its portrait, small.
+        self.list.setIconSize(QSize(LIST_ICON, LIST_ICON))
+        self._icons: dict[str, QIcon] = {}
+        self._icons_store: object = None
         self.list.setSelectionMode(QAbstractItemView.SingleSelection)
         self.list.currentItemChanged.connect(self._on_selection_changed)
 
@@ -173,7 +182,14 @@ class CastPanel(QWidget):
         skills_layout.addWidget(self.suggest_skills, 0, Qt.AlignLeft)
         self.canon = QLineEdit()
         self.canon.setPlaceholderText("e.g. 'Night of the Living Dead (1968)' — blank if original")
-        self.pictures = RefImageStrip(self._pictures, "them")
+        # The portrait large, at the top of the card; the other pictures
+        # small under the sheet (the author, Oct 15 2026).
+        self.portrait = PortraitView()
+        self.portrait.draw_requested.connect(
+            lambda: self._current and self.portrait_requested.emit(self._current.id)
+        )
+        self.pictures = RefImageStrip(self._pictures, "them", after_portrait=True)
+        self.portrait.add_requested.connect(self.pictures.add_portrait)
         self.pictures.changed.connect(self._on_pictures_changed)
         self.origin_note = QLabel("Card drafted by the model from the story. Check it.")
         self.origin_note.setObjectName("hintLabel")
@@ -196,6 +212,7 @@ class CastPanel(QWidget):
         form_host = QWidget()
         form = QFormLayout(form_host)
         form.setContentsMargins(0, 0, 0, 0)
+        form.addRow(self.portrait)
         form.addRow("Name", self.name)
         form.addRow("Aliases", self.aliases)
         form.addRow("From", self.canon)
@@ -207,7 +224,7 @@ class CastPanel(QWidget):
         form.addRow("Skills", skills_box)
         # Full width, under its label: beside it, the strip's three buttons
         # plus the label column were the form's widest row.
-        form.addRow(QLabel("Pictures"))
+        form.addRow(QLabel("Other pictures"))
         form.addRow(self.pictures)
         form.addRow(self.player_available)
         form.addRow(self.author_only)
@@ -287,6 +304,10 @@ class CastPanel(QWidget):
         """`hidden`: ids the plot hasn't brought in yet, left off the list unless
         the author has chosen to see the plot (they're still edited in place)."""
         self._cast = cast
+        store = self._pictures()
+        if store is not self._icons_store:  # another story's pictures
+            self._icons.clear()
+            self._icons_store = store
         if hidden is not None:
             self._hidden = hidden
         if supporting is not None:
@@ -309,6 +330,7 @@ class CastPanel(QWidget):
                     label += MODEL_MARK
                 item = QListWidgetItem(label)
                 item.setData(Qt.UserRole, character.id)
+                item.setIcon(self._icon(character))
                 if character.canon:
                     item.setToolTip(character.canon)
                 self.list.addItem(item)
@@ -320,6 +342,38 @@ class CastPanel(QWidget):
             self.list.setCurrentRow(1)
         else:
             self._on_selection_changed(self.list.currentItem(), None)
+
+    def _icon(self, character: Character) -> QIcon:
+        """The character's portrait, small, for the list; a blank square of
+        the same size when there is none, so the names line up."""
+        first = character.reference_images[0] if character.reference_images else None
+        key = first.file if first is not None else ""
+        icon = self._icons.get(key)
+        if icon is None:
+            store = self._pictures()
+            if first is not None and store is not None:
+                pixmap = thumbnail_of(store.read(first.file), LIST_ICON)
+            else:
+                pixmap = QPixmap()
+            if pixmap.isNull():
+                pixmap = QPixmap(LIST_ICON, LIST_ICON)
+                pixmap.fill(Qt.transparent)
+            icon = QIcon(pixmap)
+            self._icons[key] = icon
+        return icon
+
+    def _show_portrait(self) -> None:
+        character = self._current
+        first = character.reference_images[0] if character and character.reference_images else None
+        store = self._pictures()
+        data = store.read(first.file) if first is not None and store is not None else None
+        name = character.name if character is not None else ""
+        caption = first.caption if first is not None and first.caption != "portrait" else ""
+        self.portrait.show_portrait(data, caption, name)
+        self.portrait.set_offered(character is not None, character is not None)
+        item = self.list.currentItem()
+        if item is not None and character is not None:
+            item.setIcon(self._icon(character))
 
     def _add_header(self, title: str) -> None:
         item = QListWidgetItem(title)
@@ -408,6 +462,7 @@ class CastPanel(QWidget):
         self.empty_hint.setVisible(not enabled)
         self.origin_note.setVisible(bool(character and character.origin == "model"))
         self.pictures.set_refs(character.reference_images if character is not None else None)
+        self._show_portrait()
         if character is None:
             return
 
@@ -455,6 +510,7 @@ class CastPanel(QWidget):
 
     def _on_pictures_changed(self) -> None:
         if self._current is not None:
+            self._show_portrait()
             self.changed.emit()
 
     def _add_character(self) -> None:

@@ -43,6 +43,7 @@ KIND_LABELS: dict[str, str] = {
     "draft_response": "Story drafting",
     "review_response": "Settings reviews",
     "image_prompt_response": "Image prompts",
+    "portrait_prompt_response": "Portrait prompts",
     # Priced per picture: the reply's cost, or the listed price (marked).
     "image_response": "Images",
     "map_picture_response": "Map pictures",

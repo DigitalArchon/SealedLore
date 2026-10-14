@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.portraits import portrait_size
 from sealedlore.engine.reasoning import (
     LEVEL_LABELS,
     CallKind,
@@ -1032,8 +1033,38 @@ class SettingsDialog(QDialog):
         hint.setObjectName("hintLabel")
         hint.setWordWrap(True)
         form.addRow(hint)
+        self._portrait_rows(form)
         self._map_pictures_rows(form)
         return widget
+
+    def _portrait_rows(self, form: QFormLayout) -> None:
+        """Portraits of the characters (Story → Draw portraits…, the Cast
+        page, and the offer when a story starts)."""
+        form.addRow(QLabel("<b>Portraits</b>"))
+        self.portrait_model = ModelField(
+            self.config.portrait_model,
+            self._browse_image_models if self.image_catalog is not None else None,
+            recommended=RECOMMENDED_IMAGE_MODELS["portrait_model"],
+        )
+        form.addRow("Portrait model", self.portrait_model)
+        self.portrait_note = QLabel()
+        self.portrait_note.setObjectName("hintLabel")
+        self.portrait_note.setWordWrap(True)
+        form.addRow(self.portrait_note)
+        self.portrait_model.textChanged.connect(self._sync_portrait_note)
+        self._sync_portrait_note()
+
+    def _sync_portrait_note(self, *_args) -> None:
+        model = self.portrait_model.text().strip()
+        info = next((m for m in self._image_models if m.id == model), None)
+        each = info.price(portrait_size(info)) if info else None
+        price = f"${each:.3f} a portrait listed" if each else "price not listed"
+        known = recommended_image_model("portrait_model", model)
+        self.portrait_note.setText(
+            "A portrait of each character from their card, offered when a story starts and "
+            "on the Cast page; every prompt is shown to you first. "
+            f"{model or 'No model'}: {price}." + (f" {known.note}" if known is not None else "")
+        )
 
     def _map_pictures_rows(self, form: QFormLayout) -> None:
         """Map pictures: a standing approval (the author's call, Oct 2026),
@@ -1370,6 +1401,9 @@ class SettingsDialog(QDialog):
         self.config.image_count = self.image_count.value()
         self.config.image_prompt_model = self.image_prompt_model.text().strip() or None
         self.config.map_pictures = self.map_pictures.isChecked()
+        self.config.portrait_model = (
+            self.portrait_model.text().strip() or self.config.portrait_model
+        )
         self.config.map_picture_model = (
             self.map_picture_model.text().strip() or self.config.map_picture_model
         )

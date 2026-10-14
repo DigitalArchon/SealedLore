@@ -61,3 +61,6 @@ class GeneratedImage(BaseModel):
     # Made in a private scene: its direction came from the scene, so it is
     # never offered to another model's prompt writer afterwards.
     private_span: str | None = None
+    # A portrait of this character (engine/portraits.py): once drawn it
+    # becomes their first picture (`Story.portraits_taken`).
+    portrait_of: str | None = None

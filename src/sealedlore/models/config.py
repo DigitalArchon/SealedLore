@@ -82,6 +82,13 @@ RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
             "picture to the next.",
         ),
         RecommendedModel(
+            id="recraft-ai/recraft-v4.1-flash/text-to-image",
+            label="Recraft V4.1 Flash",
+            note="The most striking portraits of those tried, with cinematic light, at about "
+            "$0.008 a portrait. Like Z Image Turbo it can't be given reference pictures, so "
+            "it can't keep a character the same from one picture to the next.",
+        ),
+        RecommendedModel(
             id="bytedance/seedream-v5.0-flash",
             label="Seedream 5.0 Flash (premium)",
             note="The most finished portraits of those tried, and up to ten reference "
@@ -547,6 +554,12 @@ class Config(BaseModel):
     # `image_prompt_model` (blank: the story's own model, on the story's
     # cached prefix) and always shown to the author before anything is sent.
     image_model: str = "bytedance/seedream-v5.0-pro"
+    # A portrait of each character (engine/portraits.py), offered at a
+    # story's start and on the Cast page, every prompt shown first. FLUX.2
+    # klein 9B followed every detail of three Doomsville cards at $0.01, and
+    # takes reference pictures (RECOMMENDED_IMAGE_MODELS: the others, with
+    # what each is good at).
+    portrait_model: str = "flux-2-klein-9b"
     image_prompt_model: str | None = None
     # NanoGPT's host for each role's model (models/route.py), keyed by
     # `ROUTE_ROLES`; missing means the subscription's routing.

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -30,8 +31,15 @@ def opening_note(story: Story) -> str:
 
 class StartDialog(QDialog):
     def __init__(
-        self, story: Story, cast: Sequence[Character], parent: QWidget | None = None
+        self,
+        story: Story,
+        cast: Sequence[Character],
+        parent: QWidget | None = None,
+        *,
+        without_portraits: Sequence[Character] = (),
     ) -> None:
+        """`without_portraits`: characters the models may see who have no
+        picture yet; when there are any, a portrait of each is offered."""
         super().__init__(parent)
         self.setWindowTitle(f"Start — {story.title}")
         self.setMinimumWidth(460)
@@ -69,6 +77,20 @@ class StartDialog(QDialog):
             layout.addWidget(self.presence)
             self.play_as.currentIndexChanged.connect(self._lock_rows)
             self._lock_rows()
+        # A portrait of each character (the author, Oct 15 2026): ticked
+        # here, the Portraits dialog then shows every prompt before anything
+        # is drawn, and the opening runs while they are drawn.
+        self.portraits: QCheckBox | None = None
+        if without_portraits:
+            names = ", ".join(c.name for c in without_portraits)
+            self.portraits = QCheckBox(
+                f"Draw a portrait of each character who has none ({len(without_portraits)})"
+            )
+            self.portraits.setToolTip(
+                f"{names}: drawn from their cards by an image model. You see every prompt "
+                "and the price before anything is drawn."
+            )
+            layout.addWidget(self.portraits)
         note = QLabel(opening_note(story))
         note.setObjectName("hintLabel")
         note.setWordWrap(True)
@@ -88,6 +110,9 @@ class StartDialog(QDialog):
         # Picking one of a "play one of these" choice sets the others aside.
         aside = [i for i in self._choose_one_of if i != held] if held in self._choose_one_of else []
         self.presence.set_locked(held, aside)
+
+    def portraits_wanted(self) -> bool:
+        return self.portraits is not None and self.portraits.isChecked()
 
     def held_character_id(self) -> str | None:
         return self.play_as.currentData()
