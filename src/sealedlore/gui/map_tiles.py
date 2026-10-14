@@ -286,7 +286,7 @@ def ground_tile(look_name: str, kind: str, variant: int) -> QImage:
         _dots(painter, rng, sand.shade, 9)
     elif kind == VOID:
         painter.fillRect(0, 0, TILE, TILE, _c("#07080d"))
-        if look_name == "space" and rng.random() < 0.3:
+        if look_name in ("space", "metal") and rng.random() < 0.3:  # outside a hull
             _dots(painter, rng, "#e8ecff", 1)
     elif look_name == "cobble":
         painter.fillRect(0, 0, TILE, TILE, _c(look.deep))
@@ -634,7 +634,7 @@ def render_tiles(
                 if ch in (OPEN, BRUSH, TREES, ROCK, RUBBLE, FENCE, FIRE, "") or ch.isdigit()
                 else ch
             )
-            if ch == VOID and look_name != "space" and look_name != "floor":
+            if ch == VOID and look_name not in ("space", "floor", "metal"):
                 under = OPEN
             if ch == ROCK and look_name == "rock":
                 under = OPEN

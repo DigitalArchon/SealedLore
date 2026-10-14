@@ -71,6 +71,12 @@ class WorldArtRuntime:
     _picture_thread: threading.Thread | None = None
     _picture_client: ImageClient | None = None
     _picture_model_info: ImageModelInfo | None = None
+    # Each run's pieces: how many to draw and how many are done (drawn,
+    # failed or stopped), for the map's progress (`map_art_progress`).
+    _art_total = 0
+    _art_done = 0
+    _picture_total = 0
+    _picture_done = 0
     # Called (on the art thread) after each piece is kept: the window's cue to
     # redraw the map.
     on_map_art: Callable[[], None] | None = None
@@ -97,6 +103,18 @@ class WorldArtRuntime:
         art = self.world_art
         with self._lock():
             return art.model_copy(deep=True)
+
+    def map_art_progress(self) -> tuple[int, int]:
+        """(done, of) for the art and pictures being drawn now; (0, 0) when
+        nothing is. The author asked to see the map in progress and done."""
+        done = total = 0
+        thread = self._art_thread
+        if thread is not None and thread.is_alive():
+            done, total = done + self._art_done, total + self._art_total
+        thread = self._picture_thread
+        if thread is not None and thread.is_alive():
+            done, total = done + self._picture_done, total + self._picture_total
+        return min(done, total), total
 
     @property
     def map_art_running(self) -> bool:
@@ -182,6 +200,7 @@ class WorldArtRuntime:
         media = self.config.images()
         if not jobs or media is None:
             return False
+        self._picture_total, self._picture_done = len(jobs), 0
         client = ImageClient(media.base_url, media.api_key, api=media.api)
         self._picture_client = client
         self._art_stop = False
@@ -209,6 +228,7 @@ class WorldArtRuntime:
                 if self._art_stop:
                     return
                 self._picture_one(job, client, sizes[job.subject == "postcard"])
+                self._picture_done += 1
         finally:
             client.close()
 
@@ -286,6 +306,7 @@ class WorldArtRuntime:
         if not jobs:
             return pictures
         model = self.map_art_model
+        self._art_total, self._art_done = len(jobs), 0
         detached = getattr(self.provider, "detached", None)
         if not callable(detached):
             self._draw(jobs, model, [self.provider])
@@ -342,6 +363,8 @@ class WorldArtRuntime:
                         return
                     job = queue.pop(0)
                 self._draw_one(job, model, client)
+                with queue_lock:
+                    self._art_done += 1
 
         if len(clients) == 1:
             worker(clients[0])

@@ -20,6 +20,8 @@ from sealedlore.gui.world_view import WorldView
 
 # Pieces of art come back one after another: one redraw for a run of them.
 ART_REDRAW_MS = 400
+# How often the progress is read while the map is being drawn.
+PROGRESS_MS = 700
 
 
 class _ArtSignal(QObject):
@@ -46,6 +48,10 @@ class WorldWindow:
         self._art_timer.setSingleShot(True)
         self._art_timer.setInterval(ART_REDRAW_MS)
         self._art_timer.timeout.connect(self._on_art_timer)
+        # The drawing's progress, read without redrawing the map.
+        self._progress_timer = QTimer(self)
+        self._progress_timer.setInterval(PROGRESS_MS)
+        self._progress_timer.timeout.connect(self._sync_progress)
         # Whether the window is laid out for a map now (`_sync_world`).
         self.map_layout = False
 
@@ -99,6 +105,7 @@ class WorldWindow:
         self.world_view.picture_reader = session.pictures.read
         self.world_view.art_on = self.config.map_art
         self.world_view.drawing = session.map_art_running
+        self.world_view.set_progress(*session.map_art_progress())
         self.world_view.set_world(
             session.world(),
             session.map_art_copy(),
@@ -123,6 +130,7 @@ class WorldWindow:
             # Whatever the map still lacks (a story opened, the setting just
             # turned on, art that failed before) is drawn now, in the background.
             session.start_map_art()
+        self._sync_progress()
         if self.world_shown():
             self.refresh_world(keep_view=True)
 
@@ -140,12 +148,24 @@ class WorldWindow:
             self.refresh_world(keep_view=False)
 
     def _art_drawn(self) -> None:
+        self._sync_progress()
         if self.world_shown():
             self._art_timer.start(ART_REDRAW_MS)
 
     def _on_art_timer(self) -> None:
         self.refresh_world(keep_view=True)
+
+    def _sync_progress(self) -> None:
+        """The map's progress from the session; read again while it draws,
+        until it is done (`map_art_progress`)."""
         session = self.session
-        if session is not None and session.map_art_running and self.world_shown():
-            # Still drawing: look again, so the hint says when it is done.
-            self._art_timer.start(1500)
+        if session is None or not self.map_layout:
+            self._progress_timer.stop()
+            return
+        done, total = session.map_art_progress()
+        self.world_view.art_on = self.config.map_art
+        self.world_view.set_progress(done, total)
+        if total and not self._progress_timer.isActive():
+            self._progress_timer.start()
+        elif not total:
+            self._progress_timer.stop()

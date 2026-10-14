@@ -889,8 +889,10 @@ untick **Draw the map** to keep it plain): the land around each place the
 story reaches, the ground plan of each place you have been, and a small
 picture of each place and thing. Each is drawn once and kept. When the story
 changes something (a barn blown up, a truck burnt out), it is drawn again as
-it now is, as an edit of how it looked, so it is still the same barn. A
-branch shows the map as it stands on that branch.
+it now is, as an edit of how it looked, so it is still the same barn, and
+the local map shows it as it is now. A station or ship is drawn as its decks.
+While it draws, the map says how far it has got ("Drawing the map: 3 of 12"),
+and says when it is done. A branch shows the map as it stands on that branch.
 
 With **Draw map pictures with an image model** ticked (Settings → Images, off
 until you tick it, and needing **Draw the map** on; Qwen Image unless you

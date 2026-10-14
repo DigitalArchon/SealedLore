@@ -2110,6 +2110,22 @@ _text(
     "doors between them, and what stands in each room as objects. Nothing outside the building.",
 )
 
+# Not measured: live, Deep Space 9's plan came back as rooms scattered over
+# open space, each a building with a roof, between them stars. A place that
+# isn't a building may be a station or a ship: said for every such layout,
+# since nothing before the first land is drawn says it is in space.
+_text(
+    "map.layout.enclosed",
+    MAP,
+    "Map art: a station or ship",
+    "Added to the layout request of every place that isn't a building: if it is a station, "
+    "ship or sealed habitat, its plan is its decks.",
+    "If this place is a space station, a ship or a sealed habitat, lay out its decks: its hull "
+    'fills the grid as floor ("ground": "floor"), bulkheads as walls, rooms walled off '
+    'with doors, corridors as floor between them, airlocks as doors in the hull. Space ("dark") '
+    "only outside the hull; no roads, trees or open ground inside it.",
+)
+
 # Not measured: the map's own places inside the one being laid out, where
 # the map put them (world_art.fixed_in_plan); the program draws the
 # buildings among them itself (with_fixed), so a plan and the region agree.

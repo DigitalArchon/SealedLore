@@ -56,6 +56,7 @@ from PySide6.QtWidgets import (
     QGraphicsView,
     QHBoxLayout,
     QLabel,
+    QProgressBar,
     QScrollArea,
     QToolButton,
     QVBoxLayout,
@@ -465,6 +466,21 @@ class WorldView(QWidget):
         header.add_group([self.local_button, self.region_button, self.world_button])
         header.add_group([self.zoom_out, self.zoom_in])
         header.add_group([self.inside_button])
+        # How far the drawing has got (the author: the hint's small text said
+        # neither that it was under way nor that it was done).
+        self.progress_label = QLabel()
+        self.progress_label.setObjectName("hintLabel")
+        self.progress = QProgressBar()
+        self.progress.setTextVisible(False)
+        self.progress.setMaximumWidth(220)
+        progress_row = QHBoxLayout()
+        progress_row.setContentsMargins(0, 0, 0, 0)
+        progress_row.addWidget(self.progress_label)
+        progress_row.addWidget(self.progress, 1)
+        progress_row.addStretch(1)
+        self.progress_label.hide()
+        self.progress.hide()
+        self._drew = False  # a run has finished since this map was shown
         self.view = _WorldGraphics()
         self.scene = QGraphicsScene(self)
         self.view.setScene(self.scene)
@@ -514,6 +530,7 @@ class WorldView(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
         layout.addLayout(header)
+        layout.addLayout(progress_row)
         layout.addWidget(self.hint)
         layout.addWidget(self.view, 1)
         layout.addWidget(self.card)
@@ -898,7 +915,9 @@ class WorldView(QWidget):
         for pid, plan in self._plans.items():
             show = pid in shown_plans
             if show:
-                roofs = not inside and plan.place.kind != "building"
+                ground = self._ground_for(plan.place, str(plan.layout.spec.get("ground", "")))
+                # A deck has no roofs: its rooms are under the one hull.
+                roofs = not inside and plan.place.kind != "building" and ground != "metal"
                 fixed = {
                     f["place_id"]: (f["x"], f["x"] + f["w"] - 1, f["y"], f["y"] + f["h"] - 1)
                     for f in fixed_in_plan(self.world, plan.place)
@@ -909,7 +928,6 @@ class WorldView(QWidget):
                 fronts = tuple(
                     sorted(box for child, box in fixed.items() if child in self._changed_only)
                 )
-                ground = self._ground_for(plan.place, str(plan.layout.spec.get("ground", "")))
                 dressed = plan.childItems()
                 if (
                     not dressed
@@ -989,6 +1007,7 @@ class WorldView(QWidget):
         roofed = [b for b in houses if b not in opened] if roofs else []
         self._marked(plan, rows, layout.objects, roofed)
         spots = {_key(name): (x, y) for name, (x, y) in layout.labels.items()}
+        stood = self._stand(plan, self._people_in(plan.place.id), spots, [*roofed, *fronts], rows)
         own = {_key(n) for n in (plan.place.name, *plan.place.aliases)}
         for name, (x, y) in layout.labels.items():
             if _key(name) in own:
@@ -999,21 +1018,33 @@ class WorldView(QWidget):
             box = next((b for b in houses if b[0] <= x <= b[1] and b[2] <= y <= b[3]), None)
             if box is not None:  # a building's name on its roof, or its far wall
                 x, y = (box[0] + box[1]) / 2, box[2] + (0.6 if box in roofed else -0.4)
+            elif (x, y) in stood:  # people stand here: the name goes under their feet
+                y += 1.6
             tag.centre_on(x * TILE + TILE / 2, y * TILE)
-        self._stand(plan, self._people_in(plan.place.id), spots, [*roofed, *fronts], rows)
 
     def _ground_for(self, place: WorldPlace, ground: str) -> str:
         """A plan's open ground as the land it stands on has it: live, a barn's
-        plan came back on summer grass in a snowbound country. A floor, rock
-        or space is the plan's own."""
-        spot = position(self.world, place.id)
-        if spot is None or (ground and ground not in _OPEN_GROUND):
+        plan came back on summer grass in a snowbound country. A floor or
+        rock is the plan's own. A plan in space is a deck ("metal": panels,
+        bulkheads, stars only outside the hull): live, Deep Space 9's rooms
+        were wooden walls and red roofs on a field of stars."""
+        land = self._land_under(place)
+        if ground == "space" or land == "space":
+            return "metal"
+        if ground and ground not in _OPEN_GROUND:
             return ground
-        for patch in self.art.terrain:
+        return land if land in _OPEN_GROUND else ground
+
+    def _land_under(self, place: WorldPlace) -> str:
+        """The ground of the finest land drawn under a place, or ""."""
+        spot = position(self.world, place.id)
+        if spot is None:
+            return ""
+        for patch in sorted(self.art.terrain, key=lambda p: p.side):
             half = patch.side / 2
             if abs(spot[0] - patch.x) <= half and abs(spot[1] - patch.y) <= half:
-                return patch.ground if patch.ground in _OPEN_GROUND else ground
-        return ground
+                return patch.ground
+        return ""
 
     def _people_in(self, place_id: str) -> list[tuple[str, str]]:
         """(who, where) for everyone the story has at this place or somewhere
@@ -1077,13 +1108,16 @@ class WorldView(QWidget):
         spots: dict[str, tuple[int, int]],
         roofed: list[tuple[int, int, int, int]],
         rows: tuple[str, ...],
-    ) -> None:
+    ) -> set[tuple[int, int]]:
         """Everyone where the plan marks their place; at a roofed building,
         or one drawn open for its changed state (`roofed` has both), at its
         front; otherwise in the middle. Several in one spot stand side by
         side."""
         width = max((len(r) for r in rows), default=1)
         groups: dict[tuple[float, float], list[str]] = {}
+        # The labelled tiles people stand on, for `_dress_plan` to move the
+        # place's name off them.
+        standing: dict[tuple[int, int], list[str]] = {}
         for who, at in people:
             place = self.world.places.get(at)
             names = [place.name, *place.aliases] if place is not None else []
@@ -1095,22 +1129,31 @@ class WorldView(QWidget):
                 box = next((b for b in roofed if b[0] <= tx <= b[1] and b[2] <= ty <= b[3]), None)
                 if box is not None:  # roofed over: they stand at its front
                     ty = box[3] + 1
+                if box is None:
+                    standing.setdefault(spot, []).append(who)
                 x, y = tx * TILE + TILE / 2, ty * TILE + TILE - 2
             groups.setdefault((x, y), []).append(who)
         for (x, y), names in groups.items():
             names.sort(key=lambda n: n != self.held)
-            for i, name in enumerate(names):
-                offset = (i - (len(names) - 1) / 2) * 14
+            tags = [
+                _TagItem(name.split()[0] if name.split() else name, bold=name == self.held)
+                for name in names
+            ]
+            # Side by side by their names' width: live, two officers' names
+            # ran into each other at 14px apart.
+            step = max(14.0, *(tag.boundingRect().width() + 4 for tag in tags))
+            for i, (name, tag) in enumerate(zip(names, tags, strict=True)):
+                offset = (i - (len(names) - 1) / 2) * step
                 avatar = self._picture_image("person", name, None, AVATAR_HEIGHT)
                 figure = _PersonItem(name, avatar or person_sprite(name), held=name == self.held)
                 figure.setParentItem(plan)
                 figure.setPos(x + offset, y)
                 self.people.append(figure)
                 plan.dressed.append(figure)
-                tag = _TagItem(name.split()[0] if name.split() else name, bold=name == self.held)
                 tag.setParentItem(plan)
                 tag.centre_on(x + offset, y - figure.image.height() - 6)
                 plan.dressed.append(tag)
+        return {spot for spot, _names in standing.items()}
 
     # --- the card --------------------------------------------------------------------
 
@@ -1293,9 +1336,26 @@ class WorldView(QWidget):
                 hint += " The local map isn't drawn yet: it is, the first time the story is there."
             else:
                 hint += " The local map isn't drawn: Draw the map is off (Settings → Models)."
-        elif self.drawing:
-            hint += " Drawing the map in the background."
         return hint
+
+    def set_progress(self, done: int, total: int) -> None:
+        """The drawing under way: `done` of `total` pieces (art and
+        pictures); nothing under way when `total` is 0, said as drawn once a
+        run has finished. Cheap: nothing is redrawn."""
+        drawing = total > 0
+        if drawing:
+            self._drew = True
+            self.progress_label.setText(f"Drawing the map: {done} of {total}")
+            self.progress.setRange(0, total)
+            self.progress.setValue(done)
+        else:
+            self.progress_label.setText("✓ The map is drawn")
+        self.progress.setVisible(drawing)
+        self.progress_label.setVisible(drawing or (self._drew and self.art_on))
+        if drawing != self.drawing:
+            self.drawing = drawing
+            if self.world.places:
+                self.hint.setText(self._hint_for(self.level()))
 
     def _show_at(self, centre: QPointF, scale: float) -> None:
         """The map at `scale` (screen pixels a metre), `centre` in the middle.

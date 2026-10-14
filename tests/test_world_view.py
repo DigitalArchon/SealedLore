@@ -232,6 +232,52 @@ def test_a_building_the_story_changed_shows_its_new_plan_open_on_the_local_map(a
     assert "Barn" not in tags
 
 
+def test_a_station_in_space_is_a_deck_and_its_people_stand_apart(app):
+    """Live, Deep Space 9's plan was wooden walls and red roofs on a field of
+    stars. A plan whose land is space is a deck: the metal look, no roofs.
+    Two officers in one corridor stand apart by their names' width, and the
+    corridor's name goes under their feet."""
+    from sealedlore.models.world import TerrainPatch
+
+    view = WorldView()
+    view.resize(900, 700)
+    station = WorldPlace(id="ds9", name="Deep Space 9", kind="site", x=0.0, y=0.0, size=300)
+    hall = WorldPlace(id="hall", name="corridor", kind="area", inside="ds9", x=0.0, y=0.0, size=60)
+    world = WorldMap(
+        places={"ds9": station, "hall": hall},
+        where={"Captain Korath": "hall", "First Officer Chrag": "hall"},
+        visited={"Captain Korath": ["hall"]},
+    )
+    plan = PlaceLayout(
+        place_id="ds9",
+        rows=["_" * 40] * 6
+        + ["_" * 18 + "#####" + "_" * 17]
+        + ["_" * 18 + "#___#" + "_" * 17]
+        + ["_" * 18 + "##+##" + "_" * 17]
+        + ["_" * 40] * 15,
+        labels={"corridor": [10, 15], "Ops": [20, 7]},
+        spec={"ground": "floor"},
+    )
+    space = TerrainPatch(place_id="ds9", x=0, y=0, side=1200, rows=[" " * 40] * 40, ground="space")
+    art = WorldArt(layouts={"ds9": {"": plan}}, terrain=[space])
+    view.set_world(world, art, "Captain Korath", keep_view=False)
+    deck = view._plans["ds9"]
+    assert deck.isVisible() and deck.ground == "metal" and deck.roofs is False
+    people = sorted(view.people, key=lambda p: p.pos().x())
+    tags = {
+        t.text(): t.mapRectToParent(t.boundingRect())
+        for t in deck.childItems()
+        if isinstance(t, QGraphicsSimpleTextItem)
+    }
+    assert not tags["Captain"].intersects(tags["First"])
+    assert tags["corridor"].top() > people[0].pos().y()  # under their feet
+    # The drawing's progress, and when it is done.
+    view.set_progress(2, 5)
+    assert view.progress_label.text() == "Drawing the map: 2 of 5" and not view.progress.isHidden()
+    view.set_progress(0, 0)
+    assert view.progress.isHidden() and view.progress_label.text() == "✓ The map is drawn"
+
+
 def test_with_no_local_plan_the_region_shows_and_says_why(app):
     view = WorldView()
     view.resize(800, 600)

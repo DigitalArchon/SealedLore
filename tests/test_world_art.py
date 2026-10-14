@@ -272,6 +272,37 @@ def test_a_building_the_story_changed_is_planned_anew_though_nobody_went_in():
     assert not any(k.startswith(f"layout:{barn.id}") for k in keys)
 
 
+def test_a_place_that_isn_t_a_building_is_told_how_to_lay_out_a_station():
+    """Live, Deep Space 9 came back as rooms floating in open space."""
+    world = doomsville()
+    jobs = {j.key: j for j in plan_art(world, WorldArt(), here="house", setting="x")}
+    farm, house = jobs["layout:farm"].messages[-1].text, jobs["layout:house"].messages[-1].text
+    assert "space station, a ship or a sealed habitat" in farm
+    assert "space station" not in house and "inside of the building" in house
+
+
+def test_the_map_s_progress_is_what_the_running_threads_have_left(tmp_path: Path, story, cast):
+    import threading
+
+    session = StorySession(
+        StoryBundle(story=story, cast=cast),
+        Config(),
+        MockChatProvider(),
+        root=tmp_path,
+        learn_corrections=False,
+    )
+    assert session.map_art_progress() == (0, 0)
+    release = threading.Event()
+    session._art_thread = threading.Thread(target=release.wait)
+    session._art_thread.start()
+    session._art_total, session._art_done = 5, 2
+    session._picture_total, session._picture_done = 3, 1  # its thread isn't running
+    assert session.map_art_progress() == (2, 5)
+    release.set()
+    session._art_thread.join()
+    assert session.map_art_progress() == (0, 0)
+
+
 def test_land_is_drawn_round_the_local_area_not_the_country_it_is_in():
     """The caves in the hills: land round the caves (the hills are wider
     than a local area), never a 12 km patch of hills that would cover the

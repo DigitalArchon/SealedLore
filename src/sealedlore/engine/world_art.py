@@ -578,6 +578,8 @@ def layout_messages(
     parts: list[str] = []
     if place.kind == "building":
         parts.append(texts["map.layout.building"])
+    else:
+        parts.append(texts["map.layout.enclosed"])
     fixed_ids = {f["place_id"] for f in fixed}
     inside = [
         p
