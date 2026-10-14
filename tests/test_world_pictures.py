@@ -264,8 +264,37 @@ def test_the_isometric_view_names_a_change_first_and_goes_out_of_date_with_it():
     world = farm()
     before = isometric_state(world, "farm")
     world.places["barn"] = world.places["barn"].model_copy(update={"state": "burning"})
-    job = isometric_job(world, WorldArt(), "farm", setting="a frozen winter")
+    job = isometric_job(world, WorldArt(), "farm", look="snow")
     assert isometric_state(world, "farm") != before and job.state == "The barn: burning"
     assert "As the story has it now, The barn is burning: draw it so" in job.prompt
     assert job.prompt.index("burning: draw it so") < job.prompt.index("What is on it")
     assert "Hellsville" not in job.prompt  # only what the plan has
+
+
+def test_the_isometric_view_says_a_change_in_what_its_plan_shows():
+    """Live, the barn's change was the story's words ("past saving, a
+    furnace now"), which never say fire, beside its old description ("its
+    roof still holding"): Qwen drew it intact every time. Now the change is
+    what the redrawn plan shows, and the old description is gone."""
+    from sealedlore.engine.world_pictures import isometric_job, seen_change
+    from sealedlore.models.world import PlaceLayout
+
+    world = farm()
+    world.places["barn"] = world.places["barn"].model_copy(
+        update={"state": "past saving, a furnace now", "what": "Its roof still holding."}
+    )
+    art = WorldArt(
+        layouts={
+            "barn": {
+                "": PlaceLayout(place_id="barn", rows=["#####", "#___#", "#####"]),
+                "past saving, a furnace now": PlaceLayout(
+                    place_id="barn", rows=[":::::", ":**::", "#:::#"]
+                ),
+            }
+        }
+    )
+    assert seen_change(art, world.places["barn"]) == "on fire, in ruins, most of its walls down"
+    prompt = isometric_job(world, art, "farm", look="snow").prompt
+    assert "The barn is on fire, in ruins, most of its walls down (the story: past saving" in prompt
+    assert "roof still holding" not in prompt
+    assert "The ground: snow-covered country in winter." in prompt

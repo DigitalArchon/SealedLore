@@ -29,7 +29,7 @@ from typing import Literal
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.world_art import MAX_FAILURES, SPRITE_KINDS
 from sealedlore.engine.world_layout import position
-from sealedlore.models.world import WorldArt, WorldMap
+from sealedlore.models.world import WorldArt, WorldMap, WorldPlace
 from sealedlore.providers.images import ImageModelInfo
 
 # Where map pictures are kept, inside the story's pictures folder.
@@ -255,23 +255,72 @@ def isometric_state(world: WorldMap, area_id: str) -> str:
     return "; ".join(parts)
 
 
-def _what_is_on(world: WorldMap, art: WorldArt, area_id: str) -> str:
+# The plan's look (world_art.plan_ground) in words, for the isometric view:
+# the world bible is lore, not how the place looks (and Doomsville's virus
+# and dead had two models refuse the picture as sensitive).
+LOOK_WORDS = {
+    "snow": "snow-covered country in winter",
+    "grass": "green countryside",
+    "dirt": "bare earth",
+    "sand": "sand",
+    "rock": "bare rock",
+    "floor": "indoors",
+    "metal": "a station's metal decks, in space",
+    "space": "a station's metal decks, in space",
+}
+
+
+def seen_change(art: WorldArt, place: WorldPlace) -> str:
+    """How a changed place looks, from its plan in that state against the
+    one before it: fire, ruins, walls down. Plain words a painter can draw;
+    the story's own ("past saving, a furnace now") never said fire. Empty
+    when there is no plan of the change to read."""
+    after = art.layout_for(place.id, place.state) if place.state else None
+    if after is None or not after.rows:
+        return ""
+    before = art.layout_for(place.id, "")
+    cells = "".join(after.rows)
+    seen = []
+    if "*" in cells:
+        seen.append("on fire")
+    if cells.count(":") > len(cells) // 4:
+        seen.append("in ruins")
+    if before is not None and before.rows:
+        walls_before = "".join(before.rows).count("#")
+        if walls_before and cells.count("#") < walls_before * 0.6:
+            seen.append("most of its walls down")
+    return ", ".join(seen)
+
+
+def _changed(world: WorldMap, area_id: str) -> list[WorldPlace]:
     area = world.places[area_id]
-    text = area.name + (f", {' '.join(area.what.split())}" if area.what else "") + ". "
+    inside = [p for p in world.places.values() if p.inside == area_id and p.state]
+    return inside + ([area] if area.state else [])
+
+
+def _what_is_on(world: WorldMap, art: WorldArt, area_id: str) -> str:
+    """The place, what is in it and what the plan marks. A changed place
+    goes without the words it had before ("its roof still holding" stood
+    beside the barn burning)."""
+    area = world.places[area_id]
+    what = "" if area.state else " ".join((area.what or "").split()).rstrip(".")
+    text = area.name + (f", {what}" if what else "") + ". "
     parts = []
     for child in world.places.values():
         if child.inside != area_id:
             continue
-        what = " ".join((child.what or "").split())
-        now = f" (now {child.state})" if child.state else ""
-        parts.append(f"{child.name}{now}" + (f": {what}" if what else ""))
+        if child.state:
+            parts.append(f"{child.name} (as said above)")
+            continue
+        what = " ".join((child.what or "").split()).rstrip(".")
+        parts.append(child.name + (f": {what}" if what else ""))
     if parts:
         text += "In it: " + "; ".join(parts) + ". "
     layout = art.layout_for(area_id, area.state) or art.layout_for(area_id)
     marked = list((layout.objects if layout is not None else {}).values())
     if marked:
         text += "Marked on the map: " + ", ".join(marked) + "."
-    return text
+    return text.strip()
 
 
 def isometric_job(
@@ -279,24 +328,24 @@ def isometric_job(
     art: WorldArt,
     area_id: str,
     *,
-    setting: str,
+    look: str = "",
     texts: PromptTexts = DEFAULT_TEXTS,
 ) -> PictureJob:
     """The isometric view of an area as a picture job: its prompt names only
-    what the plan has, any change first; the picture of the plan goes with
-    it (the session renders it)."""
+    what the plan has, any change first in words a painter can draw; the
+    picture of the plan goes with it (the session renders it). `look` is
+    the plan's look (`world_art.plan_ground`)."""
     area = world.places[area_id]
-    changed = [p for p in world.places.values() if p.inside == area_id and p.state] + (
-        [area] if area.state else []
-    )
-    now = "".join(
-        texts.fill("map.picture.isometric.now", place=p.name, state=p.state) for p in changed
-    )
+    now = ""
+    for place in _changed(world, area_id):
+        seen = seen_change(art, place)
+        change = f"{seen} (the story: {place.state})" if seen else place.state
+        now += texts.fill("map.picture.isometric.now", place=place.name, state=change)
     prompt = texts.fill(
         "map.picture.isometric",
         now=now,
         places=_what_is_on(world, art, area_id),
-        setting=setting[:400],
+        look=LOOK_WORDS.get(look, "as the map shows it"),
     )
     state = isometric_state(world, area_id)
     return PictureJob(

@@ -2328,24 +2328,30 @@ _text(
 # (a road north, pine woods, a chapel; farm words for a station): this names
 # only what the plan has, and any change first. Over 13 models on a burning
 # barn and Deep Space 9, Nano Banana Pro kept the layout, drew isometric and
-# showed the fire; Qwen Image ignored the change 3 times in 3
+# showed the fire; Qwen Image ignored the change 3 times in 3. That prompt
+# kept the barn's old words ("its roof still holding") beside the change,
+# gave the change in the story's words ("a furnace now", never "fire") and
+# the world bible's lore as the setting. With the change in what the plan
+# shows, the old words gone and the ground's look instead, Qwen drew the
+# fire 6 times in 6; "no writing of any kind" cut its labels on the barn
+# from 2 of 3 to 1 of 3, not on the station (3 of 3, named things labelled)
 # (SealedLoreDocs design/map.md, Oct 15 2026).
 _text(
     "map.picture.isometric",
     MAP,
     "Map pictures: the isometric view",
     "Sent with the program's picture of the local map when the author asks for its isometric "
-    "view: what is on it, any change first, and the setting.",
+    "view: any change first, what is on it, and the ground's look.",
     "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew "
     "Valley, the same place seen from above at an angle. Keep its layout: every building, "
     "wall, path, fence, water and open ground where the map has it, the same size and shape, "
     "in the same places relative to each other. Add nothing the map does not show.{now} What "
-    "is on it: {places} The setting: {setting}. Full-bleed scene, atmospheric light, no text, "
-    "no labels, no border.",
+    "is on it: {places} The ground: {look}. Full-bleed scene, atmospheric light. No writing of "
+    "any kind: no labels, names, captions, arrows or signs, and no border.",
     (
         ("now", "Each place the story changed, as map.picture.isometric.now says it, or nothing"),
         ("places", "The place, what is in it and what the map marks there"),
-        ("setting", "The story's setting, briefly"),
+        ("look", "The plan's ground in words (snow-covered country in winter, a station's decks)"),
     ),
 )
 
@@ -2353,10 +2359,10 @@ _text(
     "map.picture.isometric.now",
     MAP,
     "Map pictures: the isometric view, a change",
-    "One place the story changed, said first in the isometric view's prompt: without it the "
-    "barn burning came back intact.",
+    "One place the story changed, said first in the isometric view's prompt, in what its "
+    "redrawn plan shows (fire, ruins, walls down) with the story's words after.",
     " As the story has it now, {place} is {state}: draw it so, not as it was.",
-    (("place", "The place"), ("state", "What it is now")),
+    (("place", "The place"), ("state", "How it looks now, then the story's words")),
 )
 
 

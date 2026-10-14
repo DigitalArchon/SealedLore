@@ -31,6 +31,7 @@ from sealedlore.engine.world_art import (
     cleaned_art,
     finish,
     plan_art,
+    plan_ground,
     setting_of,
 )
 from sealedlore.engine.world_pictures import (
@@ -237,12 +238,12 @@ class WorldArtRuntime:
             return False
         media = self.config.images()
         assert media is not None
+        art = self.map_art_copy()
+        area = world.places[area_id]
+        layout = art.layout_for(area_id, area.state) or art.layout_for(area_id)
+        ground = str(layout.spec.get("ground", "")) if layout is not None else ""
         job = isometric_job(
-            world,
-            self.map_art_copy(),
-            area_id,
-            setting=setting_of(self.story.world_bible, self.story.title),
-            texts=self.texts,
+            world, art, area_id, look=plan_ground(world, art, area, ground), texts=self.texts
         )
         client = ImageClient(media.base_url, media.api_key, api=media.api)
         self._isometric_area = area_id
