@@ -1,13 +1,16 @@
-"""The map (Map, above the transcript; Esc or Back to the story returns): the
+"""The map (the Inspector's first page for a story that keeps one): the
 world the story has been through, drawn as it grows (models/world.py).
 
-The land the story has reached is drawn tile by tile (engine/world_art.py);
-outside it is fog, the unmapped. Each place stands where the program placed
-it, with its picture once drawn: lit where the author's character has been,
-dimmed where the story only told of it, ringed where they are now. Who is
-there is written under it. A place inside another shows once the map is
-zoomed in far enough to read it. Double-click a place to open its ground
-plan, with the things and people there; Up returns to the map.
+Two views. **Here** is the place the author's character is in, at walking
+scale: its plan drawn in the program's tileset (gui/map_tiles.py), buildings
+seen from outside (See inside takes the roofs off), the marked things lying
+about, and everyone the story has there standing in it, the author's
+character ringed. **Region** is the country: the land the story has reached
+(engine/world_art.py) with fog over the rest, each place where the program
+placed it with its picture, lit where the character has been, dimmed where
+the story only told of it, ringed where they are now; a place inside another
+shows once the map is zoomed in far enough to read it. Double-click a place
+to stand in its scene; Region goes back out.
 
 Everything here is read from the session; the view never changes the story.
 """
@@ -17,17 +20,17 @@ from __future__ import annotations
 from html import escape
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen
+from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPixmap, QTransform
 from PySide6.QtWidgets import (
+    QFrame,
     QGraphicsItem,
     QGraphicsLineItem,
     QGraphicsPixmapItem,
     QGraphicsScene,
     QGraphicsSimpleTextItem,
     QGraphicsView,
-    QHBoxLayout,
     QLabel,
-    QPushButton,
+    QScrollArea,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -35,15 +38,25 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.world_layout import extent, position, size_of
 from sealedlore.gui import text_size
-from sealedlore.gui.map_art import FOG, sprite_pixmap, tile_pixmap
+from sealedlore.gui.map_art import FOG, sprite_pixmap
+from sealedlore.gui.map_tiles import (
+    TILE,
+    building_boxes,
+    person_sprite,
+    prop_sprite,
+    tiles_pixmap,
+)
 from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.models.world import WorldArt, WorldMap, WorldPlace
 
-SPRITE_SIZE = 40  # on screen, whatever the zoom
+SPRITE_SIZE = 48  # on screen, whatever the zoom
 # A place inside another is shown once its parent is this many pixels wide.
 CHILD_SHOWN_AT = 160
 ZOOM_STEP = 1.25
-TILE_PIXELS = 18  # a ground plan's tile, in scene units
+# Ground a plan may share with the land around it (`_ground_for`).
+_OPEN_GROUND = frozenset({"snow", "grass", "dirt", "sand"})
+# A scene's people, in art pixels (the tileset's scale) before the view's zoom.
+PERSON_HEIGHT = 20
 # Places with no picture of their own (land, not a thing on it): a mark only.
 _MARK_COLOURS = {
     "region": "#c9b98a",
@@ -167,6 +180,70 @@ class _WorldGraphics(QGraphicsView):
         super().mouseDoubleClickEvent(event)
 
 
+class _PersonItem(QGraphicsItem):
+    """Someone standing in a scene: their figure (in the scene's pixels, so
+    it scales with the ground) and their name over it, the author's
+    character ringed at their feet."""
+
+    def __init__(self, name: str, image, *, held: bool) -> None:
+        super().__init__()
+        self.name = name
+        self.image = image
+        self.held = held
+        self.setZValue(5 if held else 4)
+        self.setToolTip(name)
+
+    def boundingRect(self) -> QRectF:
+        w, h = self.image.width(), self.image.height()
+        return QRectF(-w / 2 - 4, -h - 2, w + 8, h + 6)
+
+    def paint(self, painter: QPainter, _option, _widget=None) -> None:
+        w, h = self.image.width(), self.image.height()
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(20, 24, 40, 80))
+        painter.drawEllipse(QPointF(0, 0), w / 2, 2)
+        if self.held:
+            painter.setPen(QPen(QColor("#f6cf6e"), 1))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawEllipse(QPointF(0, 0), w / 2 + 2, 3)
+        painter.drawImage(int(-w / 2), int(-h), self.image)
+
+
+class _TagItem(QGraphicsSimpleTextItem):
+    """A name over a scene: the same size on screen whatever the zoom."""
+
+    def __init__(self, text: str, *, bold: bool = True, colour: str = "#f4f1e8") -> None:
+        super().__init__(text)
+        font = QFont()
+        font.setPointSizeF(text_size.points(8.5))
+        font.setBold(bold)
+        self.setFont(font)
+        self.setBrush(QColor(colour))
+        self.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
+        self.setZValue(6)
+
+    def paint(self, painter: QPainter, option, widget=None) -> None:
+        rect = self.boundingRect().adjusted(-3, -1, 3, 1)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(20, 24, 40, 150))
+        painter.drawRoundedRect(rect, 3, 3)
+        super().paint(painter, option, widget)
+
+    def centre_on(self, x: float, y: float) -> None:
+        """Its middle on (x, y) in scene units, wherever the zoom puts the text."""
+        self.setPos(x, y)
+        rect = self.boundingRect()
+        self.setTransformOriginPoint(rect.center())
+        self.setTransform(QTransform.fromTranslate(-rect.width() / 2, -rect.height() / 2))
+
+
+def _key(name: str) -> str:
+    """A place's name as a plan's label might give it: no case, no "the",
+    nothing in brackets ("barn (blown up, burning)" is the barn)."""
+    name = name.lower().split("(")[0].strip()
+    return name[4:] if name.startswith("the ") else name
+
+
 class WorldView(QWidget):
     back_requested = Signal()
 
@@ -178,20 +255,22 @@ class WorldView(QWidget):
         self.hint = QLabel()
         self.hint.setObjectName("hintLabel")
         self.hint.setWordWrap(True)
-        self.up_button = QPushButton("Up to the map")
-        self.up_button.setToolTip("Back from this place to the whole map")
-        self.up_button.clicked.connect(lambda: self.open_place(None))
+        self.here_button = self._button("Here", "The place the story is now, close up")
+        self.region_button = self._button("Region", "The whole country the story has reached")
+        for button in (self.here_button, self.region_button):
+            button.setCheckable(True)
         self.zoom_out = self._button("−", "Zoom out (-, or the mouse wheel)")
         self.zoom_in = self._button("+", "Zoom in (+, or the mouse wheel)")
-        self.fit_button = self._button("Fit", "Everywhere the story has been, in view")
-        self.here_button = self._button("Here", "Where the story is now")
-        back = QPushButton("Back to the story")
-        back.clicked.connect(self.back_requested)
+        self.fit_button = self._button("Fit", "All of it in view")
+        self.inside_button = self._button("See inside", "Take the roofs off, to see inside")
+        self.inside_button.setCheckable(True)
+        # Kept for the window's Esc: up from a place to the region.
+        self.up_button = self.region_button
         header = WrapRow()
         header.add_group([self.title])
-        header.add_group([self.zoom_out, self.zoom_in, self.fit_button, self.here_button])
-        header.add_group([self.up_button])
-        header.add_group([back], right=True)
+        header.add_group([self.here_button, self.region_button])
+        header.add_group([self.zoom_out, self.zoom_in, self.fit_button])
+        header.add_group([self.inside_button])
         self.view = _WorldGraphics()
         self.scene = QGraphicsScene(self)
         self.view.setScene(self.scene)
@@ -200,31 +279,38 @@ class WorldView(QWidget):
         self.zoom_out.clicked.connect(lambda: self.view.zoom_by(1 / ZOOM_STEP))
         self.zoom_in.clicked.connect(lambda: self.view.zoom_by(ZOOM_STEP))
         self.fit_button.clicked.connect(self.fit)
-        self.here_button.clicked.connect(self.go_here)
-        # A place opened: its things, people and numbered objects beside it.
+        self.here_button.clicked.connect(lambda: self.go_here())
+        self.region_button.clicked.connect(lambda: self.open_place(None))
+        self.inside_button.toggled.connect(lambda _on: self._rebuild_scene())
+        # A place's card, under its scene: what the story said of it, who and
+        # what is there.
         self.side = QLabel()
         self.side.setObjectName("worldMapSide")
         self.side.setWordWrap(True)
         self.side.setTextFormat(Qt.RichText)
         self.side.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-        self.side.setMinimumWidth(180)
-        self.side.setMaximumWidth(260)
-        self.side.hide()
-        body = QHBoxLayout()
-        body.setContentsMargins(0, 0, 0, 0)
-        body.addWidget(self.view, 1)
-        body.addWidget(self.side)
+        self.side.setContentsMargins(0, 0, 6, 0)
+        self.card = QScrollArea()
+        self.card.setObjectName("worldMapCard")
+        self.card.setWidget(self.side)
+        self.card.setWidgetResizable(True)
+        self.card.setFrameShape(QFrame.NoFrame)
+        self.card.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.card.setMaximumHeight(120)
+        self.card.hide()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
         layout.addLayout(header)
         layout.addWidget(self.hint)
-        layout.addLayout(body, 1)
+        layout.addWidget(self.view, 1)
+        layout.addWidget(self.card)
         self.world = WorldMap()
         self.art = WorldArt()
         self.held: str | None = None
         self.place_id: str | None = None
         self._items: list[_PlaceItem] = []
+        self.people: list[_PersonItem] = []
         self._fitted = False
         self.open_place(None)
 
@@ -242,8 +328,11 @@ class WorldView(QWidget):
         self, world: WorldMap, art: WorldArt, held: str | None, *, keep_view: bool = True
     ) -> None:
         """Show this map. `keep_view` holds the zoom and place in view (a
-        redraw as art comes in); off, it fits what the story has seen."""
+        redraw as art comes in); off, it opens on the scene where the story
+        is now, or the region when there is none."""
         self.world, self.art, self.held = world, art, held
+        if not keep_view:
+            self.place_id = self.scene_for(self.here())
         if self.place_id is not None and self.place_id not in world.places:
             self.place_id = None
         center = self.view.mapToScene(self.view.viewport().rect().center())
@@ -257,16 +346,41 @@ class WorldView(QWidget):
             self.fit()
 
     def open_place(self, place_id: str | None) -> None:
-        """A place's ground plan, or (None) the whole map."""
+        """A place's scene, or (None) the whole region."""
         self.place_id = place_id if place_id in self.world.places else None
         self._fitted = False
         self._build()
         self.fit()
 
+    def go_here(self) -> None:
+        """The scene where the story is now (or, with none drawn, the region
+        centred on it)."""
+        scene = self.scene_for(self.here())
+        if scene is not None:
+            self.open_place(scene)
+            return
+        self.open_place(None)
+        here = self.here()
+        spot = position(self.world, here) if here else None
+        if spot is not None:
+            self.view.centerOn(spot[0], -spot[1])
+        self._sync_buttons()
+
     def here(self) -> str | None:
         """Where the author's character is: as the story last put them, or an
         imported map's start before it has."""
         return self.world.where.get(self.held or "") or self.world.start
+
+    def scene_for(self, place_id: str | None) -> str | None:
+        """The place whose plan shows `place_id` close up: its own, or the
+        nearest place it is in that has one."""
+        seen: set[str] = set()
+        while place_id is not None and place_id in self.world.places and place_id not in seen:
+            seen.add(place_id)
+            if self.art.layout_for(place_id):
+                return place_id
+            place_id = self.world.places[place_id].inside
+        return None
 
     def _visited(self) -> set[str]:
         visited = set(self.world.visited.get(self.held or "", []))
@@ -282,14 +396,24 @@ class WorldView(QWidget):
         around = {p.id for p in self.world.places.values() if p.inside in been}
         return set(self.world.seen) | been | around
 
+    def _sync_buttons(self) -> None:
+        in_place = self.place_id is not None
+        here_scene = self.scene_for(self.here())
+        self.here_button.setChecked(in_place and self.place_id == here_scene)
+        self.region_button.setChecked(not in_place)
+        self.inside_button.setVisible(in_place)
+        self.card.setVisible(in_place)
+
+    def _rebuild_scene(self) -> None:
+        if self.place_id is not None:
+            self._build()
+
     def _build(self) -> None:
         self.scene.clear()
         self._items = []
-        in_place = self.place_id is not None
-        self.up_button.setVisible(in_place)
-        self.here_button.setVisible(not in_place)
-        self.side.setVisible(in_place)
-        if in_place:
+        self.people = []
+        self._sync_buttons()
+        if self.place_id is not None:
             self._build_place(self.world.places[self.place_id])
             return
         self.title.setText("Map")
@@ -299,9 +423,8 @@ class WorldView(QWidget):
             )
             return
         self.hint.setText(
-            "Where the story has been, drawn as it grows. Lit: where you've been; dimmed: "
-            "places the story told of; ringed: where you are now. Scroll to zoom, drag to "
-            "move, double-click a place to open it."
+            "The country the story has reached. Lit: where you've been; dimmed: places the "
+            "story told of; ringed: where you are now. Double-click a place to stand in it."
         )
         self._build_world()
 
@@ -310,10 +433,10 @@ class WorldView(QWidget):
         for patch in self.art.terrain:
             if not patch.rows:
                 continue
-            item = QGraphicsPixmapItem(tile_pixmap(tuple(patch.rows), patch.ground))
+            item = QGraphicsPixmapItem(tiles_pixmap(tuple(patch.rows), patch.ground))
             item.setTransformationMode(Qt.FastTransformation)
             item.setShapeMode(QGraphicsPixmapItem.BoundingRectShape)
-            item.setScale(patch.side / max(len(patch.rows[0]), 1))
+            item.setScale(patch.side / (max(len(patch.rows[0]), 1) * TILE))
             item.setPos(patch.x - patch.side / 2, -(patch.y + patch.side / 2))
             item.setZValue(0)
             self.scene.addItem(item)
@@ -383,38 +506,45 @@ class WorldView(QWidget):
         self.title.setText(place.name + (f" ({place.state})" if place.state else ""))
         layout = self.art.layout_for(place.id, place.state) or self.art.layout_for(place.id)
         side = [place_card(world, place)]
+        people = self._people_in(place.id)
         if layout is None:
             self.hint.setText(
                 "Not drawn yet: a place's plan is drawn the first time the story is there."
             )
         else:
-            self.hint.setText("Seen from above, north at the top. Numbers are the things marked.")
-            item = QGraphicsPixmapItem(
-                tile_pixmap(tuple(layout.rows), str(layout.spec.get("ground", "")))
+            self.hint.setText(
+                "North at the top. Hover the things marked; double-click a place on the "
+                "Region to stand in it."
             )
+            rows = tuple(layout.rows)
+            ground = self._ground_for(place, str(layout.spec.get("ground", "")))
+            roofs = not self.inside_button.isChecked()
+            item = QGraphicsPixmapItem(tiles_pixmap(rows, ground, roofs))
             item.setTransformationMode(Qt.FastTransformation)
-            item.setScale(TILE_PIXELS)
+            item.setShapeMode(QGraphicsPixmapItem.BoundingRectShape)
             self.scene.addItem(item)
-            font = QFont()
-            font.setPointSizeF(text_size.points(9))
-            font.setBold(True)
+            boxes = building_boxes(rows) if roofs else []
+            self._marked(rows, layout.objects, boxes)
+            spots = {_key(name): (x, y) for name, (x, y) in layout.labels.items()}
+            houses = building_boxes(rows)
             for name, (x, y) in layout.labels.items():
-                label = QGraphicsSimpleTextItem(name)
-                label.setFont(font)
-                label.setBrush(QColor("#1b1d2b"))
-                label.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
-                label.setPos((x + 0.5) * TILE_PIXELS, (y + 0.5) * TILE_PIXELS)
-                self.scene.addItem(label)
+                tag = _TagItem(name.split("(")[0].strip())
+                box = next((b for b in houses if b[0] <= x <= b[1] and b[2] <= y <= b[3]), None)
+                if box is not None:  # a building's name on its roof, or its far wall
+                    x, y = (box[0] + box[1]) / 2, box[2] + (0.6 if roofs else -0.4)
+                tag.centre_on(x * TILE + TILE / 2, y * TILE)
+                self.scene.addItem(tag)
+            self._stand(people, spots, boxes, layout.rows)
             if layout.objects:
                 side.append(
                     "<b>Marked</b><br>"
                     + "<br>".join(f"{n}. {escape(v)}" for n, v in layout.objects.items())
                 )
-            width = max((len(r) for r in layout.rows), default=1) * TILE_PIXELS
-            self.scene.setSceneRect(QRectF(0, 0, width, len(layout.rows) * TILE_PIXELS))
+            width = max((len(r) for r in rows), default=1) * TILE
+            self.scene.setSceneRect(QRectF(0, 0, width, len(rows) * TILE))
         inside = [p for p in world.places.values() if p.inside == place.id]
         if inside:
-            side.append("<b>In it</b><br>" + "<br>".join(escape(p.name) for p in inside))
+            side.append("<b>In it</b><br>" + ", ".join(escape(p.name) for p in inside))
         carried = [
             t
             for t in world.things.values()
@@ -427,22 +557,127 @@ class WorldView(QWidget):
             )
         self.side.setText("<br><br>".join(side))
 
+    def _ground_for(self, place: WorldPlace, ground: str) -> str:
+        """A plan's open ground as the land it stands on has it: live, a barn's
+        plan came back on summer grass in a snowbound country. A floor, rock
+        or space is the plan's own."""
+        spot = position(self.world, place.id)
+        if spot is None or (ground and ground not in _OPEN_GROUND):
+            return ground
+        for patch in self.art.terrain:
+            half = patch.side / 2
+            if abs(spot[0] - patch.x) <= half and abs(spot[1] - patch.y) <= half:
+                return patch.ground if patch.ground in _OPEN_GROUND else ground
+        return ground
+
+    def _people_in(self, place_id: str) -> list[tuple[str, str]]:
+        """(who, where) for everyone the story has at this place or somewhere
+        inside it."""
+        out = []
+        for who, at in self.world.where.items():
+            seen: set[str] = set()
+            spot = at
+            while spot is not None and spot not in seen:
+                if spot == place_id:
+                    out.append((who, at))
+                    break
+                seen.add(spot)
+                spot = self.world.places[spot].inside if spot in self.world.places else None
+        return out
+
+    def _marked(
+        self,
+        rows: tuple[str, ...],
+        objects: dict[str, str],
+        roofed: list[tuple[int, int, int, int]],
+    ) -> None:
+        """Each numbered thing in a plan as a small prop, its name on hover;
+        not what is under a roof (See inside shows it)."""
+        for y, row in enumerate(rows):
+            for x, ch in enumerate(row):
+                if not ch.isdigit():
+                    continue
+                if any(b[0] <= x <= b[1] and b[2] <= y <= b[3] for b in roofed):
+                    continue
+                prop = QGraphicsPixmapItem(QPixmap.fromImage(prop_sprite(int(ch))))
+                prop.setTransformationMode(Qt.FastTransformation)
+                prop.setPos(x * TILE + 2, y * TILE + 2)
+                prop.setZValue(3)
+                prop.setToolTip(objects.get(ch, "something marked here"))
+                self.scene.addItem(prop)
+
+    def _stand(
+        self,
+        people: list[tuple[str, str]],
+        spots: dict[str, tuple[int, int]],
+        boxes: list[tuple[int, int, int, int]],
+        rows: list[str],
+    ) -> None:
+        """Everyone where the plan marks their place; outside a roofed
+        building, at its front; otherwise in the middle. Several in one spot
+        stand side by side."""
+        width = max((len(r) for r in rows), default=1)
+        groups: dict[tuple[float, float], list[str]] = {}
+        for who, at in people:
+            place = self.world.places.get(at)
+            names = [place.name, *place.aliases] if place is not None else []
+            spot = next((spots[_key(n)] for n in names if _key(n) in spots), None)
+            if spot is None:
+                x, y = width * TILE / 2, len(rows) * TILE / 2
+            else:
+                tx, ty = spot
+                box = next((b for b in boxes if b[0] <= tx <= b[1] and b[2] <= ty <= b[3]), None)
+                if box is not None:  # roofed over: they stand at its front
+                    ty = box[3] + 1
+                x, y = tx * TILE + TILE / 2, ty * TILE + TILE - 2
+            groups.setdefault((x, y), []).append(who)
+        for (x, y), names in groups.items():
+            names.sort(key=lambda n: n != self.held)
+            for i, name in enumerate(names):
+                offset = (i - (len(names) - 1) / 2) * 14
+                figure = _PersonItem(name, person_sprite(name), held=name == self.held)
+                figure.setPos(x + offset, y)
+                self.scene.addItem(figure)
+                self.people.append(figure)
+                tag = _TagItem(name.split()[0], bold=name == self.held)
+                tag.centre_on(x + offset, y - PERSON_HEIGHT - 6)
+                self.scene.addItem(tag)
+
+    def _update_detail(self) -> None:
+        """Show a place inside another only once its parent is big enough on
+        screen to hold it; places with nothing above them always show."""
+        scale = self.view.transform().m11()
+        places = self.world.places
+        for item in self._items:
+            place = item.place
+            shown = True
+            parent = places.get(place.inside or "")
+            while parent is not None and shown:
+                if position(self.world, parent.id) is not None:
+                    shown = size_of(parent) * scale >= CHILD_SHOWN_AT
+                parent = places.get(parent.inside or "")
+            item.setVisible(shown or item.current)
+
     # --- moving about ------------------------------------------------------------
 
     def fit(self) -> None:
-        """Everywhere the story has been in view (or the open place)."""
+        """All of a scene in view, at a whole number of screen pixels to its
+        pixels where it fits (crisp); in the region, everywhere the story has
+        been."""
         self._fitted = True
         if self.place_id is not None:
             rect = self.scene.sceneRect()
-            if not rect.isEmpty():
-                self.view.resetTransform()
-                self.view.fitInView(rect, Qt.KeepAspectRatio)
+            if rect.isEmpty():
+                return
+            port = self.view.viewport().rect()
+            scale = min(port.width() / rect.width(), port.height() / rect.height())
+            self.view.resetTransform()
+            if scale >= 2:  # crisp: a whole number of screen pixels to each
+                scale = int(scale)
+            self.view.scale(scale, scale)
+            self.view.centerOn(rect.center())
             return
         seen = self._visited() or self._shown()
-        spots = [position(self.world, pid) for pid in seen]
-        spots = [s for s in spots if s is not None]
-        if not spots:
-            return
         rect = QRectF()
         for pid in seen:
             spot = position(self.world, pid)
@@ -450,6 +685,8 @@ class WorldView(QWidget):
                 continue
             reach = max(size_of(self.world.places[pid]), 120.0)
             rect = rect.united(QRectF(spot[0] - reach, -spot[1] - reach, 2 * reach, 2 * reach))
+        if rect.isEmpty():
+            return
         self.view.resetTransform()
         self.view.fitInView(
             rect.adjusted(
@@ -459,11 +696,10 @@ class WorldView(QWidget):
         )
         self._update_detail()
 
-    def go_here(self) -> None:
-        here = self.here()
-        spot = position(self.world, here) if here else None
-        if spot is not None:
-            self.view.centerOn(spot[0], -spot[1])
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt's name
+        super().resizeEvent(event)
+        if self.place_id is not None and self._fitted:
+            self.fit()
 
     def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt's name
         if (

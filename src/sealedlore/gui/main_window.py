@@ -346,7 +346,6 @@ class MainWindow(
         self.centre_stack = PageStack()
         self.centre_stack.addWidget(self.transcript)
         self.centre_stack.addWidget(self.story_map)
-        self.centre_stack.addWidget(self.world_view)
         centre_layout.addWidget(self.centre_stack, 1)
         centre_layout.addWidget(self.composer)
 
@@ -406,8 +405,11 @@ class MainWindow(
 
         # Scene first, and the page a story opens on: playtesting found the
         # scene read wrong too often to go unwatched, and Cast is for changes
-        # made by hand.
+        # made by hand. A story that keeps a map has Map before it, opens on
+        # it, and the Inspector takes half the window (window_world.py).
         self.right_tabs = TabRows()
+        self.right_tabs.addTab(self.world_view, "Map")
+        self.right_tabs.setTabVisible(0, False)
         self.right_tabs.addTab(self.scene_panel, "Scene")
         self.right_tabs.addTab(self.cast_panel, "Cast")
         self.right_tabs.addTab(self.plot_panel, "Plot")
@@ -424,6 +426,7 @@ class MainWindow(
         self.addDockWidget(Qt.RightDockWidgetArea, right)
         self.resizeDocks([left, right], [240, 420], Qt.Horizontal)
         self._init_layout(left, right)
+        self._init_world_dock()
 
         self.status_strip = StatusStrip()
         bar = NoticeStatusBar()
@@ -591,6 +594,9 @@ class MainWindow(
         story_menu.addAction(self.usage_action)
 
         view_menu = self.menuBar().addMenu("&View")
+        # Hidden while a story keeps a map: the map has its room (window_world.py).
+        view_menu.addAction(self.stories_list_action)
+        view_menu.addSeparator()
         self.storyteller_view_action = QAction("What the &storyteller is sent", self)
         self.storyteller_view_action.setCheckable(True)
         self.storyteller_view_action.setShortcut(QKeySequence("Ctrl+Shift+V"))
@@ -1007,6 +1013,8 @@ class MainWindow(
         """Back to the no-story state the window starts in."""
         self.show_map(False)
         self.close_find()
+        if self.map_layout:
+            self._set_map_layout(False)
         if self.session is not None:
             if self.session.memory_only:
                 bad_hosts().forget_session()
@@ -1206,7 +1214,9 @@ class MainWindow(
         self._staleness_dismissed = False
         self._resume_private()
         self.refresh_panels()
-        self.right_tabs.setCurrentWidget(self.scene_panel)
+        self.right_tabs.setCurrentWidget(
+            self.world_view if self.session.map_on else self.scene_panel
+        )
         self.refresh_images()
         self._resume_videos()
         self._apply_background()
@@ -1219,6 +1229,8 @@ class MainWindow(
         self._attest_chat()
         self._update_controls()
         self._sync_world()
+        # A story opens on its map where the story is now, not where the last left it.
+        self.refresh_world(keep_view=False)
 
     def refresh_panels(self) -> None:
         if self.session is None:
@@ -1545,8 +1557,6 @@ class MainWindow(
     def show_map(self, on: bool) -> None:
         """Every branch on one diagram, in the transcript's place."""
         on = bool(on and self.session is not None and not self.session.in_private)
-        if self.world_shown():
-            self.show_world(False)
         leaving = not on and self.map_shown()
         self.centre_stack.setCurrentWidget(self.story_map if on else self.transcript)
         self.composer.setVisible(not on)

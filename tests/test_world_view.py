@@ -154,31 +154,47 @@ def window(app, tmp_path: Path, story, cast):
     return window
 
 
-def test_map_shows_for_a_story_that_keeps_one_beside_branches(window):
-    assert window.branch_bar.map_button.text() == "Branches"
-    assert window.world_button.text() == "Map" and not window.world_button.isHidden()
-    window.world_button.click()
-    assert window.world_shown() and window.composer.isHidden()
+def test_a_story_that_keeps_a_map_opens_on_it_with_the_room_it_needs(window):
+    assert window.world_shown() and window.world_button.isChecked()
+    assert window.stories_dock.isHidden() and not window.composer.isHidden()
     assert {i.place.name for i in window.world_view._items} == {"Hellsville", "Diner", "Farmhouse"}
-    # The branches take the same place: one at a time.
+    assert not window.stories_list_action.isChecked()  # View → Stories list brings it back
+    window.show()
+    window.resize(1366, 760)
+    QApplication.processEvents()
+    window._share_docks()
+    QApplication.processEvents()
+    assert abs(window.inspector_dock.width() - 683) <= 40  # half the window
+
+
+def test_map_and_the_inspector_s_other_pages_and_branches(window):
+    window.world_button.click()  # off: the page beside it
+    assert not window.world_shown() and window.right_tabs.currentWidget() is window.scene_panel
+    window.world_button.click()
+    assert window.world_shown()
+    # Branches take the story's place; the map stays beside it.
     window.show_map(True)
-    assert window.map_shown() and not window.world_shown()
-    assert not window.world_button.isChecked()
+    assert window.map_shown() and window.world_shown()
     window.show_map(False)
-    window.show_world(True)
-    # Esc goes up from a place first, then back to the story.
+    # Esc goes up from a place first, then to the page beside the map.
     window.world_view.open_place("diner")
     window._on_escape()
     assert window.world_shown() and window.world_view.place_id is None
     window._on_escape()
-    assert not window.world_shown() and not window.composer.isHidden()
+    assert not window.world_shown()
 
 
-def test_turning_the_map_off_hides_it(window):
-    window.show_world(True)
+def test_turning_the_map_off_gives_the_room_back(window):
     window.session.story.defaults.world_map = False
     window._sync_world()
     assert window.world_button.isHidden() and not window.world_shown()
+    assert not window.stories_dock.isHidden()
+    assert not window.right_tabs.isTabVisible(window.right_tabs.indexOf(window.world_view))
+
+
+def test_closing_the_story_brings_the_stories_back(window):
+    window._close_story()
+    assert not window.stories_dock.isHidden() and not window.map_layout
 
 
 def test_art_coming_back_redraws_the_map(window):
@@ -203,3 +219,42 @@ def test_under_fog_only_what_the_story_found_and_what_is_around_it_shows(app):
     view.set_world(world, WorldArt(), "Jane", keep_view=False)
     shown = {item.place.name for item in view._items}
     assert shown == {"The farm", "Farmhouse", "Hellsville"}  # not the diner, not the hills
+
+
+def test_the_map_opens_where_the_story_is_with_everyone_there_standing_in_it(app):
+    farm = WorldPlace(id="farm", name="The farm", kind="site", x=0.0, y=0.0, size=400)
+    barn = WorldPlace(id="barn", name="The barn", kind="building", inside="farm", x=50.0, y=0.0)
+    world = WorldMap(
+        places={"farm": farm, "barn": barn},
+        where={"Jane": "barn", "Ben": "farm"},
+        visited={"Jane": ["farm", "barn"]},
+    )
+    rows = [
+        "............",
+        "...#####....",
+        "...#___#....",
+        "...#___#....",
+        "...##+##....",
+        "............",
+        "............",
+    ]
+    plan = PlaceLayout(
+        place_id="farm", rows=rows, labels={"barn": [5, 2]}, spec={"ground": "grass"}
+    )
+    land = TerrainPatch(place_id="farm", x=0, y=0, side=2000, rows=["." * 4] * 4, ground="snow")
+    view = WorldView()
+    view.resize(800, 600)
+    view.set_world(
+        world, WorldArt(layouts={"farm": {"": plan}}, terrain=[land]), "Jane", keep_view=False
+    )
+    assert view.place_id == "farm" and view.here_button.isChecked()
+    assert view._ground_for(farm, "grass") == "snow"  # the plan follows the land under it
+    people = {p.name: p for p in view.people}
+    assert set(people) == {"Jane", "Ben"} and people["Jane"].held
+    # Roofed over, the barn's people stand at its front, below its south wall.
+    assert people["Jane"].pos().y() > 4 * 16
+    view.inside_button.setChecked(True)
+    people = {p.name: p for p in view.people}
+    assert people["Jane"].pos().y() < 4 * 16  # inside, where the plan marks the barn
+    view.region_button.click()
+    assert view.place_id is None and view.region_button.isChecked()

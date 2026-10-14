@@ -31,6 +31,9 @@ INSPECTOR_SHARE = 0.27
 # Above the minimum of any of its pages: squeezed to the empty page's
 # minimum, the dock jumped wider when a story opened and filled the forms.
 INSPECTOR_WIDTHS = (380, 480)
+# A story that keeps a map gives the Inspector, with the map on it, half the
+# window (the author's call); the Stories list steps aside (window_world.py).
+MAP_SHARE = 0.5
 
 
 def _clamp(value: float, bounds: tuple[int, int]) -> int:
@@ -138,6 +141,10 @@ class LayoutWindow:
             # After the layout has taken the new size.
             self._share_timer.start()
 
+    def _reshare_docks(self) -> None:
+        """Share the width out again (the window laid out for a map or not)."""
+        self._share_timer.start()
+
     def _share_docks(self) -> None:
         stories, inspector = self.stories_dock, self.inspector_dock
         placed = (
@@ -146,20 +153,39 @@ class LayoutWindow:
         )
         if not placed or stories.isFloating() or inspector.isFloating():
             return  # moved by the author: theirs to size
-        if not (stories.isVisible() and inspector.isVisible()):
+        if not inspector.isVisible():
             return
         width = self.width()
+        centre = self.centralWidget()
+        separator = self.style().pixelMetric(QStyle.PM_DockWidgetSeparatorExtent, None, self)
+        centre_min = max(centre.minimumWidth(), centre.minimumSizeHint().width())
+        if getattr(self, "map_layout", False) and not self._docks_dragged:
+            want_i = max(round(width * MAP_SHARE), INSPECTOR_WIDTHS[0])
+            if stories.isVisible():  # brought back by hand: it takes its share from the story
+                want_s = _clamp(width * STORIES_SHARE, STORIES_WIDTHS)
+                widths = share_width(
+                    width,
+                    centre_min,
+                    2 * separator,
+                    (want_s, stories.minimumSizeHint().width()),
+                    (want_i, inspector.minimumSizeHint().width()),
+                )
+                self.resizeDocks([stories, inspector], list(widths), Qt.Horizontal)
+            else:
+                want_i = min(want_i, max(INSPECTOR_WIDTHS[0], width - centre_min - separator))
+                self.resizeDocks([inspector], [want_i], Qt.Horizontal)
+            return
+        if not stories.isVisible():
+            return
         saved = self.config.window
         if self._docks_set_by_hand and saved and not self._docks_dragged:
             want_s, want_i = saved.stories_width, saved.inspector_width
         else:
             want_s = _clamp(width * STORIES_SHARE, STORIES_WIDTHS)
             want_i = _clamp(width * INSPECTOR_SHARE, INSPECTOR_WIDTHS)
-        centre = self.centralWidget()
-        separator = self.style().pixelMetric(QStyle.PM_DockWidgetSeparatorExtent, None, self)
         widths = share_width(
             width,
-            max(centre.minimumWidth(), centre.minimumSizeHint().width()),
+            centre_min,
             2 * separator,
             (want_s, stories.minimumSizeHint().width()),
             (want_i, inspector.minimumSizeHint().width()),

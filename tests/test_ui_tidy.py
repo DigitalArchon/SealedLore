@@ -125,8 +125,9 @@ def test_every_page_is_one_click_away_and_plot_shows_only_with_a_plot(app, windo
     tabs = window.right_tabs
     plot = tabs.indexOf(window.plot_panel)
     assert not tabs.isTabVisible(plot), "the story has no plot"
+    assert not tabs.isTabVisible(tabs.indexOf(window.world_view)), "nor a map"
     shown = [i for i in range(tabs.count()) if tabs.isTabVisible(i)]
-    assert len(shown) == tabs.count() - 1
+    assert len(shown) == tabs.count() - 2
     # No scrolling strip: every visible page has its own button on screen.
     settle(app)
     for index in shown:
@@ -753,7 +754,8 @@ def test_scene_is_first_and_lists_the_supporting_characters(app, window: MainWin
     from sealedlore.models.character import Character
 
     assert window.right_tabs.currentWidget() is window.scene_panel
-    assert window.right_tabs.tabText(0) == "Scene"
+    first = next(i for i in range(window.right_tabs.count()) if window.right_tabs.isTabVisible(i))
+    assert window.right_tabs.tabText(first) == "Scene"  # Map comes first only with a map
     window.right_tabs.setCurrentWidget(window.inspector)
     window.open_story(window.session.story.id)
     assert window.right_tabs.currentWidget() is window.scene_panel, "a story opens on Scene"

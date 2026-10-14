@@ -179,11 +179,12 @@ class PrivateWindow:
         self.branch_bar.setEnabled(self.session is not None and not self._busy and not private)
         if private and self.map_shown():
             self.show_map(False)
-        if private and self.world_shown():
-            self.show_world(False)
-        self.world_button.setEnabled(
-            self.session is not None and self.session.map_on and not self._busy and not private
-        )
+        # The map is paused with the rest: the window gives its room back.
+        map_on = self.session is not None and self.session.map_on and not private
+        if map_on != self.map_layout:
+            self._set_map_layout(map_on)
+        self.world_button.setVisible(map_on)
+        self.world_button.setEnabled(map_on and not self._busy)
         for widget in (self.stories, self.branch_bar):
             widget.setToolTip(
                 self._say(

@@ -890,15 +890,20 @@ changes something (a barn blown up, a truck burnt out), it is drawn again as
 it now is, as an edit of how it looked, so it is still the same barn. A
 branch shows the map as it stands on that branch.
 
-**Map**, above the transcript, shows it in the transcript's place: the land
-the story has reached, fog over everything else, and each place with its
-picture, lit where you have been, dimmed where the story only told of it,
-ringed where you are now, with who is there under its name. Hover a place
-for what the story said of it. Scroll to zoom (places inside others appear as
-you zoom in), drag to move; **Fit** shows everywhere you have been and
-**Here** where you are. Double-click a place to open its ground plan, with the
-things marked on it and the people there; **Up to the map** or Esc goes back,
-and Esc again, or **Back to the story**, returns.
+A story that keeps a map makes it part of the window: the Inspector, beside
+the story, takes half the window with **Map** as its first page, and the
+Stories list steps aside (View → Stories list brings it back). **Map**, above
+the transcript, goes to it.
+
+**Here** shows the place you are in, close up: its ground, its buildings
+from outside (**See inside** takes the roofs off), the things the story
+marked there (hover one for what it is), and everyone the story has there,
+you ringed. Under it, what the story has said of the place and who and what
+is there. **Region** shows the whole country the story has reached, fog over
+the rest: each place with its picture, lit where you have been, dimmed where
+the story only told of it, ringed where you are now. Scroll to zoom (places
+inside others appear as you zoom in), drag to move, **Fit** to see it all;
+double-click a place to stand in it. Esc goes back out to the Region.
 
 The map is the storyteller's too: each turn it is told where you are on it,
 what is around and inside that place, the ways between them and the things
