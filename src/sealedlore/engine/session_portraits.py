@@ -24,6 +24,7 @@ from sealedlore.engine.portraits import (
     fallback_prompt,
     parse_portrait_prompts,
     portrait_size,
+    where_it_begins,
 )
 from sealedlore.ids import new_id
 from sealedlore.models.character import Character
@@ -71,6 +72,7 @@ class PortraitRuntime:
                     world_bible=story.world_bible or "",
                     title=story.title,
                     image_style=story.image_style,
+                    begins=where_it_begins(story),
                     texts=texts,
                 ),
                 params=self.side_params(model, max_tokens=PORTRAIT_MAX_TOKENS, temperature=0.7),

@@ -97,9 +97,18 @@ def test_the_writer_is_asked_for_what_can_be_seen_and_never_a_name():
     assert "something the camera can see" in system and "no names" in system
     assert DEFAULT_TEXTS["portraits.no_writing"] in system
     assert "## John" in user and "Four years after the dead rose." in user
+    assert "WHERE THE STORY BEGINS" not in user  # none given
     # The story's own style when it has one.
     styled = build_portrait_messages([john], world_bible="", title="T", image_style="Oil paint.")
     assert "this style: Oil paint." in styled[0].parts[0].text
+
+
+def test_the_writer_is_told_where_the_story_begins(tmp_path: Path):
+    """Doomsville's winter is in its opening, not its world text."""
+    session, provider = session_on(tmp_path, [reply(("John", "A man."))])
+    session.write_portrait_prompts(session.without_portraits()[:1])
+    sent = json.dumps(provider.payloads[-1])
+    assert "WHERE THE STORY BEGINS" in sent and "deep winter" in sent
 
 
 def test_a_reply_is_read_by_name_and_whoever_it_left_out_gets_a_prompt_from_the_card(

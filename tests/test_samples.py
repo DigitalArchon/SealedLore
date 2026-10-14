@@ -136,3 +136,26 @@ def test_a_sample_s_shipped_map_art_fits_its_map():
         )
         assert drawn <= ids, f"{path.name}: art for {drawn - ids}"
         assert art.terrain and art.layouts, f"{path.name}: nothing drawn"
+
+
+def test_every_sample_character_comes_with_its_portrait():
+    """The samples ship a portrait of every character (the author, Oct 15
+    2026), read as any plot file's pictures are: none missing, none refused,
+    hidden data stripped."""
+    from sealedlore.gui.ref_images import load_plot_pictures
+    from sealedlore.storage.image_meta import strip_metadata
+
+    offered = sample_stories(SAMPLES)
+    assert offered
+    for _name, path in offered:
+        parsed = parse_plot_markdown(path.read_text())
+        assert load_plot_pictures(parsed, path.parent) == [], path.name
+        scenario = parsed.scenario
+        for character in [*scenario.cast, *scenario.supporting]:
+            assert character.reference_images, f"{path.name}: {character.name}"
+            assert character.reference_images[0].caption == "portrait"
+        for relative in scenario.reference_files:
+            source = path.parent / "pictures" / Path(relative).name
+            assert not source.exists() or strip_metadata(source.read_bytes()) == (
+                source.read_bytes()
+            )

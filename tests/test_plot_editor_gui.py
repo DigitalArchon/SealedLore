@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -387,6 +388,8 @@ def test_the_main_window_opens_the_editor_and_starts_a_story(app, tmp_path: Path
 
     assert editor.open_path(SAMPLE)
     editor.path = tmp_path / "Doomsville.md"
+    # Its portraits go with it, as Save as… takes them.
+    shutil.copytree(SAMPLE.parent / "pictures", tmp_path / "pictures")
     # Starting a story asks who to play; the test just closes that.
     QTimer.singleShot(0, lambda: QApplication.activeModalWidget().reject())
     editor.start_story()

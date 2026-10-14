@@ -17,6 +17,7 @@ from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.world_pictures import looks_of
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.character import Character
+from sealedlore.models.story import Story
 from sealedlore.providers.images import ImageModelInfo
 
 # The words a portrait prompt runs to: enough for a face and clothes, under
@@ -25,6 +26,8 @@ PORTRAIT_WORDS = "50 to 90"
 PORTRAIT_MAX_TOKENS = 3000
 # The setting the writer is given: the world's opening, not its whole bible.
 SETTING_CHARS = 1500
+# The opening the writer is given, for the season and the weather.
+OPENING_CHARS = 600
 # The largest square a portrait is asked for.
 PORTRAIT_SIDE = 1024
 
@@ -44,15 +47,27 @@ def _card(character: Character) -> str:
     return "\n".join(lines)
 
 
+def where_it_begins(story: Story) -> str:
+    """The starting scene and the opening, briefly: the season and the
+    weather are often said only there (Doomsville's winter is: drawn from
+    the world text alone, its people wore tank tops in the sun)."""
+    scene = story.setup.starting_scene
+    parts = [p for p in (scene.location, scene.time_of_day, scene.situation) if p]
+    opening = " ".join(story.setup.opening_text.split())[:OPENING_CHARS]
+    return " ".join([*(p.rstrip(".") + "." for p in parts), opening]).strip()
+
+
 def build_portrait_messages(
     characters: Sequence[Character],
     *,
     world_bible: str,
     title: str,
     image_style: str,
+    begins: str = "",
     texts: PromptTexts = DEFAULT_TEXTS,
 ) -> list[PromptMessage]:
-    """The writer's request: its instructions, the setting and each card."""
+    """The writer's request: its instructions, the setting, where the story
+    begins (`where_it_begins`) and each card."""
     system = texts.fill(
         "portraits.system",
         words=PORTRAIT_WORDS,
@@ -60,7 +75,10 @@ def build_portrait_messages(
         no_writing=texts["portraits.no_writing"],
     )
     world = " ".join((world_bible or "").split())[:SETTING_CHARS] or title
-    user = "THE SETTING:\n" + world + "\n\nTHE CHARACTERS:\n\n"
+    user = "THE SETTING:\n" + world + "\n\n"
+    if begins:
+        user += "WHERE THE STORY BEGINS:\n" + begins + "\n\n"
+    user += "THE CHARACTERS:\n\n"
     user += "\n\n".join(_card(c) for c in characters)
     return [
         PromptMessage(role="system", parts=(ContentPart(text=system),)),
