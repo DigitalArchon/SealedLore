@@ -71,6 +71,7 @@ SECTION_SUPPORTING = "tail.supporting"
 SECTION_SCENE_LOG = "tail.scene_log"
 SECTION_STORY_TIME = "tail.story_time"
 SECTION_SCENE = "tail.scene"
+SECTION_MAP = "tail.map"
 SECTION_DIRECTION = "tail.direction"
 SECTION_DIRECTIVES = "tail.directives"
 SECTION_AUTHOR_TURN = "tail.author_turn"
@@ -110,6 +111,9 @@ class TurnRequest:
     # this passage (engine/director.py), both rendered by the session. The
     # plot itself never reaches the prompt.
     story_time: str = ""
+    # The local map (engine/world.py `render_map_context`), for a story whose
+    # map came from its plot file; empty otherwise.
+    the_map: str = ""
     direction: str = ""
     # Whether the direction starts an event, which the REMEMBER line repeats.
     direction_begins: bool = False
@@ -303,6 +307,8 @@ def assemble_prompt(
                 show_time=scene_time_shown(story, history_nodes, summaries),
             ),
         ),
+        # Where the scene is, on the map: right after the scene, as measured.
+        (SECTION_MAP, turn.the_map),
         # After the scene it has to happen in, and close to the end: the
         # instruction the passage exists to carry out.
         (SECTION_DIRECTION, turn.direction),
@@ -379,12 +385,13 @@ def assemble_question(
     estimator: TokenEstimator | None = None,
     options: AssemblyOptions | None = None,
     rendered: str | None = None,
+    the_map: str = "",
 ) -> AssembledPrompt:
     """Assemble an out-of-character question about the story (an aside).
 
     `rendered` replaces the author's question and its rules with a request
     of the program's own (the plot asking how a skipped-over event went),
-    on the same cached prefix.
+    on the same cached prefix. `the_map` is the local map, as a turn has it.
 
     Everything ahead of the tail is exactly what a story turn sends, so the
     question rides on the same cached prefix. `history_nodes` is the whole
@@ -414,6 +421,7 @@ def assemble_question(
                 show_time=scene_time_shown(story, history_nodes, summaries),
             ),
         ),
+        (SECTION_MAP, the_map),
         (SECTION_QUESTION, rendered or render_question(question, earlier, texts)),
     ]
     return _assemble(

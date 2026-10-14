@@ -17,8 +17,10 @@ from sealedlore.engine.session_plot import SessionNotice
 from sealedlore.engine.world import (
     build_world_read_messages,
     describe_delta,
+    established,
     parse_world_reply,
     place_delta,
+    render_map_context,
     resolve_reply,
     world_at,
 )
@@ -70,6 +72,22 @@ class WorldRuntime:
             self.story.world_base,
             start=self.story.world_start,
             hidden=self.hidden_ids(path) if self.story.plot is not None else (),
+        )
+
+    def map_context(self, path, held_id: str | None) -> str:
+        """The local map for the storyteller at the end of `path`, for a story
+        whose map came from its plot file: what the file established, and
+        where the held character is. Empty otherwise, and in a private scene.
+        A map read from prose isn't sent (SealedLoreDocs design/map.md): it
+        bound the storyteller to its own mistakes."""
+        base = self.story.world_base
+        if not self.map_on or self.in_private or base is None:
+            return ""
+        held = self._character(held_id) if held_id else None
+        return render_map_context(
+            established(self._world_on(path), base),
+            held.name if held is not None else None,
+            self.texts,
         )
 
     def _prepare_world_read(self) -> _WorldRead | None:

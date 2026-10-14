@@ -900,9 +900,13 @@ you zoom in), drag to move; **Fit** shows everywhere you have been and
 things marked on it and the people there; **Up to the map** or Esc goes back,
 and Esc again, or **Back to the story**, returns.
 
-The map is for you: the storyteller isn't sent it. Measured, a map read from
-the story's own prose made passages contradict the story more, not less,
-wherever the prose had contradicted itself.
+A map from a plot file is the storyteller's too: each turn it is told where
+you are on it, what is around and inside that place, how far and which way
+each lies, the ways between them and the things there, in the file's own
+words. That costs some words on every turn; untick **Keep a map of the story**
+to save them. A map that grew from the story alone is for you only: read back
+from the prose, it would hold the storyteller to wherever the prose had
+contradicted itself.
 
 ## Branches, takes and export
 

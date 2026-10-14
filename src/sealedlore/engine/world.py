@@ -17,6 +17,7 @@ read getting wrong is checked here rather than asked for:
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Collection, Iterable, Sequence
 from typing import Any
@@ -25,7 +26,13 @@ from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.scene_state import same_person
 from sealedlore.engine.validators import locate_quote
-from sealedlore.engine.world_layout import geometry_conflicts, moves, place_new
+from sealedlore.engine.world_layout import (
+    describe_metres,
+    geometry_conflicts,
+    moves,
+    place_new,
+    position,
+)
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.character import Character
 from sealedlore.models.node import Node
@@ -153,6 +160,150 @@ def build_world_read_messages(
         PromptMessage(role="system", parts=(ContentPart(text=texts["map_read.system"]),)),
         PromptMessage(role="user", parts=(ContentPart(text=user),)),
     ]
+
+
+# --- The map here, for the storyteller -------------------------------------
+
+SECTION_MAP_HEADING = "# THE MAP HERE"
+# Enough to stand on without crowding the tail.
+MAP_LIST_LIMIT = 8
+_COMPASS = (
+    "north",
+    "north-east",
+    "east",
+    "south-east",
+    "south",
+    "south-west",
+    "west",
+    "north-west",
+)
+# Past this a distance is given in miles too; past the second, whole miles.
+_MILES_FROM = 1600.0
+_WHOLE_MILES_FROM = 8000.0
+_METRES_A_MILE = 1609.0
+
+
+def established(world: WorldMap, base: WorldDelta) -> WorldMap:
+    """The map as the plot file drew it: its places, things and ways, with the
+    file's own words for each place, where the plot isn't hiding them. Where
+    people are is the story's (the reads'), lifted to the nearest place of the
+    file. Read from prose, the rest is the map's own guess, and a guess sent to
+    the storyteller binds it (SealedLoreDocs design/map.md)."""
+    own = {p.id: p for p in base.places}
+    places = {
+        k: p.model_copy(update={"what": own[k].what}) for k, p in world.places.items() if k in own
+    }
+    where = {}
+    for who, at in world.where.items():
+        seen: set[str] = set()
+        while at is not None and at not in places and at in world.places and at not in seen:
+            seen.add(at)
+            at = world.places[at].inside
+        if at in places:
+            where[who] = at
+    owned = {t.id for t in base.things}
+    return WorldMap(
+        places=places,
+        links=[k for k in base.links if k.a in places and k.b in places],
+        where=where,
+        things={k: t for k, t in world.things.items() if k in owned},
+        start=world.start if world.start in places else None,
+    )
+
+
+def _chain(world: WorldMap, place_id: str | None) -> list[WorldPlace]:
+    """The place and every place it is inside, innermost first."""
+    out: list[WorldPlace] = []
+    while place_id is not None and place_id in world.places:
+        place = world.places[place_id]
+        if place in out:
+            break
+        out.append(place)
+        place_id = place.inside
+    return out
+
+
+def _how_far(world: WorldMap, here: str, there: str) -> str:
+    """ "8.0 km / 5 miles north", from where the map put them; nothing for a
+    road, which is a line and not a spot."""
+    a, b = position(world, here), position(world, there)
+    if a is None or b is None or world.places[there].kind == "route":
+        return ""
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    distance = math.hypot(dx, dy)
+    if distance < 1:
+        return ""
+    far = describe_metres(distance)
+    if distance >= _MILES_FROM:
+        miles = distance / _METRES_A_MILE
+        far += f" / {miles:.0f} miles" if distance >= _WHOLE_MILES_FROM else f" / {miles:.1f} miles"
+    angle = (math.degrees(math.atan2(dx, dy)) + 360) % 360
+    return f"{far} {_COMPASS[round(angle / 45) % 8]}"
+
+
+def _around(world: WorldMap, here: str, place: WorldPlace) -> str:
+    where = _how_far(world, here, place.id)
+    head = f"{place.name} ({place.kind or 'place'}" + (f", {where}" if where else "") + ")"
+    what = " ".join(place.what.split())
+    return f"{head}: {what}" if what else head
+
+
+def render_map_context(
+    world: WorldMap, held: str | None, texts: PromptTexts = DEFAULT_TEXTS
+) -> str:
+    """The local map for the storyteller's tail: where the author's character
+    is (the start before any read), what is inside it, what else is around
+    it at each level up with how far and which way, the ways between them,
+    and the things here. `world` is `established`. Empty without a place."""
+    here_id = world.where.get(held or "") or world.start
+    chain = _chain(world, here_id)
+    if not chain:
+        return ""
+    here = chain[0]
+    lines = [SECTION_MAP_HEADING, texts["map.context"], ""]
+    lines.append(f"{held} is at: " + here.name + "".join(f", in {o.name}" for o in chain[1:]))
+    if here.what:
+        lines.append("  " + " ".join(here.what.split()))
+    inside = [p for p in world.places.values() if p.inside == here.id][:MAP_LIST_LIMIT]
+    if inside:
+        lines.append("Inside it: " + "; ".join(_around(world, here.id, p) for p in inside))
+    shown = {p.id for p in chain} | {p.id for p in inside}
+    for level, outer in enumerate([*chain[1:], None]):
+        parent = outer.id if outer is not None else None
+        around = [
+            p
+            for p in world.places.values()
+            if p.inside == parent and p.id != chain[level].id and p.id not in shown
+        ][:MAP_LIST_LIMIT]
+        if around:
+            label = f"Also in {outer.name}" if outer is not None else "Elsewhere on the map"
+            lines.append(f"{label}: " + "; ".join(_around(world, here.id, p) for p in around))
+            shown |= {p.id for p in around}
+    ways = [
+        f"- from {place_name(world, k.a)} to {place_name(world, k.b)}"
+        + (f": {words}" if (words := ", ".join(w for w in (k.direction, k.distance) if w)) else "")
+        for k in world.links
+        if k.a in shown or k.b in shown
+    ]
+    if ways:
+        lines.append("Ways between them:")
+        lines += ways[: MAP_LIST_LIMIT * 2]
+    near = {p.id for p in chain} | {p.id for p in inside}
+    things = [
+        t
+        for t in world.things.values()
+        if t.carried_by == held or (t.at is not None and t.at in near)
+    ][:MAP_LIST_LIMIT]
+    if things:
+        lines.append("Things here:")
+        for thing in things:
+            at = (
+                f"carried by {thing.carried_by}"
+                if thing.carried_by
+                else place_name(world, thing.at)
+            )
+            lines.append(f"- {thing.name}: {at}" + (f", {thing.state}" if thing.state else ""))
+    return "\n".join(lines)
 
 
 # --- The reply, held to account ----------------------------------------------

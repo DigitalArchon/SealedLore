@@ -2145,6 +2145,28 @@ Setting: {setting}.""",
 )
 
 
+# The local map in the storyteller's tail (engine/world.py,
+# `render_map_context`), for a story whose map came from its plot file.
+# Measured in SealedLoreDocs design/map.md: read from prose, the map bound the
+# storyteller to its own mistakes (geography errors 3 without, 10 with); the
+# file's own map did no harm (GLM 1-3 errors in 50 passages against 4-5
+# without), and carries what only the map holds (the clinic in the old
+# hardware store). Sent whenever the story keeps a map: the author's call.
+_text(
+    "map.context",
+    MAP,
+    "The map here: heading",
+    "Heads the local map in the tail: where the author's character is, the places around "
+    "with how far and which way, the ways between them, and the things here. Only the map "
+    "the plot file drew is shown.",
+    """\
+What the story has established about where things are. Keep to it: these
+places, how they lie and how far apart they are, are as the story told them.
+Anywhere not on it is unmapped; when the story goes there, decide what is
+found, and it becomes part of the map.""",
+)
+
+
 # --- Chapters, parts and the ledger ---------------------------------------
 
 

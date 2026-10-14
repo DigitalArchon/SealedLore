@@ -162,7 +162,10 @@ A small walled town...
   the map read follow the story. The program doesn't measure them.
 - Everywhere the story goes beyond the map, the storyteller decides what is
   there and the map grows to take it in, as it does for a story with no map.
-- A map turns the story's map on (Story → Setup → About).
+- A map turns the story's map on (Story → Setup → About), and the storyteller
+  is told the part of it around the player's character each turn: the
+  places, how far and which way, the ways and the things, as written here.
+  So what a place is like belongs in its text: the storyteller keeps to it.
 
 ## Pictures
 

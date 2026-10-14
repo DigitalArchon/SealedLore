@@ -54,6 +54,7 @@ SECTION_LABELS = {
     "tail.scene_log": "Recent scenes",
     "tail.story_time": "Story time",
     "tail.scene": "This scene",
+    "tail.map": "The map here",
     "tail.direction": "Plot direction",
     "tail.directives": "This turn's instructions",
     "tail.author_turn": "Your turn",

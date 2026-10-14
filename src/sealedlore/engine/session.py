@@ -807,6 +807,8 @@ class StorySession(
                     plot, chronicle_at(nodes, plot), texts=self.texts
                 ),
             )
+        if not turn.the_map:
+            turn = replace(turn, the_map=self.map_context(nodes, turn.controlled_character_id))
         prompt = assemble_prompt(
             story=self.story,
             cast=self.visible_cast(),
@@ -3477,6 +3479,7 @@ class StorySession(
             scene_log=log_on_path(self.story.scene_log, history),
             estimator=self.estimator,
             options=options or self.assembly_options(),
+            the_map=self.map_context(history, self.story.held_character_id),
         )
         self.last_prompt = prompt
         return prompt
