@@ -162,7 +162,7 @@ def test_the_story_s_places_get_land_and_a_layout_and_sprites_nearest_first():
 def test_what_is_drawn_is_never_asked_again_nor_what_keeps_failing():
     world = farm_world()
     art = WorldArt(
-        layouts={"farm": PlaceLayout(place_id="farm", rows=["."])},
+        layouts={"farm": {"": PlaceLayout(place_id="farm", rows=["."])}},
         sprites=[
             WorldSprite(subject="place", subject_id="farm", name="Farmhouse", svg="<svg/>"),
             WorldSprite(
@@ -184,7 +184,9 @@ def test_a_changed_thing_is_drawn_as_an_edit_of_its_last_sprite():
     first = WorldSprite(
         subject="thing", subject_id="truck", name="Pickup truck", state="rusty", svg="<svg>A</svg>"
     )
-    art = WorldArt(sprites=[first], layouts={"farm": PlaceLayout(place_id="farm", rows=["."])})
+    art = WorldArt(
+        sprites=[first], layouts={"farm": {"": PlaceLayout(place_id="farm", rows=["."])}}
+    )
     (job,) = [j for j in plan_art(world, art, here="farm", setting="x") if j.subject_id == "truck"]
     assert job.key == "sprite:truck:burnt out" and job.from_sprite == first.id
     roles = [m.role for m in job.messages]
@@ -334,3 +336,43 @@ def test_land_already_drawn_is_never_drawn_again_under_a_neighbour():
     land = [k for k in keys if k.startswith("terrain:")]
     assert "terrain:town" in land
     assert len([k for k in land if k in ("terrain:farm", "terrain:barn")]) == 1
+
+
+def test_a_barn_blown_up_is_drawn_blown_up_as_an_edit_of_itself():
+    from sealedlore.engine.world import resolve_reply
+
+    barn = WorldPlace(id="barn", name="Barn", kind="building", x=0.0, y=0.0)
+    world = WorldMap(places={"barn": barn}, visited={"Jane": ["barn"]})
+    intact = WorldSprite(subject="place", subject_id="barn", name="Barn", svg="<svg>BARN</svg>")
+    plan = {"ground": "dirt", "features": [{"kind": "building", "x": 1, "y": 1, "w": 6, "h": 4}]}
+    art = WorldArt(
+        sprites=[intact],
+        layouts={"barn": {"": PlaceLayout(place_id="barn", spec=plan, rows=["."])}},
+    )
+    source = "The charge went off and the barn blew apart, its roof falling in."
+    delta, refused = resolve_reply(
+        world,
+        {"places": [{"name": "Barn", "state": "blown up", "quote": "the barn blew apart"}]},
+        source=source,
+        people=[],
+    )
+    assert refused == []
+    world = applied(world, delta)
+    assert world.places["barn"].state == "blown up"
+    assert (world.places["barn"].x, world.places["barn"].y) == (0.0, 0.0)  # it doesn't move
+
+    jobs = {j.key: j for j in plan_art(world, art, here="barn", setting="x")}
+    sprite, layout = jobs["sprite:barn:blown up"], jobs["layout:barn:blown up"]
+    assert sprite.from_sprite == intact.id and "<svg>BARN</svg>" in sprite.messages[2].text
+    assert "Now draw the same Barn, blown up." in sprite.messages[-1].text
+    assert json.loads(layout.messages[2].text) == plan
+    assert "Now lay out the same Barn, blown up. Keep what still stands" in layout.messages[3].text
+
+    # Drawn, both states are kept: a branch where it still stands shows it standing.
+    adopt(art, finish(sprite, TRUCK, model="m", made_at="t"))
+    adopt(art, finish(layout, json.dumps(plan), model="m", made_at="t"))
+    assert art.sprite_for("barn", "").svg == "<svg>BARN</svg>"
+    assert art.sprite_for("barn", "blown up").from_sprite == intact.id
+    assert set(art.layouts["barn"]) == {"", "blown up"}
+    left = [j.key for j in plan_art(world, art, here="barn", setting="x")]
+    assert left == ["terrain:barn"]  # the land stays; the ruin is in the barn's plan

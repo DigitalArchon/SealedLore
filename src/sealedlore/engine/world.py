@@ -207,13 +207,20 @@ def resolve_reply(
             old = pending or world.places[existing]
             changed = old.model_copy(deep=True)
             changed.what = _text(entry.get("what")) or changed.what
+            changed.state = _text(entry.get("state")) or changed.state
             changed.kind = kind or changed.kind  # type: ignore[assignment]
             if inside is not None and not _would_loop(world, delta, changed.id, inside):
                 changed.inside = inside
             delta.places = [p for p in delta.places if p.id != existing] + [changed]
         else:
             delta.places.append(
-                WorldPlace(name=name, kind=kind, inside=inside, what=_text(entry.get("what")))  # type: ignore[arg-type]
+                WorldPlace(
+                    name=name,
+                    kind=kind,  # type: ignore[arg-type]
+                    inside=inside,
+                    what=_text(entry.get("what")),
+                    state=_text(entry.get("state")),
+                )
             )
     for entry in _entries(reply, "links"):
         label = f"{_text(entry.get('from'))} -> {_text(entry.get('to'))}"

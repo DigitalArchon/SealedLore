@@ -397,6 +397,8 @@ def layout_messages(
     if inside:
         parts.append("In it: " + "; ".join(_what(p) for p in inside[:12]))
     things = [t for t in world.things.values() if t.at == place.id][:MAX_OBJECTS]
+    if place.state:
+        parts.insert(0, f"As it is now: {place.state}")
     if things:
         parts.append("Things here: " + "; ".join(_thing_words(t) for t in things))
     ways = _ways(world, place)
@@ -410,6 +412,17 @@ def layout_messages(
                 "map.layout.ask", place=_what(place), parts="\n".join(parts), setting=setting
             ),
         ),
+    ]
+
+
+def layout_change_messages(
+    world: WorldMap, place: WorldPlace, before: PlaceLayout, setting: str, texts: PromptTexts
+) -> list[PromptMessage]:
+    """The place laid out again in its new state, as an edit of its last plan."""
+    return [
+        *layout_messages(world, place, setting, texts),
+        _message("assistant", json.dumps(before.spec)),
+        _message("user", texts.fill("map.layout.change", place=place.name, change=place.state)),
     ]
 
 
@@ -547,57 +560,51 @@ def plan_art(
         )
     for pid in visited:
         place = world.places.get(pid)
-        key = f"layout:{pid}"
-        if place is None or place.kind not in LAYOUT_KINDS or pid in art.layouts or failed(key):
+        if place is None or place.kind not in LAYOUT_KINDS:
             continue
-        jobs.append(
-            ArtJob(
-                key,
-                "layout",
-                layout_messages(world, place, setting, texts),
-                pid,
-                name=place.name,
-                order=1,
-            )
-        )
-    for place in world.places.values():
-        key = f"sprite:{place.id}"
-        if place.kind not in SPRITE_KINDS or art.sprite_for(place.id) or failed(key):
+        if art.layout_for(pid, place.state) is not None:
             continue
-        jobs.append(
-            ArtJob(
-                key,
-                "sprite",
-                sprite_messages(_what(place), setting, texts),
-                place.id,
-                name=place.name,
-                subject="place",
-                order=2,
-            )
-        )
-    for thing in world.things.values():
-        last = art.sprite_for(thing.id)
-        if last is not None and last.state == thing.state:
-            continue
-        key = f"sprite:{thing.id}:{thing.state}"
+        key = f"layout:{pid}:{place.state}" if place.state else f"layout:{pid}"
         if failed(key):
             continue
-        what = _thing_words(thing) if last is None else thing.name
+        before = art.layout_for(pid)
         messages = (
-            sprite_messages(what, setting, texts)
+            layout_messages(world, place, setting, texts)
+            if before is None or not before.spec
+            else layout_change_messages(world, place, before, setting, texts)
+        )
+        jobs.append(
+            ArtJob(key, "layout", messages, pid, name=place.name, state=place.state, order=1)
+        )
+    subjects: list[tuple[str, str, str, str, Literal["place", "thing"]]] = [
+        (p.id, p.name, _what(p), p.state, "place")
+        for p in world.places.values()
+        if p.kind in SPRITE_KINDS
+    ]
+    subjects += [(t.id, t.name, _thing_words(t), t.state, "thing") for t in world.things.values()]
+    for subject_id, name, words, state, subject in subjects:
+        if art.sprite_for(subject_id, state) is not None:
+            continue
+        key = f"sprite:{subject_id}:{state}" if state else f"sprite:{subject_id}"
+        if failed(key):
+            continue
+        # A change is an edit of its last drawing, so it stays the same one.
+        last = art.sprite_for(subject_id)
+        messages = (
+            sprite_messages(words, setting, texts)
             if last is None
-            else change_messages(last, thing.name, thing.state or "as it is now", setting, texts)
+            else change_messages(last, name, state or "as it was before", setting, texts)
         )
         jobs.append(
             ArtJob(
                 key,
                 "sprite",
                 messages,
-                thing.id,
-                name=thing.name,
-                state=thing.state,
+                subject_id,
+                name=name,
+                state=state,
                 from_sprite=last.id if last else None,
-                subject="thing",
+                subject=subject,
                 order=2,
             )
         )
@@ -628,6 +635,8 @@ def finish(
         rows, objects, labels = rasterise(spec, LAYOUT_WIDTH, LAYOUT_HEIGHT)
         return PlaceLayout(
             place_id=job.subject_id,
+            state=job.state,
+            spec=spec,
             rows=rows,
             objects=objects,
             labels=labels,
@@ -653,7 +662,7 @@ def adopt(art: WorldArt, drawn: WorldSprite | PlaceLayout | TerrainPatch) -> Non
     if isinstance(drawn, WorldSprite):
         art.sprites.append(drawn)
     elif isinstance(drawn, PlaceLayout):
-        art.layouts.setdefault(drawn.place_id, drawn)
+        art.layouts.setdefault(drawn.place_id, {}).setdefault(drawn.state, drawn)
     elif not any(p.place_id == drawn.place_id for p in art.terrain):
         art.terrain.append(drawn)
 

@@ -1851,7 +1851,9 @@ _text(
 # player's character" on nearly every map), the people by name, fewer things,
 # links that keep a stated distance, journeys under way on the route. Over
 # three Doomsville runs DeepSeek V4.1 Flash went from 5 wrong entries to 2 and
-# 8 position errors to 2. The program holds every entry to its quote.
+# 8 position errors to 2. The program holds every entry to its quote. A
+# place's "state" was added after (the author: a barn blown up is drawn blown
+# up), not replayed.
 
 _text(
     "map_read.system",
@@ -1875,7 +1877,8 @@ object and nothing else:
 {
   "places": [{"name": "...", "inside": "a place on the map, or null",
               "kind": "region | settlement | building | room | area | route | vehicle | site",
-              "what": "a few words: what it is like", "quote": "..."}],
+              "what": "a few words: what it is like", "state": null,
+              "quote": "..."}],
   "links": [{"from": "...", "to": "...", "direction": "...",
              "distance": "...", "quote": "..."}],
   "where": [{"who": "...", "place": "...", "quote": "..."}],
@@ -1898,6 +1901,10 @@ Places
 - Use the map's names for places already on it. Give a place on the map
   again only if the passage changes what it is like ("what": the farmhouse
   burns down).
+- "state" is for a change to the place itself that the passage shows: a few
+  words ("blown up", "burnt down", "flooded", "boarded up", "rebuilt"), with
+  the sentence that shows it as the quote. Otherwise null; never a mood, the
+  weather or the time of day.
 - Two places the text keeps apart stay apart, with names that tell them apart
   (the north gate, the south gate). "inside" only when the text says or
   plainly shows it.
@@ -2063,6 +2070,20 @@ Setting: {setting}.""",
         ("parts", "What is in it and the ways out, a line each"),
         ("setting", "The story's setting, briefly"),
     ),
+)
+
+# Not measured; asked as the sprites' changes are, which kept them the same
+# object (the author: a barn blown up is drawn blown up).
+_text(
+    "map.layout.change",
+    MAP,
+    "Map art: a place changed",
+    "Asks for a place's layout again after the story changed it (blown up, flooded), as an "
+    "edit of its last plan, which is in the conversation before it.",
+    """\
+Now lay out the same {place}, {change}. Keep what still stands where it was, show what \
+changed, and reply in the same format.""",
+    (("place", "The place"), ("change", "What happened to it")),
 )
 
 # Not measured: the layout prompt's shapes, at the scale of the country

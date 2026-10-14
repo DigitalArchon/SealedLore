@@ -29,6 +29,9 @@ class WorldPlace(BaseModel):
     # The place it is part of (a room in a building), by id.
     inside: str | None = None
     what: str = ""
+    # A change to the place itself the story showed ("blown up", "flooded"):
+    # its art is redrawn for it, as an edit of the last (engine/world_art.py).
+    state: str = ""
     # Where it is on the map, in metres east (x) and north (y) of the first
     # place, and how wide: set by the program when the place first appears
     # (engine/world_layout.py) and never moved after. Once the story has been
@@ -114,9 +117,13 @@ class WorldSprite(BaseModel):
 
 class PlaceLayout(BaseModel):
     """A place's ground plan, as tiles (engine/world_art.py's legend), drawn
-    the first time the story is there."""
+    the first time the story is there, and again, as an edit, for each state
+    the story puts it in."""
 
     place_id: str
+    state: str = ""
+    # The shapes it was drawn from: what a changed state is an edit of.
+    spec: dict = Field(default_factory=dict)
     rows: list[str]
     objects: dict[str, str] = Field(default_factory=dict)
     labels: dict[str, list[int]] = Field(default_factory=dict)
@@ -142,12 +149,22 @@ class TerrainPatch(BaseModel):
 
 class WorldArt(BaseModel):
     sprites: list[WorldSprite] = Field(default_factory=list)
-    layouts: dict[str, PlaceLayout] = Field(default_factory=dict)
+    # By place id, then by state ("" before any change). Art is not branch
+    # state: a barn blown up on one branch and standing on another has both.
+    layouts: dict[str, dict[str, PlaceLayout]] = Field(default_factory=dict)
     terrain: list[TerrainPatch] = Field(default_factory=list)
     # Jobs that failed, by key, and how often: one that keeps failing is let be.
     failures: dict[str, int] = Field(default_factory=dict)
 
-    def sprite_for(self, subject_id: str) -> WorldSprite | None:
-        """The latest sprite of a place or thing."""
-        found = [s for s in self.sprites if s.subject_id == subject_id]
+    def sprite_for(self, subject_id: str, state: str | None = None) -> WorldSprite | None:
+        """The sprite of a place or thing in `state` (any state when None),
+        the latest of them."""
+        found = [s for s in self.sprites if s.subject_id == subject_id and state in (None, s.state)]
         return found[-1] if found else None
+
+    def layout_for(self, place_id: str, state: str | None = None) -> PlaceLayout | None:
+        """A place's layout in `state`, or, when None, the latest drawn."""
+        drawn = self.layouts.get(place_id) or {}
+        if state is not None:
+            return drawn.get(state)
+        return list(drawn.values())[-1] if drawn else None
