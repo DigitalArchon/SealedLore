@@ -278,6 +278,50 @@ def test_a_station_in_space_is_a_deck_and_its_people_stand_apart(app):
     assert view.progress.isHidden() and view.progress_label.text() == "✓ The map is drawn"
 
 
+def test_the_isometric_view_shows_its_painting_and_offers_to_paint_it(app):
+    """Map → Isometric: up close, the painting of the local area in place of
+    the map, saying the 2D map is the truth; out of date once the map there
+    changes, with Paint it again; never painted without the author's press."""
+    from sealedlore.engine.world_pictures import isometric_state
+    from sealedlore.models.world import MapPicture
+    from tests.test_world_pictures import png
+
+    view = WorldView()
+    view.resize(900, 700)
+    farm = WorldPlace(id="farm", name="The farm", kind="site", x=0.0, y=0.0, size=400)
+    barn = WorldPlace(id="barn", name="The barn", kind="building", inside="farm", x=0.0, y=50.0)
+    world = WorldMap(places={"farm": farm, "barn": barn}, where={"Jane": "farm"})
+    plan = PlaceLayout(place_id="farm", rows=["." * 40] * 24, spec={"ground": "snow"})
+    painted = MapPicture(
+        subject="isometric",
+        subject_id="farm",
+        name="The farm",
+        state=isometric_state(world, "farm"),
+        file="images/map/iso.png",
+    )
+    art = WorldArt(layouts={"farm": {"": plan}}, pictures=[painted])
+    view.picture_reader = lambda path: png(32, 24) if path == painted.file else None
+    view.isometric_offer = ("nano-banana-pro-edit", 0.14, None)
+    view.set_world(world, art, "Jane", keep_view=False)
+    assert view.level() == "local" and not view.iso_button.isHidden()
+    view.iso_button.setChecked(True)
+    assert view.stack.currentWidget() is view.iso_panel
+    assert "the story's truth" in view.iso_panel.note.text()
+    assert view.iso_panel.paint_button.isHidden()  # painted for the map as it is
+    # The barn burns: the painting is out of date and offers to paint again.
+    world.places["barn"] = barn.model_copy(update={"state": "burning"})
+    view.set_world(world, art, "Jane")
+    assert "has changed since" in view.iso_panel.offer.text()
+    assert "Paint it again (nano-banana-pro-edit, $0.14)" in view.iso_panel.paint_button.text()
+    asked: list[str] = []
+    view.isometric_requested.connect(asked.append)
+    view.iso_panel.paint_button.click()
+    assert asked == ["farm"]
+    # Out to the region: the map again.
+    view.go_region()
+    assert not view.iso_button.isChecked() and view.stack.currentWidget() is view.view
+
+
 def test_with_no_local_plan_the_region_shows_and_says_why(app):
     view = WorldView()
     view.resize(800, 600)

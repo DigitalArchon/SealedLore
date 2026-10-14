@@ -909,6 +909,14 @@ Everything drawn for the map stays with the story: a restart, Duplicate
 settings and a scenario file keep the art and the pictures. Story pictures
 (Image…) still show you every request first.
 
+On the local map, **Isometric** shows the area painted in isometric by an
+image model (Settings → Images → **Isometric view model**, Nano Banana Pro
+unless you choose another). It is painted from the map itself, only when you
+press **Paint it**, which gives the model and its price; it counts with the
+day's map pictures. The 2D map is the story's truth: the painting matches it
+closely, not exactly. Once the story changes something there (the barn
+burns), the view says it is out of date and offers to paint it again.
+
 A story that keeps a map makes it part of the window: the Inspector, beside
 the story, takes half the window with **Map** as its first page, and the
 Stories list steps aside (View → Stories list brings it back). **Map**, above

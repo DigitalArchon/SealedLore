@@ -517,6 +517,49 @@ def fixed_in_plan(world: WorldMap, place: WorldPlace) -> list[dict[str, Any]]:
     return out
 
 
+# Ground a plan may share with the land around it (`plan_ground`).
+OPEN_GROUND = frozenset({"snow", "grass", "dirt", "sand"})
+
+
+def land_under(world: WorldMap, art: WorldArt, place: WorldPlace) -> str:
+    """The ground of the finest land drawn under a place, or ""."""
+    spot = position(world, place.id)
+    if spot is None:
+        return ""
+    for patch in sorted(art.terrain, key=lambda p: p.side):
+        half = patch.side / 2
+        if abs(spot[0] - patch.x) <= half and abs(spot[1] - patch.y) <= half:
+            return patch.ground
+    return ""
+
+
+def plan_ground(world: WorldMap, art: WorldArt, place: WorldPlace, ground: str) -> str:
+    """The look a plan is drawn in: its open ground as the land it stands on
+    has it (live, a barn's plan came back on summer grass in a snowbound
+    country); a floor or rock its own. A plan in space is a deck ("metal":
+    panels, bulkheads, stars only outside the hull): live, Deep Space 9's
+    rooms were wooden walls and red roofs on a field of stars."""
+    land = land_under(world, art, place)
+    if ground == "space" or land == "space":
+        return "metal"
+    if ground and ground not in OPEN_GROUND:
+        return ground
+    return land if land in OPEN_GROUND else ground
+
+
+def changed_buildings(world: WorldMap, art: WorldArt, area_id: str) -> list[WorldPlace]:
+    """The buildings in a plan the story changed whose plan in that state is
+    drawn: shown open in place of their roofs."""
+    out = []
+    for child in world.places.values():
+        if child.inside != area_id or child.kind != "building" or not child.state:
+            continue
+        layout = art.layout_for(child.id, child.state)
+        if layout is not None and layout.rows:
+            out.append(child)
+    return out
+
+
 def _fixed_lines(fixed: Sequence[dict[str, Any]]) -> str:
     lines = []
     for f in fixed:

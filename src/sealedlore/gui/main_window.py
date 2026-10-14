@@ -666,8 +666,11 @@ class MainWindow(
         elif self.map_shown():
             self.show_map(False)
         elif self.world_shown():
-            # On the local map, Esc goes out to the region first.
-            if self.world_view.level() == "local":
+            # From the isometric view back to the map; on the local map, Esc
+            # goes out to the region first.
+            if self.world_view.leave_isometric():
+                pass
+            elif self.world_view.level() == "local":
                 self.world_view.go_region()
             else:
                 self.show_world(False)

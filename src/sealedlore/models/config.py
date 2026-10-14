@@ -468,6 +468,12 @@ class Config(BaseModel):
     map_pictures: bool = False
     map_picture_model: str = "qwen-image"
     map_picture_daily_limit: int = 40
+    # The isometric view of the local map (Map → Isometric), painted from the
+    # program's own render of the plan when the author asks, never on its
+    # own. Nano Banana Pro edit was the one of 13 that kept the layout, drew
+    # isometric and showed a change (a barn burning), at $0.14 a view
+    # (SealedLoreDocs design/map.md, Oct 15 2026).
+    map_isometric_model: str = "nano-banana-pro-edit"
 
     # Pictures (engine/image_prompt.py, providers/images.py). The image model
     # takes reference pictures: Seedream 5.0 Pro was the author's pick for

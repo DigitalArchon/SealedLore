@@ -1062,6 +1062,34 @@ class SettingsDialog(QDialog):
         self.map_picture_model.textChanged.connect(self._sync_map_picture_note)
         self.map_picture_limit.valueChanged.connect(self._sync_map_picture_note)
         self._sync_map_picture_note()
+        # The isometric view (Map → Isometric): painted only when asked.
+        self.map_isometric_model = ModelField(
+            self.config.map_isometric_model,
+            self._browse_image_models if self.image_catalog is not None else None,
+        )
+        form.addRow("Isometric view model", self.map_isometric_model)
+        self.map_isometric_note = QLabel()
+        self.map_isometric_note.setObjectName("hintLabel")
+        self.map_isometric_note.setWordWrap(True)
+        form.addRow(self.map_isometric_note)
+        self.map_isometric_model.textChanged.connect(self._sync_map_isometric_note)
+        self._sync_map_isometric_note()
+
+    def _sync_map_isometric_note(self, *_args) -> None:
+        model = self.map_isometric_model.text().strip()
+        info = next((m for m in self._image_models if m.id == model), None)
+        each = info.price(picture_size(info, landscape=True)) if info else None
+        price = f"${each:.2f} a view listed" if each else "price not listed"
+        takes = (
+            " It can't be given the map to paint from: choose one that takes pictures."
+            if info is not None and not info.accepts_images
+            else ""
+        )
+        self.map_isometric_note.setText(
+            "Map → Isometric paints the local map in isometric from the map itself, only when "
+            "you ask, counted with the map pictures above (needs no tick). "
+            f"{model or 'No model'}: {price}.{takes}"
+        )
 
     def _sync_map_picture_note(self, *_args) -> None:
         model = self.map_picture_model.text().strip()
@@ -1341,6 +1369,9 @@ class SettingsDialog(QDialog):
             self.map_picture_model.text().strip() or self.config.map_picture_model
         )
         self.config.map_picture_daily_limit = self.map_picture_limit.value()
+        self.config.map_isometric_model = (
+            self.map_isometric_model.text().strip() or self.config.map_isometric_model
+        )
         images = MediaEndpoint(
             base_url=self.image_url.text().strip(),
             api_key=self.image_key.text().strip(),

@@ -222,3 +222,50 @@ def test_each_place_you_have_been_gets_a_postcard_where_you_are_first():
     assert "postcard" not in barn.prompt  # the word drew a card with a frame and lettering
     info = ImageModelInfo(id="m", name="m", resolutions=("1024x1024", "1360x768", "1024x768"))
     assert picture_size(info, landscape=True) == "1360x768"
+
+
+def test_the_isometric_view_is_painted_only_when_asked_from_the_plan(session, tmp_path):
+    """Map → Isometric: the author asks (no standing approval needed), the
+    plan's own picture goes with the prompt, it counts against the day's map
+    pictures, and is kept for the map as it is now."""
+    from sealedlore.engine.world_pictures import isometric_state
+
+    session.config.map_pictures = False  # the press is the approval
+    model, _price, problem = session.isometric_offer()
+    assert model == "nano-banana-pro-edit" and problem is None
+    assert session.map_picture_jobs() == []  # nothing painted on its own
+    assert session.start_isometric("farm", lambda: png(16, 12))
+    session._isometric_thread.join(10)
+    art = session.map_art_copy()
+    view = art.picture_for("isometric", "farm")
+    assert view is not None and view.state == isometric_state(session.world(), "farm")
+    payload = FakeImages.sent[-1]
+    assert payload["model"] == "nano-banana-pro-edit"
+    assert "Redraw this game map as an isometric view" in payload["prompt"]
+    assert "data:image/png;base64" in json.dumps(payload)  # the plan's picture went with it
+    log_file = tmp_path / "stories" / session.story.id / "api_log.jsonl"
+    requests = [
+        json.loads(line)
+        for line in log_file.read_text().splitlines()
+        if '"map_picture_request"' in line
+    ]
+    assert "the map of The farm" in json.dumps(requests[-1])  # logged by name, not base64
+    assert session.map_pictures_left_today() == 1  # counted like any map picture
+    # Without a plan to paint from, nothing is sent.
+    sent = len(FakeImages.sent)
+    assert session.start_isometric("farm", lambda: None)
+    session._isometric_thread.join(10)
+    assert len(FakeImages.sent) == sent
+
+
+def test_the_isometric_view_names_a_change_first_and_goes_out_of_date_with_it():
+    from sealedlore.engine.world_pictures import isometric_job, isometric_state
+
+    world = farm()
+    before = isometric_state(world, "farm")
+    world.places["barn"] = world.places["barn"].model_copy(update={"state": "burning"})
+    job = isometric_job(world, WorldArt(), "farm", setting="a frozen winter")
+    assert isometric_state(world, "farm") != before and job.state == "The barn: burning"
+    assert "As the story has it now, The barn is burning: draw it so" in job.prompt
+    assert job.prompt.index("burning: draw it so") < job.prompt.index("What is on it")
+    assert "Hellsville" not in job.prompt  # only what the plan has

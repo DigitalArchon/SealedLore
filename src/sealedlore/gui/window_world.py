@@ -16,6 +16,7 @@ from __future__ import annotations
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QToolButton
 
+from sealedlore.gui.map_render import plan_png
 from sealedlore.gui.world_view import WorldView
 
 # Pieces of art come back one after another: one redraw for a run of them.
@@ -35,6 +36,7 @@ class WorldWindow:
         """Called from `__init__` before the centre is laid out."""
         self.world_view = WorldView()
         self.world_view.back_requested.connect(lambda: self.show_world(False))
+        self.world_view.isometric_requested.connect(self._paint_isometric)
         self.world_button = QToolButton()
         self.world_button.setObjectName("viewToggleButton")
         self.world_button.setText("Map")
@@ -105,6 +107,8 @@ class WorldWindow:
         self.world_view.picture_reader = session.pictures.read
         self.world_view.art_on = self.config.map_art
         self.world_view.drawing = session.map_art_running
+        self.world_view.isometric_offer = session.isometric_offer()
+        self.world_view.isometric_painting = session.isometric_painting
         self.world_view.set_progress(*session.map_art_progress())
         self.world_view.set_world(
             session.world(),
@@ -165,7 +169,26 @@ class WorldWindow:
         done, total = session.map_art_progress()
         self.world_view.art_on = self.config.map_art
         self.world_view.set_progress(done, total)
+        painting = session.isometric_painting
+        if painting != self.world_view.isometric_painting:
+            self.world_view.isometric_painting = painting
+            self.world_view.isometric_offer = session.isometric_offer()
+            self.world_view.sync_isometric()
         if total and not self._progress_timer.isActive():
             self._progress_timer.start()
         elif not total:
             self._progress_timer.stop()
+
+    def _paint_isometric(self, area_id: str) -> None:
+        """Paint the isometric view the author asked for: the plan is drawn
+        for the model from the map as it stands now, on the painting's own
+        thread (`plan_png` uses QImage alone)."""
+        session = self.session
+        if session is None:
+            return
+        world, art = session.world(), session.map_art_copy()
+        if session.start_isometric(area_id, lambda: plan_png(world, art, area_id)):
+            self.world_view.isometric_painting = session.isometric_painting
+        self.world_view.isometric_offer = session.isometric_offer()
+        self.world_view.sync_isometric()
+        self._sync_progress()

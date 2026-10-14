@@ -49,7 +49,7 @@ class Person:
 @dataclass(frozen=True)
 class PictureJob:
     key: str
-    subject: Literal["person", "place", "thing", "postcard"]
+    subject: Literal["person", "place", "thing", "postcard", "isometric"]
     subject_id: str
     name: str
     prompt: str
@@ -236,3 +236,74 @@ def _container(world: WorldMap, inner: str | None, outer: str) -> str | None:
         seen.add(inner)
         inner = world.places[inner].inside
     return None
+
+
+# --- The isometric view --------------------------------------------------------------
+
+
+def isometric_state(world: WorldMap, area_id: str) -> str:
+    """What the isometric view of an area shows, as the map has it now: the
+    area's own state and each changed place in it. A view painted under
+    another is out of date (the map says so and offers to paint it again)."""
+    area = world.places.get(area_id)
+    if area is None:
+        return ""
+    parts = [area.state] if area.state else []
+    for child in sorted(world.places.values(), key=lambda p: p.name):
+        if child.inside == area_id and child.state:
+            parts.append(f"{child.name}: {child.state}")
+    return "; ".join(parts)
+
+
+def _what_is_on(world: WorldMap, art: WorldArt, area_id: str) -> str:
+    area = world.places[area_id]
+    text = area.name + (f", {' '.join(area.what.split())}" if area.what else "") + ". "
+    parts = []
+    for child in world.places.values():
+        if child.inside != area_id:
+            continue
+        what = " ".join((child.what or "").split())
+        now = f" (now {child.state})" if child.state else ""
+        parts.append(f"{child.name}{now}" + (f": {what}" if what else ""))
+    if parts:
+        text += "In it: " + "; ".join(parts) + ". "
+    layout = art.layout_for(area_id, area.state) or art.layout_for(area_id)
+    marked = list((layout.objects if layout is not None else {}).values())
+    if marked:
+        text += "Marked on the map: " + ", ".join(marked) + "."
+    return text
+
+
+def isometric_job(
+    world: WorldMap,
+    art: WorldArt,
+    area_id: str,
+    *,
+    setting: str,
+    texts: PromptTexts = DEFAULT_TEXTS,
+) -> PictureJob:
+    """The isometric view of an area as a picture job: its prompt names only
+    what the plan has, any change first; the picture of the plan goes with
+    it (the session renders it)."""
+    area = world.places[area_id]
+    changed = [p for p in world.places.values() if p.inside == area_id and p.state] + (
+        [area] if area.state else []
+    )
+    now = "".join(
+        texts.fill("map.picture.isometric.now", place=p.name, state=p.state) for p in changed
+    )
+    prompt = texts.fill(
+        "map.picture.isometric",
+        now=now,
+        places=_what_is_on(world, art, area_id),
+        setting=setting[:400],
+    )
+    state = isometric_state(world, area_id)
+    return PictureJob(
+        key=f"isometric:{area_id}:{state}" if state else f"isometric:{area_id}",
+        subject="isometric",
+        subject_id=area_id,
+        name=area.name,
+        prompt=prompt,
+        state=state,
+    )

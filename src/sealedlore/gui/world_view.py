@@ -58,6 +58,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QProgressBar,
     QScrollArea,
+    QStackedWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -67,12 +68,16 @@ from sealedlore.engine.world_art import (
     containers,
     fixed_in_plan,
     local_area,
+    plan_ground,
     plan_rect,
     plan_tile,
 )
 from sealedlore.engine.world_layout import position, size_of
+from sealedlore.engine.world_pictures import isometric_state
 from sealedlore.gui import text_size
+from sealedlore.gui.isometric_view import IsometricPanel
 from sealedlore.gui.map_art import FOG, picture_sprite, sprite_pixmap
+from sealedlore.gui.map_render import drawn_box, label_key
 from sealedlore.gui.map_tiles import (
     TILE,
     building_boxes,
@@ -110,8 +115,6 @@ ZOOM_STEP = 1.25
 # grows with the font), and the gap between picture and name.
 LABEL_WIDTH = 176
 LABEL_GAP = 3
-# Ground a plan may share with the land around it (`_ground_for`).
-_OPEN_GROUND = frozenset({"snow", "grass", "dirt", "sand"})
 # A scene's people, in art pixels (the tileset's scale) before the view's zoom.
 AVATAR_HEIGHT = 26
 # A postcard's thumbnail on a place's card.
@@ -145,11 +148,7 @@ def place_card(world: WorldMap, place: WorldPlace) -> str:
     return "<br>".join(lines)
 
 
-def _key(name: str) -> str:
-    """A place's name as a plan's label might give it: no case, no "the",
-    nothing in brackets ("barn (blown up, burning)" is the barn)."""
-    name = name.lower().split("(")[0].strip()
-    return name[4:] if name.startswith("the ") else name
+_key = label_key
 
 
 class _PlaceItem(QGraphicsItem):
@@ -443,6 +442,8 @@ class _TagItem(QGraphicsSimpleTextItem):
 
 class WorldView(QWidget):
     back_requested = Signal()
+    # The author asked for the isometric view of this area to be painted.
+    isometric_requested = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -461,11 +462,17 @@ class WorldView(QWidget):
         self.zoom_in = self._button("+", "Zoom in (+, or the mouse wheel)")
         self.inside_button = self._button("See inside", "Take every roof off, to see inside")
         self.inside_button.setCheckable(True)
+        self.iso_button = self._button(
+            "Isometric",
+            "The local map painted in isometric by an image model, when you ask: the 2D map "
+            "stays the story's truth, and this matches it closely, not exactly",
+        )
+        self.iso_button.setCheckable(True)
         header = WrapRow()
         header.add_group([self.title])
         header.add_group([self.local_button, self.region_button, self.world_button])
         header.add_group([self.zoom_out, self.zoom_in])
-        header.add_group([self.inside_button])
+        header.add_group([self.inside_button, self.iso_button])
         # How far the drawing has got (the author: the hint's small text said
         # neither that it was under way nor that it was done).
         self.progress_label = QLabel()
@@ -496,6 +503,13 @@ class WorldView(QWidget):
         self.region_button.clicked.connect(lambda: self.go_region())
         self.world_button.clicked.connect(lambda: self.go_world())
         self.inside_button.toggled.connect(lambda _on: self._update_detail())
+        # The isometric view takes the map's place while it is on.
+        self.iso_panel = IsometricPanel()
+        self.iso_panel.paint_requested.connect(self._paint_requested)
+        self.iso_button.toggled.connect(lambda _on: self.sync_isometric())
+        self.stack = QStackedWidget()
+        self.stack.addWidget(self.view)
+        self.stack.addWidget(self.iso_panel)
         # A place's card, under the map: what the story said of it, who and
         # what is there. Shown on the local map, for the place in view.
         self.side = QLabel()
@@ -532,7 +546,7 @@ class WorldView(QWidget):
         layout.addLayout(header)
         layout.addLayout(progress_row)
         layout.addWidget(self.hint)
-        layout.addWidget(self.view, 1)
+        layout.addWidget(self.stack, 1)
         layout.addWidget(self.card)
         self.world = WorldMap()
         self.art = WorldArt()
@@ -544,6 +558,11 @@ class WorldView(QWidget):
         self.art_on = True
         # Whether art is on its way now (the window sets it): said in the hint.
         self.drawing = False
+        # The isometric view's model, price and why it can't be painted now
+        # (`session.isometric_offer`), and the area being painted (the window
+        # sets them).
+        self.isometric_offer: tuple[str, float | None, str | None] = ("", None, None)
+        self.isometric_painting: str | None = None
         # Every item the scene holds is held here too: PySide lets a scene
         # item go with its Python wrapper, so the land vanished once built.
         self._items: list[_PlaceItem] = []
@@ -597,6 +616,7 @@ class WorldView(QWidget):
         else:
             self.go_local()
         self._built = True
+        self.sync_isometric()
 
     def here(self) -> str | None:
         """Where the author's character is: as the story last put them, or an
@@ -804,20 +824,7 @@ class WorldView(QWidget):
             parent = self._plans.get(plan.place.inside or "")
             if parent is None or plan.place.kind != "building":
                 continue
-            names = {_key(n) for n in (plan.place.name, *plan.place.aliases)}
-            spot = next(
-                (xy for label, xy in parent.layout.labels.items() if _key(label) in names), None
-            )
-            if spot is None:
-                continue
-            box = next(
-                (
-                    b
-                    for b in building_boxes(parent.rows)
-                    if b[0] <= spot[0] <= b[1] and b[2] <= spot[1] <= b[3]
-                ),
-                None,
-            )
+            box = drawn_box(parent.layout, plan.place)
             if box is None:
                 continue
             plan.fit_to(parent.box_rect(box))
@@ -1023,28 +1030,8 @@ class WorldView(QWidget):
             tag.centre_on(x * TILE + TILE / 2, y * TILE)
 
     def _ground_for(self, place: WorldPlace, ground: str) -> str:
-        """A plan's open ground as the land it stands on has it: live, a barn's
-        plan came back on summer grass in a snowbound country. A floor or
-        rock is the plan's own. A plan in space is a deck ("metal": panels,
-        bulkheads, stars only outside the hull): live, Deep Space 9's rooms
-        were wooden walls and red roofs on a field of stars."""
-        land = self._land_under(place)
-        if ground == "space" or land == "space":
-            return "metal"
-        if ground and ground not in _OPEN_GROUND:
-            return ground
-        return land if land in _OPEN_GROUND else ground
-
-    def _land_under(self, place: WorldPlace) -> str:
-        """The ground of the finest land drawn under a place, or ""."""
-        spot = position(self.world, place.id)
-        if spot is None:
-            return ""
-        for patch in sorted(self.art.terrain, key=lambda p: p.side):
-            half = patch.side / 2
-            if abs(spot[0] - patch.x) <= half and abs(spot[1] - patch.y) <= half:
-                return patch.ground
-        return ""
+        """The look a plan is drawn in (`world_art.plan_ground`)."""
+        return plan_ground(self.world, self.art, place, ground)
 
     def _people_in(self, place_id: str) -> list[tuple[str, str]]:
         """(who, where) for everyone the story has at this place or somewhere
@@ -1312,7 +1299,49 @@ class WorldView(QWidget):
         ):
             button.setChecked(level == name)
         self.inside_button.setVisible(level == "local")
+        self.iso_button.setVisible(
+            self.iso_button.isChecked() or (level == "local" and self._local_plan() is not None)
+        )
         self.hint.setText(self._hint_for(level))
+
+    # --- the isometric view ----------------------------------------------------------
+
+    def sync_isometric(self) -> None:
+        """The isometric view for the local area, or the map: its latest
+        painting, whether it is of the map as it is now, and the offer."""
+        area = local_area(self.world, self.here()) if self.world.places else None
+        on = self.iso_button.isChecked() and area is not None
+        self.stack.setCurrentWidget(self.iso_panel if on else self.view)
+        self.inside_button.setEnabled(not on)
+        if not on or area is None:
+            return
+        latest = self.art.picture_for("isometric", area.id)
+        current = self.art.picture_for("isometric", area.id, isometric_state(self.world, area.id))
+        data = self.picture_reader(latest.file) if latest and self.picture_reader else None
+        image = QImage.fromData(data) if data else None
+        model, price, problem = self.isometric_offer
+        self.iso_panel.show_state(
+            place=area.name,
+            image=image if image is not None and not image.isNull() else None,
+            file=latest.file if latest else None,
+            current=current is not None and current is latest,
+            painting=self.isometric_painting == area.id,
+            model=model,
+            price=price,
+            problem=problem,
+        )
+
+    def leave_isometric(self) -> bool:
+        """Back to the map from the isometric view; False when it wasn't on."""
+        if not self.iso_button.isChecked():
+            return False
+        self.iso_button.setChecked(False)
+        return True
+
+    def _paint_requested(self) -> None:
+        area = local_area(self.world, self.here())
+        if area is not None:
+            self.isometric_requested.emit(area.id)
 
     def _hint_for(self, level: str) -> str:
         if not self.world.places:
@@ -1408,6 +1437,7 @@ class WorldView(QWidget):
 
     def go_region(self) -> None:
         """The country round the character: where to go next."""
+        self.leave_isometric()
         self._fitted = "region"
         scales = self._fit_scales()
         if scales is None:
@@ -1417,6 +1447,7 @@ class WorldView(QWidget):
 
     def go_world(self) -> None:
         """The whole map, zoomed out past the region so only the big names show."""
+        self.leave_isometric()
         self._fitted = "world"
         scales = self._fit_scales()
         if scales is None:

@@ -37,6 +37,7 @@ from sealedlore.engine.world_pictures import (
     MAP_PICTURES_DIR,
     Person,
     PictureJob,
+    isometric_job,
     looks_of,
     picture_size,
     plan_pictures,
@@ -77,6 +78,8 @@ class WorldArtRuntime:
     _art_done = 0
     _picture_total = 0
     _picture_done = 0
+    _isometric_thread: threading.Thread | None = None
+    _isometric_area: str | None = None
     # Called (on the art thread) after each piece is kept: the window's cue to
     # redraw the map.
     on_map_art: Callable[[], None] | None = None
@@ -114,6 +117,8 @@ class WorldArtRuntime:
         thread = self._picture_thread
         if thread is not None and thread.is_alive():
             done, total = done + self._picture_done, total + self._picture_total
+        if self.isometric_painting is not None:
+            total += 1
         return min(done, total), total
 
     @property
@@ -184,12 +189,93 @@ class WorldArtRuntime:
         model = self.config.map_picture_model
         if self._picture_model_info is not None and self._picture_model_info.id == model:
             return self._picture_model_info
-        found = next(
+        found = self._listed_image_model(model)
+        self._picture_model_info = found
+        return found
+
+    def _listed_image_model(self, model: str) -> ImageModelInfo | None:
+        return next(
             (m for m in parse_image_models({"data": self.config.image_models}) if m.id == model),
             None,
         )
-        self._picture_model_info = found
-        return found
+
+    # --- The isometric view (Map → Isometric) ----------------------------------------
+
+    @property
+    def isometric_painting(self) -> str | None:
+        """The area whose isometric view is being painted now, or None."""
+        thread = self._isometric_thread
+        return self._isometric_area if thread is not None and thread.is_alive() else None
+
+    def isometric_offer(self) -> tuple[str, float | None, str | None]:
+        """(model, its listed price for the view, why it can't be painted now
+        or None). The author asks for each view: it is never painted on its
+        own (Oct 15 2026)."""
+        model = self.config.map_isometric_model
+        info = self._listed_image_model(model)
+        price = info.price(picture_size(info, landscape=True)) if info is not None else None
+        if not self.map_on or self.open_span is not None:
+            return model, price, "Not in a private scene."
+        media = self.config.images()
+        if media is None or not media.api_key:
+            return model, price, "Set up an image endpoint in Settings → Images first."
+        if info is not None and not info.accepts_images:
+            return model, price, f"{model} can't be given the map to paint from."
+        if self.map_pictures_left_today() <= 0:
+            return model, price, "Today's map pictures for this story are used up."
+        if self.isometric_painting is not None:
+            return model, price, "A view is being painted."
+        return model, price, None
+
+    def start_isometric(self, area_id: str, render: Callable[[], bytes | None]) -> bool:
+        """Paint the isometric view of an area, in the background: `render`
+        gives the picture of its plan (gui/map_render.py: the engine draws
+        nothing), called on that thread."""
+        _model, _price, problem = self.isometric_offer()
+        world = self.world()
+        if problem is not None or area_id not in world.places:
+            return False
+        media = self.config.images()
+        assert media is not None
+        job = isometric_job(
+            world,
+            self.map_art_copy(),
+            area_id,
+            setting=setting_of(self.story.world_bible, self.story.title),
+            texts=self.texts,
+        )
+        client = ImageClient(media.base_url, media.api_key, api=media.api)
+        self._isometric_area = area_id
+        thread = threading.Thread(
+            target=self._paint_isometric,
+            args=(job, client, render),
+            name="map-isometric",
+            daemon=True,
+        )
+        self._isometric_thread = thread
+        thread.start()
+        return True
+
+    def _paint_isometric(
+        self, job: PictureJob, client: ImageClient, render: Callable[[], bytes | None]
+    ) -> None:
+        try:
+            plan = render()
+            if plan is None:
+                self._log("map_picture_error", {"job": job.key, "error": "no plan to paint from"})
+                return
+            model = self.config.map_isometric_model
+            info = self._listed_image_model(model)
+            if info is None:  # not in the config's listing: ask the endpoint once
+                listing = list_image_models(client.base_url, api=client.api)
+                info = next((m for m in listing if m.id == model), None)
+            size = picture_size(info, landscape=True)
+            self._picture_one(job, client, size, model=model, info=info, plan=plan)
+        finally:
+            client.close()
+            callback = self.on_map_art
+            if callback is not None:
+                callback()  # the map learns it is done, painted or not
 
     def start_map_pictures(self) -> bool:
         """Draw what the map needs from the image model, in the background."""
@@ -232,8 +318,21 @@ class WorldArtRuntime:
         finally:
             client.close()
 
-    def _picture_one(self, job: PictureJob, client: ImageClient, size: str) -> None:
-        model = self.config.map_picture_model
+    def _picture_one(
+        self,
+        job: PictureJob,
+        client: ImageClient,
+        size: str,
+        *,
+        model: str | None = None,
+        info: ImageModelInfo | None = None,
+        plan: bytes | None = None,
+    ) -> None:
+        """One map picture: counted against the day's limit first, drawn,
+        stripped, kept. `model` and `info` stand in for the map picture
+        model's; `plan` is the picture of the map to paint from (the
+        isometric view), sent before any reference."""
+        model = model or self.config.map_picture_model
         art = self.world_art
         with self._lock():
             if self.map_pictures_left_today(art) <= 0:
@@ -243,6 +342,14 @@ class WorldArtRuntime:
             self._save_art(art)
         references: list[str] = []
         names: list[str] = []
+        if plan is not None:
+            try:
+                plan = strip_metadata(plan)
+            except MetadataError:
+                plan = None
+            if plan is not None:
+                references.append(data_url(plan, MEDIA_TYPES[picture_kind(plan)]))
+                names.append(f"the map of {job.name}")
         if job.reference:
             data = self.pictures.read(job.reference)
             try:
@@ -268,7 +375,7 @@ class WorldArtRuntime:
                 self._save_art(art)
             self._log("map_picture_error", {"request_log_ref": log_ref, "error": str(exc)[:300]})
             return
-        info = self._picture_model_info
+        info = info or self._picture_model_info
         cost = reply.cost
         usage: dict = {"cost": cost or 0.0, "cost_reported": cost is not None}
         if cost is None and info is not None and info.price(size) is not None:
@@ -338,7 +445,7 @@ class WorldArtRuntime:
         client = self._picture_client
         if client is not None:
             client.cancel()
-        for thread in (self._art_thread, self._picture_thread):
+        for thread in (self._art_thread, self._picture_thread, self._isometric_thread):
             if thread is not None and wait_seconds > 0:
                 thread.join(wait_seconds)
 

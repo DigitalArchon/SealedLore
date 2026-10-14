@@ -2322,6 +2322,44 @@ _text(
 )
 
 
+# The isometric view of the local map (Map → Isometric), painted from the
+# program's own render of the plan (gui/map_render.py). The earlier repaints
+# drifted partly through their prompts, which named what the map hadn't
+# (a road north, pine woods, a chapel; farm words for a station): this names
+# only what the plan has, and any change first. Over 13 models on a burning
+# barn and Deep Space 9, Nano Banana Pro kept the layout, drew isometric and
+# showed the fire; Qwen Image ignored the change 3 times in 3
+# (SealedLoreDocs design/map.md, Oct 15 2026).
+_text(
+    "map.picture.isometric",
+    MAP,
+    "Map pictures: the isometric view",
+    "Sent with the program's picture of the local map when the author asks for its isometric "
+    "view: what is on it, any change first, and the setting.",
+    "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew "
+    "Valley, the same place seen from above at an angle. Keep its layout: every building, "
+    "wall, path, fence, water and open ground where the map has it, the same size and shape, "
+    "in the same places relative to each other. Add nothing the map does not show.{now} What "
+    "is on it: {places} The setting: {setting}. Full-bleed scene, atmospheric light, no text, "
+    "no labels, no border.",
+    (
+        ("now", "Each place the story changed, as map.picture.isometric.now says it, or nothing"),
+        ("places", "The place, what is in it and what the map marks there"),
+        ("setting", "The story's setting, briefly"),
+    ),
+)
+
+_text(
+    "map.picture.isometric.now",
+    MAP,
+    "Map pictures: the isometric view, a change",
+    "One place the story changed, said first in the isometric view's prompt: without it the "
+    "barn burning came back intact.",
+    " As the story has it now, {place} is {state}: draw it so, not as it was.",
+    (("place", "The place"), ("state", "What it is now")),
+)
+
+
 # The local map in the storyteller's tail (engine/world.py,
 # `render_map_context`), for a story whose map came from its plot file.
 # Measured in SealedLoreDocs design/map.md: read from prose, the map bound the

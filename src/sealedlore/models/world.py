@@ -152,7 +152,7 @@ class MapPicture(BaseModel):
     place's postcard. The file is in the story's pictures, under images/map/."""
 
     id: str = Field(default_factory=new_id)
-    subject: Literal["person", "place", "thing", "postcard"]
+    subject: Literal["person", "place", "thing", "postcard", "isometric"]
     # A place's or thing's id; a person's name.
     subject_id: str
     name: str
