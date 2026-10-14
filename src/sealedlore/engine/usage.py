@@ -38,6 +38,7 @@ KIND_LABELS: dict[str, str] = {
     "variant_response": "Plot: choosing how events go",
     "gap_response": "Plot: skipped-over events",
     "world_response": "Map reads",
+    "map_art_response": "Map art",
     "competence_response": "Skill suggestions",
     "draft_response": "Story drafting",
     "review_response": "Settings reviews",

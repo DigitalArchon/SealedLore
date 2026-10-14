@@ -1957,6 +1957,190 @@ If the passage changes nothing, reply with empty lists.""",
 )
 
 
+# Not yet sent: measured first (SealedLoreDocs design/map.md). It frames
+# the map as established fact to keep to, and leaves what lies beyond it to
+# the storyteller, which is how the map grows.
+_text(
+    "map.context",
+    MAP,
+    "The map here: heading",
+    "Heads the local map in the tail: where the author's character is, the places around, "
+    "the ways out with the distances the story gave, and the things here.",
+    """\
+What the story has established about where things are. Keep to it: these
+places, how they lie and how far apart they are, are as the story told them.
+Anywhere not on it is unmapped; when the story goes there, decide what is
+found, and it becomes part of the map.""",
+)
+
+
+# The map's art (engine/world_art.py). Measured in SealedLoreDocs
+# design/map.md: a text model writing a small SVG that code turns into pixel
+# art read at a glance 16-17 times in 20 for the best models, where pixel
+# grids read 7; a changed state asked as an edit of the model's own drawing
+# kept it the same object 94-97% of the time. Layouts as shapes the program
+# draws beat typed tile grids for every model. Word for word as measured.
+_text(
+    "map.sprite",
+    MAP,
+    "Map art: sprites",
+    "The system prompt for drawing a place or thing on the map as a small SVG. The program "
+    "keeps only plain shapes and turns them into pixel art in the story's palette.",
+    """\
+You draw small game sprites for a 2D story map in a simple retro style, somewhere between Dwarf \
+Fortress and Stardew Valley. Every sprite is seen from a three-quarter top-down view, like a \
+16-bit role-playing game. Use bold, simple shapes that still read when shown at 32x32 pixels. \
+Centre the object and let it fill most of the canvas. The background is transparent. No text, \
+no letters, no shadows on the ground.
+
+Reply with one SVG in a ```svg block and nothing else. Rules:
+- <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+- Only rect, circle, ellipse, polygon, polyline, path, line and g elements.
+- No gradients, filters, patterns, opacity, images, text or external references.
+- No background rectangle covering the canvas.
+- Every fill and stroke is one of these colours: {palette}.""",
+    (("palette", "The palette's colours, as hex"),),
+)
+
+_text(
+    "map.sprite.ask",
+    MAP,
+    "Map art: what to draw",
+    "Asks for one sprite: the place or thing, and the story's setting.",
+    """\
+Draw: {what}.
+Setting: {setting}.""",
+    (("what", "The place or thing, in a few words"), ("setting", "The story's setting, briefly")),
+)
+
+_text(
+    "map.sprite.change",
+    MAP,
+    "Map art: a changed state",
+    "Asks for a thing again in its new state, as an edit of its own last drawing (which is "
+    "in the conversation before it), so it stays the same thing.",
+    """\
+Now draw the same {what}, {change}. Keep its shape, colours and position where they still \
+apply, so it is clearly the same one.""",
+    (("what", "The thing"), ("change", "Its new state")),
+)
+
+_text(
+    "map.layout",
+    MAP,
+    "Map art: a place's layout",
+    "The system prompt for laying out a place the story has reached, as shapes the program "
+    "draws as tiles. Drawn once, the first time the story is there.",
+    """\
+You lay out places for a 2D story map in the style of Dwarf Fortress, seen from directly above, \
+north at the top, on a grid {width} tiles wide (x 0-{last_x}, west to east) and {height} tall \
+(y 0-{last_y}, north to south). One tile is about {tile}. You describe the place as shapes and \
+the program draws the tiles.
+
+Reply with JSON and nothing else:
+{
+  "ground": "snow | grass | dirt | rock | floor | space",
+  "features": [
+    {"kind": "area", "fill": "water | ice | rock | trees | brush | rubble | floor | ground | \
+dark", "shape": "rect | ellipse", "x": 0, "y": 0, "w": 5, "h": 4},
+    {"kind": "road", "points": [[x, y], [x, y]], "width": 1},
+    {"kind": "passage", "points": [[x, y], [x, y]], "width": 2},
+    {"kind": "building", "name": "...", "x": 0, "y": 0, "w": 8, "h": 6, "doors": [{"side": \
+"north | south | east | west", "at": 3}], "windows": [{"side": "...", "at": 2}]},
+    {"kind": "wall | fence | window", "points": [[x, y], [x, y]], "gaps": [[x, y]]},
+    {"kind": "object", "name": "...", "x": 0, "y": 0}
+  ]
+}
+
+Features are drawn in order, later over earlier. A building's walls run round its edge with \
+floor inside; "at" counts tiles along that side from its west or north end. A passage is open \
+floor (through rock, or a corridor). Roads and walls are straight runs between their points. Up \
+to 9 objects. Keep it plausible to scale, and give every building a door where people go in.""",
+    (
+        ("width", "Tiles across"),
+        ("height", "Tiles down"),
+        ("last_x", "The last column"),
+        ("last_y", "The last row"),
+        ("tile", "How much ground a tile covers"),
+    ),
+)
+
+_text(
+    "map.layout.ask",
+    MAP,
+    "Map art: which place to lay out",
+    "Asks for one place's layout: what the story said it is like, what is in it, the ways "
+    "out of it, and the setting.",
+    """\
+Lay out: {place}
+{parts}
+Setting: {setting}.""",
+    (
+        ("place", "The place and what the story said of it"),
+        ("parts", "What is in it and the ways out, a line each"),
+        ("setting", "The story's setting, briefly"),
+    ),
+)
+
+# Not measured: the layout prompt's shapes, at the scale of the country
+# around a place, with the places the map already has kept where they are.
+_text(
+    "map.terrain",
+    MAP,
+    "Map art: the land around a place",
+    "The system prompt for drawing the land around a place the story has reached, the first "
+    "time it gets there: the map grows by these, and they are fixed once drawn.",
+    """\
+You draw the land around a place for a 2D story map in the style of Dwarf Fortress, seen from \
+directly above, north at the top, on a grid {width} tiles wide (x 0-{last_x}, west to east) and \
+{height} tall (y 0-{last_y}, north to south). One tile is about {tile}. You describe the land \
+as shapes and the program draws the tiles. The places on the map are drawn over it by the \
+program; you draw the country they sit in.
+
+Reply with JSON and nothing else:
+{
+  "ground": "snow | grass | dirt | sand | rock | space",
+  "features": [
+    {"kind": "area", "fill": "water | ice | rock | trees | brush | rubble | ground | dark", \
+"shape": "rect | ellipse", "x": 0, "y": 0, "w": 5, "h": 4},
+    {"kind": "road", "points": [[x, y], [x, y]], "width": 1}
+  ]
+}
+
+Features are drawn in order, later over earlier. Roads are straight runs between their points. \
+Keep the places you are given clear of water and rock, run a road from each place along each \
+way out you are given, toward the edge it leads to, and make the land fit what the story said \
+and the setting: fields, woods, hills, rivers, ruins. Plausible to scale; no text.""",
+    (
+        ("width", "Tiles across"),
+        ("height", "Tiles down"),
+        ("last_x", "The last column"),
+        ("last_y", "The last row"),
+        ("tile", "How much ground a tile covers"),
+    ),
+)
+
+_text(
+    "map.terrain.ask",
+    MAP,
+    "Map art: which land to draw",
+    "Asks for the land around one place: what the story said of it, the places already on "
+    "the map within the patch (by tile), the ways out, and the setting.",
+    """\
+Draw the land around: {place}
+Places on the map here, which stay where they are:
+{places}
+{ways}
+Setting: {setting}.""",
+    (
+        ("place", "The place and what the story said of it"),
+        ("places", "The map's places in the patch, a line each, by tile"),
+        ("ways", "The ways out and where they lead"),
+        ("setting", "The story's setting, briefly"),
+    ),
+)
+
+
 # --- Chapters, parts and the ledger ---------------------------------------
 
 

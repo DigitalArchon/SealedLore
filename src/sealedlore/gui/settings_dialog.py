@@ -440,6 +440,15 @@ class SettingsDialog(QDialog):
             "of the free models."
         )
         form.addRow("Map art model", self.map_art_model)
+        self.map_art = QCheckBox("Draw the map")
+        self.map_art.setChecked(self.config.map_art)
+        self.map_art.setToolTip(
+            "In stories with the map on, draw it in the background after each passage: a "
+            "small picture of each place and thing, the layout of each place the story "
+            "reaches, and the land around it. Drawn once each, then kept. Off, the map is "
+            "kept and shown plainly, and nothing is sent to the map art model."
+        )
+        form.addRow(self.map_art)
 
         self.image_prompt_model = self._routed_field(self.config.image_prompt_model or "")
         self.image_prompt_model.setPlaceholderText("same as the story's model")
@@ -1330,6 +1339,7 @@ class SettingsDialog(QDialog):
         self.config.plot_model = self._role_model(self.plot_model) or None
         self.config.map_model = self._role_model(self.map_model) or None
         self.config.map_art_model = self._role_model(self.map_art_model) or None
+        self.config.map_art = self.map_art.isChecked()
         self.config.cache_control_mode = self.cache_mode.currentText()  # type: ignore[assignment]
         self.config.cache_ttl = self.cache_ttl.currentData()
 

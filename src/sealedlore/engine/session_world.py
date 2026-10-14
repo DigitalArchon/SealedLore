@@ -154,4 +154,7 @@ class WorldRuntime:
             self._log("world_refused", {"request_log_ref": log_ref, "refused": refused})
         node.meta.world = None if delta.empty() else delta
         self.save()
+        # Whatever the map still needs drawn goes to the art model now, in
+        # the background (session_world_art.py): the passage never waits.
+        self.start_map_art()
         yield SessionNotice(f"Map: {describe_delta(pending.before, delta)}")

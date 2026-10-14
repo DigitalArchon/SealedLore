@@ -86,3 +86,68 @@ class WorldMap(BaseModel):
     # what the fog lifts from.
     visited: dict[str, list[str]] = Field(default_factory=dict)
     conflicts: list[str] = Field(default_factory=list)
+
+
+# --- The map's art (engine/world_art.py), kept in world_art.json -------------
+#
+# Drawn once in the background by the map art model and never redrawn: once
+# the story has been somewhere, that is what it looks like. Not branch state:
+# art is keyed by the place or thing it shows, and outlives the passages.
+
+
+class WorldSprite(BaseModel):
+    """A small picture of a place or thing: a 64×64 SVG, cleaned, that the
+    view turns into pixel art in the story's palette."""
+
+    id: str = Field(default_factory=new_id)
+    subject: Literal["place", "thing"]
+    subject_id: str
+    name: str
+    # The state it shows ("burnt out"); a changed state is drawn as an edit
+    # of the sprite before it (`from_sprite`), so it stays the same object.
+    state: str = ""
+    svg: str
+    from_sprite: str | None = None
+    model: str = ""
+    made_at: str = ""
+
+
+class PlaceLayout(BaseModel):
+    """A place's ground plan, as tiles (engine/world_art.py's legend), drawn
+    the first time the story is there."""
+
+    place_id: str
+    rows: list[str]
+    objects: dict[str, str] = Field(default_factory=dict)
+    labels: dict[str, list[int]] = Field(default_factory=dict)
+    model: str = ""
+    made_at: str = ""
+
+
+class TerrainPatch(BaseModel):
+    """The land around a place the story reached, as tiles: a square `side`
+    metres wide centred on (`x`, `y`). The map grows by these: the first time
+    the story reaches unmapped country, its surroundings are drawn, and are
+    part of the map from then on."""
+
+    id: str = Field(default_factory=new_id)
+    place_id: str
+    x: float
+    y: float
+    side: float
+    rows: list[str]
+    model: str = ""
+    made_at: str = ""
+
+
+class WorldArt(BaseModel):
+    sprites: list[WorldSprite] = Field(default_factory=list)
+    layouts: dict[str, PlaceLayout] = Field(default_factory=dict)
+    terrain: list[TerrainPatch] = Field(default_factory=list)
+    # Jobs that failed, by key, and how often: one that keeps failing is let be.
+    failures: dict[str, int] = Field(default_factory=dict)
+
+    def sprite_for(self, subject_id: str) -> WorldSprite | None:
+        """The latest sprite of a place or thing."""
+        found = [s for s in self.sprites if s.subject_id == subject_id]
+        return found[-1] if found else None

@@ -457,6 +457,10 @@ class Config(BaseModel):
     # The model that draws the map: sprites and the layout of each place, in
     # the background. Blank means the map model.
     map_art_model: str | None = None
+    # Whether the map is drawn (sprites, layouts, the land around places), in
+    # the background after each map read. Off, the map is kept and shown
+    # plainly, with no calls for art.
+    map_art: bool = True
 
     # Pictures (engine/image_prompt.py, providers/images.py). The image model
     # takes reference pictures: Seedream 5.0 Pro was the author's pick for

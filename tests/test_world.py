@@ -250,6 +250,7 @@ def make_session(tmp_path: Path, story, cast, responses: list[str], *, on: bool 
         min_cacheable_tokens=1,
         scene_model="small/scene-model",
         scene_reads="manual",
+        map_art=False,  # drawn inline with the mock; tests/test_world_art.py
     )
     return StorySession(
         bundle,

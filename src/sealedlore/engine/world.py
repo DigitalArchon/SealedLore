@@ -155,6 +155,88 @@ def build_world_read_messages(
     ]
 
 
+# --- The map here, for the storyteller -------------------------------------
+
+SECTION_MAP = "# THE MAP HERE"
+# Enough to stand on without crowding the tail: the rest of the map is far
+# away and comes into this list when the story nears it.
+MAP_LIST_LIMIT = 8
+
+
+def _chain(world: WorldMap, place_id: str | None) -> list[WorldPlace]:
+    """The place and every place it is inside, innermost first."""
+    out: list[WorldPlace] = []
+    while place_id is not None and place_id in world.places:
+        place = world.places[place_id]
+        if place in out:
+            break
+        out.append(place)
+        place_id = place.inside
+    return out
+
+
+def _described(place: WorldPlace) -> str:
+    kind = f"{place.kind}" if place.kind else "place"
+    return f"{place.name} ({kind}): {place.what}" if place.what else f"{place.name} ({kind})"
+
+
+def render_map_context(
+    world: WorldMap, held: str | None, texts: PromptTexts = DEFAULT_TEXTS
+) -> str:
+    """The local map for the storyteller's tail: where the author's character
+    is, what is around and inside it, the ways out in the story's own words,
+    and the things here. Empty when the map doesn't have them anywhere."""
+    here_id = world.where.get(held or "")
+    chain = _chain(world, here_id)
+    if not chain:
+        return ""
+    here = chain[0]
+    lines = [SECTION_MAP, texts["map.context"], ""]
+    where = here.name + "".join(f", in {outer.name}" for outer in chain[1:])
+    lines.append(f"{held} is at: {where}")
+    if here.what:
+        lines.append(f"  {here.what}")
+    inside = [p for p in world.places.values() if p.inside == here.id][:MAP_LIST_LIMIT]
+    if inside:
+        lines.append("Inside it: " + "; ".join(_described(p) for p in inside))
+    around_parent = chain[1].id if len(chain) > 1 else None
+    around = [
+        p
+        for p in world.places.values()
+        if p.inside == around_parent and p.id != here.id and (around_parent or p.inside is None)
+    ][:MAP_LIST_LIMIT]
+    if around:
+        label = f"Also in {chain[1].name}" if len(chain) > 1 else "Also on the map"
+        lines.append(f"{label}: " + "; ".join(_described(p) for p in around))
+    near = {p.id for p in chain} | {p.id for p in around} | {p.id for p in inside}
+    ways = []
+    for link in world.links:
+        if link.a in near or link.b in near:
+            words = ", ".join(w for w in (link.direction, link.distance) if w)
+            ways.append(
+                f"- from {place_name(world, link.a)} to {place_name(world, link.b)}"
+                + (f": {words}" if words else "")
+            )
+    if ways:
+        lines.append("Ways between them:")
+        lines += ways[: MAP_LIST_LIMIT * 2]
+    things = [
+        t
+        for t in world.things.values()
+        if t.carried_by == held or (t.at is not None and t.at in near)
+    ][:MAP_LIST_LIMIT]
+    if things:
+        lines.append("Things here:")
+        for thing in things:
+            at = (
+                f"carried by {thing.carried_by}"
+                if thing.carried_by
+                else place_name(world, thing.at)
+            )
+            lines.append(f"- {thing.name}: {at}" + (f", {thing.state}" if thing.state else ""))
+    return "\n".join(lines)
+
+
 # --- The reply, held to account ----------------------------------------------
 
 

@@ -35,7 +35,10 @@ IMAGES_FILE = "images.json"
 # check, backup and memory chat that holds pictures holds them too.
 VIDEOS_DIR = "images/videos"
 VIDEOS_FILE = "videos.json"
-RECORD_FILES = (IMAGES_FILE, VIDEOS_FILE)
+# The map's art (models/world.py WorldArt): records like these, carried by
+# backups and copies the same way, and never part of a scenario.
+WORLD_ART_FILE = "world_art.json"
+RECORD_FILES = (IMAGES_FILE, VIDEOS_FILE, WORLD_ART_FILE)
 
 MEDIA_TYPES = {
     ".png": "image/png",

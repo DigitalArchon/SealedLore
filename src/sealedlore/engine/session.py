@@ -152,6 +152,7 @@ from sealedlore.engine.session_reasoning import ReasoningRuntime
 from sealedlore.engine.session_rebuild import RebuildRuntime
 from sealedlore.engine.session_recall import RecallRuntime
 from sealedlore.engine.session_world import WorldRuntime
+from sealedlore.engine.session_world_art import WorldArtRuntime
 from sealedlore.engine.tokens import TokenEstimator, updated_correction_factor
 from sealedlore.engine.validators import locate_quote, mentions
 from sealedlore.ids import new_id, utc_now_iso
@@ -409,6 +410,7 @@ def _weak_watch(
 class StorySession(
     PlotRuntime,
     WorldRuntime,
+    WorldArtRuntime,
     MergeRuntime,
     ArchivalRuntime,
     RebuildRuntime,
@@ -3654,6 +3656,9 @@ class StorySession(
         wait mostly froze the window), then whatever it has is logged as not
         adopted.
         """
+        # The map's art is kept piece by piece as it comes back: stopping it
+        # loses only what is still out.
+        self.stop_map_art()
         job = self._archive_job
         if job is not None:
             job.done.wait(wait_seconds)
