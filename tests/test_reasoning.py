@@ -112,11 +112,14 @@ def test_a_model_that_reasons_by_default_is_asked_for_its_lowest_from_the_start(
     assert reasoning_for("least", "anthropic/claude-opus-5.5", opus, now=NOW).effort == "low"
 
 
-def test_a_default_that_is_already_the_lowest_is_left_alone():
-    """GLM 5.3 thinks at low by default; sent low it once thought 187 tokens
-    where it thought 9 unasked."""
+def test_a_default_that_is_already_the_lowest_is_still_asked_for_by_name():
+    """GLM 5.3 thinks at low by default, and left to itself on a story turn
+    reasoned past the catch: low is sent from the first request (the author,
+    Oct 14 2026)."""
     glm = listed({"reasoning_efforts": ["low", "high", "max"]}, WEB["z-ai/glm-5.3"])
-    assert reasoning_for("least", "z-ai/glm-5.3", glm, now=NOW) == NOTHING
+    assert reasoning_for("least", "z-ai/glm-5.3", glm, now=NOW) == ReasoningConfig(
+        enabled=True, effort="low"
+    )
 
 
 def test_no_default_or_nothing_to_ask_for_instead_sends_nothing():
@@ -358,7 +361,7 @@ def test_the_listings_are_read_once_a_session_for_every_model(tmp_path: Path, st
     assert provider.payloads[0]["reasoning"] == {"enabled": True, "effort": "low"}, (
         "Kimi K3 reasons at max by default: asked for low from the first turn"
     )
-    assert session.side_params("z-ai/glm-5.3").reasoning == NOTHING
+    assert session.side_params("z-ai/glm-5.3").reasoning.effort == "low"
     assert (provider.fetches, provider.default_fetches) == (1, 1)
     saved = load_config(root=tmp_path).model_reasoning["moonshotai/kimi-k3"]
     assert (saved.reasons_by_default, saved.default_effort, saved.defaults_checked) == (

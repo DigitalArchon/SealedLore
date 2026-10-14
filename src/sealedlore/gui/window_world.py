@@ -45,7 +45,7 @@ class WorldWindow:
         self._art_timer = QTimer(self)
         self._art_timer.setSingleShot(True)
         self._art_timer.setInterval(ART_REDRAW_MS)
-        self._art_timer.timeout.connect(lambda: self.refresh_world(keep_view=True))
+        self._art_timer.timeout.connect(self._on_art_timer)
         # Whether the window is laid out for a map now (`_sync_world`).
         self.map_layout = False
 
@@ -79,7 +79,9 @@ class WorldWindow:
     def _on_page_changed(self, _index: int) -> None:
         self._sync_world_button()
         if self.world_shown():
-            self.refresh_world(keep_view=False)
+            # Back from another page, the map is as it was left (the author's
+            # call): only opening a story centres it on where the story is.
+            self.refresh_world(keep_view=True)
 
     def _sync_world_button(self) -> None:
         shown = self.world_shown()
@@ -95,6 +97,8 @@ class WorldWindow:
             return
         held = session._character(session.story.held_character_id)
         self.world_view.picture_reader = session.pictures.read
+        self.world_view.art_on = self.config.map_art
+        self.world_view.drawing = session.map_art_running
         self.world_view.set_world(
             session.world(),
             session.map_art_copy(),
@@ -109,8 +113,9 @@ class WorldWindow:
         on = session is not None and session.map_on and not session.in_private
         if on != self.map_layout:
             self._set_map_layout(on)
+        # Usable while the model writes: the map only reads the story.
         self.world_button.setVisible(on)
-        self.world_button.setEnabled(on and not self._busy)
+        self.world_button.setEnabled(on)
         if not on:
             return
         session.on_map_art = self._art_signal.drawn.emit
@@ -136,4 +141,11 @@ class WorldWindow:
 
     def _art_drawn(self) -> None:
         if self.world_shown():
-            self._art_timer.start()
+            self._art_timer.start(ART_REDRAW_MS)
+
+    def _on_art_timer(self) -> None:
+        self.refresh_world(keep_view=True)
+        session = self.session
+        if session is not None and session.map_art_running and self.world_shown():
+            # Still drawing: look again, so the hint says when it is done.
+            self._art_timer.start(1500)

@@ -263,7 +263,8 @@ def render_map_context(
     here = chain[0]
     origin = next((p.id for p in chain if p.id in fixed), None)
     lines = [SECTION_MAP_HEADING, texts["map.context"], ""]
-    lines.append(f"{held} is at: " + here.name + "".join(f", in {o.name}" for o in chain[1:]))
+    who = held or "The author's character"  # a Question before anyone is held
+    lines.append(f"{who} is at: " + here.name + "".join(f", in {o.name}" for o in chain[1:]))
     if here.what:
         lines.append("  " + " ".join(here.what.split()))
     inside = [p for p in world.places.values() if p.inside == here.id][:MAP_LIST_LIMIT]
@@ -435,7 +436,9 @@ def resolve_reply(
         delta.links.append(WorldLink(a=a, b=b, direction=direction, distance=distance))
     for entry in _entries(reply, "where"):
         who = _text(entry.get("who"))
-        if not who or _NOT_A_NAME.match(who) or not who[0].isupper():
+        # A name starts with a capital; a description ("the woman") doesn't.
+        # `islower`, not `not isupper`: a script with no case (CJK) is a name too.
+        if not who or _NOT_A_NAME.match(who) or who[0].islower():
             refused.append(f"where {who or '(nobody)'}: not a name")
             continue
         if quoted(entry) is None:

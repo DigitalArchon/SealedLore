@@ -18,9 +18,12 @@ works for every model:
   K3 both list "low" first. NanoGPT's web listing can (Oct 2 2026): it states
   a model's default (`default_reasoning`; Kimi K3 max, GLM 5.3 low, Sonnet
   4.6 none). So "as low as possible" sends a model that reasons by default its
-  lowest listed level from the first request, unless that lowest is its
-  default (GLM 5.3: sent low, it once thought 187 tokens where it thought 9
-  unasked), and sends nothing otherwise.
+  lowest listed level from the first request, and sends nothing otherwise.
+  That holds when the lowest is already its default (GLM 5.3): left to
+  itself on a story turn it reasoned past EXCESSIVE_REASONING and was caught
+  (the author, Oct 14 2026: low is the known default, not a catch); the one
+  measurement the other way (sent low, 187 tokens where 9 unasked) was on
+  the short built-in prompt.
 - Most models state no default, and a reply can still surprise: a model that
   reasons at length anyway (`EXCESSIVE_REASONING`, from the reply itself) is
   marked and asked for its lowest listed level from then on, for a week.
@@ -115,12 +118,10 @@ def _effort(effort: str) -> ReasoningConfig:
     return ReasoningConfig(enabled=True, effort=effort)  # type: ignore[arg-type]
 
 
-def _reasons_above_least(facts: ModelReasoning | None) -> bool:
-    """It reasons when nothing is sent, and lists a level below its default.
-    With no levels listed there is nothing known to ask for instead."""
-    if facts is None or not facts.reasons_by_default or not facts.efforts:
-        return False
-    return facts.default_effort != lowest(facts)
+def _reasons_by_default(facts: ModelReasoning | None) -> bool:
+    """It reasons when nothing is sent, and lists levels to ask for its
+    lowest by name. With no levels listed there is nothing known to ask for."""
+    return bool(facts is not None and facts.reasons_by_default and facts.efforts)
 
 
 def reasoning_for(
@@ -132,7 +133,7 @@ def reasoning_for(
 ) -> ReasoningConfig:
     """What to send `model` for the author's `level`."""
     if level == "least":
-        if is_tee(model) or reasons_unasked(facts, now) or _reasons_above_least(facts):
+        if is_tee(model) or reasons_unasked(facts, now) or _reasons_by_default(facts):
             return _effort(lowest(facts))
         return ReasoningConfig()
     if facts is not None and facts.reasons is False and not facts.efforts:

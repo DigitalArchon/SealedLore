@@ -16,14 +16,16 @@ story reaches it, is part of the map from then on.
 from __future__ import annotations
 
 import json
+import math
 import re
 import xml.etree.ElementTree as ElementTree
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
+from sealedlore.engine.world import key
 from sealedlore.engine.world_layout import moves, position, size_of
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.world import (
@@ -97,9 +99,23 @@ FILLS: dict[str, str] = {
 }
 
 LAYOUT_WIDTH, LAYOUT_HEIGHT = 40, 24
+PLAN_ASPECT = LAYOUT_HEIGHT / LAYOUT_WIDTH
+# A place wider than this gets a grid twice as fine (80×48): at 40 tiles a
+# 1.5 km town had 37 m tiles, and its buildings ballooned to fit them.
+WIDE_PLAN_FROM = 800.0
+# A plan's tile is its place's width over the grid, never finer than this.
+MIN_PLAN_TILE = 0.5
+# The local map at a place is the plan of the outermost place it is in that
+# is at most this wide: the farm for its farmhouse, the town for its diner,
+# the caves and not the hills they are in. Wider places are country.
+LOCAL_MAX_SIZE = 2_500.0
+# A building fixed in its parent's plan is at least this many tiles across.
+MIN_BUILDING_TILES = 4
 TERRAIN_TILES = 40
 # The land around a place: four times its width, within these bounds.
 TERRAIN_MIN_SIDE, TERRAIN_MAX_SIDE = 400.0, 40_000.0
+# Land along a way between two known places is drawn in patches this wide.
+WAY_PATCH_SIDE = 1_600.0
 MAX_OBJECTS = 9
 # Places drawn as a sprite on the map; regions, routes, areas and rooms are
 # drawn as land and layouts instead.
@@ -165,6 +181,19 @@ def clean_svg(text: str) -> str | None:
     if count == 0:
         return None
     return ElementTree.tostring(out, encoding="unicode")
+
+
+def cleaned_art(art: WorldArt) -> WorldArt:
+    """`art` as read from its file with every sprite rebuilt by `clean_svg`,
+    as drawn art always is: a scenario file or a sample's art beside its
+    plot file may be anyone's. Art that is clean comes back the same."""
+    sprites = []
+    for sprite in art.sprites:
+        svg = clean_svg(sprite.svg)
+        if svg is not None:
+            sprites.append(sprite if svg == sprite.svg else sprite.model_copy(update={"svg": svg}))
+    art.sprites = sprites
+    return art
 
 
 def _local(tag: str) -> str:
@@ -385,17 +414,178 @@ def _what(place: WorldPlace) -> str:
     return f"{place.name}, a {kind}" + (f": {place.what}" if place.what else "")
 
 
+# --- Plans on the map ---------------------------------------------------------------
+
+
+def plan_grid(place: WorldPlace) -> tuple[int, int]:
+    """(tiles across, tiles down) of a place's plan."""
+    if size_of(place) > WIDE_PLAN_FROM:
+        return 2 * LAYOUT_WIDTH, 2 * LAYOUT_HEIGHT
+    return LAYOUT_WIDTH, LAYOUT_HEIGHT
+
+
+def plan_tile(place: WorldPlace) -> float:
+    """Metres a tile of the place's plan covers."""
+    return max(size_of(place) / plan_grid(place)[0], MIN_PLAN_TILE)
+
+
+def plan_rect(world: WorldMap, place: WorldPlace) -> tuple[float, float, float, float] | None:
+    """(west, north, width, height) in metres of a place's plan on the map:
+    centred on the place (a vehicle's: where it is), the grid at its tile.
+    None for a place with no spot."""
+    spot = position(world, place.id)
+    if spot is None:
+        return None
+    tile = plan_tile(place)
+    columns, rows = plan_grid(place)
+    width, height = tile * columns, tile * rows
+    return spot[0] - width / 2, spot[1] + height / 2, width, height
+
+
+def containers(world: WorldMap, ids: Collection[str]) -> set[str]:
+    """Every place one of `ids` is inside, all the way up."""
+    out: set[str] = set()
+    for pid in ids:
+        seen: set[str] = set()
+        current = world.places.get(pid)
+        while current is not None and current.inside and current.inside not in seen:
+            seen.add(current.inside)
+            out.add(current.inside)
+            current = world.places.get(current.inside)
+    return out
+
+
+def local_area(world: WorldMap, place_id: str | None) -> WorldPlace | None:
+    """The place whose plan is the local map at `place_id`: the outermost
+    place it is in up to LOCAL_MAX_SIZE wide, else itself."""
+    chain: list[WorldPlace] = []
+    seen: set[str] = set()
+    current = world.places.get(place_id or "")
+    while current is not None and current.id not in seen:
+        seen.add(current.id)
+        chain.append(current)
+        current = world.places.get(current.inside or "")
+    if not chain:
+        return None
+    best = chain[0]
+    for place in chain[1:]:
+        if size_of(place) <= LOCAL_MAX_SIZE:
+            best = place
+    return best
+
+
+def fixed_in_plan(world: WorldMap, place: WorldPlace) -> list[dict[str, Any]]:
+    """What the map already puts in a place's plan, where it stays: each
+    place inside it with a spot of its own, as a tile box. A building is
+    drawn there by the program (`with_fixed`); anything else is told to the
+    model, which draws what is there, and labelled. The box keeps the plan's
+    aspect, so a building's own plan fits its footprint exactly."""
+    rect = plan_rect(world, place)
+    if rect is None:
+        return []
+    west, north, _w, _h = rect
+    tile = plan_tile(place)
+    columns, rows = plan_grid(place)
+    out: list[dict[str, Any]] = []
+    for child in world.places.values():
+        if child.inside != place.id or child.x is None or child.y is None:
+            continue
+        if moves(world.places, child):
+            continue
+        size = size_of(child)
+        w = min(max(MIN_BUILDING_TILES, round(size / tile)), columns)
+        h = min(max(3, round(w * PLAN_ASPECT)), rows)
+        x = round((child.x - size / 2 - west) / tile)
+        y = round((north - (child.y + size * PLAN_ASPECT / 2)) / tile)
+        x = min(max(x, 0), columns - w)
+        y = min(max(y, 0), rows - h)
+        out.append(
+            {
+                "kind": "building" if child.kind == "building" else "place",
+                "name": child.name,
+                "place_id": child.id,
+                "place_kind": child.kind or "place",
+                "x": x,
+                "y": y,
+                "w": w,
+                "h": h,
+                "what": child.what,
+            }
+        )
+    return out
+
+
+def _fixed_lines(fixed: Sequence[dict[str, Any]]) -> str:
+    lines = []
+    for f in fixed:
+        span = f"x {f['x']}-{f['x'] + f['w'] - 1}, y {f['y']}-{f['y'] + f['h'] - 1}"
+        what = " ".join(str(f.get("what") or "").split())
+        lines.append(f"- {f['name']} ({f['place_kind']}): {span}" + (f": {what}" if what else ""))
+    return "\n".join(lines)
+
+
+def with_fixed(spec: dict[str, Any], fixed: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """The model's shapes with the map's buildings where the map has them:
+    a building the model drew under a fixed name is dropped (its doors and
+    windows kept), and each fixed building is drawn at its own box."""
+    names = {key(f["name"]) for f in fixed if f["kind"] == "building"}
+    features = [f for f in spec.get("features", []) if isinstance(f, dict)]
+    own = {
+        key(str(f.get("name") or "")): f
+        for f in features
+        if f.get("kind") == "building" and f.get("name")
+    }
+    kept = [
+        f
+        for f in features
+        if not (f.get("kind") == "building" and key(str(f.get("name") or "")) in names)
+    ]
+    for f in fixed:
+        if f["kind"] != "building":
+            continue
+        drawn = own.get(key(f["name"]))
+        doors = [d for d in (drawn or {}).get("doors") or [] if isinstance(d, dict)]
+        windows = [d for d in (drawn or {}).get("windows") or [] if isinstance(d, dict)]
+        for opening in (*doors, *windows):  # within the box's own sides
+            along = f["w"] if str(opening.get("side")) in ("north", "south") else f["h"]
+            opening["at"] = min(max(_int(opening.get("at"), 1), 1), max(along - 2, 1))
+        kept.append(
+            {
+                "kind": "building",
+                "name": f["name"],
+                "x": f["x"],
+                "y": f["y"],
+                "w": f["w"],
+                "h": f["h"],
+                "doors": doors or [{"side": "south", "at": f["w"] // 2}],
+                "windows": windows,
+            }
+        )
+    return {**spec, "features": kept}
+
+
 def layout_messages(
-    world: WorldMap, place: WorldPlace, setting: str, texts: PromptTexts
+    world: WorldMap,
+    place: WorldPlace,
+    setting: str,
+    texts: PromptTexts,
+    fixed: Sequence[dict[str, Any]] = (),
 ) -> list[PromptMessage]:
-    width, height = LAYOUT_WIDTH, LAYOUT_HEIGHT
-    tile = max(size_of(place) / width, 0.5)
+    width, height = plan_grid(place)
+    tile = plan_tile(place)
     parts: list[str] = []
+    if place.kind == "building":
+        parts.append(texts["map.layout.building"])
+    fixed_ids = {f["place_id"] for f in fixed}
     inside = [
-        p for p in world.places.values() if p.inside == place.id and not moves(world.places, p)
+        p
+        for p in world.places.values()
+        if p.inside == place.id and not moves(world.places, p) and p.id not in fixed_ids
     ]
     if inside:
         parts.append("In it: " + "; ".join(_what(p) for p in inside[:12]))
+    if fixed:
+        parts.append(texts.fill("map.layout.fixed", places=_fixed_lines(fixed)))
     things = [t for t in world.things.values() if t.at == place.id][:MAX_OBJECTS]
     if place.state:
         parts.insert(0, f"As it is now: {place.state}")
@@ -416,11 +606,16 @@ def layout_messages(
 
 
 def layout_change_messages(
-    world: WorldMap, place: WorldPlace, before: PlaceLayout, setting: str, texts: PromptTexts
+    world: WorldMap,
+    place: WorldPlace,
+    before: PlaceLayout,
+    setting: str,
+    texts: PromptTexts,
+    fixed: Sequence[dict[str, Any]] = (),
 ) -> list[PromptMessage]:
     """The place laid out again in its new state, as an edit of its last plan."""
     return [
-        *layout_messages(world, place, setting, texts),
+        *layout_messages(world, place, setting, texts, fixed),
         _message("assistant", json.dumps(before.spec)),
         _message("user", texts.fill("map.layout.change", place=place.name, change=place.state)),
     ]
@@ -460,8 +655,19 @@ def terrain_messages(
     patch: tuple[float, float, float],
     setting: str,
     texts: PromptTexts,
+    *,
+    what: str | None = None,
+    ways: Sequence[str] | None = None,
+    nearby_ground: str = "",
 ) -> list[PromptMessage]:
+    """The land in `patch`: around `place` (what the story said of it), or,
+    with `what`, the country along a way (`ways`: its words). `nearby_ground`
+    is what the land already drawn nearest to it is on, so the country
+    stays one country (live, the farm's land was snow, the town's dirt and
+    the road's grass: the setting line said nothing of winter)."""
     x0, y0, side = patch
+    if nearby_ground:
+        setting = f"{setting}. " + texts.fill("map.terrain.nearby", ground=nearby_ground)
     tiles = TERRAIN_TILES
     tile = side / tiles
     found = []
@@ -473,14 +679,15 @@ def terrain_messages(
         row = int(((y0 + side / 2) - spot[1]) / tile)
         if 0 <= col < tiles and 0 <= row < tiles:
             found.append(f"- {_what(other)}: at x {col}, y {row}")
-    ways = _ways(world, place)
+    if ways is None:
+        ways = _ways(world, place)
     return [
         _message("system", _grid_fill(texts, "map.terrain", tiles, tiles, _tile_words(tile))),
         _message(
             "user",
             texts.fill(
                 "map.terrain.ask",
-                place=_what(place),
+                place=what or _what(place),
                 places="\n".join(found) or "(none but this one)",
                 ways=("Ways out: " + "; ".join(ways)) if ways else "",
                 setting=setting,
@@ -489,7 +696,21 @@ def terrain_messages(
     ]
 
 
-def _covers(patch: TerrainPatch, x: float, y: float) -> bool:
+def _centred_on(world: WorldMap, patch: TerrainPatch) -> bool:
+    """Whether `patch` is its place's own land (`terrain_patch`), not land
+    along a way kept under the place."""
+    place = world.places.get(patch.place_id)
+    if place is None or place.x is None or place.y is None:
+        return False
+    return abs(patch.x - place.x) < 1.0 and abs(patch.y - place.y) < 1.0
+
+
+def _covers(patch: TerrainPatch, x: float, y: float, side: float | None = None) -> bool:
+    """Whether `patch` has the land at (x, y): for land `side` wide wanted
+    there, only a patch at least half as wide counts (a 400 m patch round a
+    creek crossing kept the 1.6 km road past it from any land, live)."""
+    if side is not None and patch.side < side / 2:
+        return False
     half = patch.side / 2
     return abs(x - patch.x) <= half and abs(y - patch.y) <= half
 
@@ -522,12 +743,29 @@ def plan_art(
     visited = {pid for places in world.visited.values() for pid in places}
     if world.start is not None:
         visited.add(world.start)  # an imported map's start: where the story is before a passage
-    shown = set(world.seen) | visited
-    drawn_land = {patch.place_id for patch in art.terrain}
+    if here is not None and here in world.places:
+        visited.add(here)
+    # Standing somewhere, the character knows what it is in: the farm from
+    # its farmhouse.
+    shown = set(world.seen) | visited | containers(world, visited)
+    # A place has its own land when a patch is centred on it (places never
+    # move). Land along a way is kept under the way's first place too, but
+    # never centred on it: counted as that place's own, a town whose land
+    # failed once was never drawn after a road patch from it came in.
+    drawn_land = {patch.place_id for patch in art.terrain if _centred_on(world, patch)}
     planned: list[TerrainPatch] = []
 
     def failed(key: str) -> bool:
         return art.failures.get(key, 0) >= MAX_FAILURES
+
+    def covered(x: float, y: float, side: float) -> bool:
+        return any(_covers(other, x, y, side) for other in (*art.terrain, *planned))
+
+    def ground_near(x: float, y: float) -> str:
+        drawn = [p for p in art.terrain if p.ground]
+        if not drawn:
+            return ""
+        return min(drawn, key=lambda p: math.hypot(p.x - x, p.y - y)).ground
 
     def distance(place_id: str | None) -> float:
         here_spot = position(world, here) if here else None
@@ -536,8 +774,21 @@ def plan_art(
             return 0.0
         return ((here_spot[0] - spot[0]) ** 2 + (here_spot[1] - spot[1]) ** 2) ** 0.5
 
-    tops = {(_top(world, pid) or world.places[pid]).id for pid in visited if pid in world.places}
-    # Nearest the story first, so where it is now gets the land it stands on.
+    # Land around every place the story knows of (the player knows the
+    # country they start in, not only where they have been), round its
+    # local area (the farm for its farmhouse, the caves and not the hills),
+    # nearest the story first, so where it is now gets the land it stands
+    # on. A road is a line, not a spot, and a region or anything wider than
+    # a local area is the country itself: none gets a patch of its own (it
+    # would be coarse and, once drawn, keep every place in it from finer
+    # land; live, a 3 km "area" of hills took a 12 km patch that covered
+    # the road to town, so no land was drawn along it).
+    tops = set()
+    for pid in shown:
+        area = local_area(world, pid)
+        if area is None or area.kind in ("route", "region") or size_of(area) > LOCAL_MAX_SIZE:
+            continue
+        tops.add(area.id)
     for top_id in sorted(tops, key=lambda pid: (distance(pid), world.places[pid].name)):
         top = world.places[top_id]
         patch = terrain_patch(top)
@@ -546,8 +797,7 @@ def plan_art(
             continue
         # Land already drawn is established: a place standing on it (the
         # barn behind the farmhouse) gets no second, different version.
-        drawn = [*art.terrain, *planned]
-        if any(_covers(other, top.x, top.y) for other in drawn):  # type: ignore[arg-type]
+        if covered(top.x, top.y, patch[2]):  # type: ignore[arg-type]
             continue
         planned.append(
             TerrainPatch(place_id=top.id, x=patch[0], y=patch[1], side=patch[2], rows=[])
@@ -556,30 +806,94 @@ def plan_art(
             ArtJob(
                 key,
                 "terrain",
-                terrain_messages(world, top, patch, setting, texts),
+                terrain_messages(
+                    world, top, patch, setting, texts, nearby_ground=ground_near(top.x, top.y)
+                ),
                 top.id,
                 name=top.name,
                 patch=patch,
                 order=0,
             )
         )
+    # And along each way between two places the story knows of, in patches,
+    # where no land is drawn yet: the road from the farm to the town is
+    # country the player has seen.
+    for link in world.links:
+        if link.a not in shown or link.b not in shown:
+            continue
+        a, b = position(world, link.a), position(world, link.b)
+        if a is None or b is None:
+            continue
+        length = math.hypot(b[0] - a[0], b[1] - a[1])
+        steps = int(length // WAY_PATCH_SIDE)
+        for i in range(1, steps + 1):
+            t = i * WAY_PATCH_SIDE / length
+            x, y = a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t
+            key = f"terrain:{link.a}:{link.b}:{i}"
+            if covered(x, y, WAY_PATCH_SIDE) or failed(key):
+                continue
+            patch = (x, y, WAY_PATCH_SIDE)
+            planned.append(TerrainPatch(place_id=link.a, x=x, y=y, side=WAY_PATCH_SIDE, rows=[]))
+            first, second = world.places[link.a], world.places[link.b]
+            words = ", ".join(w for w in (link.direction, link.distance) if w)
+            jobs.append(
+                ArtJob(
+                    key,
+                    "terrain",
+                    terrain_messages(
+                        world,
+                        first,
+                        patch,
+                        setting,
+                        texts,
+                        what=texts.fill("map.terrain.way", start=first.name, end=second.name),
+                        ways=[
+                            f"from {first.name} to {second.name}" + (f" ({words})" if words else "")
+                        ],
+                        nearby_ground=ground_near(x, y),
+                    ),
+                    link.a,
+                    name=f"{first.name} to {second.name}",
+                    patch=patch,
+                    order=0,
+                )
+            )
+    # Plans: the local area of every place the character is or has been
+    # (the farm, not only its farmhouse), and the inside of each building.
+    wanted: dict[str, WorldPlace] = {}
     for pid in visited:
         place = world.places.get(pid)
-        if place is None or place.kind not in LAYOUT_KINDS:
+        if place is None:
             continue
+        area = local_area(world, pid)
+        if area is not None and area.kind in LAYOUT_KINDS and size_of(area) <= LOCAL_MAX_SIZE:
+            wanted[area.id] = area
+        if place.kind == "building":
+            wanted[pid] = place
+    for pid, place in wanted.items():
         if art.layout_for(pid, place.state) is not None:
             continue
         key = f"layout:{pid}:{place.state}" if place.state else f"layout:{pid}"
         if failed(key):
             continue
         before = art.layout_for(pid)
+        fixed = fixed_in_plan(world, place)
         messages = (
-            layout_messages(world, place, setting, texts)
+            layout_messages(world, place, setting, texts, fixed)
             if before is None or not before.spec
-            else layout_change_messages(world, place, before, setting, texts)
+            else layout_change_messages(world, place, before, setting, texts, fixed)
         )
         jobs.append(
-            ArtJob(key, "layout", messages, pid, name=place.name, state=place.state, order=1)
+            ArtJob(
+                key,
+                "layout",
+                messages,
+                pid,
+                name=place.name,
+                state=place.state,
+                order=1,
+                extra={"fixed": fixed, "grid": plan_grid(place)},
+            )
         )
     subjects: list[tuple[str, str, str, str, Literal["place", "thing"]]] = [
         (p.id, p.name, _what(p), p.state, "place")
@@ -641,7 +955,12 @@ def finish(
         )
     spec = parse_shapes(text)
     if job.kind == "layout":
-        rows, objects, labels = rasterise(spec, LAYOUT_WIDTH, LAYOUT_HEIGHT)
+        fixed = job.extra.get("fixed") or []
+        columns, grid_rows = job.extra.get("grid") or (LAYOUT_WIDTH, LAYOUT_HEIGHT)
+        rows, objects, labels = rasterise(with_fixed(spec, fixed), columns, grid_rows)
+        for f in fixed:  # what the map has here that isn't a building: named where it is
+            if f["kind"] != "building":
+                labels[f["name"][:60]] = [f["x"] + f["w"] // 2, f["y"] + f["h"] // 2]
         return PlaceLayout(
             place_id=job.subject_id,
             state=job.state,
@@ -674,12 +993,13 @@ def finish(
 
 
 def adopt(art: WorldArt, drawn: WorldSprite | PlaceLayout | TerrainPatch) -> None:
-    """Keep a finished drawing. A place's layout or land is never replaced."""
+    """Keep a finished drawing. A place's layout or land is never replaced:
+    land that would lie on land already drawn is dropped."""
     if isinstance(drawn, WorldSprite):
         art.sprites.append(drawn)
     elif isinstance(drawn, PlaceLayout):
         art.layouts.setdefault(drawn.place_id, {}).setdefault(drawn.state, drawn)
-    elif not any(p.place_id == drawn.place_id for p in art.terrain):
+    elif not any(_covers(p, drawn.x, drawn.y, drawn.side) for p in art.terrain):
         art.terrain.append(drawn)
 
 

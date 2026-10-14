@@ -273,6 +273,8 @@ install -m 644 "$SRC"/packaging/appimage/licenses/*.txt "$LICENCES/texts/"
 log "Sample stories and the plot format guide"
 mkdir -p "$APPDIR/usr/share/sealedlore/samples"
 cp "$SRC"/SampleStories/*.md "$APPDIR/usr/share/sealedlore/samples/"
+# A sample's map art, drawn once and shipped beside it (storage/world_art.py).
+find "$SRC/SampleStories" -maxdepth 1 -name '*.world_art.json' -exec cp {} "$APPDIR/usr/share/sealedlore/samples/" \;
 
 log "Launcher, desktop entry, icon"
 install -m 755 "$SRC/packaging/appimage/AppRun" "$APPDIR/AppRun"

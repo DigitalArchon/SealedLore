@@ -339,3 +339,17 @@ def test_the_story_never_re_measures_two_places_of_the_file(tmp_path: Path):
     assert "Jane is at: The creek crossing" in text
     assert "two miles or more" not in text  # the file says where both are
     assert "Hellsville (settlement, 5.4 km / 3.4 miles north)" in text
+
+
+def test_a_map_s_places_have_the_same_ids_at_every_import():
+    """So art drawn for a plot file's map once (a sample's, shipped beside
+    it) fits every import of the file."""
+    from sealedlore.engine.plot_md import parse_plot_markdown
+
+    text = (SAMPLES / "Doomsville with a map.md").read_text(encoding="utf-8")
+    first = parse_plot_markdown(text).scenario
+    again = parse_plot_markdown(text).scenario
+    assert [p.id for p in first.world_base.places] == [p.id for p in again.world_base.places]
+    assert [t.id for t in first.world_base.things] == [t.id for t in again.world_base.things]
+    assert first.world_start == again.world_start
+    assert len({p.id for p in first.world_base.places}) == len(first.world_base.places)

@@ -22,6 +22,7 @@ from sealedlore.engine.world import (
     applied,
     describe_delta,
     render_map,
+    render_map_context,
     resolve_reply,
     world_at,
 )
@@ -200,6 +201,31 @@ def test_things_change_hands_and_keep_one_entry():
     assert len(world.things) == 1
     (thing,) = world.things.values()
     assert thing.carried_by == "Jane" and thing.at is None and thing.state == "folded"
+
+
+def test_a_name_in_a_script_with_no_case_is_a_name():
+    world = farm_and_town()
+    source = SOURCE + " 田中 waited at the farmhouse."
+    delta, refused = resolve(
+        world,
+        {
+            "where": [
+                {"who": "田中", "place": "the farmhouse", "quote": "田中 waited at the farmhouse"},
+                {"who": "the woman", "place": "the farmhouse", "quote": "A woman watched"},
+            ]
+        },
+        source,
+    )
+    assert "田中" in delta.where and refused == ["where the woman: not a name"]
+
+
+def test_the_map_here_names_the_author_s_character_or_says_so():
+    world = farm_and_town()
+    world.where["Jane"] = world.places[next(iter(world.places))].id
+    assert "Jane is at: The farmhouse" in render_map_context(world, "Jane")
+    world.start = world.where["Jane"]
+    unheld = render_map_context(world, None)  # a Question before anyone is held
+    assert "The author's character is at: The farmhouse" in unheld and "None" not in unheld
 
 
 def test_the_notice_says_what_changed():

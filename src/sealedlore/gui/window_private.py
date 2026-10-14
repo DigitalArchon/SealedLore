@@ -184,7 +184,7 @@ class PrivateWindow:
         if map_on != self.map_layout:
             self._set_map_layout(map_on)
         self.world_button.setVisible(map_on)
-        self.world_button.setEnabled(map_on and not self._busy)
+        self.world_button.setEnabled(map_on)
         for widget in (self.stories, self.branch_bar):
             widget.setToolTip(
                 self._say(

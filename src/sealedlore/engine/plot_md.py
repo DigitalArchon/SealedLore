@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Literal, get_args
 
 from sealedlore.engine.validators import name_forms
+from sealedlore.ids import stable_id
 from sealedlore.models.character import Character
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import AgencyMode, ResponseStyle
@@ -977,7 +978,10 @@ class _Parser:
                     )
                     size = None
             entry = self.lore_entries.get(_norm(child.title))
+            # The same id at every import of the file (ids.stable_id), so a
+            # map's art made once (a sample's, shipped beside it) fits.
             place = WorldPlace(
+                id=stable_id("map place", _norm(child.title)),
                 name=child.title,
                 kind=kind,  # type: ignore[arg-type]
                 what=found.prose,
@@ -1041,7 +1045,14 @@ class _Parser:
                 if not name.strip():
                     self.error(line, "A `thing` needs a name.")
                     continue
-                delta.things.append(WorldThing(name=name.strip(), at=place.id, state=state.strip()))
+                delta.things.append(
+                    WorldThing(
+                        id=stable_id("map thing", _norm(child.title), _norm(name)),
+                        name=name.strip(),
+                        at=place.id,
+                        state=state.strip(),
+                    )
+                )
             if found.pictures:
                 self.note(
                     found.pictures[0][0],

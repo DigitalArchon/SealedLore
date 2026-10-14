@@ -112,3 +112,27 @@ def test_the_start_page_offers_a_sample(window, samples: Path):
     # With one sample it is imported at once; with more, the list opens.
     buttons["Try a sample…"].click()
     assert window.imported == [samples / "Doomsville.md"]
+
+
+def test_a_sample_s_shipped_map_art_fits_its_map():
+    """A sample's world_art.json beside it (storage/world_art.py) names only
+    places and things the sample's map has, so every import gets it whole."""
+    from sealedlore.storage.world_art import load_sidecar_art, sidecar_art_path
+
+    for path in sorted(SAMPLES.glob("*.md")):
+        if not sidecar_art_path(path).exists():
+            continue
+        art = load_sidecar_art(path)
+        assert art is not None, f"{path.name}: its art can't be read"
+        scenario = parse_plot_markdown(path.read_text(encoding="utf-8")).scenario
+        assert scenario.world_base is not None
+        ids = {p.id for p in scenario.world_base.places} | {
+            t.id for t in scenario.world_base.things
+        }
+        drawn = (
+            {s.subject_id for s in art.sprites}
+            | set(art.layouts)
+            | {t.place_id for t in art.terrain}
+        )
+        assert drawn <= ids, f"{path.name}: art for {drawn - ids}"
+        assert art.terrain and art.layouts, f"{path.name}: nothing drawn"

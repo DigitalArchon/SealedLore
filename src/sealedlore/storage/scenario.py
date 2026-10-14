@@ -17,6 +17,7 @@ from sealedlore.models.scenario import SCENARIO_FORMAT, SCENARIO_VERSION, Scenar
 from sealedlore.models.scene import SceneState
 from sealedlore.models.story import Story, StorySetup
 from sealedlore.models.supporting import SupportingCast
+from sealedlore.models.world import WorldArt
 from sealedlore.storage.atomic import atomic_write_json
 from sealedlore.storage.image_meta import MetadataError, strip_metadata, stripped_or_same
 from sealedlore.storage.images import RECORD_FILES, is_safe_relative
@@ -33,9 +34,15 @@ def _is_empty(scene: SceneState) -> bool:
     return scene == SceneState()
 
 
-def scenario_from_bundle(bundle: StoryBundle, files: Mapping[str, bytes] | None = None) -> Scenario:
+def scenario_from_bundle(
+    bundle: StoryBundle,
+    files: Mapping[str, bytes] | None = None,
+    world_art: WorldArt | None = None,
+) -> Scenario:
     """`files` are the reference pictures' bytes (`storage.images.reference_files`),
-    carried in the scenario so the pictures travel with it."""
+    carried in the scenario so the pictures travel with it; `world_art` the
+    map's art as drawn so far, likewise, its map pictures' files in `files`
+    beside them (`storage.world_art.carried_art`)."""
     story = bundle.story
     setup = story.setup
     # A story whose starting scene was never set: the one it is in now is
@@ -75,6 +82,7 @@ def scenario_from_bundle(bundle: StoryBundle, files: Mapping[str, bytes] | None 
         world_map=story.defaults.world_map,
         world_base=story.world_base,
         world_start=story.world_start,
+        world_art=world_art.model_copy(deep=True) if world_art is not None else None,
         cast=cast,
         lore=lore,
         supporting=supporting,
@@ -159,7 +167,7 @@ def bundle_from_scenario(
     story.world_base = scenario.world_base
     story.world_start = scenario.world_start
     story.defaults.main_model = main_model
-    return StoryBundle(
+    bundle = StoryBundle(
         story=story,
         cast=[character.model_copy(deep=True) for character in scenario.cast],
         lore=[entry.model_copy(deep=True) for entry in scenario.lore],
@@ -168,10 +176,21 @@ def bundle_from_scenario(
         ),
         pending_files=_decoded_files(scenario.reference_files),
     )
+    if scenario.world_art is not None:
+        # A map picture comes only with its file (storage.world_art.carried_art
+        # puts it beside the reference pictures); the counts start afresh.
+        art = scenario.world_art.model_copy(deep=True)
+        art.pictures = [p for p in art.pictures if p.file in bundle.pending_files]
+        art.pictures_by_day, art.failures = {}, {}
+        bundle.world_art = art
+    return bundle
 
 
 def fresh_playthrough(
-    source: StoryBundle, title: str, files: Mapping[str, bytes] | None = None
+    source: StoryBundle,
+    title: str,
+    files: Mapping[str, bytes] | None = None,
+    world_art: WorldArt | None = None,
 ) -> StoryBundle:
     """The same setup as `source`, unplayed: a new story with a fresh id.
 
@@ -179,10 +198,11 @@ def fresh_playthrough(
     scenario carries comes along, and so do the model and budget a scenario
     file deliberately leaves out: same machine, same author. Reviewed
     settings are in one of those two places, so a review's changes survive a
-    restart. `files` are the reference pictures, which
-    come along; pictures generated in play don't.
+    restart. `files` are the reference pictures, which come along, with the
+    map pictures' files when `world_art` carries any (`carried_art`); other
+    pictures generated in play don't.
     """
-    bundle = bundle_from_scenario(scenario_from_bundle(source, files), title=title)
+    bundle = bundle_from_scenario(scenario_from_bundle(source, files, world_art), title=title)
     bundle.story.defaults = source.story.defaults.model_copy(deep=True)
     return bundle
 

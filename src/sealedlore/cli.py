@@ -71,6 +71,7 @@ from sealedlore.storage.scenario import (
     scenario_from_bundle,
     write_scenario,
 )
+from sealedlore.storage.world_art import carried_story_art
 from sealedlore.tree import active_path, sibling_position
 
 AGENCY_MODES: tuple[AgencyMode, ...] = ("fiat", "plausible", "contested", "dice")
@@ -223,8 +224,12 @@ def cmd_generate(args: argparse.Namespace) -> int:
 def cmd_scenario_export(args: argparse.Namespace) -> int:
     root: Path | None = args.data_dir
     bundle = load_story_bundle(args.story_id, root=root)
+    art, map_files = carried_story_art(args.story_id, root)
     try:
-        write_scenario(args.file, scenario_from_bundle(bundle, reference_files(bundle, root)))
+        write_scenario(
+            args.file,
+            scenario_from_bundle(bundle, {**reference_files(bundle, root), **map_files}, art),
+        )
     except ScenarioError as exc:
         print(exc, file=sys.stderr)
         return 1
@@ -289,7 +294,10 @@ def cmd_duplicate(args: argparse.Namespace) -> int:
         return 1
     title = f"{source.story.title} (copy)"
     if args.settings_only:
-        bundle = fresh_playthrough(source, title, reference_files(source, root))
+        art, map_files = carried_story_art(args.story_id, root)
+        bundle = fresh_playthrough(
+            source, title, {**reference_files(source, root), **map_files}, art
+        )
         save_story_bundle(bundle, root=root)
     else:
         bundle = copy_story(args.story_id, title=title, root=root)

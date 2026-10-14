@@ -18,6 +18,7 @@ whole image up, never smooths it.
 from __future__ import annotations
 
 import random
+import zlib
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
@@ -26,6 +27,9 @@ from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtGui import QColor, QImage, QPainter, QPixmap
 
 TILE = 16
+# A ring of walls wider than this is a town's wall or a barricade, not a
+# building to roof over (live, Hellsville's closed barricade roofed the town).
+MAX_ROOF_TILES = 16
 
 
 @dataclass(frozen=True)
@@ -211,7 +215,9 @@ BUILT = frozenset({WALL, DOOR, WINDOW})
 
 
 def _rng(*key: object) -> random.Random:
-    return random.Random(hash(key) & 0xFFFFFFFF)
+    # Not `hash`: Python salts it anew each run, and the same rows must draw
+    # the same picture at every launch (and a person keep their look).
+    return random.Random(zlib.crc32(repr(key).encode()))
 
 
 def _c(value: str) -> QColor:
@@ -529,7 +535,14 @@ def _buildings(grid: _Grid) -> list[set[tuple[int, int]]]:
         for i in range(len(boxes)):
             for j in range(i + 1, len(boxes)):
                 a, b = boxes[i], boxes[j]
-                if a[0] <= b[1] + 1 and b[0] <= a[1] + 1 and a[2] <= b[3] + 1 and b[2] <= a[3] + 1:
+                touching = (
+                    a[0] <= b[1] + 1 and b[0] <= a[1] + 1 and a[2] <= b[3] + 1 and b[2] <= a[3] + 1
+                )
+                # A house inside a town's wall is its own: a box that holds
+                # the other whole is not a wall cut in two.
+                a_holds_b = a[0] <= b[0] and b[1] <= a[1] and a[2] <= b[2] and b[3] <= a[3]
+                b_holds_a = b[0] <= a[0] and a[1] <= b[1] and b[2] <= a[2] and a[3] <= b[3]
+                if touching and not a_holds_b and not b_holds_a:
                     boxes[i] = (
                         min(a[0], b[0]),
                         max(a[1], b[1]),
@@ -545,6 +558,8 @@ def _buildings(grid: _Grid) -> list[set[tuple[int, int]]]:
     for x0, x1, y0, y1, walls in boxes:
         if x1 - x0 < 2 or y1 - y0 < 2:
             continue  # a lone wall, not a building
+        if x1 - x0 > MAX_ROOF_TILES or y1 - y0 > MAX_ROOF_TILES:
+            continue  # a town's wall or barricade rings the town: no roof over that
         if walls < 2 * (x1 - x0 + y1 - y0) * 0.6:
             continue  # too little of the ring stands: ruins, drawn as a plan
         found.append({(bx, by) for bx in range(x0, x1 + 1) for by in range(y0, y1 + 1)})

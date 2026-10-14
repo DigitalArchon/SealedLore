@@ -166,6 +166,11 @@ A small walled town...
   is told the part of it around the player's character each turn: the
   places, how far and which way, the ways and the things, as written here.
   So what a place is like belongs in its text: the storyteller keeps to it.
+- A plot file can ship with its map already drawn: `<name>.world_art.json`
+  beside `<name>.md` (the samples do). Play the map once, then copy the
+  story's `world_art.json` from its folder next to the file under that name.
+  Every import of the file finds the same places (their ids come from their
+  names), so the art fits; without it the map is drawn as the story goes.
 
 ## Pictures
 

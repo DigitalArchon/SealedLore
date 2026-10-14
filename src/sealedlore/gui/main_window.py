@@ -125,6 +125,7 @@ from sealedlore.models.route import ROUTE_ROLES, ModelRoute
 from sealedlore.models.scene import SceneState
 from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
+from sealedlore.models.world import WorldArt
 from sealedlore.providers.base import ChatProvider, UnconfiguredProvider
 from sealedlore.providers.embeddings import EmbeddingBackend, OpenAICompatibleEmbeddings
 from sealedlore.providers.mock import MockChatProvider
@@ -163,6 +164,7 @@ from sealedlore.storage.scenario import (
     scenario_from_bundle,
     write_scenario,
 )
+from sealedlore.storage.world_art import carried_art, carried_story_art, load_sidecar_art
 from sealedlore.tree import path_to
 
 # How long after the window shows the tokenizer's warm-up starts: past the
@@ -664,9 +666,9 @@ class MainWindow(
         elif self.map_shown():
             self.show_map(False)
         elif self.world_shown():
-            # In a place, Esc goes up to the whole map first.
-            if self.world_view.place_id is not None:
-                self.world_view.open_place(None)
+            # On the local map, Esc goes out to the region first.
+            if self.world_view.level() == "local":
+                self.world_view.go_region()
             else:
                 self.show_world(False)
         elif self.find_open():
@@ -848,7 +850,11 @@ class MainWindow(
             return
         provider_config = self.config.active_provider()
         model = provider_config.model if provider_config and provider_config.model else None
-        self._open_new_bundle(bundle_from_scenario(parsed.scenario, main_model=model), review=True)
+        bundle = bundle_from_scenario(parsed.scenario, main_model=model)
+        if bundle.story.world_base is not None:
+            # A plot file may ship with its map's art drawn (a sample's).
+            bundle.world_art = load_sidecar_art(path)
+        self._open_new_bundle(bundle, review=True)
 
     def import_plot_into_story(self) -> None:
         """Give the open story a plot file's facts and events, and nothing else."""
@@ -886,8 +892,21 @@ class MainWindow(
         if self.session is None or self._busy:
             return
         title = f"{self.session.story.title} (new playthrough)"
+        files, art = self._files_and_art()
+        self._open_new_bundle(
+            fresh_playthrough(self.session.bundle, title, files, art), review=review
+        )
+
+    def _files_and_art(self) -> tuple[dict[str, bytes], WorldArt | None]:
+        """The open story's reference pictures, and its map's art with the map
+        pictures' files beside them: a restart or a scenario file of a story
+        with a map keeps what was drawn for it."""
+        assert self.session is not None
         files = reference_files(self.session.bundle, self.root)
-        self._open_new_bundle(fresh_playthrough(self.session.bundle, title, files), review=review)
+        if not self.session.map_on:
+            return files, None
+        art, map_files = carried_art(self.session.map_art_copy(), self.session.pictures.read)
+        return {**files, **map_files}, art
 
     # --- the stories list's menu ---------------------------------------------
 
@@ -908,8 +927,12 @@ class MainWindow(
             return
         if (source := self._bundle_for(story_id)) is None:
             return
+        art, map_files = carried_story_art(story_id, self.root)
         bundle = fresh_playthrough(
-            source, f"{source.story.title} (copy)", reference_files(source, self.root)
+            source,
+            f"{source.story.title} (copy)",
+            {**reference_files(source, self.root), **map_files},
+            art,
         )
         save_story_bundle(bundle, root=self.root)
         self.stories.refresh(selected_id=bundle.story.id)
@@ -1056,10 +1079,8 @@ class MainWindow(
         if not path.endswith(".json"):
             path += SCENARIO_SUFFIX
         try:
-            bundle = self.session.bundle
-            write_scenario(
-                Path(path), scenario_from_bundle(bundle, reference_files(bundle, self.root))
-            )
+            files, art = self._files_and_art()
+            write_scenario(Path(path), scenario_from_bundle(self.session.bundle, files, art))
         except OSError as exc:
             self._warn_plain("Could not export scenario", f"{path}: {exc.strerror or exc}")
             return

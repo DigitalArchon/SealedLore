@@ -125,6 +125,7 @@ Newer than the house, its roof still holding.
 ## The north road
 - kind: route
 - at: 0, 4
+- known: yes
 - way: The farm | south
 - way: Hellsville | north, five miles in all
 

@@ -26,6 +26,7 @@ from sealedlore.models.prompt_edit import PromptEdit
 from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
 from sealedlore.models.supporting import SupportingCast
+from sealedlore.models.world import WorldArt
 from sealedlore.storage import keychain
 from sealedlore.storage.atomic import (
     append_jsonl,
@@ -43,6 +44,7 @@ from sealedlore.storage.paths import (
     stories_dir,
     story_dir,
 )
+from sealedlore.storage.world_art import save_world_art
 
 
 class StoryBundle(BaseModel):
@@ -59,6 +61,10 @@ class StoryBundle(BaseModel):
     # folder, to its bytes): the pictures an imported archive or scenario, or
     # a restart, brings with it. Written by `save_story_bundle`, then cleared.
     pending_files: dict[str, bytes] = Field(default_factory=dict, exclude=True)
+    # Map art to write with the story (a plot file's shipped art, a restart
+    # carrying the art it had), kept in world_art.json like the rest; never
+    # part of the bundle's own files.
+    world_art: WorldArt | None = Field(default=None, exclude=True)
     # What loading had to do to get here (a file read from its backup), for
     # the window to tell the author. Never saved.
     notices: list[str] = Field(default_factory=list, exclude=True)
@@ -192,6 +198,9 @@ def save_story_bundle(bundle: StoryBundle, root: Path | None = None) -> None:
     for relative, data in bundle.pending_files.items():
         write_story_file(story_id, relative, data, root)
     bundle.pending_files = {}
+    if bundle.world_art is not None:
+        save_world_art(story_id, bundle.world_art, root)
+        bundle.world_art = None
 
 
 def load_story_bundle(story_id: str, root: Path | None = None) -> StoryBundle:

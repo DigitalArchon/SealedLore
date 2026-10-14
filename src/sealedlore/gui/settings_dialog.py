@@ -40,6 +40,7 @@ from sealedlore.engine.reasoning import (
 from sealedlore.engine.reasoning import describe as describe_reasoning
 from sealedlore.engine.routing import describe, routable, route_body
 from sealedlore.engine.speed_test import Role, SpeedTarget, plan_targets
+from sealedlore.engine.world_pictures import picture_size
 from sealedlore.gui.attest_check import AttestationButton
 from sealedlore.gui.fields import FormScroll
 from sealedlore.gui.image_jobs import ImageCatalog
@@ -446,7 +447,8 @@ class SettingsDialog(QDialog):
             "In stories with the map on, draw it in the background after each passage: a "
             "small picture of each place and thing, the layout of each place the story "
             "reaches, and the land around it. Drawn once each, then kept. Off, the map is "
-            "kept and shown plainly, and nothing is sent to the map art model."
+            "kept and shown plainly, nothing is sent to the map art model, and map pictures "
+            "from an image model (Images) are off too."
         )
         form.addRow(self.map_art)
 
@@ -1039,7 +1041,8 @@ class SettingsDialog(QDialog):
         self.map_pictures.setChecked(self.config.map_pictures)
         self.map_pictures.setToolTip(
             "For a story that keeps a map: everyone's avatar, the buildings and things on "
-            "it, drawn in the background as the story goes, without asking each time"
+            "it, drawn in the background as the story goes, without asking each time. "
+            "Needs Draw the map (Models) on."
         )
         form.addRow(self.map_pictures)
         self.map_picture_model = ModelField(
@@ -1063,13 +1066,17 @@ class SettingsDialog(QDialog):
     def _sync_map_picture_note(self, *_args) -> None:
         model = self.map_picture_model.text().strip()
         info = next((m for m in self._image_models if m.id == model), None)
-        prices = sorted({p for p in (info.per_image.values() if info else ()) if p})
-        price = f"${prices[0]:.3f} a picture listed" if prices else "price not listed"
+        # The sizes the map asks for (a square for a sprite, landscape for a
+        # postcard), so the ceiling is of what is sent, not the cheapest listed.
+        sizes = (picture_size(info), picture_size(info, landscape=True)) if info else ()
+        prices = [p for p in (info.price(size) for size in sizes) if p] if info else []
+        each = max(prices) if prices else None
+        price = f"up to ${each:.3f} a picture listed" if each else "price not listed"
         limit = self.map_picture_limit.value()
         self.map_picture_note.setText(
             "Drawn without asking each time: each prompt is kept in the story's log with "
             f"what it cost. {model or 'No model'}: {price}, so at most "
-            + (f"${prices[0] * limit:.2f}" if prices else f"{limit} pictures")
+            + (f"${each * limit:.2f}" if each else f"{limit} pictures")
             + " a day for a story (less on a subscription that includes the model)."
         )
 

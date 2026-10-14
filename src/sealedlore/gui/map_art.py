@@ -10,6 +10,8 @@ design/map.md). QtSvg is imported on first use, not at startup.
 
 from __future__ import annotations
 
+from collections import OrderedDict
+from collections.abc import Callable
 from functools import lru_cache
 
 from PySide6.QtCore import QByteArray, Qt
@@ -171,12 +173,24 @@ def _cut_out(image: QImage) -> QImage | None:
     return image.copy(left, top, right - left + 1, bottom - top + 1)
 
 
-@lru_cache(maxsize=256)
-def picture_sprite(key: str, data: bytes, height: int) -> QImage | None:
+# The cut-outs, by picture id and height: small images, so a map of many
+# pictures costs little. Keyed on the data itself (lru_cache) the cache held
+# every picture's whole file, up to 256 of them.
+_PICTURE_SPRITES: OrderedDict[tuple[str, int], QImage] = OrderedDict()
+_PICTURE_SPRITES_MAX = 256
+
+
+def picture_sprite(key: str, height: int, read: Callable[[], bytes | None]) -> QImage | None:
     """A map picture cut out of its background and shrunk to `height` pixels
-    of the map's art, its edge hard (no half-clear fringe). `key` names it
-    for the cache (the picture's id)."""
-    image = QImage.fromData(data)
+    of the map's art, its edge hard (no half-clear fringe). `key` is the
+    picture's id; `read` gives its file, and is called only when the cut-out
+    isn't cached, so a redraw of the map reads no files."""
+    cached = _PICTURE_SPRITES.get((key, height))
+    if cached is not None:
+        _PICTURE_SPRITES.move_to_end((key, height))
+        return cached
+    data = read()
+    image = QImage.fromData(data) if data else QImage()
     if image.isNull():
         return None
     work = image.scaled(256, 256, Qt.KeepAspectRatio, Qt.SmoothTransformation)
@@ -190,4 +204,7 @@ def picture_sprite(key: str, data: bytes, height: int) -> QImage | None:
             colour = small.pixelColor(x, y)
             colour.setAlpha(255 if colour.alpha() > 128 else 0)
             small.setPixelColor(x, y, colour)
+    _PICTURE_SPRITES[(key, height)] = small
+    while len(_PICTURE_SPRITES) > _PICTURE_SPRITES_MAX:
+        _PICTURE_SPRITES.popitem(last=False)
     return small

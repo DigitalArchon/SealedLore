@@ -2086,6 +2086,35 @@ changed, and reply in the same format.""",
     (("place", "The place"), ("change", "What happened to it")),
 )
 
+# Not measured: the first live plan of a building was a yard with a small
+# house in it. Its plan is its inside.
+_text(
+    "map.layout.building",
+    MAP,
+    "Map art: a building's inside",
+    "Added to a building's layout request: its plan is its inside, not the yard round it.",
+    "This is the inside of the building: one building feature filling the whole grid (its "
+    "outer walls at the edge, the door where people come in), rooms as walls within it with "
+    "doors between them, and what stands in each room as objects. Nothing outside the building.",
+)
+
+# Not measured: the map's own places inside the one being laid out, where
+# the map put them (world_art.fixed_in_plan); the program draws the
+# buildings among them itself (with_fixed), so a plan and the region agree.
+_text(
+    "map.layout.fixed",
+    MAP,
+    "Map art: what the map already has there",
+    "Added to a layout request when the map already puts places inside it: each with its tile "
+    "box. The program draws the buildings among them; the model draws the ground around.",
+    """\
+Already on the map here, where they stay (the program draws the buildings among them itself: \
+lay out the ground, paths and everything else around them, and draw none of them anywhere \
+else):
+{places}""",
+    (("places", "Each place with its kind, tile box and what the story said of it, a line each"),),
+)
+
 # Not measured: the layout prompt's shapes, at the scale of the country
 # around a place, with the places the map already has kept where they are.
 _text(
@@ -2142,6 +2171,28 @@ Setting: {setting}.""",
         ("ways", "The ways out and where they lead"),
         ("setting", "The story's setting, briefly"),
     ),
+)
+
+# Not measured: live, the farm's land was snow, the town's dirt and the
+# road's grass (the setting line said nothing of winter). Added to the
+# setting when land is already drawn somewhere on the map.
+_text(
+    "map.terrain.nearby",
+    MAP,
+    "Map art: the land drawn nearest",
+    "Added to the setting in a land request once any land is drawn: the ground of the land "
+    "nearest it, so the country stays one country.",
+    "The land already drawn nearest here is {ground}: this is the same country in the same season",
+    (("ground", "The nearest drawn land's ground (snow, grass…)"),),
+)
+
+_text(
+    "map.terrain.way",
+    MAP,
+    "Map art: the land along a way",
+    "What a land request along a way between two known places is of, in place of a place.",
+    "the country along the way from {start} to {end}",
+    (("start", "The place the way starts from"), ("end", "The place it leads to")),
 )
 
 
@@ -2225,7 +2276,7 @@ _text(
     "scene, atmospheric light, no text.",
     (
         ("place", "The place's name"),
-        ("view", "\"seen from outside\", or for a room \"seen inside\""),
+        ("view", '"seen from outside", or for a room "seen inside"'),
         ("what", "What the story said of it"),
         ("inside", "What is in it, as a sentence, or nothing"),
         ("setting", "The story's setting, briefly"),

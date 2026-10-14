@@ -28,6 +28,7 @@ from sealedlore.engine.world_art import (
     SPRITE_MAX_TOKENS,
     ArtJob,
     adopt,
+    cleaned_art,
     finish,
     plan_art,
     setting_of,
@@ -86,7 +87,9 @@ class WorldArtRuntime:
         with self._lock():
             if self._art is None:
                 self._art = (
-                    WorldArt() if self.memory_only else load_world_art(self.story.id, self.root)
+                    WorldArt()
+                    if self.memory_only
+                    else cleaned_art(load_world_art(self.story.id, self.root))
                 )
             return self._art
 
@@ -283,17 +286,19 @@ class WorldArtRuntime:
         if not jobs:
             return pictures
         model = self.map_art_model
-        requests = [self._art_request(job, model) for job in jobs]
         detached = getattr(self.provider, "detached", None)
         if not callable(detached):
-            self._draw(list(zip(jobs, requests, strict=True)), [self.provider])
+            self._draw(jobs, model, [self.provider])
             return True
         clients = [detached() for _ in range(ART_WORKERS)]
         self._art_clients = clients
         self._art_stop = False
+        # The requests are built on the art thread (`_draw_one`): their
+        # reasoning level may need the model listing, fetched on first use,
+        # and a story opening on its map starts this from the GUI thread.
         thread = threading.Thread(
             target=self._draw,
-            args=(list(zip(jobs, requests, strict=True)), clients),
+            args=(jobs, model, clients),
             name="map-art",
             daemon=True,
         )
@@ -325,9 +330,9 @@ class WorldArtRuntime:
             params=self.side_params(model, max_tokens=tokens),
         )
 
-    def _draw(self, work: list[tuple[ArtJob, ChatRequest]], clients: list[ChatProvider]) -> None:
+    def _draw(self, jobs: list[ArtJob], model: str, clients: list[ChatProvider]) -> None:
         """Each job on one of `clients`, in turn; each result kept and saved."""
-        queue = list(work)
+        queue = list(jobs)
         queue_lock = threading.Lock()
 
         def worker(client: ChatProvider) -> None:
@@ -335,8 +340,8 @@ class WorldArtRuntime:
                 with queue_lock:
                     if not queue:
                         return
-                    job, request = queue.pop(0)
-                self._draw_one(job, request, client)
+                    job = queue.pop(0)
+                self._draw_one(job, model, client)
 
         if len(clients) == 1:
             worker(clients[0])
@@ -348,7 +353,8 @@ class WorldArtRuntime:
         for helper in helpers:
             helper.join()
 
-    def _draw_one(self, job: ArtJob, request: ChatRequest, client: ChatProvider) -> None:
+    def _draw_one(self, job: ArtJob, model: str, client: ChatProvider) -> None:
+        request = self._art_request(job, model)
         log_ref = self._log(
             "map_art_request",
             {"job": job.key, "payload": client.build_payload(request)},

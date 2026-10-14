@@ -880,7 +880,9 @@ A plot file can bring a map drawn up beforehand (`# Map`, in the format
 guide): its places stand where the file puts them from the first passage, the
 places you haven't found yet are under fog, and a place the plot keeps hidden
 stays off the map until the plot reveals it. **Doomsville with a map**, among
-the samples, starts this way.
+the samples, starts this way, and comes with its map's art already drawn, so
+it opens complete; a restart keeps it. A story you make draws its own as it
+goes.
 
 The map is drawn in the background (Settings → Models → **Map art model**;
 untick **Draw the map** to keep it plain): the land around each place the
@@ -891,7 +893,8 @@ it now is, as an edit of how it looked, so it is still the same barn. A
 branch shows the map as it stands on that branch.
 
 With **Draw map pictures with an image model** ticked (Settings → Images, off
-until you tick it; Qwen Image unless you choose another), an image model draws
+until you tick it, and needing **Draw the map** on; Qwen Image unless you
+choose another), an image model draws
 the map's people, buildings and things instead: everyone's avatar from what
 their card says of them (you first, then whoever is with you), and each
 building standing on the ground where the story put it. They are drawn in the
@@ -899,23 +902,32 @@ background without asking each time, up to the limit set there for each story
 each day, and each one's prompt and cost are kept in the story's log. A place
 the story changes is drawn again from its last picture, so it stays the same
 place. Each place you have been gets a postcard too, a picture of the whole
-place, shown on its card under **Here**: click it to see it whole. Story
-pictures (Image…) still show you every request first.
+place, shown on its card under the local map: click it to see it whole.
+Everything drawn for the map stays with the story: a restart, Duplicate
+settings and a scenario file keep the art and the pictures. Story pictures
+(Image…) still show you every request first.
 
 A story that keeps a map makes it part of the window: the Inspector, beside
 the story, takes half the window with **Map** as its first page, and the
 Stories list steps aside (View → Stories list brings it back). **Map**, above
 the transcript, goes to it.
 
-**Here** shows the place you are in, close up: its ground, its buildings
-from outside (**See inside** takes the roofs off), the things the story
-marked there (hover one for what it is), and everyone the story has there,
-you ringed. Under it, what the story has said of the place and who and what
-is there. **Region** shows the whole country the story has reached, fog over
-the rest: each place with its picture, lit where you have been, dimmed where
-the story only told of it, ringed where you are now. Scroll to zoom (places
-inside others appear as you zoom in), drag to move, **Fit** to see it all;
-double-click a place to stand in it. Esc goes back out to the Region.
+It is one map, read at three levels by zooming; **Local**, **Region** and
+**World** jump to each. **Local** is the area you are in (the
+farm, not just its farmhouse; a town; the caves), close up: its ground and
+paths, its buildings from outside where the map has them, the things the
+story marked there (hover one for what it is), and everyone the story has
+there, you ringed. Zoom in on a building and its inside takes the roof's
+place: its rooms and what the story put in them (**See inside** takes every
+roof off at once). Under the map, what the story has said of the place in
+view and who and what is there. A story opens on its local map. **Region**
+is the country around you that the story has reached, fog over the rest: each place with its
+picture, small when far, lit where you have been, dimmed where the story only
+told of it, ringed where you are now; it is where you look to decide where to
+go next. **World** is the whole map zoomed out, its settlements and regions
+named large and the small places hidden. Scroll to zoom (places inside others
+appear as you zoom in), drag to move; double-click a place to go to it. Esc
+goes out from the local map to the region.
 
 The map is the storyteller's too: each turn it is told where you are on it,
 what is around and inside that place, the ways between them and the things
