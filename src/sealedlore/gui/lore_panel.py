@@ -108,7 +108,7 @@ class LorePanel(QWidget):
         # The entry's first picture large, the others small under it, as a
         # character's portrait is on the Cast page.
         self.picture = PortraitView(person=False)
-        self.pictures = RefImageStrip(self._pictures, "it", after_portrait=True)
+        self.pictures = RefImageStrip(self._pictures, "it", after_portrait=True, crop="picture")
         self.pictures.changed.connect(self._on_pictures_changed)
         self.picture.draw_requested.connect(lambda: self._ask("new"))
         self.picture.again_requested.connect(lambda: self._ask("again", first=True))

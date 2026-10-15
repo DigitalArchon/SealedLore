@@ -44,14 +44,15 @@ from sealedlore.engine.image_prompt import ImagePromptDraft, mentioned_numbers
 from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.session_images import DEFAULT_MAX_REFS
+from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.image_picker import ImagePickerDialog, pick_image_model
 from sealedlore.gui.model_picker import ModelField
 from sealedlore.gui.ref_images import (
     PICTURE_FILTER,
     THUMB,
-    import_reference,
     pixmap_of,
+    store_reference,
     thumbnail_of,
 )
 from sealedlore.gui.worker import GenerationWorker
@@ -436,7 +437,10 @@ class ImageDialog(QDialog):
             return
         session = self.session
         try:
-            ref = import_reference(Path(path), session.pictures)
+            picture = cropped_picture(self, Path(path))
+            if picture is None:
+                return
+            ref = store_reference(*picture, session.pictures)
         except (OSError, ValueError) as exc:
             QMessageBox.warning(self, "Couldn't add the picture", str(exc))
             return

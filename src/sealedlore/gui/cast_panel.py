@@ -193,7 +193,7 @@ class CastPanel(QWidget):
         # The portrait large, at the top of the card; the other pictures
         # small under the sheet (the author, Oct 15 2026).
         self.portrait = PortraitView()
-        self.pictures = RefImageStrip(self._pictures, "them", after_portrait=True)
+        self.pictures = RefImageStrip(self._pictures, "them", after_portrait=True, crop="portrait")
         self.portrait.draw_requested.connect(lambda: self._ask("new"))
         self.portrait.again_requested.connect(lambda: self._ask("again", first=True))
         self.portrait.edit_requested.connect(lambda: self._ask("edit", first=True))

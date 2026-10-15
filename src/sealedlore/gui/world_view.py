@@ -457,6 +457,8 @@ class WorldView(QWidget):
     back_requested = Signal()
     # The author asked for the isometric view of this area to be painted.
     isometric_requested = Signal(str)
+    # A picture of the author's own as this area's isometric view.
+    own_isometric_requested = Signal(str)
     # The author asked for this area's plan to be drawn again.
     redraw_requested = Signal(str)
 
@@ -533,6 +535,7 @@ class WorldView(QWidget):
         # The isometric view takes the map's place while it is on.
         self.iso_panel = IsometricPanel()
         self.iso_panel.paint_requested.connect(self._paint_requested)
+        self.iso_panel.own_requested.connect(self._own_requested)
         self.iso_button.toggled.connect(lambda _on: self.sync_isometric())
         self.stack = QStackedWidget()
         self.stack.addWidget(self.view)
@@ -1368,6 +1371,7 @@ class WorldView(QWidget):
             model=model,
             price=price,
             problem=problem,
+            painted_by=latest.model if latest else "",
         )
 
     def leave_isometric(self) -> bool:
@@ -1386,6 +1390,11 @@ class WorldView(QWidget):
         area = local_area(self.world, self.here())
         if area is not None:
             self.isometric_requested.emit(area.id)
+
+    def _own_requested(self) -> None:
+        area = local_area(self.world, self.here())
+        if area is not None:
+            self.own_isometric_requested.emit(area.id)
 
     def _hint_for(self, level: str) -> str:
         if not self.world.places:

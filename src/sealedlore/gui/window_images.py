@@ -16,13 +16,15 @@ from pathlib import Path
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import QDialog, QFileDialog, QInputDialog, QMessageBox, QVBoxLayout
 
+from sealedlore.engine.picture_shapes import BACKGROUND
+from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.image_dialog import FitPicture, ImageDialog, ImageViewer, save_picture_as
 from sealedlore.gui.image_jobs import ImageCatalog, ImageJobs
 from sealedlore.gui.image_picker import pick_image_model
 from sealedlore.gui.images_panel import ImagesPanel
 from sealedlore.gui.picture_variant import PictureVariantDialog
 from sealedlore.gui.portraits_dialog import PortraitsDialog
-from sealedlore.gui.ref_images import PICTURE_FILTER, picture_bytes, picture_bytes_of, pixmap_of
+from sealedlore.gui.ref_images import PICTURE_FILTER, picture_bytes_of, pixmap_of
 from sealedlore.gui.transcript import PendingPicture
 from sealedlore.gui.winprivacy import exclude_from_capture
 from sealedlore.ids import new_id
@@ -576,15 +578,20 @@ class ImagesWindow:
             self.transcript.set_background(None)
 
     def _set_background_from(self, source: Path) -> None:
-        """A picture file as the background: copied into the story, cleaned."""
+        """A picture file as the background, cropped as the author chooses
+        (first to the story area's own shape): copied into the story, cleaned."""
         if self.session is None:
             return
+        area = self.transcript.viewport().size()
         try:
-            data, suffix = picture_bytes(source)
+            picture = cropped_picture(
+                self, source, BACKGROUND, background=(area.width(), area.height())
+            )
         except (OSError, ValueError) as exc:
             self._warn_plain("Couldn't use that picture", str(exc))
             return
-        self._set_background_data(data, suffix)
+        if picture is not None:
+            self._set_background_data(*picture)
 
     def _set_background_data(self, data: bytes, suffix: str) -> None:
         if self.session is None:

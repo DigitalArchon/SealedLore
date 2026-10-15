@@ -942,6 +942,8 @@ show, leaving out names and story, which image models otherwise letter onto
 the view. The samples come with their views painted. The 2D map is the story's truth: the painting matches it
 closely, not exactly. Once the story changes something there (the barn
 burns), the view says it is out of date and offers to paint it again.
+**Use a picture of your own…** beside it takes a picture from disk as the
+view instead, cropped first to the view's shape.
 
 A story that keeps a map makes it part of the window: the Inspector, beside
 the story, takes half the window with **Map** as its first page. **Map**,
@@ -1193,6 +1195,28 @@ an address, a key, and the service it is (NanoGPT, OpenRouter, WaveSpeed, or
 any OpenAI-compatible `/images/generations`; worked out from the address
 unless you choose). Left blank, the address is the chat endpoint's, and its
 key is used only when the address is the chat endpoint's own host.
+
+### Pictures of your own
+
+Every picture you bring in from disk opens **Crop the picture** first: a
+card's picture or portrait, **Add a picture from disk…** in the picture and
+video dialogs, the background, a picture in the plot file editor, or an
+isometric view of your own. Drag the frame to move it, a corner to resize it,
+or across the picture to draw a new one. **Shape** leaves it free, to take
+any part you like, or holds it to the exact shape the app uses:
+
+- a portrait, or a place or lore picture, as your portrait model draws them;
+- the background, as the story area is in the window now;
+- an isometric view, as your isometric view model paints it;
+- a square, or the picture's own shape.
+
+Each place opens it on the shape it calls for. **Use the whole picture**
+keeps it as it is.
+
+Whatever comes in has its hidden data removed before it is kept: where and
+when a photo was taken, the camera, any thumbnail, comments, editing history
+and anything after the image. Pictures in a scenario file or a story backup
+are cleaned the same way as they are imported.
 
 ### Pictures for the cards
 

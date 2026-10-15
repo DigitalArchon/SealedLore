@@ -56,6 +56,7 @@ from sealedlore.engine.session import (
 )
 from sealedlore.engine.tokens import TokenEstimator
 from sealedlore.engine.usage import usage_fields, usage_report
+from sealedlore.gui import crop_dialog
 from sealedlore.gui.attest_check import attestation_tests
 from sealedlore.gui.bad_hosts import bad_hosts
 from sealedlore.gui.banners import OverBudgetBanner, StalenessBanner
@@ -83,7 +84,7 @@ from sealedlore.gui.model_trouble import (
 from sealedlore.gui.plot_editor import PlotEditorWindow
 from sealedlore.gui.plot_panel import ClockDialog, PlotPanel
 from sealedlore.gui.prompt_editor import PromptEditorDialog
-from sealedlore.gui.ref_images import load_plot_pictures
+from sealedlore.gui.ref_images import clean_incoming, load_plot_pictures
 from sealedlore.gui.review_dialog import ReviewRequestDialog, ReviewResultDialog
 from sealedlore.gui.route_dialog import RouteDialog
 from sealedlore.gui.scene_panel import ScenePanel
@@ -215,6 +216,8 @@ class MainWindow(
         self.config, config_notice = load_config_or_recover(root=root)
         # Hosts marked bad (Help → Model trouble) live in the config.
         bad_hosts().attach(self.config, lambda: save_config(self.config, root=self.root))
+        # A picture cropped anywhere offers the shapes this config's models draw.
+        crop_dialog.use_config(self, lambda window: window.config)
         self.session: StorySession | None = None
         self._provider: ChatProvider | None = None
         self._embeddings: EmbeddingBackend | None = None
@@ -822,7 +825,9 @@ class MainWindow(
             return
         provider_config = self.config.active_provider()
         model = provider_config.model if provider_config and provider_config.model else None
-        self._open_new_bundle(bundle_from_scenario(scenario, main_model=model), review=True)
+        bundle = bundle_from_scenario(scenario, main_model=model)
+        bundle.pending_files = clean_incoming(bundle.pending_files)
+        self._open_new_bundle(bundle, review=True)
 
     def _read_plot_file(self, path: Path) -> ParsedPlotFile | None:
         """Parse a plot file, and show what it had trouble with.
@@ -1810,6 +1815,7 @@ class MainWindow(
     def _import_archive(self, path: Path) -> None:
         try:
             bundle, api_log = read_archive(path)
+            bundle.pending_files = clean_incoming(bundle.pending_files)
             if bundle.story.chat and bundle.story.chat_keep == "memory":
                 # Exported from a chat kept in memory only: back into memory,
                 # with nothing written, or saved as an ordinary chat.

@@ -158,9 +158,45 @@ def _prepared(image: QImage, data: bytes, suffix: str) -> tuple[bytes, str]:
     return strip_metadata(encoded), ".jpg"
 
 
+def clean_incoming(files: dict[str, bytes]) -> dict[str, bytes]:
+    """A scenario's or a backup's files with nothing hidden left in their
+    pictures. Storage strips what it can in place (JPEG, PNG, WebP) and,
+    having no Qt, keeps anything else as it came; such a picture (a GIF, a
+    BMP, a JPEG it can't follow) is re-encoded here, as one added from disk
+    is. Records, videos (storage strips those) and anything that isn't a
+    picture are left as they are."""
+    from sealedlore.storage.images import RECORD_FILES
+    from sealedlore.storage.video_meta import is_mp4
+
+    cleaned: dict[str, bytes] = {}
+    for relative, data in files.items():
+        cleaned[relative] = data
+        if relative in RECORD_FILES or is_mp4(data):
+            continue
+        try:
+            cleaned[relative] = strip_metadata(data)
+            continue
+        except MetadataError:
+            pass
+        image = image_of(data)
+        if image.isNull():
+            continue
+        if image.hasAlphaChannel():
+            cleaned[relative] = strip_metadata(_encoded(image, "PNG"))
+        else:
+            cleaned[relative] = strip_metadata(_encoded(image, "JPEG", 92))
+    return cleaned
+
+
 def import_reference(source: Path, store: PictureStore, caption: str = "") -> ImageRef:
     """Copy a picture into the story as a reference. Raises ValueError or OSError."""
     data, suffix = picture_bytes(source)
+    return store_reference(data, suffix, store, caption)
+
+
+def store_reference(data: bytes, suffix: str, store: PictureStore, caption: str = "") -> ImageRef:
+    """A picture already prepared (`picture_bytes`, or cropped) kept as a
+    reference in the story."""
     ref_id = new_id()
     relative = f"{REFS_DIR}/{ref_id}{suffix}"
     store.write(relative, data)
@@ -252,15 +288,22 @@ class RefImageStrip(QWidget):
     edit_requested = Signal(str)
 
     def __init__(
-        self, pictures: StoryPictures, owner_word: str = "them", *, after_portrait: bool = False
+        self,
+        pictures: StoryPictures,
+        owner_word: str = "them",
+        *,
+        after_portrait: bool = False,
+        crop: str = "free",
     ) -> None:
         """`after_portrait`: the first picture is the owner's portrait, shown
         large elsewhere (gui/portrait_view.py); the strip shows the others,
-        and Make portrait puts the chosen one first."""
+        and Make portrait puts the chosen one first. `crop` is the shape a
+        picture added from disk is first offered at (engine/picture_shapes.py)."""
         super().__init__()
         self._pictures = pictures
         self._refs: list[ImageRef] | None = None
         self._after_portrait = after_portrait
+        self._crop = crop
 
         self.list = QListWidget()
         self.list.setObjectName("refImageList")
@@ -369,13 +412,19 @@ class RefImageStrip(QWidget):
         store = self._pictures()
         if self._refs is None or store is None:
             return
+        from sealedlore.gui.crop_dialog import cropped_picture
+
         paths, _ = QFileDialog.getOpenFileNames(
             self, "Add reference pictures", str(Path.home()), PICTURE_FILTER
         )
         added, problems = False, []
-        for path in paths:
+        for number, path in enumerate(paths, 1):
+            counter = f"{number} of {len(paths)}" if len(paths) > 1 else ""
             try:
-                self._refs.append(import_reference(Path(path), store))
+                picture = cropped_picture(self, Path(path), self._crop, counter=counter)
+                if picture is None:
+                    continue  # this one left out
+                self._refs.append(store_reference(*picture, store))
                 added = True
             except (OSError, ValueError) as exc:
                 problems.append(str(exc))
@@ -426,13 +475,18 @@ class RefImageStrip(QWidget):
         store = self._pictures()
         if self._refs is None or store is None:
             return
+        from sealedlore.gui.crop_dialog import cropped_picture
+
         path, _ = QFileDialog.getOpenFileName(
             self, "Choose a portrait", str(Path.home()), PICTURE_FILTER
         )
         if not path:
             return
         try:
-            self._refs.insert(0, import_reference(Path(path), store, "portrait"))
+            picture = cropped_picture(self, Path(path), self._crop)
+            if picture is None:
+                return
+            self._refs.insert(0, store_reference(*picture, store, "portrait"))
         except (OSError, ValueError) as exc:
             QMessageBox.warning(self, "Couldn't add", str(exc))
             return

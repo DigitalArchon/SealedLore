@@ -92,6 +92,31 @@ class MemoryKeychain:
 
 
 @pytest.fixture(autouse=True)
+def _crops_take_the_whole_picture(request, monkeypatch):
+    """Every picture added from disk opens the crop dialog, which is modal:
+    left alone it would wait for a click that never comes. Here it answers
+    "Use the whole picture", as adding did before there was a crop.
+    tests/test_crop.py drives the dialog itself (marked `real_crop`)."""
+    if request.node.get_closest_marker("real_crop"):
+        yield
+        return
+    try:
+        from PySide6.QtWidgets import QDialog
+
+        from sealedlore.gui.crop_dialog import CropDialog
+    except ImportError:
+        yield
+        return
+
+    def take_whole(dialog) -> int:
+        dialog.whole = True
+        return QDialog.Accepted
+
+    monkeypatch.setattr(CropDialog, "exec", take_whole)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def memory_keychain():
     from sealedlore.storage import keychain
 

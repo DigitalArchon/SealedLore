@@ -41,6 +41,7 @@ from sealedlore.engine.world_pictures import (
     PictureJob,
     isometric_job,
     isometric_notes,
+    isometric_state,
     isometric_writer_messages,
     looks_of,
     picture_size,
@@ -297,6 +298,34 @@ class WorldArtRuntime:
             callback = self.on_map_art
             if callback is not None:
                 callback()  # the map learns it is done, painted or not
+
+    def use_own_isometric(self, area_id: str, data: bytes, suffix: str) -> bool:
+        """The author's own picture (already prepared: stripped, cropped) as
+        an area's isometric view, of the map as it is now. Not in a private
+        scene, and only for a place on the map."""
+        if not self.map_on or self.open_span is not None:
+            return False
+        world = self.world()
+        area = world.places.get(area_id)
+        if area is None:
+            return False
+        picture_id = new_id()
+        relative = f"{MAP_PICTURES_DIR}/{picture_id}{suffix}"
+        self.pictures.write(relative, data)
+        picture = MapPicture(
+            id=picture_id,
+            subject="isometric",
+            subject_id=area_id,
+            name=area.name,
+            state=isometric_state(world, area_id),
+            file=relative,
+            made_at=utc_now_iso(),
+        )
+        art = self.world_art
+        with self._lock():
+            art.pictures.append(picture)
+            self._save_art(art)
+        return True
 
     def _isometric_scene(self, notes: str) -> str | None:
         """What is on the area in what a picture shows, from the map's own

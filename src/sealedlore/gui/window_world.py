@@ -13,10 +13,15 @@ GUI thread by a queued signal and redrawn there, a moment after the last.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QObject, QTimer, Signal
-from PySide6.QtWidgets import QMessageBox, QToolButton
+from pathlib import Path
 
+from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtWidgets import QFileDialog, QMessageBox, QToolButton
+
+from sealedlore.engine.picture_shapes import ISOMETRIC
+from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.map_render import plan_png
+from sealedlore.gui.ref_images import PICTURE_FILTER
 from sealedlore.gui.world_view import WorldView
 
 # Pieces of art come back one after another: one redraw for a run of them.
@@ -37,6 +42,7 @@ class WorldWindow:
         self.world_view = WorldView()
         self.world_view.back_requested.connect(lambda: self.show_world(False))
         self.world_view.isometric_requested.connect(self._paint_isometric)
+        self.world_view.own_isometric_requested.connect(self._own_isometric)
         self.world_view.redraw_requested.connect(self._redraw_plan)
         self.world_button = QToolButton()
         self.world_button.setObjectName("viewToggleButton")
@@ -199,6 +205,30 @@ class WorldWindow:
         self.world_view.isometric_offer = session.isometric_offer()
         self.world_view.sync_isometric()
         self._sync_progress()
+
+    def _own_isometric(self, area_id: str) -> None:
+        """A picture of the author's own as the isometric view: chosen,
+        cropped (first to the isometric view's shape), stripped and kept."""
+        session = self.session
+        if session is None or self._busy:
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, "An isometric view of your own", str(Path.home()), PICTURE_FILTER
+        )
+        if not path:
+            return
+        try:
+            picture = cropped_picture(self, Path(path), ISOMETRIC)
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "Couldn't use that picture", str(exc))
+            return
+        if picture is None:
+            return
+        if not session.use_own_isometric(area_id, *picture):
+            self.statusBar().showMessage("The map can't take a picture now.", 6000)
+            return
+        self.refresh_world()
+        self.world_view.sync_isometric()
 
     def _redraw_plan(self, area_id: str) -> None:
         """Redraw plan… on the local map: asked first, since the plan the

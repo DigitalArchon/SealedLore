@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.ref_images import PICTURE_FILTER, THUMB, inside, picture_bytes, thumbnail
 from sealedlore.ids import new_id
 from sealedlore.models.plot_file import PictureDoc
@@ -58,6 +59,14 @@ def add_picture(source: Path, folder: Path, owner: str, caption: str = "") -> Pi
     """Copy a picture into the plot file's pictures folder. Raises ValueError
     (not a picture the app reads) or OSError."""
     data, suffix = picture_bytes(source)
+    return keep_picture(data, suffix, folder, owner, caption)
+
+
+def keep_picture(
+    data: bytes, suffix: str, folder: Path, owner: str, caption: str = ""
+) -> PictureDoc:
+    """A picture already prepared (`picture_bytes`, or cropped) written into
+    the plot file's pictures folder."""
     target_dir = folder / PICTURES_DIR
     target_dir.mkdir(parents=True, exist_ok=True)
     name = _file_name(owner, suffix)
@@ -99,8 +108,13 @@ class PlotPictureStrip(QWidget):
 
     changed = Signal()
 
-    def __init__(self, folder: Folder | None = None, save_first: SaveFirst | None = None) -> None:
+    def __init__(
+        self, folder: Folder | None = None, save_first: SaveFirst | None = None, crop: str = "free"
+    ) -> None:
+        """`crop`: the shape a picture added from disk is first offered at
+        (engine/picture_shapes.py)."""
         super().__init__()
+        self._crop = crop
         # Weakly: both are usually methods of the window this strip sits in,
         # and a widget holding its own window makes a cycle whose collection
         # has crashed PySide before (gui/attest_check.py).
@@ -220,9 +234,13 @@ class PlotPictureStrip(QWidget):
             self, "Add pictures", str(Path.home()), PICTURE_FILTER
         )
         added, problems = False, []
-        for path in paths:
+        for number, path in enumerate(paths, 1):
+            counter = f"{number} of {len(paths)}" if len(paths) > 1 else ""
             try:
-                self._pictures.append(add_picture(Path(path), folder, self._owner))
+                picture = cropped_picture(self, Path(path), self._crop, counter=counter)
+                if picture is None:
+                    continue  # this one left out
+                self._pictures.append(keep_picture(*picture, folder, self._owner))
                 added = True
             except (OSError, ValueError) as exc:
                 problems.append(str(exc))

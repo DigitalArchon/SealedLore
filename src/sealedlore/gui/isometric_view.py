@@ -29,6 +29,9 @@ TRUTH_NOTE = (
     "Painted from the map by {model}. The 2D map is the story's truth: this view matches it "
     "closely, not exactly."
 )
+OWN_NOTE = (
+    "A picture of your own. The 2D map is the story's truth: the storyteller never sees this view."
+)
 
 
 class _PictureView(QGraphicsView):
@@ -73,6 +76,8 @@ class IsometricPanel(QWidget):
     """The view, what it is, and the offer to paint it."""
 
     paint_requested = Signal()
+    # The author's own picture as the view (a file chosen and cropped).
+    own_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -85,10 +90,16 @@ class IsometricPanel(QWidget):
         self.offer.setWordWrap(True)
         self.paint_button = QPushButton("Paint it")
         self.paint_button.clicked.connect(self.paint_requested.emit)
+        self.own_button = QPushButton("Use a picture of your own…")
+        self.own_button.setToolTip(
+            "Bring in a picture from disk as this place's isometric view, cropped to its shape"
+        )
+        self.own_button.clicked.connect(self.own_requested.emit)
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.addWidget(self.offer, 1)
         row.addWidget(self.paint_button, 0)
+        row.addWidget(self.own_button, 0)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
@@ -108,6 +119,7 @@ class IsometricPanel(QWidget):
         model: str,
         price: float | None,
         problem: str | None,
+        painted_by: str = "",
     ) -> None:
         """`image` (from `file`) is the latest view of `place`, `current`
         when it was painted for the map as it is now."""
@@ -131,5 +143,7 @@ class IsometricPanel(QWidget):
             self.offer.setText(said + (f" {problem}" if problem else ""))
             self.paint_button.setVisible(True)
             self.paint_button.setEnabled(problem is None)
-        self.note.setText(TRUTH_NOTE.format(model=model) if image is not None else "")
+        self.own_button.setEnabled(not painting)
+        note = TRUTH_NOTE.format(model=painted_by) if painted_by else OWN_NOTE
+        self.note.setText(note if image is not None else "")
         self.note.setVisible(image is not None)

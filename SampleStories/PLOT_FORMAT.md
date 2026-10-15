@@ -206,7 +206,9 @@ When the file is imported, each picture is copied into the new story and put
 on its character's card or its entry, with any hidden data in it (where and
 when a photograph was taken) removed. A picture that is missing or can't be
 read is noted and left out; it never stops the import. The plot file editor
-keeps the folder for you: **Add…** under Pictures copies a picture into it.
+keeps the folder for you: **Add…** under Pictures copies a picture into it,
+cropped first to whatever part or shape you choose, with its hidden data
+removed.
 
 ## Facts
 

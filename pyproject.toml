@@ -80,3 +80,4 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["real_crop: the crop dialog is driven by the test, not answered for it"]

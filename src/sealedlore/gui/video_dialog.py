@@ -49,8 +49,9 @@ from PySide6.QtWidgets import (
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.video_price import VideoQuote, pictures_worth, quote_video
 from sealedlore.engine.videos import VideoRequest
+from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.model_picker import ModelField, _Row
-from sealedlore.gui.ref_images import PICTURE_FILTER, import_reference, thumbnail_of
+from sealedlore.gui.ref_images import PICTURE_FILTER, store_reference, thumbnail_of
 from sealedlore.gui.video_jobs import VideoCatalog
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.image import RefUse
@@ -427,7 +428,10 @@ class VideoDialog(QDialog):
             return
         session = self.session
         try:
-            ref = import_reference(Path(path), session.pictures)
+            picture = cropped_picture(self, Path(path))
+            if picture is None:
+                return
+            ref = store_reference(*picture, session.pictures)
         except (OSError, ValueError) as exc:
             QMessageBox.warning(self, "Couldn't add the picture", str(exc))
             return
