@@ -4,6 +4,7 @@ description: A living knight who descended into the burning underworld, or a dam
 start: day 1, 12:00
 agency: contested
 world activity: normal
+background: pictures/furnace-background.jpg
 ---
 
 # World

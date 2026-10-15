@@ -203,12 +203,16 @@ def bundle_refs(bundle) -> list[ImageRef]:
 
 
 def reference_files(bundle, root: Path | None = None) -> dict[str, bytes]:
-    """The bytes of every reference picture in the bundle that is on disk."""
+    """The bytes of every reference picture in the bundle that is on disk,
+    and of the background picture: what a scenario carries."""
     found: dict[str, bytes] = {}
-    for ref in bundle_refs(bundle):
-        data = read_story_file(bundle.story.id, ref.file, root)
+    files = [ref.file for ref in bundle_refs(bundle)]
+    if bundle.story.background_image:
+        files.append(bundle.story.background_image)
+    for relative in files:
+        data = read_story_file(bundle.story.id, relative, root)
         if data is not None:
-            found[ref.file] = data
+            found[relative] = data
     return found
 
 

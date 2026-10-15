@@ -75,6 +75,9 @@ class Scenario(BaseModel):
     # base64), so a shared scenario brings the author's ship with it.
     image_style: str = ""
     reference_files: dict[str, str] = Field(default_factory=dict)
+    # The picture behind the transcript, its file among `reference_files`
+    # (a plot file's `background:`, a sample's: the author, Oct 2026).
+    background_image: str | None = None
     # A simple chat (engine/chat.py): its mode, system prompt and own
     # reference pictures.
     mode: StoryMode = "story"

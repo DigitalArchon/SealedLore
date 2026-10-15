@@ -140,7 +140,7 @@ class PlotPicture:
     card or a place's or lore entry's. The parser reads no files; whoever
     imports the plot does (gui/ref_images.load_plot_pictures)."""
 
-    owner_kind: str  # "character" or "lore"
+    owner_kind: str  # "character", "lore", or "background" (the front matter's)
     owner_id: str
     owner_name: str
     # As written, relative to the plot file's folder, with forward slashes.
@@ -1194,6 +1194,16 @@ class _Parser:
         activity = self.literal(front, "world_activity", get_args(WorldActivity))
         if activity:
             scenario.world_activity = activity  # type: ignore[assignment]
+        if "background" in front:
+            line, value = front["background"]
+            source, _caption = picture_parts(value)
+            problem = picture_problem(source)
+            if problem:
+                self.error(line, problem.replace("`picture`", "`background`"))
+            else:
+                self.pictures.append(
+                    PlotPicture("background", "", "The background", source, "", line)
+                )
         for key, (line, _) in front.items():
             if key not in (
                 "title",
@@ -1203,6 +1213,7 @@ class _Parser:
                 "world_activity",
                 "perspective",
                 "length",
+                "background",
             ):
                 self.note(line, f"`{key}` isn't a setting this format reads.")
         if not world:

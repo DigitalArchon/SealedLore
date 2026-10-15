@@ -85,6 +85,8 @@ def test_pictures_are_read_written_and_handed_to_whoever_imports():
         # More than one to an item, a caption or none.
         ("lore", "Hellsville", "pictures/hellsville-gate.png", ""),
         ("lore", "Jane's truck", "pictures/janes-truck.png", "from the front, one headlight gone"),
+        # The picture behind the transcript, from the front matter.
+        ("background", "The background", "pictures/hellsville-gate.png", ""),
     ]
     jane = next(c for c in parsed.scenario.cast if c.name == "Jane Moss")
     assert parsed.pictures[0].owner_id == jane.id
@@ -96,10 +98,18 @@ def test_pictures_are_read_written_and_handed_to_whoever_imports():
         ("pictures/jane-moss.png", "in her army coat, rifle slung")
     ]
     assert len(document.places[0].pictures) == 2
+    assert document.background == "pictures/hellsville-gate.png"
     again = parse_plot_markdown(render_plot_markdown(document).text)
     assert [(p.owner_name, p.source, p.caption) for p in again.pictures] == [
         row[1:] for row in found
     ]
+
+
+def test_a_background_must_be_a_picture_inside_the_files_own_folder():
+    for value in ("/etc/passwd.png", "../away.jpg", "notes.txt"):
+        parsed = parse_plot_markdown(f"---\nbackground: {value}\n---\n\n# World\n\nA town.\n")
+        assert not parsed.ok and [p.line for p in parsed.problems if p.error] == [2]
+        assert parsed.pictures == []
 
 
 @pytest.mark.parametrize(

@@ -4,6 +4,7 @@ description: An elven ranger or a wandering sellsword must carry word of a wakin
 start: day 1, 08:00
 agency: plausible
 world activity: normal
+background: pictures/silverwood-background.jpg
 ---
 
 # World

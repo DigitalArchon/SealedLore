@@ -76,7 +76,16 @@ MAP = "map"
 NOTES = "notes"
 
 UNNAMED = "Unnamed"
-_FRONT_KEYS = ("title", "description", "start", "agency", "world_activity", "perspective", "length")
+_FRONT_KEYS = (
+    "title",
+    "description",
+    "start",
+    "agency",
+    "world_activity",
+    "perspective",
+    "length",
+    "background",
+)
 
 # What can't be in a name that a condition or a list will name: the
 # separators those are split on.
@@ -231,6 +240,7 @@ def render_plot_markdown(document: PlotDocument) -> RenderedPlot:
         )
         if value
     )
+    front.append(("background", document.background.strip()))
     if any(value for _, value in front):
         writer.line("---")
         for key, value in front:
@@ -615,6 +625,8 @@ class _Reader:
                     setattr(document, key, _key(value))
                 else:
                     self.problem(line, f"`{key}: {value}` isn't a choice the format has; left out.")
+        if "background" in front:
+            document.background = picture_parts(front["background"][1])[0]
         for key, (line, value) in front.items():
             if key not in _FRONT_KEYS:
                 self.problem(line, f"`{key}: {value}` isn't a setting the format has; left out.")

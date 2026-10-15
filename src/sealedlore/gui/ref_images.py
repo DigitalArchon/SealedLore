@@ -43,7 +43,7 @@ from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.ids import new_id
 from sealedlore.models.image import ImageRef
 from sealedlore.storage.image_meta import MetadataError, picture_kind, strip_metadata
-from sealedlore.storage.images import REFS_DIR
+from sealedlore.storage.images import IMAGES_DIR, REFS_DIR
 from sealedlore.storage.picture_store import PictureStore
 
 MAX_SIDE = 2048
@@ -184,9 +184,10 @@ def load_plot_pictures(parsed: ParsedPlotFile, folder: Path) -> list[PlotProblem
     Each `- picture:` line names a file beside the plot file. It is read as
     any added picture is (hidden data removed, scaled if large), becomes a
     reference picture on its character's card or its place's or lore entry's,
-    and its bytes ride in the scenario to be written with the new story. One
-    that is missing or unreadable is left out and returned as a note: it
-    never stops the import.
+    and its bytes ride in the scenario to be written with the new story. The
+    front matter's `background:` is read the same way and becomes the
+    picture behind the transcript. One that is missing or unreadable is left
+    out and returned as a note: it never stops the import.
     """
     scenario = parsed.scenario
     owners = {c.id: c for c in [*scenario.cast, *scenario.supporting]}
@@ -195,7 +196,8 @@ def load_plot_pictures(parsed: ParsedPlotFile, folder: Path) -> list[PlotProblem
     for picture in parsed.pictures:
         owner = owners.get(picture.owner_id)
         source = inside(folder, picture.source)
-        if owner is None:
+        background = picture.owner_kind == "background"
+        if owner is None and not background:
             continue
         try:
             if source is None:
@@ -209,6 +211,13 @@ def load_plot_pictures(parsed: ParsedPlotFile, folder: Path) -> list[PlotProblem
                     picture.line,
                     f"{picture.owner_name}'s picture “{picture.source}” was left out: {exc}.",
                 )
+            )
+            continue
+        if background:
+            # Where the window keeps a background chosen by hand.
+            scenario.background_image = f"{IMAGES_DIR}/background{suffix}"
+            scenario.reference_files[scenario.background_image] = base64.b64encode(data).decode(
+                "ascii"
             )
             continue
         ref_id = new_id()

@@ -4,6 +4,7 @@ description: In a smog-choked city of airships and clockwork, an inventor or a s
 start: day 1, 19:00
 agency: contested
 world activity: eventful
+background: pictures/brasshaven-background.jpg
 ---
 
 # World

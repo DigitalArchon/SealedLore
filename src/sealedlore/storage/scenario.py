@@ -88,6 +88,7 @@ def scenario_from_bundle(
         supporting=supporting,
         plot=story.plot.model_copy(deep=True) if story.plot is not None else None,
         image_style=story.image_style,
+        background_image=story.background_image,
         mode=story.mode,
         chat_prompt=story.chat_prompt,
         chat_tail=story.chat_tail,
@@ -183,6 +184,9 @@ def bundle_from_scenario(
         art.pictures = [p for p in art.pictures if p.file in bundle.pending_files]
         art.pictures_by_day, art.failures = {}, {}
         bundle.world_art = art
+    if scenario.background_image in bundle.pending_files:
+        # Only with its file, as a map picture: a missing one is no background.
+        story.background_image = scenario.background_image
     return bundle
 
 

@@ -175,6 +175,9 @@ class PlotDocument(BaseModel):
     world_activity: WorldActivity | None = None
     perspective: Perspective | None = None
     length: FileLength | None = None
+    # The picture behind the transcript, a file beside the plot file
+    # (`background:`, written as a picture line's path is).
+    background: str = ""
     # The author's own notes, written as a comment the app never reads.
     notes: str = ""
     world: str = ""

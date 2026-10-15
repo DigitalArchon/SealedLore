@@ -44,6 +44,7 @@ agency: contested            # fiat | plausible | contested | dice
 world activity: normal       # quiet | normal | eventful
 perspective: whole story     # whole story | with character
 length: adaptive             # adaptive | brief | standard | descriptive | literary (never custom)
+background: pictures/farm.jpg   # the picture behind the story (see Pictures)
 ---
 ```
 
@@ -171,6 +172,10 @@ A small walled town...
   story's `world_art.json` from its folder next to the file under that name.
   Every import of the file finds the same places (their ids come from their
   names), so the art fits; without it the map is drawn as the story goes.
+  Its map pictures (an isometric view, say) come too when their files are
+  beside the plot file: in that copy, write each picture's `file` from the
+  plot file's folder, as a picture line is written
+  (`pictures/map/farm-isometric.jpg`). One whose file isn't there is left out.
 
 ## Pictures
 
@@ -192,6 +197,8 @@ on a line of its own among the item's settings:
 - After `|` comes the caption: what the picture shows. It is optional.
 - PNG, JPEG, WebP, BMP and GIF are read.
 - An item may have as many `picture:` lines as you like.
+- `background:` at the top of the file names a picture the same way, shown
+  behind the story's transcript (View → Background picture… changes it).
 - **Share the folder with the file.** A story with pictures is the `.md` and
   its `pictures` folder together (zipped, or as they are).
 

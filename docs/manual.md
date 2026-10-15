@@ -663,7 +663,8 @@ well: File → New story from a sample → Doomsville is the same as importing
 drawn up beforehand (a `# Map` section: see "The map"). The Ashen Reach,
 The Silverwood, Brasshaven and The Ninth Furnace show other kinds of world
 (grimdark science fiction, traditional fantasy, steampunk and a hellscape),
-each with a plot, a map drawn up and a picture of every card. Rather than
+each with a plot, a map drawn up with an isometric view, a background
+picture, and a picture of every card. Rather than
 write the format by hand, **File → Plot file editor…** writes it for you: the
 world, opening, characters, places, lore, facts and events each get a form,
 conditions and what an event brings or sets are picked from what the file
@@ -935,7 +936,10 @@ image model (Settings → Images → **Isometric view model**: Qwen Image unless
 you choose another; **Recommended** beside it offers Nano Banana Pro, the most
 faithful, at about seven times the price). It is painted from the map itself, only when you
 press **Paint it**, which gives the model and its price; it counts with the
-day's map pictures. The 2D map is the story's truth: the painting matches it
+day's map pictures. Before it is painted, the prompt writer (Settings →
+Models) turns what the map says about the place into only what a picture can
+show, leaving out names and story, which image models otherwise letter onto
+the view. The samples come with their views painted. The 2D map is the story's truth: the painting matches it
 closely, not exactly. Once the story changes something there (the barn
 burns), the view says it is out of date and offers to paint it again.
 

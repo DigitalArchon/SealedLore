@@ -41,6 +41,7 @@ from sealedlore.gui.composer import (
     WORLD_ACTIVITY_LABELS,
     WORLD_ACTIVITY_TIPS,
 )
+from sealedlore.gui.fields import set_field_text
 from sealedlore.gui.plot_pictures import Folder, PlotPictureStrip, SaveFirst
 from sealedlore.gui.style_panel import PERSPECTIVE_SUMMARIES
 from sealedlore.models.plot_file import (
@@ -237,6 +238,11 @@ class StoryPage(Page):
         for style, preset in PRESETS.items():
             if style != "custom":
                 self.length.addItem(preset.label, style)
+        self.background = QLineEdit()
+        self.background.setPlaceholderText("pictures/background.jpg")
+        self.background.setToolTip(
+            "A picture beside the plot file, shown behind the story when it is imported."
+        )
         self.notes = QPlainTextEdit()
         self.notes.setPlaceholderText(
             "Notes to yourself. Kept in the file; the app never reads them."
@@ -252,6 +258,7 @@ class StoryPage(Page):
         form.addRow("World", self.world_activity)
         form.addRow("Perspective", self.perspective)
         form.addRow("Length", self.length)
+        form.addRow("Background", self.background)
         form.addRow(
             hint("Each is a setting the story starts with; the author can change it in the app.")
         )
@@ -265,6 +272,7 @@ class StoryPage(Page):
             self.world_activity,
             self.perspective,
             self.length,
+            self.background,
             self.notes,
         )
 
@@ -282,6 +290,7 @@ class StoryPage(Page):
             (self.length, document.length),
         ):
             combo.setCurrentIndex(max(combo.findData(value), 0) if value else 0)
+        set_field_text(self.background, document.background)
         self.notes.setPlainText(document.notes)
 
     def _store(self) -> None:
@@ -295,6 +304,7 @@ class StoryPage(Page):
         document.world_activity = self.world_activity.currentData()
         document.perspective = self.perspective.currentData()
         document.length = self.length.currentData()
+        document.background = self.background.text().strip()
         document.notes = self.notes.toPlainText()
         self._name_changed(old, document.title)
 

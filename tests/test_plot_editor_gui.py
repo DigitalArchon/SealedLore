@@ -345,8 +345,11 @@ def test_importing_a_plot_brings_its_pictures_onto_the_cards(app, tmp_path: Path
     assert [ref.caption for ref in jane.reference_images] == ["in her army coat, rifle slung"]
     assert len(town.reference_images) == 2 and truck.reference_images == []
     files = [ref.file for ref in (*jane.reference_images, *town.reference_images)]
-    assert sorted(scenario.reference_files) == sorted(files)
     assert all(file.startswith("images/refs/") for file in files)
+    # The front matter's background comes in the same way, cleaned.
+    assert scenario.background_image == "images/background.png"
+    files.append(scenario.background_image)
+    assert sorted(scenario.reference_files) == sorted(files)
 
     from sealedlore.storage.repository import save_story_bundle
     from sealedlore.storage.scenario import bundle_from_scenario
@@ -356,6 +359,16 @@ def test_importing_a_plot_brings_its_pictures_onto_the_cards(app, tmp_path: Path
     for file in files:
         assert story_path(bundle.story.id, file, tmp_path / "data").is_file()
     assert bundle.cast[0].reference_images[0].file == jane.reference_images[0].file
+    assert bundle.story.background_image == "images/background.png"
+    # A restart, Duplicate settings or a scenario file keeps it.
+    from sealedlore.storage.images import reference_files
+    from sealedlore.storage.scenario import scenario_from_bundle
+
+    again = bundle_from_scenario(
+        scenario_from_bundle(bundle, reference_files(bundle, tmp_path / "data"))
+    )
+    assert again.story.background_image == "images/background.png"
+    assert "images/background.png" in again.pending_files
     window.close()
 
 

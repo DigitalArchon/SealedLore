@@ -254,8 +254,8 @@ Windows offers weaker privacy on the machine itself (see
 3. **Start from a sample.** File → New story from a sample → Doomsville (a
    survivor at a farmhouse, with a plot), or Doomsville with a map (the same
    story with the map on and the country around Hellsville drawn up), or
-   one of four other worlds, each with a plot, a map drawn up and a picture
-   of every character and place: The Ashen Reach (grimdark science fiction
+   one of four other worlds, each with a plot, a map drawn up with an
+   isometric view, a background, and a picture of every character and place: The Ashen Reach (grimdark science fiction
    on a dying mining world), The Silverwood (elves, forests, caves and a
    city on a waterfall), Brasshaven (a steampunk city of airships and
    clockwork) and The Ninth Furnace (a hellscape of cultists and rivers of
