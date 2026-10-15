@@ -60,3 +60,30 @@ def test_the_pages_can_be_looked_through_but_not_changed_during_a_job(app, windo
     window._update_controls()
     assert not panel.name.isReadOnly() and panel.remove_button.isEnabled()
     assert panel.portrait.draw_button.isEnabled()
+
+
+def test_what_the_page_turns_off_meanwhile_stays_off(app, window):
+    """The review: a story's first passage fixes Person and Tense while the
+    page is locked; the page's setEnabled(False) on a control the lock had
+    already turned off sent Qt no event, and they came back editable."""
+    style = window.style_panel
+    style.set_started(False)
+    assert style.person.isEnabled()
+    window._busy = True
+    window._update_controls()
+    assert not style.person.isEnabled()
+    style.set_started(True)  # the passage is in: fixed now
+    window._busy = False
+    window._update_controls()
+    assert not style.person.isEnabled() and not style.tense.isEnabled()
+    # And text the page made editable meanwhile stays read-only until the end.
+    panel = window.cast_panel
+    window._busy = True
+    window._update_controls()
+    panel.name.setReadOnly(False)
+    assert panel.name.isReadOnly()
+    window._busy = False
+    window._update_controls()
+    assert not panel.name.isReadOnly()
+    # Unlocked, the widgets' own methods are back.
+    assert "setEnabled" not in vars(style.person) and "setReadOnly" not in vars(panel.name)

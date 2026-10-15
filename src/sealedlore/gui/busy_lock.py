@@ -11,6 +11,13 @@ control the page turns back on meanwhile (picking another character enables
 its buttons) is turned off again and remembered as on, and a list picked
 anew locks the widgets the page has just built for it. Unlocked, each
 control is as the page last left it.
+
+What the page sets on a locked widget is taken as what it wants, not done:
+its `setEnabled`, `setDisabled` and `setReadOnly` are the lock's while it
+holds (`_hold`). A page turning off a control the lock had already turned
+off sends Qt no event, so the lock kept it remembered as on: a story's
+first passage fixes Person and Tense (`StylePanel.set_started`), and they
+came back editable once the passage was in.
 """
 
 from __future__ import annotations
@@ -83,15 +90,29 @@ class BusyLock(QObject):
                     continue
                 if isinstance(widget, _TEXT):
                     self._read_only[widget] = widget.isReadOnly()
-                    widget.setReadOnly(True)
+                    type(widget).setReadOnly(widget, True)
+                    self._hold(widget, "setReadOnly", self._read_only)
                 elif isinstance(widget, _CONTROLS) or (
                     isinstance(widget, QAbstractItemView) and not isinstance(widget, _BROWSED)
                 ):
                     self._enabled[widget] = not widget.testAttribute(Qt.WA_ForceDisabled)
-                    widget.setEnabled(False)
+                    QWidget.setEnabled(widget, False)
                     widget.installEventFilter(self)
+                    self._hold(widget, "setEnabled", self._enabled)
+                    self._hold(widget, "setDisabled", self._enabled, invert=True)
         finally:
             self._locking = False
+
+    @staticmethod
+    def _hold(widget: QWidget, name: str, wanted: dict, *, invert: bool = False) -> None:
+        """The page's own calls to `name` on the widget only say what it
+        wants once the lock lifts (an instance attribute shadows the method,
+        for calls from Python; the event filter catches the rest)."""
+
+        def remember(value: bool, widget=widget) -> None:
+            wanted[widget] = (not value) if invert else bool(value)
+
+        setattr(widget, name, remember)
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802 - Qt naming
         if (
@@ -117,11 +138,20 @@ class BusyLock(QObject):
             for widget, enabled in self._enabled.items():
                 if isValid(widget):
                     widget.removeEventFilter(self)
+                    _release(widget, "setEnabled", "setDisabled")
                     widget.setEnabled(enabled)
             for widget, read_only in self._read_only.items():
                 if isValid(widget):
+                    _release(widget, "setReadOnly")
                     widget.setReadOnly(read_only)
         finally:
             self._locking = False
         self._enabled.clear()
         self._read_only.clear()
+
+
+def _release(widget: QWidget, *names: str) -> None:
+    """The widget's own methods back, in place of the lock's."""
+    for name in names:
+        if name in vars(widget):
+            delattr(widget, name)
