@@ -377,6 +377,8 @@ class RefImageStrip(QWidget):
             self.changed.emit()
 
     def _edit_caption(self, item: QListWidgetItem | None) -> None:
+        if not self.caption_button.isEnabled():
+            return  # a double-click while the page is locked (gui/busy_lock.py)
         ref = self._ref(item)
         if ref is None:
             return

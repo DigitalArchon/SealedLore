@@ -60,6 +60,7 @@ from sealedlore.gui.attest_check import attestation_tests
 from sealedlore.gui.bad_hosts import bad_hosts
 from sealedlore.gui.banners import OverBudgetBanner, StalenessBanner
 from sealedlore.gui.branch_bar import BranchBar, opening_words
+from sealedlore.gui.busy_lock import BusyLock
 from sealedlore.gui.cast_panel import CastPanel
 from sealedlore.gui.composer import DEFAULT_SUFFIX, Composer
 from sealedlore.gui.fields import PageStack, install_wheel_guard
@@ -404,6 +405,18 @@ class MainWindow(
         self.summaries_panel.chapter_chosen.connect(self._scroll_to_node)
         self.summaries_panel.edit_committed.connect(self._save_summary)
         self.inspector = ContextInspector()
+        # The pages a job locks read-only rather than greys out.
+        self._busy_locks = [
+            BusyLock(page)
+            for page in (
+                self.cast_panel,
+                self.scene_panel,
+                self.plot_panel,
+                self.lore_panel,
+                self.style_panel,
+                self.summaries_panel,
+            )
+        ]
         self._init_images()
         self._init_videos()
         self._init_private()
@@ -1748,6 +1761,13 @@ class MainWindow(
         self._start(lambda: self.session.rewrite_from(node_id, text, name=name))
 
     def _scroll_to_node(self, node_id: str) -> None:
+        if self._busy and self._streaming_job:
+            # A jump far back rebuilds the transcript's window, under the
+            # passage being written.
+            self.statusBar().showMessage(
+                "The story can go to a chapter once the passage is in.", 6000
+            )
+            return
         self.transcript.scroll_to_node(node_id)
 
     # --- export, import, usage (§9, §8.3) ------------------------------------
@@ -3756,18 +3776,21 @@ class MainWindow(
         # With no story the inspector shows its empty page, not greyed forms
         # that look usable and answer nothing (their scrollbars included).
         self.right_tabs.show_empty(not has_story)
-        self.cast_panel.setEnabled(has_story and not busy)
-        self.scene_panel.setEnabled(has_story and not busy)
-        self.plot_panel.setEnabled(has_story and not busy)
+        self.cast_panel.setEnabled(has_story)
+        self.scene_panel.setEnabled(has_story)
+        self.plot_panel.setEnabled(has_story)
         self.clock_button.setEnabled(has_story and not busy)
-        self.summaries_panel.setEnabled(has_story and not busy)
-        self.style_panel.setEnabled(has_story and not busy)
+        self.summaries_panel.setEnabled(has_story)
+        self.style_panel.setEnabled(has_story)
+        # Looked through, not changed, while a job runs (gui/busy_lock.py).
+        for lock in self._busy_locks:
+            lock.set_locked(busy)
         self.find_action.setEnabled(has_story)
         self.find_button.setEnabled(has_story)
         if self.session is not None:
             # A story that has begun keeps its person and tense.
             self.style_panel.set_started(bool(self.session.nodes))
-        self.lore_panel.setEnabled(has_story and not busy)
+        self.lore_panel.setEnabled(has_story)
         self.last_review_action.setEnabled(
             has_story and not busy and bool(self.session and self.session.last_review)
         )
