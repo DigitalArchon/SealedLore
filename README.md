@@ -95,7 +95,8 @@ Pictures and video can each use a different service from chat (NanoGPT,
 OpenRouter, WaveSpeed, or anything OpenAI-compatible).
 
 You can also have a basic chat without the storytelling features, but still
-with summarising, end-to-end encrypted models, image generation and so on.
+with summarising, end-to-end encrypted models, image generation, a map that
+grows from the conversation, and so on.
 
 ### API usage fees
 

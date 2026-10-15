@@ -14,7 +14,10 @@ one at a time, each counted against the story's daily limit before it is
 sent, logged with its prompt, and its file stripped of hidden data like any
 picture.
 
-Never in a private scene or a chat, and never two runs at once.
+Never in a private scene, and never two runs at once. A simple chat that
+keeps a map is drawn like a story (its system prompt stands for the setting);
+map pictures from an image model stay off in a TEE chat, which is private
+throughout, since the image endpoint is not.
 """
 
 from __future__ import annotations
@@ -154,25 +157,34 @@ class WorldArtRuntime:
         if not self.map_on or not self.config.map_art or self.open_span is not None:
             return []
         world = self.world()
-        held = self._character(self.story.held_character_id)
-        here = world.where.get(held.name) if held is not None else None
+        held = self.map_held_name(self.story.held_character_id)
+        here = world.where.get(held) if held is not None else None
         return plan_art(
             world,
             self.map_art_copy(),
             here=here,
-            setting=setting_of(self.story.world_bible, self.story.title),
+            setting=self.map_setting(),
             texts=self.texts,
             limit=limit,
             sprites=not self.map_pictures_on,
         )
+
+    def map_setting(self) -> str:
+        """The setting, briefly, for the art: the world's opening words; a
+        chat's system prompt, which is all a chat says of its world."""
+        text = self.story.chat_prompt if self.story.chat else self.story.world_bible
+        return setting_of(text, self.story.title)
 
     # --- pictures from an image model -------------------------------------------
 
     @property
     def map_pictures_on(self) -> bool:
         """The author has turned map pictures on and there is somewhere to
-        send them; never in a private scene."""
+        send them; never in a private scene, nor in a TEE chat (private
+        throughout, which the image endpoint is not)."""
         if not (self.map_on and self.config.map_art and self.config.map_pictures):
+            return False
+        if self.tee_chat:
             return False
         media = self.config.images()
         return self.open_span is None and media is not None and bool(media.api_key)
@@ -190,17 +202,22 @@ class WorldArtRuntime:
         if room <= 0:
             return []
         info = self._picture_model()
-        held = self._character(self.story.held_character_id)
-        people = [
-            Person(c.name, looks_of(c.summary, c.full_description))
-            for c in (*self.visible_cast(), *self.visible_supporting())
-        ]
+        # A chat's user has no card to draw an avatar from: the map's own
+        # figure stands for them.
+        people = (
+            []
+            if self.story.chat
+            else [
+                Person(c.name, looks_of(c.summary, c.full_description))
+                for c in (*self.visible_cast(), *self.visible_supporting())
+            ]
+        )
         return plan_pictures(
             self.world(),
             art,
             people=people,
-            held=held.name if held is not None else None,
-            setting=setting_of(self.story.world_bible, self.story.title),
+            held=self.map_held_name(self.story.held_character_id),
+            setting=self.map_setting(),
             edits=info is not None and info.accepts_images,
             texts=self.texts,
             limit=min(limit, room),
@@ -498,7 +515,7 @@ class WorldArtRuntime:
                 self._save_art(art)
             self._log("map_picture_error", {"request_log_ref": log_ref, "error": str(exc)[:300]})
             return
-        if self._art_stop or not self.pictures.alive():
+        if self._art_stop or self._closed or not self.pictures.alive():
             # Closed meanwhile (another story is open, or this one deleted):
             # nothing written, or the story's folder came back as a ghost and
             # a reopened story's map art was written over by this one's.
@@ -692,9 +709,12 @@ class WorldArtRuntime:
 
     def _save_art(self, art: WorldArt) -> None:
         # Never into a story deleted meanwhile: the write made its folder
-        # again, an unreadable ghost in the list.
-        if not self.memory_only and self.pictures.alive():
-            save_world_art(self.story.id, art, self.root)
+        # again, an unreadable ghost in the list. Nor once the story is
+        # closed (`StorySession.close`), under its lock: a painting still out
+        # wrote the day's count into a folder being removed.
+        with self._closing:
+            if not self._closed and not self.memory_only and self.pictures.alive():
+                save_world_art(self.story.id, art, self.root)
 
 
 def _today() -> str:

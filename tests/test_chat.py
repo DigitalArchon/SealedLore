@@ -6,6 +6,7 @@ after the summary of their part."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -134,6 +135,124 @@ def test_nothing_but_turns_and_summaries_reach_any_model(tmp_path):
     assert set(kinds) <= {"turn", "summary"}, kinds
     assert kinds.count("turn") == 8 and "summary" in kinds
     assert session.bundle.summaries, "nothing was archived"
+
+
+MAP_READ = DEFAULT_TEXTS["map_read.system"]
+# Found in a dumped payload (its newlines escaped): the opening words.
+MAP_READ_OPENING = MAP_READ[:60]
+
+
+def test_a_chat_with_a_map_calls_its_map_read_and_nothing_else(tmp_path):
+    """The author (Oct 2026): a chat may keep a map. Every other side call
+    stays off; the map read goes out after each reply like a story's."""
+    config = make_config(
+        scene_reads="every_turn",
+        story_ledger=True,
+        suggest_characters=True,
+        lore_selector="picker",
+        archive_chunk_turns=2,
+        map_art=False,
+    )
+    # JSON everywhere: a reply the map read can parse, long enough to archive.
+    filler = json.dumps({"places": [], "note": "and a little more. " * 20})
+    session, provider = chat_session(tmp_path, [filler] * 40, config=config)
+    session.story.defaults.world_map = True
+    session.story.defaults.context_token_budget = 900
+    for i in range(6):
+        say(session, f"Question {i}: " + "tell me more. " * 10)
+    kinds = []
+    for request in provider.requests:
+        system = request.messages[0].text if request.messages[0].role == "system" else ""
+        kinds.append(
+            "summary"
+            if system == CHAT_SUMMARISER
+            else "map"
+            if system == MAP_READ
+            else "turn"
+            if system.startswith(PROMPT)
+            else system
+        )
+    assert set(kinds) <= {"turn", "summary", "map"}, kinds
+    assert kinds.count("turn") == 6 and kinds.count("map") == 6 and "summary" in kinds
+    assert session.bundle.summaries, "nothing was archived"
+
+
+def test_a_chats_private_part_pauses_its_map_and_the_summary_is_read(tmp_path):
+    """As a story's scene does: no map read, drawing or painting while the
+    part is open, and once the summary is approved the map read is sent the
+    summary, never the part."""
+    config = make_config(map_art=False)
+    session, main = chat_session(tmp_path, ["You walk in.", "{}", "Noted.", "{}"], config=config)
+    session.story.defaults.world_map = True
+    say(session, "I walk into the tavern.")
+    reads_before = sum(MAP_READ_OPENING in json.dumps(p) for p in main.payloads)
+    assert reads_before == 1
+    private = enter(session)
+    say(session, f"I whisper {MARKER} to the barkeep.")
+    assert sum(MAP_READ_OPENING in json.dumps(p) for p in main.payloads) == reads_before
+    assert session.map_art_jobs() == [] and session.map_picture_jobs() == []
+    assert session.map_context(session.path(), None) == ""
+    private.responses = ["They agreed to meet at dawn by the old well."]
+    list(session.close_private(session.summarise_private()))
+    reads = [p for p in main.payloads if MAP_READ_OPENING in json.dumps(p)]
+    assert len(reads) == reads_before + 1
+    assert "meet at dawn by the old well" in json.dumps(reads[-1])
+    assert MARKER not in json.dumps(main.payloads)
+
+
+def test_a_tee_chats_map_is_read_by_its_own_model_and_draws_no_map_pictures(tmp_path):
+    """A TEE chat is private throughout: its map's read and art go to its own
+    model, and map pictures (an image endpoint, not private) stay off."""
+    config = Config(
+        providers=[
+            ProviderConfig(
+                name="nano", base_url="https://nano-gpt.com/api/v1", model="m", api_key="k"
+            )
+        ],
+        active_provider_name="nano",
+        min_cacheable_tokens=1,
+        map_model="small/map",
+        map_art_model="small/art",
+        map_art=True,
+        map_pictures=True,
+    )
+    session, provider = chat_session(tmp_path, ["Hi.", "{}"], config=config)
+    session.story.defaults.world_map = True
+    session.story.defaults.main_model = "TEE/gemma-3-27b"
+    session.private_tee = FakeTee(signed=True)
+    assert session.map_model == "TEE/gemma-3-27b" and session.map_art_model == "TEE/gemma-3-27b"
+    assert not session.map_pictures_on
+    say(session, "Hello")
+    assert {request.model for request in provider.requests} == {"TEE/gemma-3-27b"}
+    session.story.defaults.main_model = "z-ai/glm-5.3"
+    assert session.map_model == "small/map" and session.map_pictures_on
+
+
+def test_a_memory_only_chat_with_a_map_leaves_no_trace_on_disk(tmp_path):
+    config = make_config(archive_chunk_turns=2, map_art=False)
+    story = Story(title="Incognito", mode="chat", chat_prompt=PROMPT, chat_keep="memory")
+    story.defaults.main_model = "z-ai/glm-5.3"
+    story.defaults.world_map = True
+    before = listing(tmp_path)
+    read = json.dumps(
+        {
+            "places": [{"name": "The well", "kind": "site", "quote": "the old well"}],
+            "where": [{"who": "You", "place": "The well", "quote": "the old well"}],
+        }
+    )
+    provider = MockChatProvider(["You stand by the old well.", read] * 4)
+    session = StorySession(
+        StoryBundle(story=story),
+        config,
+        provider,
+        root=tmp_path,
+        estimator=TokenEstimator(counter=fallback_counter),
+    )
+    for i in range(3):
+        say(session, f"Step {i}: I look around.")
+    assert session.world().where == {"You": next(iter(session.world().places))}
+    assert listing(tmp_path) == before
+    assert {"world_request", "world_response"} <= {e["kind"] for e in session.memory_log}
 
 
 def test_the_first_message_is_kept_in_full_after_its_part_is_summarised(tmp_path):

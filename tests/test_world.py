@@ -401,10 +401,63 @@ def test_with_the_map_off_nothing_is_read(tmp_path: Path, story, cast):
     assert not session.map_on
 
 
-def test_a_simple_chat_never_keeps_a_map(tmp_path: Path, story, cast):
+ADA_READ = reply(
+    places=[{"name": "The yard", "kind": "area", "quote": "climbed up into the cold yard"}],
+    where=[{"who": "Ada", "place": "The yard", "quote": "climbed up into the cold yard"}],
+)
+
+
+def test_a_simple_chat_keeps_a_map_when_asked(tmp_path: Path, story, cast):
+    """The author (Oct 2026): a chat may keep a map as a story does. A chat
+    has no cast: the read is given the user's name alone (never the chat's
+    stray cards), told who "I" and "you" are, and the map goes in the chat's
+    prompt right before the message, as in a story's tail."""
+    from sealedlore.engine.prompt_texts import DEFAULT_TEXTS
+    from sealedlore.models.node import CHAT_USER_ID
+
     story.mode = "chat"
-    session = make_session(tmp_path, story, cast, [FIRST_PASSAGE])
-    assert not session.map_on
+    story.chat_prompt = "You run a text adventure."
+    story.chat_character = "Ada"
+    session = make_session(tmp_path, story, cast, [FIRST_PASSAGE, ADA_READ, "You look.", "{}"])
+    assert session.map_on and session.chat_name == "Ada"
+    list(session.send(TurnRequest(speaker_id=CHAT_USER_ID, user_text="I open the cellar door.")))
+    read = session.provider.requests[-1]
+    assert read.model == "small/scene-model"
+    text = read.messages[-1].text
+    assert "THE USER'S MESSAGE:\nI open the cellar door." in text
+    assert "PEOPLE: Ada\n" in text  # the chat's stray cards are nobody's business
+    assert "The author's character: Ada\n" in text
+    assert DEFAULT_TEXTS.fill("map_read.chat", name="Ada") in text
+    world = session.world()
+    assert world.where == {"Ada": world_place(world, "The yard")}
+
+    list(session.send(TurnRequest(speaker_id=CHAT_USER_ID, user_text="I look around.")))
+    turn_sent = session.provider.requests[-2].messages[-1].text  # the read is last
+    assert turn_sent.index("# THE MAP HERE") < turn_sent.index("I look around.")
+    assert "Ada is at: The yard" in turn_sent
+    names = [section.name for section in session.last_prompt.sections]
+    assert names.index("tail.map") < names.index("tail.author_turn")
+    # The message is kept as written: the map is never in the history.
+    assert all("THE MAP HERE" not in node.content for node in session.path())
+
+
+def test_a_chat_that_names_nobody_is_tracked_as_you(tmp_path: Path, story, cast):
+    from sealedlore.models.node import CHAT_USER_ID
+
+    story.mode = "chat"
+    you = reply(
+        places=[{"name": "The yard", "kind": "area", "quote": "climbed up into the cold yard"}],
+        where=[{"who": "You", "place": "The yard", "quote": "climbed up into the cold yard"}],
+    )
+    session = make_session(tmp_path, story, cast, [FIRST_PASSAGE, you, "You look.", "{}"])
+    assert session.chat_name == "You"
+    list(session.send(TurnRequest(speaker_id=CHAT_USER_ID, user_text="I go up.")))
+    assert "The author's character: You\n" in session.provider.requests[-1].messages[-1].text
+    world = session.world()
+    assert world.where == {"You": world_place(world, "The yard")}
+    assert session.map_held_name(None) == "You"
+    list(session.send(TurnRequest(speaker_id=CHAT_USER_ID, user_text="I look around.")))
+    assert "You are at: The yard" in session.provider.requests[-2].messages[-1].text
 
 
 def test_a_new_playthrough_keeps_the_map_on(story, cast):

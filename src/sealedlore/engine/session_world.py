@@ -4,8 +4,15 @@ after each passage, in a story with the map on.
 It goes out beside the scene read on a sibling client, as the plot's clock
 read does, and its result is applied on the worker thread after theirs. A
 failed read never costs the turn: the map stays as it was and a notice says
-so. Never in a simple chat, and never in a private scene: `read_after_turn`
-isn't run there, and the approved summary is read like any passage.
+so. Never in a private scene: `read_after_turn` isn't run there, and the
+approved summary is read like any passage.
+
+A simple chat may keep a map too (the author, Oct 2026: the map should grow
+from a chat as it does from a story). A chat has no cast and holds nobody,
+so the map tracks the user by one name (`Story.chat_character`, "You" when
+blank, `chat_name`), the read is told who "I" and "you" are, and the only
+people it is given is that name. The map read is the one side call a chat
+makes (session_plot.py `_read_after_turn`).
 """
 
 from __future__ import annotations
@@ -24,6 +31,7 @@ from sealedlore.engine.world import (
     resolve_reply,
     world_at,
 )
+from sealedlore.models.character import Character
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID, Node
 from sealedlore.models.world import WorldMap
 from sealedlore.providers.base import ChatRequest, ProviderError
@@ -31,6 +39,8 @@ from sealedlore.providers.base import ChatRequest, ProviderError
 # Room for a model that reasons a little before its JSON (DeepSeek V4.1 Flash
 # answered in ~500 tokens on the longest test story).
 WORLD_MAX_TOKENS = 4000
+# A chat's user on the map when the chat names nobody.
+CHAT_MAP_NAME = "You"
 
 
 @dataclass
@@ -47,8 +57,29 @@ class _WorldRead:
 class WorldRuntime:
     @property
     def map_on(self) -> bool:
-        """The story keeps a map: the author turned it on, and it isn't a chat."""
-        return self.story.defaults.world_map and not self.story.chat
+        """The story keeps a map: the author turned it on (a simple chat may too)."""
+        return self.story.defaults.world_map
+
+    @property
+    def chat_name(self) -> str:
+        """A simple chat's name for the user on its map."""
+        return self.story.chat_character.strip() or CHAT_MAP_NAME
+
+    def map_held_name(self, held_id: str | None) -> str | None:
+        """Whom the map follows: the character `held_id` names, or a chat's
+        user. None when nobody is held in a story."""
+        if self.story.chat:
+            return self.chat_name
+        held = self._character(held_id) if held_id else None
+        return held.name if held is not None else None
+
+    def map_people(self, path=None) -> list[Character]:
+        """Whom a map read may place by name: the story's visible cast and
+        supporting cards; a chat's user alone (a chat's stray cards are
+        nobody's business)."""
+        if self.story.chat:
+            return [Character(id="", name=self.chat_name)]
+        return [*self.visible_cast(path), *self.visible_supporting()]
 
     @property
     def map_model(self) -> str:
@@ -83,10 +114,9 @@ class WorldRuntime:
         if not self.map_on or self.in_private:
             return ""
         base = self.story.world_base
-        held = self._character(held_id) if held_id else None
         return render_map_context(
             established(self._world_on(path), base),
-            held.name if held is not None else None,
+            self.map_held_name(held_id),
             self.texts,
             fixed={p.id for p in base.places} if base is not None else (),
         )
@@ -105,18 +135,22 @@ class WorldRuntime:
         path = self._path_to(node.id)
         before = self._world_on(path[:-1])
         author = path[-2] if len(path) > 1 and path[-2].kind == "user" else None
-        held = self._character(node.meta.controlled_character_id)
+        held = self.map_held_name(node.meta.controlled_character_id)
         author_text = author.content if author is not None else ""
-        if author is None:
+        note = ""
+        if self.story.chat:
+            label = "The user's message"
+            note = self.texts.fill("map_read.chat", name=self.chat_name)
+        elif author is None:
             label = "The author's turn"
         elif author.speaker_id in (DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID):
             kind = "Direction" if author.speaker_id == DIRECTOR_SPEAKER_ID else "Narration"
             label = f"The author's turn: {kind} (what it says happens)"
         else:
             speaker = self._character(author.speaker_id)
-            name = speaker.name if speaker is not None else (held.name if held else "")
+            name = speaker.name if speaker is not None else (held or "")
             label = f"The author's turn, as {name}"
-        people = [c.name for c in [*self.visible_cast(path), *self.visible_supporting()]]
+        people = [c.name for c in self.map_people(path)]
         model = self.map_model
         request = ChatRequest(
             model=model,
@@ -124,11 +158,12 @@ class WorldRuntime:
             messages=build_world_read_messages(
                 world=before,
                 people=people,
-                held=held.name if held is not None else None,
+                held=held,
                 author_label=label,
                 author_turn=author_text,
                 passage=node.content,
                 texts=self.texts,
+                note=note,
             ),
             params=self.side_params(model, max_tokens=WORLD_MAX_TOKENS),
         )
@@ -175,10 +210,9 @@ class WorldRuntime:
                 f"Couldn't read the map from this passage ({exc}). It is as it was."
             )
             return
-        people = [*self.visible_cast(self._path_to(node.id)), *self.visible_supporting()]
+        people = self.map_people(self._path_to(node.id))
         delta, refused = resolve_reply(pending.before, reply, source=pending.source, people=people)
-        held = self._character(node.meta.controlled_character_id)
-        place_delta(pending.before, delta, held.name if held is not None else None)
+        place_delta(pending.before, delta, self.map_held_name(node.meta.controlled_character_id))
         if refused:
             self._log("world_refused", {"request_log_ref": log_ref, "refused": refused})
         node.meta.world = None if delta.empty() else delta

@@ -6,6 +6,11 @@ created and then set up again (the author, Sept 2026).
 Every chat is also asked where it is kept: on disk, as any story, or in
 memory only, a full incognito conversation (the author, Sept 2026; at first a
 TEE chat's choice only). The choice is fixed with the chat. See engine/chat.py.
+
+A chat may keep a map as a story does (the author, Oct 2026): once the
+conversation sets a scene, the map read notes the places, and the map's
+art draws the local area and grows it as the chat goes. A chat has no cast,
+so it is asked the name the map tracks the user by ("You" when blank).
 """
 
 from __future__ import annotations
@@ -13,6 +18,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -104,6 +110,20 @@ class NewChatDialog(QDialog):
         )
         tail_hint.setObjectName("hintLabel")
         tail_hint.setWordWrap(True)
+        self.world_map = QCheckBox("Keep a map of the conversation")
+        self.chat_character = QLineEdit()
+        self.chat_character.setPlaceholderText("You")
+        self.chat_character.setMaxLength(60)
+        self.chat_character.setEnabled(False)
+        map_hint = QLabel(
+            "After each reply a small model (Settings → Models → Map model) notes the places "
+            "the conversation goes to, how they connect, who is where and the things that "
+            "matter, and the map grows with it (Map, above the chat); its art is drawn in the "
+            "background. One more small call after every reply. The map tracks you by the "
+            'name beside it: your character\'s name, or "You".'
+        )
+        map_hint.setObjectName("hintLabel")
+        map_hint.setWordWrap(True)
         self.keep = QComboBox()
         self.keep.addItem("On disk", "disk")
         self.keep.addItem("In memory only", "memory")
@@ -122,6 +142,9 @@ class NewChatDialog(QDialog):
         form.addRow("", prompt_hint)
         form.addRow("Tail", self.tail)
         form.addRow("", tail_hint)
+        form.addRow("Map", self.world_map)
+        form.addRow("Your name on it", self.chat_character)
+        form.addRow("", map_hint)
         form.addRow(self.keep_label, self.keep)
         form.addRow("", self.keep_hint)
 
@@ -141,6 +164,7 @@ class NewChatDialog(QDialog):
         self.attest.model_changed(self.model.text())
         self.keep.currentIndexChanged.connect(lambda _index: self._sync())
         self.title.textChanged.connect(lambda _text: self._sync())
+        self.world_map.toggled.connect(self.chat_character.setEnabled)
         self._sync()
 
     def _route_endpoint(self) -> str | None:

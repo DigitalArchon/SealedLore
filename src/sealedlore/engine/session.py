@@ -460,6 +460,10 @@ class StorySession(
         self.unreported_usage: list[Usage] = []
         # A memory-only chat's API log, which is never written (`memory_only`).
         self.memory_log: list[dict[str, Any]] = []
+        # Set at the end of `close()`, under the lock `_log` and the map's
+        # art writes take: nothing of the story is written after it.
+        self._closed = False
+        self._closing = threading.Lock()
         # A memory-only chat's pictures (`pictures`); a story's are on disk.
         self._memory_pictures: MemoryPictures | None = None
         # Prices fetched for a memory-only chat, never written to the config.
@@ -648,8 +652,8 @@ class StorySession(
             "map_art": self.config.map_art_model,
         }
         role = role_in_use(role, own)
-        if role == "summarisation" and self.story.chat and is_tee(self.model):
-            role = "story"  # a TEE chat's summaries are its own model's
+        if self.story.chat and is_tee(self.model):
+            role = "story"  # a TEE chat's every call (summaries, its map) is its own model's
         return role, (self.model if role == "story" else own[role] or self.model)
 
     def route_for(self, role: str, model: str | None = None) -> dict[str, Any]:
@@ -783,6 +787,7 @@ class StorySession(
         # they don't already cover. On a branch that forks below the summarised
         # line nothing matches, so the prose goes verbatim instead.
         split = self.split(history_nodes)
+        nodes = self.path() if history_nodes is None else list(history_nodes)
         if self.story.chat:
             prompt = assemble_chat(
                 story=self.story,
@@ -792,10 +797,12 @@ class StorySession(
                 nodes_by_id=index_nodes(self.nodes),
                 estimator=self.estimator,
                 options=self.assembly_options(),
+                # The chat's map, when it keeps one, before the message as in
+                # a story's tail; empty otherwise.
+                the_map=self.map_context(nodes, None),
             )
             self.last_prompt = prompt
             return prompt
-        nodes = self.path() if history_nodes is None else list(history_nodes)
         if lore is None:
             # Assembling must never block on the network — the inspector calls
             # this on the GUI thread — so an unqualified assemble previews the
@@ -3631,12 +3638,21 @@ class StorySession(
         return self.story.chat and self.story.chat_keep == "memory"
 
     def _log(self, kind: str, body: dict[str, Any]) -> str:
+        """One API log entry; its id. Nothing is written once the story is
+        closed (`close`): a map painting still out on its thread wrote its
+        prompt writer's request into a story being deleted, and the folder
+        came back as a ghost (or `rmtree` failed on it). The lock holds a
+        write that passed the check until it is done, so `close` can't slip
+        in between."""
         entry_id = new_id()
         entry = {"id": entry_id, "kind": kind, "at": utc_now_iso(), **body}
-        if self.memory_only:
-            self.memory_log.append(entry)
-        else:
-            append_api_log(self.story.id, entry, root=self.root)
+        with self._closing:
+            if self._closed:
+                return entry_id
+            if self.memory_only:
+                self.memory_log.append(entry)
+            else:
+                append_api_log(self.story.id, entry, root=self.root)
         return entry_id
 
     def _save_config(self) -> None:
@@ -3715,3 +3731,5 @@ class StorySession(
         if self._memory_pictures is not None:
             # A memory-only chat's pictures go with it.
             self._memory_pictures.close()
+        with self._closing:
+            self._closed = True

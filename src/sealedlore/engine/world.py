@@ -149,12 +149,16 @@ def build_world_read_messages(
     author_turn: str,
     passage: str,
     texts: PromptTexts = DEFAULT_TEXTS,
+    note: str = "",
 ) -> list[PromptMessage]:
+    """`note`: a line after the author's character, for a simple chat (who
+    "I" and "you" are, `map_read.chat`); nothing for a story."""
     user = (
         f"THE MAP BEFORE THE PASSAGE\n\n{render_map(world)}\n\n"
         f"PEOPLE: {', '.join(people) or '(none named yet)'}\n"
-        f"The author's character: {held or 'not set'}\n\n"
-        f"{author_label.upper()}:\n{author_turn}\n\n"
+        f"The author's character: {held or 'not set'}\n"
+        + (f"{note}\n" if note else "")
+        + f"\n{author_label.upper()}:\n{author_turn}\n\n"
         f"THE LATEST PASSAGE:\n{passage}"
     )
     return [
@@ -278,7 +282,8 @@ def render_map_context(
     origin = next((p.id for p in chain if p.id in fixed), None)
     lines = [SECTION_MAP_HEADING, texts["map.context"], ""]
     who = held or "The author's character"  # a Question before anyone is held
-    lines.append(f"{who} is at: " + here.name + "".join(f", in {o.name}" for o in chain[1:]))
+    verb = "are" if who.lower() == "you" else "is"  # a chat's user, unnamed
+    lines.append(f"{who} {verb} at: " + here.name + "".join(f", in {o.name}" for o in chain[1:]))
     if here.what:
         lines.append("  " + " ".join(here.what.split()))
     inside = [p for p in world.places.values() if p.inside == here.id][:MAP_LIST_LIMIT]

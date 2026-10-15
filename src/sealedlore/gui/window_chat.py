@@ -2,7 +2,8 @@
 
 A chat uses the window with the storytelling taken out: the composer is a text
 box and the Private button, the inspector shows Story so far, Images and
-Prompt, and Setup is the system prompt. A part of it can be held in private
+Prompt (and Map, when the chat keeps one: window_world), and Setup is the
+system prompt. A part of it can be held in private
 as a story's scene can (window_private). A chat on a TEE model is attested
 when it opens, as a private scene is, and has a private scene's look; one
 kept in memory only is never written anywhere and asks before it is closed.
@@ -70,8 +71,11 @@ class ChatWindow:
             chat_prompt=dialog.prompt.toPlainText().strip(),
             chat_tail=dialog.tail.toPlainText().strip(),
             chat_keep=dialog.keep_choice(),
+            chat_character=dialog.chat_character.text().strip(),
         )
         story.defaults.main_model = dialog.model.text().strip()
+        # A chat may keep a map as a story does (the author, Oct 2026).
+        story.defaults.world_map = dialog.world_map.isChecked()
         # The chat's own route: on the chat, never in the settings (a chat
         # kept in memory teaches them nothing).
         story.defaults.main_route = dialog.route()

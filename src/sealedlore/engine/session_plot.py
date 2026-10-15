@@ -269,7 +269,10 @@ class PlotRuntime:
         writer of session state. A scripted provider has no sibling, and its
         replies are taken in order as before.
         """
-        if self.story.chat:  # a simple chat is read by nobody
+        if self.story.chat:
+            # A simple chat has no scene and no plot; its map, when it keeps
+            # one, is read like a story's (session_world.py).
+            yield from self.update_world_after_turn()
             return
         make_sibling = getattr(self.provider, "sibling", None)
         if not callable(make_sibling):

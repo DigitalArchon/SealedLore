@@ -113,7 +113,7 @@ class WorldWindow:
         session = self.session
         if session is None or not self.world_shown():
             return
-        held = session._character(session.story.held_character_id)
+        held = session.map_held_name(session.story.held_character_id)
         self.world_view.picture_reader = session.pictures.read
         self.world_view.art_on = self.config.map_art
         self.world_view.drawing = session.map_art_running
@@ -121,10 +121,7 @@ class WorldWindow:
         self.world_view.isometric_painting = session.isometric_painting
         self.world_view.set_progress(*session.map_art_progress())
         self.world_view.set_world(
-            session.world(),
-            session.map_art_copy(),
-            held.name if held is not None else None,
-            keep_view=keep_view,
+            session.world(), session.map_art_copy(), held, keep_view=keep_view
         )
 
     def _sync_world(self) -> None:

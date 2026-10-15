@@ -890,7 +890,8 @@ all the fields for you to approve, for when the card has drifted.
 ## The map
 
 A story can keep a map that grows as it goes: tick **Keep a map of the story**
-on Story → Setup → About. After each passage a small model (Settings → Models
+on Story → Setup → About (a simple chat can too: **Keep a map of the
+conversation**, see "Simple chat"). After each passage a small model (Settings → Models
 → **Map model**) notes the places the story went to or described, how they
 connect, who is where and the things that matter, each held to a sentence of
 the story. A place is put on the map once, where the story said it is ("five
@@ -1480,6 +1481,16 @@ story is (Settings → Context), with a plain summariser.
   private scene's does, unless the model is a `private/` one: then it is
   end-to-end encrypted (see "Private scenes"), and the chat can move only to
   another `private/` model.
+- **A chat can keep a map**, as a story can (see "The map"): tick **Keep a
+  map of the conversation** when you start it, or later under **Story →
+  Setup… → About**. Once the conversation sets a scene, the map model reads
+  each reply for the places, who is where and the things that matter, the
+  local area is drawn, and the map grows as the chat goes; the map is sent
+  with each message, as a story's is. A chat has no cast, so the map tracks
+  you by the name beside the box (your character's name, or "You" when
+  blank). It is one more small call after every reply. In a TEE chat the
+  map is read and drawn by the chat's own model, and map pictures from an
+  image model stay off (the image endpoint is not private).
 - **Where a chat is kept** is asked when it starts, on any model: **On
   disk**, like any story, or **In memory only**. Nothing of an in-memory
   chat is written on this computer, not even its log, and it teaches the

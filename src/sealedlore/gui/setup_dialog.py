@@ -176,6 +176,26 @@ class SetupDialog(QDialog):
         self.description.setPlaceholderText("What this chat is for. Not sent to the model.")
         form.addRow("Title", self.title)
         form.addRow("Description", self.description)
+        # A chat may keep a map as a story does (the author, Oct 2026); it
+        # tracks the user by one name, since a chat has no cast.
+        self.world_map = QCheckBox("Keep a map of the conversation")
+        self.world_map.setChecked(self.story.defaults.world_map)
+        self.chat_character = line_edit(self.story.chat_character)
+        self.chat_character.setPlaceholderText("You")
+        self.chat_character.setMaxLength(60)
+        self.chat_character.setEnabled(self.story.defaults.world_map)
+        self.world_map.toggled.connect(self.chat_character.setEnabled)
+        form.addRow("Map", self.world_map)
+        form.addRow("Your name on it", self.chat_character)
+        form.addRow(
+            _hint(
+                "After each reply a small model notes the places the conversation goes to, "
+                "how they connect, who is where and the things that matter, and the map grows "
+                "with it (Map, above the chat). One more small call after every reply; the "
+                "map's pictures are drawn in the background. The map tracks you by the name "
+                'beside it: your character\'s name, or "You".'
+            )
+        )
         return widget
 
     def _chat_prompt_tab(self) -> QWidget:
@@ -483,6 +503,8 @@ class SetupDialog(QDialog):
             story.setup.description = self.description.toPlainText().strip() or None
             story.chat_prompt = self.chat_prompt.toPlainText().strip()
             story.chat_tail = self.chat_tail.toPlainText().strip()
+            story.defaults.world_map = self.world_map.isChecked()
+            story.chat_character = self.chat_character.text().strip()
             self.accept()
             return
         story.world_bible = self.world.toPlainText().strip() or None

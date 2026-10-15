@@ -194,6 +194,10 @@ class Story(BaseModel):
     # A chat on a TEE model: "memory" keeps it off the disk entirely, the log
     # included (the author: "a full incognito conversation"). Fixed at start.
     chat_keep: ChatKeep = "disk"
+    # A chat that keeps a map (`defaults.world_map`, the author, Oct 2026):
+    # the name the map tracks the user by, since a chat has no cast. Blank
+    # is "You" (engine/session_world.py `chat_name`).
+    chat_character: str = ""
     # What the TEE check found when the chat was last opened.
     chat_attestation: Attestation | None = None
     # A chat's own reference pictures, added from disk (a story's are on its

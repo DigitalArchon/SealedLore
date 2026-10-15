@@ -2419,6 +2419,24 @@ found, and it becomes part of the map.""",
 )
 
 
+# A simple chat has no cast and no held character: the map tracks the user
+# by one name (Story.chat_character, "You" when blank), and the read is told
+# who "I" and "you" are, since a chat's replies are often written to the
+# user (the author, Oct 2026: a chat may keep a map like any story).
+_text(
+    "map_read.chat",
+    MAP,
+    "The map read: a simple chat",
+    "One line in the map read's request for a simple chat, after the author's "
+    "character: who the user is on the map.",
+    """\
+This is a plain conversation, not a story with a cast: the user's own character \
+is {name}. "I" in the user's messages and "you" addressed in the replies both \
+mean {name}; track that person under that name, spelled as given.""",
+    placeholders=(("name", "the user's name on the map"),),
+)
+
+
 # --- Chapters, parts and the ledger ---------------------------------------
 
 

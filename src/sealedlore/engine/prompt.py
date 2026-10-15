@@ -446,11 +446,14 @@ def assemble_chat(
     estimator: TokenEstimator | None = None,
     options: AssemblyOptions | None = None,
     with_chat_tail: bool = True,
+    the_map: str = "",
 ) -> AssembledPrompt:
     """A simple chat's request (engine/chat.py): the author's system prompt,
     the summaries with the kept messages, the conversation as written, and
     `tail` (the user's message, or the picture writer's request) last, then
-    the chat's own tail text if it has one (not for the picture writer)."""
+    the chat's own tail text if it has one (not for the picture writer).
+    `the_map`: the chat's map (engine/world.py), when it keeps one, right
+    before the message, where a story's stands in its tail."""
     from sealedlore.engine.chat import (
         SECTION_CHAT_PROMPT,
         SECTION_CHAT_TAIL,
@@ -459,7 +462,7 @@ def assemble_chat(
     )
 
     texts = (options or AssemblyOptions()).texts
-    tail_specs = [(SECTION_AUTHOR_TURN, tail.strip())]
+    tail_specs = [(SECTION_MAP, the_map), (SECTION_AUTHOR_TURN, tail.strip())]
     if with_chat_tail:
         tail_specs.append((SECTION_CHAT_TAIL, story.chat_tail.strip()))
 

@@ -211,8 +211,8 @@ class ImagesWindow:
         session = self.session
         if session is None or not session.map_on:
             return []
-        held = session._character(session.story.held_character_id)
-        sight = out_of_the_fog(session.world(), held.name if held is not None else None)
+        held = session.map_held_name(session.story.held_character_id)
+        sight = out_of_the_fog(session.world(), held)
         return [
             picture
             for picture in session.map_art_copy().pictures
