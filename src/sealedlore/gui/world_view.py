@@ -75,7 +75,7 @@ from sealedlore.engine.world_art import (
     standing_spot,
 )
 from sealedlore.engine.world_layout import position, size_of
-from sealedlore.engine.world_pictures import isometric_state
+from sealedlore.engine.world_pictures import view_current
 from sealedlore.gui import text_size
 from sealedlore.gui.isometric_view import IsometricBar, IsometricDialog
 from sealedlore.gui.map_art import FOG, picture_sprite, sprite_pixmap
@@ -1000,8 +1000,7 @@ class WorldView(QWidget):
             if picture is None or image is None:
                 continue
             held[picture.id] = image
-            now = self.art.picture_for("isometric", pid, isometric_state(self.world, pid))
-            current = now is picture
+            current = view_current(self.world, self.art, pid, picture)
             view = _IsoItem(
                 plan.place, plan.rect(), image, current=current, painted_by=picture.model
             )
@@ -1556,7 +1555,10 @@ class WorldView(QWidget):
                 )
             )
         self.redraw_button.setVisible(
-            area is not None and not self.iso_button.isChecked() and not self.paused
+            area is not None
+            and not self.iso_button.isChecked()
+            and not self.paused
+            and self.art_on  # nothing would draw it
         )
         self.redraw_button.setEnabled(not self.drawing)
         self.hint.setText(self._hint_for(level))
@@ -1600,12 +1602,11 @@ class WorldView(QWidget):
             return
         latest = self.art.picture_for("isometric", area.id)
         has_view = latest is not None and self._iso_image(latest) is not None
-        now = self.art.picture_for("isometric", area.id, isometric_state(self.world, area.id))
         model, price, problem = self.isometric_offer
         self.iso_bar.show_state(
             place=area.name,
             has_view=has_view,
-            current=now is not None and now is latest,
+            current=latest is not None and view_current(self.world, self.art, area.id, latest),
             painting=self.isometric_painting == area.id,
             model=model,
             price=price,

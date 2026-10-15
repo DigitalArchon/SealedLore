@@ -163,6 +163,9 @@ class MapPicture(BaseModel):
     prompt: str = ""
     model: str = ""
     made_at: str = ""
+    # An isometric view: the plan it was painted from (that plan's
+    # `made_at`). A plan drawn again makes the view out of date.
+    plan: str = ""
 
 
 class TerrainPatch(BaseModel):
@@ -195,6 +198,9 @@ class WorldArt(BaseModel):
     pictures: list[MapPicture] = Field(default_factory=list)
     # Pictures asked for, by UTC day ("2026-10-14"), against the daily limit.
     pictures_by_day: dict[str, int] = Field(default_factory=dict)
+    # Places whose plan the author asked to be drawn again (Redraw plan…):
+    # the plan they have stays until the new one is drawn.
+    redraw: list[str] = Field(default_factory=list)
 
     def picture_for(
         self, subject: str, subject_id: str, state: str | None = None

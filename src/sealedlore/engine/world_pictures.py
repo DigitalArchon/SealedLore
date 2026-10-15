@@ -31,7 +31,7 @@ from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.world_art import LAYOUT_HEIGHT, LAYOUT_WIDTH, MAX_FAILURES, SPRITE_KINDS
 from sealedlore.engine.world_layout import position
 from sealedlore.messages import ContentPart, PromptMessage
-from sealedlore.models.world import WorldArt, WorldMap, WorldPlace
+from sealedlore.models.world import MapPicture, WorldArt, WorldMap, WorldPlace
 from sealedlore.providers.images import ImageModelInfo
 
 # Where map pictures are kept, inside the story's pictures folder.
@@ -62,6 +62,8 @@ class PictureJob:
     # The picture to draw it from (a change), by its file; None for a first.
     reference: str | None = None
     from_picture: str | None = None
+    # An isometric view: the plan it is painted from (its `made_at`).
+    plan: str = ""
 
 
 def looks_of(summary: str | None, description: str | None) -> str:
@@ -279,6 +281,31 @@ def _container(world: WorldMap, inner: str | None, outer: str) -> str | None:
 # --- The isometric view --------------------------------------------------------------
 
 
+def area_plan(world: WorldMap, art: WorldArt, area_id: str):
+    """The plan an area's view is painted from: its plan in its state, else
+    its latest (as gui/map_render.plan_image draws it)."""
+    area = world.places.get(area_id)
+    if area is None:
+        return None
+    return art.layout_for(area_id, area.state) or art.layout_for(area_id)
+
+
+def view_current(world: WorldMap, art: WorldArt, area_id: str, picture: MapPicture) -> bool:
+    """Whether an isometric view is of the map there as it is now: painted
+    under the area's state (`isometric_state`) and from the plan it has now.
+    A plan drawn again (Redraw plan…) makes it out of date. A view painted
+    before views kept their plan counts as current when it is newer than the
+    plan."""
+    if picture.state != isometric_state(world, area_id):
+        return False
+    plan = area_plan(world, art, area_id)
+    if plan is None:
+        return True
+    if picture.plan:
+        return picture.plan == plan.made_at
+    return not (picture.made_at and plan.made_at) or picture.made_at >= plan.made_at
+
+
 def isometric_state(world: WorldMap, area_id: str) -> str:
     """What the isometric view of an area shows, as the map has it now: the
     area's own state and each changed place in it. A view painted under
@@ -408,6 +435,7 @@ def isometric_job(
         look=LOOK_WORDS.get(look, "as the map shows it"),
     )
     state = isometric_state(world, area_id)
+    plan = area_plan(world, art, area_id)
     return PictureJob(
         key=f"isometric:{area_id}:{state}" if state else f"isometric:{area_id}",
         subject="isometric",
@@ -415,4 +443,5 @@ def isometric_job(
         name=area.name,
         prompt=prompt,
         state=state,
+        plan=plan.made_at if plan is not None else "",
     )

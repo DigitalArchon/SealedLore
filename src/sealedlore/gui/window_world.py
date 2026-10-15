@@ -236,20 +236,30 @@ class WorldWindow:
         session = self.session
         if session is None or area_id not in session.world().places:
             return
+        if self._busy:
+            # The worker may be starting the map's art after a passage.
+            self.statusBar().showMessage(
+                "The plan can be redrawn once the story's current job is done.", 6000
+            )
+            return
+        problem = session.redraw_problem(area_id)
+        if problem is not None:
+            self.statusBar().showMessage(f"The plan can't be redrawn now. {problem}", 8000)
+            return
         name = session.world().places[area_id].name
         answer = QMessageBox.question(
             self,
             "Redraw the plan?",
-            f"Draw the plan of {name} again? The plan you see now is replaced by a new one "
-            "from the map art model; the places in it keep their names and the buildings "
-            "you have been inside keep their own plans. It is drawn in the background.",
+            f"Draw the plan of {name} again? The map art model draws a new one in the "
+            "background, and it replaces the plan you see now once it is drawn (if it can't "
+            "be drawn, this one stays). The places in it keep their names, the buildings you "
+            "have been inside keep their own plans, and its isometric view goes out of date.",
         )
         if answer != QMessageBox.Yes:
             return
         if not session.redraw_plan(area_id):
-            self.statusBar().showMessage(
-                "The plan can't be redrawn now: wait for the map's drawing to finish.", 6000
-            )
+            problem = session.redraw_problem(area_id) or ""
+            self.statusBar().showMessage(f"The plan can't be redrawn now. {problem}", 6000)
             return
         self._sync_progress()
         self.refresh_world(keep_view=True)

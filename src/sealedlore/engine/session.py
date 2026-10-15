@@ -3663,7 +3663,9 @@ class StorySession(
         """
         # The map's art is kept piece by piece as it comes back: stopping it
         # loses only what is still out. The window's close waits for the
-        # threads (the art signal must not fire into a window being torn down).
+        # threads (the art signal must not fire into a window being torn down),
+        # and nothing calls back into it once the story is left.
+        self.on_map_art = None
         self.stop_map_art(wait_seconds)
         job = self._archive_job
         if job is not None:

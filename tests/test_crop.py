@@ -443,9 +443,7 @@ def test_a_picture_named_at_2x_is_cropped_in_its_own_pixels(app, tmp_path):
     assert image.devicePixelRatio() == 1.0 and image.size().toTuple() == (64, 48)
 
 
-def test_a_scenario_or_backup_imported_by_the_window_is_cleaned(
-    app, tmp_path, monkeypatch, story
-):
+def test_a_scenario_or_backup_imported_by_the_window_is_cleaned(app, tmp_path, monkeypatch, story):
     """The window's own imports, not just `clean_incoming`: a GIF with a
     comment in someone else's scenario, or in a backup, comes in clean."""
     import base64

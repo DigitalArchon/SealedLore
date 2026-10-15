@@ -80,6 +80,8 @@ class WorldArtRuntime:
     _art_thread: threading.Thread | None = None
     _art_clients: list[ChatProvider] | None = None
     _art_stop = False
+    # Stopped for good: the story was left (`stop_map_art`, from `close`).
+    _map_closed = False
     _picture_thread: threading.Thread | None = None
     _picture_client: ImageClient | None = None
     _picture_model_info: ImageModelInfo | None = None
@@ -91,6 +93,11 @@ class WorldArtRuntime:
     _picture_done = 0
     _isometric_thread: threading.Thread | None = None
     _isometric_area: str | None = None
+    _isometric_client: ImageClient | None = None
+    # Held while a run is checked for and started: the worker (after a
+    # passage) and the GUI thread (Redraw plan…, a story opening) both start
+    # runs, and two started at once drew and paid for everything twice.
+    _start_lock: threading.Lock | None = None
     # Called (on the art thread) after each piece is kept: the window's cue to
     # redraw the map.
     on_map_art: Callable[[], None] | None = None
@@ -99,6 +106,11 @@ class WorldArtRuntime:
         if self._art_lock is None:
             self._art_lock = threading.Lock()
         return self._art_lock
+
+    def _starting(self) -> threading.Lock:
+        if self._start_lock is None:
+            self._start_lock = threading.Lock()
+        return self._start_lock
 
     @property
     def world_art(self) -> WorldArt:
@@ -242,9 +254,13 @@ class WorldArtRuntime:
         """Paint the isometric view of an area, in the background: `render`
         gives the picture of its plan (gui/map_render.py: the engine draws
         nothing), called on that thread."""
+        with self._starting():
+            return self._start_isometric(area_id, render)
+
+    def _start_isometric(self, area_id: str, render: Callable[[], bytes | None]) -> bool:
         _model, _price, problem = self.isometric_offer()
         world = self.world()
-        if problem is not None or area_id not in world.places:
+        if problem is not None or area_id not in world.places or self._map_closed:
             return False
         media = self.config.images()
         assert media is not None
@@ -262,6 +278,7 @@ class WorldArtRuntime:
 
         client = ImageClient(media.base_url, media.api_key, api=media.api)
         self._isometric_area = area_id
+        self._isometric_client = client  # for `stop_map_art` to cancel
         thread = threading.Thread(
             target=self._paint_isometric,
             args=(job, isometric_notes(world, art, area_id), client, render),
@@ -284,6 +301,8 @@ class WorldArtRuntime:
                 scene = self._isometric_scene(notes)
             except Exception:  # noqa: BLE001 - painted from the map's own words instead
                 scene = None
+            if self._map_closed:
+                return  # the story was left while the scene was written
             job = make_job(scene)
             plan = render()
             if plan is None:
@@ -298,6 +317,7 @@ class WorldArtRuntime:
             self._picture_one(job, client, size, model=model, info=info, plan=plan)
         finally:
             client.close()
+            self._isometric_client = None
             callback = self.on_map_art
             if callback is not None:
                 callback()  # the map learns it is done, painted or not
@@ -376,6 +396,12 @@ class WorldArtRuntime:
 
     def start_map_pictures(self) -> bool:
         """Draw what the map needs from the image model, in the background."""
+        with self._starting():
+            return self._start_map_pictures()
+
+    def _start_map_pictures(self) -> bool:
+        if self._map_closed:
+            return False
         thread = self._picture_thread
         if thread is not None and thread.is_alive():
             return False
@@ -472,7 +498,13 @@ class WorldArtRuntime:
                 self._save_art(art)
             self._log("map_picture_error", {"request_log_ref": log_ref, "error": str(exc)[:300]})
             return
-        info = info or self._picture_model_info
+        if self._art_stop or not self.pictures.alive():
+            # Closed meanwhile (another story is open, or this one deleted):
+            # nothing written, or the story's folder came back as a ghost and
+            # a reopened story's map art was written over by this one's.
+            return
+        if info is None and model == self.config.map_picture_model:
+            info = self._picture_model_info  # an unlisted isometric model stays unpriced
         cost = reply.cost
         usage: dict = {"cost": cost or 0.0, "cost_reported": cost is not None}
         if cost is None and info is not None and info.price(size) is not None:
@@ -492,6 +524,7 @@ class WorldArtRuntime:
             prompt=job.prompt,
             model=model,
             made_at=utc_now_iso(),
+            plan=job.plan,
         )
         with self._lock():
             art.pictures.append(picture)
@@ -503,7 +536,13 @@ class WorldArtRuntime:
     def start_map_art(self) -> bool:
         """Draw what the map needs, in the background. False when there is
         nothing to draw, a run is under way, or the map can't be drawn now."""
-        pictures = self.start_map_pictures()
+        with self._starting():
+            return self._start_map_art()
+
+    def _start_map_art(self) -> bool:
+        if self._map_closed:
+            return False
+        pictures = self._start_map_pictures()
         if self.map_art_running:
             return pictures
         jobs = self.map_art_jobs()
@@ -531,39 +570,55 @@ class WorldArtRuntime:
         thread.start()
         return True
 
+    def redraw_problem(self, area_id: str) -> str | None:
+        """Why a place's plan can't be drawn again now, or None."""
+        if not self.map_on or self.open_span is not None:
+            return "Not in a private scene."
+        if not self.config.map_art:
+            return "Draw the map is off (Settings → Models): nothing would draw it."
+        if self.map_art_running:
+            return "Wait for the map's drawing to finish."
+        if self.world_art.layout_for(area_id) is None:
+            return "It has no plan yet."
+        return None
+
     def redraw_plan(self, area_id: str) -> bool:
         """Draw a place's plan again, when the author asks (Map → Redraw
         plan…, Oct 15 2026): plans are drawn once and kept, so one drawn
         badly (Deep Space 9's, before decks were asked for, was rooms
-        scattered in space) stayed so. Every state's plan of the place goes,
-        and its failures, and the art runs again; the inside plans of the
-        buildings in it stay, fitted over the boxes the new plan draws. False
-        when it can't be now (no map, a private scene, art already running)."""
-        if not self.map_on or self.open_span is not None or self.map_art_running:
+        scattered in space) stayed so. The plan it has stays until the new
+        one is drawn, which then replaces every state's plan of the place
+        (`adopt(redraw=True)`); one that can't be drawn leaves the old plan
+        for good. Its views go out of date (`view_current`). The inside
+        plans of the buildings in it stay, fitted over the boxes the new
+        plan draws. False when it can't be now (`redraw_problem`)."""
+        if self.redraw_problem(area_id) is not None:
             return False
         art = self.world_art
         with self._lock():
-            if not art.layouts.pop(area_id, None):
-                return False
-            prefix = f"layout:{area_id}"
-            for key in [k for k in art.failures if k == prefix or k.startswith(prefix + ":")]:
-                del art.failures[key]
-            saved = art.model_copy(deep=True)
-        self._save_art(saved)
+            if area_id not in art.redraw:
+                art.redraw.append(area_id)
+            art.failures.pop(f"layout:{area_id}:redraw", None)
+            self._save_art(art)
         self.start_map_art()
         return True
 
     def stop_map_art(self, wait_seconds: float = 0.0) -> None:
-        """Stop drawing: what is out is cancelled, what came back is kept."""
+        """Stop drawing, for good (the story is being left): what is out is
+        cancelled, what came back is kept, and nothing starts again."""
+        self._map_closed = True
         self._art_stop = True
         for client in self._art_clients or []:
             try:
                 client.cancel()
             except Exception:  # noqa: BLE001 - stopping must never fail
                 pass
-        client = self._picture_client
-        if client is not None:
-            client.cancel()
+        for client in (self._picture_client, self._isometric_client):
+            if client is not None:
+                try:
+                    client.cancel()
+                except Exception:  # noqa: BLE001 - stopping must never fail
+                    pass
         for thread in (self._art_thread, self._picture_thread, self._isometric_thread):
             if thread is not None and wait_seconds > 0:
                 thread.join(wait_seconds)
@@ -627,14 +682,16 @@ class WorldArtRuntime:
             return
         art = self.world_art
         with self._lock():
-            adopt(art, drawn)
+            adopt(art, drawn, redraw=job.key.endswith(":redraw"))
             self._save_art(art)
         callback = self.on_map_art
         if callback is not None:
             callback()
 
     def _save_art(self, art: WorldArt) -> None:
-        if not self.memory_only:
+        # Never into a story deleted meanwhile: the write made its folder
+        # again, an unreadable ghost in the list.
+        if not self.memory_only and self.pictures.alive():
             save_world_art(self.story.id, art, self.root)
 
 

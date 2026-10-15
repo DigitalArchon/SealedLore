@@ -365,9 +365,7 @@ def test_the_media_tab_puts_the_background_first_and_the_map_s_pictures_apart(ap
             model="qwen-image",
             made_at="2026-10-15T01:00:00",
         ),
-        MapPicture(
-            subject="postcard", subject_id="barn", name="The barn", file="images/card.png"
-        ),
+        MapPicture(subject="postcard", subject_id="barn", name="The barn", file="images/card.png"),
     ]
     panel = ImagesPanel()
     asked: list[str] = []

@@ -1023,6 +1023,27 @@ def plan_art(
         for child in world.places.values():
             if child.inside == area.id and child.kind == "building" and child.state:
                 wanted.setdefault(child.id, child)
+    # A plan the author asked to be drawn again, afresh, wherever it is: the
+    # plan it has stays until this one is drawn (`redrawn`), and stays for
+    # good if it can't be.
+    for pid in art.redraw:
+        place = world.places.get(pid)
+        key = f"layout:{pid}:redraw"
+        if place is None or place.kind not in LAYOUT_KINDS or failed(key):
+            continue
+        fixed = fixed_in_plan(world, place)
+        jobs.append(
+            ArtJob(
+                key,
+                "layout",
+                layout_messages(world, place, setting, texts, fixed),
+                pid,
+                name=place.name,
+                state=place.state,
+                order=1,
+                extra={"fixed": fixed, "grid": plan_grid(place)},
+            )
+        )
     for pid, place in wanted.items():
         if art.layout_for(pid, place.state) is not None:
             continue
@@ -1145,9 +1166,17 @@ def finish(
     )
 
 
-def adopt(art: WorldArt, drawn: WorldSprite | PlaceLayout | TerrainPatch) -> None:
+def adopt(
+    art: WorldArt, drawn: WorldSprite | PlaceLayout | TerrainPatch, *, redraw: bool = False
+) -> None:
     """Keep a finished drawing. A place's layout or land is never replaced:
-    land that would lie on land already drawn is dropped."""
+    land that would lie on land already drawn is dropped. A plan drawn again
+    at the author's asking (`redraw`) replaces every plan the place had."""
+    if redraw and isinstance(drawn, PlaceLayout):
+        art.layouts[drawn.place_id] = {drawn.state: drawn}
+        if drawn.place_id in art.redraw:
+            art.redraw.remove(drawn.place_id)
+        return
     if isinstance(drawn, WorldSprite):
         art.sprites.append(drawn)
     elif isinstance(drawn, PlaceLayout):

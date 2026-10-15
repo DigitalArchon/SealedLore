@@ -396,29 +396,93 @@ def test_the_isometric_view_says_a_change_in_what_its_plan_shows():
     assert "The ground: snow-covered country in winter." in prompt
 
 
-def test_a_plan_redrawn_when_asked_goes_with_its_failures_and_the_art_runs_again(
-    session, monkeypatch
-):
-    """Redraw plan…: a plan drawn badly stayed so, since plans are kept."""
-    from sealedlore.models.world import PlaceLayout, WorldArt
+def test_a_plan_redrawn_when_asked_keeps_the_old_one_until_the_new_is_drawn(session, monkeypatch):
+    """Redraw plan…: a plan drawn badly stayed so, since plans are kept. The
+    review: the plan went before a new one existed, so with Draw the map off,
+    or once the art model failed twice, the area had no plan for good."""
+    from sealedlore.engine.world_art import MAX_FAILURES, adopt, plan_art
+    from sealedlore.engine.world_pictures import view_current
+    from sealedlore.models.world import MapPicture, PlaceLayout, WorldArt
 
+    old = PlaceLayout(place_id="farm", rows=["#####", "#___#", "#####"], made_at="t1")
     session._art = WorldArt(
         layouts={
             "farm": {
-                "": PlaceLayout(place_id="farm", rows=["#####", "#___#", "#####"]),
+                "": old,
                 "burning": PlaceLayout(place_id="farm", rows=["*****"], state="burning"),
             },
             "barn": {"": PlaceLayout(place_id="barn", rows=["###"])},
         },
-        failures={"layout:farm": 3, "layout:farm:burning": 1, "layout:farmhouse": 2},
+        failures={"layout:farm:redraw": 2, "layout:farmhouse": 2},
+        pictures=[
+            MapPicture(subject="isometric", subject_id="farm", name="F", file="f.png", plan="t1")
+        ],
     )
     ran: list[bool] = []
     monkeypatch.setattr(session, "start_map_art", lambda: ran.append(True) or True)
+    session.config.map_art = False
+    assert "Draw the map is off" in session.redraw_problem("farm")
+    assert not session.redraw_plan("farm")
+    session.config.map_art = True
     assert session.redraw_plan("farm")
     art = session.map_art_copy()
-    assert "farm" not in art.layouts and "barn" in art.layouts  # the inside plan stays
-    assert art.failures == {"layout:farmhouse": 2}
+    assert art.layouts["farm"][""] == old and art.redraw == ["farm"]  # kept meanwhile
+    assert "layout:farm:redraw" not in art.failures  # asked again: tried again
     assert ran == [True]
-    assert not session.redraw_plan("farm")  # nothing left to redraw
+    # Planned afresh, wherever the story is (the area in view needn't be visited).
+    world = session.world()
+    jobs = plan_art(world, art, here=None, setting="", limit=40)
+    redraws = [job for job in jobs if job.key == "layout:farm:redraw"]
+    assert len(redraws) == 1
+    view = art.pictures[0]
+    assert view_current(world, art, "farm", view)
+    # Drawn: it replaces every plan the farm had, and its view is out of date.
+    new = PlaceLayout(place_id="farm", rows=["....."], made_at="t2")
+    adopt(art, new, redraw=True)
+    assert art.layouts["farm"] == {"": new} and art.redraw == []
+    assert not view_current(world, art, "farm", view)
+    # A redraw that keeps failing leaves the old plan, and is let be.
+    art.redraw.append("farm")
+    art.failures["layout:farm:redraw"] = MAX_FAILURES
+    jobs = plan_art(world, art, here=None, setting="", limit=40)
+    assert not any(job.key == "layout:farm:redraw" for job in jobs)
+    assert art.layouts["farm"] == {"": new}
     session.enter_private(keep="memory", provider=MockChatProvider(["x"]), model="m")
     assert not session.redraw_plan("barn")  # paused in a private scene
+
+
+def test_leaving_the_story_stops_its_isometric_view_and_writes_nothing(
+    session, tmp_path, monkeypatch
+):
+    """The review: nothing could stop the painting. Left (or deleted) while
+    it painted, the story's folder came back with its map art and picture,
+    an unreadable ghost, and the window was called back after closing."""
+    import shutil
+    import threading
+
+    gate = threading.Event()
+
+    class Slow(FakeImages):
+        cancelled = False
+
+        def generate(self, payload):
+            gate.wait(10)
+            if self.cancelled:
+                raise ProviderError("cancelled")
+            return super().generate(payload)
+
+        def cancel(self):
+            self.cancelled = True
+            gate.set()
+
+    monkeypatch.setattr(session_world_art, "ImageClient", Slow)
+    called: list[bool] = []
+    session.on_map_art = lambda: called.append(True)
+    assert session.start_isometric("farm", lambda: png(16, 12))
+    folder = tmp_path / "stories" / session.story.id
+    session.close(wait_seconds=0)
+    shutil.rmtree(folder)
+    session._isometric_thread.join(10)
+    assert not session._isometric_thread.is_alive()
+    assert not folder.exists() and called == []
+    assert not session.start_isometric("farm", lambda: png(16, 12))  # left for good

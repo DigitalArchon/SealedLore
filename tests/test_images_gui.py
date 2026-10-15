@@ -632,9 +632,7 @@ def test_a_picture_held_smaller_is_what_the_view_would_have_shown(app):
         assert held.toImage() == shown.toImage()
 
 
-def test_a_card_s_picture_with_no_passage_is_not_drawn_above_the_story(
-    app, window: MainWindow
-):
+def test_a_card_s_picture_with_no_passage_is_not_drawn_above_the_story(app, window: MainWindow):
     """Drawn for a card (the Start dialog's portraits) it goes on the card and
     in Media; it stacked above the opening. In the scene… has its passage."""
     from sealedlore.models.image import GeneratedImage
