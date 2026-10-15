@@ -120,6 +120,12 @@ class ImagesWindow:
         self._images = self.session.generated_images() if self.session is not None else []
 
     def _pictures_for(self, anchor: str | None) -> list:
+        """The pictures and videos the story shows after a passage (`anchor`),
+        or before the first (None). A picture drawn for a card or to be the
+        background, with no passage, belongs to none: it goes on its card or
+        behind the story, and is in Media. They stacked above the opening,
+        every portrait of the Start dialog with them. (In the scene… has its
+        passage, and shows after it.)"""
         if self.session is None:
             return []
         story_id = self.session.story.id
@@ -127,10 +133,10 @@ class ImagesWindow:
         items: list = [
             (image, store.read(image.file))
             for image in self._images
-            if image.anchor_node_id == anchor
+            if image.anchor_node_id == anchor and not _passage_less(image)
         ]
         for job in self.image_jobs.pending(story_id):
-            if job.request.anchor_node_id == anchor:
+            if job.request.anchor_node_id == anchor and not _passage_less(job.request):
                 model = job.request.model.rsplit("/", 1)[-1]
                 items.append(
                     PendingPicture(
@@ -790,3 +796,9 @@ class ImagesWindow:
 def _slug(name: str) -> str:
     """A name as part of a file name: "John Smith" as john-smith."""
     return "-".join("".join(c if c.isalnum() else " " for c in name).lower().split())
+
+
+def _passage_less(picture) -> bool:
+    """A picture (or a request for one) drawn for a card or as the background
+    with no passage of its own."""
+    return picture.anchor_node_id is None and bool(picture.card_id or picture.background)

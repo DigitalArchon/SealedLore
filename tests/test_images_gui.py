@@ -270,9 +270,16 @@ def test_a_background_edited_or_drawn_anew_lands_behind_the_story_once(
     assert request.background and request.anchor_node_id is None
     assert [use.file for use in request.references] == [old]
     assert "Keep the same place or thing" in request.prompt
-    window.image_jobs.start(request, mock_image_client(), session.pictures)
+    window.image_jobs.start(request, mock_image_client(delay=0.3), session.pictures)
+    window.reload_transcript()
+    flush(app)
+    # It pictures no passage: not drawn above the story's first message.
+    assert not window.transcript.findChildren(PendingPictureWidget)
     wait_for(app, lambda: not window.image_jobs.pending())
     flush(app)
+    window.reload_transcript()
+    flush(app)
+    assert not window.transcript.findChildren(ImageMessageWidget)
     drawn = [image for image in session.generated_images() if image.background]
     assert len(drawn) == 1
     assert session.story.background_drawn_as == drawn[0].id
@@ -623,3 +630,29 @@ def test_a_picture_held_smaller_is_what_the_view_would_have_shown(app):
         held = pixmap_within(data, QSize(100, 60))
         assert held.size().toTuple() == (80, 60)
         assert held.toImage() == shown.toImage()
+
+
+def test_a_card_s_picture_with_no_passage_is_not_drawn_above_the_story(
+    app, window: MainWindow
+):
+    """Drawn for a card (the Start dialog's portraits) it goes on the card and
+    in Media; it stacked above the opening. In the scene… has its passage."""
+    from sealedlore.models.image import GeneratedImage
+
+    store = window.session.pictures
+    store.write("images/p.png", PNG)
+    portrait = GeneratedImage(
+        file="images/p.png", prompt="A man.", model="m", size="1k", card_id="char-serrik"
+    )
+    scene = GeneratedImage(
+        anchor_node_id="a1",
+        file="images/p.png",
+        prompt="Him by a fire.",
+        model="m",
+        size="1k",
+        card_id="char-serrik",
+    )
+    store.add_images([portrait, scene])
+    window._load_images()
+    assert window._pictures_for(None) == []
+    assert [item[0].id for item in window._pictures_for("a1")] == [scene.id]
