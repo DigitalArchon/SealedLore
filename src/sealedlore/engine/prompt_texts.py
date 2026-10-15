@@ -2382,6 +2382,11 @@ _text(
 # file's own map did no harm (GLM 1-3 errors in 50 passages against 4-5
 # without), and carries what only the map holds (the clinic in the old
 # hardware store). Sent whenever the story keeps a map: the author's call.
+# The author's Direction outranks it (Oct 15 2026, the author's castle):
+# "Create a large, dark, haunted castle next to my location." as a Director
+# turn, Sonnet 4.6 refused it against "Keep to it" 10 times in 12 ("No castle
+# stands here", or the Iron Citadel 7 km off); with the clause, 0 in 6 (four
+# beside the waystation, two across the river). GLM 5.3 complied either way.
 _text(
     "map.context",
     MAP,
@@ -2391,9 +2396,11 @@ _text(
     "the plot file drew is shown.",
     """\
 What the story has established about where things are. Keep to it: these
-places, how they lie and how far apart they are, are as the story told them.
-Anywhere not on it is unmapped; when the story goes there, decide what is
-found, and it becomes part of the map.""",
+places, how they lie and how far apart they are, are as the story told them,
+unless the author's Direction or Narration adds a place or changes one: that
+is true from this turn, and the map follows it. Anywhere not on it is
+unmapped; when the story goes there, decide what is found, and it becomes
+part of the map.""",
 )
 
 
