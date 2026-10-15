@@ -347,6 +347,23 @@ def _text(value: Any) -> str:
     return " ".join(str(value).split()) if value is not None else ""
 
 
+# A place's width from the read, in metres: a hut to a city, nothing wider.
+MIN_SIZE, MAX_SIZE = 2.0, 50_000.0
+
+
+def _size(value: Any) -> float | None:
+    """A read's "size" as metres, or None: a number (or a string of one,
+    "150 m") within MIN_SIZE..MAX_SIZE; anything else is no size."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        match = re.search(r"\d+(?:\.\d+)?", value)
+        value = float(match.group()) if match else None
+    if not isinstance(value, (int, float)):
+        return None
+    return float(value) if MIN_SIZE <= value <= MAX_SIZE else None
+
+
 # What a read writes when the passage said nothing ("unknown" went into a way,
 # live): no words at all, or it reaches the storyteller as a fact.
 _NOTHING_SAID = re.compile(
@@ -423,6 +440,11 @@ def resolve_reply(
                     inside=inside,
                     what=_text(entry.get("what")),
                     state=_text(entry.get("state")),
+                    # The read's sense of scale, when it has one: without it
+                    # a vast castle got a building's 40 m and the four-tile
+                    # box that goes with it (the author's castle, Oct 15 2026).
+                    # The layout clamps it to its parent (world_layout.place_one).
+                    size=_size(entry.get("size")),
                 )
             )
     for entry in _entries(reply, "links"):

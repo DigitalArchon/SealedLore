@@ -55,6 +55,11 @@ class _WorldRead:
 
 
 class WorldRuntime:
+    # The map model a read is out to now, or None: the Map page says so
+    # while the author waits (the author's castle, Oct 15 2026: a minute
+    # with no sign that anything was happening).
+    map_reading: str | None = None
+
     @property
     def map_on(self) -> bool:
         """The story keeps a map: the author turned it on (a simple chat may too)."""
@@ -171,6 +176,7 @@ class WorldRuntime:
             "world_request",
             {"node_id": node.id, "payload": self.provider.build_payload(request)},
         )
+        self.map_reading = model
         return _WorldRead(
             node=node,
             before=before,
@@ -206,10 +212,13 @@ class WorldRuntime:
             self.unreported_usage.append(self.priced(completed.usage, pending.request.model))
             reply = parse_world_reply(text)
         except (ProviderError, ValueError) as exc:
+            self.map_reading = None
             yield SessionNotice(
                 f"Couldn't read the map from this passage ({exc}). It is as it was."
             )
             return
+        finally:
+            self.map_reading = None
         people = self.map_people(self._path_to(node.id))
         delta, refused = resolve_reply(pending.before, reply, source=pending.source, people=people)
         place_delta(pending.before, delta, self.map_held_name(node.meta.controlled_character_id))

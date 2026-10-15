@@ -408,6 +408,17 @@ def _weak_watch(
     return watch
 
 
+@dataclass
+class _SceneRead:
+    """A scene read that has been prepared but not yet answered."""
+
+    node: Node
+    before: SceneState
+    opening: bool
+    request: ChatRequest
+    log_ref: str
+
+
 class StorySession(
     PlotRuntime,
     WorldRuntime,
@@ -2725,20 +2736,19 @@ class StorySession(
 
     # --- the scene read, after each passage -----------------------------------
 
-    def update_scene_after_turn(self) -> Iterator[SessionNotice]:
-        """Read what the latest passage did to the scene, and follow it.
-
-        Never costs the author their turn: a failed read leaves the roster as
-        it was, runs the older pattern check in its place, and says so.
-        """
+    def _prepare_scene_read(self) -> _SceneRead | None:
+        """The scene read's request for the latest passage, logged; None
+        when reads are off or there is nothing to read. Prepared apart from
+        the call so the call can go out beside the other reads
+        (session_plot.py `_read_after_turn`)."""
         if self.config.scene_reads != "every_turn":
-            return
+            return None
         result = self.last_result
         if result is None or result.node is None or result.stopped_early:
-            return
+            return None
         node = result.node
         if not node.content.strip():
-            return
+            return None
         path = self._path_to(node.id)
         before = scene_at(
             path[:-1], self.story.scene, cast_ids={c.id for c in self.visible_cast(pending=True)}
@@ -2760,9 +2770,33 @@ class StorySession(
                 texts=self.texts,
             )
 
+        request, log_ref = self._scene_request(before, node=node, author=author, earlier=earlier)
+        return _SceneRead(
+            node=node, before=before, opening=opening, request=request, log_ref=log_ref
+        )
+
+    def update_scene_after_turn(
+        self, pending: _SceneRead | None = None, fetched: dict[str, object] | None = None
+    ) -> Iterator[SessionNotice]:
+        """Read what the latest passage did to the scene, and follow it.
+
+        `fetched` is the reply (or the error) of a call already made on
+        another thread. Never costs the author their turn: a failed read
+        leaves the roster as it was and says so.
+        """
+        pending = pending or self._prepare_scene_read()
+        if pending is None:
+            return
+        node, before = pending.node, pending.before
         yield SessionNotice(f"Reading the scene with {self.scene_model}…")
         try:
-            delta = self.read_scene(before, node=node, author=author, earlier=earlier)
+            if fetched is None:
+                text, completed = self.provider.complete(pending.request)
+            elif "error" in fetched:
+                raise fetched["error"]  # type: ignore[misc]
+            else:
+                text, completed = fetched["reply"]  # type: ignore[misc]
+            delta = self._scene_delta(text, completed, pending.log_ref)
         except (ProviderError, ValueError) as exc:
             yield SessionNotice(
                 f"Couldn't read the scene from this passage ({exc}). The roster is as it "
@@ -2770,7 +2804,7 @@ class StorySession(
             )
             return
 
-        if opening:
+        if pending.opening:
             self._keep_pinned(delta)
         self._apply_read(node, before, delta)
         words = describe_changes(node.meta.scene.changes if node.meta.scene else [])
@@ -2806,6 +2840,14 @@ class StorySession(
         self, before: SceneState, *, node: Node, author: Node | None, earlier: str = ""
     ) -> SceneDelta:
         """One call on the scene model. Raises ProviderError or ValueError."""
+        request, log_ref = self._scene_request(before, node=node, author=author, earlier=earlier)
+        text, completed = self.provider.complete(request)
+        return self._scene_delta(text, completed, log_ref)
+
+    def _scene_request(
+        self, before: SceneState, *, node: Node, author: Node | None, earlier: str = ""
+    ) -> tuple[ChatRequest, str]:
+        """The scene read's request, logged."""
         request = ChatRequest(
             model=self.scene_model,
             extra_body=self.route_for("scene"),
@@ -2829,7 +2871,10 @@ class StorySession(
         log_ref = self._log(
             "scene_request", {"node_id": node.id, "payload": self.provider.build_payload(request)}
         )
-        text, completed = self.provider.complete(request)
+        return request, log_ref
+
+    def _scene_delta(self, text: str, completed: StreamCompleted, log_ref: str) -> SceneDelta:
+        """A scene read's reply logged, priced and parsed."""
         self._log(
             "scene_response",
             {"request_log_ref": log_ref, "text": text, "usage": completed.raw_usage},

@@ -173,6 +173,41 @@ def test_a_place_never_ends_up_inside_itself():
     assert "  - The diner" in render_map(after)
 
 
+def test_the_read_s_sense_of_scale_is_kept_within_reason():
+    """A vast castle got a building's 40 m and the four-tile box that goes
+    with it (the author's castle, Oct 15 2026): the read now says about how
+    wide a new place is, and the map keeps it, clamped to its parent."""
+    world = farm_and_town()
+    delta, refused = resolve(
+        world,
+        {
+            "places": [
+                {
+                    "name": "The Great Engine's castle",
+                    "kind": "site",
+                    "inside": "Hellsville",
+                    "size": 200,
+                    "quote": "Jane heads north",
+                },
+                {"name": "A hut", "kind": "building", "size": "5 m", "quote": "Jane heads north"},
+                {"name": "Nowhere", "kind": "site", "size": -3, "quote": "Jane heads north"},
+                {"name": "Everywhere", "kind": "region", "size": 1e9, "quote": "Jane heads north"},
+                {"name": "A barn", "kind": "building", "size": True, "quote": "Jane heads north"},
+            ]
+        },
+    )
+    assert refused == []
+    by = {p.name: p for p in delta.places}
+    assert by["The Great Engine's castle"].size == 200 and by["A hut"].size == 5
+    assert by["Nowhere"].size is None and by["Everywhere"].size is None
+    assert by["A barn"].size is None
+    after = applied(world, delta)
+    castle = next(p for p in after.places.values() if p.name.endswith("castle"))
+    assert castle.size == 200 and castle.inside == world_place(after, "Hellsville")
+    hut = next(p for p in after.places.values() if p.name == "A hut")
+    assert hut.size == 5
+
+
 def test_a_vehicle_moves_to_where_the_passage_docks_it():
     """Once in a bay a ship stayed there for good (the review, Oct 15 2026):
     a vehicle has no spot of its own and goes where it is next shown."""
@@ -421,6 +456,50 @@ def test_a_passage_is_read_onto_the_map(session: StorySession, tmp_path: Path):
     kinds = [entry["kind"] for entry in read_api_log(session.story.id, root=tmp_path)]
     assert kinds == ["request", "response", "world_request", "world_response"]
     assert len(session.unreported_usage) == 1
+
+
+def test_the_map_is_applied_the_moment_its_read_returns(tmp_path: Path, story, cast):
+    """Live, a scene read that ran away held the map back 68 seconds though
+    its own read was done (the author's castle, Oct 15 2026): every read
+    goes out at once and each is applied as it comes back, so the map's
+    notice comes before a slow scene read's."""
+    import threading
+    import time
+
+    scene_reply = json.dumps({"location": "The yard", "arrived": [], "left": [], "shortcuts": []})
+
+    class SlowScene(MockChatProvider):
+        """The scene read's line, slow; the map read on a sibling, quick."""
+
+        def __init__(self) -> None:
+            super().__init__([FIRST_PASSAGE, scene_reply])
+            self.side = MockChatProvider([FIRST_READ])
+            self.calls = 0
+
+        def complete(self, request):
+            self.calls += 1
+            # The scene read: the passage streams, so this is the first `complete`.
+            if self.calls == 1:
+                time.sleep(0.4)
+            return super().complete(request)
+
+        def sibling(self):
+            return self.side
+
+    session = make_session(tmp_path, story, cast, [])
+    session.config.scene_reads = "every_turn"
+    session.provider = SlowScene()
+    started = time.monotonic()
+    order: list[tuple[str, float]] = []
+    for event in session.send(turn()):
+        if isinstance(event, SessionNotice) and event.text.split(":")[0] in ("Map", "Scene"):
+            order.append((event.text.split(":")[0], time.monotonic() - started))
+    assert [kind for kind, _ in order] == ["Map", "Scene"]
+    assert order[0][1] < order[1][1]
+    assert session.world().where  # the map read was applied
+    assert session.path()[-1].meta.scene is not None  # and the scene read after it
+    assert session.map_reading is None
+    assert threading.active_count() >= 1
 
 
 def test_the_map_model_is_its_own_when_set(session: StorySession):

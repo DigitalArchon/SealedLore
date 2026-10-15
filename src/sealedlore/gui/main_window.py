@@ -2103,10 +2103,12 @@ class MainWindow(
         self._update_controls()
 
     def _on_passage_done(self) -> None:
-        """The passage is in: the composer opens while the reads run."""
+        """The passage is in: the composer opens while the reads run, and
+        the map says it is being read."""
         self._background = True
         self._update_controls()
         self.composer.focus_input()
+        self._sync_progress()
 
     def _run_queued(self) -> None:
         run, self._queued, self._queued_text = self._queued, None, None

@@ -257,16 +257,17 @@ class PlotRuntime:
             yield SessionNotice(note)
 
     def _read_after_turn(self) -> Iterator[SessionNotice]:
-        """The scene read, then the chronicle read and the map read
+        """The scene read, the chronicle read and the map read
         (session_world.py), after a passage.
 
         None uses another's answer, so with a provider that can make more
-        calls alongside (`sibling()`), each of the others goes out on its own
-        while the scene is read: live, the two in series were ~3.3s of
-        background work after every passage, about half of it waiting for the
-        second call to start. Only the network call leaves this thread; the
-        results are applied here, in the usual order, so there is still one
-        writer of session state. A scripted provider has no sibling, and its
+        calls alongside (`sibling()`), every call goes out on its own line at
+        once, and each is applied here, on this thread, the moment it comes
+        back (one writer of session state). Before, the side reads were
+        applied only after the scene read: live, a scene read that ran away
+        (4,000 tokens of reasoning, an empty reply, asked once more) held the
+        map back 68 seconds though its own read was done (the author's
+        castle, Oct 15 2026). A scripted provider has no sibling, and its
         replies are taken in order as before.
         """
         if self.story.chat:
@@ -274,35 +275,32 @@ class PlotRuntime:
             # one, is read like a story's (session_world.py).
             yield from self.update_world_after_turn()
             return
-        make_sibling = getattr(self.provider, "sibling", None)
-        if not callable(make_sibling):
-            yield from self.update_scene_after_turn()
-            yield from self.update_chronicle_after_turn()
-            yield from self.update_world_after_turn()
-            return
-        # The reads that can go out beside the scene read, each with what
-        # applies its answer: the clock read, then the map (session_world.py).
-        side_reads: list[tuple[object, Callable[..., Iterator[SessionNotice]]]] = []
+        reads: list[tuple[object, Callable[..., Iterator[SessionNotice]]]] = []
+        scene = self._prepare_scene_read()
+        if scene is not None:
+            reads.append((scene, self.update_scene_after_turn))
         chronicle = self._prepare_chronicle_read()
         if chronicle is not None:
-            side_reads.append((chronicle, self.update_chronicle_after_turn))
+            reads.append((chronicle, self.update_chronicle_after_turn))
         world = self._prepare_world_read()
         if world is not None:
-            side_reads.append((world, self.update_world_after_turn))
-        if not side_reads or self.config.scene_reads != "every_turn":
-            yield from self.update_scene_after_turn()
-            for pending, finish in side_reads:
+            reads.append((world, self.update_world_after_turn))
+        make_sibling = getattr(self.provider, "sibling", None)
+        if len(reads) < 2 or not callable(make_sibling):
+            for pending, finish in reads:
                 yield from finish(pending)
             return
         boxes: list[dict[str, object]] = []
         threads: list[threading.Thread] = []
-        for pending, _finish in side_reads:
-            side = make_sibling()
+        for i, (pending, _finish) in enumerate(reads):
+            # The first call on the provider itself (this thread only waits),
+            # the rest on siblings.
+            line = self.provider if i == 0 else make_sibling()
             box: dict[str, object] = {}
 
-            def call(side=side, box: dict[str, object] = box, pending=pending) -> None:
+            def call(line=line, box: dict[str, object] = box, pending=pending) -> None:
                 try:
-                    box["reply"] = side.complete(pending.request)  # type: ignore[attr-defined]
+                    box["reply"] = line.complete(pending.request)  # type: ignore[attr-defined]
                 except BaseException as exc:  # noqa: BLE001 - re-raised on this thread below
                     box["error"] = exc
 
@@ -311,14 +309,20 @@ class PlotRuntime:
             boxes.append(box)
             threads.append(thread)
         try:
-            yield from self.update_scene_after_turn()
+            waiting = list(range(len(reads)))
+            while waiting:
+                for i in list(waiting):
+                    threads[i].join(timeout=0.05)
+                    if threads[i].is_alive():
+                        continue
+                    waiting.remove(i)
+                    pending, finish = reads[i]
+                    yield from finish(pending, boxes[i])
         finally:
             # A Stop closes this generator and cancels every provider, which
             # ends the calls; don't leave without them.
             for thread in threads:
                 thread.join()
-        for (pending, finish), box in zip(side_reads, boxes, strict=True):
-            yield from finish(pending, box)
 
     def _prepare_chronicle_read(self) -> _ChronicleRead | None:
         """The chronicle read's request for the latest passage, logged; None if
