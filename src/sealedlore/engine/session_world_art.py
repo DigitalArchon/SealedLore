@@ -435,6 +435,28 @@ class WorldArtRuntime:
         thread.start()
         return True
 
+    def redraw_plan(self, area_id: str) -> bool:
+        """Draw a place's plan again, when the author asks (Map → Redraw
+        plan…, Oct 15 2026): plans are drawn once and kept, so one drawn
+        badly (Deep Space 9's, before decks were asked for, was rooms
+        scattered in space) stayed so. Every state's plan of the place goes,
+        and its failures, and the art runs again; the inside plans of the
+        buildings in it stay, fitted over the boxes the new plan draws. False
+        when it can't be now (no map, a private scene, art already running)."""
+        if not self.map_on or self.open_span is not None or self.map_art_running:
+            return False
+        art = self.world_art
+        with self._lock():
+            if not art.layouts.pop(area_id, None):
+                return False
+            prefix = f"layout:{area_id}"
+            for key in [k for k in art.failures if k == prefix or k.startswith(prefix + ":")]:
+                del art.failures[key]
+            saved = art.model_copy(deep=True)
+        self._save_art(saved)
+        self.start_map_art()
+        return True
+
     def stop_map_art(self, wait_seconds: float = 0.0) -> None:
         """Stop drawing: what is out is cancelled, what came back is kept."""
         self._art_stop = True

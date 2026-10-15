@@ -10,7 +10,7 @@ from __future__ import annotations
 from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QRect, Qt
 from PySide6.QtGui import QImage, QPainter
 
-from sealedlore.engine.world_art import changed_buildings, plan_ground
+from sealedlore.engine.world_art import changed_buildings, decked, plan_ground
 from sealedlore.gui.map_tiles import TILE, building_boxes, render_tiles
 from sealedlore.models.world import PlaceLayout, WorldArt, WorldMap, WorldPlace
 
@@ -59,11 +59,11 @@ def plan_image(world: WorldMap, art: WorldArt, area_id: str) -> QImage | None:
             continue
         child_ground = plan_ground(world, art, child, str(child_layout.spec.get("ground", "")))
         opened.append((box, render_tiles(tuple(child_layout.rows), child_ground)))
-    # A deck has no roofs: its rooms are under the one hull.
+    # A deck has no roofs: its rooms are under the one hull, joined
+    # (`decked`), as the map draws it.
     roofs = ground != "metal"
-    image = render_tiles(
-        tuple(layout.rows), ground, roofs=roofs, cleared=tuple(box for box, _ in opened)
-    )
+    rows = decked(tuple(layout.rows)) if ground == "metal" else tuple(layout.rows)
+    image = render_tiles(rows, ground, roofs=roofs, cleared=tuple(box for box, _ in opened))
     if opened:
         painter = QPainter(image)
         for (x0, x1, y0, y1), inside in opened:

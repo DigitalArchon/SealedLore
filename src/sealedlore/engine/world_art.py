@@ -533,6 +533,102 @@ def land_under(world: WorldMap, art: WorldArt, place: WorldPlace) -> str:
     return ""
 
 
+# Gaps of up to this many blank tiles between a deck's rooms, along a row or
+# a column, are corridor: the model leaves them blank, and blank on a deck
+# is space.
+DECK_GAP = 2
+# Where someone may stand in a plan: not space, a wall, a window, water,
+# trees, rock, a fence or fire.
+WALKABLE = frozenset("._=+,:s")
+# The tile a deck's blank is filled with (TILES["_"]).
+FLOOR = "_"
+
+
+def decked(rows: tuple[str, ...] | list[str]) -> tuple[str, ...]:
+    """A station's or ship's plan as one deck (the author, Oct 15 2026:
+    Deep Space 9's rooms were "not actually joined except by empty space",
+    with people standing in space). The model draws rooms inside a hull and
+    leaves what lies between them blank, and blank (" ") on a deck is space.
+    Blank tiles the hull encloses (not reachable from the grid's edge
+    through blank) are floor, and so is a gap of up to DECK_GAP blank tiles
+    between two drawn tiles along a row or a column. Space outside the hull
+    stays space."""
+    width = max((len(r) for r in rows), default=0)
+    grid = [list(r.ljust(width)) for r in rows]
+    height = len(grid)
+    void = " "
+    filled = [row[:] for row in grid]
+
+    def runs(line: list[str]) -> list[tuple[int, int]]:
+        found, start = [], None
+        for i, char in enumerate([*line, "#"]):
+            if char == void and start is None:
+                start = i
+            elif char != void and start is not None:
+                found.append((start, i))
+                start = None
+        return found
+
+    for y in range(height):
+        for start, end in runs(grid[y]):
+            if 0 < start and end < width and end - start <= DECK_GAP:
+                for x in range(start, end):
+                    filled[y][x] = FLOOR
+    for x in range(width):
+        column = [grid[y][x] for y in range(height)]
+        for start, end in runs(column):
+            if 0 < start and end < height and end - start <= DECK_GAP:
+                for y in range(start, end):
+                    filled[y][x] = FLOOR
+    # Space is what the edge reaches through blank tiles; the rest is deck.
+    outside: set[tuple[int, int]] = set()
+    edge = [
+        (x, y)
+        for y in range(height)
+        for x in range(width)
+        if (x in (0, width - 1) or y in (0, height - 1)) and filled[y][x] == void
+    ]
+    while edge:
+        x, y = edge.pop()
+        if (x, y) in outside:
+            continue
+        outside.add((x, y))
+        for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if 0 <= nx < width and 0 <= ny < height and filled[ny][nx] == void:
+                edge.append((nx, ny))
+    for y in range(height):
+        for x in range(width):
+            if filled[y][x] == void and (x, y) not in outside:
+                filled[y][x] = FLOOR
+    return tuple("".join(row) for row in filled)
+
+
+def standing_spot(rows: tuple[str, ...], spot: tuple[int, int]) -> tuple[int, int]:
+    """The nearest tile to `spot` someone can stand on (WALKABLE): a label
+    the model put on space or a wall would stand them there. `spot` itself
+    when it can be stood on, or when nothing can."""
+    width = max((len(r) for r in rows), default=0)
+
+    def at(x: int, y: int) -> str:
+        return rows[y][x] if 0 <= y < len(rows) and 0 <= x < len(rows[y]) else " "
+
+    if at(*spot) in WALKABLE:
+        return spot
+    seen, queue = {spot}, [spot]
+    while queue:
+        nxt = []
+        for x, y in queue:
+            for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if (nx, ny) in seen or not (0 <= nx < width and 0 <= ny < len(rows)):
+                    continue
+                if at(nx, ny) in WALKABLE:
+                    return nx, ny
+                seen.add((nx, ny))
+                nxt.append((nx, ny))
+        queue = nxt
+    return spot
+
+
 def plan_ground(world: WorldMap, art: WorldArt, place: WorldPlace, ground: str) -> str:
     """The look a plan is drawn in: its open ground as the land it stands on
     has it (live, a barn's plan came back on summer grass in a snowbound

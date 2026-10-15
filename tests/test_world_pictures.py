@@ -298,3 +298,31 @@ def test_the_isometric_view_says_a_change_in_what_its_plan_shows():
     assert "The barn is on fire, in ruins, most of its walls down (the story: past saving" in prompt
     assert "roof still holding" not in prompt
     assert "The ground: snow-covered country in winter." in prompt
+
+
+def test_a_plan_redrawn_when_asked_goes_with_its_failures_and_the_art_runs_again(
+    session, monkeypatch
+):
+    """Redraw plan…: a plan drawn badly stayed so, since plans are kept."""
+    from sealedlore.models.world import PlaceLayout, WorldArt
+
+    session._art = WorldArt(
+        layouts={
+            "farm": {
+                "": PlaceLayout(place_id="farm", rows=["#####", "#___#", "#####"]),
+                "burning": PlaceLayout(place_id="farm", rows=["*****"], state="burning"),
+            },
+            "barn": {"": PlaceLayout(place_id="barn", rows=["###"])},
+        },
+        failures={"layout:farm": 3, "layout:farm:burning": 1, "layout:farmhouse": 2},
+    )
+    ran: list[bool] = []
+    monkeypatch.setattr(session, "start_map_art", lambda: ran.append(True) or True)
+    assert session.redraw_plan("farm")
+    art = session.map_art_copy()
+    assert "farm" not in art.layouts and "barn" in art.layouts  # the inside plan stays
+    assert art.failures == {"layout:farmhouse": 2}
+    assert ran == [True]
+    assert not session.redraw_plan("farm")  # nothing left to redraw
+    session.enter_private(keep="memory", provider=MockChatProvider(["x"]), model="m")
+    assert not session.redraw_plan("barn")  # paused in a private scene

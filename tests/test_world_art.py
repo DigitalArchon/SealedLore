@@ -735,3 +735,31 @@ def test_land_is_told_the_ground_of_the_land_drawn_nearest():
     jobs = {j.key: j for j in plan_art(world, art, here="house", setting="a dead land")}
     ask = jobs["terrain:town"].messages[1].text
     assert "a dead land. The land already drawn nearest here is snow" in ask
+
+
+def test_a_deck_s_blank_inside_its_hull_and_its_narrow_gaps_are_floor():
+    """Deep Space 9 (the author, Oct 15 2026): rooms joined by nothing but
+    space, people standing in space. Space outside the hull stays space."""
+    from sealedlore.engine.world_art import decked, standing_spot
+
+    rows = (
+        "          ",
+        " ######## ",
+        " #__ ___# ",
+        " #      # ",
+        " #__  __# ",
+        " ######## ",
+        "          ",
+        "          ",
+        "          ",
+        " ##  ##   ",
+    )
+    deck = decked(rows)
+    assert deck[2] == " #______# "  # a one-tile gap: floor
+    assert deck[3] == " #______# " and deck[4] == " #______# "  # enclosed: floor
+    assert deck[0] == "          " and deck[7] == "          "  # outside: space
+    assert deck[9] == " ##__##   "  # a two-tile gap between rooms: a corridor
+    # Someone placed on space or a wall stands on the nearest floor instead.
+    assert standing_spot(rows, (3, 3)) in {(3, 2), (3, 4)}
+    assert standing_spot(deck, (3, 3)) == (3, 3)
+    assert standing_spot(deck, (1, 3)) == (2, 3)

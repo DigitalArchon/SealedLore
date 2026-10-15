@@ -66,11 +66,13 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.world_art import (
     containers,
+    decked,
     fixed_in_plan,
     local_area,
     plan_ground,
     plan_rect,
     plan_tile,
+    standing_spot,
 )
 from sealedlore.engine.world_layout import position, size_of
 from sealedlore.engine.world_pictures import isometric_state
@@ -319,7 +321,12 @@ class _PlanItem(QGraphicsPixmapItem):
         self, ground: str, roofs: bool, cleared: tuple[tuple[int, int, int, int], ...]
     ) -> None:
         self.ground, self.roofs, self.cleared = ground, roofs, cleared
-        self.setPixmap(tiles_pixmap(self.rows, ground, roofs, cleared))
+        self.setPixmap(tiles_pixmap(self.drawn_rows(), ground, roofs, cleared))
+
+    def drawn_rows(self) -> tuple[str, ...]:
+        """The rows as drawn: a deck's blank between its rooms is floor
+        (`world_art.decked`), elsewhere the rows as the model gave them."""
+        return decked(self.rows) if self.ground == "metal" else self.rows
 
     def rect(self) -> QRectF:
         """Where it lies, in scene units (y down)."""
@@ -450,6 +457,8 @@ class WorldView(QWidget):
     back_requested = Signal()
     # The author asked for the isometric view of this area to be painted.
     isometric_requested = Signal(str)
+    # The author asked for this area's plan to be drawn again.
+    redraw_requested = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -474,11 +483,17 @@ class WorldView(QWidget):
             "stays the story's truth, and this matches it closely, not exactly",
         )
         self.iso_button.setCheckable(True)
+        self.redraw_button = self._button(
+            "Redraw plan…",
+            "Draw the plan of the place you are in again, if it came out wrong. You are "
+            "asked first; the map art model draws it in the background.",
+        )
+        self.redraw_button.clicked.connect(self._redraw_requested)
         header = WrapRow()
         header.add_group([self.title])
         header.add_group([self.local_button, self.region_button, self.world_button])
         header.add_group([self.zoom_out, self.zoom_in])
-        header.add_group([self.inside_button, self.iso_button])
+        header.add_group([self.inside_button, self.iso_button, self.redraw_button])
         # How far the drawing has got (the author: the hint's small text said
         # neither that it was under way nor that it was done).
         self.progress_label = QLabel()
@@ -498,6 +513,7 @@ class WorldView(QWidget):
         self.pause_note.setObjectName("mapPaused")
         self.pause_note.setWordWrap(True)
         self.pause_note.hide()
+        self.paused = False
         self._drew = False  # a run has finished since this map was shown
         self.view = _WorldGraphics()
         self.scene = QGraphicsScene(self)
@@ -1010,7 +1026,9 @@ class WorldView(QWidget):
             self.scene.removeItem(child)
         plan.dressed = []
         self.people = [p for p in self.people if p.parentItem() is not plan]
-        rows, layout = plan.rows, plan.layout
+        layout = plan.layout
+        plan.ground = ground
+        rows = plan.drawn_rows()
         pictured = self._pictured_buildings(rows, layout.labels, opened) if roofs else {}
         cleared = tuple(sorted({*opened, *pictured}))
         plan.render(ground, roofs, cleared)
@@ -1130,6 +1148,8 @@ class WorldView(QWidget):
                     ty = box[3] + 1
                 if box is None:
                     standing.setdefault(spot, []).append(who)
+                    # A label on space or a wall would stand them there.
+                    tx, ty = standing_spot(rows, (tx, ty))
                 x, y = tx * TILE + TILE / 2, ty * TILE + TILE - 2
             groups.setdefault((x, y), []).append(who)
         for (x, y), names in groups.items():
@@ -1314,6 +1334,13 @@ class WorldView(QWidget):
         self.iso_button.setVisible(
             self.iso_button.isChecked() or (level == "local" and self._local_plan() is not None)
         )
+        self.redraw_button.setVisible(
+            level == "local"
+            and self._local_plan() is not None
+            and not self.iso_button.isChecked()
+            and not self.paused
+        )
+        self.redraw_button.setEnabled(not self.drawing)
         self.hint.setText(self._hint_for(level))
 
     # --- the isometric view ----------------------------------------------------------
@@ -1350,6 +1377,11 @@ class WorldView(QWidget):
         self.iso_button.setChecked(False)
         return True
 
+    def _redraw_requested(self) -> None:
+        area = local_area(self.world, self.here())
+        if area is not None:
+            self.redraw_requested.emit(area.id)
+
     def _paint_requested(self) -> None:
         area = local_area(self.world, self.here())
         if area is not None:
@@ -1383,6 +1415,9 @@ class WorldView(QWidget):
         """A private scene is open: the map stands as the story was when it
         began, and says so."""
         self.pause_note.setVisible(paused)
+        self.paused = paused
+        if self.world.places:
+            self._sync_buttons()
 
     def set_progress(self, done: int, total: int) -> None:
         """The drawing under way: `done` of `total` pieces (art and
@@ -1398,6 +1433,7 @@ class WorldView(QWidget):
             self.progress_label.setText("✓ The map is drawn")
         self.progress.setVisible(drawing)
         self.progress_label.setVisible(drawing or (self._drew and self.art_on))
+        self.redraw_button.setEnabled(not drawing)
         if drawing != self.drawing:
             self.drawing = drawing
             if self.world.places:

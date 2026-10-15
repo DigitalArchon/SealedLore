@@ -939,6 +939,12 @@ A story that keeps a map makes it part of the window: the Inspector, beside
 the story, takes half the window with **Map** as its first page. **Map**,
 above the transcript, goes to it.
 
+A station or a ship is drawn as one deck: its rooms joined under the hull,
+space only outside it. A plan is drawn once and kept, so one that came out
+wrong stays so; **Redraw plan…** on the local map draws the plan of the place
+you are in again (you are asked first; the buildings you have been inside
+keep their own plans).
+
 During a private scene the map stays in the window but is paused: it shows
 the story as it was when the scene began, nothing from the scene is read into
 it, and nothing is drawn or painted. Once you approve the scene's summary, the

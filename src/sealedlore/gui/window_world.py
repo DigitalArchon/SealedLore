@@ -14,7 +14,7 @@ GUI thread by a queued signal and redrawn there, a moment after the last.
 from __future__ import annotations
 
 from PySide6.QtCore import QObject, QTimer, Signal
-from PySide6.QtWidgets import QToolButton
+from PySide6.QtWidgets import QMessageBox, QToolButton
 
 from sealedlore.gui.map_render import plan_png
 from sealedlore.gui.world_view import WorldView
@@ -37,6 +37,7 @@ class WorldWindow:
         self.world_view = WorldView()
         self.world_view.back_requested.connect(lambda: self.show_world(False))
         self.world_view.isometric_requested.connect(self._paint_isometric)
+        self.world_view.redraw_requested.connect(self._redraw_plan)
         self.world_button = QToolButton()
         self.world_button.setObjectName("viewToggleButton")
         self.world_button.setText("Map")
@@ -195,3 +196,27 @@ class WorldWindow:
         self.world_view.isometric_offer = session.isometric_offer()
         self.world_view.sync_isometric()
         self._sync_progress()
+
+    def _redraw_plan(self, area_id: str) -> None:
+        """Redraw plan… on the local map: asked first, since the plan the
+        story has stood on is replaced (`redraw_plan`)."""
+        session = self.session
+        if session is None or area_id not in session.world().places:
+            return
+        name = session.world().places[area_id].name
+        answer = QMessageBox.question(
+            self,
+            "Redraw the plan?",
+            f"Draw the plan of {name} again? The plan you see now is replaced by a new one "
+            "from the map art model; the places in it keep their names and the buildings "
+            "you have been inside keep their own plans. It is drawn in the background.",
+        )
+        if answer != QMessageBox.Yes:
+            return
+        if not session.redraw_plan(area_id):
+            self.statusBar().showMessage(
+                "The plan can't be redrawn now: wait for the map's drawing to finish.", 6000
+            )
+            return
+        self._sync_progress()
+        self.refresh_world(keep_view=True)
