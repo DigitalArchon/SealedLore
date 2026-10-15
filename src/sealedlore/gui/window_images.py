@@ -18,6 +18,7 @@ from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import QDialog, QFileDialog, QInputDialog, QMessageBox, QVBoxLayout
 
 from sealedlore.engine.picture_shapes import BACKGROUND
+from sealedlore.engine.world_art import out_of_the_fog
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.image_dialog import (
     FitPicture,
@@ -203,16 +204,19 @@ class ImagesWindow:
         return {ref.drawn_as for card in cards for ref in card.reference_images if ref.drawn_as}
 
     def _map_pictures(self) -> list:
-        """The map's isometric views and postcards of places on the map as
-        the story stands (a place the plot still hides is not on it)."""
+        """The map's isometric views and postcards of places out of the fog
+        as the story stands, as the map shows them (a place the plot still
+        hides is not on it; one the story hasn't reached is under the fog:
+        a sample's views of places not yet reached were listed and saved)."""
         session = self.session
         if session is None or not session.map_on:
             return []
-        places = session.world().places
+        held = session._character(session.story.held_character_id)
+        sight = out_of_the_fog(session.world(), held.name if held is not None else None)
         return [
             picture
             for picture in session.map_art_copy().pictures
-            if picture.subject in ("isometric", "postcard") and picture.subject_id in places
+            if picture.subject in ("isometric", "postcard") and picture.subject_id in sight
         ]
 
     def _refresh_image_views(self) -> None:
@@ -259,26 +263,31 @@ class ImagesWindow:
         if self._shows_private():
             exclude_from_capture(dialog, True)  # the private model's prompt
         accepted = dialog.exec()
+        writer = dialog.writer_model()
+        request = dialog.request if accepted else None
+        # Freed once read: a child of the window, it held the story it was
+        # opened in for as long as the window lived.
+        dialog.deleteLater()
         # The writer picked in the dialog sticks, as Settings → Models →
         # Image prompt writer (blank: the story model).
         # (Not in private or a TEE chat: their own model writes, and the
         # setting stays as the author left it for stories. Nor from a chat
         # kept in memory only, which teaches the settings nothing.)
         private = self.session.in_private or self.session.tee_chat or self.session.memory_only
-        if not private and dialog.writer_model() != self.config.image_prompt_model:
-            self.config.image_prompt_model = dialog.writer_model()
+        if not private and writer != self.config.image_prompt_model:
+            self.config.image_prompt_model = writer
             save_config(self.config, root=self.root)
         # The prompt writer's call, paid whether or not a picture follows.
         for usage in self.session.unreported_usage:
             self.status_strip.add_cost(usage)
         self.session.unreported_usage.clear()
         self._refresh_story_cost()
-        if not accepted or dialog.request is None:
+        if not accepted or request is None:
             return
         client = self.session.image_client()
         if client is None:
             return
-        self.image_jobs.start(dialog.request, client, self.session.pictures)
+        self.image_jobs.start(request, client, self.session.pictures)
         self.statusBar().showMessage(
             "Drawing the picture in the background. It appears after its passage when done.",
             8000,
@@ -353,13 +362,15 @@ class ImagesWindow:
             parent=self,
         )
         accepted = dialog.exec()
+        chosen = dialog.chosen_model() if accepted else ""
+        requests = dialog.requests() if accepted else []
+        dialog.deleteLater()  # read; held the story otherwise
         self._drain_side_costs()
         if not accepted:
             return False
-        if dialog.chosen_model() != self.config.portrait_model:
-            self.config.portrait_model = dialog.chosen_model()
+        if chosen != self.config.portrait_model:
+            self.config.portrait_model = chosen
             save_config(self.config, root=self.root)
-        requests = dialog.requests()
         self._start_card_pictures(requests)
         return bool(requests)
 
@@ -403,9 +414,11 @@ class ImagesWindow:
             parent=self,
         )
         accepted = dialog.exec()
+        request = dialog.request() if accepted else None
+        dialog.deleteLater()  # read; held the story otherwise
         self._drain_side_costs()
-        if accepted:
-            self._start_card_pictures([dialog.request()])
+        if request is not None:
+            self._start_card_pictures([request])
 
     def _card_picture_action(self, action: str, card_id: str, ref_id: str) -> None:
         """A card's picture in the Media tab: see it whole, go to its card,
@@ -769,6 +782,7 @@ class ImagesWindow:
         if session.config.images() is None:
             self._warn_plain("No endpoint", "Set up an image endpoint in Settings first.")
             return
+        shown = session.pictures.read(subject.file)
         dialog = PictureVariantDialog(
             session,
             subject,
@@ -777,12 +791,30 @@ class ImagesWindow:
             browse=self._browse_pictures,
             parent=self,
         )
-        if not dialog.exec():
+        try:
+            if not dialog.exec():
+                return
+            request = dialog.request()
+        finally:
+            dialog.deleteLater()  # a child of the window, holding the story, otherwise
+        if session is not self.session:
+            return
+        if subject.background and session.story.background_image != subject.file:
+            shown = None
+        if shown is None or session.pictures.read(subject.file) != shown:
+            # The background's file is reused: one drawn meanwhile (a new
+            # background landing while this was open) would have been sent
+            # in place of the one shown and paid for.
+            self._warn_plain(
+                "The picture changed",
+                "The picture changed while the edit was open, so nothing was sent. Open "
+                "Edit… again on the picture as it is now.",
+            )
             return
         client = session.image_client()
         if client is None:
             return
-        self.image_jobs.start(dialog.request(), client, session.pictures)
+        self.image_jobs.start(request, client, session.pictures)
         self.statusBar().showMessage(
             "Drawing the edited picture in the background"
             + (": it goes behind the story when done." if subject.background else "."),

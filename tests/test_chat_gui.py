@@ -181,6 +181,9 @@ def test_a_memory_only_chat_is_never_written_and_asks_before_it_goes(
         def writer_model(self):
             return None
 
+        def deleteLater(self):  # noqa: N802 - Qt naming
+            pass
+
     monkeypatch.setattr("sealedlore.gui.window_images.ImageDialog", NoDialog)
     from sealedlore.models.config import ProviderConfig
 
@@ -414,6 +417,9 @@ def test_a_tee_chats_picture_leaves_the_prompt_writer_setting_alone(app, window,
 
         def exec(self):
             return 0
+
+        def deleteLater(self):  # noqa: N802 - Qt naming
+            pass
 
         def writer_model(self):
             return None  # a TEE chat's own model writes

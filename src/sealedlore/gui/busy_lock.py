@@ -122,11 +122,12 @@ class BusyLock(QObject):
             and watched in self._enabled
             and watched.isEnabled()
         ):
-            # The page turned it on: remembered so, kept off for now.
+            # The page turned it on: remembered so, kept off for now (by
+            # Qt's own method: the widget's is the lock's shadow, `_hold`).
             self._enabled[watched] = True
             self._locking = True
             try:
-                watched.setEnabled(False)
+                QWidget.setEnabled(watched, False)
             finally:
                 self._locking = False
         return False

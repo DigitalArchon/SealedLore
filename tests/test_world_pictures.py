@@ -434,6 +434,9 @@ def test_a_plan_redrawn_when_asked_keeps_the_old_one_until_the_new_is_drawn(sess
     jobs = plan_art(world, art, here=None, setting="", limit=40)
     redraws = [job for job in jobs if job.key == "layout:farm:redraw"]
     assert len(redraws) == 1
+    # First in the run, whatever is nearer: twelve nearer pieces kept it out.
+    assert jobs[0].key == "layout:farm:redraw"
+    assert plan_art(world, art, here=None, setting="", limit=1)[0].key == "layout:farm:redraw"
     view = art.pictures[0]
     assert view_current(world, art, "farm", view)
     # Drawn: it replaces every plan the farm had, and its view is out of date.

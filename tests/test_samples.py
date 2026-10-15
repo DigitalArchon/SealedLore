@@ -219,3 +219,19 @@ def test_the_guide_s_front_matter_parses_as_written():
     parsed = parse_plot_markdown(text)
     assert [p.message for p in parsed.problems if p.error] == []
     assert parsed.scenario.title == "Doomsville"
+
+
+def test_media_lists_only_the_views_the_map_shows(app, tmp_path: Path):
+    """The review: Media's Map section listed (and Save all wrote) the views
+    of places the map keeps under the fog, the vox relay among them."""
+    window = MainWindow(root=tmp_path, use_mock=True)
+    window.open_setup = lambda *a, **k: False
+    window._import_plot_file(SAMPLES / "The Ashen Reach.md")
+    window.refresh_images()
+    names = [
+        window.images_panel.map_list.item(i).text().split("\n")[1]
+        for i in range(window.images_panel.map_list.count())
+    ]
+    assert sorted(names) == ["Hollowmouth", "Shaft Nine"]
+    window._chat_allows_close = lambda: True
+    window.close()

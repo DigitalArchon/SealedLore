@@ -87,3 +87,20 @@ def test_what_the_page_turns_off_meanwhile_stays_off(app, window):
     assert not panel.name.isReadOnly()
     # Unlocked, the widgets' own methods are back.
     assert "setEnabled" not in vars(style.person) and "setReadOnly" not in vars(panel.name)
+
+
+def test_a_control_qt_itself_turns_on_is_kept_off_and_remembered(app, window):
+    """The event filter turns a control enabled by a path the shadow can't
+    see (Qt's own method, a signal connected straight to the slot) off again
+    by Qt's own method: called through the shadow, it stayed on for the job
+    and was remembered off."""
+    from PySide6.QtWidgets import QWidget
+
+    panel = window.cast_panel
+    window._busy = True
+    window._update_controls()
+    QWidget.setEnabled(panel.remove_button, True)
+    assert not panel.remove_button.isEnabled()
+    window._busy = False
+    window._update_controls()
+    assert panel.remove_button.isEnabled()

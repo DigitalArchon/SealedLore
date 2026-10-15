@@ -68,7 +68,9 @@ from sealedlore.engine.world_art import (
     containers,
     decked,
     fixed_in_plan,
+    in_sight,
     local_area,
+    out_of_the_fog,
     plan_ground,
     plan_rect,
     plan_tile,
@@ -794,31 +796,12 @@ class WorldView(QWidget):
         return visited
 
     def _shown(self) -> set[str]:
-        """What shows through the fog: what the story has seen or told of,
-        and where the character has been."""
-        been = self._visited() | ({self.here()} - {None})
-        # Stand somewhere and you know what it is in and what is in it: the
-        # farm from its farmhouse, the farmhouse from the farm.
-        been |= containers(self.world, been)
-        around = {p.id for p in self.world.places.values() if p.inside in been}
-        return set(self.world.seen) | been | around
+        """What shows through the fog (`world_art.in_sight`)."""
+        return in_sight(self.world, self.held)
 
     def _out_of_the_fog(self) -> set[str]:
-        """The places whose plans may be drawn: those shown (`_shown`), and
-        what stands in a local area that is (a building's inside, seen when
-        zoomed in). A local area of its own must be shown itself: a site in
-        known country (a wreck in the ashfields) is not. A plot file's map
-        can come with plans of places the story hasn't reached (a sample's
-        are drawn whole), and showing one would lift the fog off it: The
-        Ashen Reach's vox relay showed, plan and all, to anyone who moved
-        the map over it."""
-        shown = self._shown()
-        out = set()
-        for pid in self.world.places:
-            area = local_area(self.world, pid)
-            if pid in shown or (area is not None and area.id != pid and area.id in shown):
-                out.add(pid)
-        return out
+        """The places whose plans may be drawn (`world_art.out_of_the_fog`)."""
+        return out_of_the_fog(self.world, self.held)
 
     def level(self) -> str:
         """Which of LEVELS the zoom is nearest now (see REGION_REACH)."""
@@ -1319,8 +1302,10 @@ class WorldView(QWidget):
                     out.append((who, at))
                     break
                 seen.add(spot)
-                if spot in shown_plans and spot != at and spot not in self._changed_only:
-                    break  # stands in that plan, drawn closer
+                if spot in shown_plans and spot not in self._changed_only:
+                    # Stands in that plan, drawn closer: someone at the
+                    # farmhouse, its inside shown, stood in the farm too.
+                    break
                 spot = self.world.places[spot].inside if spot in self.world.places else None
         return out
 

@@ -444,6 +444,37 @@ def plan_rect(world: WorldMap, place: WorldPlace) -> tuple[float, float, float, 
     return spot[0] - width / 2, spot[1] + height / 2, width, height
 
 
+def in_sight(world: WorldMap, held: str | None) -> set[str]:
+    """What shows through the fog for the character `held`: what the story
+    has seen or told of, where they have been (an imported map's start
+    before a passage has placed them), what that is in, and what is in it
+    (stand somewhere and you know what it is in and what is in it)."""
+    here = world.where.get(held or "") or world.start
+    visited = set(world.visited.get(held or "", []))
+    if world.start is not None and not visited:
+        visited.add(world.start)
+    been = visited | ({here} - {None})
+    been |= containers(world, been)
+    around = {p.id for p in world.places.values() if p.inside in been}
+    return set(world.seen) | been | around
+
+
+def out_of_the_fog(world: WorldMap, held: str | None) -> set[str]:
+    """The places whose plans and pictures may be shown: those in sight
+    (`in_sight`), and what stands in a local area that is (a building's
+    inside, seen when zoomed in). A local area of its own must be in sight
+    itself: a site in known country (a wreck in the ashfields) is not. A
+    plot file's map can come with plans of places the story hasn't reached
+    (a sample's are drawn whole), and showing one lifted the fog off it."""
+    shown = in_sight(world, held)
+    out = set()
+    for pid in world.places:
+        area = local_area(world, pid)
+        if pid in shown or (area is not None and area.id != pid and area.id in shown):
+            out.add(pid)
+    return out
+
+
 def containers(world: WorldMap, ids: Collection[str]) -> set[str]:
     """Every place one of `ids` is inside, all the way up."""
     out: set[str] = set()
@@ -1040,7 +1071,9 @@ def plan_art(
                 pid,
                 name=place.name,
                 state=place.state,
-                order=1,
+                # First, whatever is nearer the story: the area in view may
+                # be anywhere, and twelve nearer pieces kept it out of the run.
+                order=-1,
                 extra={"fixed": fixed, "grid": plan_grid(place)},
             )
         )

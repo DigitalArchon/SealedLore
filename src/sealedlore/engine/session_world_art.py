@@ -680,6 +680,8 @@ class WorldArtRuntime:
                 self._save_art(art)
             self._log("map_art_refused", {"request_log_ref": log_ref, "reason": str(exc)[:300]})
             return
+        if self._map_closed:
+            return  # the story was left: a session opened since owns its art
         art = self.world_art
         with self._lock():
             adopt(art, drawn, redraw=job.key.endswith(":redraw"))

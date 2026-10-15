@@ -1232,16 +1232,13 @@ class MainWindow(
     def open_story(self, story_id: str) -> None:
         if self._busy:
             return
-        leaving = self.session is not None and self.session.story.id != story_id
-        # Leaving a memory-only chat or scene loses it: asked first.
-        if leaving and not self._private_allows_close():
+        # Leaving a memory-only chat or scene loses it, whichever story opens
+        # next (the same one again comes back from disk, without it): asked.
+        if self.session is not None and not self._private_allows_close():
             return
         self.show_map(False)
-        if self.session is not None and self.session.story.id != story_id:
-            # Background chapters of the story being left are logged, not lost.
-            self.session.close(wait_seconds=0)
         try:
-            self.session = StorySession.load(
+            session = StorySession.load(
                 story_id,
                 self.config,
                 self._current_provider(),
@@ -1253,6 +1250,13 @@ class MainWindow(
         except (FileNotFoundError, ValueError) as exc:
             self._warn_plain("Could not open story", str(exc))
             return
+        if self.session is not None:
+            # Background chapters of the story being left are logged, not
+            # lost, and its map stops drawing. The same story opened again
+            # was left running: two sessions drew and paid for the same
+            # pieces, and the old one's map art was written over the new's.
+            self.session.close(wait_seconds=0)
+        self.session = session
         self._after_open()
 
     def _after_open(self) -> None:

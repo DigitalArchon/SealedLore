@@ -746,6 +746,12 @@ def test_someone_in_a_part_of_a_building_stands_once_at_the_building(app):
         assert len(johns()) == 1
         view.go_local()
         assert len(johns()) == 1
+    # At the farmhouse itself, its inside shown: in the farmhouse, not the farm
+    # as well (counted among every figure, shown or not: each is a scene item).
+    world.where["John"] = "house"
+    view.set_world(world, art, "John")
+    view.go_to("house")
+    assert len([p for p in view.people if p.name == "John"]) == 1
 
 
 def test_nobody_stands_on_water_a_wall_or_space(app):

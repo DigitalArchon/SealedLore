@@ -139,6 +139,7 @@ class PictureVariantDialog(QDialog):
         # What it was drawn from, of what is still there to send.
         store = session.pictures
         self._from = [] if edit else [u for u in subject.references if store.read(u.file)]
+        self._gone = 0 if edit else len(subject.references) - len(self._from)
         self.session = session
         self.subject, self.edit = subject, edit
         self.card, self.source = subject.card, subject.source
@@ -366,12 +367,24 @@ class PictureVariantDialog(QDialog):
                 "(Recommended lists those that edited well)."
             )
         else:
+            sent = self._from[:takes] if takes is not None else self._from
+            names = ", ".join(f"image {i}: {use.owner_name}" for i, use in enumerate(sent, 1))
             if drawn_from and takes is not None and takes < drawn_from:
                 parts.append(f"Only the first {_pictures(takes)} it was drawn from can be sent")
             elif drawn_from == 1:
                 parts.append("The picture it was drawn from goes with it")
             elif drawn_from:
                 parts.append(f"The {drawn_from} pictures it was drawn from go with it")
+            if sent:
+                parts[-1] += f" ({names})"
+            if self._gone or len(sent) < drawn_from:
+                # Numbered as sent: the prompt's "image 2" may now be another.
+                verb = "is" if self._gone == 1 else "are"
+                gone = f"{_pictures(self._gone).capitalize()} it was drawn from {verb} gone. "
+                gone = gone if self._gone else ""
+                parts.append(
+                    f"{gone}The prompt's image numbers may not match what is sent: check it"
+                )
             if known is not None:
                 parts.append(known.note)
         self.note.setText(". ".join(parts))
