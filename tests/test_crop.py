@@ -36,6 +36,7 @@ from sealedlore.gui.crop_dialog import (  # noqa: E402
     fit_rect,
     from_corner,
     from_edge,
+    whole_pixels,
     moved,
 )
 from sealedlore.gui.ref_images import clean_incoming, image_of  # noqa: E402
@@ -117,6 +118,31 @@ def test_a_moved_frame_stays_in_the_picture_and_a_side_moves_alone():
     assert moved((0, 0, 100, 100), 500, -50, 400, 300) == (300, 0, 100, 100)
     assert from_edge((50, 50, 100, 100), "right", (300, 0), 400, 300) == (50, 50, 250, 100)
     assert from_edge((50, 50, 100, 100), "left", (500, 0), 400, 300)[2] == MIN_SIDE
+    # A narrow frame at the edge, its side pulled in: moved back into the picture.
+    assert from_edge((390, 0, 10, 100), "right", (395, 50), 400, 300) == (384, 0, MIN_SIDE, 100)
+
+
+def _inside(rect, width=400, height=300) -> bool:
+    x, y, w, h = rect
+    return x >= 0 and y >= 0 and x + w <= width and y + h <= height
+
+
+def test_a_frame_never_collapses_nor_leaves_the_picture():
+    """Live (the review): a corner dragged past the picture's edge from a
+    frame already on it kept a 1-pixel sliver, and a frame drawn from the
+    margin kept a pixel from outside the picture."""
+    # The bottom-right corner of the whole picture dragged past its left edge.
+    rect = from_corner((0, 0), (-50, 120), None, 400, 300)
+    assert rect[2] >= MIN_SIDE and _inside(rect)
+    # A 2:3 frame on the top edge, a corner dragged up past it.
+    rect = from_corner((100, 0), (160, -80), 2 / 3, 400, 300)
+    assert rect[2] >= MIN_SIDE and rect[2] / rect[3] == pytest.approx(2 / 3) and _inside(rect)
+    # Drawn from the margin right of the picture, outward.
+    rect = from_corner((400, 100), (450, 150), None, 400, 300)
+    assert rect[2] >= MIN_SIDE and _inside(rect)
+    # In whole pixels, never a pixel past the edge.
+    pixels = whole_pixels((400, 10, 0, 50), 400, 300)
+    assert pixels.left() == 399 and pixels.right() <= 399 and pixels.width() == 1
 
 
 # --- the dialog -----------------------------------------------------------------------
@@ -195,11 +221,13 @@ def _answer(monkeypatch, *, shape: str | None = None, rect=None, whole=False, ca
 def test_a_crop_is_kept_upright_stripped_and_only_the_part_chosen(app, tmp_path, monkeypatch):
     source = tmp_path / "photo.jpg"
     source.write_bytes(dirty_jpeg(orientation=6, width=64, height=48))  # stands 48 x 64
-    _answer(monkeypatch, rect=(8, 8, 30, 40))
+    # A frame that only fits the picture standing up: lying down (64 x 48),
+    # its 58-pixel bottom would be cut to 40.
+    _answer(monkeypatch, rect=(8, 8, 30, 50))
     data, suffix = cropped_picture(None, source)
     assert suffix == ".jpg" and leftovers(data) == [] and strip_metadata(data) == data
     picture = image_of(data)
-    assert (picture.width(), picture.height()) == (30, 40)
+    assert (picture.width(), picture.height()) == (30, 50)
     # The whole picture is kept as it came, stripped, nothing re-encoded.
     _answer(monkeypatch, whole=True)
     whole, _ = cropped_picture(None, source)
@@ -368,6 +396,7 @@ def test_a_scenario_s_or_backup_s_pictures_come_in_clean(app):
 
 def test_crops_use_the_window_s_config_and_never_keep_the_window(app, tmp_path):
     import gc
+    import weakref
 
     from sealedlore.gui.main_window import MainWindow
 
@@ -377,8 +406,85 @@ def test_crops_use_the_window_s_config_and_never_keep_the_window(app, tmp_path):
     portrait = next(s for s in crop_dialog.shapes() if s.key == PORTRAIT)
     assert (portrait.width, portrait.height) == (3, 4)
     window.close()
-    window.deleteLater()
-    del window
-    app.processEvents()
+
+    # Held weakly: an owner gone is the defaults, whoever else held a window.
+    class Owner:
+        config = window.config
+
+    owner = Owner()
+    crop_dialog.use_config(owner, lambda o: o.config)
+    gone = weakref.ref(owner)
+    assert next(s for s in crop_dialog.shapes() if s.key == PORTRAIT).height == 4
+    del owner
     gc.collect()
-    assert all(s.key for s in crop_dialog.shapes())  # no window: the defaults
+    assert gone() is None
+    portrait = next(s for s in crop_dialog.shapes() if s.key == PORTRAIT)
+    assert (portrait.width, portrait.height) == (2, 3)  # what portrait_size asks unlisted
+
+
+@pytest.mark.real_crop
+def test_a_frame_too_small_to_keep_cannot_be_cropped(app):
+    dialog = CropDialog(_image(), crop_dialog.shapes())
+    dialog.view.set_rect((10, 10, MIN_SIDE - 6, 40))
+    assert not dialog.crop_button.isEnabled()
+    dialog.view.set_rect((10, 10, MIN_SIDE, 40))
+    assert dialog.crop_button.isEnabled()
+    dialog.deleteLater()
+
+
+def test_a_picture_named_at_2x_is_cropped_in_its_own_pixels(app, tmp_path):
+    """Qt reads "face@2x.png" as twice as dense: the crop dialog drew it at
+    half size under a full-size frame."""
+    from sealedlore.gui.ref_images import load_image
+
+    path = tmp_path / "face@2x.png"
+    _image(64, 48).save(str(path))
+    image = load_image(path)
+    assert image.devicePixelRatio() == 1.0 and image.size().toTuple() == (64, 48)
+
+
+def test_a_scenario_or_backup_imported_by_the_window_is_cleaned(
+    app, tmp_path, monkeypatch, story
+):
+    """The window's own imports, not just `clean_incoming`: a GIF with a
+    comment in someone else's scenario, or in a backup, comes in clean."""
+    import base64
+
+    from sealedlore.gui.main_window import MainWindow
+    from sealedlore.models.character import Character
+    from sealedlore.models.image import ImageRef
+    from sealedlore.models.scenario import Scenario
+    from sealedlore.storage.repository import StoryBundle
+
+    assert b"comment" in GIF.lower() or leftovers(GIF) != []
+    window = MainWindow(root=tmp_path / "data", use_mock=True)
+    opened: list = []
+    monkeypatch.setattr(window, "_open_new_bundle", lambda bundle, **_k: opened.append(bundle))
+    scenario = Scenario(
+        title="Gif",
+        cast=[Character(name="Ann", reference_images=[ImageRef(file="images/refs/a.gif")])],
+        reference_files={"images/refs/a.gif": base64.b64encode(GIF).decode()},
+    )
+    path = tmp_path / "gif.sealedlore-scenario.json"
+    path.write_text(scenario.model_dump_json(), encoding="utf-8")
+    window._import_scenario(path)
+    [bundle] = opened
+    assert leftovers(bundle.pending_files["images/refs/a.gif"]) == []
+
+    backup = StoryBundle(story=story)
+    backup.pending_files = {"images/refs/b.gif": GIF}
+    monkeypatch.setattr(main_window_module(), "read_archive", lambda _p: (backup, []))
+    kept: list = []
+    monkeypatch.setattr(
+        main_window_module(), "restore_archive", lambda b, *_a, **_k: kept.append(b) or b
+    )
+    monkeypatch.setattr(window, "open_story", lambda *_a, **_k: None)
+    window._import_archive(tmp_path / "x.sealedlore-backup.zip")
+    assert kept and leftovers(kept[0].pending_files["images/refs/b.gif"]) == []
+    window.close()
+
+
+def main_window_module():
+    import sealedlore.gui.main_window as module
+
+    return module

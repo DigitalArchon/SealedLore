@@ -91,22 +91,36 @@ def from_corner(
     height: float,
 ) -> Rect:
     """The frame from a fixed corner to the pointer, kept in the picture and
-    to `ratio` when there is one. Used to drag a corner and to draw anew."""
+    to `ratio` when there is one, never smaller than MIN_SIDE a side (or the
+    picture). Used to drag a corner and to draw anew. A corner on the
+    picture's edge with the pointer past it has no room that way: the frame
+    goes the other way (it collapsed to nothing, and Crop kept a sliver)."""
     ax, ay = anchor
     dx, dy = point[0] - ax, point[1] - ay
-    room_w = (width - ax) if dx >= 0 else ax
-    room_h = (height - ay) if dy >= 0 else ay
+    least_w = min(MIN_SIDE * max(ratio, 1.0) if ratio else MIN_SIDE, width)
+    least_h = min(least_w / ratio if ratio else MIN_SIDE, height)
+    right = dx >= 0 if (width - ax if dx >= 0 else ax) >= least_w else ax < width - ax
+    down = dy >= 0 if (height - ay if dy >= 0 else ay) >= least_h else ay < height - ay
+    room_w = (width - ax) if right else ax
+    room_h = (height - ay) if down else ay
     if ratio:
         # The shape follows whichever way the pointer has gone further.
         w = min(max(abs(dx), abs(dy) * ratio), room_w, room_h * ratio)
-        w = max(w, min(MIN_SIDE * max(ratio, 1.0), room_w, room_h * ratio))
+        w = max(w, min(least_w, room_w, room_h * ratio))
         h = w / ratio
     else:
-        w = max(min(abs(dx), room_w), min(MIN_SIDE, room_w))
-        h = max(min(abs(dy), room_h), min(MIN_SIDE, room_h))
-    x = ax if dx >= 0 else ax - w
-    y = ay if dy >= 0 else ay - h
-    return (x, y, w, h)
+        w = max(min(abs(dx), room_w), min(least_w, room_w))
+        h = max(min(abs(dy), room_h), min(least_h, room_h))
+    x = ax if right else ax - w
+    y = ay if down else ay - h
+    return inside((x, y, w, h), width, height)
+
+
+def inside(rect: Rect, width: float, height: float) -> Rect:
+    """The frame no larger than the picture, moved into it."""
+    x, y, w, h = rect
+    w, h = min(w, width), min(h, height)
+    return (min(max(x, 0.0), width - w), min(max(y, 0.0), height - h), w, h)
 
 
 def from_edge(
@@ -129,13 +143,16 @@ def from_edge(
         h = bottom - y
     elif edge == "bottom":
         h = max(py - y, MIN_SIDE)
-    return (x, y, w, h)
+    # A frame narrower than MIN_SIDE from the edge would go past it: moved back in.
+    return inside((x, y, w, h), width, height)
 
 
 def whole_pixels(rect: Rect, width: int, height: int) -> QRect:
-    """The frame in whole pixels, inside the picture."""
+    """The frame in whole pixels, inside the picture: at least one pixel of
+    it, never a pixel past its edge."""
     x, y, w, h = rect
-    left, top = max(0, round(x)), max(0, round(y))
+    left = min(max(0, round(x)), max(width - 1, 0))
+    top = min(max(0, round(y)), max(height - 1, 0))
     right, bottom = min(width, round(x + w)), min(height, round(y + h))
     return QRect(left, top, max(1, right - left), max(1, bottom - top))
 
@@ -152,7 +169,8 @@ class CropView(QWidget):
     def __init__(self, image: QImage, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._image = image
-        self._pixmap = QPixmap.fromImage(image)
+        # The picture as shown, at the size it is shown: a whole-size copy
+        # beside the image was 50 MB a dialog for a 12-megapixel photo.
         self._scaled: QPixmap | None = None
         self._ratio: float | None = None
         self._rect: Rect = fit_rect(image.width(), image.height(), None)
@@ -275,7 +293,9 @@ class CropView(QWidget):
         scale, left, top = self._placement()
         size = QSize(round(self._image.width() * scale), round(self._image.height() * scale))
         if self._scaled is None or self._scaled.size() != size:
-            self._scaled = self._pixmap.scaled(size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self._scaled = QPixmap.fromImage(
+                self._image.scaled(size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            )
         painter.drawPixmap(round(left), round(top), self._scaled)
         frame = self._on_screen(self._rect)
         shown = QRectF(left, top, size.width(), size.height())
@@ -385,6 +405,10 @@ class CropDialog(QDialog):
         if max(crop.width(), crop.height()) < SMALL_SIDE:
             text += " That is small: it may look soft beside pictures the app draws."
         self.size_label.setText(text)
+        # A frame smaller than MIN_SIDE is a slip, not a picture (a picture
+        # that small itself is taken whole).
+        least = min(MIN_SIDE, self._image.width(), self._image.height())
+        self.crop_button.setEnabled(min(crop.width(), crop.height()) >= least)
 
     def _take_whole(self) -> None:
         self.whole = True
@@ -409,11 +433,17 @@ def cropped_picture(
     if image.isNull():
         raise ValueError(f"{source.name} isn't a picture this app can read")
     dialog = CropDialog(image, shapes(background), initial, parent, counter=counter)
-    if dialog.exec() != QDialog.Accepted:
-        return None
-    if dialog.whole or dialog.view.crop() == QRect(0, 0, image.width(), image.height()):
+    try:
+        if dialog.exec() != QDialog.Accepted:
+            return None
+        whole = dialog.whole or dialog.view.crop() == QRect(0, 0, image.width(), image.height())
+        part = None if whole else dialog.cropped()
+    finally:
+        # Gone with its picture: kept as the parent's child, each dialog held
+        # its photo for as long as the window lived.
+        dialog.deleteLater()
+    if part is None:
         return picture_bytes(source)  # as it was, nothing re-encoded
-    part = dialog.cropped()
     if part.hasAlphaChannel():
         return picture_bytes_of(_encoded(part, "PNG"), ".png")
     return picture_bytes_of(_encoded(part, "JPEG", 92), ".jpg")

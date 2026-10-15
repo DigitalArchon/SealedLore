@@ -67,10 +67,14 @@ def _encoded(image: QImage, fmt: str, quality: int = -1) -> bytes:
 
 
 def load_image(path: Path) -> QImage:
-    """A picture file as it should be seen: its EXIF orientation applied."""
+    """A picture file as it should be seen: its EXIF orientation applied, and
+    one pixel a pixel (Qt reads "face@2x.png" as twice as dense, and the crop
+    dialog drew it at half size under a full-size frame)."""
     reader = QImageReader(str(path))
     reader.setAutoTransform(True)
-    return reader.read()
+    image = reader.read()
+    image.setDevicePixelRatio(1.0)
+    return image
 
 
 def load_pixmap(path: Path) -> QPixmap:
