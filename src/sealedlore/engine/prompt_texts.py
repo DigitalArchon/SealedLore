@@ -3243,17 +3243,22 @@ _text(
 
 # Draw a new background… (Media): the direction the story's prompt writer is
 # given for a picture to stand behind the story's text. The author sees it
-# in the picture dialog and can change it before anything is written; not
-# measured.
+# in the picture dialog and can change it before anything is written.
+# Checked live once (Brasshaven, GLM 5.3 writing, FLUX.2 klein drawing): the
+# first wording, "a wide view of where the story is now", got the moment
+# (the automaton in the doorway, two constables coming) and the workshop's
+# name, which FLUX lettered on a sign; asked for the place and not what is
+# happening in it, and for no signs or names, it got a quiet street.
 _text(
     "pictures.background",
     PICTURES,
     "Card pictures: a background",
     "The direction given to the picture prompt writer for the story's background, the "
     "picture behind its text; the author can change it before it is written.",
-    "A wide view of where the story is now, to stand behind the story's text as its "
-    "background: the place itself, its light and weather, seen from a little way off. No one "
-    "close to the viewer.",
+    "A wide, quiet view of the place where the story is now, to stand behind the story's "
+    "text as its background: the place itself, its light and weather, seen from a little "
+    "way off, not what is happening in it. No one close to the viewer, and no signs, names "
+    "or writing of any kind: describe the place, never name it.",
 )
 
 # A character alone in the current scene (In the scene… on a card): the
