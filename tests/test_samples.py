@@ -154,6 +154,8 @@ def test_every_sample_character_comes_with_its_portrait():
         for character in [*scenario.cast, *scenario.supporting]:
             assert character.reference_images, f"{path.name}: {character.name}"
             assert character.reference_images[0].caption == "portrait"
+        for entry in scenario.lore:
+            assert entry.reference_images, f"{path.name}: {entry.title}"
         for relative in scenario.reference_files:
             source = path.parent / "pictures" / Path(relative).name
             assert not source.exists() or strip_metadata(source.read_bytes()) == (

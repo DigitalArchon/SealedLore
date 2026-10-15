@@ -83,6 +83,7 @@ keep her community going.
 
 ## Hellsville
 - keywords: the town
+- picture: pictures/hellsville.jpg | main street
 
 A small town five miles north of the farmhouse where the story begins. It is well
 known in the region: most people the player's character meets know it exists.
@@ -91,8 +92,19 @@ Whether they say so, or tell them where it is, is another matter.
 ## The Hidden Caves
 - keywords: caves, the caves
 - hidden: yes
+- picture: pictures/hidden-caves.jpg | the cave mouth
 
 A series of caves in the hills near Hellsville. There is not much there.
+
+# Lore
+
+## The farmhouse
+- keywords: farmhouse, the farm
+- picture: pictures/farmhouse.jpg | from the road
+
+The farmhouse where the story begins, five miles south of Hellsville: two storeys
+of white paint gone to grey, one shutter hanging, snow drifted to the windowsills
+and a sagging fence around the yard. From the road it looks abandoned.
 
 # Facts
 

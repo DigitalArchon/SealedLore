@@ -80,7 +80,11 @@ def test_the_sample_parses_without_errors():
     assert scenario.choose_one_of == [names["John"].id, names["Jane"].id]
     assert not names["Marcus Webb"].is_player_available
     assert names["Ben"].is_player_available
-    assert [entry.title for entry in scenario.lore] == ["Hellsville", "The Hidden Caves"]
+    assert [entry.title for entry in scenario.lore] == [
+        "Hellsville",
+        "The Hidden Caves",
+        "The farmhouse",
+    ]
 
     plot = scenario.plot
     assert plot is not None

@@ -60,8 +60,8 @@ def test_a_sample_opens_clean_and_every_page_fills(app, editor: PlotEditorWindow
         editor.tree.setCurrentItem(item)
         app.processEvents()
         seen += 1
-    # 10 headers, 6 characters, 2 places, 3 facts, 6 events, 3 variants.
-    assert seen == 30
+    # 10 headers, 6 characters, 2 places, 1 lore entry, 3 facts, 6 events, 3 variants.
+    assert seen == 31
 
     editor._select((EVENT, 0, 1))
     page = editor.pages.currentWidget()
