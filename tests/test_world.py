@@ -439,3 +439,21 @@ def test_a_way_the_passage_gave_no_words_for_has_none():
     delta, _ = resolve_reply(world, reply, source=source, people=[])
     (way,) = applied(world, delta).links
     assert way.direction is None and way.distance is None
+
+
+
+def test_country_is_as_far_as_its_edge():
+    """The review: a village at the edge of a 12 km forest was told the forest
+    lay 8.2 km north, its middle. An area or a region is reached at its edge."""
+    from sealedlore.engine.world import _how_far
+    from sealedlore.models.world import WorldPlace
+
+    village = WorldPlace(id="v", name="Fernhollow", kind="settlement", x=0.0, y=0.0, size=800)
+    forest = WorldPlace(id="f", name="The Silverwood", kind="area", x=2000.0, y=8000.0, size=12000)
+    city = WorldPlace(id="c", name="Sylvaranth", kind="settlement", x=0.0, y=14000.0, size=2000)
+    world = WorldMap(places={"v": village, "f": forest, "c": city})
+    fixed = {"v", "f", "c"}
+    assert _how_far(world, "v", "f", fixed) == "its edge 2.2 km / 1.4 miles north"
+    assert _how_far(world, "v", "c", fixed).startswith("14 km")  # a town: to its middle
+    world.places["f"] = forest.model_copy(update={"size": 20000})
+    assert _how_far(world, "v", "f", fixed) == "all around"

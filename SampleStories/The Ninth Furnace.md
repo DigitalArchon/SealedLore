@@ -1,6 +1,6 @@
 ---
 title: The Ninth Furnace
-description: A living knight who descended into the burning underworld, or a damned thief who has lived there a hundred years, must cross rivers of lava and cult strongholds to reach the one gate that leads out.
+description: A living knight who descended into the burning underworld and the damned thief she has paid to guide her must cross rivers of lava and cult strongholds to reach the one gate that leads out.
 start: day 1, 12:00
 agency: contested
 world activity: normal
@@ -40,31 +40,31 @@ take others with them.
 # Opening
 - location: The Pilgrims' Rest, a cultist waystation on the Pilgrim Road
 - time: Ember-tide, when the lava runs brightest
-- situation: The player's character has just reached the cult's waystation on the bank of a river of fire, and a procession of cultists is coming down the road.
+- situation: Maren and Calix have just reached the cult's waystation on the bank of a river of fire, and a procession of cultists is coming down the road.
 
-The player's character arrives at the Pilgrims' Rest, a walled cult waystation
-of black stone beside a river of lava, hot wind full of ash, as the drums of a
-cult procession sound on the road behind them.
+Sister Maren Vey and Calix the Unbound, the living knight and the damned thief
+she has paid in promises to guide her, arrive together at the Pilgrims' Rest, a
+walled cult waystation of black stone beside a river of lava, hot wind full of
+ash, as the drums of a cult procession sound on the road behind them.
 
 # Characters
 
 ## Sister Maren Vey
 - role: player
-- choose: start
-- aliases: Maren, the knight, the living woman
+- aliases: Maren, the knight
 - voice: Steady, plain, devout; prays under her breath.
 - picture: pictures/furnace-maren.jpg | portrait
 
 A 29-year-old knight of the Order of the Dawn, alive, who descended into the
 Pit by a forbidden rite to bring back her brother's soul. Tall and strong,
-with cropped fair hair, a burn scar on one cheek, battered silver plate armour
+with cropped silver-fair hair, a burn scar on one cheek, battered silver plate armour
 gone black with soot, a white tabard with a sun sigil and a longsword. She
-casts a shadow here, and every demon can smell her.
+casts a shadow here, and every demon can smell her. She has promised Calix a
+way out with her if he gets her to her brother and to the gate.
 
 ## Calix the Unbound
 - role: player
-- choose: start
-- aliases: Calix, the thief
+- aliases: Calix
 - voice: Quick, mocking, charming; hides fear behind jokes.
 - picture: pictures/furnace-calix.jpg | portrait
 
@@ -72,22 +72,22 @@ A damned soul, a thief in life, who has been in the Pit for a hundred years
 and has escaped every chain they put on him. Wiry and ash-grey, with dark
 hair, a sharp grin, the burned-on brand of a broken chain on his neck and a
 patchwork of stolen leathers and knives. He knows every back way in the Ninth
-Furnace and has never found the one way out.
+Furnace and has never found the one way out, until a living knight promised to
+take him with her.
 
-## High Cantor Vossk
+## Cantor Vossk
 - role: storyteller
-- aliases: Vossk, the Cantor
+- aliases: Vossk
 - voice: Deep, sonorous, every word a chant; terrifyingly reasonable.
 - picture: pictures/furnace-vossk.jpg | portrait
 
-The leader of the Cult of the Ember Crown on the Pilgrim Road, damned for four
-hundred years. Huge and gaunt in heavy red robes, his face hidden by an iron
+The High Cantor, leader of the Cult of the Ember Crown on the Pilgrim Road,
+damned for four hundred years. Huge and gaunt in heavy red robes, his face hidden by an iron
 mask shaped like a crown of flames, an iron censer smoking in his hand. He
 wants a living soul to offer to Malgareth, and he can smell one coming.
 
 ## Ashgrin
 - role: storyteller
-- aliases: the imp
 - voice: Squeaky, wheedling, gleeful, constant bargaining.
 - picture: pictures/furnace-ashgrin.jpg | portrait
 
@@ -110,7 +110,6 @@ through the Ashen Gate.
 ## Orin
 - role: storyteller
 - hidden: yes
-- aliases: Maren's brother
 - voice: Hollow and dull at first; himself again, slowly, if anyone reaches him.
 - picture: pictures/furnace-orin.jpg | portrait
 
@@ -293,9 +292,8 @@ A colossal gate of bone-white stone in a cliff that rises into the smoke.
 
 # Facts
 
-- hunted: no [watch] — yes once the cult or the fallen are actively hunting the player's character; no again if they lose them
-- orin: in chains (in chains, freed, lost) — what has become of Orin
-- ashgrin: neutral (neutral, ally, betrayer) — where the imp Ashgrin stands
+- orin: in chains (in chains, freed, lost) [watch] — what has become of Orin: freed once someone breaks his soul-chain; lost if he is taken back or destroyed
+- ashgrin: neutral (neutral, ally, betrayer) [watch] — where the imp Ashgrin stands: ally once a bargain with him is struck and kept; betrayer once he sells someone out
 - gate: sealed (sealed, open) — the Ashen Gate; changed only by events
 
 # Timeline
@@ -304,7 +302,8 @@ A colossal gate of bone-white stone in a cliff that rises into the smoke.
 - when: day 4–6
 - lead-in: yes
 - must happen: yes
-- aftermath: At the Feast of Ember-tide the whole cult gathered on the Pilgrim Road to call on Malgareth. The Archfiend heard them, and now knows a living soul walks his realm.
+- requires: gate = sealed
+- aftermath: At the Feast of Ember-tide the whole cult gathered on the Pilgrim Road to call on their master in the Iron Citadel. They were heard: the Citadel now knows a living soul walks the Ninth Furnace.
 
 The cult holds its great rite on the Pilgrim Road.
 
@@ -320,6 +319,7 @@ The cult holds its great rite on the Pilgrim Road.
 - when: day 10–14
 - must happen: yes
 - lead-in: yes
+- requires: gate = sealed
 - brings: Archfiend Malgareth
 - aftermath: Archfiend Malgareth himself has come out of the Iron Citadel to hunt the living soul, and the whole Ninth Furnace trembles at his passing.
 
@@ -327,7 +327,6 @@ Malgareth leaves his citadel.
 
 ### Anywhere
 - tell: The ground shakes. A shadow passes over the lava; ash falls like snow. Archfiend Malgareth strides out of the Iron Citadel across the cavern, tall as a tower, sniffing the air for the living. Every imp, cultist and damned soul flees before him. He will speak before he strikes: he wants something only the living can give.
-- sets: hunted = yes
 
 # Events
 

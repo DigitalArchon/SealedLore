@@ -887,6 +887,30 @@ class _Parser:
                         "alias the story uses instead, avoids it.",
                     )
 
+    def names_like_places(self, characters: list[Character], titles: list[str]) -> None:
+        """Warn when a part of someone's name is a place's or lore entry's
+        whole name ("Ysolde of Sylvaranth", "Mags of the Undercroft"): the
+        checks match parts of names, so every passage naming the place names
+        them too, and a hidden one is brought in by it."""
+        names = {}
+        for title in titles:
+            words = [
+                w for w in re.findall(r"[\w’']+", title) if w.lower() not in ("the", "a", "an")
+            ]
+            if len(words) == 1:
+                names[words[0].lower()] = title
+        for character in characters:
+            for form in name_forms(character):
+                place = names.get(form.lower())
+                if place is not None and " " not in form:
+                    self.note(
+                        0,
+                        f"{character.name} answers to “{form}”, which is also {place}'s name. "
+                        "The checks match parts of names, so a passage naming the place "
+                        "names them too; an alias without it avoids that.",
+                    )
+                    break
+
     def places(self, block: _Block | None, *, are_places: bool = True) -> list[LoreEntry]:
         """`# Places` (where the story can be) or, with `are_places` off, `# Lore`:
         the same entries, but never offered to the chronicle as somewhere to be."""
@@ -1127,6 +1151,10 @@ class _Parser:
         places = self.places(sections.get("places"))
         lore = [*places, *self.places(sections.get("lore"), are_places=False)]
         world_base, world_start = self.world_map(sections.get("map"))
+        titles = [entry.title for entry in lore]
+        if world_base is not None:
+            titles += [place.name for place in world_base.places]
+        self.names_like_places(cast + supporting, titles)
 
         facts = self.facts(sections.get("facts"))
         ids = self.event_ids([sections.get("timeline"), sections.get("events")])

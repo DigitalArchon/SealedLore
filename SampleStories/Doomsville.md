@@ -120,7 +120,7 @@ and a sagging fence around the yard. From the road it looks abandoned.
 - lead-in: yes
 - requires: hellsville = standing
 - must happen: yes
-- aftermath: Hellsville was overrun by the dead. The town is burned out and the dead still walk its streets. Elena Ruiz got out and went east. Within a few weeks most people in the region have heard, and anyone asked about the town will say so.
+- aftermath: A horde of the dead came down on Hellsville. If the town fell, it is burned out, the dead still walk its streets, and Elena Ruiz got out and went east; if it was held, the scars of the fight are everywhere and its people are burying their dead. Within a few weeks most people in the region have heard what happened, and anyone asked about the town will say so.
 
 A horde of the dead descends on Hellsville.
 

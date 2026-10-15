@@ -270,3 +270,37 @@ def test_every_spelling_of_not_happened_is_a_negation(spelling: str):
     assert [(c.event_id, c.happened) for c in greeting.requires if c.event_id] == [
         ("attack", False)
     ]
+
+
+def test_a_name_part_that_is_a_place_s_name_is_noted():
+    """The review: "Mags, the Queen of the Undercroft" answered to
+    "Undercroft", so every passage naming the place named her, and her
+    hidden card came in early."""
+    text = """---
+title: Piers
+---
+
+# World
+
+A city.
+
+# Opening
+
+It begins.
+
+# Characters
+
+## Mags Carroway
+- role: player
+- aliases: Mags, the Queen of the Undercroft
+
+A smuggler.
+
+# Places
+
+## The Undercroft
+
+The dark under the piers.
+"""
+    problems = [p.message for p in parse_plot_markdown(text).problems]
+    assert any("answers to “Undercroft”" in m and "The Undercroft" in m for m in problems)

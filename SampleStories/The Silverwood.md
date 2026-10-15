@@ -1,6 +1,6 @@
 ---
 title: The Silverwood
-description: An elven ranger or a wandering sellsword must carry word of a waking shadow from a forest village to the shining city on the falls, through ancient woods and the caves beneath the mountains.
+description: An elven ranger and a sellsword come home must carry word of a waking shadow from a forest village to the shining city on the falls, through ancient woods and the caves beneath the mountains.
 start: day 1, 08:00
 agency: plausible
 world activity: normal
@@ -38,17 +38,17 @@ have come out of the deep woods with eyes like coals.
 - time: Early morning, late autumn
 - situation: Market day. A villager has just been carried in from the woods, wounded by something with grey-rotted claws.
 
-The player's character is in Fernhollow, a human village of thatched cottages
-and gardens where the fields meet the forest, on a misty autumn morning when a
-woodcutter is carried in from the trees on a hurdle, wounded and raving about
-grey wolves.
+Elowen Thistledown, the elven ranger who watches this edge of the forest, and
+Brannoc Hale, a sellsword come home this autumn, are both in Fernhollow, a human
+village of thatched cottages and gardens below the Silverwood, on a misty
+autumn morning when a woodcutter is carried in from the trees on a hurdle,
+wounded and raving about grey wolves.
 
 # Characters
 
 ## Elowen Thistledown
 - role: player
-- choose: start
-- aliases: Elowen, the ranger
+- aliases: Elowen
 - voice: Soft-spoken, precise, dry; elvish turns of phrase.
 - picture: pictures/silverwood-elowen.jpg | portrait
 
@@ -60,8 +60,7 @@ humans than most elves think proper.
 
 ## Brannoc Hale
 - role: player
-- choose: start
-- aliases: Brannoc, the sellsword
+- aliases: Brannoc
 - voice: Warm, blunt, a joke for every bad moment.
 - picture: pictures/silverwood-brannoc.jpg | portrait
 
@@ -72,7 +71,7 @@ home this autumn meaning to stay.
 
 ## Queen Ysolde
 - role: storyteller
-- aliases: the Queen, Ysolde of Sylvaranth
+- aliases: the Queen, Ysolde
 - voice: Stately, cool, every word weighed; rare flashes of grief.
 - picture: pictures/silverwood-ysolde.jpg | portrait
 
@@ -84,14 +83,14 @@ King's war and has told almost no one what was done to end it.
 ## Durra Flintmantle
 - role: storyteller
 - hidden: yes
-- aliases: Durra, the dwarf
+- aliases: Durra
 - voice: Gruff, loud, generous; hates being hurried.
 - picture: pictures/silverwood-durra.jpg | portrait
 
 A dwarf warden of the old ways under the Greyspine Mountains, a hundred and
-twenty and stout as an oak stump. Her red-brown beard is braided with iron
-rings; she wears a mail coat, a miner's lamp on her helm and a war pick on her
-back. She knows the deep roads better than anyone above ground.
+twenty and stout as an oak stump. His red-brown beard, greying at the chin, is
+braided with iron rings; he wears a mail coat, an iron helm and a war pick on
+his back. He knows the deep roads better than anyone above ground.
 
 ## Mother Wenna
 - role: storyteller
@@ -107,7 +106,7 @@ quiet about.
 ## The Hollow King
 - role: storyteller
 - hidden: yes
-- aliases: the Grey King, Malthis
+- aliases: Malthis
 - voice: A dry whisper like dead leaves, courteous and patient.
 - picture: pictures/silverwood-hollow-king.jpg | portrait
 
@@ -224,7 +223,7 @@ A stone watermill on the stream, its wheel turning slowly.
 - at: 0, 6
 - known: yes
 - way: Fernhollow | south
-- way: Sylvaranth | north, a day's walk under the trees
+- way: Sylvaranth | north, half a day's walk under the trees
 
 A green road under silver-barked trees, kept clear by the elves, running north
 through the Silverwood to the elven city.
@@ -232,7 +231,7 @@ through the Silverwood to the elven city.
 ## The Silverwood
 - kind: area
 - at: 2, 8
-- size: 12
+- size: 16
 - known: yes
 
 An ancient forest of tall silver-barked trees, ferns and moss, shafts of
@@ -313,7 +312,6 @@ dwarf roads that go down a very long way.
 - blight: spreading (spreading, held back, healed, triumphant) — the grey blight in the Silverwood; changed only by events
 - queen_warned: no — yes once Queen Ysolde has heard from the player's character what is happening in the forest
 - seal: cracking (cracking, mended, broken) — the Seal of Thorns that holds the Hollow King
-- has_companions: no [watch] — yes while at least one other person (not an animal) travels with the player's character; no if they are alone again
 
 # Timeline
 
@@ -383,7 +381,7 @@ The Seal of Thorns gives way.
 - requires: An audience with the queen happened
 - brings: Durra Flintmantle
 - trigger: The player's character reaches the Deepdelve or the mountain path to it.
-- tell: A lamp bobs in the dark of the great doorway, and Durra Flintmantle, warden of the old ways, steps out with her war pick ready, demanding to know who comes to the deep roads. Once she hears the queen sent them, she will guide them down.
+- tell: A lamp bobs in the dark of the great doorway, and Durra Flintmantle, warden of the old ways, steps out with his war pick ready, demanding to know who comes to the deep roads. Once he hears the queen sent them, he will guide them down.
 
 ## Mending the seal
 - at: The Deepdelve

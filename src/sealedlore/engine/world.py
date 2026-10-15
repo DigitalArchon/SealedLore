@@ -32,6 +32,7 @@ from sealedlore.engine.world_layout import (
     moves,
     place_new,
     position,
+    size_of,
 )
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.character import Character
@@ -228,12 +229,25 @@ def _how_far(world: WorldMap, here: str | None, there: str, fixed: Collection[st
     distance = math.hypot(dx, dy)
     if distance < 1:
         return ""
+    angle = (math.degrees(math.atan2(dx, dy)) + 360) % 360
+    bearing = _COMPASS[round(angle / 45) % 8]
+    place = world.places[there]
+    if place.kind in ("area", "region") and place.size:
+        # Country is reached at its edge, not its middle: a village at the
+        # edge of a 12 km forest was told the forest lay 8.2 km north.
+        edge = distance - size_of(place) / 2
+        if edge < 1:
+            return "all around"
+        return f"its edge {_far(edge)} {bearing}"
+    return f"{_far(distance)} {bearing}"
+
+
+def _far(distance: float) -> str:
     far = describe_metres(distance)
     if distance >= _MILES_FROM:
         miles = distance / _METRES_A_MILE
         far += f" / {miles:.0f} miles" if distance >= _WHOLE_MILES_FROM else f" / {miles:.1f} miles"
-    angle = (math.degrees(math.atan2(dx, dy)) + 360) % 360
-    return f"{far} {_COMPASS[round(angle / 45) % 8]}"
+    return far
 
 
 def _around(world: WorldMap, here: str | None, place: WorldPlace, fixed: Collection[str]) -> str:

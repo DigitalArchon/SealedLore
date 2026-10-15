@@ -1,6 +1,6 @@
 ---
 title: Brasshaven
-description: In a smog-choked city of airships and clockwork, an inventor or a sky captain is drawn into a plot to seize the great Engine that keeps the city aloft.
+description: In a smog-choked city of airships and clockwork, an inventor and a sky captain are drawn into a plot to seize the great Engine that keeps the city aloft.
 start: day 1, 19:00
 agency: contested
 world activity: eventful
@@ -38,16 +38,16 @@ the street to stare up at the Engine tower, ticking in unison.
 - time: Evening, in the rain
 - situation: A wounded automaton has stumbled into the workshop with a message stamped on a brass card, and the Constabulary's whistles are close behind it.
 
-The player's character is in the Gilded Gear, a cluttered inventor's workshop
-on Tinker's Row, on a rainy evening, when a damaged brass automaton staggers in
-through the door, leaking oil, presses a punched brass card into their hand and
-says, in a voice like a music box winding down, "They mean to stop the Engine."
+Professor Adelaide Quill is at her bench in the Gilded Gear, her cluttered
+workshop on Tinker's Row, and Captain Silas Thorne has come in out of the rain
+for a compass she mended, when a damaged brass automaton staggers in through the
+door, leaking oil, presses a punched brass card into the nearest hand and says,
+in a voice like a music box winding down, "They mean to stop the Engine."
 
 # Characters
 
 ## Professor Adelaide Quill
 - role: player
-- choose: start
 - aliases: Adelaide, the Professor, Quill
 - voice: Rapid, brilliant, distracted; scientific asides at bad moments.
 - picture: pictures/brasshaven-adelaide.jpg | portrait
@@ -55,18 +55,18 @@ says, in a voice like a music box winding down, "They mean to stop the Engine."
 A 31-year-old inventor and disgraced former lecturer of the Royal Artificers'
 College, now owner of the Gilded Gear. Slight and energetic, with a mass of
 dark curls pinned up anyhow, brass-rimmed goggles on her forehead, a leather
-apron over a high-collared blouse, and a mechanical left hand of her own
+apron over a high-collared blouse, and a mechanical right hand of her own
 design. She was expelled for proving the Engine was running hotter every year.
 
 ## Captain Silas Thorne
 - role: player
-- choose: start
-- aliases: Silas, the Captain, Thorne
+- aliases: Silas, Thorne
 - voice: Easy charm, sardonic, an old soldier's bluntness underneath.
 - picture: pictures/brasshaven-silas.jpg | portrait
 
-A 40-year-old airship captain and smuggler, master of the small, fast airship
-the Wayward Lark. Tall, lean and sunburned, with a greying moustache, a long
+A 56-year-old airship captain and smuggler, master of the small, fast airship
+the Wayward Lark, and an old friend of Adelaide's. Tall, lean and weathered,
+with a grey moustache, a long
 brown flying coat, a scarf, a battered captain's cap and a brace of pistols.
 He flew for the Commonwealth's sky navy until he refused an order and has
 flown for himself since.
@@ -77,7 +77,7 @@ flown for himself since.
 - voice: Dry, patient, relentless; never raises his voice.
 - picture: pictures/brasshaven-hollis.jpg | portrait
 
-A 55-year-old inspector of the Brasshaven Constabulary, thin and grey, in a
+A 70-year-old inspector of the Brasshaven Constabulary, thin and grey, in a
 dark overcoat and bowler hat, with a pocket of clockwork gadgets and a
 truncheon he rarely needs. Honest in a corrupt force, and the most persistent
 man in the city.
@@ -96,7 +96,6 @@ who stands in their way.
 
 ## Tock
 - role: storyteller
-- aliases: the automaton
 - voice: Precise, polite, music-box chimes between words; learning to have feelings.
 - picture: pictures/brasshaven-tock.jpg | portrait
 
@@ -108,7 +107,7 @@ meant to.
 ## Mags Carroway
 - role: storyteller
 - hidden: yes
-- aliases: Mags, the Queen of the Undercroft
+- aliases: Mags
 - voice: Loud, funny, shrewd; Undercroft slang.
 - picture: pictures/brasshaven-mags.jpg | portrait
 
@@ -286,7 +285,7 @@ full of steam vents and dripping pipes.
 # Facts
 
 - engine: running (running, sabotaged, stopped, saved) — the state of the Great Engine; changed only by events
-- automatons: restless (restless, rising, freed, under Ashcombe's control) — what has become of the city's automatons
+- automatons: restless (restless, rising, freed, under Ashcombe's control) [watch] — what has become of the city's automatons: freed once the calculating engine's hold on them is broken; under Ashcombe's control once they obey her orders openly; rising once they march
 - wanted: no [watch] — yes once the Constabulary is hunting the player's character by name; no if the hunt is called off
 - plot_exposed: no — yes once the player's character holds proof that Lady Ashcombe means to stop the Engine
 

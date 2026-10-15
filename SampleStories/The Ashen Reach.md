@@ -1,6 +1,6 @@
 ---
 title: The Ashen Reach
-description: On a dying mining world under a merciless Directorate, a penal trooper or a disgraced investigator must learn why the deep shafts went silent before the guns in orbit decide for them.
+description: On a dying mining world under a merciless Directorate, a penal trooper and a disgraced investigator must learn why the deep shafts went silent before the guns in orbit decide for them.
 start: day 1, 06:00
 agency: contested
 world activity: normal
@@ -28,7 +28,7 @@ Doubt is heresy. Heresy is death. Contact with anything not human is the worst
 heresy of all, and a world thought tainted by it may be sanctioned: burned from
 orbit until nothing lives.
 
-Hollowmouth is the mining town around Shaft Nine, the deepest pit on Varkesh.
+Hollowmouth is the mining town beside Shaft Nine, the deepest pit on Varkesh.
 Three weeks ago the deep levels of Shaft Nine stopped answering. The tithe
 quota has not been met. A penal detachment and an investigator have been sent
 to find out why.
@@ -38,16 +38,17 @@ to find out why.
 - time: Dawn shift siren, day one
 - situation: The penal detachment and the investigator landed in the night. The town is silent, the shaft is sealed, and the overseer wants them gone.
 
-The player's character wakes in the cold barracks at Hollowmouth as the dawn
-siren sounds, with orders to report to the overseer and descend into Shaft
-Nine. Through the grimy window the winding tower stands black against the ash
-sky, and its great wheel is not turning.
+Sergeant Ilsa Marrow wakes in the cold barracks at Hollowmouth as the dawn
+siren sounds; Investigator Teodor Vance, who would not sleep in the overseer's
+guest rooms, has spent the night at the window. Their orders are to report to
+the overseer and descend into Shaft Nine. Through the grimy window, out past the
+dome, the winding tower stands black against the ash sky, and its great wheel is
+not turning.
 
 # Characters
 
 ## Sergeant Ilsa Marrow
 - role: player
-- choose: start
 - aliases: Marrow, the sergeant
 - voice: Flat, quiet, gallows humour; swears in miner's cant.
 - picture: pictures/reach-ilsa.jpg | portrait
@@ -60,7 +61,6 @@ was a miner, and she has survived eleven years in a unit where most last one.
 
 ## Investigator Teodor Vance
 - role: player
-- choose: start
 - aliases: Vance, the investigator
 - voice: Measured, courtly, tired; quotes scripture he no longer believes.
 - picture: pictures/reach-teodor.jpg | portrait
@@ -107,7 +107,7 @@ seven notes.
 ## Brother Kael
 - role: storyteller
 - hidden: yes
-- aliases: Kael, the Hollow Saint
+- aliases: Kael
 - voice: Gentle, serene, utterly sure.
 - picture: pictures/reach-kael.jpg | portrait
 
@@ -123,7 +123,7 @@ rock is a god that wants to set Varkesh free.
 - picture: pictures/reach-hollowmouth.jpg | the town under its dome
 
 A mining town of rust-streaked prefab blocks under a cracked pressure dome,
-built around the pithead of Shaft Nine. Its chapel spire and refinery stacks
+a short rail run west of the pithead of Shaft Nine. Its chapel spire and refinery stacks
 rise through the dome's skin; its streets are lit by sodium lamps and
 loudspeakers that never stop praying.
 
@@ -320,7 +320,7 @@ storms block the town's own vox.
 
 # Facts
 
-- shaft_nine: sealed (sealed, opened, collapsed) — the state of Shaft Nine's lift and its deep levels
+- shaft_nine: sealed (sealed, opened, collapsed) [watch] — the state of Shaft Nine's lift and its deep levels: opened once the lift or the ladder shaft is used to go down; collapsed once the prose shows the shaft brought down
 - truth_known: no — yes once the player's character has learned that Overseer Drask sealed the shaft with the deep shift still alive below
 - choir: singing (singing, silenced, awakened) [watch] — the Choir in the deep levels: silenced once the prose shows its song stopped for good (the gallery collapsed, the stone broken, or Kael ending it); awakened once the prose shows something vast below waking and rising; singing otherwise
 - sanction: none (none, threatened, called off, carried out) — the Directorate's judgement on Varkesh
@@ -331,7 +331,7 @@ storms block the town's own vox.
 - when: day 4–7
 - lead-in: yes
 - must happen: yes
-- tell: The battle cruiser Unyielding Verdict drops out of the warp and takes orbit over Varkesh. Its captain hails Hollowmouth through the vox: the investigator has until the cruiser's tenth dawn to declare the world clean, or it will be sanctioned. The dome's lights dim as the town hears it on every loudspeaker.
+- tell: The battle cruiser Unyielding Verdict drops out of the warp and takes orbit over Varkesh. Its captain hails Hollowmouth through the vox: the investigator has a handful of days, until the captain's patience runs out, to declare the world clean, or it will be sanctioned. The dome's lights dim as the town hears it on every loudspeaker.
 - sets: sanction = threatened
 
 ## The Sanction
@@ -339,7 +339,7 @@ storms block the town's own vox.
 - requires: sanction = threatened
 - must happen: yes
 - lead-in: yes
-- aftermath: Varkesh's southern hemisphere is a sea of fire and glass. Hollowmouth is gone. Those who escaped tell of a sky that turned white.
+- aftermath: The Verdict's deadline came and its captain gave judgement on Varkesh: the guns stayed cold if the world was declared clean in time; if not, the southern hemisphere is a sea of fire and glass, Hollowmouth is gone, and those who escaped tell of a sky that turned white.
 
 The cruiser's deadline expires.
 
@@ -378,7 +378,7 @@ The cruiser's deadline expires.
 ## Into the deep
 - at: The Deep Levels
 - pacing: any time
-- requires: at = Shaft Nine
+- requires: at = Shaft Nine, shaft_nine != collapsed
 - reveals: The Deep Levels, The Choir
 - brings: Brother Kael
 - trigger: The player's character rides the cage lift, or climbs, down into the deep levels of Shaft Nine.
