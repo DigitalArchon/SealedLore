@@ -554,9 +554,13 @@ def test_a_chat_tail_ends_every_request_and_never_enters_the_history(tmp_path):
 def test_a_chat_tail_travels_with_the_chat_but_not_to_the_picture_writer(tmp_path):
     session, provider = chat_session(tmp_path, ["Hi."])
     session.story.chat_tail = "Stay terse."
+    session.story.chat_character = "Ada"
+    session.story.defaults.world_map = True
     back = bundle_from_scenario(scenario_from_bundle(session.bundle, {}))
     assert back.story.chat_tail == "Stay terse."
-    assert fresh_playthrough(session.bundle, "Again").story.chat_tail == "Stay terse."
+    assert back.story.chat_character == "Ada" and back.story.defaults.world_map
+    again = fresh_playthrough(session.bundle, "Again").story
+    assert again.chat_tail == "Stay terse." and again.chat_character == "Ada"
 
     say(session, "Hello")
     provider.responses = ["not json: only the request matters here"]

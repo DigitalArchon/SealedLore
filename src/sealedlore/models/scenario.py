@@ -83,6 +83,8 @@ class Scenario(BaseModel):
     mode: StoryMode = "story"
     chat_prompt: str = ""
     chat_tail: str = ""
+    # A chat that keeps a map: the name the map tracks the user by.
+    chat_character: str = ""
     reference_images: list[ImageRef] = Field(default_factory=list)
     # The story's own edits to the prompt texts: part of how it is told.
     prompt_edits: dict[str, PromptEdit] = Field(default_factory=dict)

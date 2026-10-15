@@ -92,6 +92,7 @@ def scenario_from_bundle(
         mode=story.mode,
         chat_prompt=story.chat_prompt,
         chat_tail=story.chat_tail,
+        chat_character=story.chat_character,
         reference_images=[ref.model_copy() for ref in story.reference_images],
         prompt_edits={key: edit.model_copy() for key, edit in story.prompt_edits.items()},
         reference_files={
@@ -158,6 +159,7 @@ def bundle_from_scenario(
         mode=scenario.mode,
         chat_prompt=scenario.chat_prompt,
         chat_tail=scenario.chat_tail,
+        chat_character=scenario.chat_character,
         reference_images=[ref.model_copy() for ref in scenario.reference_images],
         prompt_edits={key: edit.model_copy() for key, edit in scenario.prompt_edits.items()},
     )
