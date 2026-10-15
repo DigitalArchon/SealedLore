@@ -2351,7 +2351,12 @@ _text(
     "any kind: no labels, names, captions, arrows or signs, and no border.",
     (
         ("now", "Each place the story changed, as map.picture.isometric.now says it, or nothing"),
-        ("places", "The place, what is in it and what the map marks there"),
+        (
+            "places",
+            "What is on it in what a picture shows, as map.picture.isometric.writer wrote it "
+            "from the place, what is in it and what the map marks there (those as they are, "
+            "if the writer fails)",
+        ),
         ("look", "The plan's ground in words (snow-covered country in winter, a station's decks)"),
     ),
 )
@@ -2364,6 +2369,31 @@ _text(
     "redrawn plan shows (fire, ruins, walls down) with the story's words after.",
     " As the story has it now, {place} is {state}: draw it so, not as it was.",
     (("place", "The place"), ("state", "How it looks now, then the story's words")),
+)
+
+# What is on the place, for the isometric view, in what a picture shows: the
+# places' own text carried story ("Confessor Hesk preaches here at every shift
+# change", "Half its workers have not reported for a week") and names, and
+# Qwen Image lettered them onto the picture. Blind-judged on four sample areas,
+# three takes each (Oct 15 2026): the places as written put writing in 11 of
+# 12 pictures and place labels in 6; written by this, none in 12, all 12
+# isometric, appeal 2.8 -> 4.0 of 5, at some cost to the plan's layout (2.5 ->
+# 1.8 of 5). Code can't tell what is visible: a first-sentence cut still
+# carried "where the cultists sleep, eat and chant".
+_text(
+    "map.picture.isometric.writer",
+    MAP,
+    "Map pictures: the isometric view's scene",
+    "Turns what the map says about a place (its description, what is in it, what the map "
+    "marks) into what a picture can show, for the isometric view's prompt, on the prompt "
+    "writer's model.",
+    "You write the scene description for an image model that will repaint a top-down game map "
+    "of one place as an isometric view. From the notes below, describe only what can be seen "
+    "from above: the ground, the buildings and structures, their shapes, materials and "
+    "colours, the light, and what stands where. Leave out every name of a place or a person, "
+    "history, who uses a place or what happens there, rumours, sounds and smells, and anything "
+    "else a picture cannot show. Invent nothing the notes do not give. One paragraph of at "
+    "most 120 words, no lists, no quotation marks, no preamble.",
 )
 
 

@@ -26,6 +26,7 @@ from sealedlore.models.world import (
     WorldPlace,
     WorldThing,
 )
+from sealedlore.providers.base import ProviderError
 from sealedlore.providers.images import ImageModelInfo, ImageReply
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage.repository import StoryBundle, save_story_bundle
@@ -256,6 +257,38 @@ def test_the_isometric_view_is_painted_only_when_asked_from_the_plan(session, tm
     assert session.start_isometric("farm", lambda: None)
     session._isometric_thread.join(10)
     assert len(FakeImages.sent) == sent
+
+
+def test_the_isometric_view_is_painted_from_what_a_picture_shows_not_the_map_s_words(
+    session, tmp_path
+):
+    """The places' own text carries names and story, and Qwen Image lettered
+    them onto the view (writing in 11 of 12, none once the prompt writer had
+    turned them into what can be seen). The writer gets the map's words; the
+    painter gets the writer's scene. If the writer fails, the map's words go."""
+    session.provider.responses = ["  A snowbound yard   with a red barn.  "]
+    assert session.start_isometric("farm", lambda: png(16, 12))
+    session._isometric_thread.join(10)
+    written = session.provider.payloads[-1]
+    system, notes = (m["content"] for m in written["messages"])
+    assert "describe only what can be seen" in json.dumps(system)
+    assert "The farm" in json.dumps(notes) and "The barn" in json.dumps(notes)
+    prompt = FakeImages.sent[-1]["prompt"]
+    assert "What is on it: A snowbound yard with a red barn." in prompt
+    assert "The barn" not in prompt  # the names stayed with the writer
+    kinds = [
+        json.loads(line)["kind"]
+        for line in (tmp_path / "stories" / session.story.id / "api_log.jsonl")
+        .read_text()
+        .splitlines()
+    ]
+    assert kinds.count("isometric_prompt_request") == 1
+    assert kinds.count("isometric_prompt_response") == 1
+
+    session.provider.error = ProviderError("down")
+    assert session.start_isometric("farm", lambda: png(16, 12))
+    session._isometric_thread.join(10)
+    assert "What is on it: The farm" in FakeImages.sent[-1]["prompt"]
 
 
 def test_the_isometric_view_names_a_change_first_and_goes_out_of_date_with_it():

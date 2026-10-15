@@ -29,6 +29,7 @@ from typing import Literal
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.world_art import MAX_FAILURES, SPRITE_KINDS
 from sealedlore.engine.world_layout import position
+from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.world import WorldArt, WorldMap, WorldPlace
 from sealedlore.providers.images import ImageModelInfo
 
@@ -265,8 +266,12 @@ LOOK_WORDS = {
     "sand": "sand",
     "rock": "bare rock",
     "floor": "indoors",
-    "metal": "a station's metal decks, in space",
+    # A deck in space is "space" (the session says which); "metal" is
+    # plating on the ground too (a domed town's).
+    "metal": "metal decks and plating",
     "space": "a station's metal decks, in space",
+    "hell": "cracked black volcanic rock glowing in its seams",
+    "cobble": "cobbled streets",
 }
 
 
@@ -296,6 +301,21 @@ def _changed(world: WorldMap, area_id: str) -> list[WorldPlace]:
     area = world.places[area_id]
     inside = [p for p in world.places.values() if p.inside == area_id and p.state]
     return inside + ([area] if area.state else [])
+
+
+def isometric_notes(world: WorldMap, art: WorldArt, area_id: str) -> str:
+    """What the map says is on an area, for the prompt writer to turn into
+    what a picture shows (map.picture.isometric.writer)."""
+    return _what_is_on(world, art, area_id)
+
+
+def isometric_writer_messages(
+    notes: str, texts: PromptTexts = DEFAULT_TEXTS
+) -> list[PromptMessage]:
+    return [
+        PromptMessage("system", (ContentPart(texts["map.picture.isometric.writer"]),)),
+        PromptMessage("user", (ContentPart(notes),)),
+    ]
 
 
 def _what_is_on(world: WorldMap, art: WorldArt, area_id: str) -> str:
@@ -330,11 +350,14 @@ def isometric_job(
     *,
     look: str = "",
     texts: PromptTexts = DEFAULT_TEXTS,
+    places: str | None = None,
 ) -> PictureJob:
     """The isometric view of an area as a picture job: its prompt names only
     what the plan has, any change first in words a painter can draw; the
     picture of the plan goes with it (the session renders it). `look` is
-    the plan's look (`world_art.plan_ground`)."""
+    the plan's look (`world_art.plan_ground`); `places` what is on it as the
+    prompt writer put it (map.picture.isometric.writer), else the map's own
+    words (`isometric_notes`)."""
     area = world.places[area_id]
     now = ""
     for place in _changed(world, area_id):
@@ -344,7 +367,7 @@ def isometric_job(
     prompt = texts.fill(
         "map.picture.isometric",
         now=now,
-        places=_what_is_on(world, art, area_id),
+        places=places if places else _what_is_on(world, art, area_id),
         look=LOOK_WORDS.get(look, "as the map shows it"),
     )
     state = isometric_state(world, area_id)

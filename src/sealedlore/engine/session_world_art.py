@@ -30,6 +30,7 @@ from sealedlore.engine.world_art import (
     adopt,
     cleaned_art,
     finish,
+    land_under,
     plan_art,
     plan_ground,
     setting_of,
@@ -39,6 +40,8 @@ from sealedlore.engine.world_pictures import (
     Person,
     PictureJob,
     isometric_job,
+    isometric_notes,
+    isometric_writer_messages,
     looks_of,
     picture_size,
     plan_pictures,
@@ -58,6 +61,9 @@ from sealedlore.providers.images import (
 from sealedlore.storage.image_meta import MetadataError, picture_kind, strip_metadata
 from sealedlore.storage.images import MEDIA_TYPES
 from sealedlore.storage.world_art import load_world_art, save_world_art
+
+# The isometric view's scene: a paragraph, after the writer's reasoning.
+ISOMETRIC_SCENE_TOKENS = 4000
 
 # Pieces drawn at once in the background: enough to keep up with a passage,
 # few enough to leave the subscription's burst for the story's own calls.
@@ -242,14 +248,19 @@ class WorldArtRuntime:
         area = world.places[area_id]
         layout = art.layout_for(area_id, area.state) or art.layout_for(area_id)
         ground = str(layout.spec.get("ground", "")) if layout is not None else ""
-        job = isometric_job(
-            world, art, area_id, look=plan_ground(world, art, area, ground), texts=self.texts
-        )
+        look = plan_ground(world, art, area, ground)
+        if look == "metal" and "space" in (ground, land_under(world, art, area)):
+            look = "space"  # a deck in space, not plating on the ground
+        texts = self.texts
+
+        def job(places: str | None) -> PictureJob:
+            return isometric_job(world, art, area_id, look=look, texts=texts, places=places)
+
         client = ImageClient(media.base_url, media.api_key, api=media.api)
         self._isometric_area = area_id
         thread = threading.Thread(
             target=self._paint_isometric,
-            args=(job, client, render),
+            args=(job, isometric_notes(world, art, area_id), client, render),
             name="map-isometric",
             daemon=True,
         )
@@ -258,9 +269,18 @@ class WorldArtRuntime:
         return True
 
     def _paint_isometric(
-        self, job: PictureJob, client: ImageClient, render: Callable[[], bytes | None]
+        self,
+        make_job: Callable[[str | None], PictureJob],
+        notes: str,
+        client: ImageClient,
+        render: Callable[[], bytes | None],
     ) -> None:
         try:
+            try:
+                scene = self._isometric_scene(notes)
+            except Exception:  # noqa: BLE001 - painted from the map's own words instead
+                scene = None
+            job = make_job(scene)
             plan = render()
             if plan is None:
                 self._log("map_picture_error", {"job": job.key, "error": "no plan to paint from"})
@@ -277,6 +297,41 @@ class WorldArtRuntime:
             callback = self.on_map_art
             if callback is not None:
                 callback()  # the map learns it is done, painted or not
+
+    def _isometric_scene(self, notes: str) -> str | None:
+        """What is on the area in what a picture shows, from the map's own
+        words, by the prompt writer (map.picture.isometric.writer), or None
+        when it fails: the view is then painted from the words as they are.
+        On the painting's thread."""
+        model = self.image_prompt_model
+        detached = getattr(self.provider, "detached", None)
+        writer = detached() if callable(detached) else self.provider
+        try:
+            params = self.side_params(model, max_tokens=ISOMETRIC_SCENE_TOKENS, temperature=0.3)
+            request = ChatRequest(
+                model=model,
+                extra_body=self.route_for("image_prompt", model),
+                messages=isometric_writer_messages(notes, self.texts),
+                params=params,
+            )
+            log_ref = self._log(
+                "isometric_prompt_request", {"payload": writer.build_payload(request)}
+            )
+            try:
+                text, completed = writer.complete(request)
+            except Exception as exc:  # painted from the map's own words instead
+                self._log("isometric_prompt_error", {"request_log_ref": log_ref, "error": str(exc)})
+                return None
+            self._log(
+                "isometric_prompt_response",
+                {"request_log_ref": log_ref, "text": text, "usage": completed.raw_usage},
+            )
+            self.unreported_usage.append(self.priced(completed.usage, model))
+            scene = " ".join(text.split())
+            return scene if scene and completed.finish_reason != "length" else None
+        finally:
+            if writer is not self.provider:
+                writer.close()
 
     def start_map_pictures(self) -> bool:
         """Draw what the map needs from the image model, in the background."""
