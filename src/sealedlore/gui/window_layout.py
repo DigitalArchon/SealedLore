@@ -18,6 +18,8 @@ story open it is always shown, since it is how a story is opened.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtCore import QEvent, Qt, QTimer, Signal
 from PySide6.QtWidgets import QDockWidget, QStyle, QToolButton
 
@@ -81,11 +83,17 @@ def share_width(
 
 class StoriesDock(QDockWidget):
     """The Stories list's dock: its close button is the author putting the
-    list away (`closed`), as View → Stories list is."""
+    list away (`closed`), as View → Stories list is. Never with no story
+    open (`may_close`): the list is how one is opened, and closed then it
+    was gone until View → Stories list (the review, Oct 15 2026)."""
 
     closed = Signal()
+    may_close: Callable[[], bool] | None = None
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        if self.may_close is not None and not self.may_close():
+            event.ignore()
+            return
         super().closeEvent(event)
         self.closed.emit()
 
@@ -122,6 +130,7 @@ class LayoutWindow:
     def _init_stories_list(self) -> None:
         """Called once the dock and View's action exist."""
         self.stories_list_action.triggered.connect(self._choose_stories_list)
+        self.stories_dock.may_close = lambda: getattr(self, "session", None) is not None
         self.stories_dock.closed.connect(lambda: self._choose_stories_list(False))
         self.stories_dock.visibilityChanged.connect(lambda _shown: self._sync_stories_button())
         self._sync_stories_list()

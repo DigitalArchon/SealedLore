@@ -239,6 +239,52 @@ def test_the_local_area_and_the_building_s_inside_are_planned_at_the_start():
     assert "terrain:hills" not in keys and "layout:hills" not in keys  # country, not a spot
 
 
+def test_a_way_too_long_for_patches_gets_none():
+    """A link read in light-years planned 3e13 patches and hung the thread
+    (the review, Oct 15 2026): past MAX_WAY_PATCHES a way gets no land of
+    its own, and the land round each end is drawn as before."""
+    import time
+
+    from sealedlore.engine.world_art import MAX_WAY_PATCHES
+    from sealedlore.models.world import WorldLink
+
+    world = doomsville()
+    far = WorldPlace(id="bajor", name="Bajor", kind="settlement", x=4.7e16, y=0.0)
+    world.places["bajor"] = far
+    world.seen.append("bajor")
+    world.links.append(WorldLink(a="farm", b="bajor", distance="five light-years"))
+    started = time.monotonic()
+    keys = [j.key for j in plan_art(world, WorldArt(), here=None, setting="x")]
+    assert time.monotonic() - started < 2
+    assert not any(k.startswith("terrain:farm:bajor:") for k in keys)
+    assert "terrain:bajor" in keys and "terrain:farm" in keys
+    assert len([k for k in keys if k.startswith("terrain:farm:town:")]) == 3  # as before
+    assert MAX_WAY_PATCHES * WAY_PATCH_SIDE > 50_000
+
+
+def test_a_drawing_reply_s_numbers_can_t_hang_or_crash_the_parser():
+    """ "w": 1e9 ran the building loop for the rest of the session and 1e999
+    overflowed round (the review, Oct 15 2026): held to the grid."""
+    import time
+
+    from sealedlore.engine.world_art import COORD_LIMIT, _int, rasterise
+
+    assert _int("1e999") == 0 and _int(float("inf"), 7) == 7 and _int(-1e12) == -COORD_LIMIT
+    spec = {
+        "ground": "grass",
+        "features": [
+            {"kind": "building", "x": 2, "y": 2, "w": 1e9, "h": 1e9, "name": "Vast"},
+            {"kind": "area", "x": -1e9, "y": 0, "w": 1e9, "h": 3, "fill": "water"},
+            {"kind": "road", "points": [[0, 0], [1e9, 1e9]], "width": 1e9},
+        ],
+    }
+    started = time.monotonic()
+    rows, _objects, labels = rasterise(spec, 20, 12)
+    assert time.monotonic() - started < 5
+    assert len(rows) == 12 and all(len(r) == 20 for r in rows)
+    assert "Vast" in labels
+
+
 def test_land_along_a_way_never_counts_as_its_first_place_s_own():
     """A road patch is kept under the way's first place; if that place's own
     land failed and the road's came in first, the place still gets its own."""
@@ -826,3 +872,31 @@ def test_a_deck_s_blank_inside_its_hull_and_its_narrow_gaps_are_floor():
     assert standing_spot(rows, (3, 3)) in {(3, 2), (3, 4)}
     assert standing_spot(deck, (3, 3)) == (3, 3)
     assert standing_spot(deck, (1, 3)) == (2, 3)
+
+
+def test_a_place_as_it_was_never_borrows_a_changed_state_s_drawing():
+    """A barn blown up on one branch was drawn burning on the branch where it
+    stands (the review, Oct 15 2026)."""
+    from sealedlore.models.world import MapPicture, WorldSprite
+
+    burning = PlaceLayout(place_id="barn", state="blown up", rows=["*"], spec={})
+    art = WorldArt(
+        layouts={"barn": {"blown up": burning}},
+        sprites=[
+            WorldSprite(
+                subject="place", subject_id="barn", name="The barn", state="blown up", svg="<svg/>"
+            )
+        ],
+        pictures=[
+            MapPicture(subject="place", subject_id="barn", name="b", state="blown up", file="f")
+        ],
+    )
+    assert art.layout_shown("barn", "") is None
+    assert art.layout_shown("barn", "blown up") is burning
+    assert art.layout_shown("barn", "burning") is burning  # a changed place: the latest
+    assert art.sprite_shown("barn", "") is None and art.sprite_shown("barn", "ruined") is not None
+    assert art.picture_shown("place", "barn", "") is None
+    assert art.picture_shown("place", "barn", None) is not None
+    intact = PlaceLayout(place_id="barn", state="", rows=["#"], spec={})
+    art.layouts["barn"][""] = intact
+    assert art.layout_shown("barn", "") is intact and art.layout_shown("barn", "ruined") is intact

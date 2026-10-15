@@ -22,6 +22,7 @@ throughout, since the image endpoint is not.
 
 from __future__ import annotations
 
+import json
 import threading
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -54,6 +55,7 @@ from sealedlore.engine.world_pictures import (
     unquoted,
 )
 from sealedlore.ids import new_id, utc_now_iso
+from sealedlore.models.node import Usage
 from sealedlore.models.world import MapPicture, WorldArt
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError
 from sealedlore.providers.images import (
@@ -66,7 +68,7 @@ from sealedlore.providers.images import (
     parse_image_models,
 )
 from sealedlore.storage.image_meta import MetadataError, picture_kind, strip_metadata
-from sealedlore.storage.images import MEDIA_TYPES
+from sealedlore.storage.images import MEDIA_TYPES, WORLD_ART_FILE
 from sealedlore.storage.world_art import load_world_art, save_world_art
 
 # The isometric view's scene: a paragraph, after the writer's reasoning.
@@ -97,6 +99,8 @@ class WorldArtRuntime:
     _isometric_thread: threading.Thread | None = None
     _isometric_area: str | None = None
     _isometric_client: ImageClient | None = None
+    # The view's scene writer, while it writes: cancelled with the rest.
+    _isometric_writer: ChatProvider | None = None
     # Held while a run is checked for and started: the worker (after a
     # passage) and the GUI thread (Redraw plan…, a story opening) both start
     # runs, and two started at once drew and paid for everything twice.
@@ -132,6 +136,33 @@ class WorldArtRuntime:
         art = self.world_art
         with self._lock():
             return art.model_copy(deep=True)
+
+    def backup_files(self) -> dict[str, bytes]:
+        """Everything a backup carries beside the bundle: the pictures and
+        their records, and for a chat kept in memory only, its map's art,
+        which on disk sits in the story's folder with them and from memory
+        was lost (the review, Oct 15 2026)."""
+        files = self.pictures.all_files()
+        if self.memory_only:
+            art = self.map_art_copy()
+            if art != WorldArt():
+                files[WORLD_ART_FILE] = json.dumps(art.model_dump(), indent=2).encode("utf-8")
+        return files
+
+    def restore_memory_art(self, files: dict[str, bytes]) -> dict[str, bytes]:
+        """A memory chat's map art from its backup's files (taken out of
+        them; the rest are its pictures)."""
+        files = dict(files)
+        data = files.pop(WORLD_ART_FILE, None)
+        if data is not None:
+            try:
+                art = cleaned_art(WorldArt.model_validate_json(data))
+            except ValueError:
+                art = None
+            if art is not None:
+                with self._lock():
+                    self._art = art
+        return files
 
     def map_art_progress(self) -> tuple[int, int]:
         """(done, of) for the art and pictures being drawn now; (0, 0) when
@@ -256,6 +287,9 @@ class WorldArtRuntime:
         price = info.price(isometric_size(info)) if info is not None else None
         if not self.map_on or self.open_span is not None:
             return model, price, "Not in a private scene."
+        if self.tee_chat:
+            # Private throughout; the image endpoint isn't (as map pictures).
+            return model, price, "Not in a TEE chat: the image endpoint isn't private."
         media = self.config.images()
         if media is None or not media.api_key:
             return model, price, "Set up an image endpoint in Settings → Images first."
@@ -283,7 +317,7 @@ class WorldArtRuntime:
         assert media is not None
         art = self.map_art_copy()
         area = world.places[area_id]
-        layout = art.layout_for(area_id, area.state) or art.layout_for(area_id)
+        layout = art.layout_shown(area_id, area.state)
         ground = str(layout.spec.get("ground", "")) if layout is not None else ""
         look = plan_ground(world, art, area, ground)
         if look == "metal" and "space" in (ground, land_under(world, art, area)):
@@ -374,9 +408,11 @@ class WorldArtRuntime:
         A scene with quotation marks is asked for once more, and what is
         still quoted the second time is left out (`unquoted`). On the
         painting's thread."""
-        model = self.image_prompt_model
+        # The role's model: a TEE chat's own (every call of one stays on it).
+        model = self.role_model("image_prompt")
         detached = getattr(self.provider, "detached", None)
         writer = detached() if callable(detached) else self.provider
+        self._isometric_writer = writer  # for `stop_map_art` to cancel
         try:
             params = self.side_params(model, max_tokens=ISOMETRIC_SCENE_TOKENS, temperature=0.3)
             request = ChatRequest(
@@ -391,6 +427,7 @@ class WorldArtRuntime:
                 scene = unquoted(again if again is not None else scene)
             return scene or None
         finally:
+            self._isometric_writer = None
             if writer is not self.provider:
                 writer.close()
 
@@ -515,21 +552,37 @@ class WorldArtRuntime:
                 self._save_art(art)
             self._log("map_picture_error", {"request_log_ref": log_ref, "error": str(exc)[:300]})
             return
-        if self._art_stop or self._closed or not self.pictures.alive():
-            # Closed meanwhile (another story is open, or this one deleted):
-            # nothing written, or the story's folder came back as a ghost and
-            # a reopened story's map art was written over by this one's.
-            return
         if info is None and model == self.config.map_picture_model:
             info = self._picture_model_info  # an unlisted isometric model stays unpriced
         cost = reply.cost
-        usage: dict = {"cost": cost or 0.0, "cost_reported": cost is not None}
-        if cost is None and info is not None and info.price(size) is not None:
+        if cost is not None:
+            usage: dict = {"cost": cost, "cost_reported": True}
+        elif info is not None and info.price(size) is not None:
             usage = {"cost": info.price(size), "cost_estimated": True}
-        self._log("map_picture_response", {"request_log_ref": log_ref, "usage": usage})
+        else:
+            # Neither reported nor listed: unpriced, never a reported $0.00
+            # (it was logged as cost 0.0 and counted so; the review, Oct 15 2026).
+            usage = {"cost_reported": False}
         picture_id = new_id()
         relative = f"{MAP_PICTURES_DIR}/{picture_id}{picture_kind(data) or '.png'}"
-        self.pictures.write(relative, data)
+        with self._closing:
+            if self._art_stop or self._closed or not self.pictures.alive():
+                # Closed meanwhile (another story is open, or this one deleted):
+                # nothing written, or the story's folder came back as a ghost
+                # and a reopened story's map art was written over by this
+                # one's. Under the lock, so a close can't slip in before the
+                # write (the folder's images/map/ came back by itself).
+                return
+            self._log("map_picture_response", {"request_log_ref": log_ref, "usage": usage})
+            self.pictures.write(relative, data)
+        # Into the session's own readout, as a story picture's cost goes.
+        self.unreported_usage.append(
+            Usage(
+                cost=float(usage.get("cost", 0.0)),
+                cost_estimated=bool(usage.get("cost_estimated")),
+                cost_reported=bool(usage.get("cost_reported")),
+            )
+        )
         picture = MapPicture(
             id=picture_id,
             subject=job.subject,
@@ -630,7 +683,7 @@ class WorldArtRuntime:
                 client.cancel()
             except Exception:  # noqa: BLE001 - stopping must never fail
                 pass
-        for client in (self._picture_client, self._isometric_client):
+        for client in (self._picture_client, self._isometric_client, self._isometric_writer):
             if client is not None:
                 try:
                     client.cancel()

@@ -225,3 +225,32 @@ class WorldArt(BaseModel):
         if state is not None:
             return drawn.get(state)
         return list(drawn.values())[-1] if drawn else None
+
+    # What is shown for a place in a state: drawn for that state, else as
+    # the place was (""), else, for a changed place only, the latest drawn.
+    # A place as it was never borrows a changed state's drawing: a barn
+    # blown up on one branch was drawn burning, inside and all, on the branch
+    # where it stands (the review, Oct 15 2026).
+
+    def layout_shown(self, place_id: str, state: str) -> PlaceLayout | None:
+        drawn = self.layouts.get(place_id) or {}
+        found = drawn.get(state) or drawn.get("")
+        if found is None and state and drawn:
+            found = list(drawn.values())[-1]
+        return found
+
+    def sprite_shown(self, subject_id: str, state: str) -> WorldSprite | None:
+        found = self.sprite_for(subject_id, state) or self.sprite_for(subject_id, "")
+        if found is None and state:
+            found = self.sprite_for(subject_id)
+        return found
+
+    def picture_shown(self, subject: str, subject_id: str, state: str | None) -> MapPicture | None:
+        if state is None:
+            return self.picture_for(subject, subject_id)
+        found = self.picture_for(subject, subject_id, state) or self.picture_for(
+            subject, subject_id, ""
+        )
+        if found is None and state:
+            found = self.picture_for(subject, subject_id)
+        return found

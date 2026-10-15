@@ -816,3 +816,85 @@ def test_a_site_in_known_country_stays_in_the_fog_until_seen(app):
     view.set_world(world, art, "Jane")
     view.go_to("w")
     assert "The wreck" in shown_plans(view)
+
+
+def test_the_card_follows_a_redraw(app):
+    """A redraw from a passage that changed the place under the card kept the
+    old card, since the place's id was the same (the review, Oct 15 2026)."""
+    world = town()
+    plan = PlaceLayout(place_id="diner", rows=["#####", "#___#", "##+##"], spec={})
+    art = WorldArt(layouts={"diner": {"": plan}})
+    view = WorldView()
+    view.resize(800, 600)
+    view.show()
+    QApplication.processEvents()
+    view.set_world(world, art, "Jane", keep_view=False)
+    view.go_to("diner")
+    assert view.title.text() == "Diner" and view.card.isVisible()
+    later = world.model_copy(deep=True)
+    later.places["diner"].state = "burning"
+    view.set_world(later, art, "Jane")
+    assert view.title.text() == "Diner (burning)"
+    view.close()
+
+
+def test_an_empty_map_leaves_nothing_of_the_last(app):
+    from sealedlore.models.world import MapPicture
+    from tests.test_world_pictures import png
+
+    world = town()
+    plan = PlaceLayout(place_id="diner", rows=["#####", "#___#", "##+##"], spec={})
+    art = WorldArt(
+        layouts={"diner": {"": plan}},
+        pictures=[
+            MapPicture(
+                subject="postcard", subject_id="diner", name="Diner", file="images/map/p.png"
+            )
+        ],
+    )
+    view = WorldView()
+    view.resize(800, 600)
+    view.picture_reader = lambda path: png() if path == "images/map/p.png" else None
+    view.set_world(world, art, "Jane", keep_view=False)
+    view.go_to("diner")
+    view.iso_button.setChecked(True)
+    view.set_progress(1, 1)
+    view.set_progress(0, 0)
+    assert not view.postcard_button.isHidden() and view._drew
+    view.set_world(WorldMap(), WorldArt(), None, keep_view=False)
+    assert view.title.text() == "Map" and view.card.isHidden() and view.postcard_button.isHidden()
+    assert view._postcard is None and not view._drew and not view.iso_button.isChecked()
+
+
+def test_the_isometric_lays_the_view_that_matches_the_map_now(app):
+    """The latest view alone laid a burning farm over the branch where it
+    stands and offered to paint it again (the review, Oct 15 2026)."""
+    from sealedlore.engine.world_pictures import shown_view
+    from tests.test_world_pictures import png
+
+    world, art, painted = _two_areas()
+    stale = painted.model_copy(update={"id": "later", "state": "the barn: blown up"})
+    art.pictures.append(stale)
+    assert shown_view(world, art, "farm") is painted
+    view = WorldView()
+    view.resize(900, 700)
+    view.picture_reader = lambda path: png(50, 30) if path == painted.file else None
+    view.set_world(world, art, "Jane", keep_view=False)
+    view.go_to("farm")
+    view.iso_button.setChecked(True)
+    assert view._isos["farm"].current
+    art.pictures.remove(painted)
+    assert shown_view(world, art, "farm") is stale  # out of date, and said so
+
+
+def test_the_stories_dock_stays_with_no_story_open(window):
+    """Closed with its button and no story open, the list was gone until
+    View → Stories list (the review, Oct 15 2026)."""
+    window.config.stories_list = True
+    window.stories_dock.show()
+    window.stories_dock.close()
+    assert window.stories_dock.isHidden() and not window.config.stories_list
+    window.close_story()
+    assert not window.stories_dock.isHidden()
+    window.stories_dock.close()
+    assert not window.stories_dock.isHidden()

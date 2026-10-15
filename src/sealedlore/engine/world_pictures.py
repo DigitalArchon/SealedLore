@@ -287,7 +287,19 @@ def area_plan(world: WorldMap, art: WorldArt, area_id: str):
     area = world.places.get(area_id)
     if area is None:
         return None
-    return art.layout_for(area_id, area.state) or art.layout_for(area_id)
+    return art.layout_shown(area_id, area.state)
+
+
+def shown_view(world: WorldMap, art: WorldArt, area_id: str) -> MapPicture | None:
+    """The isometric view to lay over an area: the latest that is of the map
+    there as it is now (`view_current`), else the latest painted, out of date
+    and said so. The latest alone laid a burning farm over the branch where
+    it stands, and offered to paint it again (the review, Oct 15 2026)."""
+    views = [p for p in art.pictures if p.subject == "isometric" and p.subject_id == area_id]
+    for picture in reversed(views):
+        if view_current(world, art, area_id, picture):
+            return picture
+    return views[-1] if views else None
 
 
 def view_current(world: WorldMap, art: WorldArt, area_id: str, picture: MapPicture) -> bool:
@@ -400,7 +412,7 @@ def _what_is_on(world: WorldMap, art: WorldArt, area_id: str) -> str:
         parts.append(child.name + (f": {what}" if what else ""))
     if parts:
         text += "In it: " + "; ".join(parts) + ". "
-    layout = art.layout_for(area_id, area.state) or art.layout_for(area_id)
+    layout = art.layout_shown(area_id, area.state)
     marked = list((layout.objects if layout is not None else {}).values())
     if marked:
         text += "Marked on the map: " + ", ".join(marked) + "."

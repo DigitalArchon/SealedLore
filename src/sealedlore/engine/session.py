@@ -463,7 +463,7 @@ class StorySession(
         # Set at the end of `close()`, under the lock `_log` and the map's
         # art writes take: nothing of the story is written after it.
         self._closed = False
-        self._closing = threading.Lock()
+        self._closing = threading.RLock()  # `_log` is called under it by the map's writes
         # A memory-only chat's pictures (`pictures`); a story's are on disk.
         self._memory_pictures: MemoryPictures | None = None
         # Prices fetched for a memory-only chat, never written to the config.
@@ -3627,7 +3627,7 @@ class StorySession(
     def restore_memory(self, files: dict[str, bytes], log: list[dict[str, Any]]) -> None:
         """A memory-only chat brought back from its backup, in memory: its
         pictures and its log, as they were exported."""
-        self._memory_pictures = MemoryPictures(self._log, files)
+        self._memory_pictures = MemoryPictures(self._log, self.restore_memory_art(files))
         self.memory_log.extend(log)
 
     @property

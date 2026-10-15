@@ -77,7 +77,7 @@ from sealedlore.engine.world_art import (
     standing_spot,
 )
 from sealedlore.engine.world_layout import position, size_of
-from sealedlore.engine.world_pictures import view_current
+from sealedlore.engine.world_pictures import shown_view, view_current
 from sealedlore.gui import text_size
 from sealedlore.gui.isometric_view import IsometricBar, IsometricDialog
 from sealedlore.gui.map_art import FOG, picture_sprite, sprite_pixmap
@@ -769,6 +769,13 @@ class WorldView(QWidget):
         center = self.view.mapToScene(self.view.viewport().rect().center())
         transform = self.view.transform()
         fitted = self._fitted
+        if not keep_view:
+            # A story opening: nothing of the last one's drawing or views
+            # (it opened with "✓ The map is drawn" and Isometric on; the review).
+            self._drew = False
+            self.iso_button.blockSignals(True)
+            self.iso_button.setChecked(False)
+            self.iso_button.blockSignals(False)
         self._build()
         if keep_view and self._built and fitted is None:
             self.view.setTransform(transform)
@@ -900,6 +907,10 @@ class WorldView(QWidget):
         self._isos = {}
         self._badges = {}
         self.people = []
+        # The card is written afresh: a redraw from a passage that changed the
+        # place under it (burning, someone come) kept the old card, since
+        # the place's id was the same (the review, Oct 15 2026).
+        self._card_place = None
         self.scene.clear()
         self.scene.setSceneRect(QRectF())  # set below from what is drawn
         if not self.world.places:
@@ -907,6 +918,13 @@ class WorldView(QWidget):
             self.hint.setText(
                 "Nothing on the map yet: it grows as the story goes, from the next passage on."
             )
+            # Nothing of the last map stays under an empty one: a memory
+            # chat's card and postcard showed under a new story's (the review).
+            self.card.hide()
+            self.postcard_button.hide()
+            self._postcard = None
+            self._iso_images = {}
+            self._focus = None
             self._sync_buttons()
             return
         self._open = self._out_of_the_fog()
@@ -966,7 +984,7 @@ class WorldView(QWidget):
         """Every plan drawn, where its place is; its people, props and names
         are added when it is first shown (`_dress_plan`)."""
         for place in self.world.places.values():
-            layout = self.art.layout_for(place.id, place.state) or self.art.layout_for(place.id)
+            layout = self.art.layout_shown(place.id, place.state)
             rect = plan_rect(self.world, place) if layout is not None else None
             if layout is None or rect is None or not layout.rows:
                 continue
@@ -994,7 +1012,7 @@ class WorldView(QWidget):
         off (`_update_detail_now`)."""
         held: dict[str, QImage] = {}
         for pid, plan in self._area_plans().items():
-            picture = self.art.picture_for("isometric", pid)
+            picture = shown_view(self.world, self.art, pid)
             image = self._iso_image(picture) if picture is not None else None
             if picture is None or image is None:
                 continue
@@ -1091,7 +1109,7 @@ class WorldView(QWidget):
             pixmap = self._picture_pixmap("place", place.id, place.state, pixels)
             if pixmap is not None:
                 return pixmap
-            sprite = self.art.sprite_for(place.id, place.state) or self.art.sprite_for(place.id)
+            sprite = self.art.sprite_shown(place.id, place.state)
             return sprite_pixmap(sprite.id, sprite.svg, pixels) if sprite else None
 
         return picture
@@ -1210,7 +1228,8 @@ class WorldView(QWidget):
             current = places[current].inside if current in places else None
         if ringed is None and here is not None:  # nothing above it shown: itself, then
             own = next((item for item in self._items if item.place.id == here), None)
-            in_plan = here in shown_plans or (places[here].inside or "") in shown_plans
+            above = places[here].inside if here in places else None
+            in_plan = here in shown_plans or (above or "") in shown_plans
             if own is not None and not in_plan:  # a plan carrying it stands for it
                 own.setVisible(True)
                 ringed = here
@@ -1436,7 +1455,7 @@ class WorldView(QWidget):
         world = self.world
         self.title.setText(place.name + (f" ({place.state})" if place.state else ""))
         side = [place_card(world, place)]
-        layout = self.art.layout_for(place.id, place.state) or self.art.layout_for(place.id)
+        layout = self.art.layout_shown(place.id, place.state)
         if layout is not None and layout.objects:
             side.append(
                 "<b>Marked</b><br>"
@@ -1460,9 +1479,7 @@ class WorldView(QWidget):
         self.card.show()
 
     def _set_postcard(self, place: WorldPlace) -> None:
-        picture = self.art.picture_for("postcard", place.id, place.state) or self.art.picture_for(
-            "postcard", place.id
-        )
+        picture = self.art.picture_shown("postcard", place.id, place.state)
         data = self.picture_reader(picture.file) if picture and self.picture_reader else None
         image = QImage.fromData(data) if data else QImage()
         if image.isNull():
@@ -1504,9 +1521,7 @@ class WorldView(QWidget):
     def _picture_image(self, subject: str, subject_id: str, state: str | None, height: int):
         """A map picture, cut out and shrunk to `height`: in this state, else
         the latest. None when there is none (or its file can't be read)."""
-        picture = self.art.picture_for(subject, subject_id, state) or self.art.picture_for(
-            subject, subject_id
-        )
+        picture = self.art.picture_shown(subject, subject_id, state)
         if picture is None or self.picture_reader is None:
             return None
         reader, file = self.picture_reader, picture.file
@@ -1620,7 +1635,7 @@ class WorldView(QWidget):
             if self.world.places:
                 self.hint.setText(self._hint_for(self.level()))
             return
-        latest = self.art.picture_for("isometric", area.id)
+        latest = shown_view(self.world, self.art, area.id)
         has_view = latest is not None and self._iso_image(latest) is not None
         model, price, problem = self.isometric_offer
         self.iso_bar.show_state(
@@ -1659,7 +1674,7 @@ class WorldView(QWidget):
     def show_view_whole(self, area_id: str) -> None:
         """An area's view on its own, read whole from its file."""
         area = self.world.places.get(area_id)
-        picture = self.art.picture_for("isometric", area_id)
+        picture = shown_view(self.world, self.art, area_id)
         if area is None or picture is None or self.picture_reader is None:
             return
         image = image_of(self.picture_reader(picture.file))

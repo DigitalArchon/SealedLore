@@ -127,7 +127,7 @@ from sealedlore.models.route import ROUTE_ROLES, ModelRoute
 from sealedlore.models.scene import SceneState
 from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
-from sealedlore.models.world import WorldArt
+from sealedlore.models.world import WorldArt, WorldMap
 from sealedlore.providers.base import ChatProvider, UnconfiguredProvider
 from sealedlore.providers.embeddings import EmbeddingBackend, OpenAICompatibleEmbeddings
 from sealedlore.providers.mock import MockChatProvider
@@ -1071,6 +1071,10 @@ class MainWindow(
             self.session.close(wait_seconds=0)
             self.session.save()
         self.session = None
+        # Nothing of the story's map stays for the next: a memory chat's
+        # card, postcard and decoded views (the review, Oct 15 2026).
+        self.world_view.picture_reader = None
+        self.world_view.set_world(WorldMap(), WorldArt(), None, keep_view=False)
         self._sync_stories_list()
         self.setWindowTitle("SealedLore")
         self.status_strip.reset_session_cost()
@@ -1793,7 +1797,7 @@ class MainWindow(
     def export_story_archive(self) -> None:
         if self.session is None:
             return
-        files = self.session.pictures.all_files()
+        files = self.session.backup_files()
         video_bytes = sum(len(data) for name, data in files.items() if is_video_file(name))
         if video_bytes:
             # Videos are megabytes each, and base64 in a backup a third more.

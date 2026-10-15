@@ -118,6 +118,11 @@ TERRAIN_TILES = 40
 TERRAIN_MIN_SIDE, TERRAIN_MAX_SIDE = 400.0, 40_000.0
 # Land along a way between two known places is drawn in patches this wide.
 WAY_PATCH_SIDE = 1_600.0
+# A way longer than this many patches gets none: it isn't country the player
+# has walked, and a link read in light-years ("Bajor, five light-years away")
+# planned 3e13 patches and hung the thread that asked (the review, Oct 15
+# 2026). The land round each end's place is drawn as before.
+MAX_WAY_PATCHES = 32
 MAX_OBJECTS = 9
 # Places drawn as a sprite on the map; regions, routes, areas and rooms are
 # drawn as land and layouts instead.
@@ -233,10 +238,16 @@ def _safe_attribute(name: str, value: str) -> bool:
 # --- Layouts and land, drawn by the program ------------------------------------
 
 
+# A coordinate or size in a drawing reply is held to this many tiles past
+# the grid: "w": 1e9 made the building loop run for the rest of the session
+# (the review, Oct 15 2026), and 1e999 (infinity) overflowed `round`.
+COORD_LIMIT = 512
+
+
 def _int(value: Any, default: int = 0) -> int:
     try:
-        return int(round(float(value)))
-    except (TypeError, ValueError):
+        return max(-COORD_LIMIT, min(COORD_LIMIT, int(round(float(value)))))
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
@@ -1000,6 +1011,8 @@ def plan_art(
             continue
         length = math.hypot(b[0] - a[0], b[1] - a[1])
         steps = int(length // WAY_PATCH_SIDE)
+        if steps > MAX_WAY_PATCHES:
+            continue
         for i in range(1, steps + 1):
             t = i * WAY_PATCH_SIDE / length
             x, y = a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t

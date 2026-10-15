@@ -402,10 +402,15 @@ def resolve_reply(
             changed.what = changed.what or _text(entry.get("what"))
             changed.state = _text(entry.get("state")) or changed.state
             changed.kind = changed.kind or kind  # type: ignore[assignment]
+            known_places = {**world.places, **{p.id: p for p in delta.places}}
             if (
-                changed.inside is None
+                # A vehicle (or a room in one) has no spot of its own and
+                # goes where the passage docks it; once in a bay, it stayed
+                # there for good (the review, Oct 15 2026).
+                (changed.inside is None or moves(known_places, changed))
                 and changed.x is None  # a placed place has its spot: never moved
                 and inside is not None
+                and inside != changed.inside
                 and not _would_loop(world, delta, changed.id, inside)
             ):
                 changed.inside = inside
@@ -459,7 +464,10 @@ def resolve_reply(
         who = _text(entry.get("who"))
         # A name starts with a capital; a description ("the woman") doesn't.
         # `islower`, not `not isupper`: a script with no case (CJK) is a name too.
-        if not who or _NOT_A_NAME.match(who) or who[0].islower():
+        # Someone in the story is a name whatever it looks like: "The Hollow
+        # King" was refused as a description (the review, Oct 15 2026).
+        known = any(same_person(who, c) for c in people) if who else False
+        if not who or (not known and (_NOT_A_NAME.match(who) or who[0].islower())):
             refused.append(f"where {who or '(nobody)'}: not a name")
             continue
         if quoted(entry) is None:
@@ -550,14 +558,19 @@ def describe_delta(world: WorldMap, delta: WorldDelta) -> str:
 # --- Folding ------------------------------------------------------------------
 
 
-def applied(world: WorldMap, delta: WorldDelta, *, base: bool = False) -> WorldMap:
-    """`world` with `delta` applied (a new map; `world` is left alone).
-    Places come placed (`place_delta`); one that somehow isn't is placed here
-    by the same rule, so the map is the same however often it is folded.
+def applied(
+    world: WorldMap, delta: WorldDelta, *, base: bool = False, in_place: bool = False
+) -> WorldMap:
+    """`world` with `delta` applied (a new map; `world` is left alone, unless
+    `in_place`: `world_at` folds a long path onto one copy, since a deep copy
+    of a 500-place map for each of 500 messages took ~1s a call on the GUI
+    thread). Places come placed (`place_delta`); one that somehow isn't is
+    placed here by the same rule, so the map is the same however often it is
+    folded.
 
     A passage's places, and the places it puts people or ways between, are
     seen; an imported map (`base`) shows only the places it says are known."""
-    out = world.model_copy(deep=True)
+    out = world if in_place else world.model_copy(deep=True)
     known = {**world.places, **{p.id: p for p in delta.places}}
     unplaced = [
         p.model_copy(deep=True)
@@ -590,7 +603,27 @@ def applied(world: WorldMap, delta: WorldDelta, *, base: bool = False) -> WorldM
     for place_id in seen:
         if place_id not in out.seen:
             out.seen.append(place_id)
+    _prune(out)
     return out
+
+
+def _prune(world: WorldMap) -> None:
+    """Whatever names a place that isn't on the map goes: a take switched
+    moves what followed under the other take (`tree.move_continuation`), and
+    the passages after it were read against the map the old take made, so
+    their deltas name its places. Live (Oct 15 2026) the view indexed one
+    of them and the transcript's whole reload died with it."""
+    places = world.places
+    for place in places.values():
+        if place.inside is not None and place.inside not in places:
+            place.inside = None
+    world.links = [k for k in world.links if k.a in places and k.b in places]
+    world.where = {who: pid for who, pid in world.where.items() if pid in places}
+    for thing in world.things.values():
+        if thing.at is not None and thing.at not in places:
+            thing.at = None
+    world.seen = [pid for pid in world.seen if pid in places]
+    world.visited = {who: [p for p in ps if p in places] for who, ps in world.visited.items()}
 
 
 def place_delta(world: WorldMap, delta: WorldDelta, held: str | None) -> None:
@@ -624,7 +657,7 @@ def world_at(
         world.seen.append(world.start)  # where the story begins is never under fog
     for node in path:
         if node.meta.world is not None:
-            world = applied(world, node.meta.world)
+            world = applied(world, node.meta.world, in_place=True)  # ours alone: fresh above
     gone = {p.id for p in world.places.values() if p.lore_id is not None and p.lore_id in hidden}
     if not gone:
         return world

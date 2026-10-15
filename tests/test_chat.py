@@ -228,6 +228,60 @@ def test_a_tee_chats_map_is_read_by_its_own_model_and_draws_no_map_pictures(tmp_
     assert session.map_model == "small/map" and session.map_pictures_on
 
 
+def test_a_tee_chats_isometric_view_is_refused_and_its_writer_is_its_own(tmp_path):
+    config = Config(
+        providers=[
+            ProviderConfig(
+                name="nano", base_url="https://nano-gpt.com/api/v1", model="m", api_key="k"
+            )
+        ],
+        active_provider_name="nano",
+        min_cacheable_tokens=1,
+        image_prompt_model="writer/model",
+    )
+    session, _provider = chat_session(tmp_path, ["Hi."], config=config)
+    session.story.defaults.world_map = True
+    session.story.defaults.main_model = "TEE/gemma-3-27b"
+    assert "TEE chat" in (session.isometric_offer()[2] or "")
+    assert session.role_model("image_prompt") == "TEE/gemma-3-27b"
+    session.story.defaults.main_model = "z-ai/glm-5.3"
+    assert "TEE chat" not in (session.isometric_offer()[2] or "")
+    assert session.role_model("image_prompt") == "writer/model"
+
+
+def test_a_memory_chats_map_art_goes_into_its_backup_and_comes_back(tmp_path):
+    """From memory the art was lost with the chat's backup (the review, Oct
+    15 2026): it rides in the backup's files, and is taken back out."""
+    from sealedlore.models.world import PlaceLayout
+    from sealedlore.storage.images import WORLD_ART_FILE
+
+    story = Story(title="Incognito", mode="chat", chat_prompt=PROMPT, chat_keep="memory")
+    story.defaults.world_map = True
+    session = StorySession(
+        StoryBundle(story=story),
+        make_config(map_art=False),
+        MockChatProvider(["Hi."]),
+        root=tmp_path,
+        estimator=TokenEstimator(counter=fallback_counter),
+    )
+    assert session.backup_files() == {}
+    art = session.world_art
+    art.layouts["farm"] = {"": PlaceLayout(place_id="farm", rows=["..", ".."], spec={})}
+    files = session.backup_files()
+    assert set(files) == {WORLD_ART_FILE}
+    again = StorySession(
+        StoryBundle(story=story.model_copy(deep=True)),
+        make_config(map_art=False),
+        MockChatProvider(["Hi."]),
+        root=tmp_path,
+        estimator=TokenEstimator(counter=fallback_counter),
+    )
+    again.restore_memory(files, [])
+    assert again.world_art.layout_for("farm") is not None
+    assert WORLD_ART_FILE not in again.pictures.all_files()
+    assert listing(tmp_path) == {}
+
+
 def test_a_memory_only_chat_with_a_map_leaves_no_trace_on_disk(tmp_path):
     config = make_config(archive_chunk_turns=2, map_art=False)
     story = Story(title="Incognito", mode="chat", chat_prompt=PROMPT, chat_keep="memory")

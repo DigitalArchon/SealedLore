@@ -173,6 +173,102 @@ def test_a_place_never_ends_up_inside_itself():
     assert "  - The diner" in render_map(after)
 
 
+def test_a_vehicle_moves_to_where_the_passage_docks_it():
+    """Once in a bay a ship stayed there for good (the review, Oct 15 2026):
+    a vehicle has no spot of its own and goes where it is next shown."""
+    world = WorldMap()
+    text = "The Sable Crest sat in docking bay three. Later it landed at Kendra spaceport."
+    delta, _refused = resolve(
+        world,
+        {
+            "places": [
+                {"name": "Docking bay three", "kind": "room", "quote": "sat in docking bay three"},
+                {
+                    "name": "Sable Crest",
+                    "kind": "vehicle",
+                    "inside": "Docking bay three",
+                    "quote": "sat in docking bay three",
+                },
+            ]
+        },
+        text,
+    )
+    world = applied(world, delta)
+    ship = next(p for p in world.places.values() if p.name == "Sable Crest")
+    bay = next(p for p in world.places.values() if p.name == "Docking bay three")
+    assert ship.inside == bay.id
+    delta, _refused = resolve(
+        world,
+        {
+            "places": [
+                {"name": "Kendra spaceport", "kind": "site", "quote": "landed at Kendra spaceport"},
+                {
+                    "name": "Sable Crest",
+                    "kind": "vehicle",
+                    "inside": "Kendra spaceport",
+                    "quote": "landed at Kendra spaceport",
+                },
+            ]
+        },
+        text,
+    )
+    world = applied(world, delta)
+    port = next(p for p in world.places.values() if p.name == "Kendra spaceport")
+    assert world.places[ship.id].inside == port.id
+    # A place with a spot of its own is never moved, as before.
+    delta, _refused = resolve(
+        world,
+        {
+            "places": [
+                {
+                    "name": "Docking bay three",
+                    "inside": "Kendra spaceport",
+                    "quote": "sat in docking bay three",
+                }
+            ]
+        },
+        text,
+    )
+    assert applied(world, delta).places[bay.id].inside == bay.inside
+
+
+def test_someone_in_the_story_is_a_name_whatever_it_looks_like():
+    """ "The Hollow King" was refused as a description (the review, Oct 15
+    2026): a name form of someone in the story is that person."""
+    world = farm_and_town()
+    king = Character(id="c-king", name="The Hollow King")
+    delta, refused = resolve_reply(
+        world,
+        {
+            "where": [
+                {
+                    "who": "The Hollow King",
+                    "place": "Hellsville",
+                    "quote": "Marcus Webb waited at the diner",
+                }
+            ]
+        },
+        source=SOURCE,
+        people=[*PEOPLE, king],
+    )
+    assert "The Hollow King" in delta.where and refused == []
+    _delta, refused = resolve_reply(
+        world,
+        {
+            "where": [
+                {
+                    "who": "The woman",
+                    "place": "Hellsville",
+                    "quote": "A woman watched from the porch",
+                }
+            ]
+        },
+        source=SOURCE,
+        people=[*PEOPLE, king],
+    )
+    assert refused == ["where The woman: not a name"]
+
+
 def test_things_change_hands_and_keep_one_entry():
     world = farm_and_town()
     first, _ = resolve(
@@ -509,3 +605,29 @@ def test_country_is_as_far_as_its_edge():
     assert _how_far(world, "v", "c", fixed).startswith("14 km")  # a town: to its middle
     world.places["f"] = forest.model_copy(update={"size": 20000})
     assert _how_far(world, "v", "f", fixed) == "all around"
+
+
+def test_what_names_a_place_no_longer_on_the_map_is_pruned():
+    """A take switched moves what followed under the other take, whose map
+    lacks the places the first made; live, the view indexed one and the
+    transcript's reload died (Oct 15 2026)."""
+    from sealedlore.models.world import WorldDelta, WorldLink, WorldPlace, WorldThing
+
+    world = farm_and_town()
+    farm = next(iter(world.places.values()))
+    ghost = "no-such-place"
+    delta = WorldDelta(
+        places=[
+            WorldPlace(id="shed", name="The shed", kind="building", inside=ghost, x=1.0, y=1.0)
+        ],
+        links=[WorldLink(a=farm.id, b=ghost)],
+        where={"Jane": ghost, "Marcus Webb": farm.id},
+        things=[WorldThing(id="axe", name="Axe", at=ghost)],
+        seen=[ghost],
+    )
+    after = applied(world, delta)
+    assert after.where == {"Marcus Webb": farm.id}
+    assert all(ghost not in (k.a, k.b) for k in after.links)
+    assert after.things["axe"].at is None and after.places["shed"].inside is None
+    assert ghost not in after.seen and ghost not in after.visited.get("Jane", [])
+    assert render_map_context(after, "Jane") == ""  # unplaced, not crashed

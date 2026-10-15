@@ -47,7 +47,7 @@ def plan_image(world: WorldMap, art: WorldArt, area_id: str) -> QImage | None:
     """The area's plan as the local map shows it from outside, or None when
     it has no plan."""
     area = world.places.get(area_id)
-    layout = (art.layout_for(area_id, area.state) or art.layout_for(area_id)) if area else None
+    layout = art.layout_shown(area_id, area.state) if area else None
     if area is None or layout is None or not layout.rows:
         return None
     ground = plan_ground(world, art, area, str(layout.spec.get("ground", "")))
