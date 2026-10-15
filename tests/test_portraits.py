@@ -22,6 +22,7 @@ from sealedlore.engine.session import StorySession
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.models.character import Character
 from sealedlore.models.config import Config
+from sealedlore.models.lore import LoreEntry
 from sealedlore.providers.images import ImageModelInfo, ImageReply
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage.repository import read_api_log, save_story_bundle
@@ -78,11 +79,11 @@ def test_only_characters_the_models_may_see_are_offered_or_written_for(tmp_path:
     brings them in: a portrait of one would be the first a model heard of
     them."""
     session, provider = session_on(tmp_path, [reply(("John", "A man."), ("Jane", "A woman."))])
-    names = {c.name for c in session.without_portraits()}
+    names = {c.name for c in session.without_pictures()[0]}
     assert names == {"John", "Jane"}
     ben = next(c for c in session.cast if c.name == "Ben")
-    prompts, problem = session.write_portrait_prompts([*session.cast])
-    assert set(prompts) == {c.id for c in session.without_portraits()} and problem is None
+    prompts, problem = session.write_card_prompts([*session.cast])
+    assert set(prompts) == {c.id for c in session.without_pictures()[0]} and problem is None
     sent = json.dumps(provider.payloads)
     assert "hermit" not in sent and ben.id not in prompts
 
@@ -95,6 +96,7 @@ def test_the_writer_is_asked_for_what_can_be_seen_and_never_a_name():
     system, user = (m.parts[0].text for m in messages)
     assert DEFAULT_TEXTS["portraits.style"] in system  # the story set no style
     assert "something the camera can see" in system and "no names" in system
+    assert "head-and-shoulders portrait" in system and "For each lore entry" not in system
     assert DEFAULT_TEXTS["portraits.no_writing"] in system
     assert "## John" in user and "Four years after the dead rose." in user
     assert "WHERE THE STORY BEGINS" not in user  # none given
@@ -106,7 +108,7 @@ def test_the_writer_is_asked_for_what_can_be_seen_and_never_a_name():
 def test_the_writer_is_told_where_the_story_begins(tmp_path: Path):
     """Doomsville's winter is in its opening, not its world text."""
     session, provider = session_on(tmp_path, [reply(("John", "A man."))])
-    session.write_portrait_prompts(session.without_portraits()[:1])
+    session.write_card_prompts(session.without_pictures()[0][:1])
     sent = json.dumps(provider.payloads[-1])
     assert "WHERE THE STORY BEGINS" in sent and "deep winter" in sent
 
@@ -115,8 +117,8 @@ def test_a_reply_is_read_by_name_and_whoever_it_left_out_gets_a_prompt_from_the_
     tmp_path: Path,
 ):
     session, _provider = session_on(tmp_path, [reply(("john", "  A tired   man. "), ("Zed", "?"))])
-    john, jane = session.without_portraits()
-    prompts, problem = session.write_portrait_prompts([john, jane])
+    john, jane = session.without_pictures()[0]
+    prompts, problem = session.write_card_prompts([john, jane])
     assert prompts[john.id] == "A tired man."  # by name, any case, spaces closed up
     assert prompts[jane.id] == fallback_prompt(jane, image_style="")
     assert "left out Jane" in problem
@@ -127,8 +129,8 @@ def test_a_reply_is_read_by_name_and_whoever_it_left_out_gets_a_prompt_from_the_
 
 def test_a_failed_writer_still_leaves_prompts_to_edit(tmp_path: Path):
     session, provider = session_on(tmp_path, ["not json at all"])
-    people = session.without_portraits()
-    prompts, problem = session.write_portrait_prompts(people)
+    people = session.without_pictures()[0]
+    prompts, problem = session.write_card_prompts(people)
     assert set(prompts) == {c.id for c in people} and "couldn't be read" in problem
     kinds = [entry["kind"] for entry in read_api_log(session.story.id, root=tmp_path)]
     assert "portrait_prompt_request" in kinds and "portrait_prompt_response" in kinds
@@ -140,7 +142,7 @@ def test_portraits_wait_for_a_private_scene_to_end(tmp_path: Path):
     session, _provider = session_on(tmp_path, ["x"])
     session.enter_private(keep="memory", provider=MockChatProvider(["y"]), model="local/m")
     with pytest.raises(ValueError, match="private scene"):
-        session.write_portrait_prompts(session.without_portraits())
+        session.write_card_prompts(session.without_pictures()[0])
 
 
 def test_the_portrait_size_is_the_largest_square_up_to_1024():
@@ -166,22 +168,94 @@ class _Images:
 
 def test_a_drawn_portrait_is_sent_as_approved_and_becomes_the_first_picture_once(tmp_path: Path):
     session, _provider = session_on(tmp_path, ["x"])
-    john = session.without_portraits()[0]
+    john = session.without_pictures()[0][0]
     info = ImageModelInfo(
         id="flux-2-klein-9b", name="F", resolutions=("1024*1024",), per_image={"*": 0.01}
     )
     approved = "  A tired man, frost on his collar.\n"
-    request = session.portrait_request(john, approved, model=info.id, info=info)
+    request = session.card_request(john, approved, model=info.id, info=info, first=True)
     assert request.prompt == approved and request.size == "1024*1024"
-    assert request.portrait_of == john.id and request.references == ()
+    assert request.card_id == john.id and request.card_first and request.references == ()
     client = _Images()
     records = run_image_request(client, request, store=session.pictures)
     assert client.sent[0]["prompt"] == approved  # not even trimmed
     session.pictures.add_images(records)
-    assert session.take_portraits() == ["John"]
+    assert session.take_card_pictures() == ["John"]
     first = john.reference_images[0]
     assert first.caption == "portrait" and session.pictures.read(first.file) == PNG
+    assert first.prompt == approved and first.model == info.id  # for Draw again
     assert first.file != records[0].file  # its own copy: Media's Delete leaves it
     # Taken once: removed from the card, it stays removed.
     john.reference_images.clear()
-    assert session.take_portraits() == [] and not john.reference_images
+    assert session.take_card_pictures() == [] and not john.reference_images
+
+
+def test_lore_entries_are_written_for_too_and_one_with_nothing_to_see_gets_no_prompt(
+    tmp_path: Path,
+):
+    session, provider = session_on(
+        tmp_path,
+        [
+            json.dumps(
+                {
+                    "portraits": [{"name": "John", "prompt": "A man."}],
+                    "lore": [
+                        {"title": "Hellsville", "prompt": "A walled town in snow."},
+                        {"title": "the bite", "prompt": ""},
+                    ],
+                }
+            )
+        ],
+    )
+    session.bundle.lore.append(LoreEntry(title="The bite", content="A bite turns you in days."))
+    people, lore = session.without_pictures()
+    # The caves are held back until the author mentions them: not offered.
+    assert "The Hidden Caves" not in {e.title for e in lore}
+    caves = next(e for e in session.bundle.lore if e.title == "The Hidden Caves")
+    town = next(e for e in lore if e.title == "Hellsville")
+    bite = next(e for e in lore if e.title == "The bite")
+    prompts, problem = session.write_card_prompts(people[:1], [town, bite, caves])
+    assert prompts[town.id] == "A walled town in snow." and prompts[bite.id] == ""
+    assert caves.id not in prompts
+    assert problem is None
+    system = provider.payloads[-1]["messages"][0]["content"]
+    sent = json.dumps(provider.payloads[-1])
+    assert "lore entry" in json.dumps(system) and "THE LORE ENTRIES" in sent
+
+
+def test_an_edit_sends_the_picture_and_lands_after_the_others(tmp_path: Path):
+    session, _provider = session_on(tmp_path, ["x"])
+    john = session.without_pictures()[0][0]
+    info = ImageModelInfo(id="m", name="M", resolutions=("1024x1024",), max_inputs=4)
+    first = run_image_request(
+        _Images(),
+        session.card_request(john, "A man.", model="m", info=info, first=True),
+        store=session.pictures,
+    )
+    session.pictures.add_images(first)
+    session.take_card_pictures()
+    portrait = john.reference_images[0]
+    prompt = session.card_edit_prompt(john, "add a fresh scar down his left cheek")
+    assert prompt.startswith("Edit this picture: add a fresh scar down his left cheek. Keep")
+    assert "the same person" in prompt
+    request = session.card_request(
+        john, prompt, model="m", info=info, first=False, caption="a scar", source=portrait
+    )
+    assert [use.ref_id for use in request.references] == [portrait.id]
+    client = _Images()
+    edited = run_image_request(client, request, store=session.pictures)
+    assert client.sent[0]["imageDataUrls"]  # the picture went with the prompt
+    session.pictures.add_images(edited)
+    assert session.take_card_pictures() == ["John"]
+    assert [r.caption for r in john.reference_images] == ["portrait", "a scar"]
+
+
+def test_a_lore_picture_is_landscape_and_its_edit_keeps_the_place(tmp_path: Path):
+    from sealedlore.engine.portraits import card_size
+
+    session, _provider = session_on(tmp_path, ["x"])
+    town = next(e for e in session.without_pictures()[1] if e.title == "Hellsville")
+    info = ImageModelInfo(id="m", name="M", resolutions=("1024x1024", "1360x768"))
+    assert card_size(town, info) == "1360x768"
+    assert "the same place or thing" in session.card_edit_prompt(town, "at night")
+    assert "Jane alone" in session.scene_direction(session.cast[1])

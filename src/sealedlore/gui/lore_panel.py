@@ -7,7 +7,7 @@ why, and — when embeddings weren't used — that it was keywords alone.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QSpinBox,
@@ -27,13 +28,20 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.retrieval import RetrievalReport
 from sealedlore.gui.fields import FormScroll, set_field_text
-from sealedlore.gui.ref_images import RefImageStrip, StoryPictures
+from sealedlore.gui.portrait_view import PortraitView
+from sealedlore.gui.ref_images import CardIcons, RefImageStrip, StoryPictures
 from sealedlore.models.lore import LoreEntry
+
+# The pictures beside the titles in the list.
+LIST_ICON = 28
 
 
 class LorePanel(QWidget):
     changed = Signal()
     reembed_requested = Signal()
+    # (entry id, picture id or "", what): a picture drawn for the entry:
+    # "new", or "again" or "edit" of that picture (as on the Cast page).
+    picture_requested = Signal(str, str, str)
 
     def __init__(self, pictures: StoryPictures | None = None) -> None:
         super().__init__()
@@ -46,6 +54,9 @@ class LorePanel(QWidget):
 
         self.list = QListWidget()
         self.list.setObjectName("loreList")
+        # Each title beside its picture, small.
+        self.list.setIconSize(QSize(LIST_ICON, LIST_ICON))
+        self._icons = CardIcons(self._pictures, LIST_ICON)
         self.list.setSelectionMode(QAbstractItemView.SingleSelection)
         self.list.currentItemChanged.connect(self._on_selection_changed)
 
@@ -70,7 +81,8 @@ class LorePanel(QWidget):
         splitter.addWidget(top)
         splitter.addWidget(self._build_editor())
         splitter.addWidget(self._build_injection_view())
-        splitter.setSizes([180, 320, 200])
+        # The entry, with its picture at the top, is the long part.
+        splitter.setSizes([150, 520, 160])
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -93,8 +105,18 @@ class LorePanel(QWidget):
         self.priority = QSpinBox()
         self.priority.setRange(-100, 100)
         self.priority.setToolTip("Higher priority survives the lore token cap first")
-        self.pictures = RefImageStrip(self._pictures, "it")
-        self.pictures.changed.connect(lambda: self._current is not None and self.changed.emit())
+        # The entry's first picture large, the others small under it, as a
+        # character's portrait is on the Cast page.
+        self.picture = PortraitView(person=False)
+        self.pictures = RefImageStrip(self._pictures, "it", after_portrait=True)
+        self.pictures.changed.connect(self._on_pictures_changed)
+        self.picture.draw_requested.connect(lambda: self._ask("new"))
+        self.picture.again_requested.connect(lambda: self._ask("again", first=True))
+        self.picture.edit_requested.connect(lambda: self._ask("edit", first=True))
+        self.picture.add_requested.connect(self.pictures.add_portrait)
+        self.picture.remove_requested.connect(self._remove_picture)
+        self.pictures.again_requested.connect(lambda ref: self._ask("again", ref))
+        self.pictures.edit_requested.connect(lambda ref: self._ask("edit", ref))
 
         self.title.textChanged.connect(self._apply_edits)
         self.content.textChanged.connect(self._apply_edits)
@@ -107,6 +129,7 @@ class LorePanel(QWidget):
         form_host = QWidget()
         form = QFormLayout(form_host)
         form.setContentsMargins(0, 0, 0, 0)
+        form.addRow(self.picture)
         form.addRow("Title", self.title)
         form.addRow("Content", self.content)
         form.addRow("Keywords", self.keywords)
@@ -115,7 +138,7 @@ class LorePanel(QWidget):
         form.addRow(self.enabled)
         form.addRow(self.until_mentioned)
         # Full width, under its label, as on the Cast page.
-        form.addRow(QLabel("Pictures"))
+        form.addRow(QLabel("Other pictures"))
         form.addRow(self.pictures)
 
         self.empty_hint = QLabel("Add an entry, or select one to edit.")
@@ -173,6 +196,7 @@ class LorePanel(QWidget):
                 continue
             item = QListWidgetItem(self._label(entry))
             item.setData(Qt.UserRole, entry.id)
+            item.setIcon(self._icons.icon(entry.reference_images))
             self.list.addItem(item)
             if entry.id == selected:
                 self.list.setCurrentItem(item)
@@ -272,6 +296,44 @@ class LorePanel(QWidget):
         self._current = next((e for e in self._entries if e.id == entry_id), None)
         self._load_editor()
 
+    def _ask(self, what: str, ref_id: str = "", *, first: bool = False) -> None:
+        entry = self._current
+        if entry is None:
+            return
+        if first and entry.reference_images:
+            ref_id = entry.reference_images[0].id
+        self.picture_requested.emit(entry.id, ref_id, what)
+
+    def _remove_picture(self) -> None:
+        entry = self._current
+        if entry is None or not entry.reference_images:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Remove the picture?",
+            f"Take this picture off “{entry.title}”? Its next picture takes its place. "
+            "Pictures drawn for the story stay in Media.",
+        )
+        if answer == QMessageBox.Yes:
+            self.pictures.remove_first()
+
+    def _on_pictures_changed(self) -> None:
+        if self._current is not None:
+            self._show_picture()
+            self.changed.emit()
+
+    def _show_picture(self) -> None:
+        entry = self._current
+        first = entry.reference_images[0] if entry and entry.reference_images else None
+        store = self._pictures()
+        data = store.read(first.file) if first is not None and store is not None else None
+        caption = first.caption if first is not None else ""
+        self.picture.show_portrait(data, caption, entry.title if entry is not None else "")
+        self.picture.set_offered(entry is not None)
+        item = self.list.currentItem()
+        if item is not None and entry is not None:
+            item.setIcon(self._icons.icon(entry.reference_images))
+
     def _load_editor(self) -> None:
         entry = self._current
         enabled = entry is not None
@@ -279,6 +341,7 @@ class LorePanel(QWidget):
         self.remove_button.setEnabled(enabled)
         self.empty_hint.setVisible(not enabled)
         self.pictures.set_refs(entry.reference_images if entry is not None else None)
+        self._show_picture()
         if entry is None:
             return
 

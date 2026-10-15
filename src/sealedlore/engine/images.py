@@ -52,8 +52,12 @@ class ImageRequest:
     # scene, so it reaches neither images.json nor the API log. The approved
     # prompt is kept either way: it was sent to the image model regardless.
     direction_kept: bool = True
-    # A character's portrait: the character's id (engine/portraits.py).
-    portrait_of: str | None = None
+    # A picture for a card (engine/session_portraits.py): the character's or
+    # lore entry's id, whether it becomes the card's first picture (a
+    # portrait) or an extra one, and its caption there.
+    card_id: str | None = None
+    card_first: bool = False
+    card_caption: str = ""
 
 
 class MissingReference(ValueError):
@@ -147,7 +151,9 @@ def run_image_request(
                 cost_reported=reported,
                 request_log_ref=log_ref,
                 private_span=request.private_span,
-                portrait_of=request.portrait_of,
+                card_id=request.card_id,
+                card_first=request.card_first,
+                card_caption=request.card_caption,
             )
         )
     store.log(

@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.gui.start_presence import StartPresence
 from sealedlore.models.character import Character
+from sealedlore.models.lore import LoreEntry
 from sealedlore.models.story import Story
 
 
@@ -29,6 +30,11 @@ def opening_note(story: Story) -> str:
     return "The model writes the opening from the setup's notes. Regenerate gives another."
 
 
+def _count(n: int, one: str, many: str) -> str:
+    """ "3 characters", "1 lore entry"; "" for none."""
+    return f"{n} {one if n == 1 else many}" if n else ""
+
+
 class StartDialog(QDialog):
     def __init__(
         self,
@@ -36,10 +42,11 @@ class StartDialog(QDialog):
         cast: Sequence[Character],
         parent: QWidget | None = None,
         *,
-        without_portraits: Sequence[Character] = (),
+        without_pictures: tuple[Sequence[Character], Sequence[LoreEntry]] = ((), ()),
     ) -> None:
-        """`without_portraits`: characters the models may see who have no
-        picture yet; when there are any, a portrait of each is offered."""
+        """`without_pictures`: the characters and lore entries the models may
+        see that have no picture yet; when there are any, a picture of each
+        is offered (a plot file or premise often brings none)."""
         super().__init__(parent)
         self.setWindowTitle(f"Start — {story.title}")
         self.setMinimumWidth(460)
@@ -77,20 +84,26 @@ class StartDialog(QDialog):
             layout.addWidget(self.presence)
             self.play_as.currentIndexChanged.connect(self._lock_rows)
             self._lock_rows()
-        # A portrait of each character (the author, Oct 15 2026): ticked
-        # here, the Portraits dialog then shows every prompt before anything
-        # is drawn, and the opening runs while they are drawn.
-        self.portraits: QCheckBox | None = None
-        if without_portraits:
-            names = ", ".join(c.name for c in without_portraits)
-            self.portraits = QCheckBox(
-                f"Draw a portrait of each character who has none ({len(without_portraits)})"
+        # A picture of each card (the author, Oct 15 2026): ticked here, the
+        # pictures dialog then shows every prompt before anything is drawn,
+        # and the opening runs while they are drawn.
+        self.pictures: QCheckBox | None = None
+        people, lore = without_pictures
+        if people or lore:
+            counts = [
+                _count(len(people), "character", "characters"),
+                _count(len(lore), "lore entry", "lore entries"),
+            ]
+            counts = [count for count in counts if count]
+            self.pictures = QCheckBox(
+                f"Draw pictures for the cards that have none ({' and '.join(counts)})"
             )
-            self.portraits.setToolTip(
-                f"{names}: drawn from their cards by an image model. You see every prompt "
-                "and the price before anything is drawn."
+            names = [c.name for c in people] + [e.title for e in lore]
+            self.pictures.setToolTip(
+                f"{', '.join(names)}: drawn from their cards by an image model. You see "
+                "every prompt and the price before anything is drawn, and can untick any."
             )
-            layout.addWidget(self.portraits)
+            layout.addWidget(self.pictures)
         note = QLabel(opening_note(story))
         note.setObjectName("hintLabel")
         note.setWordWrap(True)
@@ -111,8 +124,8 @@ class StartDialog(QDialog):
         aside = [i for i in self._choose_one_of if i != held] if held in self._choose_one_of else []
         self.presence.set_locked(held, aside)
 
-    def portraits_wanted(self) -> bool:
-        return self.portraits is not None and self.portraits.isChecked()
+    def pictures_wanted(self) -> bool:
+        return self.pictures is not None and self.pictures.isChecked()
 
     def held_character_id(self) -> str | None:
         return self.play_as.currentData()

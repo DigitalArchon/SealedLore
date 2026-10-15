@@ -3067,28 +3067,56 @@ _text(
 _text(
     "portraits.system",
     PICTURES,
-    "Portraits: the writer's instructions",
-    "The system prompt of the call that writes a portrait prompt for each character, from "
-    "their cards and the setting, for the author to approve before anything is drawn.",
-    "You write prompts for an image model that draws a portrait of each character in a "
-    "story, so the author can see who is who. For each character below, write one prompt "
-    "of {words} words for a head-and-shoulders portrait in this style: {style}. Describe "
-    "what the picture shows, not who they are: apparent age, build, face, skin, hair, "
-    "eyes, expression, what they wear and carry, and a little of their world behind them, "
-    "out of focus. Every phrase must be something the camera can see: no names, roles, "
-    'history, dates or story facts (not "a bandit", not "four years after the end of the '
-    'world", but "frost on a stubbled jaw", "a snowbound road behind"). An image model '
-    "can only ignore such words or write them on the picture. Keep to their card; where it "
-    "says nothing of their looks, choose plain details that fit who they are and the "
-    "setting, and keep the characters distinct from one another. End each prompt with: "
-    "{no_writing}\n\n"
-    'Reply with JSON only: {"portraits": [{"name": "the character\'s name as given", '
-    '"prompt": "the prompt"}]}',
+    "Card pictures: the writer's instructions",
+    "The system prompt of the call that writes a prompt for each character's portrait and "
+    "each lore entry's picture, from their cards and the setting, for the author to approve "
+    "before anything is drawn. The parts for characters and lore follow it.",
+    "You write prompts for an image model that draws pictures for a story, so the author "
+    "can see its people, places and things. Every picture is in this style: {style}. Every "
+    "phrase must be something the camera can see: no names, roles, history, dates or story "
+    'facts (not "a bandit", not "four years after the end of the world", but "frost '
+    'on a stubbled jaw", "a snowbound road behind"). An image model can only ignore such '
+    "words or write them on the picture. End each prompt with: {no_writing}",
     (
-        ("words", "How long each prompt is"),
         ("style", "The story's picture style, or the portrait default"),
         ("no_writing", "Portraits: no writing"),
     ),
+)
+
+_text(
+    "portraits.characters",
+    PICTURES,
+    "Card pictures: the characters",
+    "Added to the writer's instructions when it is given characters.",
+    "For each character, write one prompt of {words} words for a head-and-shoulders "
+    "portrait: apparent age, build, face, skin, hair, eyes, expression, what they wear and "
+    "carry, and a little of their world behind them, out of focus. Keep to their card; "
+    "where it says nothing of their looks, choose plain details that fit who they are and "
+    "the setting, and keep the characters distinct from one another.",
+    (("words", "How long each prompt is"),),
+)
+
+_text(
+    "portraits.lore",
+    PICTURES,
+    "Card pictures: the lore",
+    "Added to the writer's instructions when it is given lore entries.",
+    "For each lore entry (a place, a thing, a group or a creature), write one prompt of "
+    "{words} words for a picture of it as someone there would see it: its shape, "
+    "materials, light, weather and what is around it, true to the entry and the setting. "
+    "If an entry has nothing that can be seen (a rule, a history, an idea), give it an "
+    "empty prompt.",
+    (("words", "How long each prompt is"),),
+)
+
+_text(
+    "portraits.reply",
+    PICTURES,
+    "Card pictures: the reply",
+    "Ends the writer's instructions: the JSON the program reads.",
+    'Reply with JSON only: {"portraits": [{"name": "a character\'s name as given", '
+    '"prompt": "the prompt"}], "lore": [{"title": "a lore entry\'s title as given", '
+    '"prompt": "the prompt, or empty"}]}. Leave out a list you were given nothing for.',
 )
 
 _text(
@@ -3110,15 +3138,68 @@ _text(
 _text(
     "portraits.fallback",
     PICTURES,
-    "Portraits: a prompt with no writer",
-    "A character's portrait prompt when the writer's reply left them out or failed: built "
-    "from their card, for the author to edit before anything is drawn.",
+    "Card pictures: a prompt with no writer",
+    "A card's picture prompt when the writer's reply left it out or failed: built from the "
+    "card, for the author to edit before anything is drawn.",
     "{style}. {looks} {no_writing}",
     (
         ("style", "The picture style"),
-        ("looks", "What the character's card says of them"),
+        ("looks", "What the card says of them or it"),
         ("no_writing", "Portraits: no writing"),
     ),
+)
+
+
+# Editing a card's picture (Edit… on a portrait or lore picture): the
+# author's change, then what to keep. On John's portrait, FLUX.2 klein 9B,
+# Qwen Image, FLUX.2 klein Base Edit, FLUX.2 Flash and Seedream 5.0 Flash
+# Edit made all three of a scar, twenty years older and a suit at dinner and
+# kept him; Z Image Base ignored the suit, Qwen 2.1 Edit and Nano Banana Edit
+# didn't age him (SealedLoreDocs design/images.md, Oct 15 2026).
+_text(
+    "pictures.edit",
+    PICTURES,
+    "Card pictures: an edit",
+    "The prompt for an edit of a card's picture, sent with the picture itself.",
+    "Edit this picture: {change} Keep {keep}; change nothing else. {no_writing}",
+    (
+        ("change", "What the author wants changed"),
+        ("keep", "Card pictures: what an edit keeps"),
+        ("no_writing", "Portraits: no writing"),
+    ),
+)
+
+_text(
+    "pictures.edit.person",
+    PICTURES,
+    "Card pictures: what an edit keeps (a character)",
+    "What an edit of a character's picture keeps.",
+    "the same person: the same face, features and build, and the pose, framing and light "
+    "unless the change says otherwise",
+)
+
+_text(
+    "pictures.edit.thing",
+    PICTURES,
+    "Card pictures: what an edit keeps (lore)",
+    "What an edit of a lore entry's picture keeps.",
+    "the same place or thing: its shape, layout and materials, and the framing and light "
+    "unless the change says otherwise",
+)
+
+# A character alone in the current scene (In the scene… on a card): the
+# story's own prompt writer, which has read the story, is given this as the
+# author's direction, with the character's pictures as references.
+_text(
+    "pictures.scene_of",
+    PICTURES,
+    "Card pictures: a character in the scene",
+    "The direction given to the picture prompt writer for a picture of one character as "
+    "they are at this moment of the story; the author can change it before it is written.",
+    "{name} alone, as they are at this moment in the story: where they are and the place "
+    "around them, what they wear and carry, what they are doing, the light and the weather. "
+    "Nobody else in the picture.",
+    (("name", "The character's name"),),
 )
 
 

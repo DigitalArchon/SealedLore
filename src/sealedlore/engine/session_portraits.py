@@ -1,16 +1,17 @@
-"""Portraits of the characters: the session's side. A mixin for
-`StorySession` (engine/portraits.py is the pure half).
+"""Pictures for the cards: the session's side. A mixin for `StorySession`
+(engine/portraits.py is the pure half).
 
-The author asks (when a story starts, or on the Cast page), the prompt
-writer writes a prompt for each character from their card, the author sees
-and may change every one, and each is then drawn as an ordinary approved
-picture (engine/images.py, on its own thread). A drawn portrait becomes its
-character's first picture, the one the Cast page shows large
-(`take_portraits`).
+The author asks (when a story starts, on the Cast and Lore pages, or under
+Story), the prompt writer writes a prompt for each card from what it says,
+the author sees and may change every one, and each is then drawn as an
+ordinary approved picture (engine/images.py, on its own thread). A drawn
+picture goes onto its card (`take_card_pictures`): a new portrait first, a
+picture drawn again, edited or of the character in the scene after the
+others, so the author can keep the one they like and remove the rest.
 
-Only characters the models may see are offered: a plot-hidden character's
-portrait would be the first a model heard of them. Never in a private scene
-or a simple chat (a chat has no cast).
+Only cards the models may see are offered: a plot-hidden character's
+portrait, or a lore entry still held back, would be the first a model heard
+of them. Never in a private scene or a simple chat (a chat has no cards).
 """
 
 from __future__ import annotations
@@ -20,15 +21,18 @@ from collections.abc import Sequence
 from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.portraits import (
     PORTRAIT_MAX_TOKENS,
+    Card,
     build_portrait_messages,
+    card_size,
+    edit_prompt,
     fallback_prompt,
     parse_portrait_prompts,
-    portrait_size,
     where_it_begins,
 )
 from sealedlore.ids import new_id
 from sealedlore.models.character import Character
-from sealedlore.models.image import ImageRef
+from sealedlore.models.image import ImageRef, RefUse
+from sealedlore.models.lore import LoreEntry
 from sealedlore.providers.base import ChatRequest
 from sealedlore.providers.images import ImageModelInfo
 from sealedlore.storage.images import REFS_DIR
@@ -38,31 +42,51 @@ PORTRAIT_CAPTION = "portrait"
 
 
 class PortraitRuntime:
-    def portrait_candidates(self) -> list[Character]:
-        """Everyone who may have a portrait now: the cast and supporting
-        characters the models may see."""
+    def picture_cards(self) -> tuple[list[Character], list[LoreEntry]]:
+        """Every card that may have a picture now: the characters and the
+        enabled lore entries the models may see."""
         if self.story.chat:
-            return []
-        return [*self.visible_cast(), *self.visible_supporting()]
+            return [], []
+        characters = [*self.visible_cast(), *self.visible_supporting()]
+        return characters, [e for e in self.visible_lore() if e.enabled]
 
-    def without_portraits(self) -> list[Character]:
+    def without_pictures(self) -> tuple[list[Character], list[LoreEntry]]:
         """Those of them with no picture at all."""
-        return [c for c in self.portrait_candidates() if not c.reference_images]
+        characters, lore = self.picture_cards()
+        return (
+            [c for c in characters if not c.reference_images],
+            [e for e in lore if not e.reference_images],
+        )
 
-    def write_portrait_prompts(
-        self, characters: Sequence[Character], *, model: str | None = None
+    def card(self, card_id: str) -> Card | None:
+        """A character or lore entry by id, any of them."""
+        for card in (*self.cast, *self.supporting, *self.bundle.lore):
+            if card.id == card_id:
+                return card
+        return None
+
+    def write_card_prompts(
+        self,
+        characters: Sequence[Character] = (),
+        lore: Sequence[LoreEntry] = (),
+        *,
+        model: str | None = None,
     ) -> tuple[dict[str, str], str | None]:
-        """A prompt for each character, by id, and what went wrong if the
-        writer didn't answer for all of them (their prompts are then built
-        from their cards). One call, on the prompt writer's model."""
-        self._refuse_in_private("Writing portrait prompts")
+        """A prompt for each card, by id ("" for a lore entry with nothing
+        to see), and what went wrong if the writer didn't answer for all of
+        them (their prompts are then built from their cards). One call, on
+        the prompt writer's model."""
+        self._refuse_in_private("Writing picture prompts")
         texts = self.texts
         story = self.story
-        allowed = {c.id for c in self.portrait_candidates()}
-        characters = [c for c in characters if c.id in allowed]
+        allowed_people, allowed_lore = self.picture_cards()
+        people_ids = {c.id for c in allowed_people}
+        lore_ids = {e.id for e in allowed_lore}
+        characters = [c for c in characters if c.id in people_ids]
+        lore = [e for e in lore if e.id in lore_ids]
         prompts: dict[str, str] = {}
         problem: str | None = None
-        if characters:
+        if characters or lore:
             model = model or self.image_prompt_model
             request = ChatRequest(
                 model=model,
@@ -73,6 +97,7 @@ class PortraitRuntime:
                     title=story.title,
                     image_style=story.image_style,
                     begins=where_it_begins(story),
+                    lore=lore,
                     texts=texts,
                 ),
                 params=self.side_params(model, max_tokens=PORTRAIT_MAX_TOKENS, temperature=0.7),
@@ -93,69 +118,104 @@ class PortraitRuntime:
                 self.unreported_usage.append(self.priced(completed.usage, model))
             if text:
                 try:
-                    prompts = parse_portrait_prompts(text, characters)
+                    prompts = parse_portrait_prompts(text, characters, lore)
                 except ValueError as exc:
                     problem = f"The prompt writer's reply couldn't be read ({exc})"
-        missing = [c for c in characters if c.id not in prompts]
+        missing = [c for c in (*characters, *lore) if c.id not in prompts]
         if missing and problem is None:
-            problem = "The prompt writer left out " + ", ".join(c.name for c in missing)
-        for character in missing:
-            prompts[character.id] = fallback_prompt(
-                character, image_style=story.image_style, texts=texts
-            )
+            names = [c.name if isinstance(c, Character) else c.title for c in missing]
+            problem = "The prompt writer left out " + ", ".join(names)
+        for card in missing:
+            prompts[card.id] = fallback_prompt(card, image_style=story.image_style, texts=texts)
         if problem:
             problem += ": their prompts are built from their cards."
         return prompts, problem
 
-    def portrait_request(
+    def card_request(
         self,
-        character: Character,
+        card: Card,
         prompt: str,
         *,
         model: str,
         info: ImageModelInfo | None,
+        first: bool,
+        caption: str = "",
+        source: ImageRef | None = None,
     ) -> ImageRequest:
-        """The request for one portrait, its prompt exactly as approved."""
-        size = portrait_size(info)
+        """The request for one picture of a card, its prompt exactly as
+        approved. `first`: it becomes the card's first picture (a new
+        portrait); else it goes after the others. `source`: the picture
+        an edit is of, sent with the prompt."""
+        size = card_size(card, info)
+        references: tuple[RefUse, ...] = ()
+        if source is not None:
+            person = isinstance(card, Character)
+            references = (
+                RefUse(
+                    owner_kind="character" if person else "lore",
+                    owner_id=card.id,
+                    owner_name=card.name if person else card.title,
+                    ref_id=source.id,
+                    file=source.file,
+                    caption=source.caption,
+                ),
+            )
         return ImageRequest(
             story_id=self.story.id,
             model=model,
             prompt=prompt,
             size=size,
             n=1,
-            references=(),
+            references=references,
             anchor_node_id=None,
             listed_price=info.price(size) if info is not None else None,
-            portrait_of=character.id,
+            card_id=card.id,
+            card_first=first,
+            card_caption=caption or (PORTRAIT_CAPTION if first else ""),
         )
 
-    def take_portraits(self) -> list[str]:
-        """Make each portrait drawn for this story and not yet taken its
-        character's first picture; the names of those that changed. Each is
-        taken once (`Story.portraits_taken`): one the author later removes
-        from the card stays removed. A character gone since is skipped."""
+    def card_edit_prompt(self, card: Card, change: str) -> str:
+        """The prompt for an edit of a card's picture."""
+        return edit_prompt(change, person=isinstance(card, Character), texts=self.texts)
+
+    def scene_direction(self, character: Character) -> str:
+        """The direction for a picture of one character as they are now."""
+        return self.texts.fill("pictures.scene_of", name=character.name)
+
+    def take_card_pictures(self) -> list[str]:
+        """Put each picture drawn for this story's cards and not yet taken
+        onto its card; the names of the cards that changed. Each is taken
+        once (`Story.card_pictures_taken`): one the author later removes
+        stays removed. A card gone since is skipped."""
         if self.story.chat:
             return []
-        taken = set(self.story.portraits_taken)
-        people = {c.id: c for c in [*self.cast, *self.supporting]}
+        taken = set(self.story.card_pictures_taken)
         names: list[str] = []
         changed = False
         for image in self.generated_images():
-            if image.portrait_of is None or image.id in taken:
+            if image.card_id is None or image.id in taken:
                 continue
-            character = people.get(image.portrait_of)
+            card = self.card(image.card_id)
             data = self.pictures.read(image.file)
-            if character is not None and data is not None:
+            if card is not None and data is not None:
                 ref_id = new_id()
                 suffix = image.file[image.file.rfind(".") :] if "." in image.file else ".png"
                 relative = f"{REFS_DIR}/{ref_id}{suffix}"
                 # A copy: deleting the picture from Media leaves the card's.
                 self.pictures.write(relative, data)
-                character.reference_images.insert(
-                    0, ImageRef(id=ref_id, file=relative, caption=PORTRAIT_CAPTION)
+                ref = ImageRef(
+                    id=ref_id,
+                    file=relative,
+                    caption=image.card_caption,
+                    prompt=image.prompt,
+                    model=image.model,
                 )
-                names.append(character.name)
-            self.story.portraits_taken.append(image.id)
+                if image.card_first:
+                    card.reference_images.insert(0, ref)
+                else:
+                    card.reference_images.append(ref)
+                names.append(card.name if isinstance(card, Character) else card.title)
+            self.story.card_pictures_taken.append(image.id)
             taken.add(image.id)
             changed = True
         if changed:

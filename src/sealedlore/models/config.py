@@ -99,6 +99,29 @@ RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
             "pictures, at about $0.027 a portrait: nearly three times the default.",
         ),
     ),
+    # Editing a card's picture (Edit…): given John's portrait and a scar,
+    # twenty years older and a suit at dinner. Picked in the Edit dialog;
+    # the card's own model is used when it can take the picture.
+    "picture_edit": (
+        RecommendedModel(
+            id="flux-2-klein-9b",
+            label="FLUX.2 klein 9B",
+            tag="default",
+            note="Made all three edits tried (a scar, twenty years older, a suit at dinner) "
+            "and kept the face, about $0.016 with the picture.",
+        ),
+        RecommendedModel(
+            id="qwen-image",
+            label="Qwen Image",
+            note="Made all three and kept the face, about $0.03 (free within a NanoGPT "
+            "subscription's daily allowance); the suit came out as a wider shot.",
+        ),
+        RecommendedModel(
+            id="bytedance/seedream-v5.0-flash/edit",
+            label="Seedream 5.0 Flash Edit",
+            note="Made all three, the subtlest scar and the most finished suit, about $0.027.",
+        ),
+    ),
     "map_isometric_model": (
         # With the clearer prompt it showed the change 6/6 and kept the layout.
         RecommendedModel(

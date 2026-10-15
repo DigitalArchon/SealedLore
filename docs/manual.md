@@ -797,9 +797,11 @@ named characters who aren't on file yet:
 A selected character's **portrait** is shown large at the top of their sheet,
 with their other pictures small under the sheet. The portrait is simply their
 first picture: **Make portrait** under the others puts another first, **Choose
-a file…** takes one from your computer, and **Draw a portrait…** has an image
-model draw one (see Pictures → Portraits). Click the portrait to see it whole.
-Each name in the list has its portrait beside it, small.
+a file…** takes one from your computer, and **Draw a portrait…**, **Draw
+again…**, **Edit…** and **In the scene…** have an image model draw one (see
+Pictures → Pictures for the cards). Click the portrait to see it whole. Each
+name in the list has its portrait beside it, small. A lore entry's first
+picture is shown the same way on the Lore page.
 
 Two checkboxes on a cast sheet decide who writes that character:
 
@@ -1173,19 +1175,43 @@ any OpenAI-compatible `/images/generations`; worked out from the address
 unless you choose). Left blank, the address is the chat endpoint's, and its
 key is used only when the address is the chat endpoint's own host.
 
-### Portraits
+### Pictures for the cards
 
-**Story → Draw portraits…**, **Draw a portrait…** on a cast sheet, or the box
-in the Start dialog (shown when some of the characters have no picture yet)
-gives each character a portrait drawn from their card. The prompt writer
-(Settings → Models → Image prompt writer, blank for the story model) writes a
-prompt for each, describing only what a camera would see, never a name; the
-**Portraits** dialog shows every one. Change any you like, untick anyone you
-don't want drawn, choose the model and see the price, then **Draw**. Nothing
-is drawn before that. From the Start dialog, the opening runs while the
-portraits are drawn. Each portrait becomes the character's first picture and
-is kept in Media with its prompt and cost. Characters the plot hasn't brought
-in yet are never offered: their portrait would tell a model about them early.
+**Story → Draw pictures for the cards…**, **Draw a portrait…** on a cast
+sheet, **Draw a picture…** on a lore entry, or the box in the Start dialog
+gives each character a portrait and each lore entry a picture, drawn from
+what their cards say. The Start dialog counts the characters and lore entries
+with no picture yet (a plot file or a premise often brings none) and offers
+them all at once; the opening then runs while they are drawn. The prompt
+writer (Settings → Models → Image prompt writer, blank for the story model)
+writes a prompt for each, describing only what a camera would see, never a
+name. A lore entry with nothing to see (a rule, a history) is left unticked.
+The dialog shows every prompt: change any you like, untick anything you don't
+want drawn, choose the model and see the price, then **Draw**. Nothing is
+drawn before that. Each picture goes first among its card's pictures, shown
+large on the Cast or Lore page, and is kept in Media with its prompt and cost.
+Characters the plot hasn't brought in yet, and lore held back until you
+mention it, are never offered: their picture would tell a model about them
+early.
+
+Under a card's large picture, and for any of its other pictures:
+
+- **Draw again…** draws it again from its own prompt (or a prompt written
+  from the card, for a picture added from a file), by the same model or
+  another.
+- **Edit…** makes a changed copy: say what to change (a scar, other clothes,
+  another background, years older) and the picture is sent with that. It
+  needs a model that can be given a picture; the card's own model is used
+  when it can, otherwise FLUX.2 klein 9B, and **Recommended** lists the
+  models that edited well.
+- **In the scene…** (a character) pictures them alone as they are at this
+  moment of the story: where they are, what they wear and are doing. The
+  story's own prompt writer, which has read the story, writes it, with their
+  pictures as references, in the usual picture dialog.
+
+A new picture is added to the card's pictures; the original stays. **Make
+portrait** (**Show first** on a lore entry) puts the one you like first, and
+**Remove** takes off the one you don't.
 
 The portrait model is Settings → Images → **Portrait model**; **Recommended**
 beside it lists the models measured for portraits, with what each is good at:

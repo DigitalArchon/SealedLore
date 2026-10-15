@@ -14,6 +14,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
+from PySide6.QtCore import QObject, Signal  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from sealedlore.engine.session import StorySession  # noqa: E402
@@ -24,6 +25,7 @@ from sealedlore.gui.start_dialog import StartDialog  # noqa: E402
 from sealedlore.models.character import Character  # noqa: E402
 from sealedlore.models.config import Config  # noqa: E402
 from sealedlore.models.image import ImageRef  # noqa: E402
+from sealedlore.models.lore import LoreEntry  # noqa: E402
 from sealedlore.providers.mock import MockChatProvider  # noqa: E402
 from sealedlore.storage.picture_store import MemoryPictures  # noqa: E402
 from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
@@ -94,7 +96,7 @@ def test_the_dialog_shows_every_prompt_and_draws_them_as_they_stand(
     dialog.rows[1].tick.setChecked(False)
     requests = dialog.requests()
     assert [r.prompt for r in requests][0] == "  My own words.\n"
-    assert all(r.portrait_of for r in requests) and len(requests) == len(cast) - 1
+    assert all(r.card_id and r.card_first for r in requests) and len(requests) == len(cast) - 1
     assert dialog.draw_button.text() == f"Draw {len(cast) - 1}"
     dialog.reject()
 
@@ -124,18 +126,175 @@ def test_the_cast_page_shows_the_portrait_large_and_the_others_small(app):
     assert [r.id for r in jane.reference_images] == ["b", "a"]
     assert panel.portrait.caption.text() == "in her coat"
     # Someone with none: a place for one, and the ways to get one.
-    asked: list[str] = []
-    panel.portrait_requested.connect(asked.append)
+    asked: list[tuple] = []
+    panel.picture_requested.connect(lambda *args: asked.append(args))
+    panel.portrait.edit_button.click()  # on Jane's portrait, now "b"
+    panel.pictures.list.setCurrentRow(0)
+    panel.pictures.again_button.click()  # on her other picture, "a"
+    panel.portrait.scene_button.click()
+    assert asked == [(jane.id, "b", "edit"), (jane.id, "a", "again"), (jane.id, "", "scene")]
+    asked.clear()
     panel.select_character(john.id)
     assert panel.portrait.picture.isHidden() and not panel.portrait.empty.isHidden()
+    assert panel.portrait.edit_button.isHidden()  # nothing to edit yet
     panel.portrait.draw_button.click()
-    assert asked == [john.id]
+    assert asked == [(john.id, "", "new")]
 
 
-def test_start_offers_portraits_only_for_those_without(app, story, cast):
+def test_start_counts_the_cards_without_pictures(app, story, cast):
     plain = StartDialog(story, cast)
-    assert plain.portraits is None and not plain.portraits_wanted()
-    offered = StartDialog(story, cast, without_portraits=cast[:1])
-    assert offered.portraits is not None and "(1)" in offered.portraits.text()
-    offered.portraits.setChecked(True)
-    assert offered.portraits_wanted()
+    assert plain.pictures is None and not plain.pictures_wanted()
+    town = LoreEntry(title="Hellsville", content="A walled town.")
+    caves = LoreEntry(title="The caves", content="Caves.")
+    offered = StartDialog(story, cast, without_pictures=(cast[:1], [town, caves]))
+    assert "(1 character and 2 lore entries)" in offered.pictures.text()
+    assert "Hellsville" in offered.pictures.toolTip()
+    offered.pictures.setChecked(True)
+    assert offered.pictures_wanted()
+    lore_only = StartDialog(story, cast, without_pictures=([], [town]))
+    assert "(1 lore entry)" in lore_only.pictures.text()
+
+
+class _Catalog(QObject):
+    """Stands in for the window's ImageCatalog: a listing, no fetching."""
+
+    changed = Signal()
+
+    def __init__(self, models):
+        super().__init__()
+        self.models = models
+
+    def ensure(self, *, force: bool = False) -> None:
+        pass
+
+
+def _session(tmp_path: Path, story, cast, replies=("x",)) -> StorySession:
+    bundle = StoryBundle(story=story, cast=cast)
+    save_story_bundle(bundle, root=tmp_path)
+    return StorySession(
+        bundle,
+        Config(),
+        MockChatProvider(list(replies)),
+        root=tmp_path,
+        estimator=TokenEstimator(counter=fallback_counter),
+        learn_corrections=False,
+    )
+
+
+def test_an_edit_says_what_changes_and_needs_a_model_that_takes_a_picture(
+    app, tmp_path: Path, story, cast
+):
+    from sealedlore.gui.picture_variant import PictureVariantDialog
+    from sealedlore.providers.images import ImageModelInfo
+
+    session = _session(tmp_path, story, cast)
+    session.pictures.write("images/refs/p.png", PNG)
+    portrait = ImageRef(
+        id="p", file="images/refs/p.png", caption="portrait", prompt="A man.", model="words-only"
+    )
+    hero = cast[0]
+    hero.reference_images = [portrait]
+    catalog = _Catalog(
+        [
+            ImageModelInfo(id="words-only", name="W", resolutions=("1024x1024",)),
+            ImageModelInfo(
+                id="flux-2-klein-9b",
+                name="F",
+                resolutions=("1024*1024",),
+                max_inputs=4,
+                per_image={"*": 0.016},
+            ),
+        ]
+    )
+    dialog = PictureVariantDialog(session, hero, portrait, edit=True, catalog=catalog, browse=None)
+    # Its own model can't be given the picture: the default edit model instead.
+    assert dialog.model.text() == "flux-2-klein-9b"
+    assert not dialog.draw_button.isEnabled()  # nothing said to change yet
+    dialog.change.setText("twenty years older")
+    assert dialog.prompt.toPlainText().startswith("Edit this picture: twenty years older.")
+    assert dialog.draw_button.isEnabled()
+    request = dialog.request()
+    assert request.references[0].ref_id == "p" and request.card_caption == "twenty years older"
+    assert not request.card_first
+    dialog.model.setText("words-only")
+    assert not dialog.draw_button.isEnabled() and "can't be given a picture" in dialog.note.text()
+    dialog.reject()
+    # Drawing again: the picture's own prompt and model, nothing sent with it.
+    again = PictureVariantDialog(session, hero, portrait, edit=False, catalog=catalog, browse=None)
+    assert again.prompt.toPlainText() == "A man." and again.model.text() == "words-only"
+    request = again.request()
+    assert request.references == () and request.card_caption == "drawn again"
+    again.reject()
+
+
+def test_the_lore_page_shows_an_entry_s_picture_large_with_the_same_actions(app):
+    from sealedlore.gui.lore_panel import LorePanel
+
+    store = MemoryPictures(lambda _kind, _body: "")
+    store.write("images/refs/t.png", PNG)
+    town = LoreEntry(
+        title="Hellsville",
+        content="A walled town.",
+        reference_images=[ImageRef(id="t", file="images/refs/t.png", caption="from the road")],
+    )
+    bare = LoreEntry(title="The caves", content="Caves.")
+    panel = LorePanel(lambda: store)
+    panel.set_entries([town, bare])
+    panel.list.setCurrentRow(0)
+    assert not panel.picture.picture.isHidden()
+    assert panel.picture.scene_button.isHidden()  # a character's alone
+    asked: list[tuple] = []
+    panel.picture_requested.connect(lambda *args: asked.append(args))
+    panel.picture.edit_button.click()
+    panel.list.setCurrentRow(1)
+    assert panel.picture.picture.isHidden()
+    panel.picture.draw_button.click()
+    assert asked == [(town.id, "t", "edit"), (bare.id, "", "new")]
+
+
+def test_the_cards_dialog_writes_for_lore_too_and_leaves_out_what_has_nothing_to_see(
+    app, tmp_path: Path, story, cast
+):
+    town = LoreEntry(title="Hellsville", content="A walled town.")
+    bite = LoreEntry(title="The bite", content="A bite turns you.")
+    written = json.dumps(
+        {
+            "lore": [
+                {"title": "Hellsville", "prompt": "A walled town in snow."},
+                {"title": "The bite", "prompt": ""},
+            ]
+        }
+    )
+    session = _session(tmp_path, story, cast, [written])
+    session.bundle.lore.extend([town, bite])
+    dialog = PortraitsDialog(session, [], lore=[town, bite], catalog=None, browse=None)
+    wait_for(app, lambda: not dialog.writing())
+    app.processEvents()
+    town_row, bite_row = dialog.rows
+    assert town_row.prompt.toPlainText() == "A walled town in snow."
+    assert not bite_row.tick.isChecked() and not bite_row.wanted()
+    requests = dialog.requests()
+    assert [r.card_id for r in requests] == [town.id] and requests[0].card_first
+    dialog.reject()
+
+
+def test_in_the_scene_asks_for_them_alone_with_their_pictures_and_lands_on_the_card(
+    app, tmp_path: Path, story, cast
+):
+    from sealedlore.gui.image_dialog import SCENE_CAPTION, ImageDialog
+
+    session = _session(tmp_path, story, cast)
+    session.pictures.write("images/refs/p.png", PNG)
+    hero = cast[0]
+    hero.reference_images = [ImageRef(id="p", file="images/refs/p.png", caption="portrait")]
+    dialog = ImageDialog(session, card=hero)
+    assert dialog.direction.toPlainText().startswith(f"{hero.name} alone")
+    assert [use.ref_id for use in dialog._refs] == ["p"]
+    dialog.model.setText("some-model")
+    dialog.size_choice.setEditText("1024x1024")
+    dialog.prompt.setPlainText("A man by a fire.")
+    dialog._approve()
+    request = dialog.request
+    assert request.card_id == hero.id and not request.card_first
+    assert request.card_caption == SCENE_CAPTION
+    assert [use.ref_id for use in request.references] == ["p"]

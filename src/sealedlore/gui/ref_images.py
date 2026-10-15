@@ -238,6 +238,9 @@ class RefImageStrip(QWidget):
     """Thumbnails of one owner's reference pictures, with add, caption and remove."""
 
     changed = Signal()
+    # (picture id) Draw again… and Edit… on the chosen picture (after_portrait).
+    again_requested = Signal(str)
+    edit_requested = Signal(str)
 
     def __init__(
         self, pictures: StoryPictures, owner_word: str = "them", *, after_portrait: bool = False
@@ -277,10 +280,21 @@ class RefImageStrip(QWidget):
         self.caption_button.clicked.connect(lambda: self._edit_caption(self.list.currentItem()))
         self.remove_button = QPushButton("Remove")
         self.remove_button.clicked.connect(self._remove)
-        self.portrait_button = QPushButton("Make portrait")
-        self.portrait_button.setToolTip("Show this one large, as their portrait")
+        person = owner_word == "them"
+        self.portrait_button = QPushButton("Make portrait" if person else "Show first")
+        self.portrait_button.setToolTip(
+            "Show this one large, as their portrait" if person else "Show this one large, first"
+        )
         self.portrait_button.clicked.connect(self._make_portrait)
         self.portrait_button.setVisible(after_portrait)
+        self.again_button = QPushButton("Draw again…")
+        self.again_button.setToolTip("This picture drawn again; the new one is added")
+        self.again_button.clicked.connect(lambda: self._ask(self.again_requested))
+        self.edit_button = QPushButton("Edit…")
+        self.edit_button.setToolTip("A changed copy of this picture; it is added")
+        self.edit_button.clicked.connect(lambda: self._ask(self.edit_requested))
+        for button in (self.again_button, self.edit_button):
+            button.setVisible(after_portrait)
         self.hint = QLabel(
             "No other pictures. Add more to keep their look in generated images."
             if after_portrait
@@ -297,6 +311,8 @@ class RefImageStrip(QWidget):
             self.caption_button,
             self.remove_button,
             self.portrait_button,
+            self.again_button,
+            self.edit_button,
         ):
             buttons.add_group([button])
 
@@ -331,6 +347,8 @@ class RefImageStrip(QWidget):
         self.caption_button.setEnabled(selected)
         self.remove_button.setEnabled(selected)
         self.portrait_button.setEnabled(selected)
+        self.again_button.setEnabled(selected)
+        self.edit_button.setEnabled(selected)
 
     def _ref(self, item: QListWidgetItem | None) -> ImageRef | None:
         if item is None or self._refs is None:
@@ -370,6 +388,19 @@ class RefImageStrip(QWidget):
             self.set_refs(self._refs)
             self.changed.emit()
 
+    def _ask(self, signal) -> None:
+        ref = self._ref(self.list.currentItem())
+        if ref is not None:
+            signal.emit(ref.id)
+
+    def remove_first(self) -> None:
+        """Take the first picture (the portrait, shown large) off; its file
+        stays, as Remove leaves a picture's."""
+        if self._refs:
+            self._refs.pop(0)
+            self.set_refs(self._refs)
+            self.changed.emit()
+
     def _make_portrait(self) -> None:
         ref = self._ref(self.list.currentItem())
         if ref is None or self._refs is None:
@@ -406,3 +437,36 @@ class RefImageStrip(QWidget):
         self._refs.remove(ref)
         self.set_refs(self._refs)
         self.changed.emit()
+
+
+class CardIcons:
+    """Cards' first pictures, small, for a list of names (the Cast and Lore
+    pages): read once per picture and kept until another story's pictures
+    are shown. A card with none gets a blank square, so the names line up."""
+
+    def __init__(self, pictures: StoryPictures, side: int) -> None:
+        self._pictures = pictures
+        self._side = side
+        self._icons: dict[str, QIcon] = {}
+        self._store: object = None
+
+    def icon(self, refs: list[ImageRef]) -> QIcon:
+        store = self._pictures()
+        if store is not self._store:  # another story's pictures
+            self._icons.clear()
+            self._store = store
+        first = refs[0] if refs else None
+        key = first.file if first is not None else ""
+        icon = self._icons.get(key)
+        if icon is None:
+            pixmap = (
+                thumbnail_of(store.read(first.file), self._side)
+                if first is not None and store is not None
+                else QPixmap()
+            )
+            if pixmap.isNull():
+                pixmap = QPixmap(self._side, self._side)
+                pixmap.fill(Qt.transparent)
+            icon = QIcon(pixmap)
+            self._icons[key] = icon
+        return icon

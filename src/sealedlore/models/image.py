@@ -30,6 +30,10 @@ class ImageRef(BaseModel):
     # What the picture shows ("front view", "in flight suit"), for the prompt
     # writer and the author.
     caption: str = ""
+    # How it was drawn, when it was (Draw again… offers the same prompt and
+    # model); blank for a picture added from a file.
+    prompt: str = ""
+    model: str = ""
 
 
 class RefUse(BaseModel):
@@ -61,6 +65,9 @@ class GeneratedImage(BaseModel):
     # Made in a private scene: its direction came from the scene, so it is
     # never offered to another model's prompt writer afterwards.
     private_span: str | None = None
-    # A portrait of this character (engine/portraits.py): once drawn it
-    # becomes their first picture (`Story.portraits_taken`).
-    portrait_of: str | None = None
+    # Drawn for a card (engine/session_portraits.py): once drawn it is put on
+    # that character or lore entry, first or after the others, with its
+    # caption (`Story.card_pictures_taken`).
+    card_id: str | None = None
+    card_first: bool = False
+    card_caption: str = ""

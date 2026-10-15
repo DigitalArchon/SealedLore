@@ -55,6 +55,7 @@ from sealedlore.gui.ref_images import (
     thumbnail_of,
 )
 from sealedlore.gui.worker import GenerationWorker
+from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, RefUse
 from sealedlore.providers.images import ImageModelInfo, parse_image_models
 from sealedlore.storage.picture_store import file_name
@@ -64,6 +65,10 @@ DIRECTION_HINT = (
     "“The current scene, with the focus on my character in combat.”\n"
     "“Ignore the background chatter: a portrait of her reaction to what I just said.”"
 )
+
+
+# The caption a picture of a character in the scene is given on their card.
+SCENE_CAPTION = "in the scene"
 
 
 class ImageDialog(QDialog):
@@ -76,9 +81,14 @@ class ImageDialog(QDialog):
         catalog: ImageCatalog | None = None,
         browse: Callable[[str], str | None] | None = None,
         parent: QWidget | None = None,
+        card: Character | None = None,
     ) -> None:
+        """`card`: a picture of this character alone, as they are now in the
+        story (In the scene… on their card): the direction says so, their
+        pictures go as references, and the picture is added to their card."""
         super().__init__(parent)
-        self.setWindowTitle("Generate image")
+        self.card = card
+        self.setWindowTitle(f"{card.name} in the scene" if card is not None else "Generate image")
         self._browse = browse
         self.setMinimumWidth(720)
         self.session = session
@@ -104,6 +114,8 @@ class ImageDialog(QDialog):
         )
 
         self._build()
+        if card is not None:
+            self._for_card(card)
         if prefill is not None:
             self._prefill(prefill)
         self._fill_models(prefill.model if prefill is not None else session.config.image_model)
@@ -291,6 +303,16 @@ class ImageDialog(QDialog):
         layout.addLayout(form)
         layout.addWidget(self.warning)
         layout.addWidget(self.buttons)
+
+    def _for_card(self, card: Character) -> None:
+        """In the scene…: the direction, and the character's own pictures as
+        the references (their portrait first), kept whatever the writer
+        lists."""
+        self.direction.setPlainText(self.session.scene_direction(card))
+        uses = [c.use for c in self._choices if c.use.owner_id == card.id]
+        self._set_refs(uses[: max(1, self._max_refs())])
+        self._refs_edited = True
+        self._written_with = [use.ref_id for use in self._refs]
 
     def _prefill(self, image: GeneratedImage) -> None:
         open_span = self.session.open_span
@@ -643,6 +665,8 @@ class ImageDialog(QDialog):
             direction_kept=not (
                 self.session.in_private and self.session.open_span.keep == "memory"
             ),
+            card_id=self.card.id if self.card is not None else None,
+            card_caption=SCENE_CAPTION if self.card is not None else "",
         )
         self.accept()
 

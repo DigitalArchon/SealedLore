@@ -14,7 +14,7 @@ The model suggests them; nothing joins either tier without the author's say.
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QFont, QIcon, QPixmap
+from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QSplitter,
@@ -39,7 +40,7 @@ from sealedlore.engine.dice import TIER_ORDER
 from sealedlore.gui import theme
 from sealedlore.gui.fields import FormScroll, set_field_text
 from sealedlore.gui.portrait_view import PortraitView
-from sealedlore.gui.ref_images import RefImageStrip, StoryPictures, thumbnail_of
+from sealedlore.gui.ref_images import CardIcons, RefImageStrip, StoryPictures
 from sealedlore.models.character import Character
 from sealedlore.models.supporting import CharacterSuggestion
 
@@ -61,8 +62,9 @@ class CastPanel(QWidget):
     dismiss_requested = Signal(str)
     scan_requested = Signal()
     infer_requested = Signal(str)
-    # A portrait of this character drawn by an image model (character id).
-    portrait_requested = Signal(str)
+    # (character id, picture id or "", what): a picture drawn for the card:
+    # "new" (a portrait), "again" or "edit" (of that picture), "scene".
+    picture_requested = Signal(str, str, str)
 
     def __init__(self, pictures: StoryPictures | None = None) -> None:
         super().__init__()
@@ -79,8 +81,7 @@ class CastPanel(QWidget):
         # Each name beside its portrait, small.
         self.list.setIconSize(QSize(LIST_ICON, LIST_ICON))
         self.list.setMinimumHeight(LIST_ICON * 3)
-        self._icons: dict[str, QIcon] = {}
-        self._icons_store: object = None
+        self._icons = CardIcons(self._pictures, LIST_ICON)
         self.list.setSelectionMode(QAbstractItemView.SingleSelection)
         self.list.currentItemChanged.connect(self._on_selection_changed)
 
@@ -188,11 +189,15 @@ class CastPanel(QWidget):
         # The portrait large, at the top of the card; the other pictures
         # small under the sheet (the author, Oct 15 2026).
         self.portrait = PortraitView()
-        self.portrait.draw_requested.connect(
-            lambda: self._current and self.portrait_requested.emit(self._current.id)
-        )
         self.pictures = RefImageStrip(self._pictures, "them", after_portrait=True)
+        self.portrait.draw_requested.connect(lambda: self._ask("new"))
+        self.portrait.again_requested.connect(lambda: self._ask("again", first=True))
+        self.portrait.edit_requested.connect(lambda: self._ask("edit", first=True))
+        self.portrait.scene_requested.connect(lambda: self._ask("scene"))
         self.portrait.add_requested.connect(self.pictures.add_portrait)
+        self.portrait.remove_requested.connect(self._remove_portrait)
+        self.pictures.again_requested.connect(lambda ref: self._ask("again", ref))
+        self.pictures.edit_requested.connect(lambda ref: self._ask("edit", ref))
         self.pictures.changed.connect(self._on_pictures_changed)
         self.origin_note = QLabel("Card drafted by the model from the story. Check it.")
         self.origin_note.setObjectName("hintLabel")
@@ -309,10 +314,6 @@ class CastPanel(QWidget):
         """`hidden`: ids the plot hasn't brought in yet, left off the list unless
         the author has chosen to see the plot (they're still edited in place)."""
         self._cast = cast
-        store = self._pictures()
-        if store is not self._icons_store:  # another story's pictures
-            self._icons.clear()
-            self._icons_store = store
         if hidden is not None:
             self._hidden = hidden
         if supporting is not None:
@@ -349,23 +350,28 @@ class CastPanel(QWidget):
             self._on_selection_changed(self.list.currentItem(), None)
 
     def _icon(self, character: Character) -> QIcon:
-        """The character's portrait, small, for the list; a blank square of
-        the same size when there is none, so the names line up."""
-        first = character.reference_images[0] if character.reference_images else None
-        key = first.file if first is not None else ""
-        icon = self._icons.get(key)
-        if icon is None:
-            store = self._pictures()
-            if first is not None and store is not None:
-                pixmap = thumbnail_of(store.read(first.file), LIST_ICON)
-            else:
-                pixmap = QPixmap()
-            if pixmap.isNull():
-                pixmap = QPixmap(LIST_ICON, LIST_ICON)
-                pixmap.fill(Qt.transparent)
-            icon = QIcon(pixmap)
-            self._icons[key] = icon
-        return icon
+        return self._icons.icon(character.reference_images)
+
+    def _ask(self, what: str, ref_id: str = "", *, first: bool = False) -> None:
+        character = self._current
+        if character is None:
+            return
+        if first and character.reference_images:
+            ref_id = character.reference_images[0].id
+        self.picture_requested.emit(character.id, ref_id, what)
+
+    def _remove_portrait(self) -> None:
+        character = self._current
+        if character is None or not character.reference_images:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Remove the portrait?",
+            f"Take this portrait off {character.name}'s card? Their next picture becomes "
+            "the portrait. Pictures drawn for the story stay in Media.",
+        )
+        if answer == QMessageBox.Yes:
+            self.pictures.remove_first()
 
     def _show_portrait(self) -> None:
         character = self._current
