@@ -14,18 +14,19 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtGui import QAction, QKeySequence
-from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
+from PySide6.QtWidgets import QDialog, QFileDialog, QInputDialog, QMessageBox, QVBoxLayout
 
-from sealedlore.gui.image_dialog import ImageDialog, ImageViewer, save_picture_as
+from sealedlore.gui.image_dialog import FitPicture, ImageDialog, ImageViewer, save_picture_as
 from sealedlore.gui.image_jobs import ImageCatalog, ImageJobs
 from sealedlore.gui.image_picker import pick_image_model
 from sealedlore.gui.images_panel import ImagesPanel
 from sealedlore.gui.picture_variant import PictureVariantDialog
 from sealedlore.gui.portraits_dialog import PortraitsDialog
-from sealedlore.gui.ref_images import PICTURE_FILTER, picture_bytes, picture_bytes_of
+from sealedlore.gui.ref_images import PICTURE_FILTER, picture_bytes, picture_bytes_of, pixmap_of
 from sealedlore.gui.transcript import PendingPicture
 from sealedlore.gui.winprivacy import exclude_from_capture
 from sealedlore.ids import new_id
+from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, ImageRef
 from sealedlore.models.node import Usage
 from sealedlore.storage.image_meta import picture_kind
@@ -49,6 +50,7 @@ class ImagesWindow:
         self.images_panel.action_requested.connect(self._image_action)
         self.images_panel.generate_requested.connect(lambda: self.generate_image())
         self.images_panel.save_all_requested.connect(self.save_all_pictures)
+        self.images_panel.card_action_requested.connect(self._card_picture_action)
         self.transcript.illustrate_requested.connect(
             lambda node_id: self.generate_image(anchor_id=node_id)
         )
@@ -140,9 +142,18 @@ class ImagesWindow:
         if self.session is None:
             self.images_panel.set_images([], None, set())
             return
-        on_path = {node.id for node in self.session.full_path()}
+        session = self.session
+        on_path = {node.id for node in session.full_path()}
+        # The cards as the Cast and Lore pages show them: a plot-hidden one
+        # only with spoilers on.
+        hidden = set() if self.config.show_plot_spoilers else session.hidden_ids()
         self.images_panel.set_images(
-            self._images, self.session.pictures, on_path, videos=self._videos
+            self._images,
+            session.pictures,
+            on_path,
+            videos=self._videos,
+            cast=[c for c in (*session.cast, *session.supporting) if c.id not in hidden],
+            lore=[e for e in session.bundle.lore if e.id not in hidden],
         )
 
     def _refresh_image_views(self) -> None:
@@ -324,6 +335,34 @@ class ImagesWindow:
         if accepted:
             self._start_card_pictures([dialog.request()])
 
+    def _card_picture_action(self, action: str, card_id: str, ref_id: str) -> None:
+        """A card's picture in the Media tab: see it whole, go to its card,
+        or save it."""
+        session = self.session
+        card = session.card(card_id) if session is not None else None
+        ref = next((r for r in card.reference_images if r.id == ref_id), None) if card else None
+        if ref is None:
+            return
+        name = card.name if isinstance(card, Character) else card.title
+        if action == "show":
+            if isinstance(card, Character):
+                self.right_tabs.setCurrentWidget(self.cast_panel)
+                self.cast_panel.select_character(card.id)
+            else:
+                self.right_tabs.setCurrentWidget(self.lore_panel)
+                self.lore_panel.select_entry(card.id)
+            return
+        data = session.pictures.read(ref.file)
+        if action == "save":
+            save_picture_as(self, data, file_name(ref.file))
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle(name + (f" · {ref.caption}" if ref.caption else ""))
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(FitPicture(pixmap_of(data)))
+        dialog.resize(900, 900)
+        dialog.exec()
+
     def _take_card_pictures(self) -> None:
         """Pictures drawn for the open story's cards go on them."""
         if self.session is None or self._busy:
@@ -331,6 +370,7 @@ class ImagesWindow:
         names = self.session.take_card_pictures()
         if names:
             self.refresh_panels()
+            self.refresh_images()
             self.statusBar().showMessage(f"Picture ready: {', '.join(names)}.", 8000)
 
     def _on_image_jobs_changed(self) -> None:
@@ -427,10 +467,23 @@ class ImagesWindow:
         convenience for any story."""
         if self.session is None:
             return
-        images = self.session.pictures.images()
+        session = self.session
+        images = session.pictures.images()
         # Finished videos too: they are as much the story's as its pictures.
-        videos = [v for v in self.session.pictures.videos() if v.status == "done" and v.file]
-        if not images and not videos:
+        videos = [v for v in session.pictures.videos() if v.status == "done" and v.file]
+        # And every card's pictures, named by their card (cast-john-1.jpg).
+        cards: list[tuple[str, str]] = []
+        for kind, owners in (
+            ("cast", [*session.cast, *session.supporting]),
+            ("lore", session.bundle.lore),
+        ):
+            for owner in owners:
+                name = owner.name if kind == "cast" else owner.title
+                slug = "-".join("".join(c if c.isalnum() else " " for c in name).lower().split())
+                for number, ref in enumerate(owner.reference_images, start=1):
+                    suffix = Path(ref.file).suffix
+                    cards.append((ref.file, f"{kind}-{slug or 'card'}-{number}{suffix}"))
+        if not images and not videos and not cards:
             return
         chosen = QFileDialog.getExistingDirectory(self, "Save all pictures", str(Path.home()))
         if not chosen:
@@ -450,6 +503,18 @@ class ImagesWindow:
                 extra = 2
                 while target.exists():
                     target = folder / f"{number:03d}-{extra}-{name}"
+                    extra += 1
+                target.write_bytes(data)
+                written += 1
+            for source, name in cards:
+                data = store.read(source)
+                if data is None:
+                    missing += 1
+                    continue
+                target = folder / name
+                extra = 2
+                while target.exists():
+                    target = folder / f"{Path(name).stem}-{extra}{Path(name).suffix}"
                     extra += 1
                 target.write_bytes(data)
                 written += 1

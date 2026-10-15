@@ -1,8 +1,12 @@
-"""Every picture and video made for this story, newest first.
+"""Every picture and video in the story, in one place (the author, Oct 15
+2026): the cast's pictures, the lore's, and the story's own, each a section.
 
-Including those whose passage was deleted or sits on another branch: the
-transcript shows a picture only after its passage, and a picture costs money,
-so it is never lost with a branch.
+The story's are every picture and video made for it, newest first, including
+those whose passage was deleted or sits on another branch: the transcript
+shows a picture only after its passage, and a picture costs money, so it is
+never lost with a branch. A picture drawn for a card shows under its card
+(`ImageRef.drawn_as`), not twice; taken off the card, it is the story's again.
+Cards the plot hasn't brought in are left out unless spoilers are shown.
 """
 
 from __future__ import annotations
@@ -11,12 +15,14 @@ from PySide6.QtCore import QPoint, QSize, Qt, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QMenu,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -24,11 +30,44 @@ from PySide6.QtWidgets import (
 from sealedlore.gui.ref_images import thumbnail_of
 from sealedlore.gui.transcript import IMAGE_ACTIONS, picture_caption
 from sealedlore.gui.video_view import VIDEO_ACTIONS, video_caption
+from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage
+from sealedlore.models.lore import LoreEntry
 from sealedlore.models.video import GeneratedVideo
 from sealedlore.storage.picture_store import PictureStore
 
 GALLERY_THUMB = 150
+CARD_THUMB = 110
+
+
+class _Gallery(QListWidget):
+    """Pictures in a grid as tall as its rows: the page scrolls, not it."""
+
+    def __init__(self, thumb: int) -> None:
+        super().__init__()
+        self.setObjectName("imageGallery")
+        self.setViewMode(QListWidget.IconMode)
+        self.setResizeMode(QListWidget.Adjust)
+        self.setMovement(QListWidget.Static)
+        self.setIconSize(QSize(thumb, thumb))
+        # Room for two lines of caption under the picture.
+        self.setGridSize(QSize(thumb + 40, thumb + 64))
+        self.setSpacing(4)
+        self.setWordWrap(True)
+        self.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setContextMenuPolicy(Qt.CustomContextMenu)
+
+    def fit(self) -> None:
+        grid = self.gridSize()
+        columns = max(1, (self.viewport().width() or self.width()) // max(1, grid.width()))
+        rows = -(-self.count() // columns)
+        self.setFixedHeight(rows * grid.height() + 2 * self.frameWidth() + 4)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        super().resizeEvent(event)
+        self.fit()
 
 
 class ImagesPanel(QWidget):
@@ -39,21 +78,26 @@ class ImagesPanel(QWidget):
     generate_requested = Signal()
     generate_video_requested = Signal()
     save_all_requested = Signal()
+    # (action, card id, picture id) for a card's picture: "open", "show"
+    # (on its page), "save".
+    card_action_requested = Signal(str, str, str)
 
     def __init__(self) -> None:
         super().__init__()
-        self.list = QListWidget()
-        self.list.setObjectName("imageGallery")
-        self.list.setViewMode(QListWidget.IconMode)
-        self.list.setResizeMode(QListWidget.Adjust)
-        self.list.setMovement(QListWidget.Static)
-        self.list.setIconSize(QSize(GALLERY_THUMB, GALLERY_THUMB))
-        self.list.setSpacing(6)
-        self.list.setWordWrap(True)
-        self.list.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.list.setContextMenuPolicy(Qt.CustomContextMenu)
+        # The story's own pictures and videos (`list`, as it has always been).
+        self.list = _Gallery(GALLERY_THUMB)
         self.list.customContextMenuRequested.connect(self._menu)
         self.list.itemActivated.connect(self._activate)
+        self.cast_list = _Gallery(CARD_THUMB)
+        self.lore_list = _Gallery(CARD_THUMB)
+        for gallery in (self.cast_list, self.lore_list):
+            gallery.itemActivated.connect(lambda item: self._card_action("open", item))
+            gallery.customContextMenuRequested.connect(
+                lambda position, g=gallery: self._card_menu(g, position)
+            )
+        self.cast_heading = _heading()
+        self.lore_heading = _heading()
+        self.story_heading = _heading()
         self.hint = QLabel(
             "No pictures or videos yet. Image… beside Send (or Story → Generate image…) "
             "pictures what is happening, and Story → Generate video… makes a few seconds of "
@@ -71,7 +115,9 @@ class ImagesPanel(QWidget):
         )
         self.generate_video_button.clicked.connect(self.generate_video_requested)
         self.save_all_button = QPushButton("Save all…")
-        self.save_all_button.setToolTip("Copy every picture here into a folder you choose")
+        self.save_all_button.setToolTip(
+            "Copy every picture and video here, the cards' too, into a folder you choose"
+        )
         self.save_all_button.clicked.connect(self.save_all_requested)
         self.save_all_button.setEnabled(False)
         buttons = QHBoxLayout()
@@ -80,10 +126,28 @@ class ImagesPanel(QWidget):
         buttons.addWidget(self.generate_video_button, 1)
         buttons.addWidget(self.save_all_button)
 
+        page = QWidget()
+        sections = QVBoxLayout(page)
+        sections.setContentsMargins(0, 0, 0, 0)
+        sections.setSpacing(6)
+        for heading, gallery in (
+            (self.cast_heading, self.cast_list),
+            (self.lore_heading, self.lore_list),
+            (self.story_heading, self.list),
+        ):
+            sections.addWidget(heading)
+            sections.addWidget(gallery)
+        sections.addStretch(1)
+        scroll = QScrollArea()
+        scroll.setWidget(page)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.addWidget(self.hint)
-        layout.addWidget(self.list, 1)
+        layout.addWidget(scroll, 1)
         layout.addLayout(buttons)
 
     def set_images(
@@ -92,10 +156,20 @@ class ImagesPanel(QWidget):
         store: PictureStore | None,
         on_path: set[str],
         videos: list[GeneratedVideo] | None = None,
+        *,
+        cast: list[Character] | None = None,
+        lore: list[LoreEntry] | None = None,
     ) -> None:
+        """`cast` and `lore`: the cards whose pictures to show (those the
+        author may see), each picture under its card's name."""
+        cast, lore = cast or [], lore or []
+        on_cards = {ref.drawn_as for card in (*cast, *lore) for ref in card.reference_images}
         self.list.clear()
         made = sorted(
-            [*(("image", image) for image in images), *(("video", v) for v in videos or ())],
+            [
+                *(("image", image) for image in images if image.id not in on_cards),
+                *(("video", v) for v in videos or ()),
+            ],
             key=lambda pair: pair[1].created_at,
             reverse=True,
         )
@@ -113,8 +187,37 @@ class ImagesPanel(QWidget):
             if store is not None:
                 item.setIcon(QIcon(thumbnail_of(store.read(image.file), GALLERY_THUMB)))
             self.list.addItem(item)
-        self.hint.setVisible(not made)
-        self.save_all_button.setEnabled(bool(made))
+        counts: dict[str, int] = {}
+        card_galleries = ((self.cast_list, cast, "Cast"), (self.lore_list, lore, "Lore"))
+        for gallery, cards, word in card_galleries:
+            gallery.clear()
+            for card in cards:
+                name = card.name if isinstance(card, Character) else card.title
+                for ref in card.reference_images:
+                    shown = ref.caption if ref.caption and ref.caption != "portrait" else ""
+                    caption = f"{name}\n{shown}" if shown else name
+                    item = QListWidgetItem(caption)
+                    item.setData(Qt.UserRole, card.id)
+                    item.setData(Qt.UserRole + 1, ref.id)
+                    item.setToolTip(ref.prompt or ref.caption or name)
+                    if store is not None:
+                        item.setIcon(QIcon(thumbnail_of(store.read(ref.file), CARD_THUMB)))
+                    gallery.addItem(item)
+            counts[word] = gallery.count()
+        counts["Story"] = self.list.count()
+        for heading, gallery, word in (
+            (self.cast_heading, self.cast_list, "Cast"),
+            (self.lore_heading, self.lore_list, "Lore"),
+            (self.story_heading, self.list, "Story"),
+        ):
+            heading.setText(f"{word.upper()} · {counts[word]}")
+            shown = counts[word] > 0
+            heading.setVisible(shown)
+            gallery.setVisible(shown)
+            gallery.fit()
+        anything = any(counts.values())
+        self.hint.setVisible(not anything)
+        self.save_all_button.setEnabled(anything)
 
     def _add_video(
         self, video: GeneratedVideo, store: PictureStore | None, on_path: set[str]
@@ -129,6 +232,23 @@ class ImagesPanel(QWidget):
         if store is not None and video.poster:
             item.setIcon(QIcon(thumbnail_of(store.read(video.poster), GALLERY_THUMB)))
         self.list.addItem(item)
+
+    def _card_action(self, action: str, item: QListWidgetItem | None) -> None:
+        if item is not None:
+            self.card_action_requested.emit(
+                action, item.data(Qt.UserRole), item.data(Qt.UserRole + 1)
+            )
+
+    def _card_menu(self, gallery: QListWidget, position: QPoint) -> None:
+        item = gallery.itemAt(position)
+        if item is None:
+            return
+        menu = QMenu(self)
+        for key, text in CARD_ACTIONS:
+            menu.addAction(text).triggered.connect(
+                lambda _checked=False, k=key: self._card_action(k, item)
+            )
+        menu.exec(gallery.viewport().mapToGlobal(position))
 
     def _activate(self, item: QListWidgetItem) -> None:
         if item.data(Qt.UserRole + 1) == "video":
@@ -164,3 +284,16 @@ class ImagesPanel(QWidget):
                 lambda _checked=False, k=key: self.action_requested.emit(k, image_id)
             )
         menu.exec(self.list.viewport().mapToGlobal(position))
+
+
+CARD_ACTIONS = (
+    ("open", "See it whole"),
+    ("show", "Show its card"),
+    ("save", "Save picture as…"),
+)
+
+
+def _heading() -> QLabel:
+    label = QLabel()
+    label.setObjectName("composerCaption")
+    return label

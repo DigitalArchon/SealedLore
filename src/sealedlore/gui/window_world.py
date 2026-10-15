@@ -87,6 +87,9 @@ class WorldWindow:
 
     def _on_page_changed(self, _index: int) -> None:
         self._sync_world_button()
+        if self.right_tabs.currentWidget() is self.images_panel:
+            # The cards' pictures change on their own pages: read afresh.
+            self.refresh_images()
         if self.world_shown():
             # Back from another page, the map is as it was left (the author's
             # call): only opening a story centres it on where the story is.

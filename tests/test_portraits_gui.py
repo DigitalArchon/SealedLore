@@ -14,7 +14,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QObject, Signal  # noqa: E402
+from PySide6.QtCore import QObject, Qt, Signal  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from sealedlore.engine.session import StorySession  # noqa: E402
@@ -298,3 +298,43 @@ def test_in_the_scene_asks_for_them_alone_with_their_pictures_and_lands_on_the_c
     assert request.card_id == hero.id and not request.card_first
     assert request.card_caption == SCENE_CAPTION
     assert [use.ref_id for use in request.references] == ["p"]
+
+
+def test_the_media_tab_shows_every_picture_by_cast_lore_and_story(app):
+    """The author: every image and video in the story in one place. A
+    picture drawn for a card shows under its card, not twice; taken off the
+    card, it is the story's again."""
+    from sealedlore.gui.images_panel import ImagesPanel
+    from sealedlore.models.image import GeneratedImage
+
+    store = MemoryPictures(lambda _kind, _body: "")
+    for name in ("p", "t", "s", "d"):
+        store.write(f"images/{name}.png", PNG)
+    drawn = GeneratedImage(
+        id="drawn", file="images/d.png", prompt="A man.", model="m", size="1024x1536"
+    )
+    scene = GeneratedImage(id="scene", file="images/s.png", prompt="A road.", model="m", size="1k")
+    jane = Character(
+        name="Jane",
+        reference_images=[
+            ImageRef(id="p", file="images/p.png", caption="portrait", drawn_as="drawn")
+        ],
+    )
+    town = LoreEntry(
+        title="Hellsville",
+        content="A town.",
+        reference_images=[ImageRef(id="t", file="images/t.png", caption="main street")],
+    )
+    panel = ImagesPanel()
+    panel.set_images([drawn, scene], store, set(), [], cast=[jane], lore=[town])
+    assert panel.cast_list.count() == 1 and panel.lore_list.count() == 1
+    assert [panel.list.item(i).data(Qt.UserRole) for i in range(panel.list.count())] == ["scene"]
+    assert panel.cast_heading.text() == "CAST · 1" and panel.story_heading.text() == "STORY · 1"
+    asked: list[tuple] = []
+    panel.card_action_requested.connect(lambda *args: asked.append(args))
+    panel.lore_list.itemActivated.emit(panel.lore_list.item(0))
+    assert asked == [("open", town.id, "t")]
+    # Off the card, the drawing is the story's again.
+    jane.reference_images.clear()
+    panel.set_images([drawn, scene], store, set(), [], cast=[jane], lore=[town])
+    assert panel.list.count() == 2 and panel.cast_heading.isHidden()

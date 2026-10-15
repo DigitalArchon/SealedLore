@@ -390,6 +390,9 @@ class LorePanel(QWidget):
         self.set_entries(self._entries)
         self.changed.emit()
 
+    def select_entry(self, entry_id: str) -> None:
+        self._select(entry_id)
+
     def _select(self, entry_id: str) -> None:
         for row in range(self.list.count()):
             item = self.list.item(row)

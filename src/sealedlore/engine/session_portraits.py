@@ -209,6 +209,7 @@ class PortraitRuntime:
                     caption=image.card_caption,
                     prompt=image.prompt,
                     model=image.model,
+                    drawn_as=image.id,
                 )
                 if image.card_first:
                     card.reference_images.insert(0, ref)

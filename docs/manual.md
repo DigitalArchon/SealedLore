@@ -1173,8 +1173,13 @@ Generate. The picture is drawn in the background while you play on and lands
 in the **Media** tab, and can be set as the transcript's background (from
 its ⋯ menu, or any picture file with View → Background picture…). Pictures
 are kept even when their passage is deleted; only their own Delete removes
-them, since they cost money. **Save all…** in the Media tab copies every
-picture into a folder you choose; each picture's ⋯ menu saves one.
+them, since they cost money. The Media tab shows every picture and video in
+the story in one place: **Cast** (every picture on every character's card),
+**Lore** (the same for lore entries) and **Story** (the story's own pictures
+and videos, newest first). A picture drawn for a card shows under its card;
+right-click one to see it whole, go to its card or save it. **Save all…**
+copies everything there into a folder you choose, the cards' pictures named
+by card; each picture's ⋯ menu saves one.
 
 Pictures go to the chat endpoint unless **Settings → Images** names another:
 an address, a key, and the service it is (NanoGPT, OpenRouter, WaveSpeed, or

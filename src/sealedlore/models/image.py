@@ -34,6 +34,9 @@ class ImageRef(BaseModel):
     # model); blank for a picture added from a file.
     prompt: str = ""
     model: str = ""
+    # The picture drawn for this story it was copied from (GeneratedImage
+    # id): the Media tab shows that drawing under its card, not twice.
+    drawn_as: str = ""
 
 
 class RefUse(BaseModel):
