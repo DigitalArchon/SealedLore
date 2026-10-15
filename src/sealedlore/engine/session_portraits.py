@@ -16,10 +16,12 @@ of them. Never in a private scene or a simple chat (a chat has no cards).
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Sequence
 
 from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.portraits import (
+    PORTRAIT_BATCH,
     PORTRAIT_MAX_TOKENS,
     Card,
     build_portrait_messages,
@@ -33,7 +35,7 @@ from sealedlore.ids import new_id
 from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef, RefUse
 from sealedlore.models.lore import LoreEntry
-from sealedlore.providers.base import ChatRequest
+from sealedlore.providers.base import ChatProvider, ChatRequest
 from sealedlore.providers.images import ImageModelInfo
 from sealedlore.storage.images import REFS_DIR
 
@@ -74,8 +76,9 @@ class PortraitRuntime:
     ) -> tuple[dict[str, str], str | None]:
         """A prompt for each card, by id ("" for a lore entry with nothing
         to see), and what went wrong if the writer didn't answer for all of
-        them (their prompts are then built from their cards). One call, on
-        the prompt writer's model."""
+        them (their prompts are then built from their cards). A few cards a
+        call (`PORTRAIT_BATCH`), on the prompt writer's model, two calls at a
+        time when the provider has a sibling (a Stop reaches both)."""
         self._refuse_in_private("Writing picture prompts")
         texts = self.texts
         story = self.story
@@ -85,42 +88,75 @@ class PortraitRuntime:
         characters = [c for c in characters if c.id in people_ids]
         lore = [e for e in lore if e.id in lore_ids]
         prompts: dict[str, str] = {}
-        problem: str | None = None
+        problems: list[str] = []
         if characters or lore:
             model = model or self.image_prompt_model
-            request = ChatRequest(
-                model=model,
-                extra_body=self.route_for("image_prompt", model),
-                messages=build_portrait_messages(
-                    characters,
-                    world_bible=story.world_bible or "",
-                    title=story.title,
-                    image_style=story.image_style,
-                    begins=where_it_begins(story),
-                    lore=lore,
-                    texts=texts,
-                ),
-                params=self.side_params(model, max_tokens=PORTRAIT_MAX_TOKENS, temperature=0.7),
-            )
-            log_ref = self._log(
-                "portrait_prompt_request", {"payload": self.provider.build_payload(request)}
-            )
-            try:
-                text, completed = self.provider.complete(request)
-            except Exception as exc:  # the author can still edit and draw
-                self._log("portrait_prompt_error", {"request_log_ref": log_ref, "error": str(exc)})
-                text, problem = "", f"The prompt writer failed ({exc})"
-            else:
+            params = self.side_params(model, max_tokens=PORTRAIT_MAX_TOKENS, temperature=0.7)
+            batches = [
+                (characters[i : i + PORTRAIT_BATCH], [])
+                for i in range(0, len(characters), PORTRAIT_BATCH)
+            ] + [([], lore[i : i + PORTRAIT_BATCH]) for i in range(0, len(lore), PORTRAIT_BATCH)]
+            queue = list(batches)
+            lock = threading.Lock()
+
+            def write(people: list[Character], entries: list[LoreEntry], client) -> None:
+                request = ChatRequest(
+                    model=model,
+                    extra_body=self.route_for("image_prompt", model),
+                    messages=build_portrait_messages(
+                        people,
+                        world_bible=story.world_bible or "",
+                        title=story.title,
+                        image_style=story.image_style,
+                        begins=where_it_begins(story),
+                        lore=entries,
+                        texts=texts,
+                    ),
+                    params=params,
+                )
+                log_ref = self._log(
+                    "portrait_prompt_request", {"payload": client.build_payload(request)}
+                )
+                try:
+                    text, completed = client.complete(request)
+                except Exception as exc:  # the author can still edit and draw
+                    self._log(
+                        "portrait_prompt_error", {"request_log_ref": log_ref, "error": str(exc)}
+                    )
+                    with lock:
+                        problems.append(f"The prompt writer failed ({exc})")
+                    return
                 self._log(
                     "portrait_prompt_response",
                     {"request_log_ref": log_ref, "text": text, "usage": completed.raw_usage},
                 )
                 self.unreported_usage.append(self.priced(completed.usage, model))
-            if text:
                 try:
-                    prompts = parse_portrait_prompts(text, characters, lore)
+                    written = parse_portrait_prompts(text, people, entries) if text else {}
                 except ValueError as exc:
-                    problem = f"The prompt writer's reply couldn't be read ({exc})"
+                    with lock:
+                        problems.append(f"The prompt writer's reply couldn't be read ({exc})")
+                    return
+                with lock:
+                    prompts.update(written)
+
+            def lane(client: ChatProvider) -> None:
+                while True:
+                    with lock:
+                        if not queue:
+                            return
+                        people, entries = queue.pop(0)
+                    write(people, entries, client)
+
+            sibling = getattr(self.provider, "sibling", None)
+            helper = None
+            if callable(sibling) and len(batches) > 1:
+                helper = threading.Thread(target=lane, args=(sibling(),), daemon=True)
+                helper.start()
+            lane(self.provider)
+            if helper is not None:
+                helper.join()
+        problem = problems[0] if problems else None
         missing = [c for c in (*characters, *lore) if c.id not in prompts]
         if missing and problem is None:
             names = [c.name if isinstance(c, Character) else c.title for c in missing]

@@ -27,6 +27,10 @@ from sealedlore.providers.images import ImageModelInfo
 # 77-token reach of the SDXL models' text encoder for the gist of it.
 PORTRAIT_WORDS = "50 to 90"
 PORTRAIT_MAX_TOKENS = 4000
+# Cards written for in one call. All of a sample's thirteen in one call, GLM
+# 5.3 spent the whole 4,000 tokens reasoning and wrote no prompt at all
+# (Oct 2026), and every card fell back to its own text.
+PORTRAIT_BATCH = 4
 # The setting the writer is given: the world's opening, not its whole bible.
 SETTING_CHARS = 1500
 # The opening the writer is given, for the season and the weather.

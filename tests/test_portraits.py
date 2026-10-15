@@ -138,6 +138,47 @@ def test_a_failed_writer_still_leaves_prompts_to_edit(tmp_path: Path):
         parse_portrait_prompts("nothing", people)
 
 
+def test_the_writer_is_asked_a_few_cards_at_a_time_and_a_bad_reply_costs_only_its_own(
+    tmp_path: Path, monkeypatch
+):
+    """Thirteen cards in one call ran GLM 5.3 out of room reasoning, and it
+    wrote nothing for any of them. A few go in each call; one that fails
+    falls back for its own cards alone."""
+    from sealedlore.engine import session_portraits
+
+    monkeypatch.setattr(session_portraits, "PORTRAIT_BATCH", 1)
+    session, provider = session_on(tmp_path, [reply(("John", "A tired man.")), "not json"])
+    john, jane = session.without_pictures()[0]
+    prompts, problem = session.write_card_prompts([john, jane])
+    assert len(provider.payloads) == 2
+    first, second = (json.dumps(p["messages"][-1]) for p in provider.payloads)
+    assert "John" in first and "Jane" not in first
+    assert "Jane" in second and "John" not in second
+    assert prompts[john.id] == "A tired man."
+    assert prompts[jane.id] == fallback_prompt(jane, image_style="")
+    assert "couldn't be read" in problem
+
+
+def test_with_a_sibling_two_calls_are_written_at_once(tmp_path: Path, monkeypatch):
+    from sealedlore.engine import session_portraits
+
+    monkeypatch.setattr(session_portraits, "PORTRAIT_BATCH", 1)
+    # Each answers for both: a call's reply is read for its own cards only.
+    both = reply(("John", "A tired man."), ("Jane", "A tired woman."))
+    session, provider = session_on(tmp_path, [both])
+    other = MockChatProvider([both])
+    provider.delay = other.delay = 0.02  # each lane busy while the other takes the next
+    provider.sibling = lambda: other
+    john, jane = session.without_pictures()[0]
+    prompts, problem = session.write_card_prompts([john, jane])
+    assert len(provider.payloads) == 1 and len(other.payloads) == 1
+    names = {"John", "Jane"}
+    asked = {n for p in (*provider.payloads, *other.payloads) for n in names if n in json.dumps(p)}
+    assert asked == names
+    assert problem is None
+    assert (prompts[john.id], prompts[jane.id]) == ("A tired man.", "A tired woman.")
+
+
 def test_portraits_wait_for_a_private_scene_to_end(tmp_path: Path):
     session, _provider = session_on(tmp_path, ["x"])
     session.enter_private(keep="memory", provider=MockChatProvider(["y"]), model="local/m")
