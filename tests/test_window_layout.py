@@ -91,22 +91,24 @@ def test_the_docks_take_what_they_want_when_there_is_room():
 
 def test_a_tight_window_takes_from_stories_before_the_inspector_goes_below_its_floor():
     floor = INSPECTOR_WIDTHS[0]
-    # A 1366px laptop: 1366 - 766 - 8 leaves 592 for both docks.
-    assert share_width(1366, 766, 8, (245, 120), (floor, 360)) == (592 - floor, floor)
+    room = 766 + 8 + floor  # what the centre and the Inspector's floor take
+    # Room for the floor and 200 more: the Stories list gets the 200.
+    assert share_width(room + 200, 766, 8, (245, 120), (floor, 360)) == (200, floor)
     # Squeezed to its minimum, the Inspector jumped wider when a story filled
     # its forms: Stories gives way first, down to its own minimum.
-    assert share_width(1300, 766, 8, (234, 120), (floor, 360)) == (1300 - 766 - 8 - floor, floor)
+    assert share_width(room + 130, 766, 8, (234, 120), (floor, 360)) == (130, floor)
     # Then the Inspector, below its floor to its minimum.
-    assert share_width(1100, 766, 8, (220, 120), (floor, 360)) == (120, 360)
+    assert share_width(room + 40, 766, 8, (220, 120), (floor, 360)) == (120, floor - 80)
 
 
 def test_a_window_too_narrow_for_both_floors_keeps_the_minimums():
     assert share_width(900, 766, 8, (220, 120), (380, 360)) == (120, 360)
 
 
-def test_on_a_laptop_the_stories_list_is_wide_enough_to_read(app, window: MainWindow):
+def test_at_1080p_the_stories_list_is_wide_enough_to_read(app, window: MainWindow):
+    """1080p is the floor (the author, Oct 15 2026): laptops at 1366 were."""
     needs_real_fonts()
-    window.resize(1366, 768)
+    window.resize(1920, 1050)
     settle(app)
     assert window.stories_dock.width() >= 200
     assert window.inspector_dock.width() >= INSPECTOR_WIDTHS[0]

@@ -36,7 +36,9 @@ STORIES_WIDTHS = (220, 320)
 INSPECTOR_SHARE = 0.27
 # Above the minimum of any of its pages: squeezed to the empty page's
 # minimum, the dock jumped wider when a story opened and filled the forms.
-INSPECTOR_WIDTHS = (380, 480)
+# 450 since the Cast card sets the portrait beside its fields (Oct 15
+# 2026; the author: assume 1080p, not a 1366px laptop).
+INSPECTOR_WIDTHS = (450, 520)
 # A story that keeps a map gives the Inspector, with the map on it, half the
 # window (the author's call).
 MAP_SHARE = 0.5
@@ -44,7 +46,7 @@ MAP_SHARE = 0.5
 # author brings it back) the Inspector takes the room it left: the author
 # wanted the pages beside the story less cramped and more graphical.
 INSPECTOR_ALONE_SHARE = 0.38
-INSPECTOR_ALONE_WIDTHS = (380, 720)
+INSPECTOR_ALONE_WIDTHS = (450, 720)
 
 
 def _clamp(value: float, bounds: tuple[int, int]) -> int:

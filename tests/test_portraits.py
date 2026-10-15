@@ -145,14 +145,17 @@ def test_portraits_wait_for_a_private_scene_to_end(tmp_path: Path):
         session.write_card_prompts(session.without_pictures()[0])
 
 
-def test_the_portrait_size_is_the_largest_square_up_to_1024():
-    info = ImageModelInfo(id="m", name="M", resolutions=("512x512", "1024x1024", "1920x1088"))
-    assert portrait_size(info) == "1024x1024"
-    assert portrait_size(ImageModelInfo(id="m", name="M", resolutions=("1024*1024",))) == (
-        "1024*1024"
-    )
-    assert portrait_size(ImageModelInfo(id="m", name="M", resolutions=("1k", "2k"))) == "1k"
-    assert portrait_size(None) == "1024x1024"
+def test_a_portrait_is_taller_than_wide_nearest_three_by_four():
+    def size(*sizes: str) -> str:
+        return portrait_size(ImageModelInfo(id="m", name="M", resolutions=sizes))
+
+    # FLUX.2 klein's list: 1024x1536 (2:3) is nearer 3:4 than 720x1280.
+    assert size("1024*1024", "1280*720", "720*1280", "1536*1024", "1024*1536") == "1024*1536"
+    assert size("1024x1024", "768x1024", "576x1024", "1024x768") == "768x1024"
+    assert size("512x512", "1024x1024", "1920x1088") == "1024x1024"  # no tall size
+    assert size("1088x1920", "1024x1024") == "1024x1024"  # too tall to ask for
+    assert size("1k", "2k") == "1k"
+    assert portrait_size(None) == "1024x1536"
 
 
 class _Images:
@@ -170,11 +173,11 @@ def test_a_drawn_portrait_is_sent_as_approved_and_becomes_the_first_picture_once
     session, _provider = session_on(tmp_path, ["x"])
     john = session.without_pictures()[0][0]
     info = ImageModelInfo(
-        id="flux-2-klein-9b", name="F", resolutions=("1024*1024",), per_image={"*": 0.01}
+        id="flux-2-klein-9b", name="F", resolutions=("1024*1536",), per_image={"*": 0.01}
     )
     approved = "  A tired man, frost on his collar.\n"
     request = session.card_request(john, approved, model=info.id, info=info, first=True)
-    assert request.prompt == approved and request.size == "1024*1024"
+    assert request.prompt == approved and request.size == "1024*1536"
     assert request.card_id == john.id and request.card_first and request.references == ()
     client = _Images()
     records = run_image_request(client, request, store=session.pictures)

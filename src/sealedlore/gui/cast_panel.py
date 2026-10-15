@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QSizePolicy,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
@@ -46,6 +47,9 @@ from sealedlore.models.supporting import CharacterSuggestion
 
 HEADER_ROLE = Qt.UserRole + 1
 MODEL_MARK = "  ✦"
+# The width of the card's left column: the portrait, its other pictures.
+PORTRAIT_COLUMN = 300
+PORTRAIT_COLUMN_MIN = 160
 # The portraits beside the names in the list.
 LIST_ICON = 28
 # Past this many skills the table scrolls rather than pushing the form down.
@@ -217,10 +221,24 @@ class CastPanel(QWidget):
         self.player_available.toggled.connect(self._sync_voicing)
         self.author_only.toggled.connect(self._apply_edits)
 
-        form_host = QWidget()
-        form = QFormLayout(form_host)
+        # The portrait at the left of the card, tall, with the other pictures
+        # under it; the card's text on the right (the author, Oct 15 2026:
+        # most screens are wide).
+        pictures_column = QWidget()
+        # Its full width where there is room, narrower where there isn't.
+        pictures_column.setMinimumWidth(PORTRAIT_COLUMN_MIN)
+        pictures_column.setMaximumWidth(PORTRAIT_COLUMN)
+        pictures_column.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        column = QVBoxLayout(pictures_column)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(6)
+        column.addWidget(self.portrait)
+        column.addWidget(QLabel("Other pictures"))
+        column.addWidget(self.pictures)
+        column.addStretch(1)
+        fields = QWidget()
+        form = QFormLayout(fields)
         form.setContentsMargins(0, 0, 0, 0)
-        form.addRow(self.portrait)
         form.addRow("Name", self.name)
         form.addRow("Aliases", self.aliases)
         form.addRow("From", self.canon)
@@ -230,17 +248,19 @@ class CastPanel(QWidget):
         form.addRow("Voice", self.voice_notes)
         form.addRow("Competence", self.competence)
         form.addRow("Skills", skills_box)
-        # Full width, under its label: beside it, the strip's three buttons
-        # plus the label column were the form's widest row.
-        form.addRow(QLabel("Other pictures"))
-        form.addRow(self.pictures)
         form.addRow(self.player_available)
         form.addRow(self.author_only)
+        form_host = QWidget()
+        card = QHBoxLayout(form_host)
+        card.setContentsMargins(0, 0, 0, 0)
+        card.setSpacing(12)
+        card.addWidget(pictures_column, 0, Qt.AlignTop)
+        card.addWidget(fields, 1)
 
         self.empty_hint = QLabel("Add a character, or select one to edit.")
         self.empty_hint.setObjectName("hintLabel")
         self.empty_hint.setWordWrap(True)
-        form.addRow(self.empty_hint)
+        form.insertRow(0, self.empty_hint)
 
         scroll = FormScroll(form_host)
         self._form_host = form_host

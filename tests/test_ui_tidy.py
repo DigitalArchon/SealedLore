@@ -521,7 +521,7 @@ def test_with_no_story_open_the_window_says_so_and_offers_a_start(app, tmp_path:
     needs_real_fonts()  # the dock's width follows the forms' text
     save_story_bundle(StoryBundle(story=story, cast=cast, nodes=make_exchange(2)), root=tmp_path)
     window = MainWindow(root=tmp_path, use_mock=True)
-    window.resize(1280, 860)
+    window.resize(1920, 1050)  # 1080p, the floor
     window.show()
     settle(app)
     try:

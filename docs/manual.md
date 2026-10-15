@@ -794,8 +794,9 @@ named characters who aren't on file yet:
 
 **Move to cast** and **Move to supporting** switch a character between the two.
 
-A selected character's **portrait** is shown large at the top of their sheet,
-with their other pictures small under the sheet. The portrait is simply their
+A selected character's **portrait** is shown large at the left of their
+sheet, with their other pictures small under it and the sheet's fields to the
+right. Portraits are drawn taller than wide. The portrait is simply their
 first picture: **Make portrait** under the others puts another first, **Choose
 a file…** takes one from your computer, and **Draw a portrait…**, **Draw
 again…**, **Edit…** and **In the scene…** have an image model draw one (see

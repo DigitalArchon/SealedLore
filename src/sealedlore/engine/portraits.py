@@ -33,7 +33,10 @@ SETTING_CHARS = 1500
 OPENING_CHARS = 600
 # A lore entry as the writer is given it.
 LORE_CHARS = 900
-# The largest square a portrait is asked for.
+# A portrait's shape: the tall size nearest 3:4, at most this high; a model
+# with no tall size gets the largest square up to PORTRAIT_SIDE.
+PORTRAIT_RATIO = 3 / 4
+PORTRAIT_TALLEST = 1536
 PORTRAIT_SIDE = 1024
 
 Card = Character | LoreEntry
@@ -159,20 +162,28 @@ def edit_prompt(change: str, *, person: bool, texts: PromptTexts = DEFAULT_TEXTS
 
 
 def portrait_size(model: ImageModelInfo | None) -> str:
-    """The largest square the model lists up to PORTRAIT_SIDE (a portrait
-    is shown large on the Cast page); else its first size, or 1024x1024."""
-    best: tuple[int, str] | None = None
+    """A portrait is taller than wide (the author, Oct 15 2026: shown at the
+    left of the card, beside its text): the tall size the model lists
+    nearest 3:4, up to PORTRAIT_TALLEST high, the larger on a tie; else the
+    largest square up to PORTRAIT_SIDE; else its first size, or 1024x1536."""
+    tall: list[tuple[float, int, str]] = []
+    square: list[tuple[int, str]] = []
     for size in model.resolutions if model is not None else ():
         parts = size.replace("*", "x").split("x")
-        if len(parts) == 2 and parts[0] == parts[1] and parts[0].isdigit():
-            side = int(parts[0])
-            if side <= PORTRAIT_SIDE and (best is None or side > best[0]):
-                best = (side, size)
-    if best is not None:
-        return best[1]
+        if len(parts) != 2 or not (parts[0].isdigit() and parts[1].isdigit()):
+            continue
+        width, height = int(parts[0]), int(parts[1])
+        if width < height <= PORTRAIT_TALLEST:
+            tall.append((abs(width / height - PORTRAIT_RATIO), -width * height, size))
+        elif width == height <= PORTRAIT_SIDE:
+            square.append((width, size))
+    if tall:
+        return min(tall)[2]
+    if square:
+        return max(square)[1]
     if model is not None and model.resolutions:
         return "1k" if "1k" in model.resolutions else model.resolutions[0]
-    return "1024x1024"
+    return "1024x1536"
 
 
 def card_size(card: Card, model: ImageModelInfo | None) -> str:
