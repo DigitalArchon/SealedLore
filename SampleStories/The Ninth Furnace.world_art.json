@@ -2034,16 +2034,40 @@
  "failures": {},
  "pictures": [
   {
-   "id": "6901d234-b3d5-48dd-96ac-f43565ac030c",
+   "id": "8cb1fe28-c7ae-4903-86bb-14e73cbd0c1a",
+   "subject": "isometric",
+   "subject_id": "467c861c-acdc-5a73-9d3d-a78cd5d58710",
+   "name": "The Hollow of Cinders",
+   "state": "",
+   "file": "pictures/map/furnace-hollow-of-cinders-isometric.jpg",
+   "from_picture": null,
+   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: A circle of five shattered standing stones, cracked and leaning, stands on a broad plain of grey ash. Near the centre lies a hearth, a ring of blackened stones holding charred cinders. To one side of the circle rises a low mound of heaped grey ash, and opposite it rests a small pile of yellowed bones. A dark fissure in the ground releases a plume of white steam that drifts across the stones. Among them hovers a pale, translucent spirit figure. Cold, dim light flattens the grey tones of the ash and picks out the weathered, broken surfaces of the standing stones. The ground: cracked black volcanic rock glowing in its seams. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
+   "model": "qwen-image",
+   "made_at": "2026-10-15T02:18:38.059800+00:00"
+  },
+  {
+   "id": "ad725720-ad73-4460-aa45-e69745d0e008",
+   "subject": "isometric",
+   "subject_id": "47e71ea9-0d62-5fb2-a6d5-e64b9097b407",
+   "name": "The Iron Citadel",
+   "state": "",
+   "file": "pictures/map/furnace-iron-citadel-isometric.jpg",
+   "from_picture": null,
+   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: A vast castle of black iron rises from a glowing lake of molten orange lava, its walls jagged and its towers ending in long spikes. A single iron bridge crosses the lava to the gate, with heavy chains strung along its edges and hanging from the walls. Within the walls, open furnace pits glow red-orange, casting flickering light on the dark metal walkways around them. At the centre stands the largest hall, topped with a spiked dome; inside, visible from above through its open roof, a throne bristles with iron spikes on a raised dais. The whole fortress is sharp-angled, soot-blackened, and rimmed with fiery light reflected off the lava, while chains drape across courtyards and between towers. The ground: cracked black volcanic rock glowing in its seams. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
+   "model": "qwen-image",
+   "made_at": "2026-10-15T02:19:06.052392+00:00"
+  },
+  {
+   "id": "7cfcf916-7afc-4b38-8032-57f285007b13",
    "subject": "isometric",
    "subject_id": "71d48e7f-64f3-57fa-a6d6-1d7b3eb88690",
    "name": "The Pilgrims' Rest",
    "state": "",
    "file": "pictures/map/furnace-pilgrims-rest-isometric.jpg",
    "from_picture": null,
-   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: A walled compound of rough black stone sits on cracked obsidian ground whose glowing seams pulse with orange light along the bank of a slow river of molten lava. Within the walls, a courtyard of cracked basalt flagstones centres on a burning altar with four braziers at its corners; an iron bell post and a skull-topped pole stand nearby. A long rectangular hall of black stone with an iron door and red banners along its walls occupies one side of the compound. Low, squat pens built from black stone and pale bone fill another corner. A narrow bridge of black iron chains and riveted plates spans the lava river at the compound's edge. The ground: cracked black volcanic rock glowing in its seams. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
+   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: A walled compound of black stone stands on cracked, charred ground whose seams glow with orange light, beside a broad river of flowing lava. Inside the walls, a courtyard of cracked basalt flagstones surrounds a burning altar, with four braziers at its corners, an iron bell post, and a skull pole standing nearby. A long black stone hall with an iron door bears red banners on its walls. Low pens built of black stone and bone line another part of the enclosure. A narrow bridge of black iron chains and plates crosses the molten river. Firelight from the lava, altar, and braziers casts warm orange and red glows across the dark stone surfaces. The ground: cracked black volcanic rock glowing in its seams. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
    "model": "qwen-image",
-   "made_at": "2026-10-15T01:14:02.237703+00:00"
+   "made_at": "2026-10-15T02:25:25.947458+00:00"
   }
  ],
  "pictures_by_day": {}

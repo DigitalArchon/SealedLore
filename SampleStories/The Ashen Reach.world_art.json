@@ -3055,6 +3055,42 @@
    "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: Hollowmouth, A grim mining town of rust-streaked prefab blocks and iron walkways under a cracked pressure dome. Grey dust on every surface; sodium lamps; loudspeakers on every corner. In it: The barracks: A long concrete blockhouse by the south wall, cold and damp, with rows of iron bunks. The penal detachment is quartered here; The Chapel of the Engine: A soot-black chapel with a tall spire, its doors carved with the God-Engine's gears. Confessor Hesk preaches here at every shift change; The Overseer's Bastion: A squat fortified block on the town's only rise, with gun slits, a vox mast and the overseer's quarters at the top; The refinery: A tangle of pipes, vats and smokestacks belching orange flame through the dome. Half its workers have not reported for a week; The scrapmarket: A crowded square of stalls made of crates and tarpaulin, where miners trade ration bars, scrap, rumours and contraband; The landing field: A cracked rockcrete pad under the dome's open north lock, scorched black by landing jets; The pithead gate: A heavy blast gate in the dome's east wall, where the rail line runs out to Shaft Nine. Two guards in rebreathers never let it stand open. Marked on the map: blast gate, iron walkway, sodium lamp, sodium lamp, loudspeaker, loudspeaker, vox mast, smokestack, landing jetscorch. The ground: a station's metal decks, in space. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
    "model": "nano-banana-pro-edit",
    "made_at": "2026-10-15T00:46:01.554417+00:00"
+  },
+  {
+   "id": "759cb79f-a454-4f36-94c4-266b7c4823cc",
+   "subject": "isometric",
+   "subject_id": "77cfcb70-78be-5d95-af8a-4fc152220b7a",
+   "name": "Shaft Nine",
+   "state": "",
+   "file": "pictures/map/reach-shaft-nine-isometric.jpg",
+   "from_picture": null,
+   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: A tall black iron winding tower stands over a dark shaft mouth cut into the ground, its great headframe wheel motionless at the top. Iron gantries for loading run out from the tower, and around them sit small ore carts on rails. Grey heaps of spoil rise in mounds nearby, and a black coal pile lies heaped beside the track. A slender vent stack rises from the ground, and poles carrying warning banners are planted around the shaft. A small watch post, a simple hut or tower, stands to one side. The ground is bare and trampled, crossed by rails and cart tracks, all under flat, even daylight from above. The ground: bare earth. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
+   "model": "qwen-image",
+   "made_at": "2026-10-15T02:16:19.182399+00:00"
+  },
+  {
+   "id": "c0611819-2d04-4d71-94e0-e78028a13d60",
+   "subject": "isometric",
+   "subject_id": "0b12e0d5-4146-5196-972c-3e4390c7bb1b",
+   "name": "The vox relay",
+   "state": "",
+   "file": "pictures/map/reach-vox-relay-isometric.jpg",
+   "from_picture": null,
+   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: A low hill of dark grey slag rises above flat, dusty ground. At its crest stands a tall, thin metal mast with cross-braced struts, its steel frame rust-brown against the pale sky. Guy wires run down from the mast's top to a heavy concrete anchor block on the slope, taut cables casting thin shadows. Near the base, several cylindrical fuel drums in faded red and yellow sit in a loose cluster, some lying on their sides. A small signal beacon—a squat, boxy fixture with a dark lens—stands beside the mast, and a rough pile of stacked stones forms a low cairn a short distance away. Harsh daylight falls from high above, sharpening the shadows of every structure across the uneven, metallic-grey slope. The ground: bare rock. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
+   "model": "qwen-image",
+   "made_at": "2026-10-15T02:17:50.063902+00:00"
+  },
+  {
+   "id": "4e756817-7001-46d6-b02e-5a427b90bd75",
+   "subject": "isometric",
+   "subject_id": "d9b84158-450c-5eb9-9beb-f8147b2bf4ac",
+   "name": "The wreck of the Pale Martyr",
+   "state": "",
+   "file": "pictures/map/reach-wreck-of-the-pale-martyr-isometric.jpg",
+   "from_picture": null,
+   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: A plain of drifted grey ash holds the broken hull of a crashed frigate, its dark metal half buried, the long spine of the keel rising at an angle toward the sky. A rectangular airlock hatch hangs open along the hull's flank. Nearby lie a shattered idol of a machine figure, a cluster of frost-rimed corpses, and a skeleton in the faded colours of a uniform. Loose salvaged cables snake over the ash, throwing blue-white sparks. An upturned command throne rests beside a sturdily built reliquary crate, and a breach-scorched plaque is bolted to a blackened bulkhead. Hard light falls from one side, casting long shadows from the raised keel across the pale ground. The ground: bare earth. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
+   "model": "qwen-image",
+   "made_at": "2026-10-15T02:17:18.068809+00:00"
   }
  ],
  "pictures_by_day": {}

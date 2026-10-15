@@ -3015,16 +3015,40 @@
  "failures": {},
  "pictures": [
   {
-   "id": "b083ad98-ee75-4738-b62f-8a33732e25f6",
+   "id": "36e00049-cc6f-4770-9425-345171bd0b81",
+   "subject": "isometric",
+   "subject_id": "44685240-e21f-5878-9b9c-276755d0b86e",
+   "name": "The creek crossing",
+   "state": "",
+   "file": "pictures/map/doomsville-creek-crossing-isometric.jpg",
+   "from_picture": null,
+   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: A pale frozen creek cuts across the scene, its surface a dull grey-blue streaked with white. A low wooden bridge spans it, half swallowed by deep snowdrifts so that only its planks and low rails break the white. Around the crossing, drifts pile against a wrecked wooden cart lying overturned on the bank. Scattered bones, some half-buried, dot the snow near the bridge, and a single barrel stands upright at one end. A rough barricade of piled timber and debris blocks part of the approach, and a corpse lies sprawled in the snow beside it, dark against the white. Cold, flat winter light with faint blue shadows softens every edge. The ground: snow-covered country in winter. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
+   "model": "qwen-image",
+   "made_at": "2026-10-15T02:13:37.472036+00:00"
+  },
+  {
+   "id": "88cff8b0-66f4-44b6-af7b-4847816d5ce2",
+   "subject": "isometric",
+   "subject_id": "a3f8414e-f7dc-581a-b9f1-fc0f98688d84",
+   "name": "Hellsville",
+   "state": "",
+   "file": "pictures/map/doomsville-hellsville-isometric.jpg",
+   "from_picture": null,
+   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: A small walled town seen from above at night, its perimeter closed by barricades of cars, stacked tyres and scrap except at gateways to north and south, with a single road running between them. Along this main street an old diner glows with mismatched lanterns; four more lanterns mark buildings nearby, among them a general store and another narrow shopfront building. A weathered church steeple rises as the second-tallest structure; a water tower on tall legs stands highest, both showing above the walls. Rooftops and ground lie dark under cold night light, dotted with the warm points of lanterns. The ground: snow-covered country in winter. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
+   "model": "qwen-image",
+   "made_at": "2026-10-15T02:14:50.716412+00:00"
+  },
+  {
+   "id": "aca6ba08-21d4-47ac-b6d5-af64c2977c4d",
    "subject": "isometric",
    "subject_id": "b637a244-e18f-5caf-b588-6cd5a28043c4",
    "name": "The farm",
    "state": "",
    "file": "pictures/map/doomsville-farm-isometric.jpg",
    "from_picture": null,
-   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: An isometric view of an isolated farm buried in deep snow. A two-storey farmhouse with grey, weathered painted wood siding stands at the north edge, a covered porch facing outward, one shutter hanging loose from an upper window. Beside it sits a barn with a intact roof, its timber noticeably newer and better maintained than the house. A sagging wooden fence encloses the rear yard, behind which lies a flat frozen pond. Scattered across the snow-covered ground are a stone well, a mounded haystack, a frozen wooden trough, a bare oak tree with skeletal branches, a ragged scarecrow on a post, and an old iron plough half-buried in snow. Pale winter light casts long blue shadows across everything. The ground: snow-covered country in winter. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
+   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: A snow-covered farmstead enclosed by a sagging wooden fence. A two-storey farmhouse with grey, weathered white paint and one hanging shutter stands near the road, its porch on the north side. Behind it, a barn with a newer, intact roof. A frozen pond lies at the rear of the property. Scattered across the deep snow: a well, a haystack, a frozen trough, a bare oak tree, a scarecrow, and an old plough. Everything is blanketed in white, the wooden structures standing dark against the snow under cold winter light. The ground: snow-covered country in winter. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
    "model": "qwen-image",
-   "made_at": "2026-10-15T01:12:32.853187+00:00"
+   "made_at": "2026-10-15T02:23:50.253251+00:00"
   }
  ],
  "pictures_by_day": {}

@@ -13,6 +13,9 @@ from pathlib import Path
 import pytest
 
 from sealedlore.engine.plot_md import parse_plot_markdown
+from sealedlore.engine.world import applied
+from sealedlore.engine.world_art import local_area
+from sealedlore.models.world import WorldMap
 from sealedlore.storage import paths
 from sealedlore.storage.paths import PLOT_FORMAT_GUIDE, sample_stories
 
@@ -144,6 +147,16 @@ def test_a_sample_s_shipped_map_art_fits_its_map():
         assert len(with_files.pictures) == len(listed), f"{path.name}: a map picture is missing"
         assert {p.subject_id for p in with_files.pictures} <= ids
         assert sorted(files) == sorted(p.file for p in with_files.pictures)
+        # A showcase: every area with a plan comes with its isometric view
+        # (the author, Oct 15 2026: several areas each, not the start alone).
+        world = applied(WorldMap(), scenario.world_base, base=True)
+        areas = {
+            pid
+            for pid in art.layouts
+            if pid in world.places and (local_area(world, pid) or world.places[pid]).id == pid
+        }
+        viewed = {p.subject_id for p in with_files.pictures if p.subject == "isometric"}
+        assert areas <= viewed, f"{path.name}: no view of {sorted(areas - viewed)}"
 
 
 def test_every_sample_character_comes_with_its_portrait():
@@ -169,3 +182,26 @@ def test_every_sample_character_comes_with_its_portrait():
             assert not source.exists() or strip_metadata(source.read_bytes()) == (
                 source.read_bytes()
             )
+
+
+def test_a_sample_s_map_shows_each_area_s_own_view_over_it(app, tmp_path: Path):
+    """Brasshaven, looked at over the Ashcombe Works: Isometric lays the
+    works' own view over the works (it used to show Tinker's Row, where the
+    story is), each painted area is marked before Isometric is pressed."""
+    window = MainWindow(root=tmp_path, use_mock=True)
+    window.open_setup = lambda *a, **k: False
+    window.resize(1600, 1000)
+    window._import_plot_file(SAMPLES / "Brasshaven.md")
+    session = window.session
+    window.show_world(True)
+    view = window.world_view
+    works = next(p for p in session.world().places.values() if p.name == "The Ashcombe Works")
+    view.go_to(works.id)
+    assert view.area_in_view().id == works.id
+    assert view._badges[works.id].isVisible() and not view._isos[works.id].isVisible()
+    view.iso_button.setChecked(True)
+    assert view._isos[works.id].isVisible()
+    assert view._isos[works.id].sceneBoundingRect() == view._plans[works.id].rect()
+    assert view.iso_bar.offer.text() == "The Ashcombe Works: its isometric view."
+    window._chat_allows_close = lambda: True
+    window.close()

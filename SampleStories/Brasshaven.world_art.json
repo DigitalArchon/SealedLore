@@ -2706,16 +2706,52 @@
  "failures": {},
  "pictures": [
   {
-   "id": "e8256ddf-dd1f-43b5-9a2a-f995a86b5ead",
+   "id": "c9e90bb7-8256-4b59-a795-5341c0f84b91",
+   "subject": "isometric",
+   "subject_id": "8ed0e87a-f711-53e4-b4f1-629bdd6c3250",
+   "name": "The Engine Cathedral",
+   "state": "",
+   "file": "pictures/map/brasshaven-engine-cathedral-isometric.jpg",
+   "from_picture": null,
+   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: A vast rectangular hall of riveted iron ribs and pale glass panes fills the view, daylight falling through its long roof to a colossal chimney tower of dark iron that rises above every surrounding rooftop. Inside the hall a huge engine of iron stands at the centre, ringed by pressure gauges on piped stands. A boiler and a coal store heaped with black coal sit against one wall, and an overhead gantry crane on raised rails spans the engine from end to end. A platform lift with an iron cage occupies one corner. On the street side tall iron gates open the wall, and beside them a walled dock with tram rails meets the building. The ground: indoors. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
+   "model": "qwen-image",
+   "made_at": "2026-10-15T02:10:41.747622+00:00"
+  },
+  {
+   "id": "2c2c4133-3d9d-4a87-a132-5e443ba7fb27",
+   "subject": "isometric",
+   "subject_id": "de95d84b-d756-58df-b3de-3f30effc79dc",
+   "name": "The Ashcombe Works",
+   "state": "",
+   "file": "pictures/map/brasshaven-ashcombe-works-isometric.jpg",
+   "from_picture": null,
+   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: An isometric view of a walled industrial compound behind iron railings, with three iron gates set into the fence line. Inside, four tall smokestacks rise from brick foundry buildings, their chimneys trailing smoke. Long warehouse structures with pitched roofs stand among the foundries. A coal heap sits near one of the gates. Beside the factories stands a grand mansion of white stone trimmed with brass, with a tall mooring tower rising beside it. Rows of mechanical automatons march in and out through the iron gates. Daylight falls across the scene, casting long shadows from the smokestacks and the mooring tower over the grey rooftops and the pale stone of the mansion. The ground: cobbled streets. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
+   "model": "qwen-image",
+   "made_at": "2026-10-15T02:10:55.918129+00:00"
+  },
+  {
+   "id": "57a60a9c-4f87-4e98-8dc3-3b5f90ed8354",
+   "subject": "isometric",
+   "subject_id": "3de664bb-929a-5f6b-9d8c-d010af9532f5",
+   "name": "The Skyport",
+   "state": "",
+   "file": "pictures/map/brasshaven-skyport-isometric.jpg",
+   "from_picture": null,
+   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: A broad, open pier at the city's highest point, its deck laid bare to the sky. Rising from the platform stand seven tall iron mooring towers, grey and weathered, skeletal frames spread evenly across the surface. Around and above them, airships of every size ride tethered, their rounded envelopes and rigging lines crossing over the deck below. At one edge of the pier sits a single great lift, a large shafted structure breaking the otherwise open platform. No walls or roofs clutter the surface; the towers, the moored vessels, and the lone lift dominate the view, all hard iron lines against the exposed deck. The ground: indoors. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
+   "model": "qwen-image",
+   "made_at": "2026-10-15T02:11:32.283154+00:00"
+  },
+  {
+   "id": "eded8e9e-813c-4f80-a75b-d089fefd8e0f",
    "subject": "isometric",
    "subject_id": "0b14db0f-84e0-595d-9d72-2ea912b6f8e6",
    "name": "Tinker's Row",
    "state": "",
    "file": "pictures/map/brasshaven-tinkers-row-isometric.jpg",
    "from_picture": null,
-   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: Tinker's Row, A crooked district of workshops on the middle piers: narrow cobbled lanes, brass signs, steaming pipes, chimneys and gas lamps. In it: The Gilded Gear: Adelaide Quill's workshop: a narrow two-storey brick building with a big round brass gear over its door, its windows full of clockwork; The Copper Kettle: A tiny tearoom and tavern where artificers argue over plans, its windows fogged with steam; The tram stop: An iron shelter where the cog tram stops before climbing the pier. Marked on the map: iron tram shelter, gas lamp, gas lamp, gas lamp, gas lamp, brass sign: The Gilded Gear, steaming pipe run, chimney, chimney. The ground: as the map shows it. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
-   "model": "qwen-image",
-   "made_at": "2026-10-15T00:45:21.060621+00:00"
+   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: An isometric view of a narrow district of cobbled lanes on wooden piers over water. A two-storey brick building with a large round brass gear mounted above its door, its windows filled with clockwork devices. Beside it, a tiny tearoom building with fogged, steam-covered windows. An iron tram shelter stands along the lane. Steaming pipes run between buildings, and two brick chimneys rise from the rooftops. Brass signs hang over doorways. Four gas lamps line the crooked lanes, casting warm light. The scene is rendered in warm browns, coppers, and brass tones, with steam drifting across the cobblestones. The ground: cobbled streets. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
+   "model": "nano-banana-pro-edit",
+   "made_at": "2026-10-15T02:30:43.405989+00:00"
   }
  ],
  "pictures_by_day": {}

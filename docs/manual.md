@@ -664,8 +664,8 @@ well: File → New story from a sample → Doomsville is the same as importing
 drawn up beforehand (a `# Map` section: see "The map"). The Ashen Reach,
 The Silverwood, Brasshaven and The Ninth Furnace show other kinds of world
 (grimdark science fiction, traditional fantasy, steampunk and a hellscape),
-each with a plot, a map drawn up with an isometric view, a background
-picture, and a picture of every card. Rather than
+each with a plot, a map drawn up with an isometric view of every area, a
+background picture, and a picture of every card. Rather than
 write the format by hand, **File → Plot file editor…** writes it for you: the
 world, opening, characters, places, lore, facts and events each get a form,
 conditions and what an event brings or sets are picked from what the file
