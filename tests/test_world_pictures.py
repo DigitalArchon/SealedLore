@@ -14,7 +14,13 @@ import pytest
 from sealedlore.engine import session_world_art
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
-from sealedlore.engine.world_pictures import Person, looks_of, picture_size, plan_pictures
+from sealedlore.engine.world_pictures import (
+    Person,
+    isometric_size,
+    looks_of,
+    picture_size,
+    plan_pictures,
+)
 from sealedlore.models.character import Character
 from sealedlore.models.config import Config, MediaEndpoint, ProviderConfig
 from sealedlore.models.node import NodeMeta
@@ -225,6 +231,23 @@ def test_each_place_you_have_been_gets_a_postcard_where_you_are_first():
     assert picture_size(info, landscape=True) == "1360x768"
 
 
+def test_the_isometric_view_is_painted_nearest_the_shape_of_its_plan():
+    """The map lays the view over the plan it was painted from (5:3): the
+    listed size nearest that shape, not the widest (Qwen's 4:3 lost a tenth
+    at the top and the bottom)."""
+    qwen = ImageModelInfo(
+        id="q", name="q", resolutions=("auto", "1024x1024", "768x1024", "1024x768", "1024x576")
+    )
+    assert isometric_size(qwen) == "1024x576"
+    klein = ImageModelInfo(
+        id="k", name="k", resolutions=("1024*1024", "1280*720", "1536*1024", "1536*1536")
+    )
+    assert isometric_size(klein) == "1280*720"
+    # Sizes it doesn't read ("1k") or no listing: as a postcard.
+    assert isometric_size(ImageModelInfo(id="n", name="n", resolutions=("1k", "2k"))) == "1k"
+    assert isometric_size(None) == "1024x768"
+
+
 def test_the_isometric_view_is_painted_only_when_asked_from_the_plan(session, tmp_path):
     """Map → Isometric: the author asks (no standing approval needed), the
     plan's own picture goes with the prompt, it counts against the day's map
@@ -232,6 +255,15 @@ def test_the_isometric_view_is_painted_only_when_asked_from_the_plan(session, tm
     from sealedlore.engine.world_pictures import isometric_state
 
     session.config.map_pictures = False  # the press is the approval
+    session.config.image_models = [
+        {
+            "id": "qwen-image",
+            "supported_parameters": {
+                "resolutions": ["1024x768", "1024x576"],
+                "max_input_images": 3,
+            },
+        }
+    ]
     model, _price, problem = session.isometric_offer()
     assert model == "qwen-image" and problem is None
     assert session.map_picture_jobs() == []  # nothing painted on its own
@@ -242,6 +274,7 @@ def test_the_isometric_view_is_painted_only_when_asked_from_the_plan(session, tm
     assert view is not None and view.state == isometric_state(session.world(), "farm")
     payload = FakeImages.sent[-1]
     assert payload["model"] == "qwen-image"
+    assert payload["size"] == "1024x576"  # the plan's shape, near enough
     assert "Redraw this game map as an isometric view" in payload["prompt"]
     assert "data:image/png;base64" in json.dumps(payload)  # the plan's picture went with it
     log_file = tmp_path / "stories" / session.story.id / "api_log.jsonl"
@@ -289,6 +322,36 @@ def test_the_isometric_view_is_painted_from_what_a_picture_shows_not_the_map_s_w
     assert session.start_isometric("farm", lambda: png(16, 12))
     session._isometric_thread.join(10)
     assert "What is on it: The farm" in FakeImages.sent[-1]["prompt"]
+
+
+def test_a_scene_that_quotes_words_is_asked_for_again_and_never_lettered(session, tmp_path):
+    """The writer once wrote 'a bulkhead plaque lettered "PALE MARTYR"' and
+    the painter lettered it on: quotation marks get the scene asked for once
+    more, and what is still quoted the second time is left out."""
+    session.provider.responses = [
+        'A wreck with a plaque lettered "PALE MARTYR" on its hull.',
+        "A wreck half buried in ash.",
+    ]
+    assert session.start_isometric("farm", lambda: png(16, 12))
+    session._isometric_thread.join(10)
+    prompt = FakeImages.sent[-1]["prompt"]
+    assert "What is on it: A wreck half buried in ash." in prompt
+    session.provider.responses = [
+        'A plaque lettered "PALE MARTYR".',
+        "A plaque lettered “PALE MARTYR” on a hull.",
+    ]
+    assert session.start_isometric("farm", lambda: png(16, 12))
+    session._isometric_thread.join(10)
+    prompt = FakeImages.sent[-1]["prompt"]
+    assert "What is on it: A plaque lettered on a hull." in prompt
+    assert "MARTYR" not in prompt
+    kinds = [
+        json.loads(line)["kind"]
+        for line in (tmp_path / "stories" / session.story.id / "api_log.jsonl")
+        .read_text()
+        .splitlines()
+    ]
+    assert kinds.count("isometric_prompt_request") == 4  # each asked twice, each logged
 
 
 def test_the_isometric_view_names_a_change_first_and_goes_out_of_date_with_it():

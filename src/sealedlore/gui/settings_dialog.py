@@ -41,7 +41,7 @@ from sealedlore.engine.reasoning import (
 from sealedlore.engine.reasoning import describe as describe_reasoning
 from sealedlore.engine.routing import describe, routable, route_body
 from sealedlore.engine.speed_test import Role, SpeedTarget, plan_targets
-from sealedlore.engine.world_pictures import picture_size
+from sealedlore.engine.world_pictures import isometric_size, picture_size
 from sealedlore.gui.attest_check import AttestationButton
 from sealedlore.gui.fields import FormScroll
 from sealedlore.gui.image_jobs import ImageCatalog
@@ -1121,7 +1121,7 @@ class SettingsDialog(QDialog):
     def _sync_map_isometric_note(self, *_args) -> None:
         model = self.map_isometric_model.text().strip()
         info = next((m for m in self._image_models if m.id == model), None)
-        each = info.price(picture_size(info, landscape=True)) if info else None
+        each = info.price(isometric_size(info)) if info else None
         price = f"${each:.2f} a view listed" if each else "price not listed"
         takes = (
             " It can't be given the map to paint from: choose one that takes pictures."

@@ -12,6 +12,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
+from PySide6.QtCore import QRectF  # noqa: E402
 from PySide6.QtWidgets import QApplication, QGraphicsSimpleTextItem  # noqa: E402
 
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
@@ -278,48 +279,115 @@ def test_a_station_in_space_is_a_deck_and_its_people_stand_apart(app):
     assert view.progress.isHidden() and view.progress_label.text() == "✓ The map is drawn"
 
 
-def test_the_isometric_view_shows_its_painting_and_offers_to_paint_it(app):
-    """Map → Isometric: up close, the painting of the local area in place of
-    the map, saying the 2D map is the truth; out of date once the map there
-    changes, with Paint it again; never painted without the author's press."""
+def _two_areas():
+    """A farm with a view and a town without, a few hundred metres apart."""
     from sealedlore.engine.world_pictures import isometric_state
     from sealedlore.models.world import MapPicture
-    from tests.test_world_pictures import png
 
-    view = WorldView()
-    view.resize(900, 700)
     farm = WorldPlace(id="farm", name="The farm", kind="site", x=0.0, y=0.0, size=400)
     barn = WorldPlace(id="barn", name="The barn", kind="building", inside="farm", x=0.0, y=50.0)
-    world = WorldMap(places={"farm": farm, "barn": barn}, where={"Jane": "farm"})
-    plan = PlaceLayout(place_id="farm", rows=["." * 40] * 24, spec={"ground": "snow"})
+    works = WorldPlace(id="works", name="The works", kind="site", x=900.0, y=0.0, size=400)
+    world = WorldMap(
+        places={"farm": farm, "barn": barn, "works": works},
+        where={"Jane": "farm"},
+        seen=["farm", "works"],
+    )
+    plans = {
+        pid: {"": PlaceLayout(place_id=pid, rows=["." * 40] * 24, spec={"ground": "snow"})}
+        for pid in ("farm", "works")
+    }
     painted = MapPicture(
         subject="isometric",
         subject_id="farm",
         name="The farm",
         state=isometric_state(world, "farm"),
         file="images/map/iso.png",
+        model="qwen-image",
     )
-    art = WorldArt(layouts={"farm": {"": plan}}, pictures=[painted])
-    view.picture_reader = lambda path: png(32, 24) if path == painted.file else None
-    view.isometric_offer = ("nano-banana-pro-edit", 0.14, None)
+    return world, WorldArt(layouts=plans, pictures=[painted]), painted
+
+
+def test_each_area_s_isometric_view_lies_over_it_on_the_map(app):
+    """Map → Isometric (the author, Oct 15 2026): each area has its own view,
+    the map marks which have one before Isometric is pressed, and a view lies
+    over the 2D map where its area is. The bar is for the area in view, not
+    the character's (looking at the works, it used to show the farm)."""
+    from tests.test_world_pictures import png
+
+    view = WorldView()
+    view.resize(900, 700)
+    world, art, painted = _two_areas()
+    view.picture_reader = lambda path: png(50, 30) if path == painted.file else None
+    view.isometric_offer = ("qwen-image", 0.02, None)
     view.set_world(world, art, "Jane", keep_view=False)
-    assert view.level() == "local" and not view.iso_button.isHidden()
+    assert view.level() == "local" and view.area_in_view().id == "farm"
+    assert not view.iso_button.isHidden() and "The farm has one" in view.iso_button.toolTip()
+    # Before Isometric is pressed: the farm is marked, the works isn't.
+    assert set(view._isos) == {"farm"} and view._badges["farm"].isVisible()
+    assert not view._isos["farm"].isVisible()
+    assert view._badges["farm"].text == "◆ Isometric view"
+    # On: the view lies over the farm's plan, exactly where it is.
     view.iso_button.setChecked(True)
-    assert view.stack.currentWidget() is view.iso_panel
-    assert "the story's truth" in view.iso_panel.note.text()
-    assert view.iso_panel.paint_button.isHidden()  # painted for the map as it is
-    # The barn burns: the painting is out of date and offers to paint again.
-    world.places["barn"] = barn.model_copy(update={"state": "burning"})
-    view.set_world(world, art, "Jane")
-    assert "has changed since" in view.iso_panel.offer.text()
-    assert "Paint it again (nano-banana-pro-edit, $0.14)" in view.iso_panel.paint_button.text()
+    farm_view = view._isos["farm"]
+    assert farm_view.isVisible() and not view._badges["farm"].isVisible()
+    assert farm_view.sceneBoundingRect() == view._plans["farm"].rect()
+    assert not view.iso_bar.isHidden() and "its isometric view" in view.iso_bar.offer.text()
+    assert "the story's truth" in view.hint.text()  # what the view is, in the hint line
+    assert "Paint it again (qwen-image, $0.02)" in view.iso_bar.paint_button.text()
+    # Its 50x30 painting covers the plan's 5:3 rectangle whole: nothing cut.
+    assert farm_view.source() == QRectF(0, 0, 50, 30)
+    # Over to the works: the bar is the works', which has none yet.
+    view.go_to("works")
+    assert view.area_in_view().id == "works"
+    assert "The works has no isometric view yet" in view.iso_bar.offer.text()
+    assert view.iso_bar.paint_button.text() == "Paint it (qwen-image, $0.02)"
+    assert view.iso_bar.whole_button.isHidden()
     asked: list[str] = []
     view.isometric_requested.connect(asked.append)
-    view.iso_panel.paint_button.click()
-    assert asked == ["farm"]
-    # Out to the region: the map again.
+    view.iso_bar.paint_button.click()
+    assert asked == ["works"]  # the area in view, not where Jane is
+    own: list[str] = []
+    view.own_isometric_requested.connect(own.append)
+    view.iso_bar.own_button.click()
+    assert own == ["works"]
+    # Being painted: said, and not offered twice.
+    view.isometric_painting = "works"
+    view.sync_isometric()
+    assert "Painting the view of The works" in view.iso_bar.offer.text()
+    assert view.iso_bar.paint_button.isHidden()
+    view.isometric_painting = None
+    # The barn burns: the farm's view is out of date, and says so.
+    world.places["barn"] = world.places["barn"].model_copy(update={"state": "burning"})
+    view.go_to("farm")
+    view.set_world(world, art, "Jane")
+    assert "the map has changed since this view was painted" in view.iso_bar.offer.text()
+    assert not view._isos["farm"].current
+    # Faded to see the map under it.
+    view.iso_bar.opacity.setValue(40)
+    assert view._isos["farm"].opacity() == pytest.approx(0.4)
+    # Off: the marks again, now saying the view is out of date.
+    assert view.leave_isometric() and not view.leave_isometric()
+    assert view._badges["farm"].text.endswith("out of date") and view.iso_bar.isHidden()
+    # Out to the region: no area in view, the views close up only; the farm
+    # is marked by its name.
     view.go_region()
-    assert not view.iso_button.isChecked() and view.stack.currentWidget() is view.view
+    assert view.area_in_view() is None
+    farm_item = next(i for i in view._items if i.place.id == "farm")
+    assert farm_item._name.startswith("◆ ")
+
+
+def test_a_mark_clicked_shows_that_area_s_view(app):
+    from tests.test_world_pictures import png
+
+    view = WorldView()
+    view.resize(900, 700)
+    world, art, painted = _two_areas()
+    view.picture_reader = lambda path: png(50, 30) if path == painted.file else None
+    view.set_world(world, art, "Jane", keep_view=False)
+    view.go_to("works")
+    view._badge_clicked("farm")
+    assert view.iso_button.isChecked() and view.area_in_view().id == "farm"
+    assert view._isos["farm"].isVisible()
 
 
 def test_with_no_local_plan_the_region_shows_and_says_why(app):
@@ -597,3 +665,28 @@ def test_a_place_s_postcard_shows_on_its_card(app):
     assert view.title.text() == "Diner" and not view.postcard_button.isHidden()
     view.go_region()
     assert view.postcard_button.isHidden() and view.card.isHidden()  # no card off the local map
+
+
+def test_a_plan_in_the_fog_is_not_drawn_nor_its_view_marked(app):
+    """A plot file's map may come with plans of places the story hasn't
+    reached (a sample's are drawn whole): moved over one, the map showed it,
+    plan and all, and a view would have been marked there."""
+    from tests.test_world_pictures import png
+
+    view = WorldView()
+    view.resize(900, 700)
+    world, art, painted = _two_areas()
+    world.seen = ["works"]  # the farm not reached, nor told of
+    world.where = {"Jane": "works"}
+    art.pictures[0] = art.pictures[0].model_copy(update={"subject_id": "farm"})
+    view.picture_reader = lambda path: png(50, 30) if path == painted.file else None
+    view.set_world(world, art, "Jane", keep_view=False)
+    view.go_to("farm")
+    assert view.level() == "local"
+    assert "The farm" not in shown_plans(view) and "farm" not in view._isos
+    assert view.area_in_view() is None or view.area_in_view().id != "farm"
+    # Once it is seen, it is there, view and all.
+    world.seen = ["works", "farm"]
+    view.set_world(world, art, "Jane")
+    view.go_to("farm")
+    assert "The farm" in shown_plans(view) and view._badges["farm"].isVisible()

@@ -23,8 +23,9 @@ for the big names):
   places hidden.
 
 Local, Region and World jump to each, centred on the character; the wheel
-moves between them. Everything here is read from the session; the view
-never changes the story.
+moves between them. Isometric lays each area's painted view over its plan
+(gui/isometric_view.py), and marks the areas that have one while it is off.
+Everything here is read from the session; the view never changes the story.
 """
 
 from __future__ import annotations
@@ -58,7 +59,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QProgressBar,
     QScrollArea,
-    QStackedWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -77,7 +77,7 @@ from sealedlore.engine.world_art import (
 from sealedlore.engine.world_layout import position, size_of
 from sealedlore.engine.world_pictures import isometric_state
 from sealedlore.gui import text_size
-from sealedlore.gui.isometric_view import IsometricPanel
+from sealedlore.gui.isometric_view import IsometricBar, IsometricDialog
 from sealedlore.gui.map_art import FOG, picture_sprite, sprite_pixmap
 from sealedlore.gui.map_render import drawn_box, label_key
 from sealedlore.gui.map_tiles import (
@@ -87,8 +87,9 @@ from sealedlore.gui.map_tiles import (
     prop_sprite,
     tiles_pixmap,
 )
+from sealedlore.gui.ref_images import image_of
 from sealedlore.gui.wrap_row import WrapRow
-from sealedlore.models.world import PlaceLayout, WorldArt, WorldMap, WorldPlace
+from sealedlore.models.world import MapPicture, PlaceLayout, WorldArt, WorldMap, WorldPlace
 
 LEVELS = ("local", "region", "world")
 # A place's picture on the region: scaled with the map, within these (a
@@ -127,6 +128,19 @@ LABEL_GAP = 3
 AVATAR_HEIGHT = 26
 # A postcard's thumbnail on a place's card.
 POSTCARD_THUMB = (176, 100)
+# An area's isometric view lies over its plan: above every plan (2 to 2.9)
+# and below the places' pictures and names (3 and up).
+ISO_Z = 2.95
+# A view is held no wider than this (the map shows it no wider); seen whole,
+# it is read from its file again.
+ISO_HELD_WIDTH = 1600
+# What marks an area that has a view, while the views aren't shown.
+ISO_MARK = "◆"
+ISO_TIP = (
+    "Each area's isometric view laid over the map where it is: painted by an image model "
+    "from the map when you ask, or a picture of your own. The 2D map stays the story's "
+    "truth; a view matches it closely, not exactly."
+)
 # Places with no picture of their own (land, not a thing on it): a mark only.
 _MARK_COLOURS = {
     "region": "#c9b98a",
@@ -172,7 +186,9 @@ class _PlaceItem(QGraphicsItem):
         *,
         visited: bool,
         current: bool,
+        painted: bool = False,
     ) -> None:
+        """`painted`: the place has an isometric view, marked before its name."""
         super().__init__()
         self.place = place
         self._picture = picture
@@ -187,7 +203,8 @@ class _PlaceItem(QGraphicsItem):
         self.setAcceptHoverEvents(True)
         self.setOpacity(1.0 if visited or current else 0.55)
         self.setZValue(4 if current else 3)
-        self._name = place.name + (f" ({place.state})" if place.state else "")
+        mark = f"{ISO_MARK} " if painted else ""
+        self._name = mark + place.name + (f" ({place.state})" if place.state else "")
         self._fonts()
         self.set_pixels(MIN_PLACE_PX)
 
@@ -346,6 +363,8 @@ class _PlanItem(QGraphicsPixmapItem):
 
 class _WorldGraphics(QGraphicsView):
     place_opened = Signal(str)
+    # A double-click on an area's isometric view: see it whole.
+    view_opened = Signal(str)
     zoomed = Signal()
     zoom_at = Signal(QPointF)
     dragged = Signal()
@@ -357,6 +376,9 @@ class _WorldGraphics(QGraphicsView):
         self.setRenderHint(QPainter.Antialiasing, True)
         self.setDragMode(QGraphicsView.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        # The middle stays where it is when the map's room changes (the
+        # isometric bar over it, the card under it): what is in view stays.
+        self.setResizeAnchor(QGraphicsView.AnchorViewCenter)
         self.setBackgroundBrush(QBrush(QColor(FOG)))
         self.setObjectName("worldMapView")
 
@@ -387,9 +409,11 @@ class _WorldGraphics(QGraphicsView):
 
     def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802 - Qt's name
         item = self.itemAt(event.position().toPoint())
-        while item is not None and not isinstance(item, _PlaceItem):
+        while item is not None and not isinstance(item, (_PlaceItem, _IsoItem)):
             item = item.parentItem()
-        if isinstance(item, _PlaceItem):
+        if isinstance(item, _IsoItem):
+            self.view_opened.emit(item.area.id)
+        elif isinstance(item, _PlaceItem):
             self.place_opened.emit(item.place.id)
         else:
             self.zoom_at.emit(self.mapToScene(event.position().toPoint()))
@@ -453,6 +477,94 @@ class _TagItem(QGraphicsSimpleTextItem):
         self.setTransform(QTransform.fromTranslate(-rect.width() / 2, -rect.height() / 2))
 
 
+class _IsoItem(QGraphicsItem):
+    """An area's isometric view over its plan, in metres: the painting
+    covers the plan's rectangle, cut to it where their shapes differ (a view
+    is painted near the plan's 5:3, so little is), framed so the edge of the
+    area shows: gold while it is of the map as it is, grey once out of date."""
+
+    def __init__(
+        self, area: WorldPlace, rect: QRectF, image: QImage, *, current: bool, painted_by: str
+    ) -> None:
+        super().__init__()
+        self.area = area
+        self.current = current
+        self._rect = rect
+        self.pixmap = QPixmap.fromImage(image)
+        self.setZValue(ISO_Z)
+        said = f"painted from the map by {painted_by}" if painted_by else "a picture of your own"
+        old = "" if current else " The map here has changed since it was painted."
+        self.setToolTip(
+            f"{area.name}: its isometric view, {said}.{old} Double-click to see it whole."
+        )
+
+    def boundingRect(self) -> QRectF:  # noqa: N802 - Qt's name
+        return self._rect
+
+    def source(self) -> QRectF:
+        """The part of the painting over the plan: all of it, less what is
+        wider (at the sides) or taller (top and bottom) than the plan."""
+        width, height = self.pixmap.width(), self.pixmap.height()
+        wanted = self._rect.width() / self._rect.height()
+        if height and width / height > wanted:
+            cut = width - height * wanted
+            return QRectF(cut / 2, 0, width - cut, height)
+        cut = height - width / wanted
+        return QRectF(0, cut / 2, width, height - cut)
+
+    def paint(self, painter: QPainter, _option, _widget=None) -> None:
+        painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+        painter.drawPixmap(self._rect, self.pixmap, self.source())
+        pen = QPen(QColor("#f6cf6e" if self.current else "#9aa0b4"), 2)
+        pen.setCosmetic(True)
+        painter.setPen(pen)
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRect(self._rect)
+
+
+class _BadgeItem(QGraphicsItem):
+    """The mark on an area that has an isometric view, at its plan's top
+    left while the views aren't shown, the same size whatever the zoom: so
+    the author can see which areas have one before pressing Isometric. A
+    click shows them, centred on this area."""
+
+    def __init__(self, area_id: str, text: str, on_click: Callable[[str], None]) -> None:
+        super().__init__()
+        self.area_id = area_id
+        self.text = text
+        self._on_click = on_click
+        self.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
+        self.setZValue(ISO_Z)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setAcceptedMouseButtons(Qt.LeftButton)
+        self.setToolTip("This area has an isometric view: click to lay it over the map")
+        self._font = QFont()
+        self._font.setPointSizeF(text_size.points(8.5))
+        self._font.setBold(True)
+        metrics = QFontMetricsF(self._font)
+        # Inside the plan's corner, a few pixels in.
+        self._box = QRectF(6, 6, metrics.horizontalAdvance(text) + 14, metrics.height() + 6)
+
+    def boundingRect(self) -> QRectF:  # noqa: N802 - Qt's name
+        return self._box.adjusted(-1, -1, 1, 1)
+
+    def paint(self, painter: QPainter, _option, _widget=None) -> None:
+        painter.setPen(QPen(QColor("#f6cf6e"), 1))
+        painter.setBrush(QColor(20, 24, 40, 210))
+        painter.drawRoundedRect(self._box, 4, 4)
+        painter.setFont(self._font)
+        painter.setPen(QColor("#f6cf6e"))
+        painter.drawText(self._box, Qt.AlignCenter, self.text)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt's name
+        event.accept()  # a click on the mark, not the start of a drag
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt's name
+        if self._box.contains(event.pos()):
+            self._on_click(self.area_id)
+        event.accept()
+
+
 class WorldView(QWidget):
     back_requested = Signal()
     # The author asked for the isometric view of this area to be painted.
@@ -479,11 +591,7 @@ class WorldView(QWidget):
         self.zoom_in = self._button("+", "Zoom in (+, or the mouse wheel)")
         self.inside_button = self._button("See inside", "Take every roof off, to see inside")
         self.inside_button.setCheckable(True)
-        self.iso_button = self._button(
-            "Isometric",
-            "The local map painted in isometric by an image model, when you ask: the 2D map "
-            "stays the story's truth, and this matches it closely, not exactly",
-        )
+        self.iso_button = self._button("Isometric", ISO_TIP)
         self.iso_button.setCheckable(True)
         self.redraw_button = self._button(
             "Redraw plan…",
@@ -532,14 +640,16 @@ class WorldView(QWidget):
         self.region_button.clicked.connect(lambda: self.go_region())
         self.world_button.clicked.connect(lambda: self.go_world())
         self.inside_button.toggled.connect(lambda _on: self._update_detail())
-        # The isometric view takes the map's place while it is on.
-        self.iso_panel = IsometricPanel()
-        self.iso_panel.paint_requested.connect(self._paint_requested)
-        self.iso_panel.own_requested.connect(self._own_requested)
-        self.iso_button.toggled.connect(lambda _on: self.sync_isometric())
-        self.stack = QStackedWidget()
-        self.stack.addWidget(self.view)
-        self.stack.addWidget(self.iso_panel)
+        # Isometric lays each area's view over the map; the bar over the map
+        # is for the area in view (`area_in_view`).
+        self.iso_bar = IsometricBar()
+        self.iso_bar.paint_requested.connect(self._paint_requested)
+        self.iso_bar.own_requested.connect(self._own_requested)
+        self.iso_bar.whole_requested.connect(self._whole_requested)
+        self.iso_bar.opacity_changed.connect(self._set_iso_opacity)
+        self.iso_bar.hide()
+        self.iso_button.toggled.connect(self._iso_toggled)
+        self.view.view_opened.connect(self.show_view_whole)
         # A place's card, under the map: what the story said of it, who and
         # what is there. Shown on the local map, for the place in view.
         self.side = QLabel()
@@ -577,7 +687,8 @@ class WorldView(QWidget):
         layout.addLayout(progress_row)
         layout.addWidget(self.pause_note)
         layout.addWidget(self.hint)
-        layout.addWidget(self.stack, 1)
+        layout.addWidget(self.iso_bar)
+        layout.addWidget(self.view, 1)
         layout.addWidget(self.card)
         self.world = WorldMap()
         self.art = WorldArt()
@@ -594,6 +705,14 @@ class WorldView(QWidget):
         # sets them).
         self.isometric_offer: tuple[str, float | None, str | None] = ("", None, None)
         self.isometric_painting: str | None = None
+        # Each area's view over its plan, the marks on those that have one,
+        # and the views read from their files (held scaled, by picture id).
+        self._isos: dict[str, _IsoItem] = {}
+        self._badges: dict[str, _BadgeItem] = {}
+        self._iso_images: dict[str, QImage] = {}
+        self._iso_opacity = 1.0
+        # The area the isometric bar is about now (`area_in_view`).
+        self._focus: str | None = None
         # Every item the scene holds is held here too: PySide lets a scene
         # item go with its Python wrapper, so the land vanished once built.
         self._items: list[_PlaceItem] = []
@@ -612,6 +731,8 @@ class WorldView(QWidget):
         self._built = False
         self._updating = False
         self._fitting = False
+        # The places out of the fog, whose plans may be drawn (`_build`).
+        self._open: set[str] = set()
         self._build()
 
     @staticmethod
@@ -669,6 +790,19 @@ class WorldView(QWidget):
         been |= containers(self.world, been)
         around = {p.id for p in self.world.places.values() if p.inside in been}
         return set(self.world.seen) | been | around
+
+    def _out_of_the_fog(self) -> set[str]:
+        """The places whose plans may be drawn: those shown (`_shown`) and
+        what is inside them. A plot file's map can come with plans of places
+        the story hasn't reached (a sample's are drawn whole), and showing
+        one would lift the fog off it: The Ashen Reach's vox relay showed,
+        plan and all, to anyone who moved the map over it."""
+        shown = self._shown()
+        return {
+            pid
+            for pid in self.world.places
+            if pid in shown or containers(self.world, [pid]) & shown
+        }
 
     def level(self) -> str:
         """Which of LEVELS the zoom is nearest now (see REGION_REACH)."""
@@ -764,6 +898,8 @@ class WorldView(QWidget):
         self._plans = {}
         self._links = []
         self._land = []
+        self._isos = {}
+        self._badges = {}
         self.people = []
         self.scene.clear()
         self.scene.setSceneRect(QRectF())  # set below from what is drawn
@@ -774,9 +910,11 @@ class WorldView(QWidget):
             )
             self._sync_buttons()
             return
+        self._open = self._out_of_the_fog()
         self._build_land()
         self._build_links()
         self._build_plans()
+        self._build_isometric()
         self._build_places()
         bounds = QRectF()
         for item in self.scene.items():
@@ -841,6 +979,57 @@ class WorldView(QWidget):
             self._plans[place.id] = plan
         self._fit_in_parents()
 
+    def _area_plans(self) -> dict[str, _PlanItem]:
+        """The plans of local areas (the farm, the town: `local_area`), the
+        places an isometric view is of."""
+        out = {}
+        for pid, plan in self._plans.items():
+            area = local_area(self.world, pid)
+            if area is not None and area.id == pid and pid in self._open:
+                out[pid] = plan
+        return out
+
+    def _build_isometric(self) -> None:
+        """Each local area's latest isometric view over its plan, shown while
+        Isometric is on, and the mark saying it has one, shown while it is
+        off (`_update_detail_now`)."""
+        held: dict[str, QImage] = {}
+        for pid, plan in self._area_plans().items():
+            picture = self.art.picture_for("isometric", pid)
+            image = self._iso_image(picture) if picture is not None else None
+            if picture is None or image is None:
+                continue
+            held[picture.id] = image
+            now = self.art.picture_for("isometric", pid, isometric_state(self.world, pid))
+            current = now is picture
+            view = _IsoItem(
+                plan.place, plan.rect(), image, current=current, painted_by=picture.model
+            )
+            view.setOpacity(self._iso_opacity)
+            view.setVisible(False)
+            self.scene.addItem(view)
+            self._isos[pid] = view
+            mark = f"{ISO_MARK} Isometric view" + ("" if current else " · out of date")
+            badge = _BadgeItem(pid, mark, self._badge_clicked)
+            badge.setPos(plan.rect().topLeft())
+            badge.setVisible(False)
+            self.scene.addItem(badge)
+            self._badges[pid] = badge
+        # Only the views in use stay held: one painted again replaces its old one.
+        self._iso_images = held
+
+    def _iso_image(self, picture: MapPicture) -> QImage | None:
+        """An isometric view's picture, held no wider than ISO_HELD_WIDTH;
+        None when its file can't be read."""
+        image = self._iso_images.get(picture.id)
+        if image is None:
+            data = self.picture_reader(picture.file) if self.picture_reader else None
+            image = image_of(data)
+            if image.width() > ISO_HELD_WIDTH:
+                image = image.scaledToWidth(ISO_HELD_WIDTH, Qt.SmoothTransformation)
+            self._iso_images[picture.id] = image
+        return None if image.isNull() else image
+
     def _fit_in_parents(self) -> None:
         """Each building's plan over the box its parent's plan drew for it
         (found by its name there), and that box kept as the one to open
@@ -875,15 +1064,24 @@ class WorldView(QWidget):
             spot = position(world, place.id)
             if spot is None or place.id not in shown:
                 continue
+            painted = place.id in self._isos
             item = _PlaceItem(
                 place,
                 self._picture_for(place),
                 people.get(place.id, []),
                 visited=place.id in visited,
                 current=place.id == here,
+                painted=painted,
             )
             item.setPos(spot[0], -spot[1])
-            item.setToolTip(place_card(world, place))
+            item.setToolTip(
+                place_card(world, place)
+                + (
+                    f"<br><br>{ISO_MARK} It has an isometric view: Isometric, close up."
+                    if painted
+                    else ""
+                )
+            )
             self.scene.addItem(item)
             self._items.append(item)
 
@@ -933,6 +1131,8 @@ class WorldView(QWidget):
         for pid, plan in self._plans.items():
             if level != "local" or not plan.rect().intersects(near):
                 continue  # the region and the world draw places, not plans
+            if pid not in self._open:
+                continue  # still in the fog
             on_screen = plan.width_m * scale
             is_inside = plan.place.kind == "building"
             if is_inside:
@@ -976,6 +1176,12 @@ class WorldView(QWidget):
                 ):
                     self._dress_plan(plan, ground, roofs, opened, fronts)
             plan.setVisible(show)
+        # Each area's view over its plan with Isometric on; its mark with it off.
+        iso_on = self.iso_button.isChecked()
+        for pid, view in self._isos.items():
+            view.setVisible(iso_on and pid in shown_plans)
+        for pid, badge in self._badges.items():
+            badge.setVisible(not iso_on and pid in shown_plans)
         here = self.here()
         for item in self._items:
             place = item.place
@@ -1013,6 +1219,9 @@ class WorldView(QWidget):
             item.set_ringed(item.place.id == ringed)
         self._sync_buttons()
         self._sync_card(level, shown_plans)
+        focus = self.area_in_view(level)
+        if (focus.id if focus is not None else None) != self._focus:
+            self.sync_isometric()  # the bar follows the area in view
 
     def _dress_plan(
         self,
@@ -1334,71 +1543,134 @@ class WorldView(QWidget):
         ):
             button.setChecked(level == name)
         self.inside_button.setVisible(level == "local")
-        self.iso_button.setVisible(
-            self.iso_button.isChecked() or (level == "local" and self._local_plan() is not None)
-        )
+        area = self.area_in_view(level)
+        self.iso_button.setVisible(self.iso_button.isChecked() or area is not None)
+        if area is not None:
+            has = area.id in self._isos
+            self.iso_button.setToolTip(
+                ISO_TIP
+                + (
+                    f" {area.name} has one ({ISO_MARK} on the map marks each area that does)."
+                    if has
+                    else f" {area.name} has none yet: paint one, or use a picture of your own."
+                )
+            )
         self.redraw_button.setVisible(
-            level == "local"
-            and self._local_plan() is not None
-            and not self.iso_button.isChecked()
-            and not self.paused
+            area is not None and not self.iso_button.isChecked() and not self.paused
         )
         self.redraw_button.setEnabled(not self.drawing)
         self.hint.setText(self._hint_for(level))
 
-    # --- the isometric view ----------------------------------------------------------
+    # --- the isometric views ---------------------------------------------------------
+
+    def area_in_view(self, level: str | None = None) -> WorldPlace | None:
+        """The local area the isometric bar and Redraw plan act on, on the
+        local map: the one whose plan is under the middle of the view, else
+        the nearest whose plan is in sight. None on the region or the world,
+        or with no area's plan in sight. (It was always the character's own:
+        looking at the Ashcombe Works, Isometric showed Tinker's Row.)"""
+        if not self.world.places or (level or self.level()) != "local":
+            return None
+        port = self.view.mapToScene(self.view.viewport().rect()).boundingRect()
+        centre = port.center()
+        nearest: tuple[float, WorldPlace] | None = None
+        for plan in self._area_plans().values():
+            rect = plan.rect()
+            if rect.contains(centre):
+                return plan.place
+            if not rect.intersects(port):
+                continue
+            middle = rect.center()
+            distance = math.hypot(middle.x() - centre.x(), middle.y() - centre.y())
+            if nearest is None or distance < nearest[0]:
+                nearest = (distance, plan.place)
+        return nearest[1] if nearest is not None else None
 
     def sync_isometric(self) -> None:
-        """The isometric view for the local area, or the map: its latest
-        painting, whether it is of the map as it is now, and the offer."""
-        area = local_area(self.world, self.here()) if self.world.places else None
-        on = self.iso_button.isChecked() and area is not None
-        self.stack.setCurrentWidget(self.iso_panel if on else self.view)
+        """The bar for the area in view, while the views are shown: its view
+        and whether it is of the map as it is now, and the offer."""
+        on = self.iso_button.isChecked()
+        area = self.area_in_view()
+        self._focus = area.id if area is not None else None
         self.inside_button.setEnabled(not on)
+        self.iso_bar.setVisible(on and area is not None)
         if not on or area is None:
+            if self.world.places:
+                self.hint.setText(self._hint_for(self.level()))
             return
         latest = self.art.picture_for("isometric", area.id)
-        current = self.art.picture_for("isometric", area.id, isometric_state(self.world, area.id))
-        data = self.picture_reader(latest.file) if latest and self.picture_reader else None
-        image = QImage.fromData(data) if data else None
+        has_view = latest is not None and self._iso_image(latest) is not None
+        now = self.art.picture_for("isometric", area.id, isometric_state(self.world, area.id))
         model, price, problem = self.isometric_offer
-        self.iso_panel.show_state(
+        self.iso_bar.show_state(
             place=area.name,
-            image=image if image is not None and not image.isNull() else None,
-            file=latest.file if latest else None,
-            current=current is not None and current is latest,
+            has_view=has_view,
+            current=now is not None and now is latest,
             painting=self.isometric_painting == area.id,
             model=model,
             price=price,
             problem=problem,
-            painted_by=latest.model if latest else "",
+            painted_by=latest.model if latest is not None else "",
         )
+        self.hint.setText(self._hint_for("local"))
 
     def leave_isometric(self) -> bool:
-        """Back to the map from the isometric view; False when it wasn't on."""
+        """The views off, back to the 2D map; False when they weren't on."""
         if not self.iso_button.isChecked():
             return False
         self.iso_button.setChecked(False)
         return True
 
+    def _iso_toggled(self, _on: bool) -> None:
+        self._update_detail()
+        self.sync_isometric()
+
+    def _set_iso_opacity(self, opacity: float) -> None:
+        self._iso_opacity = opacity
+        for view in self._isos.values():
+            view.setOpacity(opacity)
+
+    def _badge_clicked(self, area_id: str) -> None:
+        """A mark clicked: that area, with the views over the map."""
+        self.go_to(area_id)
+        self.iso_button.setChecked(True)
+
+    def show_view_whole(self, area_id: str) -> None:
+        """An area's view on its own, read whole from its file."""
+        area = self.world.places.get(area_id)
+        picture = self.art.picture_for("isometric", area_id)
+        if area is None or picture is None or self.picture_reader is None:
+            return
+        image = image_of(self.picture_reader(picture.file))
+        if image.isNull():
+            return
+        IsometricDialog(area.name, image, picture.model, self).exec()
+
+    def _whole_requested(self) -> None:
+        area = self.area_in_view()
+        if area is not None:
+            self.show_view_whole(area.id)
+
     def _redraw_requested(self) -> None:
-        area = local_area(self.world, self.here())
+        area = self.area_in_view()
         if area is not None:
             self.redraw_requested.emit(area.id)
 
     def _paint_requested(self) -> None:
-        area = local_area(self.world, self.here())
+        area = self.area_in_view()
         if area is not None:
             self.isometric_requested.emit(area.id)
 
     def _own_requested(self) -> None:
-        area = local_area(self.world, self.here())
+        area = self.area_in_view()
         if area is not None:
             self.own_isometric_requested.emit(area.id)
 
     def _hint_for(self, level: str) -> str:
         if not self.world.places:
             return "Nothing on the map yet: it grows as the story goes, from the next passage on."
+        if level == "local" and self.iso_button.isChecked() and self.iso_bar.isVisibleTo(self):
+            return self.iso_bar.note  # what the view in sight is
         if level == "local":
             return (
                 "North at the top. Zoom in on a building to see inside it; hover a marked "
@@ -1499,7 +1771,6 @@ class WorldView(QWidget):
 
     def go_region(self) -> None:
         """The country round the character: where to go next."""
-        self.leave_isometric()
         self._fitted = "region"
         scales = self._fit_scales()
         if scales is None:
@@ -1509,7 +1780,6 @@ class WorldView(QWidget):
 
     def go_world(self) -> None:
         """The whole map, zoomed out past the region so only the big names show."""
-        self.leave_isometric()
         self._fitted = "world"
         scales = self._fit_scales()
         if scales is None:

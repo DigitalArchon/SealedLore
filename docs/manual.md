@@ -931,19 +931,28 @@ Everything drawn for the map stays with the story: a restart, Duplicate
 settings and a scenario file keep the art and the pictures. Story pictures
 (Image…) still show you every request first.
 
-On the local map, **Isometric** shows the area painted in isometric by an
-image model (Settings → Images → **Isometric view model**: Qwen Image unless
-you choose another; **Recommended** beside it offers Nano Banana Pro, the most
-faithful, at about seven times the price). It is painted from the map itself, only when you
-press **Paint it**, which gives the model and its price; it counts with the
-day's map pictures. Before it is painted, the prompt writer (Settings →
-Models) turns what the map says about the place into only what a picture can
-show, leaving out names and story, which image models otherwise letter onto
-the view. The samples come with their views painted. The 2D map is the story's truth: the painting matches it
-closely, not exactly. Once the story changes something there (the barn
-burns), the view says it is out of date and offers to paint it again.
-**Use a picture of your own…** beside it takes a picture from disk as the
-view instead, cropped first to the view's shape.
+Each area on the local map (a farm, a town, a works) can have an
+**isometric view**: the area painted in isometric by an image model (Settings
+→ Images → **Isometric view model**: Qwen Image unless you choose another;
+**Recommended** beside it offers Nano Banana Pro, the most faithful, at about
+seven times the price). An area that has one is marked **◆ Isometric view**
+at its corner on the local map, and with a ◆ before its name on the region.
+**Isometric** lays every area's view over the map, exactly where the area
+is, so you see what it shows and where that is among everything around it;
+**Fade** lets the map show through, and **See it whole** (or a double-click
+on a view) opens it on its own to zoom into. The bar over the map is for the
+area in the middle of the view, wherever you have moved the map: **Paint it**
+paints that area from its map, giving the model and its price first (it
+counts with the day's map pictures), and **Paint it again** paints another
+take. Before it is painted, the prompt writer (Settings → Models) turns what
+the map says about the place into only what a picture can show, leaving out
+names and story, which image models otherwise letter onto the view. The
+samples come with a view of every area. The 2D map is the story's truth: a
+painting matches it closely, not exactly. Once the story changes something
+there (the barn burns), the view says it is out of date and offers to paint
+it again. **Use a picture of your own…** takes a picture from disk as the
+area's view instead, cropped first to the area's shape. The views and the
+postcards are in Media too, under **Map**.
 
 A story that keeps a map makes it part of the window: the Inspector, beside
 the story, takes half the window with **Map** as its first page. **Map**,
@@ -951,9 +960,9 @@ above the transcript, goes to it.
 
 A station or a ship is drawn as one deck: its rooms joined under the hull,
 space only outside it. A plan is drawn once and kept, so one that came out
-wrong stays so; **Redraw plan…** on the local map draws the plan of the place
-you are in again (you are asked first; the buildings you have been inside
-keep their own plans).
+wrong stays so; **Redraw plan…** on the local map draws the plan of the area
+in the middle of the view again (you are asked first; the buildings you have
+been inside keep their own plans).
 
 During a private scene the map stays in the window but is paused: it shows
 the story as it was when the scene began, nothing from the scene is read into
@@ -1207,7 +1216,7 @@ any part you like, or holds it to the exact shape the app uses:
 
 - a portrait, or a place or lore picture, as your portrait model draws them;
 - the background, as the story area is in the window now;
-- an isometric view, as your isometric view model paints it;
+- an isometric view, in the shape of a map area (5:3), which it covers;
 - a square, or the picture's own shape.
 
 Each place opens it on the shape it calls for. **Use the whole picture**

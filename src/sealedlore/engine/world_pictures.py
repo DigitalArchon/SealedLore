@@ -22,12 +22,13 @@ last picture (when the model takes pictures), so it stays the same barn.
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
-from sealedlore.engine.world_art import MAX_FAILURES, SPRITE_KINDS
+from sealedlore.engine.world_art import LAYOUT_HEIGHT, LAYOUT_WIDTH, MAX_FAILURES, SPRITE_KINDS
 from sealedlore.engine.world_layout import position
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.world import WorldArt, WorldMap, WorldPlace
@@ -37,6 +38,9 @@ from sealedlore.providers.images import ImageModelInfo
 MAP_PICTURES_DIR = "images/map"
 # What a card says of someone, at most, in a prompt.
 LOOKS_CHARS = 420
+# The isometric view is laid over its area's plan on the map, so it is painted
+# in the shape the model lists nearest the plan's (5:3), at most this wide.
+ISOMETRIC_WIDEST = 1536
 
 
 @dataclass(frozen=True)
@@ -90,6 +94,39 @@ def picture_size(model: ImageModelInfo | None, *, landscape: bool = False) -> st
     if big_enough:
         return big_enough[0][2]
     return sizes[0] if sizes else "1024x1024"
+
+
+# Words in quotation marks in the isometric view's scene are words to letter
+# onto it: the writer is told to use none (map.picture.isometric.writer),
+# and once wrote 'a bulkhead plaque lettered "PALE MARTYR"', which Nano
+# Banana Pro painted on the wreck's hull (1 scene of 17, Oct 15 2026).
+# Single quotes are left alone: they are apostrophes too.
+QUOTED = re.compile(r'"[^"]*"|“[^”]*”|„[^“”]*[“”]|«[^»]*»')
+
+
+def unquoted(scene: str) -> str:
+    """The scene with whatever it quotes left out."""
+    return " ".join(QUOTED.sub("", scene).split())
+
+
+def isometric_size(model: ImageModelInfo | None) -> str:
+    """The isometric view's size: the landscape size the model lists nearest
+    the shape of a plan (LAYOUT_WIDTH by LAYOUT_HEIGHT, 5:3), the larger on a
+    tie, up to ISOMETRIC_WIDEST across. The map lays the view over the plan
+    it was painted from, so the nearer its shape, the less is cut off (a 4:3
+    view lost a tenth at the top and the bottom). Else as a postcard."""
+    wanted = LAYOUT_WIDTH / LAYOUT_HEIGHT
+    shapes: list[tuple[float, int, str]] = []
+    for size in model.resolutions if model is not None else ():
+        parts = size.replace("*", "x").split("x")
+        if len(parts) != 2 or not (parts[0].isdigit() and parts[1].isdigit()):
+            continue
+        width, height = int(parts[0]), int(parts[1])
+        if height < width <= ISOMETRIC_WIDEST:
+            shapes.append((abs(width / height - wanted), -width * height, size))
+    if shapes:
+        return min(shapes)[2]
+    return picture_size(model, landscape=True)
 
 
 def plan_pictures(

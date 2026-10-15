@@ -37,15 +37,18 @@ from sealedlore.engine.world_art import (
 )
 from sealedlore.engine.world_pictures import (
     MAP_PICTURES_DIR,
+    QUOTED,
     Person,
     PictureJob,
     isometric_job,
     isometric_notes,
+    isometric_size,
     isometric_state,
     isometric_writer_messages,
     looks_of,
     picture_size,
     plan_pictures,
+    unquoted,
 )
 from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.world import MapPicture, WorldArt
@@ -221,7 +224,7 @@ class WorldArtRuntime:
         own (Oct 15 2026)."""
         model = self.config.map_isometric_model
         info = self._listed_image_model(model)
-        price = info.price(picture_size(info, landscape=True)) if info is not None else None
+        price = info.price(isometric_size(info)) if info is not None else None
         if not self.map_on or self.open_span is not None:
             return model, price, "Not in a private scene."
         media = self.config.images()
@@ -291,7 +294,7 @@ class WorldArtRuntime:
             if info is None:  # not in the config's listing: ask the endpoint once
                 listing = list_image_models(client.base_url, api=client.api)
                 info = next((m for m in listing if m.id == model), None)
-            size = picture_size(info, landscape=True)
+            size = isometric_size(info)
             self._picture_one(job, client, size, model=model, info=info, plan=plan)
         finally:
             client.close()
@@ -331,7 +334,9 @@ class WorldArtRuntime:
         """What is on the area in what a picture shows, from the map's own
         words, by the prompt writer (map.picture.isometric.writer), or None
         when it fails: the view is then painted from the words as they are.
-        On the painting's thread."""
+        A scene with quotation marks is asked for once more, and what is
+        still quoted the second time is left out (`unquoted`). On the
+        painting's thread."""
         model = self.image_prompt_model
         detached = getattr(self.provider, "detached", None)
         writer = detached() if callable(detached) else self.provider
@@ -343,24 +348,31 @@ class WorldArtRuntime:
                 messages=isometric_writer_messages(notes, self.texts),
                 params=params,
             )
-            log_ref = self._log(
-                "isometric_prompt_request", {"payload": writer.build_payload(request)}
-            )
-            try:
-                text, completed = writer.complete(request)
-            except Exception as exc:  # painted from the map's own words instead
-                self._log("isometric_prompt_error", {"request_log_ref": log_ref, "error": str(exc)})
-                return None
-            self._log(
-                "isometric_prompt_response",
-                {"request_log_ref": log_ref, "text": text, "usage": completed.raw_usage},
-            )
-            self.unreported_usage.append(self.priced(completed.usage, model))
-            scene = " ".join(text.split())
-            return scene if scene and completed.finish_reason != "length" else None
+            scene = self._write_isometric_scene(writer, request, model)
+            if scene is not None and QUOTED.search(scene):
+                again = self._write_isometric_scene(writer, request, model)
+                scene = unquoted(again if again is not None else scene)
+            return scene or None
         finally:
             if writer is not self.provider:
                 writer.close()
+
+    def _write_isometric_scene(self, writer, request: ChatRequest, model: str) -> str | None:
+        """One call to the isometric view's writer, logged; None when it
+        fails or is cut off."""
+        log_ref = self._log("isometric_prompt_request", {"payload": writer.build_payload(request)})
+        try:
+            text, completed = writer.complete(request)
+        except Exception as exc:  # painted from the map's own words instead
+            self._log("isometric_prompt_error", {"request_log_ref": log_ref, "error": str(exc)})
+            return None
+        self._log(
+            "isometric_prompt_response",
+            {"request_log_ref": log_ref, "text": text, "usage": completed.raw_usage},
+        )
+        self.unreported_usage.append(self.priced(completed.usage, model))
+        scene = " ".join(text.split())
+        return scene if scene and completed.finish_reason != "length" else None
 
     def start_map_pictures(self) -> bool:
         """Draw what the map needs from the image model, in the background."""

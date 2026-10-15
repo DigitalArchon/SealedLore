@@ -61,8 +61,8 @@ def _listed(model: str, *sizes: str) -> dict:
 
 def test_each_shape_is_the_size_its_model_draws():
     """A picture brought in should match one drawn: a portrait is the tall
-    size the portrait model lists, a lore picture its landscape size, the
-    isometric view the isometric model's."""
+    size the portrait model lists, a lore picture its landscape size. An
+    isometric view is the shape of the plan it is laid over on the map."""
     config = Config(
         portrait_model="flux",
         map_isometric_model="qwen",
@@ -75,7 +75,7 @@ def test_each_shape_is_the_size_its_model_draws():
     assert [s.key for s in picture_shapes(config)][:2] == [FREE, ORIGINAL]
     assert (shapes[PORTRAIT].width, shapes[PORTRAIT].height) == (2, 3)
     assert (shapes[PICTURE].width, shapes[PICTURE].height) == (16, 9)  # widest up to 1360
-    assert (shapes[ISOMETRIC].width, shapes[ISOMETRIC].height) == (4, 3)
+    assert (shapes[ISOMETRIC].width, shapes[ISOMETRIC].height) == (5, 3)
     # The background covers the story area, so its shape is the area's own.
     assert shapes[BACKGROUND].ratio == pytest.approx(935 / 660)
     assert "935 × 660" in shapes[BACKGROUND].label
@@ -85,7 +85,7 @@ def test_each_shape_is_the_size_its_model_draws():
 def test_without_a_listing_the_shapes_are_the_app_s_own_defaults():
     shapes = {s.key: s for s in picture_shapes(None)}
     assert shapes[PORTRAIT].ratio == pytest.approx(2 / 3)  # what portrait_size asks for unlisted
-    assert shapes[ISOMETRIC].ratio == pytest.approx(4 / 3)
+    assert shapes[ISOMETRIC].ratio == pytest.approx(5 / 3)
     assert shapes[BACKGROUND].ratio == pytest.approx(16 / 9)
     assert size_ratio("1k") is None and size_ratio("1536*1024") == (3, 2)
 
