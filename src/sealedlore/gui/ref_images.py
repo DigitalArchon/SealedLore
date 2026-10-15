@@ -461,9 +461,19 @@ class RefImageStrip(QWidget):
         """Take the first picture (the portrait, shown large) off; its file
         stays, as Remove leaves a picture's."""
         if self._refs:
-            self._refs.pop(0)
-            self.set_refs(self._refs)
-            self.changed.emit()
+            self.remove_ref(self._refs[0].id)
+
+    def remove_ref(self, ref_id: str) -> None:
+        """Take this picture off, wherever it now stands (a picture that
+        landed meanwhile may have taken its place); its file stays."""
+        if self._refs is None:
+            return
+        for index, ref in enumerate(self._refs):
+            if ref.id == ref_id:
+                self._refs.pop(index)
+                self.set_refs(self._refs)
+                self.changed.emit()
+                return
 
     def _make_portrait(self) -> None:
         ref = self._ref(self.list.currentItem())
@@ -521,9 +531,13 @@ class CardIcons:
 
     def icon(self, refs: list[ImageRef]) -> QIcon:
         store = self._pictures()
-        if store is not self._store:  # another story's pictures
+        # Another story's pictures: by the story, not the object, which a
+        # story on disk makes anew each time it is asked (so nothing was ever
+        # read once: every refresh read and decoded every card's picture).
+        key = (store.story_id, store.root) if hasattr(store, "story_id") else id(store)
+        if key != self._store:
             self._icons.clear()
-            self._store = store
+            self._store = key
         first = refs[0] if refs else None
         key = first.file if first is not None else ""
         icon = self._icons.get(key)

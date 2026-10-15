@@ -177,15 +177,17 @@ class PortraitRuntime:
         first: bool,
         caption: str = "",
         source: ImageRef | None = None,
+        references: Sequence[RefUse] = (),
     ) -> ImageRequest:
         """The request for one picture of a card, its prompt exactly as
         approved. `first`: it becomes the card's first picture (a new
         portrait); else it goes after the others. `source`: the picture
-        an edit is of, sent with the prompt."""
+        an edit is of, sent with the prompt; else `references`, the pictures
+        a picture drawn again was drawn from."""
         size = card_size(card, info)
-        references: tuple[RefUse, ...] = ()
+        person = isinstance(card, Character)
+        references = tuple(references)
         if source is not None:
-            person = isinstance(card, Character)
             references = (
                 RefUse(
                     owner_kind="character" if person else "lore",
@@ -207,7 +209,9 @@ class PortraitRuntime:
             listed_price=info.price(size) if info is not None else None,
             card_id=card.id,
             card_first=first,
-            card_caption=caption or (PORTRAIT_CAPTION if first else ""),
+            # A lore entry's first picture is no portrait (the Lore page
+            # captioned Hellsville so, and the writer's catalogue named it so).
+            card_caption=caption or (PORTRAIT_CAPTION if first and person else ""),
         )
 
     def card_edit_prompt(self, card: Card, change: str) -> str:
@@ -256,6 +260,10 @@ class PortraitRuntime:
             self.story.card_pictures_taken.append(image.id)
             taken.add(image.id)
             changed = True
+        if names:
+            # The cards moved on, as by hand: an Undo review restored them
+            # from before, and the picture, taken once, was gone for good.
+            self.forget_review_undo()
         if changed:
             self.save()
         return names

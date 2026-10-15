@@ -224,7 +224,10 @@ def test_a_drawn_portrait_is_sent_as_approved_and_becomes_the_first_picture_once
     records = run_image_request(client, request, store=session.pictures)
     assert client.sent[0]["prompt"] == approved  # not even trimmed
     session.pictures.add_images(records)
+    session.review_undo = object()  # a review was applied before it landed
     assert session.take_card_pictures() == ["John"]
+    # The cards moved on: an Undo review would take the picture away for good.
+    assert session.review_undo is None
     first = john.reference_images[0]
     assert first.caption == "portrait" and session.pictures.read(first.file) == PNG
     assert first.prompt == approved and first.model == info.id  # for Draw again
@@ -265,6 +268,14 @@ def test_lore_entries_are_written_for_too_and_one_with_nothing_to_see_gets_no_pr
     system = provider.payloads[-1]["messages"][0]["content"]
     sent = json.dumps(provider.payloads[-1])
     assert "lore entry" in json.dumps(system) and "THE LORE ENTRIES" in sent
+    # With no story style, a place is not drawn as a portrait photograph.
+    for payload in provider.payloads:
+        text = json.dumps(payload)
+        portrait_style = "head and shoulders" in json.dumps(payload["messages"][0])
+        assert portrait_style == ("THE CHARACTERS" in text)
+    # Nor is its first picture called a portrait.
+    request = session.card_request(town, "A town.", model="m", info=None, first=True)
+    assert request.card_caption == "" and request.card_first
 
 
 def test_an_edit_sends_the_picture_and_lands_after_the_others(tmp_path: Path):

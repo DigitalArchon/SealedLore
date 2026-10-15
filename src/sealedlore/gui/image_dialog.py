@@ -60,6 +60,7 @@ from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, RefUse
 from sealedlore.providers.images import ImageModelInfo, parse_image_models
+from sealedlore.storage.image_meta import picture_kind
 from sealedlore.storage.picture_store import file_name
 
 DIRECTION_HINT = (
@@ -763,10 +764,21 @@ class ImageViewer(QDialog):
         save_picture_as(self, self._data, self._name)
 
 
+def named_for(name: str, data: bytes) -> str:
+    """A file name with the extension its bytes call for: a GIF from someone
+    else's scenario is kept as PNG, under the name it came with."""
+    kind = picture_kind(data)
+    path = Path(name)
+    if kind is None or path.suffix.lower() in (kind, ".jpeg" if kind == ".jpg" else kind):
+        return name
+    return path.stem + kind
+
+
 def save_picture_as(parent: QWidget, data: bytes | None, name: str) -> None:
     """Save a stored picture wherever the author chooses."""
     if data is None:
         return
+    name = named_for(name, data)
     suffix = Path(name).suffix
     target, _ = QFileDialog.getSaveFileName(
         parent, "Save picture", str(Path.home() / name), f"Pictures (*{suffix})"

@@ -46,9 +46,14 @@ PORTRAIT_SIDE = 1024
 Card = Character | LoreEntry
 
 
-def portrait_style(image_style: str, texts: PromptTexts = DEFAULT_TEXTS) -> str:
-    """The story's picture style, or the portrait default."""
-    return " ".join(image_style.split()).rstrip(".") or texts["portraits.style"]
+def portrait_style(
+    image_style: str, texts: PromptTexts = DEFAULT_TEXTS, *, lore: bool = False
+) -> str:
+    """The story's picture style, or the default for portraits, or for a lore
+    entry's picture (a place or a thing: told "portrait photograph, head and
+    shoulders", the writer was asked to draw Hellsville so)."""
+    default = texts["portraits.style.lore" if lore else "portraits.style"]
+    return " ".join(image_style.split()).rstrip(".") or default
 
 
 def where_it_begins(story: Story) -> str:
@@ -90,7 +95,8 @@ def build_portrait_messages(
     parts = [
         texts.fill(
             "portraits.system",
-            style=portrait_style(image_style, texts),
+            # A call is characters or lore entries, never both (`write_card_prompts`).
+            style=portrait_style(image_style, texts, lore=not characters),
             no_writing=texts["portraits.no_writing"],
         )
     ]
@@ -122,7 +128,7 @@ def fallback_prompt(card: Card, *, image_style: str, texts: PromptTexts = DEFAUL
         looks = looks_of(card.summary, card.full_description) or "A person."
     return texts.fill(
         "portraits.fallback",
-        style=portrait_style(image_style, texts),
+        style=portrait_style(image_style, texts, lore=isinstance(card, LoreEntry)),
         looks=looks if looks.endswith((".", "…", "!", "?")) else looks + ".",
         no_writing=texts["portraits.no_writing"],
     )

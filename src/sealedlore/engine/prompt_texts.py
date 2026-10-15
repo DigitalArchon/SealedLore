@@ -3157,6 +3157,18 @@ _text(
     "Photorealistic portrait photograph, head and shoulders, natural light, sharp focus",
 )
 
+# A lore entry's picture is a place or a thing: given the portrait's style
+# ("head and shoulders") when the story had none, the writer was asked to
+# draw a town so. Not measured.
+_text(
+    "portraits.style.lore",
+    PICTURES,
+    "Portraits: the style of a lore picture when the story has none",
+    "The picture style a lore entry's picture is drawn in when the story's own (Setup → "
+    "Pictures) is blank.",
+    "Photorealistic, natural light, sharp focus",
+)
+
 _text(
     "portraits.no_writing",
     PICTURES,

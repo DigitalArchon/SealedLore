@@ -372,6 +372,21 @@ class CastPanel(QWidget):
     def _icon(self, character: Character) -> QIcon:
         return self._icons.icon(character.reference_images)
 
+    def refresh_pictures(self) -> None:
+        """The cards' pictures as they are now (one just landed): the list's
+        icons, the portrait and the others, nothing else. Reloaded whole, the
+        card put the cursor at the start of the field being typed in and
+        lost its undo."""
+        cards = {c.id: c for c in (*self._cast, *self._supporting)}
+        for row in range(self.list.count()):
+            item = self.list.item(row)
+            character = cards.get(item.data(Qt.UserRole))
+            if character is not None:
+                item.setIcon(self._icon(character))
+        current = self._current
+        self.pictures.set_refs(current.reference_images if current is not None else None)
+        self._show_portrait()
+
     def _ask(self, what: str, ref_id: str = "", *, first: bool = False) -> None:
         character = self._current
         if character is None:
@@ -384,14 +399,18 @@ class CastPanel(QWidget):
         character = self._current
         if character is None or not character.reference_images:
             return
+        # The one shown when asked: a portrait landing while the question is
+        # up goes first, and "the first" was then the new one.
+        shown = character.reference_images[0].id
         answer = QMessageBox.question(
             self,
             "Remove the portrait?",
             f"Take this portrait off {character.name}'s card? Their next picture becomes "
             "the portrait. Pictures drawn for the story stay in Media.",
         )
-        if answer == QMessageBox.Yes:
-            self.pictures.remove_first()
+        if answer == QMessageBox.Yes and self._current is not None:
+            if self._current.id == character.id:
+                self.pictures.remove_ref(shown)
 
     def _show_portrait(self) -> None:
         character = self._current

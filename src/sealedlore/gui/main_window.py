@@ -1184,9 +1184,6 @@ class MainWindow(
         dialog = StartDialog(story, self.session.cast, parent=self, without_pictures=offered)
         if dialog.exec() != StartDialog.Accepted:
             return
-        if dialog.pictures_wanted():
-            # Before the opening: drawn in the background while it runs.
-            self.draw_card_pictures(*offered)
         held = dialog.held_character_id()
         # Before holding: pinning resets the roster the held character joins.
         if (pinned := dialog.pinned()) is not None:
@@ -1197,6 +1194,11 @@ class MainWindow(
         if self.session.set_aside_unchosen(held):
             self.refresh_panels()
         self._on_held_changed(held or "")
+        if dialog.pictures_wanted():
+            # Before the opening: drawn in the background while it runs. Of
+            # the cards still in the story: whoever wasn't picked of a "play
+            # one of these" is set aside, and their portrait was lost.
+            self.draw_card_pictures(*self.session.without_pictures())
 
         opening = story.setup.opening_text.strip()
         if not opening:

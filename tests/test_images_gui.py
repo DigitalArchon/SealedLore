@@ -419,7 +419,8 @@ def test_a_memory_chat_keeps_its_pictures_in_memory_and_can_save_them(
     wait_for(app, lambda: not window.image_jobs.pending())
     flush(app)
     assert len(session.generated_images()) == 1
-    assert window.images_panel.list.count() == 1
+    # The picture drawn, and the picture added from disk (shown in Media too).
+    assert window.images_panel.list.count() == 2
     assert window.images_panel.save_all_button.isEnabled()
     assert any(p.picture is not None for p in window.transcript.findChildren(ImageMessageWidget))
     assert {"image_request", "image_response"} <= {e["kind"] for e in session.memory_log}
@@ -437,7 +438,7 @@ def test_a_memory_chat_keeps_its_pictures_in_memory_and_can_save_them(
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *a, **k: str(target))
     window.save_all_pictures()
     saved = sorted(p.name for p in target.iterdir())
-    assert len(saved) == 1 and saved[0].startswith("001-")
+    assert len(saved) == 2 and saved[0].startswith("001-") and saved[1].startswith("added-1")
     assert data_listing(tmp_path) == before
     # And one picture at a time, from the picture's own menu.
     one = tmp_path_factory.mktemp("one") / "picture.png"
@@ -654,3 +655,101 @@ def test_a_card_s_picture_with_no_passage_is_not_drawn_above_the_story(app, wind
     window._load_images()
     assert window._pictures_for(None) == []
     assert [item[0].id for item in window._pictures_for("a1")] == [scene.id]
+
+
+def test_a_picture_landing_leaves_the_card_being_typed_in_alone(app, window: MainWindow):
+    """The review: a portrait landing reloaded the Cast page whole, and the
+    cursor in the field being typed in jumped to its start, its undo lost."""
+    from PySide6.QtGui import QTextCursor
+
+    from sealedlore.models.image import GeneratedImage
+
+    panel = window.cast_panel
+    serrik = window.session.cast[0]
+    panel.select_character(serrik.id)
+    panel.summary.setPlainText("A tired man. He limps")
+    cursor = panel.summary.textCursor()
+    cursor.movePosition(QTextCursor.End)
+    panel.summary.setTextCursor(cursor)
+    at = panel.summary.textCursor().position()
+    store = window.session.pictures
+    store.write("images/new.png", PNG)
+    store.add_images(
+        [
+            GeneratedImage(
+                file="images/new.png",
+                prompt="A man.",
+                model="m",
+                size="1k",
+                card_id=serrik.id,
+                card_first=True,
+            )
+        ]
+    )
+    window._take_card_pictures()
+    assert panel.summary.textCursor().position() == at
+    assert panel.summary.toPlainText() == "A tired man. He limps"
+    assert serrik.reference_images[0].drawn_as  # landed, and shown
+    assert not panel.portrait.picture.isHidden()
+
+
+def test_card_icons_read_each_picture_once(app, tmp_path, monkeypatch):
+    """A story on disk makes its store anew each time it is asked: the cache
+    took that for another story's and read every picture on every refresh."""
+    from sealedlore.gui.ref_images import CardIcons
+    from sealedlore.storage import picture_store
+
+    reads: list[str] = []
+    monkeypatch.setattr(
+        picture_store.DiskPictures, "read", lambda self, relative: reads.append(relative) or PNG
+    )
+    icons = CardIcons(lambda: picture_store.DiskPictures("s", tmp_path), 24)
+    refs = [ImageRef(file="images/refs/a.png")]
+    icons.icon(refs)
+    icons.icon(refs)
+    assert reads == ["images/refs/a.png"]
+    other = CardIcons(lambda: picture_store.DiskPictures("other", tmp_path), 24)
+    other.icon(refs)
+    assert len(reads) == 2
+
+
+def test_save_all_saves_each_picture_once_and_no_hidden_card_s(
+    app, window: MainWindow, tmp_path_factory, monkeypatch
+):
+    """The review: a picture drawn for a card was saved twice (by its id and
+    by its card's name), a card the plot still hides was saved by name, and
+    a GIF kept as PNG was saved under .gif."""
+    from PySide6.QtWidgets import QFileDialog
+
+    from sealedlore.gui.image_dialog import named_for
+    from sealedlore.models.image import GeneratedImage
+
+    session = window.session
+    store = session.pictures
+    store.write("images/drawn.png", PNG)
+    store.write("images/refs/drawn-copy.png", PNG)
+    store.add_images(
+        [GeneratedImage(id="drawn", file="images/drawn.png", prompt="p", model="m", size="1k")]
+    )
+    serrik, maela = session.cast[0], session.cast[1]
+    serrik.reference_images.append(
+        ImageRef(id="copy", file="images/refs/drawn-copy.png", drawn_as="drawn")
+    )
+    store.write("images/refs/secret.png", PNG)
+    maela.reference_images.append(ImageRef(id="secret", file="images/refs/secret.png"))
+    monkeypatch.setattr(type(session), "hidden_ids", lambda self: {maela.id})
+    window.config.show_plot_spoilers = False
+    window.refresh_images()
+    story_ids = [
+        window.images_panel.list.item(i).data(Qt.UserRole)
+        for i in range(window.images_panel.list.count())
+    ]
+    assert "drawn" not in story_ids  # under its card only
+    target = tmp_path_factory.mktemp("saved")
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *a, **k: str(target))
+    window.save_all_pictures()
+    saved = sorted(p.name for p in target.iterdir())
+    assert not any(name.startswith("001-") for name in saved)  # not twice
+    assert not any("maela" in name for name in saved)  # hidden
+    assert "cast-serrik-vaun-2.png" in saved
+    assert named_for("b.gif", PNG) == "b.png" and named_for("a.jpeg", b"\xff\xd8\xff") == "a.jpeg"

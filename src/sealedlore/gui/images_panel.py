@@ -37,7 +37,7 @@ from sealedlore.gui.ref_images import thumbnail_of
 from sealedlore.gui.transcript import IMAGE_ACTIONS, picture_caption
 from sealedlore.gui.video_view import VIDEO_ACTIONS, video_caption
 from sealedlore.models.character import Character
-from sealedlore.models.image import GeneratedImage
+from sealedlore.models.image import GeneratedImage, ImageRef
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.video import GeneratedVideo
 from sealedlore.models.world import MapPicture
@@ -92,6 +92,9 @@ class ImagesPanel(QWidget):
     background_action_requested = Signal(str)
     # (action, map picture id) for an isometric view or a postcard (MAP_ACTIONS).
     map_action_requested = Signal(str, str)
+    # (action, picture id) for a picture added from disk to no card
+    # (`Story.reference_images`, ADDED_ACTIONS).
+    added_action_requested = Signal(str, str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -178,14 +181,20 @@ class ImagesPanel(QWidget):
         background: str | None = None,
         background_drawn_as: str = "",
         map_pictures: list[MapPicture] | None = None,
+        drawn_for_cards: set[str] | None = None,
+        added: list[ImageRef] | None = None,
     ) -> None:
         """`cast` and `lore`: the cards whose pictures to show (those the
-        author may see), each picture under its card's name. `background`:
-        the background's file, first among the story's, standing for the
-        picture it was drawn as. `map_pictures`: the map's views and
+        author may see), each picture under its card's name;
+        `drawn_for_cards`: every picture drawn as a card's, those not shown
+        too (a hidden card's drawing showed under Story, its prompt with it).
+        `background`: the background's file, first among the story's,
+        standing for the picture it was drawn as; `added`: the pictures
+        added from disk to no card. `map_pictures`: the map's views and
         postcards (those of places the author may see)."""
         cast, lore = cast or [], lore or []
         on_cards = {ref.drawn_as for card in (*cast, *lore) for ref in card.reference_images}
+        on_cards |= drawn_for_cards or set()
         if background:
             on_cards.add(background_drawn_as)
         self.list.clear()
@@ -199,6 +208,14 @@ class ImagesPanel(QWidget):
                 "draw a new one or edit it"
             )
             item.setIcon(QIcon(thumbnail_of(data, GALLERY_THUMB)))
+            self.list.addItem(item)
+        for ref in added or []:
+            item = QListWidgetItem("Added picture" + (f"\n{ref.caption}" if ref.caption else ""))
+            item.setData(Qt.UserRole, ref.id)
+            item.setData(Qt.UserRole + 1, "added")
+            item.setToolTip("A picture added from disk, to send with picture prompts")
+            if store is not None:
+                item.setIcon(QIcon(thumbnail_of(store.read(ref.file), GALLERY_THUMB)))
             self.list.addItem(item)
         made = sorted(
             [
@@ -292,13 +309,16 @@ class ImagesPanel(QWidget):
         item = gallery.itemAt(position)
         if item is None:
             return
+        # Read now: a picture landing while the menu is open rebuilds the
+        # gallery, and the item is gone by the time a choice is made.
+        card_id, ref_id = item.data(Qt.UserRole), item.data(Qt.UserRole + 1)
         menu = QMenu(self)
         for key, text in CARD_ACTIONS:
             if key == "-":
                 menu.addSeparator()
                 continue
             menu.addAction(text).triggered.connect(
-                lambda _checked=False, k=key: self._card_action(k, item)
+                lambda _checked=False, k=key: self.card_action_requested.emit(k, card_id, ref_id)
             )
         menu.exec(gallery.viewport().mapToGlobal(position))
 
@@ -310,10 +330,11 @@ class ImagesPanel(QWidget):
         item = self.map_list.itemAt(position)
         if item is None:
             return
+        picture_id = item.data(Qt.UserRole)  # read now, as `_card_menu`
         menu = QMenu(self)
         for key, text in MAP_ACTIONS:
             menu.addAction(text).triggered.connect(
-                lambda _checked=False, k=key: self._map_action(k, item)
+                lambda _checked=False, k=key: self.map_action_requested.emit(k, picture_id)
             )
         menu.exec(self.map_list.viewport().mapToGlobal(position))
 
@@ -323,6 +344,8 @@ class ImagesPanel(QWidget):
             self.video_action_requested.emit("show", item.data(Qt.UserRole))
         elif kind == "background":
             self.background_action_requested.emit("open")
+        elif kind == "added":
+            self.added_action_requested.emit("open", item.data(Qt.UserRole))
         else:
             self.action_requested.emit("open", item.data(Qt.UserRole))
 
@@ -332,6 +355,13 @@ class ImagesPanel(QWidget):
             return
         image_id = item.data(Qt.UserRole)
         menu = QMenu(self)
+        if item.data(Qt.UserRole + 1) == "added":
+            for key, text in ADDED_ACTIONS:
+                menu.addAction(text).triggered.connect(
+                    lambda _checked=False, k=key: self.added_action_requested.emit(k, image_id)
+                )
+            menu.exec(self.list.viewport().mapToGlobal(position))
+            return
         if item.data(Qt.UserRole + 1) == "background":
             for key, text in BACKGROUND_ACTIONS:
                 if key == "-":
@@ -387,6 +417,10 @@ BACKGROUND_ACTIONS = (
 MAP_ACTIONS = (
     ("open", "See it whole"),
     ("show", "Show on the map"),
+    ("save", "Save picture as…"),
+)
+ADDED_ACTIONS = (
+    ("open", "See it whole"),
     ("save", "Save picture as…"),
 )
 

@@ -88,22 +88,13 @@ class StartDialog(QDialog):
         # pictures dialog then shows every prompt before anything is drawn,
         # and the opening runs while they are drawn.
         self.pictures: QCheckBox | None = None
+        self._without = without_pictures
         people, lore = without_pictures
         if people or lore:
-            counts = [
-                _count(len(people), "character", "characters"),
-                _count(len(lore), "lore entry", "lore entries"),
-            ]
-            counts = [count for count in counts if count]
-            self.pictures = QCheckBox(
-                f"Draw pictures for the cards that have none ({' and '.join(counts)})"
-            )
-            names = [c.name for c in people] + [e.title for e in lore]
-            self.pictures.setToolTip(
-                f"{', '.join(names)}: drawn from their cards by an image model. You see "
-                "every prompt and the price before anything is drawn, and can untick any."
-            )
+            self.pictures = QCheckBox()
             layout.addWidget(self.pictures)
+            self.play_as.currentIndexChanged.connect(self._sync_pictures)
+            self._sync_pictures()
         note = QLabel(opening_note(story))
         note.setObjectName("hintLabel")
         note.setWordWrap(True)
@@ -124,8 +115,34 @@ class StartDialog(QDialog):
         aside = [i for i in self._choose_one_of if i != held] if held in self._choose_one_of else []
         self.presence.set_locked(held, aside)
 
+    def _sync_pictures(self) -> None:
+        """The cards a picture is offered for, less whoever the choice of
+        character sets aside: their portrait was drawn, paid for and lost."""
+        if self.pictures is None:
+            return
+        held = self.play_as.currentData()
+        aside = set(self._choose_one_of) - {held} if held in self._choose_one_of else set()
+        people = [c for c in self._without[0] if c.id not in aside]
+        lore = list(self._without[1])
+        counts = [
+            _count(len(people), "character", "characters"),
+            _count(len(lore), "lore entry", "lore entries"),
+        ]
+        counts = [count for count in counts if count]
+        self.pictures.setText(
+            f"Draw pictures for the cards that have none ({' and '.join(counts)})"
+        )
+        names = [c.name for c in people] + [e.title for e in lore]
+        self.pictures.setToolTip(
+            f"{', '.join(names)}: drawn from their cards by an image model. You see "
+            "every prompt and the price before anything is drawn, and can untick any."
+        )
+        self.pictures.setVisible(bool(people or lore))
+
     def pictures_wanted(self) -> bool:
-        return self.pictures is not None and self.pictures.isChecked()
+        return (
+            self.pictures is not None and self.pictures.isChecked() and not self.pictures.isHidden()
+        )
 
     def held_character_id(self) -> str | None:
         return self.play_as.currentData()

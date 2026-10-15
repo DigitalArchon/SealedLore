@@ -19,7 +19,13 @@ from PySide6.QtWidgets import QDialog, QFileDialog, QInputDialog, QMessageBox, Q
 
 from sealedlore.engine.picture_shapes import BACKGROUND
 from sealedlore.gui.crop_dialog import cropped_picture
-from sealedlore.gui.image_dialog import FitPicture, ImageDialog, ImageViewer, save_picture_as
+from sealedlore.gui.image_dialog import (
+    FitPicture,
+    ImageDialog,
+    ImageViewer,
+    named_for,
+    save_picture_as,
+)
 from sealedlore.gui.image_jobs import ImageCatalog, ImageJobs
 from sealedlore.gui.image_picker import pick_image_model
 from sealedlore.gui.images_panel import ImagesPanel
@@ -57,6 +63,7 @@ class ImagesWindow:
         self.images_panel.card_action_requested.connect(self._card_picture_action)
         self.images_panel.background_action_requested.connect(self._background_action)
         self.images_panel.map_action_requested.connect(self._map_picture_action)
+        self.images_panel.added_action_requested.connect(self._added_picture_action)
         self.transcript.illustrate_requested.connect(
             lambda node_id: self.generate_image(anchor_id=node_id)
         )
@@ -158,18 +165,42 @@ class ImagesWindow:
         on_path = {node.id for node in session.full_path()}
         # The cards as the Cast and Lore pages show them: a plot-hidden one
         # only with spoilers on.
-        hidden = set() if self.config.show_plot_spoilers else session.hidden_ids()
+        cast, lore = self._media_cards()
         self.images_panel.set_images(
             self._images,
             session.pictures,
             on_path,
             videos=self._videos,
-            cast=[c for c in (*session.cast, *session.supporting) if c.id not in hidden],
-            lore=[e for e in session.bundle.lore if e.id not in hidden],
+            cast=cast,
+            lore=lore,
             background=session.story.background_image,
             background_drawn_as=session.story.background_drawn_as,
             map_pictures=self._map_pictures(),
+            drawn_for_cards=self._drawn_for_cards(),
+            added=list(session.story.reference_images),
         )
+
+    def _media_cards(self) -> tuple[list, list]:
+        """The cards as the Cast and Lore pages show them: a plot-hidden one
+        only with spoilers on."""
+        session = self.session
+        hidden = set() if self.config.show_plot_spoilers else session.hidden_ids()
+        return (
+            [c for c in (*session.cast, *session.supporting) if c.id not in hidden],
+            [e for e in session.bundle.lore if e.id not in hidden],
+        )
+
+    def _drawn_for_cards(self) -> set[str]:
+        """Every picture drawn as a card's, on any card, shown or not, set
+        aside or not: in Media and Save all under its card, or not at all."""
+        session = self.session
+        cards = [
+            *session.cast,
+            *session.supporting,
+            *session.story.setup.set_aside,
+            *session.bundle.lore,
+        ]
+        return {ref.drawn_as for card in cards for ref in card.reference_images if ref.drawn_as}
 
     def _map_pictures(self) -> list:
         """The map's isometric views and postcards of places on the map as
@@ -340,7 +371,17 @@ class ImagesWindow:
             return
         card = session.card(card_id)
         characters, lore = session.picture_cards()
-        if card is None or not any(c.id == card_id for c in (*characters, *lore)):
+        if card is None:
+            return
+        if not any(c.id == card_id for c in (*characters, *lore)):
+            # Said, not silently nothing: the first picture would be the
+            # first a model heard of it.
+            name = card.name if isinstance(card, Character) else card.title
+            self.statusBar().showMessage(
+                f"No picture is drawn of {name} yet: the models can't see it (the plot hasn't "
+                "brought it in, it waits to be mentioned, or it is turned off).",
+                10000,
+            )
             return
         if what == "new":
             person = any(c.id == card_id for c in characters)
@@ -399,7 +440,9 @@ class ImagesWindow:
             return  # the worker owns the story; taken when it is done
         names = self.session.take_card_pictures()
         if names:
-            self.refresh_panels()
+            # The pictures only: the author may be typing on a card.
+            self.cast_panel.refresh_pictures()
+            self.lore_panel.refresh_pictures()
             self.refresh_images()
             self.statusBar().showMessage(f"Picture ready: {', '.join(names)}.", 8000)
         try:
@@ -514,15 +557,17 @@ class ImagesWindow:
         if self.session is None:
             return
         session = self.session
-        images = session.pictures.images()
+        # What Media shows: a picture drawn as a card's is saved under its
+        # card's name, not twice, and a card the plot still hides isn't
+        # (its name was in the file's).
+        drawn_for_cards = self._drawn_for_cards()
+        images = [i for i in session.pictures.images() if i.id not in drawn_for_cards]
         # Finished videos too: they are as much the story's as its pictures.
         videos = [v for v in session.pictures.videos() if v.status == "done" and v.file]
         # And every card's pictures, named by their card (cast-john-1.jpg).
         cards: list[tuple[str, str]] = []
-        for kind, owners in (
-            ("cast", [*session.cast, *session.supporting]),
-            ("lore", session.bundle.lore),
-        ):
+        shown_cast, shown_lore = self._media_cards()
+        for kind, owners in (("cast", shown_cast), ("lore", shown_lore)):
             for owner in owners:
                 name = owner.name if kind == "cast" else owner.title
                 slug = _slug(name)
@@ -534,6 +579,8 @@ class ImagesWindow:
         background = session.story.background_image
         if background and not any(i.id == session.story.background_drawn_as for i in images):
             cards.append((background, f"background{Path(background).suffix}"))
+        for number, ref in enumerate(session.story.reference_images, start=1):
+            cards.append((ref.file, f"added-{number}{Path(ref.file).suffix}"))
         for picture in self._map_pictures():
             kind = "isometric" if picture.subject == "isometric" else "postcard"
             suffix = Path(picture.file).suffix
@@ -553,7 +600,7 @@ class ImagesWindow:
                 if data is None:
                     missing += 1
                     continue
-                name = file_name(image.file)
+                name = named_for(file_name(image.file), data)
                 target = folder / f"{number:03d}-{name}"
                 extra = 2
                 while target.exists():
@@ -566,6 +613,7 @@ class ImagesWindow:
                 if data is None:
                     missing += 1
                     continue
+                name = named_for(name, data)
                 target = folder / name
                 extra = 2
                 while target.exists():
@@ -749,6 +797,18 @@ class ImagesWindow:
         layout.addWidget(FitPicture(pixmap_of(data)))
         dialog.resize(1000, 760)
         dialog.exec()
+
+    def _added_picture_action(self, action: str, ref_id: str) -> None:
+        """A picture added from disk to no card, in Media: see it whole or save it."""
+        session = self.session
+        ref = next((r for r in session.story.reference_images if r.id == ref_id), None)
+        if session is None or ref is None:
+            return
+        data = session.pictures.read(ref.file)
+        if action == "save":
+            save_picture_as(self, data, file_name(ref.file))
+        else:
+            self._show_whole(ref.caption or "Added picture", data)
 
     def _map_picture_action(self, action: str, picture_id: str) -> None:
         """An isometric view or a postcard in the Media tab: see it whole,

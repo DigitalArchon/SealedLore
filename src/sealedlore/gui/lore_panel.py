@@ -308,14 +308,17 @@ class LorePanel(QWidget):
         entry = self._current
         if entry is None or not entry.reference_images:
             return
+        # The one shown when asked, as on the Cast page.
+        shown = entry.reference_images[0].id
         answer = QMessageBox.question(
             self,
             "Remove the picture?",
             f"Take this picture off “{entry.title}”? Its next picture takes its place. "
             "Pictures drawn for the story stay in Media.",
         )
-        if answer == QMessageBox.Yes:
-            self.pictures.remove_first()
+        if answer == QMessageBox.Yes and self._current is not None:
+            if self._current.id == entry.id:
+                self.pictures.remove_ref(shown)
 
     def _on_pictures_changed(self) -> None:
         if self._current is not None:
@@ -327,12 +330,25 @@ class LorePanel(QWidget):
         first = entry.reference_images[0] if entry and entry.reference_images else None
         store = self._pictures()
         data = store.read(first.file) if first is not None and store is not None else None
-        caption = first.caption if first is not None else ""
+        caption = first.caption if first is not None and first.caption != "portrait" else ""
         self.picture.show_portrait(data, caption, entry.title if entry is not None else "")
         self.picture.set_offered(entry is not None)
         item = self.list.currentItem()
         if item is not None and entry is not None:
             item.setIcon(self._icons.icon(entry.reference_images))
+
+    def refresh_pictures(self) -> None:
+        """The entries' pictures as they are now, nothing else (as the Cast
+        page's `refresh_pictures`)."""
+        entries = {e.id: e for e in self._entries}
+        for row in range(self.list.count()):
+            item = self.list.item(row)
+            entry = entries.get(item.data(Qt.UserRole))
+            if entry is not None:
+                item.setIcon(self._icons.icon(entry.reference_images))
+        current = self._current
+        self.pictures.set_refs(current.reference_images if current is not None else None)
+        self._show_picture()
 
     def _load_editor(self) -> None:
         entry = self._current

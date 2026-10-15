@@ -153,6 +153,12 @@ def test_start_counts_the_cards_without_pictures(app, story, cast):
     assert offered.pictures_wanted()
     lore_only = StartDialog(story, cast, without_pictures=([], [town]))
     assert "(1 lore entry)" in lore_only.pictures.text()
+    # "Play one of these": whoever isn't picked is set aside, and isn't drawn.
+    story.setup.choose_one_of = [cast[0].id, cast[1].id]
+    pair = StartDialog(story, cast, without_pictures=(cast[:2], []))
+    pair.play_as.setCurrentIndex(pair.play_as.findData(cast[0].id))
+    assert "(1 character)" in pair.pictures.text()
+    assert cast[1].name not in pair.pictures.toolTip()
 
 
 class _Catalog(QObject):
@@ -435,3 +441,80 @@ def test_an_edit_of_a_story_picture_keeps_the_scene_and_goes_after_its_passage(
     assert request.size == "1280*720"  # nearest the picture's own 16:9
     assert request.card_id is None
     dialog.reject()
+
+
+def test_remove_takes_off_the_portrait_shown_when_asked(app, monkeypatch):
+    """The review: a portrait landing while Remove's question was up went
+    first, and Yes removed it and kept the one the author was looking at."""
+    from PySide6.QtWidgets import QMessageBox
+
+    store = MemoryPictures(lambda _kind, _body: "")
+    for name in ("old", "new"):
+        store.write(f"images/refs/{name}.png", PNG)
+    jane = Character(name="Jane", reference_images=[ImageRef(id="old", file="images/refs/old.png")])
+    panel = CastPanel(lambda: store)
+    panel.set_cast([jane])
+    panel.select_character(jane.id)
+
+    def landing(*_args, **_kwargs):
+        jane.reference_images.insert(0, ImageRef(id="new", file="images/refs/new.png"))
+        panel.pictures.set_refs(jane.reference_images)
+        return QMessageBox.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", landing)
+    panel.portrait.remove_button.click()
+    assert [ref.id for ref in jane.reference_images] == ["new"]
+
+
+def test_drawn_again_a_picture_goes_with_what_it_was_drawn_from(app, tmp_path: Path, story, cast):
+    """The review: Draw again on an In the scene… picture sent "the man in
+    image 1" with no image 1 (an edit's copy, "Edit this picture" with no
+    picture), paid for and drawn as anyone at all."""
+    from sealedlore.gui.picture_variant import PictureVariantDialog
+    from sealedlore.models.image import GeneratedImage, RefUse
+    from sealedlore.providers.images import ImageModelInfo
+
+    session = _session(tmp_path, story, cast)
+    hero = cast[0]
+    session.pictures.write("images/refs/p.png", PNG)
+    session.pictures.write("images/scene.png", PNG)
+    use = RefUse(
+        owner_kind="character",
+        owner_id=hero.id,
+        owner_name=hero.name,
+        ref_id="p",
+        file="images/refs/p.png",
+    )
+    drawn = GeneratedImage(
+        id="scene-1",
+        anchor_node_id="a1",
+        file="images/scene.png",
+        prompt="The man in image 1 by a fire.",
+        model="klein",
+        size="1k",
+        references=[use],
+        card_id=hero.id,
+    )
+    session.pictures.add_images([drawn])
+    copy = ImageRef(
+        id="c",
+        file="images/refs/c.png",
+        prompt=drawn.prompt,
+        model="klein",
+        drawn_as="scene-1",
+    )
+    session.pictures.write("images/refs/c.png", PNG)
+    hero.reference_images = [ImageRef(id="p", file="images/refs/p.png"), copy]
+    catalog = _Catalog(
+        [
+            ImageModelInfo(id="klein", name="K", resolutions=("1024*1536",), max_inputs=4),
+            ImageModelInfo(id="words-only", name="W", resolutions=("1024x1024",)),
+        ]
+    )
+    again = PictureVariantDialog(session, hero, copy, edit=False, catalog=catalog, browse=None)
+    assert "The picture it was drawn from goes with it" in again.note.text()
+    request = again.request()
+    assert [u.file for u in request.references] == ["images/refs/p.png"]
+    again.model.setText("words-only")
+    assert not again.draw_button.isEnabled() and "can't be given a picture" in again.note.text()
+    again.reject()

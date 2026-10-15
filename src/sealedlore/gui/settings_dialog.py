@@ -1067,7 +1067,7 @@ class SettingsDialog(QDialog):
         model = self.portrait_model.text().strip()
         info = next((m for m in self._image_models if m.id == model), None)
         each = info.price(portrait_size(info)) if info else None
-        price = f"${each:.3f} a portrait listed" if each else "price not listed"
+        price = f"${each:.3f} a portrait listed" if each is not None else "price not listed"
         known = recommended_model("portrait_model", model)
         self.portrait_note.setText(
             "A portrait of each character from their card, offered when a story starts and "
@@ -1122,7 +1122,7 @@ class SettingsDialog(QDialog):
         model = self.map_isometric_model.text().strip()
         info = next((m for m in self._image_models if m.id == model), None)
         each = info.price(isometric_size(info)) if info else None
-        price = f"${each:.2f} a view listed" if each else "price not listed"
+        price = f"${each:.2f} a view listed" if each is not None else "price not listed"
         takes = (
             " It can't be given the map to paint from: choose one that takes pictures."
             if info is not None and not info.accepts_images
@@ -1142,9 +1142,9 @@ class SettingsDialog(QDialog):
         # The sizes the map asks for (a square for a sprite, landscape for a
         # postcard), so the ceiling is of what is sent, not the cheapest listed.
         sizes = (picture_size(info), picture_size(info, landscape=True)) if info else ()
-        prices = [p for p in (info.price(size) for size in sizes) if p] if info else []
+        prices = [p for p in (info.price(size) for size in sizes) if p is not None] if info else []
         each = max(prices) if prices else None
-        price = f"up to ${each:.3f} a picture listed" if each else "price not listed"
+        price = f"up to ${each:.3f} a picture listed" if each is not None else "price not listed"
         limit = self.map_picture_limit.value()
         self.map_picture_note.setText(
             "Drawn without asking each time: each prompt is kept in the story's log with "

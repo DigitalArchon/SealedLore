@@ -207,12 +207,14 @@ class PortraitsDialog(QDialog):
         layout.addWidget(self.status)
         layout.addWidget(self.buttons)
 
+        # Before anything can call `_sync`: a stale listing makes `ensure`
+        # say it changed at once, and `_sync` reads the worker.
+        self._thread: QThread | None = None
+        self._worker: GenerationWorker | None = None
         self.model.textChanged.connect(self._sync)
         if catalog is not None:
             catalog.changed.connect(self._sync)
             catalog.ensure()
-        self._thread: QThread | None = None
-        self._worker: GenerationWorker | None = None
         self._write()
         self._sync()
         self.resize(720, 760)
@@ -270,7 +272,7 @@ class PortraitsDialog(QDialog):
         prices = [info.price(card_size(row.card, info)) for row in wanted] if info else []
         each = info.price(card_size(self.rows[0].card, info)) if info and self.rows else None
         known = recommended_model("portrait_model", model)
-        price = f"about ${each:.3f} a picture" if each else "price not listed"
+        price = f"about ${each:.3f} a picture" if each is not None else "price not listed"
         self.model_note.setText(
             f"{model or 'No model'}: {price}." + (f" {known.note}" if known is not None else "")
         )

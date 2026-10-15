@@ -41,7 +41,7 @@ from sealedlore.gui.ref_images import image_of, thumbnail_of
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.character import Character
 from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS, recommended_model
-from sealedlore.models.image import GeneratedImage, ImageRef
+from sealedlore.models.image import GeneratedImage, ImageRef, RefUse
 from sealedlore.providers.images import ImageModelInfo
 
 THUMB_SIDE = 160
@@ -64,9 +64,17 @@ class VariantSubject:
     source: ImageRef | None = None
     image: GeneratedImage | None = None
     background: bool = False
+    # The pictures it was drawn from, sent with its prompt (an edit's
+    # picture, In the scene…'s): drawn again without them, "Edit this
+    # picture" and "the man in image 1" came out as anyone at all.
+    references: tuple[RefUse, ...] = ()
 
     @classmethod
-    def of_card(cls, card: Card, source: ImageRef) -> VariantSubject:
+    def of_card(
+        cls, card: Card, source: ImageRef, drawn: GeneratedImage | None = None
+    ) -> VariantSubject:
+        """`drawn`: the picture drawn for the story it is a copy of
+        (`ImageRef.drawn_as`), whose references go again with its prompt."""
         return cls(
             name=card_name(card),
             file=source.file,
@@ -74,6 +82,7 @@ class VariantSubject:
             model=source.model,
             card=card,
             source=source,
+            references=tuple(drawn.references) if drawn is not None else (),
         )
 
     @classmethod
@@ -120,8 +129,16 @@ class PictureVariantDialog(QDialog):
         super().__init__(parent)
         if not isinstance(subject, VariantSubject):
             assert source is not None
-            subject = VariantSubject.of_card(subject, source)
+            drawn = (
+                next((i for i in session.generated_images() if source.drawn_as == i.id), None)
+                if source.drawn_as
+                else None
+            )
+            subject = VariantSubject.of_card(subject, source, drawn)
         assert edit or subject.card is not None
+        # What it was drawn from, of what is still there to send.
+        store = session.pictures
+        self._from = [] if edit else [u for u in subject.references if store.read(u.file)]
         self.session = session
         self.subject, self.edit = subject, edit
         self.card, self.source = subject.card, subject.source
@@ -278,10 +295,14 @@ class PictureVariantDialog(QDialog):
         thread = QThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
+        worker.failed.connect(self._on_write_failed)
         worker.finished.connect(thread.quit)
         thread.finished.connect(self._on_written)
         self._worker, self._thread = worker, thread
         thread.start()
+
+    def _on_write_failed(self, message: str) -> None:
+        self._failure = message
 
     def _on_written(self) -> None:
         self._worker, self._thread = None, None
@@ -290,7 +311,12 @@ class PictureVariantDialog(QDialog):
             return
         self.busy.hide()
         self.prompt.setEnabled(True)
-        self.prompt.setPlaceholderText("This text is sent exactly as it is here.")
+        failure = getattr(self, "_failure", None)
+        self.prompt.setPlaceholderText(
+            f"The prompt couldn't be written ({failure}): write one here, sent exactly as it is."
+            if failure
+            else "This text is sent exactly as it is here."
+        )
         self._set_prompt(self._prompts.get(self.card.id, ""))
 
     # --- the model and the price -------------------------------------------------
@@ -319,15 +345,35 @@ class PictureVariantDialog(QDialog):
         role = "picture_edit" if self.edit else "portrait_model"
         known = recommended_model(role, model)
         cannot = self.edit and info is not None and not info.accepts_images
-        price = f"about ${each:.3f}" if each else "price not listed"
+        takes = info.max_inputs if info is not None else None
+        drawn_from = len(self._from)
+        if drawn_from and takes == 0:
+            cannot = True
+        price = f"about ${each:.3f}" if each is not None else "price not listed"
+        if each is not None and (self.edit or drawn_from):
+            # Listed for what is drawn; FLUX.2 klein charged $0.016, not
+            # $0.010, with a picture sent (design/images.md).
+            price += ", and a picture sent with it may cost more"
         parts = [f"{model or 'No model'}: {price}"]
-        if cannot:
+        if cannot and drawn_from:
+            parts.append(
+                f"It was drawn from {_pictures(drawn_from)}, sent with its prompt, and this "
+                "model can't be given a picture: choose another."
+            )
+        elif cannot:
             parts.append(
                 "It can't be given a picture, so it can't edit one: choose another "
                 "(Recommended lists those that edited well)."
             )
-        elif known is not None:
-            parts.append(known.note)
+        else:
+            if drawn_from and takes is not None and takes < drawn_from:
+                parts.append(f"Only the first {_pictures(takes)} it was drawn from can be sent")
+            elif drawn_from == 1:
+                parts.append("The picture it was drawn from goes with it")
+            elif drawn_from:
+                parts.append(f"The {drawn_from} pictures it was drawn from go with it")
+            if known is not None:
+                parts.append(known.note)
         self.note.setText(". ".join(parts))
         ready = self._worker is None and bool(model) and bool(self.prompt.toPlainText().strip())
         if self.edit:
@@ -351,6 +397,7 @@ class PictureVariantDialog(QDialog):
                 prompt, model=model, info=info, size=self.size()
             )
         caption = " ".join(self.change.text().split()) if self.edit else AGAIN_CAPTION
+        takes = info.max_inputs if info is not None else len(self._from)
         return self.session.card_request(
             self.card,
             prompt,
@@ -359,6 +406,7 @@ class PictureVariantDialog(QDialog):
             first=False,
             caption=caption or "edited",
             source=self.source if self.edit else None,
+            references=self._from[:takes],
         )
 
     def reject(self) -> None:
@@ -367,3 +415,7 @@ class PictureVariantDialog(QDialog):
             self._worker.stop()
             return
         super().reject()
+
+
+def _pictures(count: int) -> str:
+    return "one picture" if count == 1 else f"{count} pictures"
