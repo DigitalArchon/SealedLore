@@ -804,17 +804,21 @@ class WorldView(QWidget):
         return set(self.world.seen) | been | around
 
     def _out_of_the_fog(self) -> set[str]:
-        """The places whose plans may be drawn: those shown (`_shown`) and
-        what is inside them. A plot file's map can come with plans of places
-        the story hasn't reached (a sample's are drawn whole), and showing
-        one would lift the fog off it: The Ashen Reach's vox relay showed,
-        plan and all, to anyone who moved the map over it."""
+        """The places whose plans may be drawn: those shown (`_shown`), and
+        what stands in a local area that is (a building's inside, seen when
+        zoomed in). A local area of its own must be shown itself: a site in
+        known country (a wreck in the ashfields) is not. A plot file's map
+        can come with plans of places the story hasn't reached (a sample's
+        are drawn whole), and showing one would lift the fog off it: The
+        Ashen Reach's vox relay showed, plan and all, to anyone who moved
+        the map over it."""
         shown = self._shown()
-        return {
-            pid
-            for pid in self.world.places
-            if pid in shown or containers(self.world, [pid]) & shown
-        }
+        out = set()
+        for pid in self.world.places:
+            area = local_area(self.world, pid)
+            if pid in shown or (area is not None and area.id != pid and area.id in shown):
+                out.add(pid)
+        return out
 
     def level(self) -> str:
         """Which of LEVELS the zoom is nearest now (see REGION_REACH)."""

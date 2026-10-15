@@ -789,3 +789,25 @@ def test_a_plan_is_dressed_again_only_when_what_it_shows_changes(app):
     for _ in range(5):
         view._update_detail()
     assert plan.dressed == first and len(view.people) == count
+
+
+def test_a_site_in_known_country_stays_in_the_fog_until_seen(app):
+    """A wreck in the ashfields: the ashfields are known, the wreck is not,
+    and its plan (a sample's are drawn whole) stays under the fog. A
+    building in a known town is the town's, and shows when zoomed in."""
+    view = WorldView()
+    view.resize(900, 700)
+    fields = WorldPlace(id="f", name="The ashfields", kind="area", x=0.0, y=0.0, size=7000)
+    wreck = WorldPlace(id="w", name="The wreck", kind="site", inside="f", x=200.0, y=0.0, size=400)
+    town = WorldPlace(id="t", name="Hollowmouth", kind="settlement", x=0.0, y=-6000.0, size=700)
+    world = WorldMap(
+        places={"f": fields, "w": wreck, "t": town}, seen=["f", "t"], where={"Jane": "t"}
+    )
+    art = WorldArt(layouts={"w": {"": PlaceLayout(place_id="w", rows=["." * 40] * 24, spec={})}})
+    view.set_world(world, art, "Jane", keep_view=False)
+    view.go_to("w")
+    assert "The wreck" not in shown_plans(view)
+    world.seen = ["f", "w"]
+    view.set_world(world, art, "Jane")
+    view.go_to("w")
+    assert "The wreck" in shown_plans(view)
