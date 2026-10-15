@@ -153,6 +153,44 @@ def test_the_docks_grow_with_the_window_until_a_separator_is_dragged(app, window
     assert window.stories_dock.width() == dragged, "the author's width is left alone"
 
 
+def test_dragged_widths_stay_through_opening_and_closing_a_story(
+    app, window: MainWindow, tmp_path: Path, story
+):
+    """The review: with the list kept, a drag was shared away again on every
+    story opened or closed; a width kept from the last launch was used only
+    with no story open."""
+    window.resize(1600, 900)
+    settle(app)
+    window._docks_dragged = True  # as a separator press sets it
+    window._docks_set_by_hand = True
+    window.resizeDocks([window.stories_dock, window.inspector_dock], [300, 560], Qt.Horizontal)
+    settle(app)
+    widths = (window.stories_dock.width(), window.inspector_dock.width())
+    window._close_story()
+    settle(app)
+    window.open_story(story.id)
+    settle(app)
+    assert (window.stories_dock.width(), window.inspector_dock.width()) == widths
+    window.close()
+
+    # Next launch, the list put away with a story open: the width kept.
+    again = MainWindow(root=tmp_path, use_mock=True)
+    try:
+        again.config.window = WindowLayout(
+            width=1600, height=900, stories_width=300, inspector_width=470
+        )
+        again._docks_set_by_hand = True
+        again.config.stories_list = False
+        again.resize(1600, 900)
+        again.show()
+        again.open_story(story.id)
+        settle(app)
+        assert again.stories_dock.isHidden()
+        assert again.inspector_dock.width() == 470
+    finally:
+        again.close()
+
+
 def test_a_press_a_widget_passed_on_is_not_a_drag(app, window: MainWindow):
     label = window.findChild(QLabel)
     assert label is not None

@@ -228,22 +228,31 @@ class LayoutWindow:
             return  # moved by the author: theirs to size
         if not inspector.isVisible():
             return
+        if self._docks_dragged:
+            # The author's widths, from the drag on: opening or closing a
+            # story reshared them away (a drag to 300/560 came back 288/462).
+            return
         width = self.width()
         centre = self.centralWidget()
         separator = self.style().pixelMetric(QStyle.PM_DockWidgetSeparatorExtent, None, self)
         centre_min = max(centre.minimumWidth(), centre.minimumSizeHint().width())
         on_map = getattr(self, "map_layout", False)
+        saved = self.config.window
+        by_hand = self._docks_set_by_hand and saved is not None and saved.inspector_width
         if not stories.isVisible():
-            if self._docks_dragged:
-                return  # the author's width
             if on_map:
                 want_i = max(round(width * MAP_SHARE), INSPECTOR_WIDTHS[0])
+            elif by_hand:
+                # A width the author dragged before, kept from the last time:
+                # applied with no story open only, it was lost to the share
+                # whenever one was.
+                want_i = saved.inspector_width
             else:
                 want_i = _clamp(width * INSPECTOR_ALONE_SHARE, INSPECTOR_ALONE_WIDTHS)
             want_i = min(want_i, max(INSPECTOR_WIDTHS[0], width - centre_min - separator))
             self.resizeDocks([inspector], [want_i], Qt.Horizontal)
             return
-        if on_map and not self._docks_dragged:
+        if on_map:
             # Brought back by hand: the list takes its share from the story.
             want_i = max(round(width * MAP_SHARE), INSPECTOR_WIDTHS[0])
             want_s = _clamp(width * STORIES_SHARE, STORIES_WIDTHS)
@@ -256,8 +265,7 @@ class LayoutWindow:
             )
             self.resizeDocks([stories, inspector], list(widths), Qt.Horizontal)
             return
-        saved = self.config.window
-        if self._docks_set_by_hand and saved and not self._docks_dragged:
+        if by_hand:
             want_s, want_i = saved.stories_width, saved.inspector_width
         else:
             want_s = _clamp(width * STORIES_SHARE, STORIES_WIDTHS)
