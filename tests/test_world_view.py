@@ -703,7 +703,6 @@ def test_a_plan_in_the_fog_is_not_drawn_nor_its_view_marked(app):
     assert "The farm" in shown_plans(view) and view._badges["farm"].isVisible()
 
 
-
 def test_someone_in_a_part_of_a_building_stands_once_at_the_building(app):
     """The review: John on "The porch" of the farmhouse (the read invents such
     places) stood in the farm's middle, and twice, or not at all, as the

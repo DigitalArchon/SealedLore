@@ -441,7 +441,6 @@ def test_a_way_the_passage_gave_no_words_for_has_none():
     assert way.direction is None and way.distance is None
 
 
-
 def test_country_is_as_far_as_its_edge():
     """The review: a village at the edge of a 12 km forest was told the forest
     lay 8.2 km north, its middle. An area or a region is reached at its edge."""
