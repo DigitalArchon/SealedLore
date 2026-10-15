@@ -989,10 +989,13 @@ there, you ringed. Zoom in on a building and its inside takes the roof's
 place: its rooms and what the story put in them (**See inside** takes every
 roof off at once). Under the map, what the story has said of the place in
 view and who and what is there. A story opens on its local map. **Region**
-is the country around you that the story has reached, fog over the rest: each place with its
-picture, small when far, lit where you have been, dimmed where the story only
-told of it, ringed where you are now; it is where you look to decide where to
-go next. **World** is the whole map zoomed out, its settlements and regions
+is the country around you that the story has reached: each place with its
+picture, small when far, its name bright where you have been or can see now,
+dim where the story only told of it, ringed where you are now; it is where you
+look to decide where to go next. The fog has three shades, named under the
+map's buttons: the area you are in now is clear and edged in gold (what Local
+shows), country you know but aren't in lies under a grey haze, and anywhere
+unexplored is dark. **World** is the whole map zoomed out, its settlements and regions
 named large and the small places hidden. Scroll to zoom (places inside others
 appear as you zoom in), drag to move; double-click a place to go to it. Esc
 goes out from the local map to the region.

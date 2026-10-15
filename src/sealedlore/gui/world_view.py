@@ -42,6 +42,7 @@ from PySide6.QtGui import (
     QFontMetricsF,
     QImage,
     QPainter,
+    QPainterPath,
     QPen,
     QPixmap,
     QTransform,
@@ -139,6 +140,20 @@ POSTCARD_THUMB = (176, 100)
 # area's name on the region, stands above the names so it can be clicked.
 ISO_Z = 2.95
 ISO_MARK_Z = 4.5
+# The fog has three shades (the author, Oct 15 2026: black where nothing is
+# known and full colour for everything else said nothing of where the
+# character is now). Unexplored is the bare FOG ground; country known but
+# not where they are lies under a grey haze (VEIL), over the land, plans
+# and views and under the names; the local area they are in (what
+# Local shows) is clear, edged in the ring's gold.
+VEIL_Z = 2.97
+# A grey haze lighter than the fog: a darker wash left a dark setting's
+# land (the Ninth Furnace's) the colour of the unexplored fog beside it.
+VEIL = "#5c6170"
+VEIL_ALPHA = 150
+SIGHT_EDGE = "#f6cf6e"
+# A land colour for the legend's swatches, as the program draws grass.
+LEGEND_LAND = "#7d8a5c"
 # A view is held no wider than this (the map shows it no wider); seen whole,
 # it is read from its file again.
 ISO_HELD_WIDTH = 1600
@@ -302,6 +317,84 @@ class _PlaceItem(QGraphicsItem):
         painter.drawText(rect.translated(1, 1), flags, text)
         painter.setPen(QColor("#f4f1e8"))
         painter.drawText(rect, flags, text)
+
+
+class _VeilItem(QGraphicsItem):
+    """The haze over known country the character isn't in now: the drawn
+    land, plans and views (`known`, in scene units) less `sight`, which is
+    edged instead. The unexplored fog around them is left bare, or it would
+    take the haze too and look known. Never hit by a click or a hover (its
+    shape is empty), so what lies under it answers."""
+
+    def __init__(self, known: QPainterPath, sight: QRectF) -> None:
+        super().__init__()
+        clear = QPainterPath()
+        clear.addRect(sight)
+        self.veiled = known.subtracted(clear)
+        self.sight = sight
+        self.setZValue(VEIL_Z)
+        self.setAcceptedMouseButtons(Qt.NoButton)
+
+    def boundingRect(self) -> QRectF:
+        return self.veiled.boundingRect().united(self.sight).adjusted(-2, -2, 2, 2)
+
+    def shape(self) -> QPainterPath:
+        return QPainterPath()
+
+    def paint(self, painter: QPainter, _option, _widget=None) -> None:
+        painter.fillPath(self.veiled, _veil_colour())
+        edge = QPen(QColor(SIGHT_EDGE), 2)
+        edge.setCosmetic(True)
+        painter.setPen(edge)
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRect(self.sight)
+
+
+def _veil_colour() -> QColor:
+    veil = QColor(VEIL)
+    veil.setAlpha(VEIL_ALPHA)
+    return veil
+
+
+def _swatch(fill: str, *, veiled: bool = False, edge: str = "#5a5f6e") -> QPixmap:
+    """A legend square: `fill`, under the veil if `veiled`, edged."""
+    pixmap = QPixmap(14, 14)
+    pixmap.fill(QColor(fill))
+    painter = QPainter(pixmap)
+    if veiled:
+        painter.fillRect(pixmap.rect(), _veil_colour())
+    painter.setPen(QPen(QColor(edge), 2))
+    painter.drawRect(1, 1, 12, 12)
+    painter.end()
+    return pixmap
+
+
+class _FogLegend(QWidget):
+    """What the fog's three shades mean, under the hint."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        self.here_label = QLabel()
+        for fill, words, veiled, edge in (
+            (LEGEND_LAND, None, False, SIGHT_EDGE),
+            (LEGEND_LAND, "Known, not here", True, "#5a5f6e"),
+            (FOG, "Unexplored", False, "#5a5f6e"),
+        ):
+            mark = QLabel()
+            mark.setPixmap(_swatch(fill, veiled=veiled, edge=edge))
+            label = self.here_label if words is None else QLabel(words)
+            label.setObjectName("hintLabel")
+            row.addWidget(mark)
+            row.addWidget(label)
+            row.addSpacing(8)
+        row.addStretch(1)
+        self.set_held(None)
+
+    def set_held(self, held: str | None) -> None:
+        self.here_label.setText(f"Around {held} now" if held else "Around you now")
 
 
 class _PlanItem(QGraphicsPixmapItem):
@@ -730,6 +823,9 @@ class WorldView(QWidget):
         layout.addLayout(progress_row)
         layout.addWidget(self.pause_note)
         layout.addWidget(self.hint)
+        self.legend = _FogLegend()
+        self.legend.hide()
+        layout.addWidget(self.legend)
         layout.addWidget(self.iso_bar)
         layout.addWidget(self.view, 1)
         layout.addWidget(self.card)
@@ -766,6 +862,7 @@ class WorldView(QWidget):
         self._boxes: dict[str, tuple[str, tuple[int, int, int, int]]] = {}
         self._links: list[QGraphicsLineItem] = []
         self._land: list[QGraphicsPixmapItem] = []
+        self._veil: _VeilItem | None = None
         self.people: list[_PersonItem] = []
         self._card_place: WorldPlace | None = None
         # The level last fitted (refitted when the view is resized), None
@@ -866,22 +963,27 @@ class WorldView(QWidget):
         area = local_area(self.world, self.here())
         return self._plans.get(area.id) if area is not None else None
 
+    def _sight(self) -> QRectF:
+        """The local area the character is in, in scene units: its plan, or
+        a little country round them before it is drawn. What Local fits, and
+        what the fog leaves clear. Empty when they are nowhere on the map."""
+        plan = self._local_plan()
+        if plan is not None:
+            return plan.rect()
+        here = self.here()
+        spot = position(self.world, here) if here else None
+        if spot is None:
+            return QRectF()
+        reach = max(size_of(self.world.places[here]), 100.0) * 1.5  # type: ignore[index]
+        return QRectF(spot[0] - reach, -spot[1] - reach, 2 * reach, 2 * reach)
+
     def _rects(self) -> tuple[QRectF, QRectF, QRectF]:
         """What each level fits, in scene units: the local area's plan (or
         a little country round the character), the known places within
         REGION_REACH of them (all of them when that is fewer than two), and
         every known place."""
         here = self.here()
-        plan = self._local_plan()
-        if plan is not None:
-            local = plan.rect()
-        else:
-            spot = position(self.world, here) if here else None
-            if spot is not None:
-                reach = max(size_of(self.world.places[here]), 100.0) * 1.5  # type: ignore[index]
-                local = QRectF(spot[0] - reach, -spot[1] - reach, 2 * reach, 2 * reach)
-            else:
-                local = QRectF()
+        local = self._sight()
         shown = self._shown()
         world = self._around(shown)
         spot = position(self.world, here) if here else None
@@ -954,6 +1056,8 @@ class WorldView(QWidget):
             self._postcard = None
             self._iso_images = {}
             self._focus = None
+            self._veil = None
+            self.legend.hide()
             self._sync_buttons()
             return
         self._open = self._out_of_the_fog()
@@ -972,7 +1076,24 @@ class WorldView(QWidget):
         if not bounds.isEmpty():
             pad = max(bounds.width(), bounds.height(), 200.0) * 0.5
             self.scene.setSceneRect(bounds.adjusted(-pad, -pad, pad, pad))
+        self._build_veil()
         self._update_detail()
+
+    def _build_veil(self) -> None:
+        """The fog over known country the character isn't in now, and the
+        legend saying so; nothing where they are nowhere on the map."""
+        sight = self._sight()
+        self._veil = None
+        self.legend.set_held(self.held)
+        self.legend.setVisible(not sight.isEmpty())
+        if sight.isEmpty():
+            return
+        known = QPainterPath()
+        known.setFillRule(Qt.WindingFill)
+        for item in [*self._land, *self._plans.values(), *self._isos.values()]:
+            known.addRect(item.sceneBoundingRect())
+        self._veil = _VeilItem(known.simplified(), sight)
+        self.scene.addItem(self._veil)
 
     def _build_land(self) -> None:
         # Coarse land first, finer on top: a town's six kilometres under the
@@ -1098,6 +1219,11 @@ class WorldView(QWidget):
         world = self.world
         shown = self._shown()
         visited, here = self._visited(), self.here()
+        # What is in the area the character is in now is lit, as where they
+        # have been is: they can see it (the fog's clear part, `_sight`).
+        sight = self._sight()
+        if here is not None:
+            visited = visited | {here} | containers(world, [here])
         # A place names everyone in it, or in anything inside it: the farm
         # says "John" while its farmhouse is too small to show.
         people: dict[str, list[str]] = {}
@@ -1113,7 +1239,7 @@ class WorldView(QWidget):
                 place,
                 self._picture_for(place),
                 people.get(place.id, []),
-                visited=place.id in visited,
+                visited=place.id in visited or sight.contains(QPointF(spot[0], -spot[1])),
                 current=place.id == here,
                 painted=painted,
             )
@@ -1772,9 +1898,9 @@ class WorldView(QWidget):
         if level == "world":
             return "The whole map: its settlements and regions. Zoom in for the country."
         hint = (
-            "The country the story has reached. Lit: where you've been; dimmed: places the "
-            "story told of; ringed: where you are now. Double-click a place to go to it; "
-            "zoom in for the local map."
+            "The country the story has reached. Names bright: where you've been or can see "
+            "now; dim: places the story only told of; ringed: where you are now. "
+            "Double-click a place to go to it; zoom in for the local map."
         )
         if self._local_plan() is None:
             if self.drawing:

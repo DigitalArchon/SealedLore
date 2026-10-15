@@ -18,6 +18,7 @@ from PySide6.QtWidgets import QApplication, QDialog, QGraphicsSimpleTextItem  # 
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.gui.map_art import picture_sprite, pixel_art, tile_image  # noqa: E402
 from sealedlore.gui.world_view import (  # noqa: E402
+    ISO_Z,
     MIN_PLACE_PX,
     WorldView,
     place_card,
@@ -1057,3 +1058,66 @@ def test_the_stories_dock_stays_with_no_story_open(window):
     assert not window.stories_dock.isHidden()
     window.stories_dock.close()
     assert not window.stories_dock.isHidden()
+
+
+def test_the_fog_veils_known_country_and_leaves_the_area_you_are_in_clear(app):
+    # The author (Oct 15 2026): black for unexplored and full colour for the
+    # rest said nothing of where the character is now. Three shades: the bare
+    # fog, known country under a veil, and the local area clear.
+    farm = WorldPlace(id="farm", name="The farm", kind="site", x=0.0, y=0.0, size=400)
+    house = WorldPlace(id="house", name="Farmhouse", kind="building", inside="farm", x=0.0, y=50.0)
+    town = WorldPlace(id="town", name="Hellsville", kind="settlement", x=0.0, y=8000.0)
+    world = WorldMap(
+        places={p.id: p for p in (farm, house, town)},
+        seen=["town"],
+        visited={"Jane": ["farm", "town"]},
+        where={"Jane": "farm"},
+    )
+    land = [
+        TerrainPatch(place_id="farm", x=0, y=0, side=2000, rows=["." * 4] * 4, ground="snow"),
+        TerrainPatch(place_id="town", x=0, y=8000, side=2000, rows=["." * 4] * 4, ground="dirt"),
+    ]
+    view = WorldView()
+    view.resize(800, 600)
+    view.set_world(world, WorldArt(terrain=land), "Jane", keep_view=False)
+    veil = view._veil
+    assert veil is not None and veil.zValue() > ISO_Z
+    assert veil.sight == view._sight() and not veil.sight.isEmpty()
+    assert veil.sight.contains(QPointF(0.0, 0.0))  # the farm, where Jane is
+    assert not veil.veiled.contains(QPointF(0.0, 0.0))  # clear
+    assert veil.veiled.contains(QPointF(0.0, -8000.0))  # the town: known, not here
+    assert veil.veiled.contains(QPointF(900.0, 0.0))  # the farm's land past its area
+    assert not veil.veiled.contains(QPointF(5000.0, -4000.0))  # unexplored: bare fog
+    # Never hit: a double-click or a hover reaches what lies under it.
+    assert veil.shape().isEmpty()
+    assert veil not in view.scene.items(QPointF(0.0, -8000.0))
+    assert not view.legend.isHidden() and "Jane" in view.legend.here_label.text()
+
+
+def test_a_place_in_sight_is_lit_though_never_visited(app):
+    farm = WorldPlace(id="farm", name="The farm", kind="site", x=0.0, y=0.0, size=400)
+    barn = WorldPlace(id="barn", name="The barn", kind="building", inside="farm", x=60.0, y=0.0)
+    well = WorldPlace(id="well", name="The well", kind="site", x=-60.0, y=0.0)
+    town = WorldPlace(id="town", name="Hellsville", kind="settlement", x=0.0, y=8000.0)
+    world = WorldMap(
+        places={p.id: p for p in (farm, barn, well, town)},
+        seen=["town", "well"],
+        visited={"Jane": ["barn"]},
+        where={"Jane": "barn"},
+    )
+    view = WorldView()
+    view.resize(800, 600)
+    view.set_world(world, WorldArt(), "Jane", keep_view=False)
+    opacity = {item.place.id: item.opacity() for item in view._items}
+    assert opacity["barn"] == 1.0 and opacity["farm"] == 1.0  # where she is, and what it's in
+    assert opacity["well"] == 1.0  # never been, but she can see it from here
+    assert opacity["town"] < 1.0  # only told of, and far off
+
+
+def test_no_fog_and_no_legend_when_the_character_is_nowhere_on_the_map(app):
+    town = WorldPlace(id="town", name="Hellsville", kind="settlement", x=0.0, y=8000.0)
+    view = WorldView()
+    view.set_world(WorldMap(places={"town": town}, seen=["town"]), WorldArt(), "Jane")
+    assert view._veil is None and view.legend.isHidden()
+    view.set_world(WorldMap(), WorldArt(), "Jane")
+    assert view._veil is None and view.legend.isHidden()
