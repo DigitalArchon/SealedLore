@@ -12,7 +12,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QRectF  # noqa: E402
+from PySide6.QtCore import QPointF, QRectF  # noqa: E402
 from PySide6.QtWidgets import QApplication, QGraphicsSimpleTextItem  # noqa: E402
 
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
@@ -265,13 +265,24 @@ def test_a_station_in_space_is_a_deck_and_its_people_stand_apart(app):
     deck = view._plans["ds9"]
     assert deck.isVisible() and deck.ground == "metal" and deck.roofs is False
     people = sorted(view.people, key=lambda p: p.pos().x())
+    # Where the names land on screen: compared in the plan's own units they
+    # passed while overlapping once the plan was drawn smaller than its pixels.
+    port = view.view.viewportTransform()
     tags = {
-        t.text(): t.mapRectToParent(t.boundingRect())
+        t.text(): t.deviceTransform(port).mapRect(t.boundingRect())
         for t in deck.childItems()
         if isinstance(t, QGraphicsSimpleTextItem)
     }
     assert not tags["Captain"].intersects(tags["First"])
-    assert tags["corridor"].top() > people[0].pos().y()  # under their feet
+    view.view.zoom_by(0.5)  # smaller than its pixels: still apart
+    tags = {
+        t.text(): t.deviceTransform(view.view.viewportTransform()).mapRect(t.boundingRect())
+        for t in deck.childItems()
+        if isinstance(t, QGraphicsSimpleTextItem)
+    }
+    assert not tags["Captain"].intersects(tags["First"])
+    feet = people[0].deviceTransform(view.view.viewportTransform()).map(QPointF(0, 0))
+    assert tags["corridor"].top() > feet.y() - 4  # under their feet
     # The drawing's progress, and when it is done.
     view.set_progress(2, 5)
     assert view.progress_label.text() == "Drawing the map: 2 of 5" and not view.progress.isHidden()
@@ -690,3 +701,91 @@ def test_a_plan_in_the_fog_is_not_drawn_nor_its_view_marked(app):
     view.set_world(world, art, "Jane")
     view.go_to("farm")
     assert "The farm" in shown_plans(view) and view._badges["farm"].isVisible()
+
+
+
+def test_someone_in_a_part_of_a_building_stands_once_at_the_building(app):
+    """The review: John on "The porch" of the farmhouse (the read invents such
+    places) stood in the farm's middle, and twice, or not at all, as the
+    farmhouse's own plan was shown or hidden."""
+    view = WorldView()
+    view.resize(900, 700)
+    farm = WorldPlace(id="farm", name="The farm", kind="site", x=0.0, y=0.0, size=400)
+    house = WorldPlace(
+        id="house", name="The farmhouse", kind="building", inside="farm", x=0.0, y=0.0, size=40
+    )
+    porch = WorldPlace(id="porch", name="The porch", kind="area", inside="house")
+    world = WorldMap(
+        places={"farm": farm, "house": house, "porch": porch},
+        where={"John": "porch"},
+        visited={"John": ["farm"]},
+    )
+    rows = ["." * 40] * 24
+    rows = [*rows[:10], "." * 18 + "####" + "." * 18, *rows[11:]]
+    art = WorldArt(
+        layouts={
+            "farm": {
+                "": PlaceLayout(
+                    place_id="farm", rows=rows, labels={"The farmhouse": [19, 10]}, spec={}
+                )
+            },
+            "house": {"": PlaceLayout(place_id="house", rows=["_" * 40] * 24, spec={})},
+        }
+    )
+    view.set_world(world, art, "John", keep_view=False)
+
+    def johns() -> list:
+        return [p for p in view.people if p.name == "John" and p.parentItem().isVisible()]
+
+    assert len(johns()) == 1
+    farm_plan = view._plans["farm"]
+    figure = johns()[0]
+    assert figure.parentItem() is farm_plan
+    assert figure.pos().y() > 10 * 16  # at the farmhouse's front, not the farm's middle
+    for _ in range(3):  # its own plan shown, then not: never two, never none
+        view.go_to("house")
+        assert len(johns()) == 1
+        view.go_local()
+        assert len(johns()) == 1
+
+
+def test_nobody_stands_on_water_a_wall_or_space(app):
+    """The review: someone at a creek crossing whose plan names no spot for
+    them stood in its middle, on the frozen creek."""
+    view = WorldView()
+    view.resize(900, 700)
+    crossing = WorldPlace(id="c", name="The creek crossing", kind="site", x=0.0, y=0.0, size=100)
+    world = WorldMap(places={"c": crossing}, where={"Jane": "c"}, visited={"Jane": ["c"]})
+    rows = ["." * 40] * 9 + ["~" * 40] * 6 + ["." * 40] * 9
+    art = WorldArt(layouts={"c": {"": PlaceLayout(place_id="c", rows=rows, spec={})}})
+    view.set_world(world, art, "Jane", keep_view=False)
+    [jane] = view.people
+    tile_x, tile_y = int(jane.pos().x() // 16), int((jane.pos().y() - 1) // 16)
+    assert rows[tile_y][tile_x] == "."
+
+
+def test_a_plan_is_dressed_again_only_when_what_it_shows_changes(app):
+    """The review: a plan with a pictured building was dressed anew on every
+    scroll and zoom, and the list of people grew each time."""
+    from sealedlore.models.world import MapPicture
+    from tests.test_world_pictures import png
+
+    view = WorldView()
+    view.resize(900, 700)
+    world, art, _painted = _two_areas()
+    rows = ["." * 40] * 10 + ["." * 18 + "####" + "." * 18] * 3 + ["." * 40] * 11
+    art.layouts["farm"][""] = PlaceLayout(
+        place_id="farm", rows=rows, labels={"The barn": [19, 11]}, spec={"ground": "snow"}
+    )
+    art.pictures.append(
+        MapPicture(subject="place", subject_id="barn", name="The barn", file="images/map/b.png")
+    )
+    view.picture_reader = lambda path: png(32, 32)
+    view.set_world(world, art, "Jane", keep_view=False)
+    plan = view._plans["farm"]
+    assert plan.cleared  # the barn stands pictured on the plan
+    first = list(plan.dressed)
+    count = len(view.people)
+    for _ in range(5):
+        view._update_detail()
+    assert plan.dressed == first and len(view.people) == count

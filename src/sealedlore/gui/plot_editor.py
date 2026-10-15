@@ -708,6 +708,7 @@ class PlotEditorWindow(QMainWindow):
 
     def preview(self) -> None:
         dialog = QDialog(self)
+        dialog.setAttribute(Qt.WA_DeleteOnClose)  # kept with the editor otherwise
         dialog.setWindowTitle("Plot file preview")
         dialog.setMinimumSize(720, 560)
         view = QPlainTextEdit(render_plot_markdown(self.document).text)

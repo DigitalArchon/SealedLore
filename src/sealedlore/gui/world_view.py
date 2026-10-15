@@ -95,6 +95,8 @@ LEVELS = ("local", "region", "world")
 # A place's picture on the region: scaled with the map, within these (a
 # farmhouse at region zoom is small, never invisible).
 MIN_PLACE_PX, MAX_PLACE_PX = 16, 96
+# The sizes it is drawn at, so each picture is cut out at a few sizes only.
+PLACE_SIZES = (16, 20, 24, 32, 40, 48, 64, 80, 96)
 # On the local map a plan is drawn once it is this wide on screen; smaller,
 # its place's picture stands for it. Never on the region or the world.
 PLAN_MIN_PX = 96
@@ -124,8 +126,10 @@ PAUSED_NOTE = (
 # grows with the font), and the gap between picture and name.
 LABEL_WIDTH = 176
 LABEL_GAP = 3
-# A scene's people, in art pixels (the tileset's scale) before the view's zoom.
+# A scene's people, in art pixels (the tileset's scale) before the view's zoom,
+# and how far apart several in one spot stand.
 AVATAR_HEIGHT = 26
+PERSON_STEP = 16
 # A postcard's thumbnail on a place's card.
 POSTCARD_THUMB = (176, 100)
 # An area's isometric view lies over its plan: above every plan (2 to 2.9)
@@ -307,6 +311,12 @@ class _PlanItem(QGraphicsPixmapItem):
         # Boxes of the buildings in it drawn open for their changed state,
         # where people at them stand at the front (`_stand`).
         self.fronts: tuple[tuple[int, int, int, int], ...] = ()
+        # What it was last dressed for: the insides shown open in it (not
+        # `cleared`, which has the pictured buildings too: compared with
+        # that, a plan with one was dressed anew on every scroll), and who
+        # stands in it.
+        self.opened: tuple[tuple[int, int, int, int], ...] | None = None
+        self.standing: tuple[tuple[str, str], ...] = ()
         self.ground = ""
         # A building the story changed, its plan drawn in that state: shown
         # open on the local map, in place of its roof, at any zoom.
@@ -469,12 +479,14 @@ class _TagItem(QGraphicsSimpleTextItem):
         painter.drawRoundedRect(rect, 3, 3)
         super().paint(painter, option, widget)
 
-    def centre_on(self, x: float, y: float) -> None:
-        """Its middle on (x, y) in its parent's units, wherever the zoom puts the text."""
+    def centre_on(self, x: float, y: float, *, lift: int = 0) -> None:
+        """Its middle on (x, y) in its parent's units, wherever the zoom puts
+        the text; `lift` lines of text higher, in screen pixels."""
         self.setPos(x, y)
         rect = self.boundingRect()
         self.setTransformOriginPoint(rect.center())
-        self.setTransform(QTransform.fromTranslate(-rect.width() / 2, -rect.height() / 2))
+        up = lift * (rect.height() + 2)
+        self.setTransform(QTransform.fromTranslate(-rect.width() / 2, -rect.height() / 2 - up))
 
 
 class _IsoItem(QGraphicsItem):
@@ -1165,15 +1177,15 @@ class WorldView(QWidget):
                 fronts = tuple(
                     sorted(box for child, box in fixed.items() if child in self._changed_only)
                 )
-                dressed = plan.childItems()
+                standing = tuple(self._people_in(pid, shown_plans))
                 if (
-                    not dressed
+                    plan.opened != opened
                     or plan.roofs != roofs
-                    or plan.cleared != opened
                     or plan.fronts != fronts
                     or plan.ground != ground
+                    or plan.standing != standing
                 ):
-                    self._dress_plan(plan, ground, roofs, opened, fronts)
+                    self._dress_plan(plan, ground, roofs, opened, fronts, standing)
             plan.setVisible(show)
         # Each area's view over its plan with Isometric on; its mark with it off.
         iso_on = self.iso_button.isChecked()
@@ -1195,7 +1207,8 @@ class WorldView(QWidget):
                         visible = size_of(parent) * scale >= CHILD_SHOWN_AT
                     parent = places.get(parent.inside or "")
             item.setVisible(visible)
-            item.set_pixels(int(min(max(size_of(place) * scale, MIN_PLACE_PX), MAX_PLACE_PX)))
+            if visible:  # a hidden place's picture isn't cut out at every zoom
+                item.set_pixels(_snapped(size_of(place) * scale))
             item.set_big(level == "world")
         # The ring: on the character's place, or the nearest shown place it is in.
         shown_ids = {item.place.id for item in self._items if item.isVisible()}
@@ -1229,14 +1242,18 @@ class WorldView(QWidget):
         roofs: bool,
         opened: tuple[tuple[int, int, int, int], ...],
         fronts: tuple[tuple[int, int, int, int], ...] = (),
+        standing: tuple[tuple[str, str], ...] = (),
     ) -> None:
         """Render a plan and stand everything in it: pictured buildings on
-        cleared ground, the marked things, names, and the people."""
-        plan.fronts = fronts
+        cleared ground, the marked things, names, and the people (`standing`:
+        who, and where they are, from `_people_in`)."""
+        plan.fronts, plan.opened, plan.standing = fronts, opened, standing
+        # Its people go before its children do: once removed, they have no
+        # parent to know them by, and the list grew with every dressing.
+        self.people = [p for p in self.people if p.parentItem() is not plan]
         for child in list(plan.childItems()):
             self.scene.removeItem(child)
         plan.dressed = []
-        self.people = [p for p in self.people if p.parentItem() is not plan]
         layout = plan.layout
         plan.ground = ground
         rows = plan.drawn_rows()
@@ -1255,7 +1272,7 @@ class WorldView(QWidget):
         roofed = [b for b in houses if b not in opened] if roofs else []
         self._marked(plan, rows, layout.objects, roofed)
         spots = {_key(name): (x, y) for name, (x, y) in layout.labels.items()}
-        stood = self._stand(plan, self._people_in(plan.place.id), spots, [*roofed, *fronts], rows)
+        stood = self._stand(plan, list(standing), spots, [*roofed, *fronts], rows)
         own = {_key(n) for n in (plan.place.name, *plan.place.aliases)}
         for name, (x, y) in layout.labels.items():
             if _key(name) in own:
@@ -1274,13 +1291,15 @@ class WorldView(QWidget):
         """The look a plan is drawn in (`world_art.plan_ground`)."""
         return plan_ground(self.world, self.art, place, ground)
 
-    def _people_in(self, place_id: str) -> list[tuple[str, str]]:
+    def _people_in(self, place_id: str, shown_plans: set[str]) -> list[tuple[str, str]]:
         """(who, where) for everyone the story has at this place or somewhere
-        inside it, but not in a place inside it whose own plan is shown (they
-        stand in that). Before a passage has placed the author's character,
-        they are at an imported map's start, as `here()` has them. Nobody
-        stands in a building drawn open only for its changed state: they are
-        at its front, in the plan around it."""
+        inside it, but not in a place inside it whose own plan is shown
+        (`shown_plans`, this pass: read from the plans' visibility, a plan
+        dressed before the others were shown or hidden stood someone in two
+        plans, or in none). Before a passage has placed the author's
+        character, they are at an imported map's start, as `here()` has
+        them. Nobody stands in a building drawn open only for its changed
+        state: they are at its front, in the plan around it."""
         if place_id in self._changed_only:
             return []
         where = dict(self.world.where)
@@ -1296,13 +1315,7 @@ class WorldView(QWidget):
                     out.append((who, at))
                     break
                 seen.add(spot)
-                plan = self._plans.get(spot)
-                if (
-                    plan is not None
-                    and plan.isVisible()
-                    and spot != at
-                    and spot not in self._changed_only
-                ):
+                if spot in shown_plans and spot != at and spot not in self._changed_only:
                     break  # stands in that plan, drawn closer
                 spot = self.world.places[spot].inside if spot in self.world.places else None
         return out
@@ -1337,53 +1350,70 @@ class WorldView(QWidget):
         roofed: list[tuple[int, int, int, int]],
         rows: tuple[str, ...],
     ) -> set[tuple[int, int]]:
-        """Everyone where the plan marks their place; at a roofed building,
-        or one drawn open for its changed state (`roofed` has both), at its
-        front; otherwise in the middle. Several in one spot stand side by
-        side."""
+        """Everyone where the plan marks their place, or the place it is in
+        (someone on a building's porch stands at the building); at a roofed
+        building, or one drawn open for its changed state (`roofed` has
+        both), at its front; otherwise in the middle. Always on a tile they
+        can stand on (`standing_spot`): the middle of a creek crossing is the
+        creek. Several in one spot stand side by side, their names in a
+        column over them."""
         width = max((len(r) for r in rows), default=1)
-        groups: dict[tuple[float, float], list[str]] = {}
+        groups: dict[tuple[int, int], list[str]] = {}
         # The labelled tiles people stand on, for `_dress_plan` to move the
         # place's name off them.
         standing: dict[tuple[int, int], list[str]] = {}
         for who, at in people:
-            place = self.world.places.get(at)
-            names = [place.name, *place.aliases] if place is not None else []
-            spot = next((spots[_key(n)] for n in names if _key(n) in spots), None)
+            spot = self._labelled(at, plan.place.id, spots)
             if spot is None:
-                x, y = width * TILE / 2, len(rows) * TILE / 2
+                tx, ty = width // 2, len(rows) // 2
             else:
                 tx, ty = spot
                 box = next((b for b in roofed if b[0] <= tx <= b[1] and b[2] <= ty <= b[3]), None)
                 if box is not None:  # roofed over: they stand at its front
                     ty = box[3] + 1
-                if box is None:
+                else:
                     standing.setdefault(spot, []).append(who)
-                    # A label on space or a wall would stand them there.
-                    tx, ty = standing_spot(rows, (tx, ty))
-                x, y = tx * TILE + TILE / 2, ty * TILE + TILE - 2
-            groups.setdefault((x, y), []).append(who)
-        for (x, y), names in groups.items():
+            tx = min(max(tx, 0), width - 1)
+            ty = min(max(ty, 0), len(rows) - 1)
+            # A label (or the middle, or a front) on water, a wall or space
+            # would stand them there.
+            groups.setdefault(standing_spot(rows, (tx, ty)), []).append(who)
+        for (tx, ty), names in groups.items():
+            x, y = tx * TILE + TILE / 2, ty * TILE + TILE - 2
             names.sort(key=lambda n: n != self.held)
-            tags = [
-                _TagItem(name.split()[0] if name.split() else name, bold=name == self.held)
-                for name in names
-            ]
-            # Side by side by their names' width: live, two officers' names
-            # ran into each other at 14px apart.
-            step = max(14.0, *(tag.boundingRect().width() + 4 for tag in tags))
-            for i, (name, tag) in enumerate(zip(names, tags, strict=True)):
-                offset = (i - (len(names) - 1) / 2) * step
+            for i, name in enumerate(names):
+                offset = (i - (len(names) - 1) / 2) * PERSON_STEP
                 avatar = self._picture_image("person", name, None, AVATAR_HEIGHT)
                 figure = _PersonItem(name, avatar or person_sprite(name), held=name == self.held)
                 figure.setParentItem(plan)
                 figure.setPos(x + offset, y)
                 self.people.append(figure)
                 plan.dressed.append(figure)
+            tallest = max(f.image.height() for f in self.people[-len(names) :])
+            # The names in a column over the group, in screen pixels: spaced
+            # side by side in the plan's own, two officers' names ran into
+            # each other once the plan was drawn smaller than its pixels.
+            for line, name in enumerate(names):
+                tag = _TagItem(name.split()[0] if name.split() else name, bold=name == self.held)
                 tag.setParentItem(plan)
-                tag.centre_on(x + offset, y - figure.image.height() - 6)
+                tag.centre_on(x, y - tallest - 6, lift=line)
                 plan.dressed.append(tag)
         return {spot for spot, _names in standing.items()}
+
+    def _labelled(
+        self, at: str, plan_id: str, spots: dict[str, tuple[int, int]]
+    ) -> tuple[int, int] | None:
+        """Where the plan marks `at`, or the nearest place it is in that the
+        plan marks, up to the plan's own place."""
+        seen: set[str] = set()
+        current = self.world.places.get(at)
+        while current is not None and current.id not in seen and current.id != plan_id:
+            seen.add(current.id)
+            for name in (current.name, *current.aliases):
+                if _key(name) in spots:
+                    return spots[_key(name)]
+            current = self.world.places.get(current.inside or "")
+        return None
 
     # --- the card --------------------------------------------------------------------
 
@@ -1462,6 +1492,7 @@ class WorldView(QWidget):
             return
         name, data = self._postcard
         dialog = QDialog(self)
+        dialog.setAttribute(Qt.WA_DeleteOnClose)  # a child of the map, kept with it otherwise
         dialog.setWindowTitle(name)
         label = QLabel()
         image = QImage.fromData(data)
@@ -1645,7 +1676,9 @@ class WorldView(QWidget):
         image = image_of(self.picture_reader(picture.file))
         if image.isNull():
             return
-        IsometricDialog(area.name, image, picture.model, self).exec()
+        dialog = IsometricDialog(area.name, image, picture.model, self)
+        dialog.setAttribute(Qt.WA_DeleteOnClose)
+        dialog.exec()
 
     def _whole_requested(self) -> None:
         area = self.area_in_view()
@@ -1830,6 +1863,14 @@ class WorldView(QWidget):
             self.view.zoom_by(1 / ZOOM_STEP)
         else:
             super().keyPressEvent(event)
+
+
+def _snapped(pixels: float) -> int:
+    """A place's picture size on the region, to the nearest of PLACE_SIZES:
+    each new size cut a map picture out again (0.19 s each), and every
+    wheel step made new sizes, so zooming the region froze the window."""
+    pixels = min(max(pixels, MIN_PLACE_PX), MAX_PLACE_PX)
+    return min(PLACE_SIZES, key=lambda size: abs(size - pixels))
 
 
 def visible_names(view: WorldView) -> list[str]:

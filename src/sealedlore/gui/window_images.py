@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import QDialog, QFileDialog, QInputDialog, QMessageBox, QVBoxLayout
 
@@ -470,7 +471,9 @@ class ImagesWindow:
         store = self.session.pictures
         data = store.read(image.file)
         if action == "open":
-            ImageViewer(image, data, self).exec()
+            viewer = ImageViewer(image, data, self)
+            viewer.setAttribute(Qt.WA_DeleteOnClose)  # with its picture, once closed
+            viewer.exec()
         elif action == "prompt":
             box = QMessageBox(self)
             box.setWindowTitle("Prompt")
@@ -740,6 +743,7 @@ class ImagesWindow:
         if not data:
             return
         dialog = QDialog(self)
+        dialog.setAttribute(Qt.WA_DeleteOnClose)
         dialog.setWindowTitle(title)
         layout = QVBoxLayout(dialog)
         layout.addWidget(FitPicture(pixmap_of(data)))
@@ -765,7 +769,9 @@ class ImagesWindow:
         elif picture.subject == "isometric":
             image = image_of(session.pictures.read(picture.file))
             if not image.isNull():
-                IsometricDialog(picture.name, image, picture.model, self).exec()
+                dialog = IsometricDialog(picture.name, image, picture.model, self)
+                dialog.setAttribute(Qt.WA_DeleteOnClose)
+                dialog.exec()
         else:
             self._show_whole(f"{picture.name}: a postcard", session.pictures.read(picture.file))
 

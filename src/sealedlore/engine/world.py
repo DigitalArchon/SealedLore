@@ -295,7 +295,9 @@ def render_map_context(
     things = [
         t
         for t in world.things.values()
-        if t.carried_by == held or (t.at is not None and t.at in near)
+        # Carried by the held character, never "carried by nobody": with no
+        # one held yet, every thing on the map was "here".
+        if (held is not None and t.carried_by == held) or (t.at is not None and t.at in near)
     ][:MAP_LIST_LIMIT]
     if things:
         lines.append("Things here:")

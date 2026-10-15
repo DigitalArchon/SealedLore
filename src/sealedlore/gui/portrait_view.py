@@ -219,6 +219,7 @@ class PortraitView(QWidget):
         if not self._data:
             return
         dialog = QDialog(self)
+        dialog.setAttribute(Qt.WA_DeleteOnClose)  # with its picture, once closed
         dialog.setWindowTitle(self._name or self._noun.capitalize())
         layout = QVBoxLayout(dialog)
         layout.addWidget(FitPicture(pixmap_of(self._data)))

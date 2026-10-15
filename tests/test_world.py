@@ -226,6 +226,13 @@ def test_the_map_here_names_the_author_s_character_or_says_so():
     world.start = world.where["Jane"]
     unheld = render_map_context(world, None)  # a Question before anyone is held
     assert "The author's character is at: The farmhouse" in unheld and "None" not in unheld
+    # A thing nobody carries is not "here" for want of anyone held: the review
+    # found every thing on the map listed so.
+    from sealedlore.models.world import WorldThing
+
+    town = next(p.id for p in world.places.values() if p.name == "Hellsville")
+    world.things["lark"] = WorldThing(id="lark", name="The airship", at=town)
+    assert "The airship" not in render_map_context(world, None)
 
 
 def test_the_notice_says_what_changed():
