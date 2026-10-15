@@ -3101,6 +3101,23 @@ _text(
     'Reply with JSON only: {"references": [], "prompt": "..."}',
 )
 
+# The image model takes no reference pictures (HiDream, Z Image): told the
+# catalogue anyway with "at most 0", the writer still wrote "the man from
+# image 1" and the prompt went out naming a picture that wasn't sent (live,
+# Oct 15 2026). It is told there are none to send, and to describe in words.
+_text(
+    "pictures.refs.untaken",
+    PICTURES,
+    "Picture prompt: the model takes no pictures",
+    "In place of the catalogue of pictures when the image model accepts no "
+    "reference pictures: nothing is sent, so the prompt must describe in words.",
+    """\
+The image model takes no reference pictures, so none are sent with the prompt: \
+describe everyone and everything in words, from what the story says they look \
+like and wear, and never refer to an image by number.
+Reply with JSON only: {"references": [], "prompt": "..."}""",
+)
+
 
 # --- Portraits (engine/portraits.py) ----------------------------------------
 

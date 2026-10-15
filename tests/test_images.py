@@ -325,6 +325,18 @@ def test_the_question_numbers_nothing_itself_and_the_reply_chooses_in_order():
     assert [use.ref_id for use in capped.references] == ["ref-1"]
     assert mentioned_numbers("the man in Image 2 and image 10") == {2, 10}
 
+    # A model that takes no pictures (HiDream): the catalogue is not offered
+    # at all, or the writer still wrote "the man from image 1" (live).
+    untaken = build_image_question(
+        direction="Serrik alone",
+        held_name="Serrik Vaun",
+        style="",
+        choices=choices,
+        max_refs=0,
+    )
+    assert "R1 — Serrik Vaun" not in untaken and "# REFERENCE PICTURES" not in untaken
+    assert "takes no reference pictures" in untaken
+
 
 def make_session(tmp_path: Path, bundle: StoryBundle, replies: list[str]) -> StorySession:
     config = Config(

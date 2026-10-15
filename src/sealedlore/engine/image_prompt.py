@@ -111,6 +111,11 @@ def build_image_question(
             ]
         else:
             parts += ["", texts["pictures.refs.none"]]
+    elif choices and max_refs <= 0:
+        # The model takes none: offered the catalogue with "at most 0", the
+        # writer still named "image 1", and the prompt went out naming a
+        # picture that wasn't sent.
+        parts += ["", texts["pictures.refs.untaken"]]
     elif choices:
         parts += [
             "",
