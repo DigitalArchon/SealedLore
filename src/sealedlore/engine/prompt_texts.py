@@ -3212,9 +3212,36 @@ _text(
     "pictures.edit.thing",
     PICTURES,
     "Card pictures: what an edit keeps (lore)",
-    "What an edit of a lore entry's picture keeps.",
+    "What an edit of a lore entry's picture, or of the background, keeps.",
     "the same place or thing: its shape, layout and materials, and the framing and light "
     "unless the change says otherwise",
+)
+
+# Edit… on a picture of the story (Media, or a picture's menu in the story):
+# the scene, with whoever is in it, is what it keeps. Checked live on one
+# picture (SealedLoreDocs design/images.md), not A/B'd.
+_text(
+    "pictures.edit.scene",
+    PICTURES,
+    "Card pictures: what an edit keeps (a picture of the story)",
+    "What an edit of a picture of the story keeps.",
+    "the same scene: the same people with the same faces, hair and clothes, the same place, "
+    "and the composition, framing and light unless the change says otherwise",
+)
+
+# Draw a new background… (Media): the direction the story's prompt writer is
+# given for a picture to stand behind the story's text. The author sees it
+# in the picture dialog and can change it before anything is written; not
+# measured.
+_text(
+    "pictures.background",
+    PICTURES,
+    "Card pictures: a background",
+    "The direction given to the picture prompt writer for the story's background, the "
+    "picture behind its text; the author can change it before it is written.",
+    "A wide view of where the story is now, to stand behind the story's text as its "
+    "background: the place itself, its light and weather, seen from a little way off. No one "
+    "close to the viewer.",
 )
 
 # A character alone in the current scene (In the scene… on a card): the

@@ -164,6 +164,13 @@ class Story(BaseModel):
     image_style: str = ""
     # A picture shown behind the transcript, relative to the story folder.
     background_image: str | None = None
+    # The picture drawn for this story the background is a copy of
+    # (GeneratedImage id), if it is one: the Media tab shows the background
+    # in its place, not twice, and Draw a new background… starts from it.
+    background_drawn_as: str = ""
+    # Pictures drawn to be the background that have been put behind the
+    # story: each is taken once, so one the author replaces stays replaced.
+    backgrounds_taken: list[str] = Field(default_factory=list)
     # The pictures in the story's folder have had their hidden data removed
     # (storage.images.clean_story_images). False for a story made before
     # that was done on the way in, which is cleaned once when it next opens.

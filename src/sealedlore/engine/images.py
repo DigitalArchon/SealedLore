@@ -58,6 +58,8 @@ class ImageRequest:
     card_id: str | None = None
     card_first: bool = False
     card_caption: str = ""
+    # Drawn to be the story's background (`GeneratedImage.background`).
+    background: bool = False
 
 
 class MissingReference(ValueError):
@@ -154,6 +156,7 @@ def run_image_request(
                 card_id=request.card_id,
                 card_first=request.card_first,
                 card_caption=request.card_caption,
+                background=request.background,
             )
         )
     store.log(

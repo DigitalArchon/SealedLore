@@ -1270,8 +1270,13 @@ class MainWindow(
         self._counted_summaries.clear()
         self._staleness_dismissed = False
         self._resume_private()
-        # Pictures drawn for its cards while another story was open.
+        # Pictures drawn for its cards, or to be its background, while another
+        # story was open.
         self.session.take_card_pictures()
+        try:
+            self.session.take_background_pictures()
+        except (OSError, ValueError) as exc:
+            self.statusBar().showMessage(f"Couldn't use the new background: {exc}", 12000)
         self.refresh_panels()
         self.right_tabs.setCurrentWidget(
             self.world_view if self.session.map_on else self.scene_panel

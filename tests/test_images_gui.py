@@ -19,7 +19,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QEvent  # noqa: E402
+from PySide6.QtCore import QEvent, Qt  # noqa: E402
 from PySide6.QtGui import QColor, QImage  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
@@ -245,6 +245,58 @@ def test_a_background_is_set_kept_and_cleared(app, window: MainWindow, tmp_path:
     window.session.story.background_image = "images/missing.png"
     window._apply_background()
     assert not window.transcript.has_background
+
+
+def test_a_background_edited_or_drawn_anew_lands_behind_the_story_once(
+    app, window: MainWindow, tmp_path: Path
+):
+    """Media → the background → Edit… (or Draw a new background…): the
+    picture drawn goes behind the story when it comes back, the background
+    stands for it in Media rather than showing twice, and it is taken once:
+    a background cleared afterwards stays cleared."""
+    source = tmp_path / "bg.png"
+    source.write_bytes(PNG)
+    window._set_background_from(source)
+    session = window.session
+    old = session.story.background_image
+    window.refresh_images()
+    assert window.images_panel.list.item(0).data(Qt.UserRole) == "background"
+    request = session.background_edit_request(
+        session.picture_edit_prompt("at night", keep="thing"),
+        model="bytedance/seedream-v5.0-pro",
+        info=None,
+        size="1k",
+    )
+    assert request.background and request.anchor_node_id is None
+    assert [use.file for use in request.references] == [old]
+    assert "Keep the same place or thing" in request.prompt
+    window.image_jobs.start(request, mock_image_client(), session.pictures)
+    wait_for(app, lambda: not window.image_jobs.pending())
+    flush(app)
+    drawn = [image for image in session.generated_images() if image.background]
+    assert len(drawn) == 1
+    assert session.story.background_drawn_as == drawn[0].id
+    assert session.pictures.read(session.story.background_image) == PNG
+    assert window.transcript.has_background
+    ids = [
+        window.images_panel.list.item(i).data(Qt.UserRole)
+        for i in range(window.images_panel.list.count())
+    ]
+    assert ids == ["background"]  # not the drawing as well
+    # Cleared: the drawing is the story's again, and opening the story
+    # doesn't put it back.
+    window.clear_background()
+    assert session.story.background_drawn_as == ""
+    window.open_story(session.story.id)
+    assert window.session.story.background_image is None
+    ids = [
+        window.images_panel.list.item(i).data(Qt.UserRole)
+        for i in range(window.images_panel.list.count())
+    ]
+    assert ids == [drawn[0].id]
+    # Set as background from its menu: a copy that stands for it again.
+    window._image_action("background", drawn[0].id)
+    assert window.session.story.background_drawn_as == drawn[0].id
 
 
 def test_a_large_picture_is_scaled_on_the_way_in(app, tmp_path: Path):

@@ -152,17 +152,44 @@ def parse_portrait_prompts(
     return prompts
 
 
-def edit_prompt(change: str, *, person: bool, texts: PromptTexts = DEFAULT_TEXTS) -> str:
-    """An edit's prompt: the author's change, then what to keep."""
+# What an edit keeps: a character's picture the person, a lore entry's (or the
+# background) the place or thing, a picture of the story the whole scene.
+EDIT_KEEPS = ("person", "thing", "scene")
+
+
+def edit_prompt(change: str, *, keep: str, texts: PromptTexts = DEFAULT_TEXTS) -> str:
+    """An edit's prompt: the author's change, then what to keep (one of
+    EDIT_KEEPS)."""
+    assert keep in EDIT_KEEPS, keep
     change = " ".join(change.split())
     if change and not change.endswith((".", "!", "?")):
         change += "."
     return texts.fill(
         "pictures.edit",
         change=change,
-        keep=texts["pictures.edit.person" if person else "pictures.edit.thing"],
+        keep=texts[f"pictures.edit.{keep}"],
         no_writing=texts["portraits.no_writing"],
     )
+
+
+def size_like(model: ImageModelInfo | None, width: int, height: int) -> str:
+    """The size the model lists nearest a picture's own shape (`width` by
+    `height` pixels), the larger on a tie: an edit keeps the picture's shape.
+    Else a portrait's or a landscape picture's size, as the shape leans."""
+    if width <= 0 or height <= 0:
+        return picture_size(model, landscape=True)
+    wanted = width / height
+    shapes: list[tuple[float, int, str]] = []
+    for size in model.resolutions if model is not None else ():
+        parts = size.replace("*", "x").split("x")
+        if len(parts) != 2 or not (parts[0].isdigit() and parts[1].isdigit()):
+            continue
+        w, h = int(parts[0]), int(parts[1])
+        if w and h:
+            shapes.append((abs(w / h - wanted), -w * h, size))
+    if shapes:
+        return min(shapes)[2]
+    return portrait_size(model) if height > width else picture_size(model, landscape=True)
 
 
 def portrait_size(model: ImageModelInfo | None) -> str:
@@ -191,7 +218,7 @@ def portrait_size(model: ImageModelInfo | None) -> str:
 
 
 def card_size(card: Card, model: ImageModelInfo | None) -> str:
-    """A portrait's square, or a lore picture's landscape."""
+    """A portrait's tall size, or a lore picture's landscape."""
     if isinstance(card, LoreEntry):
         return picture_size(model, landscape=True)
     return portrait_size(model)

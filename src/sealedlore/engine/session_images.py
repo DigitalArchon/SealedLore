@@ -22,6 +22,8 @@ from sealedlore.engine.image_prompt import (
     parse_image_prompt,
     ref_choices,
 )
+from sealedlore.engine.images import ImageRequest
+from sealedlore.engine.portraits import edit_prompt
 from sealedlore.engine.prompt import assemble_chat, assemble_question
 from sealedlore.engine.scene_state import log_on_path, scene_at
 from sealedlore.engine.video_prompt import (
@@ -33,10 +35,10 @@ from sealedlore.models.image import GeneratedImage, ImageRef, RefUse
 from sealedlore.models.node import Node
 from sealedlore.models.video import GeneratedVideo
 from sealedlore.providers.base import ChatRequest
-from sealedlore.providers.images import ImageClient
+from sealedlore.providers.images import ImageClient, ImageModelInfo
 from sealedlore.providers.tee import is_tee
 from sealedlore.providers.videos import VideoClient
-from sealedlore.storage.images import clean_story_images
+from sealedlore.storage.images import IMAGES_DIR, clean_story_images
 from sealedlore.tree import index_nodes, path_to
 
 # The most reference pictures offered when the model's own limit is unknown.
@@ -332,6 +334,119 @@ class ImageRuntime:
     def generated_images(self) -> list[GeneratedImage]:
         """Read afresh each time: a job may have added one since."""
         return self.pictures.images()
+
+    def picture_edit_request(
+        self,
+        image: GeneratedImage,
+        prompt: str,
+        *,
+        model: str,
+        info: ImageModelInfo | None,
+        size: str,
+    ) -> ImageRequest:
+        """Edit… on a picture of the story: the picture itself goes with the
+        prompt (exactly as approved), and the new one goes after the same
+        passage, the old one kept."""
+        use = RefUse(
+            owner_kind="picture",
+            owner_id=image.id,
+            owner_name="The picture",
+            ref_id=image.id,
+            file=image.file,
+        )
+        return ImageRequest(
+            story_id=self.story.id,
+            model=model,
+            prompt=prompt,
+            size=size,
+            n=1,
+            references=(use,),
+            anchor_node_id=image.anchor_node_id,
+            listed_price=info.price(size) if info is not None else None,
+        )
+
+    def background_edit_request(
+        self, prompt: str, *, model: str, info: ImageModelInfo | None, size: str
+    ) -> ImageRequest:
+        """Edit… on the background: the background itself goes with the
+        prompt, and the new picture becomes the background once drawn (the
+        old one stays in Media when it was drawn here)."""
+        relative = self.story.background_image or ""
+        use = RefUse(
+            owner_kind="story",
+            owner_id=self.story.id,
+            owner_name="The background",
+            ref_id="background",
+            file=relative,
+        )
+        return ImageRequest(
+            story_id=self.story.id,
+            model=model,
+            prompt=prompt,
+            size=size,
+            n=1,
+            references=(use,),
+            anchor_node_id=None,
+            listed_price=info.price(size) if info is not None else None,
+            background=True,
+        )
+
+    def picture_edit_prompt(self, change: str, *, keep: str) -> str:
+        """The prompt for an edit: the change, then what it keeps (a story
+        picture its scene, the background its place)."""
+        return edit_prompt(change, keep=keep, texts=self.texts)
+
+    # --- the background ----------------------------------------------------------
+
+    def set_background(self, data: bytes, suffix: str, *, drawn_as: str = "") -> None:
+        """A picture as the story's background, copied in as
+        images/background<suffix> (an old one by another name goes).
+        `drawn_as`: the picture drawn for this story it is a copy of, shown
+        in its place in Media rather than twice. The bytes are already
+        clean (drawn here, or prepared on the way in). Raises OSError or
+        ValueError, with the story unchanged."""
+        relative = f"{IMAGES_DIR}/background{suffix}"
+        old = self.story.background_image
+        self.pictures.write(relative, data)
+        if old and old != relative:
+            self.pictures.remove(old)
+        self.story.background_image = relative
+        self.story.background_drawn_as = drawn_as
+        self.save()
+
+    def clear_background(self) -> None:
+        """No background: its file goes (a copy: a picture it was drawn as stays)."""
+        if self.story.background_image:
+            self.pictures.remove(self.story.background_image)
+        self.story.background_image = None
+        self.story.background_drawn_as = ""
+        self.save()
+
+    def take_background_pictures(self) -> bool:
+        """The latest picture drawn to be the background and not yet taken
+        goes behind the story (on open, and when one comes back). Each is
+        taken once (`Story.backgrounds_taken`): one the author replaces or
+        clears afterwards stays so. True when the background changed."""
+        taken = set(self.story.backgrounds_taken)
+        fresh = [i for i in self.generated_images() if i.background and i.id not in taken]
+        if not fresh:
+            return False
+        self.story.backgrounds_taken.extend(image.id for image in fresh)
+        latest = max(fresh, key=lambda image: image.created_at)
+        data = self.pictures.read(latest.file)
+        if data is None:
+            self.save()
+            return False
+        suffix = latest.file[latest.file.rfind(".") :] if "." in latest.file else ".png"
+        self.set_background(data, suffix, drawn_as=latest.id)
+        return True
+
+    def background_picture(self) -> GeneratedImage | None:
+        """The picture drawn here that the background is a copy of, if any."""
+        drawn = self.story.background_drawn_as
+        if not drawn:
+            return None
+        return next((i for i in self.generated_images() if i.id == drawn), None)
 
 
 def _use(kind, owner_id: str, name: str, ref) -> RefUse:

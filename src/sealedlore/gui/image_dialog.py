@@ -44,6 +44,7 @@ from sealedlore.engine.image_prompt import ImagePromptDraft, mentioned_numbers
 from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.session_images import DEFAULT_MAX_REFS
+from sealedlore.engine.world_pictures import picture_size
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.image_picker import ImagePickerDialog, pick_image_model
@@ -83,13 +84,22 @@ class ImageDialog(QDialog):
         browse: Callable[[str], str | None] | None = None,
         parent: QWidget | None = None,
         card: Character | None = None,
+        background: bool = False,
     ) -> None:
         """`card`: a picture of this character alone, as they are now in the
         story (In the scene… on their card): the direction says so, their
-        pictures go as references, and the picture is added to their card."""
+        pictures go as references, and the picture is added to their card.
+        `background`: a picture to stand behind the story's text (Media →
+        the background → Draw a new background…): the direction says so, it
+        is wide, and it becomes the background once drawn."""
         super().__init__(parent)
         self.card = card
-        self.setWindowTitle(f"{card.name} in the scene" if card is not None else "Generate image")
+        self.background = background
+        if card is not None:
+            title = f"{card.name} in the scene"
+        else:
+            title = "Draw the background" if background else "Generate image"
+        self.setWindowTitle(title)
         self._browse = browse
         self.setMinimumWidth(720)
         self.session = session
@@ -117,6 +127,8 @@ class ImageDialog(QDialog):
         self._build()
         if card is not None:
             self._for_card(card)
+        if background and prefill is None:
+            self.direction.setPlainText(session.texts["pictures.background"])
         if prefill is not None:
             self._prefill(prefill)
         self._fill_models(prefill.model if prefill is not None else session.config.image_model)
@@ -133,10 +145,16 @@ class ImageDialog(QDialog):
         where = "the moment the story is at now"
         if self.anchor_id and self.anchor_id != self.session.story.active_leaf_id:
             where = "the moment the chosen passage ends on"
+        what = f"A picture of {where}."
+        if self.background:
+            what = (
+                "A picture to stand behind the story's text: it becomes the background once "
+                "it is drawn, and the old one stays in Media when it was drawn here."
+            )
         intro = QLabel(
-            f"A picture of {where}. A model that has read the story writes a prompt; you "
-            "check and edit it, and nothing is sent until you press Generate. The picture "
-            "is drawn in the background while you play on."
+            f"{what} A model that has read the story writes a prompt; you check and edit "
+            "it, and nothing is sent until you press Generate. The picture is drawn in the "
+            "background while you play on."
         )
         intro.setWordWrap(True)
         intro.setObjectName("hintLabel")
@@ -361,6 +379,8 @@ class ImageDialog(QDialog):
                     self.size_choice.count() - 1, f"${price:.3f} a picture", Qt.ToolTipRole
                 )
         wanted = current or self.session.config.image_size
+        if self.background and not current and info is not None:
+            wanted = picture_size(info, landscape=True)  # wide, behind the text
         if wanted not in sizes and sizes:
             wanted = (
                 self.session.config.image_size
@@ -661,7 +681,8 @@ class ImageDialog(QDialog):
             size=size,
             n=self.count.value(),
             references=tuple(self._sent_refs()),
-            anchor_node_id=self.anchor_id,
+            # A background pictures no passage: it stands behind them all.
+            anchor_node_id=None if self.background else self.anchor_id,
             direction=self.direction.toPlainText().strip(),
             listed_price=info.price(size) if info is not None else None,
             private_span=self.session.open_span.id if self.session.in_private else None,
@@ -671,6 +692,7 @@ class ImageDialog(QDialog):
             ),
             card_id=self.card.id if self.card is not None else None,
             card_caption=SCENE_CAPTION if self.card is not None else "",
+            background=self.background,
         )
         self.accept()
 

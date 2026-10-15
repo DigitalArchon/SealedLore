@@ -212,7 +212,8 @@ class PortraitRuntime:
 
     def card_edit_prompt(self, card: Card, change: str) -> str:
         """The prompt for an edit of a card's picture."""
-        return edit_prompt(change, person=isinstance(card, Character), texts=self.texts)
+        keep = "person" if isinstance(card, Character) else "thing"
+        return edit_prompt(change, keep=keep, texts=self.texts)
 
     def scene_direction(self, character: Character) -> str:
         """The direction for a picture of one character as they are now."""

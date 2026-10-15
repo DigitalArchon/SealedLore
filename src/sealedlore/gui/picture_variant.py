@@ -2,19 +2,22 @@
 entry's): the author's ask, Oct 15 2026. A picture drawn again, or a copy
 with something changed (a scar, other clothes, another background, years
 older), is added to the card's pictures; the original stays until the author
-removes it.
+removes it. Edit… works the same on a picture of the story (the new one goes
+after the same passage) and on the background (the new one goes behind the
+story once drawn): the Media tab offers it on every picture.
 
 Draw again sends the picture's own prompt (kept on the card when it was
 drawn here; otherwise one is written from the card), by the same model or
 another. Edit sends the picture itself with the change, to a model that can
-be given a picture: the card's own model when it can, else the default edit
-model. Either way the dialog shows the whole request and its price, and
+be given a picture: the picture's own model when it can, else the default
+edit model. Either way the dialog shows the whole request and its price, and
 nothing is sent before Draw; the prompt is sent exactly as it stands.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import (
@@ -30,15 +33,15 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.images import ImageRequest
-from sealedlore.engine.portraits import Card, card_size
+from sealedlore.engine.portraits import Card, card_size, size_like
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.model_picker import ModelField
 from sealedlore.gui.portraits_dialog import card_name
-from sealedlore.gui.ref_images import thumbnail_of
+from sealedlore.gui.ref_images import image_of, thumbnail_of
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.character import Character
 from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS, recommended_model
-from sealedlore.models.image import ImageRef
+from sealedlore.models.image import GeneratedImage, ImageRef
 from sealedlore.providers.images import ImageModelInfo
 
 THUMB_SIDE = 160
@@ -46,52 +49,132 @@ THUMB_SIDE = 160
 AGAIN_CAPTION = "drawn again"
 
 
+@dataclass(frozen=True)
+class VariantSubject:
+    """What Draw again… or Edit… is of: a card's picture (`card`, `source`),
+    a picture of the story (`image`), or the background (`background`)."""
+
+    name: str
+    # The picture in the story's pictures, and how it was drawn here (blank
+    # for a picture from a file).
+    file: str
+    prompt: str = ""
+    model: str = ""
+    card: Card | None = None
+    source: ImageRef | None = None
+    image: GeneratedImage | None = None
+    background: bool = False
+
+    @classmethod
+    def of_card(cls, card: Card, source: ImageRef) -> VariantSubject:
+        return cls(
+            name=card_name(card),
+            file=source.file,
+            prompt=source.prompt,
+            model=source.model,
+            card=card,
+            source=source,
+        )
+
+    @classmethod
+    def of_picture(cls, image: GeneratedImage) -> VariantSubject:
+        return cls(
+            name="the picture", file=image.file, prompt=image.prompt, model=image.model, image=image
+        )
+
+    @classmethod
+    def of_background(cls, file: str, drawn: GeneratedImage | None) -> VariantSubject:
+        """The background; `drawn`, the picture drawn here it is a copy of."""
+        return cls(
+            name="the background",
+            file=file,
+            prompt=drawn.prompt if drawn is not None else "",
+            model=drawn.model if drawn is not None else "",
+            background=True,
+        )
+
+    @property
+    def keep(self) -> str:
+        """What an edit keeps (`portraits.EDIT_KEEPS`)."""
+        if self.card is not None:
+            return "person" if isinstance(self.card, Character) else "thing"
+        return "thing" if self.background else "scene"
+
+
 class PictureVariantDialog(QDialog):
     def __init__(
         self,
         session,
-        card: Card,
-        source: ImageRef,
+        subject: VariantSubject | Card,
+        source: ImageRef | None = None,
         *,
         edit: bool,
         catalog: ImageCatalog | None,
         browse: Callable[[str], str | None] | None,
         parent: QWidget | None = None,
     ) -> None:
+        """`subject`: what it is of; a card with its picture as `source`
+        stands for `VariantSubject.of_card`. Only a card's picture is drawn
+        again here (a picture of the story is drawn again in the picture
+        dialog, with its references)."""
         super().__init__(parent)
+        if not isinstance(subject, VariantSubject):
+            assert source is not None
+            subject = VariantSubject.of_card(subject, source)
+        assert edit or subject.card is not None
         self.session = session
-        self.card, self.source, self.edit = card, source, edit
+        self.subject, self.edit = subject, edit
+        self.card, self.source = subject.card, subject.source
         self._catalog = catalog
         self._closing = False
         self._hand_edited = False
         self._prompts: dict[str, str] = {}
-        name = card_name(card)
-        self.setWindowTitle(f"Edit a picture of {name}" if edit else f"Draw {name} again")
+        name = subject.name
+        if subject.card is None:
+            self.setWindowTitle(f"Edit {name}")
+        else:
+            self.setWindowTitle(f"Edit a picture of {name}" if edit else f"Draw {name} again")
         self.setMinimumWidth(620)
 
         picture = QLabel()
         picture.setAlignment(Qt.AlignCenter)
         store = session.pictures
-        thumb = thumbnail_of(store.read(source.file), THUMB_SIDE) if store is not None else None
+        data = store.read(subject.file) if store is not None else None
+        # The picture's own shape: an edit is drawn in the size nearest it.
+        shape = image_of(data).size() if data else None
+        self._shape = (shape.width(), shape.height()) if shape is not None else (0, 0)
+        thumb = thumbnail_of(data, THUMB_SIDE) if data else None
         if thumb is not None and not thumb.isNull():
             picture.setPixmap(thumb)
+        if subject.background:
+            goes = "The new picture becomes the background once it is drawn"
+            stays = "this one stays in Media when it was drawn here"
+        elif subject.image is not None:
+            goes = "The new picture goes after the same passage, and in Media"
+            stays = "this one stays until you delete it"
+        else:
+            goes = "The new picture is added to the card's pictures"
+            stays = "this one stays until you remove it"
         intro = QLabel(
             "A copy of this picture with what you say changed. The picture itself is sent "
-            "with the prompt, so the model must be one that can be given a picture. The new "
-            "picture is added to the card's pictures; this one stays until you remove it."
+            "with the prompt, so the model must be one that can be given a picture. "
+            f"{goes}; {stays}."
             if edit
             else "This picture drawn again from its prompt, by the same model or another. "
-            "The new picture is added to the card's pictures; this one stays until you "
-            "remove it."
+            f"{goes}; {stays}."
         )
         intro.setWordWrap(True)
 
         self.change = QLineEdit()
-        self.change.setPlaceholderText(
-            "a fresh scar down his left cheek · twenty years older · a dark suit at dinner"
-            if isinstance(card, Character)
-            else "at night, in a storm · burned out and abandoned · in high summer"
-        )
+        if subject.keep == "person":
+            examples = (
+                "a fresh scar down his left cheek · twenty years older · a dark suit at dinner"
+            )
+        elif subject.keep == "scene":
+            examples = "at night · in pouring rain · everyone soaked and laughing"
+        else:
+            examples = "at night, in a storm · burned out and abandoned · in high summer"
+        self.change.setPlaceholderText(examples)
         self.change.textChanged.connect(self._compose)
         self.prompt = QPlainTextEdit()
         self.prompt.setMinimumHeight(130)
@@ -136,8 +219,8 @@ class PictureVariantDialog(QDialog):
         self._worker: GenerationWorker | None = None
         if edit:
             self._compose()
-        elif source.prompt:
-            self._set_prompt(source.prompt)
+        elif subject.prompt:
+            self._set_prompt(subject.prompt)
         else:
             self._write()  # a picture from a file: a prompt from the card
         if catalog is not None:
@@ -150,10 +233,10 @@ class PictureVariantDialog(QDialog):
         Editing: the picture's own model if it can be given a picture, else
         the portrait model if it can, else the recommended edit model."""
         config = self.session.config
-        own = self.source.model or config.portrait_model
+        own = self.subject.model or config.portrait_model
         if not self.edit:
             return own
-        for model in (self.source.model, config.portrait_model):
+        for model in (self.subject.model, config.portrait_model):
             info = self._info(model)
             if model and info is not None and info.accepts_images:
                 return model
@@ -171,7 +254,9 @@ class PictureVariantDialog(QDialog):
         """The edit's prompt from the change, until the author writes in
         the prompt itself."""
         if self.edit and not self._hand_edited:
-            self._set_prompt(self.session.card_edit_prompt(self.card, self.change.text()))
+            self._set_prompt(
+                self.session.picture_edit_prompt(self.change.text(), keep=self.subject.keep)
+            )
 
     def _on_prompt_edited(self) -> None:
         self._hand_edited = True
@@ -218,10 +303,18 @@ class PictureVariantDialog(QDialog):
     def model_info(self) -> ImageModelInfo | None:
         return self._info(self.model.text().strip())
 
+    def size(self) -> str:
+        """A card's size, or, for a picture of the story or the background,
+        the size the model lists nearest the picture's own shape."""
+        info = self.model_info()
+        if self.card is not None:
+            return card_size(self.card, info)
+        return size_like(info, *self._shape)
+
     def _sync(self, *_args) -> None:
         model = self.model.text().strip()
         info = self.model_info()
-        size = card_size(self.card, info)
+        size = self.size()
         each = info.price(size) if info is not None else None
         role = "picture_edit" if self.edit else "portrait_model"
         known = recommended_model(role, model)
@@ -248,12 +341,21 @@ class PictureVariantDialog(QDialog):
 
     def request(self) -> ImageRequest:
         """The approved request: the prompt exactly as it stands."""
+        prompt, model, info = self.prompt.toPlainText(), self.chosen_model(), self.model_info()
+        if self.subject.image is not None:
+            return self.session.picture_edit_request(
+                self.subject.image, prompt, model=model, info=info, size=self.size()
+            )
+        if self.subject.background:
+            return self.session.background_edit_request(
+                prompt, model=model, info=info, size=self.size()
+            )
         caption = " ".join(self.change.text().split()) if self.edit else AGAIN_CAPTION
         return self.session.card_request(
             self.card,
-            self.prompt.toPlainText(),
-            model=self.chosen_model(),
-            info=self.model_info(),
+            prompt,
+            model=model,
+            info=info,
             first=False,
             caption=caption or "edited",
             source=self.source if self.edit else None,

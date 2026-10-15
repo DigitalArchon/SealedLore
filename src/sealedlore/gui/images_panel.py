@@ -1,12 +1,18 @@
 """Every picture and video in the story, in one place (the author, Oct 15
-2026): the cast's pictures, the lore's, and the story's own, each a section.
+2026): the cast's pictures, the lore's, the story's own, and the map's, each
+a section.
 
-The story's are every picture and video made for it, newest first, including
-those whose passage was deleted or sits on another branch: the transcript
-shows a picture only after its passage, and a picture costs money, so it is
-never lost with a branch. A picture drawn for a card shows under its card
-(`ImageRef.drawn_as`), not twice; taken off the card, it is the story's again.
-Cards the plot hasn't brought in are left out unless spoilers are shown.
+The story's are its background first (the author: it belongs with the
+story's pictures, to be seen, saved, drawn anew or edited), then every
+picture and video made for it, newest first, including those whose passage
+was deleted or sits on another branch: the transcript shows a picture only
+after its passage, and a picture costs money, so it is never lost with a
+branch. A picture drawn for a card shows under its card (`ImageRef.drawn_as`),
+not twice; taken off the card, it is the story's again. The background drawn
+here shows as the background (`Story.background_drawn_as`), not twice
+either. Cards the plot hasn't brought in are left out unless spoilers are
+shown. Every picture can be drawn again or edited from its menu, as on the
+Cast and Lore pages. The map's are its isometric views and postcards.
 """
 
 from __future__ import annotations
@@ -34,6 +40,7 @@ from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.video import GeneratedVideo
+from sealedlore.models.world import MapPicture
 from sealedlore.storage.picture_store import PictureStore
 
 GALLERY_THUMB = 150
@@ -79,8 +86,12 @@ class ImagesPanel(QWidget):
     generate_video_requested = Signal()
     save_all_requested = Signal()
     # (action, card id, picture id) for a card's picture: "open", "show"
-    # (on its page), "save".
+    # (on its page), "save", "again", "edit".
     card_action_requested = Signal(str, str, str)
+    # An action on the background (BACKGROUND_ACTIONS).
+    background_action_requested = Signal(str)
+    # (action, map picture id) for an isometric view or a postcard (MAP_ACTIONS).
+    map_action_requested = Signal(str, str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -95,9 +106,13 @@ class ImagesPanel(QWidget):
             gallery.customContextMenuRequested.connect(
                 lambda position, g=gallery: self._card_menu(g, position)
             )
+        self.map_list = _Gallery(CARD_THUMB)
+        self.map_list.itemActivated.connect(lambda item: self._map_action("open", item))
+        self.map_list.customContextMenuRequested.connect(self._map_menu)
         self.cast_heading = _heading()
         self.lore_heading = _heading()
         self.story_heading = _heading()
+        self.map_heading = _heading()
         self.hint = QLabel(
             "No pictures or videos yet. Image… beside Send (or Story → Generate image…) "
             "pictures what is happening, and Story → Generate video… makes a few seconds of "
@@ -134,6 +149,7 @@ class ImagesPanel(QWidget):
             (self.cast_heading, self.cast_list),
             (self.lore_heading, self.lore_list),
             (self.story_heading, self.list),
+            (self.map_heading, self.map_list),
         ):
             sections.addWidget(heading)
             sections.addWidget(gallery)
@@ -159,12 +175,31 @@ class ImagesPanel(QWidget):
         *,
         cast: list[Character] | None = None,
         lore: list[LoreEntry] | None = None,
+        background: str | None = None,
+        background_drawn_as: str = "",
+        map_pictures: list[MapPicture] | None = None,
     ) -> None:
         """`cast` and `lore`: the cards whose pictures to show (those the
-        author may see), each picture under its card's name."""
+        author may see), each picture under its card's name. `background`:
+        the background's file, first among the story's, standing for the
+        picture it was drawn as. `map_pictures`: the map's views and
+        postcards (those of places the author may see)."""
         cast, lore = cast or [], lore or []
         on_cards = {ref.drawn_as for card in (*cast, *lore) for ref in card.reference_images}
+        if background:
+            on_cards.add(background_drawn_as)
         self.list.clear()
+        data = store.read(background) if store is not None and background else None
+        if data is not None:
+            item = QListWidgetItem("Background\n(behind the story's text)")
+            item.setData(Qt.UserRole, "background")
+            item.setData(Qt.UserRole + 1, "background")
+            item.setToolTip(
+                "The picture behind the story's text. Right-click to see it whole, save it, "
+                "draw a new one or edit it"
+            )
+            item.setIcon(QIcon(thumbnail_of(data, GALLERY_THUMB)))
+            self.list.addItem(item)
         made = sorted(
             [
                 *(("image", image) for image in images if image.id not in on_cards),
@@ -205,10 +240,24 @@ class ImagesPanel(QWidget):
                     gallery.addItem(item)
             counts[word] = gallery.count()
         counts["Story"] = self.list.count()
+        self.map_list.clear()
+        for picture in sorted(map_pictures or [], key=lambda p: p.made_at, reverse=True):
+            kind = "Isometric view" if picture.subject == "isometric" else "Postcard"
+            item = QListWidgetItem(f"{kind}\n{picture.name}")
+            item.setData(Qt.UserRole, picture.id)
+            item.setToolTip(
+                f"{kind} of {picture.name}"
+                + (f", painted by {picture.model}" if picture.model else ", your own picture")
+            )
+            if store is not None:
+                item.setIcon(QIcon(thumbnail_of(store.read(picture.file), CARD_THUMB)))
+            self.map_list.addItem(item)
+        counts["Map"] = self.map_list.count()
         for heading, gallery, word in (
             (self.cast_heading, self.cast_list, "Cast"),
             (self.lore_heading, self.lore_list, "Lore"),
             (self.story_heading, self.list, "Story"),
+            (self.map_heading, self.map_list, "Map"),
         ):
             heading.setText(f"{word.upper()} · {counts[word]}")
             shown = counts[word] > 0
@@ -245,14 +294,35 @@ class ImagesPanel(QWidget):
             return
         menu = QMenu(self)
         for key, text in CARD_ACTIONS:
+            if key == "-":
+                menu.addSeparator()
+                continue
             menu.addAction(text).triggered.connect(
                 lambda _checked=False, k=key: self._card_action(k, item)
             )
         menu.exec(gallery.viewport().mapToGlobal(position))
 
+    def _map_action(self, action: str, item: QListWidgetItem | None) -> None:
+        if item is not None:
+            self.map_action_requested.emit(action, item.data(Qt.UserRole))
+
+    def _map_menu(self, position: QPoint) -> None:
+        item = self.map_list.itemAt(position)
+        if item is None:
+            return
+        menu = QMenu(self)
+        for key, text in MAP_ACTIONS:
+            menu.addAction(text).triggered.connect(
+                lambda _checked=False, k=key: self._map_action(k, item)
+            )
+        menu.exec(self.map_list.viewport().mapToGlobal(position))
+
     def _activate(self, item: QListWidgetItem) -> None:
-        if item.data(Qt.UserRole + 1) == "video":
+        kind = item.data(Qt.UserRole + 1)
+        if kind == "video":
             self.video_action_requested.emit("show", item.data(Qt.UserRole))
+        elif kind == "background":
+            self.background_action_requested.emit("open")
         else:
             self.action_requested.emit("open", item.data(Qt.UserRole))
 
@@ -262,6 +332,16 @@ class ImagesPanel(QWidget):
             return
         image_id = item.data(Qt.UserRole)
         menu = QMenu(self)
+        if item.data(Qt.UserRole + 1) == "background":
+            for key, text in BACKGROUND_ACTIONS:
+                if key == "-":
+                    menu.addSeparator()
+                    continue
+                menu.addAction(text).triggered.connect(
+                    lambda _checked=False, k=key: self.background_action_requested.emit(k)
+                )
+            menu.exec(self.list.viewport().mapToGlobal(position))
+            return
         if item.data(Qt.UserRole + 1) == "video":
             for key, text in VIDEO_ACTIONS:
                 if key == "-":
@@ -289,6 +369,24 @@ class ImagesPanel(QWidget):
 CARD_ACTIONS = (
     ("open", "See it whole"),
     ("show", "Show its card"),
+    ("save", "Save picture as…"),
+    ("-", ""),
+    ("again", "Draw again…"),
+    ("edit", "Edit…"),
+)
+BACKGROUND_ACTIONS = (
+    ("open", "See it whole"),
+    ("save", "Save picture as…"),
+    ("-", ""),
+    ("draw", "Draw a new background…"),
+    ("edit", "Edit…"),
+    ("file", "Choose a file instead…"),
+    ("-", ""),
+    ("clear", "Clear the background"),
+)
+MAP_ACTIONS = (
+    ("open", "See it whole"),
+    ("show", "Show on the map"),
     ("save", "Save picture as…"),
 )
 

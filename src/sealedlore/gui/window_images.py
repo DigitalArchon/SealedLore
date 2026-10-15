@@ -22,9 +22,10 @@ from sealedlore.gui.image_dialog import FitPicture, ImageDialog, ImageViewer, sa
 from sealedlore.gui.image_jobs import ImageCatalog, ImageJobs
 from sealedlore.gui.image_picker import pick_image_model
 from sealedlore.gui.images_panel import ImagesPanel
-from sealedlore.gui.picture_variant import PictureVariantDialog
+from sealedlore.gui.isometric_view import IsometricDialog
+from sealedlore.gui.picture_variant import PictureVariantDialog, VariantSubject
 from sealedlore.gui.portraits_dialog import PortraitsDialog
-from sealedlore.gui.ref_images import PICTURE_FILTER, picture_bytes_of, pixmap_of
+from sealedlore.gui.ref_images import PICTURE_FILTER, image_of, picture_bytes_of, pixmap_of
 from sealedlore.gui.transcript import PendingPicture
 from sealedlore.gui.winprivacy import exclude_from_capture
 from sealedlore.ids import new_id
@@ -32,7 +33,7 @@ from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, ImageRef
 from sealedlore.models.node import Usage
 from sealedlore.storage.image_meta import picture_kind
-from sealedlore.storage.images import IMAGES_DIR, REFS_DIR
+from sealedlore.storage.images import REFS_DIR
 from sealedlore.storage.picture_store import PictureStore, file_name
 from sealedlore.storage.repository import save_config
 
@@ -53,6 +54,8 @@ class ImagesWindow:
         self.images_panel.generate_requested.connect(lambda: self.generate_image())
         self.images_panel.save_all_requested.connect(self.save_all_pictures)
         self.images_panel.card_action_requested.connect(self._card_picture_action)
+        self.images_panel.background_action_requested.connect(self._background_action)
+        self.images_panel.map_action_requested.connect(self._map_picture_action)
         self.transcript.illustrate_requested.connect(
             lambda node_id: self.generate_image(anchor_id=node_id)
         )
@@ -156,7 +159,23 @@ class ImagesWindow:
             videos=self._videos,
             cast=[c for c in (*session.cast, *session.supporting) if c.id not in hidden],
             lore=[e for e in session.bundle.lore if e.id not in hidden],
+            background=session.story.background_image,
+            background_drawn_as=session.story.background_drawn_as,
+            map_pictures=self._map_pictures(),
         )
+
+    def _map_pictures(self) -> list:
+        """The map's isometric views and postcards of places on the map as
+        the story stands (a place the plot still hides is not on it)."""
+        session = self.session
+        if session is None or not session.map_on:
+            return []
+        places = session.world().places
+        return [
+            picture
+            for picture in session.map_art_copy().pictures
+            if picture.subject in ("isometric", "postcard") and picture.subject_id in places
+        ]
 
     def _refresh_image_views(self) -> None:
         """The Media tab now; the transcript once no passage is streaming into it."""
@@ -172,9 +191,11 @@ class ImagesWindow:
         anchor_id: str | None = None,
         prefill: GeneratedImage | None = None,
         card=None,
+        background: bool = False,
     ) -> None:
         """`card`: a picture of that character alone, in the scene now, added
-        to their card (In the scene… on the Cast page)."""
+        to their card (In the scene… on the Cast page). `background`: a
+        picture to go behind the story's text (Media → the background)."""
         if self.session is None:
             return
         if self._busy:
@@ -195,6 +216,7 @@ class ImagesWindow:
             browse=self._browse_models,
             parent=self,
             card=card,
+            background=background,
         )
         if self._shows_private():
             exclude_from_capture(dialog, True)  # the private model's prompt
@@ -339,11 +361,14 @@ class ImagesWindow:
 
     def _card_picture_action(self, action: str, card_id: str, ref_id: str) -> None:
         """A card's picture in the Media tab: see it whole, go to its card,
-        or save it."""
+        save it, or draw it again or edit it, as on its card."""
         session = self.session
         card = session.card(card_id) if session is not None else None
         ref = next((r for r in card.reference_images if r.id == ref_id), None) if card else None
         if ref is None:
+            return
+        if action in ("again", "edit"):
+            self._on_card_picture(card_id, ref_id, action)
             return
         name = card.name if isinstance(card, Character) else card.title
         if action == "show":
@@ -358,15 +383,11 @@ class ImagesWindow:
         if action == "save":
             save_picture_as(self, data, file_name(ref.file))
             return
-        dialog = QDialog(self)
-        dialog.setWindowTitle(name + (f" · {ref.caption}" if ref.caption else ""))
-        layout = QVBoxLayout(dialog)
-        layout.addWidget(FitPicture(pixmap_of(data)))
-        dialog.resize(900, 900)
-        dialog.exec()
+        self._show_whole(name + (f" · {ref.caption}" if ref.caption else ""), data)
 
     def _take_card_pictures(self) -> None:
-        """Pictures drawn for the open story's cards go on them."""
+        """Pictures drawn for the open story's cards go on them, and one drawn
+        to be the background goes behind the story."""
         if self.session is None or self._busy:
             return  # the worker owns the story; taken when it is done
         names = self.session.take_card_pictures()
@@ -374,6 +395,16 @@ class ImagesWindow:
             self.refresh_panels()
             self.refresh_images()
             self.statusBar().showMessage(f"Picture ready: {', '.join(names)}.", 8000)
+        try:
+            changed = self.session.take_background_pictures()
+        except (OSError, ValueError) as exc:
+            self._warn_plain("Couldn't use the new background", str(exc))
+            return
+        if changed:
+            self._apply_background()
+            self.refresh_images()
+            self._update_controls()
+            self.statusBar().showMessage("The new background is in.", 8000)
 
     def _on_image_jobs_changed(self) -> None:
         count = len(self.image_jobs.pending())
@@ -402,7 +433,7 @@ class ImagesWindow:
             self._refresh_story_cost()
             self._refresh_image_views()
             self.statusBar().showMessage("Picture ready.", 8000)
-            if any(record.card_id for record in records):
+            if any(record.card_id or record.background for record in records):
                 self._take_card_pictures()
         else:
             self.statusBar().showMessage(
@@ -451,9 +482,13 @@ class ImagesWindow:
         elif action == "reference":
             self._use_as_reference(data)
         elif action == "background" and data is not None:
-            self._set_background_data(data, picture_kind(data) or ".png")
+            self._set_background_data(data, picture_kind(data) or ".png", drawn_as=image.id)
         elif action == "again":
-            self.generate_image(anchor_id=image.anchor_node_id, prefill=image)
+            self.generate_image(
+                anchor_id=image.anchor_node_id, prefill=image, background=image.background
+            )
+        elif action == "edit":
+            self._edit_picture(VariantSubject.of_picture(image))
         elif action == "delete":
             answer = QMessageBox.question(
                 self, "Delete picture", "Delete this picture? Its file is removed."
@@ -481,10 +516,19 @@ class ImagesWindow:
         ):
             for owner in owners:
                 name = owner.name if kind == "cast" else owner.title
-                slug = "-".join("".join(c if c.isalnum() else " " for c in name).lower().split())
+                slug = _slug(name)
                 for number, ref in enumerate(owner.reference_images, start=1):
                     suffix = Path(ref.file).suffix
                     cards.append((ref.file, f"{kind}-{slug or 'card'}-{number}{suffix}"))
+        # The background, unless it is a copy of a picture saved above; and
+        # the map's views and postcards (map-isometric-the-farm.jpg).
+        background = session.story.background_image
+        if background and not any(i.id == session.story.background_drawn_as for i in images):
+            cards.append((background, f"background{Path(background).suffix}"))
+        for picture in self._map_pictures():
+            kind = "isometric" if picture.subject == "isometric" else "postcard"
+            suffix = Path(picture.file).suffix
+            cards.append((picture.file, f"map-{kind}-{_slug(picture.name) or 'place'}{suffix}"))
         if not images and not videos and not cards:
             return
         chosen = QFileDialog.getExistingDirectory(self, "Save all pictures", str(Path.home()))
@@ -593,27 +637,21 @@ class ImagesWindow:
         if picture is not None:
             self._set_background_data(*picture)
 
-    def _set_background_data(self, data: bytes, suffix: str) -> None:
+    def _set_background_data(self, data: bytes, suffix: str, *, drawn_as: str = "") -> None:
+        """`drawn_as`: the picture drawn here it is a copy of (Set as background)."""
         if self.session is None:
             return
         if self._busy:
             self.statusBar().showMessage("Wait for the story's current job to finish.", 6000)
             return
-        store = self.session.pictures
-        relative = f"{IMAGES_DIR}/background{suffix}"
-        story = self.session.story
-        old = story.background_image
         try:
-            store.write(relative, data)
+            self.session.set_background(data, suffix, drawn_as=drawn_as)
         except (OSError, ValueError) as exc:
             self._warn_plain("Couldn't use that picture", str(exc))
             return
-        if old and old != relative:
-            store.remove(old)
-        self.session.story.background_image = relative
-        self.session.save()
         self._apply_background()
         self._update_controls()
+        self.refresh_images()
 
     def choose_background(self) -> None:
         if self.session is None:
@@ -627,13 +665,103 @@ class ImagesWindow:
     def clear_background(self) -> None:
         if self.session is None or self._busy:
             return
-        story = self.session.story
-        if story.background_image:
-            self.session.pictures.remove(story.background_image)
-        story.background_image = None
-        self.session.save()
+        self.session.clear_background()
         self._apply_background()
         self._update_controls()
+        self.refresh_images()
+
+    def _background_action(self, action: str) -> None:
+        """The background in the Media tab: see it whole, save it, draw a new
+        one or edit it (each drawn one goes behind the story when it comes
+        back), choose a file instead, or clear it."""
+        session = self.session
+        if session is None or not session.story.background_image:
+            return
+        relative = session.story.background_image
+        data = session.pictures.read(relative)
+        if action == "open":
+            self._show_whole("Background", data)
+        elif action == "save":
+            save_picture_as(self, data, f"background{Path(relative).suffix}")
+        elif action == "draw":
+            self.generate_image(prefill=session.background_picture(), background=True)
+        elif action == "edit":
+            self._edit_picture(VariantSubject.of_background(relative, session.background_picture()))
+        elif action == "file":
+            self.choose_background()
+        elif action == "clear":
+            self.clear_background()
+
+    def _edit_picture(self, subject: VariantSubject) -> None:
+        """Edit… on a picture of the story or on the background: the change,
+        the whole request and its price shown before anything is sent."""
+        session = self.session
+        if session is None:
+            return
+        if self._busy:
+            self.statusBar().showMessage(
+                "A picture can be edited once the story's current job is done.", 6000
+            )
+            return
+        if session.in_private:
+            self.statusBar().showMessage("Pictures wait until the private scene ends.", 6000)
+            return
+        if session.config.images() is None:
+            self._warn_plain("No endpoint", "Set up an image endpoint in Settings first.")
+            return
+        dialog = PictureVariantDialog(
+            session,
+            subject,
+            edit=True,
+            catalog=self.image_catalog,
+            browse=self._browse_pictures,
+            parent=self,
+        )
+        if not dialog.exec():
+            return
+        client = session.image_client()
+        if client is None:
+            return
+        self.image_jobs.start(dialog.request(), client, session.pictures)
+        self.statusBar().showMessage(
+            "Drawing the edited picture in the background"
+            + (": it goes behind the story when done." if subject.background else "."),
+            8000,
+        )
+        self._refresh_image_views()
+
+    def _show_whole(self, title: str, data: bytes | None) -> None:
+        if not data:
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(FitPicture(pixmap_of(data)))
+        dialog.resize(1000, 760)
+        dialog.exec()
+
+    def _map_picture_action(self, action: str, picture_id: str) -> None:
+        """An isometric view or a postcard in the Media tab: see it whole,
+        show it on the map (a view laid over its area), or save it."""
+        session = self.session
+        if session is None:
+            return
+        picture = next((p for p in session.map_art_copy().pictures if p.id == picture_id), None)
+        if picture is None:
+            return
+        if action == "save":
+            save_picture_as(self, session.pictures.read(picture.file), file_name(picture.file))
+        elif action == "show":
+            self.show_world(True)
+            self.world_view.go_to(picture.subject_id)
+            if picture.subject == "isometric":
+                self.world_view.iso_button.setChecked(True)
+        elif picture.subject == "isometric":
+            image = image_of(session.pictures.read(picture.file))
+            if not image.isNull():
+                IsometricDialog(picture.name, image, picture.model, self).exec()
+        else:
+            self._show_whole(f"{picture.name}: a postcard", session.pictures.read(picture.file))
 
     # --- closing -------------------------------------------------------------
 
@@ -657,3 +785,8 @@ class ImagesWindow:
         self.image_jobs.wait_all()
         self.image_catalog.wait()
         return True
+
+
+def _slug(name: str) -> str:
+    """A name as part of a file name: "John Smith" as john-smith."""
+    return "-".join("".join(c if c.isalnum() else " " for c in name).lower().split())

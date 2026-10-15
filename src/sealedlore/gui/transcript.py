@@ -681,7 +681,7 @@ class ImageMessageWidget(QFrame):
         more = QToolButton()
         more.setObjectName("messageAction")
         more.setText("⋯")
-        more.setToolTip("Open, save, use as a reference or a background, generate again")
+        more.setToolTip("Open, save, use as a reference or a background, generate again or edit")
         more.setPopupMode(QToolButton.InstantPopup)
         more.setMenu(menu)
         self.more_button = more
@@ -717,6 +717,7 @@ IMAGE_ACTIONS = (
     ("reference", "Use as a reference picture for…"),
     ("background", "Set as background"),
     ("again", "Generate again…"),
+    ("edit", "Edit…"),
     ("-", ""),
     ("delete", "Delete picture"),
 )

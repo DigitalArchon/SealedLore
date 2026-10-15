@@ -382,7 +382,8 @@ archiving, rebuilding summaries.
   it at a glance), **Cast** (sheets, skills, supporting characters), **Plot** (the clock, facts and events; shown only for a
   story with a plot), **Lore**, **Style**, **Story so far** (the chapter
   summaries: edit, rebuild, archive now; double-click one to go to it in the
-  story), **Media** (every picture and video the story has made), and
+  story), **Media** (every picture and video the story has made, its
+  background and the map's views), and
   **Prompt** (exactly what the storyteller was sent
   last turn; **Copy prompt** copies it as readable text, **Copy request
   JSON** as the exact request body).
@@ -1193,11 +1194,19 @@ its ⋯ menu, or any picture file with View → Background picture…). Pictures
 are kept even when their passage is deleted; only their own Delete removes
 them, since they cost money. The Media tab shows every picture and video in
 the story in one place: **Cast** (every picture on every character's card),
-**Lore** (the same for lore entries) and **Story** (the story's own pictures
-and videos, newest first). A picture drawn for a card shows under its card;
-right-click one to see it whole, go to its card or save it. **Save all…**
-copies everything there into a folder you choose, the cards' pictures named
-by card; each picture's ⋯ menu saves one.
+**Lore** (the same for lore entries), **Story** (the background first, then
+the story's own pictures and videos, newest first) and **Map** (the map's
+isometric views and postcards). A picture drawn for a card shows under its
+card; right-click one to see it whole, go to its card, save it, **Draw
+again…** or **Edit…**, as on its card. Right-click the background to see it
+whole, save it, **Draw a new background…** (the picture dialog, with a
+direction for a picture to stand behind the story's text), **Edit…** it, choose
+a file instead or clear it; a background drawn or edited goes behind the
+story when it is done, and the old one stays in Media when it was drawn here.
+A story picture's menu (here, or its ⋯ in the story) has **Edit…** too: the
+changed copy goes after the same passage. **Save all…** copies everything
+there into a folder you choose, the cards' pictures named by card; each
+picture's ⋯ menu saves one.
 
 Pictures go to the chat endpoint unless **Settings → Images** names another:
 an address, a key, and the service it is (NanoGPT, OpenRouter, WaveSpeed, or
