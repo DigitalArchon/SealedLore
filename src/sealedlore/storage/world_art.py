@@ -18,7 +18,8 @@ from pydantic import ValidationError
 
 from sealedlore.models.world import WorldArt
 from sealedlore.storage.atomic import atomic_write_json, read_json
-from sealedlore.storage.images import WORLD_ART_FILE, read_story_file
+from sealedlore.storage.image_meta import MetadataError, strip_metadata
+from sealedlore.storage.images import IMAGES_DIR, WORLD_ART_FILE, is_safe_relative, read_story_file
 from sealedlore.storage.paths import story_dir
 
 
@@ -74,7 +75,13 @@ def carried_story_art(story_id: str, root: Path | None = None) -> tuple[WorldArt
 # is for a scenario the player makes), as "<name>.world_art.json" beside
 # "<name>.md". Its ids are the file's own (ids.stable_id), so it fits every
 # import. Made by playing the map once and copying the story's world_art.json.
+# Its map pictures (a sample's isometric views) are files beside the plot
+# file, each record's `file` written from the plot file's folder as a
+# `- picture:` line is ("pictures/map/farm-isometric.jpg").
 SIDECAR_SUFFIX = ".world_art.json"
+# Where a sidecar's map pictures go in the new story: beside those the story
+# draws (engine/world_pictures.MAP_PICTURES_DIR).
+SIDECAR_PICTURES_DIR = f"{IMAGES_DIR}/map"
 
 
 def sidecar_art_path(plot_path: Path) -> Path:
@@ -85,20 +92,60 @@ def sidecar_art_path(plot_path: Path) -> Path:
 
 
 def load_sidecar_art(plot_path: Path) -> WorldArt | None:
-    """The art shipped beside a plot file, or None (missing or unreadable:
-    the map is drawn as it goes, as for any story)."""
+    """The art shipped beside a plot file, without its map pictures, or
+    None (missing or unreadable: the map is drawn as it goes, as for any
+    story)."""
+    art, _files = load_sidecar(plot_path)
+    if art is not None:
+        art.pictures = []
+    return art
+
+
+def load_sidecar(plot_path: Path) -> tuple[WorldArt | None, dict[str, bytes]]:
+    """The art shipped beside a plot file and its map pictures' files, as
+    the new story will hold them (`StoryBundle.world_art` and
+    `pending_files`). A picture comes only with its file: one whose file is
+    missing, outside the plot file's folder (a plot file may be someone
+    else's) or can't have its hidden data stripped is left out, or the story
+    would hold a record of nothing and never draw it again. The counts are
+    the story's that drew it, and start afresh."""
     path = sidecar_art_path(plot_path)
     try:
         data = read_json(path, None)
     except (OSError, ValueError):
-        return None
+        return None, {}
     if not isinstance(data, dict):
-        return None
+        return None, {}
     try:
         art = WorldArt.model_validate(data)
     except ValidationError:
+        return None, {}
+    art.pictures_by_day, art.failures = {}, {}
+    files: dict[str, bytes] = {}
+    kept = []
+    for picture in art.pictures:
+        source = _inside(plot_path.parent, picture.file)
+        relative = f"{SIDECAR_PICTURES_DIR}/{Path(picture.file).name}"
+        if source is None or not is_safe_relative(relative) or relative in files:
+            continue
+        try:
+            files[relative] = strip_metadata(source.read_bytes())
+        except (OSError, MetadataError):
+            continue
+        picture.file = relative
+        kept.append(picture)
+    art.pictures = kept
+    return art, files
+
+
+def _inside(folder: Path, relative: str) -> Path | None:
+    """`relative` under `folder` as an existing file, or None if it isn't
+    one or leads out of it (by `..`, an absolute path, or a link)."""
+    try:
+        base = folder.resolve()
+        target = (base / relative).resolve()
+    except (OSError, RuntimeError, ValueError):
         return None
-    # Only drawn art travels this way: a map picture's file can't come with
-    # it, and the counts are the story's that drew it.
-    art.pictures, art.pictures_by_day, art.failures = [], {}, {}
-    return art
+    if not target.is_relative_to(base) or target == base or not target.is_file():
+        return None
+    return target

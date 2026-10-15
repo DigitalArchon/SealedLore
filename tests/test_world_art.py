@@ -664,7 +664,8 @@ def test_a_restart_or_a_scenario_keeps_the_map_pictures_with_their_files(
 def test_art_read_from_a_file_is_cleaned_as_drawn_art_is(tmp_path: Path):
     """A scenario's or a sample's art may be anyone's: its SVG is rebuilt
     from plain shapes when the story loads it, as drawn art always is. A
-    sample's art beside its plot file never brings pictures or counts."""
+    sample's art beside its plot file brings no counts, nor a picture
+    without its file."""
     from sealedlore.engine.world_art import cleaned_art
     from sealedlore.models.world import MapPicture, WorldSprite
     from sealedlore.storage.world_art import load_sidecar_art, sidecar_art_path
@@ -701,6 +702,53 @@ def test_art_read_from_a_file_is_cleaned_as_drawn_art_is(tmp_path: Path):
     shipped = load_sidecar_art(plot)
     assert shipped is not None
     assert (shipped.pictures, shipped.pictures_by_day, shipped.failures) == ([], {}, {})
+
+
+def test_a_sample_s_map_pictures_come_from_files_beside_it(tmp_path: Path, story):
+    """A sample ships its isometric views as files beside the plot file,
+    named as a picture line names one. Each is read stripped into the new
+    story's map pictures; one missing, or reaching out of the plot file's
+    folder, is left out with its record."""
+    from sealedlore.models.world import MapPicture
+    from sealedlore.storage.world_art import load_sidecar, sidecar_art_path
+    from tests.test_world_pictures import png
+
+    folder = tmp_path / "samples"
+    (folder / "pictures" / "map").mkdir(parents=True)
+    picture = png()
+    assert b"tEXt" in picture
+    (folder / "pictures" / "map" / "farm-isometric.png").write_bytes(picture)
+    (tmp_path / "secret.png").write_bytes(picture)
+    (folder / "pictures" / "map" / "link.png").symlink_to(tmp_path / "secret.png")
+    plot = folder / "Farm.md"
+
+    def shipped(file: str, subject_id: str = "farm") -> MapPicture:
+        return MapPicture(subject="isometric", subject_id=subject_id, name="F", file=file)
+
+    sidecar_art_path(plot).write_text(
+        WorldArt(
+            pictures=[
+                shipped("pictures/map/farm-isometric.png"),
+                shipped("pictures/map/missing.png", "a"),
+                shipped("../secret.png", "b"),
+                shipped("/etc/passwd", "c"),
+                shipped("pictures/map/link.png", "d"),
+            ],
+            pictures_by_day={"2026-10-14": 3},
+        ).model_dump_json(),
+        encoding="utf-8",
+    )
+    art, files = load_sidecar(plot)
+    assert art is not None and art.pictures_by_day == {}
+    [kept] = art.pictures
+    assert (kept.subject_id, kept.file) == ("farm", "images/map/farm-isometric.png")
+    assert list(files) == ["images/map/farm-isometric.png"]
+    assert b"tEXt" not in files[kept.file] and files[kept.file].startswith(b"\x89PNG")
+
+    # Written with the story, where the map's own pictures are.
+    save_story_bundle(StoryBundle(story=story, world_art=art, pending_files=files), root=tmp_path)
+    assert load_world_art(story.id, tmp_path).picture_for("isometric", "farm") is not None
+    assert (tmp_path / "stories" / story.id / kept.file).read_bytes() == files[kept.file]
 
 
 def test_a_town_gets_a_finer_grid_and_a_building_s_plan_is_its_inside():

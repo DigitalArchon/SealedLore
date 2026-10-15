@@ -2034,16 +2034,16 @@
  "failures": {},
  "pictures": [
   {
-   "id": "81a0cc18-ecaf-4789-8fc3-2a51b1daef36",
+   "id": "6901d234-b3d5-48dd-96ac-f43565ac030c",
    "subject": "isometric",
    "subject_id": "71d48e7f-64f3-57fa-a6d6-1d7b3eb88690",
    "name": "The Pilgrims' Rest",
    "state": "",
-   "file": "map/furnace-pilgrims-rest-isometric.jpg",
+   "file": "pictures/map/furnace-pilgrims-rest-isometric.jpg",
    "from_picture": null,
-   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: The Pilgrims' Rest, A walled cult waystation of black stone on the bank of a river of lava, on cracked black ground glowing in the seams. In it: The shrine courtyard: A courtyard of cracked basalt flagstones around a burning altar, braziers at its corners; The cult hall: A long black stone hall with an iron door and red banners, where the cultists sleep, eat and chant; The bone kennels: Low pens of black stone and bone where the cult keeps its hellhounds; The iron bridge: A narrow bridge of black iron chains and plates over the river of fire. Marked on the map: burning altar, brazier, brazier, brazier, brazier, iron bell post, skull pole. The ground: as the map shows it. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
+   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: A walled compound of rough black stone sits on cracked obsidian ground whose glowing seams pulse with orange light along the bank of a slow river of molten lava. Within the walls, a courtyard of cracked basalt flagstones centres on a burning altar with four braziers at its corners; an iron bell post and a skull-topped pole stand nearby. A long rectangular hall of black stone with an iron door and red banners along its walls occupies one side of the compound. Low, squat pens built from black stone and pale bone fill another corner. A narrow bridge of black iron chains and riveted plates spans the lava river at the compound's edge. The ground: cracked black volcanic rock glowing in its seams. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
    "model": "qwen-image",
-   "made_at": "2026-10-15T00:45:17.116838+00:00"
+   "made_at": "2026-10-15T01:14:02.237703+00:00"
   }
  ],
  "pictures_by_day": {}

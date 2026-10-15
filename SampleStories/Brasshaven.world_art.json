@@ -2711,7 +2711,7 @@
    "subject_id": "0b14db0f-84e0-595d-9d72-2ea912b6f8e6",
    "name": "Tinker's Row",
    "state": "",
-   "file": "map/brasshaven-tinkers-row-isometric.jpg",
+   "file": "pictures/map/brasshaven-tinkers-row-isometric.jpg",
    "from_picture": null,
    "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: Tinker's Row, A crooked district of workshops on the middle piers: narrow cobbled lanes, brass signs, steaming pipes, chimneys and gas lamps. In it: The Gilded Gear: Adelaide Quill's workshop: a narrow two-storey brick building with a big round brass gear over its door, its windows full of clockwork; The Copper Kettle: A tiny tearoom and tavern where artificers argue over plans, its windows fogged with steam; The tram stop: An iron shelter where the cog tram stops before climbing the pier. Marked on the map: iron tram shelter, gas lamp, gas lamp, gas lamp, gas lamp, brass sign: The Gilded Gear, steaming pipe run, chimney, chimney. The ground: as the map shows it. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
    "model": "qwen-image",

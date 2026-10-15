@@ -5,6 +5,7 @@ SampleStories/ is offered with no other change."""
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 from pathlib import Path
@@ -117,7 +118,7 @@ def test_the_start_page_offers_a_sample(window, samples: Path):
 def test_a_sample_s_shipped_map_art_fits_its_map():
     """A sample's world_art.json beside it (storage/world_art.py) names only
     places and things the sample's map has, so every import gets it whole."""
-    from sealedlore.storage.world_art import load_sidecar_art, sidecar_art_path
+    from sealedlore.storage.world_art import load_sidecar, load_sidecar_art, sidecar_art_path
 
     for path in sorted(SAMPLES.glob("*.md")):
         if not sidecar_art_path(path).exists():
@@ -136,6 +137,13 @@ def test_a_sample_s_shipped_map_art_fits_its_map():
         )
         assert drawn <= ids, f"{path.name}: art for {drawn - ids}"
         assert art.terrain and art.layouts, f"{path.name}: nothing drawn"
+        # Its map pictures (the isometric views) are files beside it, and
+        # every one listed comes with its file.
+        listed = json.loads(sidecar_art_path(path).read_text(encoding="utf-8"))["pictures"]
+        with_files, files = load_sidecar(path)
+        assert len(with_files.pictures) == len(listed), f"{path.name}: a map picture is missing"
+        assert {p.subject_id for p in with_files.pictures} <= ids
+        assert sorted(files) == sorted(p.file for p in with_files.pictures)
 
 
 def test_every_sample_character_comes_with_its_portrait():

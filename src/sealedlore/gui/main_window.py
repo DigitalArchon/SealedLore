@@ -165,7 +165,7 @@ from sealedlore.storage.scenario import (
     scenario_from_bundle,
     write_scenario,
 )
-from sealedlore.storage.world_art import carried_art, carried_story_art, load_sidecar_art
+from sealedlore.storage.world_art import carried_art, carried_story_art, load_sidecar
 from sealedlore.tree import path_to
 
 # How long after the window shows the tokenizer's warm-up starts: past the
@@ -872,8 +872,10 @@ class MainWindow(
         model = provider_config.model if provider_config and provider_config.model else None
         bundle = bundle_from_scenario(parsed.scenario, main_model=model)
         if bundle.story.world_base is not None:
-            # A plot file may ship with its map's art drawn (a sample's).
-            bundle.world_art = load_sidecar_art(path)
+            # A plot file may ship with its map's art drawn (a sample's),
+            # and its map pictures (the isometric views) beside it.
+            bundle.world_art, files = load_sidecar(path)
+            bundle.pending_files.update(files)
         self._open_new_bundle(bundle, review=True)
 
     def import_plot_into_story(self) -> None:
