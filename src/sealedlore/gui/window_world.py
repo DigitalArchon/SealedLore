@@ -210,7 +210,12 @@ class WorldWindow:
         """A picture of the author's own as the isometric view: chosen,
         cropped (first to the isometric view's shape), stripped and kept."""
         session = self.session
-        if session is None or self._busy:
+        if session is None:
+            return
+        if self._busy:
+            self.statusBar().showMessage(
+                "A view can be brought in once the story's current job is done.", 6000
+            )
             return
         path, _ = QFileDialog.getOpenFileName(
             self, "An isometric view of your own", str(Path.home()), PICTURE_FILTER
@@ -224,7 +229,12 @@ class WorldWindow:
             return
         if picture is None:
             return
-        if not session.use_own_isometric(area_id, *picture):
+        try:
+            kept = session.use_own_isometric(area_id, *picture)
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "Couldn't keep that picture", str(exc))
+            return
+        if not kept:
             self.statusBar().showMessage("The map can't take a picture now.", 6000)
             return
         self.refresh_world()

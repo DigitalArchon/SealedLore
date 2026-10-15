@@ -750,6 +750,21 @@ def test_a_sample_s_map_pictures_come_from_files_beside_it(tmp_path: Path, story
     assert load_world_art(story.id, tmp_path).picture_for("isometric", "farm") is not None
     assert (tmp_path / "stories" / story.id / kept.file).read_bytes() == files[kept.file]
 
+    # Two of one name from different folders: both kept, the second under
+    # its own record's name (it was dropped, record and all).
+    for sub in ("a", "b"):
+        (folder / "pictures" / "map" / sub).mkdir()
+        (folder / "pictures" / "map" / sub / "view.png").write_bytes(picture)
+    sidecar_art_path(plot).write_text(
+        WorldArt(
+            pictures=[shipped("pictures/map/a/view.png"), shipped("pictures/map/b/view.png", "t")]
+        ).model_dump_json(),
+        encoding="utf-8",
+    )
+    art, files = load_sidecar(plot)
+    assert len(art.pictures) == 2 and len(files) == 2
+    assert sorted(p.file for p in art.pictures) == sorted(files)
+
 
 def test_a_town_gets_a_finer_grid_and_a_building_s_plan_is_its_inside():
     from sealedlore.engine.world_art import plan_grid

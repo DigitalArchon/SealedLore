@@ -39,14 +39,17 @@ the importer can point at it.
 ---
 title: Doomsville
 description: One line for the story list.
-start: day 1, 15:30          # the clock at the first passage
-agency: contested            # fiat | plausible | contested | dice
-world activity: normal       # quiet | normal | eventful
-perspective: whole story     # whole story | with character
-length: adaptive             # adaptive | brief | standard | descriptive | literary (never custom)
-background: pictures/farm.jpg   # the picture behind the story (see Pictures)
+start: day 1, 15:30          <!-- the clock at the first passage -->
+agency: contested            <!-- fiat | plausible | contested | dice -->
+world activity: normal       <!-- quiet | normal | eventful -->
+perspective: whole story     <!-- whole story | with character -->
+length: adaptive             <!-- adaptive | brief | standard | descriptive | literary (never custom) -->
+background: pictures/farm.jpg   <!-- the picture behind the story (see Pictures) -->
 ---
 ```
+
+(The notes after each value are comments, as anywhere in the file: a `#`
+there would be read as part of the value.)
 
 A key the importer doesn't know is noted and ignored, so there is no
 front-matter key for the picture style: set that in the app.

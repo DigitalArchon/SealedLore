@@ -319,6 +319,33 @@ def test_save_as_elsewhere_takes_the_pictures_along(app, tmp_path: Path):
     editor.close()
 
 
+def test_save_as_takes_the_background_and_the_map_drawn_for_it(app, tmp_path: Path):
+    """The review: Save as… left the background behind (the copy imported
+    with none), and the map drawn for the file, its sidecar and views, under
+    any other name."""
+    import shutil
+
+    from sealedlore.storage.world_art import load_sidecar, sidecar_art_path
+
+    samples = Path(__file__).resolve().parents[1] / "SampleStories"
+    here = tmp_path / "here"
+    here.mkdir()
+    source = here / "Doomsville with a map.md"
+    shutil.copy(samples / source.name, source)
+    shutil.copy(sidecar_art_path(samples / source.name), sidecar_art_path(source))
+    shutil.copytree(samples / "pictures", here / "pictures")
+    editor = PlotEditorWindow()
+    assert editor.open_path(source)
+    there = tmp_path / "there" / "My copy.md"
+    assert editor._write(there)
+    background = editor.document.background
+    assert background and (there.parent / background).is_file()
+    assert sidecar_art_path(there).is_file()
+    art, files = load_sidecar(there)
+    assert art is not None and files and len(files) == len(art.pictures)
+    editor.close()
+
+
 def test_importing_a_plot_brings_its_pictures_onto_the_cards(app, tmp_path: Path, monkeypatch):
     from PySide6.QtWidgets import QMessageBox
 

@@ -713,6 +713,9 @@ class ImagesWindow:
     def choose_background(self) -> None:
         if self.session is None:
             return
+        if self._busy:  # asked before the picture is chosen and cropped, not after
+            self.statusBar().showMessage("Wait for the story's current job to finish.", 6000)
+            return
         path, _ = QFileDialog.getOpenFileName(
             self, "Background picture", str(Path.home()), PICTURE_FILTER
         )

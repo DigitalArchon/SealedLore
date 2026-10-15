@@ -342,15 +342,18 @@ class RefImageStrip(QWidget):
             "Show this one large, as their portrait" if person else "Show this one large, first"
         )
         self.portrait_button.clicked.connect(self._make_portrait)
-        self.portrait_button.setVisible(after_portrait)
         self.again_button = QPushButton("Draw again…")
         self.again_button.setToolTip("This picture drawn again; the new one is added")
         self.again_button.clicked.connect(lambda: self._ask(self.again_requested))
         self.edit_button = QPushButton("Edit…")
         self.edit_button.setToolTip("A changed copy of this picture; it is added")
         self.edit_button.clicked.connect(lambda: self._ask(self.edit_requested))
-        for button in (self.again_button, self.edit_button):
-            button.setVisible(after_portrait)
+        if not after_portrait:
+            # Hidden, never shown here: shown before it has a parent, a
+            # widget is a window of its own (CLAUDE.md, the transcript's
+            # rules); with one, it shows with the strip.
+            for button in (self.portrait_button, self.again_button, self.edit_button):
+                button.hide()
         self.hint = QLabel(
             "No other pictures. Add more to keep their look in generated images."
             if after_portrait

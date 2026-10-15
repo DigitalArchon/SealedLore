@@ -518,3 +518,32 @@ def test_drawn_again_a_picture_goes_with_what_it_was_drawn_from(app, tmp_path: P
     again.model.setText("words-only")
     assert not again.draw_button.isEnabled() and "can't be given a picture" in again.note.text()
     again.reject()
+
+
+def test_building_a_picture_strip_shows_no_window_of_its_own(app):
+    """The review: Make portrait, Draw again… and Edit… were shown before
+    they had a parent, each a top-level window for a moment, on every card."""
+    from PySide6.QtCore import QEvent
+    from PySide6.QtCore import QObject as _QObject
+
+    from sealedlore.gui.ref_images import RefImageStrip
+
+    class Windows(_QObject):
+        shown: list[str] = []
+
+        def eventFilter(self, watched, event):  # noqa: N802 - Qt naming
+            if event.type() == QEvent.Show and watched.isWidgetType() and watched.isWindow():
+                self.shown.append(type(watched).__name__)
+            return False
+
+    spy = Windows()
+    app.installEventFilter(spy)
+    try:
+        strip = RefImageStrip(lambda: None, after_portrait=True)
+    finally:
+        app.removeEventFilter(spy)
+    assert spy.shown == []
+    plain = RefImageStrip(lambda: None)
+    assert plain.again_button.isHidden() and plain.portrait_button.isHidden()
+    strip.deleteLater()
+    plain.deleteLater()

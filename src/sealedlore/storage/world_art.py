@@ -125,7 +125,12 @@ def load_sidecar(plot_path: Path) -> tuple[WorldArt | None, dict[str, bytes]]:
     kept = []
     for picture in art.pictures:
         source = _inside(plot_path.parent, picture.file)
-        relative = f"{SIDECAR_PICTURES_DIR}/{Path(picture.file).name}"
+        name = Path(picture.file).name
+        relative = f"{SIDECAR_PICTURES_DIR}/{name}"
+        if relative in files:
+            # Two files of one name from different folders: the second was
+            # dropped with its record. Named by its own record instead.
+            relative = f"{SIDECAR_PICTURES_DIR}/{picture.id}{Path(name).suffix}"
         if source is None or not is_safe_relative(relative) or relative in files:
             continue
         try:

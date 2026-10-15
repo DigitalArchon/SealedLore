@@ -74,7 +74,7 @@ from sealedlore.gui.plot_editor_pages import (
     WayPage,
     WorldPage,
 )
-from sealedlore.gui.plot_pictures import copy_pictures
+from sealedlore.gui.plot_pictures import copy_pictures, copy_sidecar
 from sealedlore.models.plot_file import (
     CharacterDoc,
     EntryDoc,
@@ -255,9 +255,13 @@ class PlotEditorWindow(QMainWindow):
         return self.path.parent if self.path is not None else None
 
     def _pictures(self) -> list[PictureDoc]:
+        """Every picture the file names: its cards' and its background."""
         document = self.document
         owners = [*document.characters, *document.places, *document.lore]
-        return [picture for owner in owners for picture in owner.pictures]
+        pictures = [picture for owner in owners for picture in owner.pictures]
+        if document.background.strip():
+            pictures.append(PictureDoc(file=document.background.strip()))
+        return pictures
 
     def _refresh_title(self) -> None:
         name = self.path.name if self.path else "Untitled"
@@ -691,18 +695,24 @@ class PlotEditorWindow(QMainWindow):
             QMessageBox.warning(self, "Could not save", f"{path.name}: {exc}")
             return False
         old = self._folder()
+        old_path = self.path
         self.path = path
         self._set_modified(False)
+        left: list[str] = []
+        if old_path is not None and old_path.resolve() != path.resolve():
+            # Under another name: the map drawn for it (its sidecar, and the
+            # views it names) is the new file's too.
+            left += copy_sidecar(old_path, path)
         if old is not None and old.resolve() != path.parent.resolve():
             # Saved somewhere else: the pictures its lines name come along.
-            left = copy_pictures(self._pictures(), old, path.parent)
-            if left:
-                QMessageBox.warning(
-                    self,
-                    "Some pictures stayed behind",
-                    f"The file was saved, but these pictures couldn't be copied beside it "
-                    f"from {old}:\n\n" + "\n".join(left),
-                )
+            left += copy_pictures(self._pictures(), old, path.parent)
+        if left:
+            QMessageBox.warning(
+                self,
+                "Some pictures stayed behind",
+                f"The file was saved, but these couldn't be copied beside it from {old}:\n\n"
+                + "\n".join(left),
+            )
         self._show(self.current_ref())  # a picture's thumbnail follows the folder
         return True
 

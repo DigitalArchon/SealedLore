@@ -205,3 +205,17 @@ def test_a_sample_s_map_shows_each_area_s_own_view_over_it(app, tmp_path: Path):
     assert view.iso_bar.offer.text() == "The Ashcombe Works: its isometric view."
     window._chat_allows_close = lambda: True
     window.close()
+
+
+def test_the_guide_s_front_matter_parses_as_written():
+    """The review: copied as written, the guide's example front matter was an
+    import error (its notes were `#`, read as part of each value)."""
+    import re
+
+    guide = (SAMPLES / PLOT_FORMAT_GUIDE).read_text(encoding="utf-8")
+    block = re.search(r"## Settings at the top\s+```markdown\n(.*?)```", guide, re.DOTALL)
+    assert block is not None
+    text = block.group(1) + "\n# World\n\nA town.\n\n# Opening\n\nIt begins.\n"
+    parsed = parse_plot_markdown(text)
+    assert [p.message for p in parsed.problems if p.error] == []
+    assert parsed.scenario.title == "Doomsville"
