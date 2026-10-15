@@ -41,18 +41,16 @@ from sealedlore.engine.world_art import (
 )
 from sealedlore.engine.world_pictures import (
     MAP_PICTURES_DIR,
-    QUOTED,
     Person,
     PictureJob,
     isometric_job,
-    isometric_notes,
     isometric_size,
     isometric_state,
-    isometric_writer_messages,
     looks_of,
     picture_size,
     plan_pictures,
-    unquoted,
+    size_pixels,
+    views_of,
 )
 from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.node import Usage
@@ -70,9 +68,6 @@ from sealedlore.providers.images import (
 from sealedlore.storage.image_meta import MetadataError, picture_kind, strip_metadata
 from sealedlore.storage.images import MEDIA_TYPES, WORLD_ART_FILE
 from sealedlore.storage.world_art import load_world_art, save_world_art
-
-# The isometric view's scene: a paragraph, after the writer's reasoning.
-ISOMETRIC_SCENE_TOKENS = 4000
 
 # Pieces drawn at once in the background: enough to keep up with a passage,
 # few enough to leave the subscription's burst for the story's own calls.
@@ -100,7 +95,6 @@ class WorldArtRuntime:
     _isometric_area: str | None = None
     _isometric_client: ImageClient | None = None
     # The view's scene writer, while it writes: cancelled with the rest.
-    _isometric_writer: ChatProvider | None = None
     # Held while a run is checked for and started: the worker (after a
     # passage) and the GUI thread (Redraw plan…, a story opening) both start
     # runs, and two started at once drew and paid for everything twice.
@@ -301,14 +295,18 @@ class WorldArtRuntime:
             return model, price, "A view is being painted."
         return model, price, None
 
-    def start_isometric(self, area_id: str, render: Callable[[], bytes | None]) -> bool:
+    def start_isometric(
+        self, area_id: str, render: Callable[[tuple[int, int]], bytes | None]
+    ) -> bool:
         """Paint the isometric view of an area, in the background: `render`
-        gives the picture of its plan (gui/map_render.py: the engine draws
-        nothing), called on that thread."""
+        gives the program's isometric render of its plan at a size in pixels
+        (gui/map_iso.py: the engine draws nothing), called on that thread."""
         with self._starting():
             return self._start_isometric(area_id, render)
 
-    def _start_isometric(self, area_id: str, render: Callable[[], bytes | None]) -> bool:
+    def _start_isometric(
+        self, area_id: str, render: Callable[[tuple[int, int]], bytes | None]
+    ) -> bool:
         _model, _price, problem = self.isometric_offer()
         world = self.world()
         if problem is not None or area_id not in world.places or self._map_closed:
@@ -322,17 +320,13 @@ class WorldArtRuntime:
         look = plan_ground(world, art, area, ground)
         if look == "metal" and "space" in (ground, land_under(world, art, area)):
             look = "space"  # a deck in space, not plating on the ground
-        texts = self.texts
-
-        def job(places: str | None) -> PictureJob:
-            return isometric_job(world, art, area_id, look=look, texts=texts, places=places)
-
+        job = isometric_job(world, art, area_id, look=look, texts=self.texts)
         client = ImageClient(media.base_url, media.api_key, api=media.api)
         self._isometric_area = area_id
         self._isometric_client = client  # for `stop_map_art` to cancel
         thread = threading.Thread(
             target=self._paint_isometric,
-            args=(job, isometric_notes(world, art, area_id), client, render),
+            args=(job, client, render),
             name="map-isometric",
             daemon=True,
         )
@@ -342,29 +336,23 @@ class WorldArtRuntime:
 
     def _paint_isometric(
         self,
-        make_job: Callable[[str | None], PictureJob],
-        notes: str,
+        job: PictureJob,
         client: ImageClient,
-        render: Callable[[], bytes | None],
+        render: Callable[[tuple[int, int]], bytes | None],
     ) -> None:
         try:
-            try:
-                scene = self._isometric_scene(notes)
-            except Exception:  # noqa: BLE001 - painted from the map's own words instead
-                scene = None
-            if self._map_closed:
-                return  # the story was left while the scene was written
-            job = make_job(scene)
-            plan = render()
-            if plan is None:
-                self._log("map_picture_error", {"job": job.key, "error": "no plan to paint from"})
-                return
             model = self.config.map_isometric_model
             info = self._listed_image_model(model)
             if info is None:  # not in the config's listing: ask the endpoint once
                 listing = list_image_models(client.base_url, api=client.api)
                 info = next((m for m in listing if m.id == model), None)
             size = isometric_size(info)
+            # The render is made at the size the model will paint: one shape
+            # in and out (the author's rule for image-to-image).
+            plan = render(size_pixels(size))
+            if plan is None:
+                self._log("map_picture_error", {"job": job.key, "error": "no plan to paint from"})
+                return
             self._picture_one(job, client, size, model=model, info=info, plan=plan)
         finally:
             client.close()
@@ -398,55 +386,32 @@ class WorldArtRuntime:
         art = self.world_art
         with self._lock():
             art.pictures.append(picture)
+            self._choose_view(art, area_id, picture.state, picture.id)
             self._save_art(art)
         return True
 
-    def _isometric_scene(self, notes: str) -> str | None:
-        """What is on the area in what a picture shows, from the map's own
-        words, by the prompt writer (map.picture.isometric.writer), or None
-        when it fails: the view is then painted from the words as they are.
-        A scene with quotation marks is asked for once more, and what is
-        still quoted the second time is left out (`unquoted`). On the
-        painting's thread."""
-        # The role's model: a TEE chat's own (every call of one stays on it).
-        model = self.role_model("image_prompt")
-        detached = getattr(self.provider, "detached", None)
-        writer = detached() if callable(detached) else self.provider
-        self._isometric_writer = writer  # for `stop_map_art` to cancel
-        try:
-            params = self.side_params(model, max_tokens=ISOMETRIC_SCENE_TOKENS, temperature=0.3)
-            request = ChatRequest(
-                model=model,
-                extra_body=self.route_for("image_prompt", model),
-                messages=isometric_writer_messages(notes, self.texts),
-                params=params,
-            )
-            scene = self._write_isometric_scene(writer, request, model)
-            if scene is not None and QUOTED.search(scene):
-                again = self._write_isometric_scene(writer, request, model)
-                scene = unquoted(again if again is not None else scene)
-            return scene or None
-        finally:
-            self._isometric_writer = None
-            if writer is not self.provider:
-                writer.close()
+    def choose_isometric(self, area_id: str, picture_id: str) -> bool:
+        """Show this one of an area's isometric views over the map, for the
+        map as it is there now (the author, Oct 15 2026: with half a dozen
+        painted, swap between them). False for a picture that isn't one of
+        the area's views, or in a private scene."""
+        if not self.map_on or self.open_span is not None:
+            return False
+        world = self.world()
+        if area_id not in world.places:
+            return False
+        art = self.world_art
+        with self._lock():
+            if not any(p.id == picture_id for p in views_of(art, area_id)):
+                return False
+            self._choose_view(art, area_id, isometric_state(world, area_id), picture_id)
+            self._save_art(art)
+        return True
 
-    def _write_isometric_scene(self, writer, request: ChatRequest, model: str) -> str | None:
-        """One call to the isometric view's writer, logged; None when it
-        fails or is cut off."""
-        log_ref = self._log("isometric_prompt_request", {"payload": writer.build_payload(request)})
-        try:
-            text, completed = writer.complete(request)
-        except Exception as exc:  # painted from the map's own words instead
-            self._log("isometric_prompt_error", {"request_log_ref": log_ref, "error": str(exc)})
-            return None
-        self._log(
-            "isometric_prompt_response",
-            {"request_log_ref": log_ref, "text": text, "usage": completed.raw_usage},
-        )
-        self.unreported_usage.append(self.priced(completed.usage, model))
-        scene = " ".join(text.split())
-        return scene if scene and completed.finish_reason != "length" else None
+    @staticmethod
+    def _choose_view(art: WorldArt, area_id: str, state: str, picture_id: str) -> None:
+        """Under the art lock."""
+        art.chosen_views.setdefault(area_id, {})[state] = picture_id
 
     def start_map_pictures(self) -> bool:
         """Draw what the map needs from the image model, in the background."""
@@ -598,6 +563,9 @@ class WorldArtRuntime:
         )
         with self._lock():
             art.pictures.append(picture)
+            if job.subject == "isometric":
+                # The author asked for it: the view over the map now.
+                self._choose_view(art, job.subject_id, job.state, picture.id)
             self._save_art(art)
         callback = self.on_map_art
         if callback is not None:
@@ -683,7 +651,7 @@ class WorldArtRuntime:
                 client.cancel()
             except Exception:  # noqa: BLE001 - stopping must never fail
                 pass
-        for client in (self._picture_client, self._isometric_client, self._isometric_writer):
+        for client in (self._picture_client, self._isometric_client):
             if client is not None:
                 try:
                     client.cancel()

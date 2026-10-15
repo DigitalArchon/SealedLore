@@ -201,6 +201,13 @@ class WorldArt(BaseModel):
     # Places whose plan the author asked to be drawn again (Redraw plan…):
     # the plan they have stays until the new one is drawn.
     redraw: list[str] = Field(default_factory=list)
+    # The isometric view the author chose to show over an area, by area id
+    # and then by the map's state there (`world_pictures.isometric_state`):
+    # an area may have several (Paint it again, pictures of one's own), and
+    # the author swaps between them (the author, Oct 15 2026). Painting one
+    # or bringing one in chooses it; a choice naming a picture that is gone
+    # falls back to the latest.
+    chosen_views: dict[str, dict[str, str]] = Field(default_factory=dict)
 
     def picture_for(
         self, subject: str, subject_id: str, state: str | None = None

@@ -935,26 +935,35 @@ settings and a scenario file keep the art and the pictures. Story pictures
 
 Each area on the local map (a farm, a town, a works) can have an
 **isometric view**: the area painted in isometric by an image model (Settings
-→ Images → **Isometric view model**: Qwen Image unless you choose another;
-**Recommended** beside it offers Nano Banana Pro, the most faithful, at about
-seven times the price). An area that has one is marked **◆ Isometric view**
-at its corner on the local map, and with a ◆ before its name on the region.
-**Isometric** lays every area's view over the map, exactly where the area
-is, so you see what it shows and where that is among everything around it;
-**Fade** lets the map show through, and **See it whole** (or a double-click
-on a view) opens it on its own to zoom into. The bar over the map is for the
-area in the middle of the view, wherever you have moved the map: **Paint it**
-paints that area from its map, giving the model and its price first (it
-counts with the day's map pictures), and **Paint it again** paints another
-take. Before it is painted, the prompt writer (Settings → Models) turns what
-the map says about the place into only what a picture can show, leaving out
-names and story, which image models otherwise letter onto the view. The
-samples come with a view of every area. The 2D map is the story's truth: a
-painting matches it closely, not exactly. Once the story changes something
-there (the barn burns), the view says it is out of date and offers to paint
-it again. **Use a picture of your own…** takes a picture from disk as the
-area's view instead, cropped first to the area's shape. The views and the
-postcards are in Media too, under **Map**.
+→ Images → **Isometric view model**: FLUX.2 klein 9B unless you choose
+another, about a cent and a half a view; **Recommended** beside it offers Qwen
+Image, free within a NanoGPT subscription's allowance, and Seedream 5.0 Pro,
+the most faithful, at about six times the price). An area that has one is marked **◆ Isometric view**
+wherever its view isn't drawn: at its corner on the local map, and under its
+name on the region, so you can see which areas have one without going into
+them; click the mark to see that area's view. **Isometric** lays every
+area's view over the map, exactly where the area is, so you see what it
+shows and where that is among everything around it; **Fade** lets the map
+show through, and **See it whole** (or a double-click on a view) opens it on
+its own to zoom into. The bar over the map is for the area in the middle of
+the view, wherever you have moved the map: **Paint it** paints that area
+from its map, giving the model and its price first (it counts with the day's
+map pictures), and **Paint it again** paints another take. The model is
+given the program's own isometric render of the area's plan, every building
+a plain block, and asked to repaint it keeping everything where it is, with
+one line about the place and its ground; given the top-down plan or a
+paragraph of description, models rearranged the buildings. The samples come
+with a view of every area. The 2D map is the story's truth: a painting matches it
+closely, not exactly. Once the story changes something there (the barn
+burns), the view says it is out of date and offers to paint it again. **Use
+a picture of your own…** takes a picture from disk as the area's view
+instead, cropped first to the area's shape. Every view painted or brought in
+is kept: the newest lies over the map, and once an area has several the bar
+says so and **Choose a view…** lets you swap between them (the choice is for
+the map as it is there now; a view painted after a change is chosen for that
+change). The views and the postcards are in Media too, under **Map**, the
+one on the map marked; right-click another there for **Show this view on
+the map**.
 
 A story that keeps a map makes it part of the window: the Inspector, beside
 the story, takes half the window with **Map** as its first page. **Map**,

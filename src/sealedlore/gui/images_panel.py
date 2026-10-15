@@ -181,6 +181,7 @@ class ImagesPanel(QWidget):
         background: str | None = None,
         background_drawn_as: str = "",
         map_pictures: list[MapPicture] | None = None,
+        shown_views: set[str] | None = None,
         drawn_for_cards: set[str] | None = None,
         added: list[ImageRef] | None = None,
     ) -> None:
@@ -191,7 +192,9 @@ class ImagesPanel(QWidget):
         `background`: the background's file, first among the story's,
         standing for the picture it was drawn as; `added`: the pictures
         added from disk to no card. `map_pictures`: the map's views and
-        postcards (those of places the author may see)."""
+        postcards (those of places the author may see); `shown_views`: the
+        isometric views laid over the map now, said so (an area may have
+        several, and any can be shown from here)."""
         cast, lore = cast or [], lore or []
         on_cards = {ref.drawn_as for card in (*cast, *lore) for ref in card.reference_images}
         on_cards |= drawn_for_cards or set()
@@ -260,11 +263,20 @@ class ImagesPanel(QWidget):
         self.map_list.clear()
         for picture in sorted(map_pictures or [], key=lambda p: p.made_at, reverse=True):
             kind = "Isometric view" if picture.subject == "isometric" else "Postcard"
-            item = QListWidgetItem(f"{kind}\n{picture.name}")
+            on_map = picture.id in (shown_views or set())
+            item = QListWidgetItem(f"{kind}\n{picture.name}" + ("\n✓ on the map" if on_map else ""))
             item.setData(Qt.UserRole, picture.id)
+            item.setData(Qt.UserRole + 1, picture.subject)
             item.setToolTip(
                 f"{kind} of {picture.name}"
                 + (f", painted by {picture.model}" if picture.model else ", your own picture")
+                + (
+                    ", the one laid over the map now"
+                    if on_map
+                    else "; right-click to lay it over the map"
+                    if picture.subject == "isometric"
+                    else ""
+                )
             )
             if store is not None:
                 item.setIcon(QIcon(thumbnail_of(store.read(picture.file), CARD_THUMB)))
@@ -331,8 +343,11 @@ class ImagesPanel(QWidget):
         if item is None:
             return
         picture_id = item.data(Qt.UserRole)  # read now, as `_card_menu`
+        isometric = item.data(Qt.UserRole + 1) == "isometric"
         menu = QMenu(self)
         for key, text in MAP_ACTIONS:
+            if key == "use" and not isometric:
+                continue  # a postcard is the place's one picture
             menu.addAction(text).triggered.connect(
                 lambda _checked=False, k=key: self.map_action_requested.emit(k, picture_id)
             )
@@ -417,6 +432,8 @@ BACKGROUND_ACTIONS = (
 MAP_ACTIONS = (
     ("open", "See it whole"),
     ("show", "Show on the map"),
+    # An isometric view's alone: chosen as the one laid over its area.
+    ("use", "Show this view on the map"),
     ("save", "Save picture as…"),
 )
 ADDED_ACTIONS = (

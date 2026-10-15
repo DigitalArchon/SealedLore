@@ -30,7 +30,6 @@ from typing import Literal
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.world_art import LAYOUT_HEIGHT, LAYOUT_WIDTH, MAX_FAILURES, SPRITE_KINDS
 from sealedlore.engine.world_layout import position
-from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.world import MapPicture, WorldArt, WorldMap, WorldPlace
 from sealedlore.providers.images import ImageModelInfo
 
@@ -98,17 +97,13 @@ def picture_size(model: ImageModelInfo | None, *, landscape: bool = False) -> st
     return sizes[0] if sizes else "1024x1024"
 
 
-# Words in quotation marks in the isometric view's scene are words to letter
-# onto it: the writer is told to use none (map.picture.isometric.writer),
-# and once wrote 'a bulkhead plaque lettered "PALE MARTYR"', which Nano
-# Banana Pro painted on the wreck's hull (1 scene of 17, Oct 15 2026).
-# Single quotes are left alone: they are apostrophes too.
-QUOTED = re.compile(r'"[^"]*"|“[^”]*”|„[^“”]*[“”]|«[^»]*»')
-
-
-def unquoted(scene: str) -> str:
-    """The scene with whatever it quotes left out."""
-    return " ".join(QUOTED.sub("", scene).split())
+def size_pixels(size: str) -> tuple[int, int]:
+    """A listed size as (width, height) in pixels; a size with no numbers
+    ("1k", "auto", "16:9") as 1024 by 576, the shape most such models paint."""
+    parts = size.replace("*", "x").split("x")
+    if len(parts) == 2 and all(p.isdigit() for p in parts) and all(int(p) > 0 for p in parts):
+        return int(parts[0]), int(parts[1])
+    return 1024, 576
 
 
 def isometric_size(model: ImageModelInfo | None) -> str:
@@ -290,12 +285,31 @@ def area_plan(world: WorldMap, art: WorldArt, area_id: str):
     return art.layout_shown(area_id, area.state)
 
 
+def views_of(art: WorldArt, area_id: str) -> list[MapPicture]:
+    """Every isometric view an area has, oldest first: each Paint it (again)
+    and each picture of the author's own adds one, and none is thrown away."""
+    return [p for p in art.pictures if p.subject == "isometric" and p.subject_id == area_id]
+
+
+def chosen_view(world: WorldMap, art: WorldArt, area_id: str) -> MapPicture | None:
+    """The view the author chose for the area, for the map as it is there
+    now (`WorldArt.chosen_views`), or None: none chosen under this state, or
+    the one chosen is gone."""
+    chosen = art.chosen_views.get(area_id, {}).get(isometric_state(world, area_id))
+    return next((p for p in views_of(art, area_id) if p.id == chosen), None) if chosen else None
+
+
 def shown_view(world: WorldMap, art: WorldArt, area_id: str) -> MapPicture | None:
-    """The isometric view to lay over an area: the latest that is of the map
-    there as it is now (`view_current`), else the latest painted, out of date
-    and said so. The latest alone laid a burning farm over the branch where
-    it stands, and offered to paint it again (the review, Oct 15 2026)."""
-    views = [p for p in art.pictures if p.subject == "isometric" and p.subject_id == area_id]
+    """The isometric view to lay over an area: the one the author chose
+    for the map as it is there now (`chosen_view`; painting one chooses
+    it), else the latest that is of the map as it is now (`view_current`),
+    else the latest painted, out of date and said so. The latest alone laid
+    a burning farm over the branch where it stands, and offered to paint it
+    again (the review, Oct 15 2026)."""
+    chosen = chosen_view(world, art, area_id)
+    if chosen is not None:
+        return chosen
+    views = views_of(art, area_id)
     for picture in reversed(views):
         if view_current(world, art, area_id, picture):
             return picture
@@ -379,44 +393,16 @@ def _changed(world: WorldMap, area_id: str) -> list[WorldPlace]:
     return inside + ([area] if area.state else [])
 
 
-def isometric_notes(world: WorldMap, art: WorldArt, area_id: str) -> str:
-    """What the map says is on an area, for the prompt writer to turn into
-    what a picture shows (map.picture.isometric.writer)."""
-    return _what_is_on(world, art, area_id)
-
-
-def isometric_writer_messages(
-    notes: str, texts: PromptTexts = DEFAULT_TEXTS
-) -> list[PromptMessage]:
-    return [
-        PromptMessage("system", (ContentPart(texts["map.picture.isometric.writer"]),)),
-        PromptMessage("user", (ContentPart(notes),)),
-    ]
-
-
-def _what_is_on(world: WorldMap, art: WorldArt, area_id: str) -> str:
-    """The place, what is in it and what the plan marks. A changed place
-    goes without the words it had before ("its roof still holding" stood
-    beside the barn burning)."""
-    area = world.places[area_id]
-    what = "" if area.state else " ".join((area.what or "").split()).rstrip(".")
-    text = area.name + (f", {what}" if what else "") + ". "
-    parts = []
-    for child in world.places.values():
-        if child.inside != area_id:
-            continue
-        if child.state:
-            parts.append(f"{child.name} (as said above)")
-            continue
-        what = " ".join((child.what or "").split()).rstrip(".")
-        parts.append(child.name + (f": {what}" if what else ""))
-    if parts:
-        text += "In it: " + "; ".join(parts) + ". "
-    layout = art.layout_shown(area_id, area.state)
-    marked = list((layout.objects if layout is not None else {}).values())
-    if marked:
-        text += "Marked on the map: " + ", ".join(marked) + "."
-    return text.strip()
+def one_line(place: WorldPlace) -> str:
+    """The area in one sentence: the first of its description, else its
+    name. Measured (SealedLoreDocs design/map.md, Oct 15 2026): with the
+    program's render, one line beat the writer's paragraph on layout (Qwen
+    3.5 against 2.5, klein 3.1 against 2.75); the paragraph's inventions
+    (a steeple, a water tower, "enclosed by a fence") were what got painted."""
+    text = " ".join((place.what or "").split())
+    match = re.match(r"(.+?[.!?])(\s|$)", text)
+    first = (match.group(1) if match else text).rstrip(".")
+    return (first or place.name) + "."
 
 
 def isometric_job(
@@ -426,14 +412,13 @@ def isometric_job(
     *,
     look: str = "",
     texts: PromptTexts = DEFAULT_TEXTS,
-    places: str | None = None,
 ) -> PictureJob:
-    """The isometric view of an area as a picture job: its prompt names only
-    what the plan has, any change first in words a painter can draw; the
-    picture of the plan goes with it (the session renders it). `look` is
-    the plan's look (`world_art.plan_ground`); `places` what is on it as the
-    prompt writer put it (map.picture.isometric.writer), else the map's own
-    words (`isometric_notes`)."""
+    """The isometric view of an area as a picture job: the program's own
+    isometric render of its plan goes with the prompt (gui/map_iso.py, made
+    on the painting's thread), the prompt says what the render is and asks
+    for it repainted, any change first in words a painter can draw, the area
+    in one line (`one_line`) and the ground's look (`world_art.plan_ground`).
+    No prompt writer: measured, its paragraph cost layout."""
     area = world.places[area_id]
     now = ""
     for place in _changed(world, area_id):
@@ -443,7 +428,7 @@ def isometric_job(
     prompt = texts.fill(
         "map.picture.isometric",
         now=now,
-        places=places if places else _what_is_on(world, art, area_id),
+        places=one_line(area),
         look=LOOK_WORDS.get(look, "as the map shows it"),
     )
     state = isometric_state(world, area_id)

@@ -77,7 +77,7 @@ from sealedlore.engine.world_art import (
     standing_spot,
 )
 from sealedlore.engine.world_layout import position, size_of
-from sealedlore.engine.world_pictures import shown_view, view_current
+from sealedlore.engine.world_pictures import shown_view, view_current, views_of
 from sealedlore.gui import text_size
 from sealedlore.gui.isometric_view import IsometricBar, IsometricDialog
 from sealedlore.gui.map_art import FOG, picture_sprite, sprite_pixmap
@@ -135,8 +135,10 @@ PERSON_STEP = 16
 # A postcard's thumbnail on a place's card.
 POSTCARD_THUMB = (176, 100)
 # An area's isometric view lies over its plan: above every plan (2 to 2.9)
-# and below the places' pictures and names (3 and up).
+# and below the places' pictures and names (3 and up). Its mark, under the
+# area's name on the region, stands above the names so it can be clicked.
 ISO_Z = 2.95
+ISO_MARK_Z = 4.5
 # A view is held no wider than this (the map shows it no wider); seen whole,
 # it is read from its file again.
 ISO_HELD_WIDTH = 1600
@@ -209,8 +211,11 @@ class _PlaceItem(QGraphicsItem):
         self.setAcceptHoverEvents(True)
         self.setOpacity(1.0 if visited or current else 0.55)
         self.setZValue(4 if current else 3)
-        mark = f"{ISO_MARK} " if painted else ""
-        self._name = mark + place.name + (f" ({place.state})" if place.state else "")
+        # An area with an isometric view carries its mark (`_BadgeItem`)
+        # under its name, not a sign in the name (the author, Oct 15 2026:
+        # a ◆ before the name was too little to tell an area had one).
+        self.painted = painted
+        self._name = place.name + (f" ({place.state})" if place.state else "")
         self._fonts()
         self.set_pixels(MIN_PLACE_PX)
 
@@ -263,6 +268,11 @@ class _PlaceItem(QGraphicsItem):
         half = self._half()
         height = half + 6 + LABEL_GAP + 2 * self._line + 2
         return QRectF(-self._width / 2 - 2, -half - 6, self._width + 4, height)
+
+    def label_bottom(self) -> float:
+        """Where the label ends, in screen pixels below the spot: under the
+        name, or under the people when there are any."""
+        return self._half() + LABEL_GAP + self._line * (2 if self._who else 1) + 2
 
     def paint(self, painter: QPainter, _option, _widget=None) -> None:
         half = self._half()
@@ -537,10 +547,11 @@ class _IsoItem(QGraphicsItem):
 
 
 class _BadgeItem(QGraphicsItem):
-    """The mark on an area that has an isometric view, at its plan's top
-    left while the views aren't shown, the same size whatever the zoom: so
-    the author can see which areas have one before pressing Isometric. A
-    click shows them, centred on this area."""
+    """The mark on an area that has an isometric view, wherever the view
+    itself isn't drawn, the same size whatever the zoom: at its plan's top
+    left on the local map, and under its name on the region (the author,
+    Oct 15 2026: which areas have one must show without going into them).
+    A click shows the views, centred on this area."""
 
     def __init__(self, area_id: str, text: str, on_click: Callable[[str], None]) -> None:
         super().__init__()
@@ -556,8 +567,23 @@ class _BadgeItem(QGraphicsItem):
         self._font.setPointSizeF(text_size.points(8.5))
         self._font.setBold(True)
         metrics = QFontMetricsF(self._font)
-        # Inside the plan's corner, a few pixels in.
-        self._box = QRectF(6, 6, metrics.horizontalAdvance(text) + 14, metrics.height() + 6)
+        self._size = (metrics.horizontalAdvance(text) + 14, metrics.height() + 6)
+        # Inside the plan's corner, a few pixels in, until anchored.
+        self._box = QRectF(6, 6, *self._size)
+
+    def at_corner(self, spot: QPointF) -> None:
+        """Inside a plan's top left corner (`spot`), a few pixels in."""
+        self._anchor(spot, 6.0, 6.0, ISO_Z)
+
+    def under_name(self, spot: QPointF, drop: float) -> None:
+        """Centred under a place's label, `drop` pixels below its `spot`."""
+        self._anchor(spot, -self._size[0] / 2, drop, ISO_MARK_Z)
+
+    def _anchor(self, spot: QPointF, x: float, y: float, z: float) -> None:
+        self.prepareGeometryChange()
+        self.setPos(spot)
+        self._box = QRectF(x, y, *self._size)
+        self.setZValue(z)
 
     def boundingRect(self) -> QRectF:  # noqa: N802 - Qt's name
         return self._box.adjusted(-1, -1, 1, 1)
@@ -585,6 +611,8 @@ class WorldView(QWidget):
     isometric_requested = Signal(str)
     # A picture of the author's own as this area's isometric view.
     own_isometric_requested = Signal(str)
+    # The author asked to choose among this area's views.
+    choose_view_requested = Signal(str)
     # The author asked for this area's plan to be drawn again.
     redraw_requested = Signal(str)
 
@@ -659,6 +687,7 @@ class WorldView(QWidget):
         self.iso_bar = IsometricBar()
         self.iso_bar.paint_requested.connect(self._paint_requested)
         self.iso_bar.own_requested.connect(self._own_requested)
+        self.iso_bar.choose_requested.connect(self._choose_requested)
         self.iso_bar.whole_requested.connect(self._whole_requested)
         self.iso_bar.opacity_changed.connect(self._set_iso_opacity)
         self.iso_bar.hide()
@@ -1026,8 +1055,7 @@ class WorldView(QWidget):
             self.scene.addItem(view)
             self._isos[pid] = view
             mark = f"{ISO_MARK} Isometric view" + ("" if current else " · out of date")
-            badge = _BadgeItem(pid, mark, self._badge_clicked)
-            badge.setPos(plan.rect().topLeft())
+            badge = _BadgeItem(pid, mark, self._badge_clicked)  # placed by `_update_detail_now`
             badge.setVisible(False)
             self.scene.addItem(badge)
             self._badges[pid] = badge
@@ -1192,12 +1220,10 @@ class WorldView(QWidget):
                 ):
                     self._dress_plan(plan, ground, roofs, opened, fronts, standing)
             plan.setVisible(show)
-        # Each area's view over its plan with Isometric on; its mark with it off.
+        # Each area's view over its plan with Isometric on.
         iso_on = self.iso_button.isChecked()
         for pid, view in self._isos.items():
             view.setVisible(iso_on and pid in shown_plans)
-        for pid, badge in self._badges.items():
-            badge.setVisible(not iso_on and pid in shown_plans)
         here = self.here()
         for item in self._items:
             place = item.place
@@ -1235,11 +1261,34 @@ class WorldView(QWidget):
                 ringed = here
         for item in self._items:
             item.set_ringed(item.place.id == ringed)
+        self._place_marks(shown_plans)
         self._sync_buttons()
         self._sync_card(level, shown_plans)
         focus = self.area_in_view(level)
         if (focus.id if focus is not None else None) != self._focus:
             self.sync_isometric()  # the bar follows the area in view
+
+    def _place_marks(self, shown_plans: set[str]) -> None:
+        """Each area's mark wherever its view isn't drawn: at its plan's
+        corner on the local map, else under its name where the region shows
+        it (the author: which areas have a view must show without going
+        into them). Hidden where the view lies over the map, or where the
+        area isn't drawn at all. After the places' pixels are set: the mark
+        hangs under the label."""
+        by_place = {item.place.id: item for item in self._items}
+        for pid, badge in self._badges.items():
+            plan = self._plans.get(pid)
+            item = by_place.get(pid)
+            if self._isos[pid].isVisible():
+                badge.setVisible(False)
+            elif pid in shown_plans and plan is not None:
+                badge.at_corner(plan.rect().topLeft())
+                badge.setVisible(True)
+            elif item is not None and item.isVisible():
+                badge.under_name(item.pos(), item.label_bottom())
+                badge.setVisible(True)
+            else:
+                badge.setVisible(False)
 
     def _dress_plan(
         self,
@@ -1647,6 +1696,7 @@ class WorldView(QWidget):
             price=price,
             problem=problem,
             painted_by=latest.model if latest is not None else "",
+            views=len(views_of(self.art, area.id)) if has_view else 0,
         )
         self.hint.setText(self._hint_for("local"))
 
@@ -1704,6 +1754,11 @@ class WorldView(QWidget):
         if area is not None:
             self.own_isometric_requested.emit(area.id)
 
+    def _choose_requested(self) -> None:
+        area = self.area_in_view()
+        if area is not None:
+            self.choose_view_requested.emit(area.id)
+
     def _hint_for(self, level: str) -> str:
         if not self.world.places:
             return "Nothing on the map yet: it grows as the story goes, from the next passage on."
@@ -1738,20 +1793,26 @@ class WorldView(QWidget):
         if self.world.places:
             self._sync_buttons()
 
-    def set_progress(self, done: int, total: int) -> None:
+    def set_progress(self, done: int, total: int, activity: str = "") -> None:
         """The drawing under way: `done` of `total` pieces (art and
         pictures); nothing under way when `total` is 0, said as drawn once a
-        run has finished. Cheap: nothing is redrawn."""
+        run has finished. `activity`: what is happening before any drawing
+        (the passage being read for the map), with a busy bar (the author:
+        a minute passed with no sign anything was happening). Cheap: nothing
+        is redrawn."""
         drawing = total > 0
         if drawing:
             self._drew = True
             self.progress_label.setText(f"Drawing the map: {done} of {total}")
             self.progress.setRange(0, total)
             self.progress.setValue(done)
+        elif activity:
+            self.progress_label.setText(activity)
+            self.progress.setRange(0, 0)  # busy: no count to show yet
         else:
             self.progress_label.setText("✓ The map is drawn")
-        self.progress.setVisible(drawing)
-        self.progress_label.setVisible(drawing or (self._drew and self.art_on))
+        self.progress.setVisible(drawing or bool(activity))
+        self.progress_label.setVisible(drawing or bool(activity) or (self._drew and self.art_on))
         self.redraw_button.setEnabled(not drawing)
         if drawing != self.drawing:
             self.drawing = drawing

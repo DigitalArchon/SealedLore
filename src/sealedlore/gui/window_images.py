@@ -19,6 +19,7 @@ from PySide6.QtWidgets import QDialog, QFileDialog, QInputDialog, QMessageBox, Q
 
 from sealedlore.engine.picture_shapes import BACKGROUND
 from sealedlore.engine.world_art import out_of_the_fog
+from sealedlore.engine.world_pictures import shown_view
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.image_dialog import (
     FitPicture,
@@ -177,6 +178,7 @@ class ImagesWindow:
             background=session.story.background_image,
             background_drawn_as=session.story.background_drawn_as,
             map_pictures=self._map_pictures(),
+            shown_views=self._shown_views(),
             drawn_for_cards=self._drawn_for_cards(),
             added=list(session.story.reference_images),
         )
@@ -218,6 +220,16 @@ class ImagesWindow:
             for picture in session.map_art_copy().pictures
             if picture.subject in ("isometric", "postcard") and picture.subject_id in sight
         ]
+
+    def _shown_views(self) -> set[str]:
+        """The isometric views laid over the map now, one per area."""
+        session = self.session
+        if session is None or not session.map_on:
+            return set()
+        world, art = session.world(), session.map_art_copy()
+        areas = {p.subject_id for p in art.pictures if p.subject == "isometric"}
+        shown = (shown_view(world, art, area_id) for area_id in areas)
+        return {picture.id for picture in shown if picture is not None}
 
     def _refresh_image_views(self) -> None:
         """The Media tab now; the transcript once no passage is streaming into it."""
@@ -847,7 +859,8 @@ class ImagesWindow:
 
     def _map_picture_action(self, action: str, picture_id: str) -> None:
         """An isometric view or a postcard in the Media tab: see it whole,
-        show it on the map (a view laid over its area), or save it."""
+        show it on the map (a view laid over its area, or chosen as the one
+        over it: "use"), or save it."""
         session = self.session
         if session is None:
             return
@@ -856,6 +869,11 @@ class ImagesWindow:
             return
         if action == "save":
             save_picture_as(self, session.pictures.read(picture.file), file_name(picture.file))
+        elif action == "use" and picture.subject == "isometric":
+            self.show_isometric_view(picture.subject_id, picture.id)
+            self.show_world(True)
+            self.world_view.go_to(picture.subject_id)
+            self.world_view.iso_button.setChecked(True)
         elif action == "show":
             self.show_world(True)
             self.world_view.go_to(picture.subject_id)

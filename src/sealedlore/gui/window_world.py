@@ -15,13 +15,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QTimer, Signal
-from PySide6.QtWidgets import QFileDialog, QMessageBox, QToolButton
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
+from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox, QToolButton
 
 from sealedlore.engine.picture_shapes import ISOMETRIC
+from sealedlore.engine.world_pictures import shown_view, view_current, views_of
 from sealedlore.gui.crop_dialog import cropped_picture
-from sealedlore.gui.map_render import plan_png
-from sealedlore.gui.ref_images import PICTURE_FILTER
+from sealedlore.gui.isometric_view import CHOICE_THUMB, ChooseViewDialog, ViewChoice
+from sealedlore.gui.map_iso import iso_png
+from sealedlore.gui.ref_images import PICTURE_FILTER, thumbnail_of
 from sealedlore.gui.world_view import WorldView
 
 # Pieces of art come back one after another: one redraw for a run of them.
@@ -43,6 +45,7 @@ class WorldWindow:
         self.world_view.back_requested.connect(lambda: self.show_world(False))
         self.world_view.isometric_requested.connect(self._paint_isometric)
         self.world_view.own_isometric_requested.connect(self._own_isometric)
+        self.world_view.choose_view_requested.connect(self._choose_isometric)
         self.world_view.redraw_requested.connect(self._redraw_plan)
         self.world_button = QToolButton()
         self.world_button.setObjectName("viewToggleButton")
@@ -178,26 +181,29 @@ class WorldWindow:
             return
         done, total = session.map_art_progress()
         self.world_view.art_on = self.config.map_art
-        self.world_view.set_progress(done, total)
+        reading = session.map_reading
+        activity = f"Reading the passage for the map with {reading}…" if reading else ""
+        self.world_view.set_progress(done, total, activity)
         painting = session.isometric_painting
         if painting != self.world_view.isometric_painting:
             self.world_view.isometric_painting = painting
             self.world_view.isometric_offer = session.isometric_offer()
             self.world_view.sync_isometric()
-        if total and not self._progress_timer.isActive():
+        if (total or activity) and not self._progress_timer.isActive():
             self._progress_timer.start()
-        elif not total:
+        elif not total and not activity:
             self._progress_timer.stop()
 
     def _paint_isometric(self, area_id: str) -> None:
-        """Paint the isometric view the author asked for: the plan is drawn
-        for the model from the map as it stands now, on the painting's own
-        thread (`plan_png` uses QImage alone)."""
+        """Paint the isometric view the author asked for: the program's
+        isometric render of the plan is drawn for the model from the map as
+        it stands now, at the size the model paints, on the painting's own
+        thread (`iso_png` uses QImage alone)."""
         session = self.session
         if session is None:
             return
         world, art = session.world(), session.map_art_copy()
-        if session.start_isometric(area_id, lambda: plan_png(world, art, area_id)):
+        if session.start_isometric(area_id, lambda size: iso_png(world, art, area_id, size)):
             self.world_view.isometric_painting = session.isometric_painting
         self.world_view.isometric_offer = session.isometric_offer()
         self.world_view.sync_isometric()
@@ -236,6 +242,47 @@ class WorldWindow:
             return
         self.refresh_world()
         self.world_view.sync_isometric()
+
+    def _choose_isometric(self, area_id: str) -> None:
+        """Choose a view… on the isometric bar: the area's views, newest
+        first, the one chosen laid over the map (`choose_isometric`)."""
+        session = self.session
+        if session is None:
+            return
+        world, art = session.world(), session.map_art_copy()
+        area = world.places.get(area_id)
+        if area is None:
+            return
+        shown = shown_view(world, art, area_id)
+        choices = [
+            ViewChoice(
+                picture.id,
+                thumbnail_of(session.pictures.read(picture.file), CHOICE_THUMB[0]),
+                painted_by=picture.model,
+                made_at=picture.made_at,
+                current=view_current(world, art, area_id, picture),
+                shown=shown is not None and picture.id == shown.id,
+            )
+            for picture in reversed(views_of(art, area_id))
+        ]
+        if len(choices) < 2:
+            return
+        dialog = ChooseViewDialog(area.name, choices, self)
+        dialog.setAttribute(Qt.WA_DeleteOnClose)
+        chosen = dialog.chosen if dialog.exec() == QDialog.Accepted else None
+        if chosen is not None:
+            self.show_isometric_view(area_id, chosen)
+
+    def show_isometric_view(self, area_id: str, picture_id: str) -> None:
+        """This one of an area's views over the map (from the chooser, or
+        Media's Show this view on the map), the map and Media redrawn."""
+        session = self.session
+        if session is None or not session.choose_isometric(area_id, picture_id):
+            self.statusBar().showMessage("That view can't be shown on the map now.", 6000)
+            return
+        self.refresh_world()
+        self.world_view.sync_isometric()
+        self.refresh_images()
 
     def _redraw_plan(self, area_id: str) -> None:
         """Redraw plan… on the local map: asked first, since the plan the

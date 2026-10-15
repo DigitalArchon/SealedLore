@@ -1884,7 +1884,7 @@ object and nothing else:
 {
   "places": [{"name": "...", "inside": "a place on the map, or null",
               "kind": "region | settlement | building | room | area | route | vehicle | site",
-              "what": "a few words: what it is like", "state": null,
+              "what": "a few words: what it is like", "size": null, "state": null,
               "quote": "..."}],
   "links": [{"from": "...", "to": "...", "direction": "...",
              "distance": "...", "quote": "..."}],
@@ -1917,6 +1917,15 @@ Places
   plainly shows it.
 - Places that move (a ship, a wagon) are kind "vehicle". A vehicle someone
   owns or uses is also a thing.
+- "kind" by what the place is, not what it is called: a single roof (a house,
+  a barn, a shop, a hall) is a "building"; a castle, a fort, a compound, a
+  station, a camp or a farm is a "site", with grounds and buildings of its
+  own; a cave, a clearing, a square or a field is an "area".
+- "size": about how wide the place is, in metres, when the passage gives a
+  sense of its scale, else null. For scale: a room 5, a cottage 10, a house
+  15, a barn 25, a warehouse 40, a manor 60, a castle or a fort 150, a hamlet
+  300, a village 600, a town 1500, a city 4000. A vast castle with towers is
+  200 or more; a hut is 5. A place already on the map keeps its size.
 
 Links
 
@@ -2323,40 +2332,35 @@ _text(
 
 
 # The isometric view of the local map (Map → Isometric), painted from the
-# program's own render of the plan (gui/map_render.py). The earlier repaints
-# drifted partly through their prompts, which named what the map hadn't
-# (a road north, pine woods, a chapel; farm words for a station): this names
-# only what the plan has, and any change first. Over 13 models on a burning
-# barn and Deep Space 9, Nano Banana Pro kept the layout, drew isometric and
-# showed the fire; Qwen Image ignored the change 3 times in 3. That prompt
-# kept the barn's old words ("its roof still holding") beside the change,
-# gave the change in the story's words ("a furnace now", never "fire") and
-# the world bible's lore as the setting. With the change in what the plan
-# shows, the old words gone and the ground's look instead, Qwen drew the
-# fire 6 times in 6; "no writing of any kind" cut its labels on the barn
-# from 2 of 3 to 1 of 3, not on the station (3 of 3, named things labelled).
-# Qwen is the default since; Nano Banana Pro the premium choice
-# (SealedLoreDocs design/map.md, Oct 15 2026).
+# program's own isometric render of the plan (gui/map_iso.py). Sent the
+# top-down plan, every model composed from the words and glanced at the
+# picture: the best of eleven cheap models kept the layout at 2.4 of 5, and
+# the plan sent in the model's own shape changed nothing (±0.25). Sent this
+# render, Qwen Image went 1.75 → 3.5 with one line of words, FLUX.2 klein
+# 9B 2.1 → 3.1, Seedream 5.0 Pro 2.75 → 3.5, Nano Banana Pro isometric 4/4
+# at 3.0. One line of words beat the prompt writer's paragraph (Qwen 3.5
+# against 2.5; the paragraph's steeple, water tower and "enclosed by a
+# fence" were what got painted), and keying buildings by roof colour did
+# not help (the colours leaked), so the render draws every building alike.
+# Blind Claude judges, 104 pictures (SealedLoreDocs design/map.md, Oct 15
+# 2026). "No writing" stays: klein letters its signs.
 _text(
     "map.picture.isometric",
     MAP,
     "Map pictures: the isometric view",
-    "Sent with the program's picture of the local map when the author asks for its isometric "
-    "view: any change first, what is on it, and the ground's look.",
-    "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew "
-    "Valley, the same place seen from above at an angle. Keep its layout: every building, "
-    "wall, path, fence, water and open ground where the map has it, the same size and shape, "
-    "in the same places relative to each other. Add nothing the map does not show.{now} What "
-    "is on it: {places} The ground: {look}. Full-bleed scene, atmospheric light. No writing of "
-    "any kind: no labels, names, captions, arrows or signs, and no border.",
+    "Sent with the program's isometric render of the local map when the author asks for its "
+    "view: what the render is, any change first, the area in one line, and the ground's look.",
+    "This picture is a plain isometric render of a game map: the ground as tiles, each "
+    "building a simple block with a roof, walls, fences, paths and water as flat shapes, "
+    "small marks for the things standing about. Repaint it as 16-bit pixel art in the style "
+    "of Stardew Valley from exactly this viewpoint. Keep every building, wall, path, fence, "
+    "water and open ground where the render has it, the same footprint, size and shape, and "
+    "the same number of buildings. Add nothing the render does not show.{now} What is on it: "
+    "{places} The ground: {look}. Full-bleed scene, atmospheric light. No writing of any "
+    "kind: no labels, names, captions, arrows or signs, and no border.",
     (
         ("now", "Each place the story changed, as map.picture.isometric.now says it, or nothing"),
-        (
-            "places",
-            "What is on it in what a picture shows, as map.picture.isometric.writer wrote it "
-            "from the place, what is in it and what the map marks there (those as they are, "
-            "if the writer fails)",
-        ),
+        ("places", "The area in one line: the first sentence of its description, or its name"),
         ("look", "The plan's ground in words (snow-covered country in winter, a station's decks)"),
     ),
 )
@@ -2370,32 +2374,6 @@ _text(
     " As the story has it now, {place} is {state}: draw it so, not as it was.",
     (("place", "The place"), ("state", "How it looks now, then the story's words")),
 )
-
-# What is on the place, for the isometric view, in what a picture shows: the
-# places' own text carried story ("Confessor Hesk preaches here at every shift
-# change", "Half its workers have not reported for a week") and names, and
-# Qwen Image lettered them onto the picture. Blind-judged on four sample areas,
-# three takes each (Oct 15 2026): the places as written put writing in 11 of
-# 12 pictures and place labels in 6; written by this, none in 12, all 12
-# isometric, appeal 2.8 -> 4.0 of 5, at some cost to the plan's layout (2.5 ->
-# 1.8 of 5). Code can't tell what is visible: a first-sentence cut still
-# carried "where the cultists sleep, eat and chant".
-_text(
-    "map.picture.isometric.writer",
-    MAP,
-    "Map pictures: the isometric view's scene",
-    "Turns what the map says about a place (its description, what is in it, what the map "
-    "marks) into what a picture can show, for the isometric view's prompt, on the prompt "
-    "writer's model.",
-    "You write the scene description for an image model that will repaint a top-down game map "
-    "of one place as an isometric view. From the notes below, describe only what can be seen "
-    "from above: the ground, the buildings and structures, their shapes, materials and "
-    "colours, the light, and what stands where. Leave out every name of a place or a person, "
-    "history, who uses a place or what happens there, rumours, sounds and smells, and anything "
-    "else a picture cannot show. Invent nothing the notes do not give. One paragraph of at "
-    "most 120 words, no lists, no quotation marks, no preamble.",
-)
-
 
 # The local map in the storyteller's tail (engine/world.py,
 # `render_map_context`), for a story whose map came from its plot file.

@@ -12,8 +12,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QPointF, QRectF  # noqa: E402
-from PySide6.QtWidgets import QApplication, QGraphicsSimpleTextItem  # noqa: E402
+from PySide6.QtCore import QPointF, QRectF, Qt  # noqa: E402
+from PySide6.QtWidgets import QApplication, QDialog, QGraphicsSimpleTextItem  # noqa: E402
 
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.gui.map_art import picture_sprite, pixel_art, tile_image  # noqa: E402
@@ -380,11 +380,59 @@ def test_each_area_s_isometric_view_lies_over_it_on_the_map(app):
     assert view.leave_isometric() and not view.leave_isometric()
     assert view._badges["farm"].text.endswith("out of date") and view.iso_bar.isHidden()
     # Out to the region: no area in view, the views close up only; the farm
-    # is marked by its name.
+    # is still marked, under its name (the author: which areas have a view
+    # must show without going into them; a ◆ in the name was too little).
     view.go_region()
     assert view.area_in_view() is None
     farm_item = next(i for i in view._items if i.place.id == "farm")
-    assert farm_item._name.startswith("◆ ")
+    assert farm_item.isVisible() and farm_item._name == "The farm"
+    badge = view._badges["farm"]
+    assert badge.isVisible() and badge.pos() == farm_item.pos()
+    assert badge.boundingRect().top() >= farm_item.label_bottom() - 1  # under the label
+    assert badge.boundingRect().center().x() == pytest.approx(0, abs=1)  # centred on it
+    assert badge.zValue() > farm_item.zValue()  # above the names, to be clicked
+    # Isometric on at the region: the views are drawn close up only, so the
+    # mark still stands for the farm's.
+    view.iso_button.setChecked(True)
+    assert not view._isos["farm"].isVisible() and badge.isVisible()
+    view.go_to("farm")
+    assert view._isos["farm"].isVisible() and not badge.isVisible()
+
+
+def test_an_area_with_several_views_offers_a_choice(app):
+    """Paint it again and pictures of one's own add views, none is thrown
+    away, and the author swaps between them (the author, Oct 15 2026): the
+    bar says how many and offers Choose a view…, for the area in view."""
+    from sealedlore.engine.world_pictures import shown_view
+    from tests.test_world_pictures import png
+
+    view = WorldView()
+    view.resize(900, 700)
+    world, art, painted = _two_areas()
+    view.picture_reader = lambda path: png(50, 30)
+    view.isometric_offer = ("qwen-image", 0.02, None)
+    view.set_world(world, art, "Jane", keep_view=False)
+    view.iso_button.setChecked(True)
+    assert view.iso_bar.choose_button.isHidden()  # one view: nothing to choose
+    assert view.iso_bar.offer.text() == "The farm: its isometric view."
+    again = painted.model_copy(update={"id": "again", "file": "images/map/again.png"})
+    art.pictures.append(again)
+    view.set_world(world, art, "Jane")
+    assert shown_view(world, art, "farm") is again  # the latest, until one is chosen
+    assert view.iso_bar.offer.text() == "The farm: its isometric view (one of 2)."
+    assert not view.iso_bar.choose_button.isHidden()
+    asked: list[str] = []
+    view.choose_view_requested.connect(asked.append)
+    view.iso_bar.choose_button.click()
+    assert asked == ["farm"]
+    # Chosen: the first one again, over the map and said so.
+    art.chosen_views = {"farm": {painted.state: painted.id}}
+    view.set_world(world, art, "Jane")
+    assert shown_view(world, art, "farm") is painted
+    assert view._isos["farm"].pixmap.width() == 50
+    # Over the works, with none: no choice offered.
+    view.go_to("works")
+    assert view.iso_bar.choose_button.isHidden()
 
 
 def test_a_mark_clicked_shows_that_area_s_view(app):
@@ -885,6 +933,117 @@ def test_the_isometric_lays_the_view_that_matches_the_map_now(app):
     assert view._isos["farm"].current
     art.pictures.remove(painted)
     assert shown_view(world, art, "farm") is stale  # out of date, and said so
+
+
+def test_the_chooser_and_media_put_another_of_an_area_s_views_on_the_map(window, monkeypatch):
+    """Choose a view… on the bar, and Show this view on the map in Media,
+    each choose among the area's views; Media marks the one on the map."""
+    from sealedlore.engine.world_pictures import isometric_state, shown_view
+    from sealedlore.gui import window_world
+    from sealedlore.models.world import MapPicture, PlaceLayout
+    from tests.test_world_pictures import png
+
+    session = window.session
+    world = session.world()
+    state = isometric_state(world, "town")
+    art = session.world_art
+    art.layouts["town"] = {
+        "": PlaceLayout(place_id="town", rows=["." * 40] * 24, spec={"ground": "snow"})
+    }
+    older = MapPicture(
+        subject="isometric",
+        subject_id="town",
+        name="Hellsville",
+        state=state,
+        file="images/map/older.png",
+        model="qwen-image",
+        made_at="2026-10-15T01:00:00+00:00",
+    )
+    newer = older.model_copy(
+        update={
+            "id": "newer",
+            "file": "images/map/newer.png",
+            "made_at": "2026-10-15T02:00:00+00:00",
+        }
+    )
+    session.pictures.write(older.file, png(50, 30))
+    session.pictures.write(newer.file, png(60, 36))
+    art.pictures.extend([older, newer])
+    window.show_world(True)
+    window.refresh_world()
+    view = window.world_view
+    view.go_to("town")
+    view.iso_button.setChecked(True)
+    assert shown_view(world, art, "town") is newer
+    assert view.iso_bar.offer.text() == "Hellsville: its isometric view (one of 2)."
+    assert not view.iso_bar.choose_button.isHidden()
+
+    class FakeChooser:
+        """The dialog, answered with the older view; what it was shown is kept."""
+
+        shown: list = []
+
+        def __init__(self, place, choices, parent=None):
+            FakeChooser.shown = [(c.picture_id, c.current, c.shown, c.label()) for c in choices]
+            self.chosen = choices[-1].picture_id
+
+        def setAttribute(self, *_args) -> None:
+            pass
+
+        def exec(self) -> int:
+            return QDialog.Accepted
+
+    monkeypatch.setattr(window_world, "ChooseViewDialog", FakeChooser)
+    view.iso_bar.choose_button.click()
+    # Newest first, the one on the map said so, each with when and by whom.
+    assert [c[0] for c in FakeChooser.shown] == ["newer", older.id]
+    assert FakeChooser.shown[0][1:3] == (True, True) and FakeChooser.shown[1][1:3] == (True, False)
+    assert FakeChooser.shown[0][3].startswith("Painted by qwen-image\n")
+    assert FakeChooser.shown[0][3].endswith("\n✓ On the map now")
+    art = session.map_art_copy()
+    assert art.chosen_views["town"][state] == older.id
+    assert view._isos["town"].pixmap.width() == 50  # the older one, over the map
+    # Media: the one on the map is marked, and another can be put there.
+    window.refresh_images()
+    items = [
+        window.images_panel.map_list.item(i) for i in range(window.images_panel.map_list.count())
+    ]
+    texts = {item.data(Qt.UserRole): item.text() for item in items}
+    assert texts[older.id].endswith("✓ on the map") and "on the map" not in texts["newer"]
+    assert all(item.data(Qt.UserRole + 1) == "isometric" for item in items)
+    window._map_picture_action("use", "newer")
+    assert session.map_art_copy().chosen_views["town"][state] == "newer"
+    assert view.iso_button.isChecked() and view._isos["town"].pixmap.width() == 60
+    items = [
+        window.images_panel.map_list.item(i) for i in range(window.images_panel.map_list.count())
+    ]
+    texts = {item.data(Qt.UserRole): item.text() for item in items}
+    assert texts["newer"].endswith("✓ on the map") and "on the map" not in texts[older.id]
+    window.close()
+
+
+def test_the_chooser_lists_an_area_s_views_and_answers_with_the_one_picked(app):
+    import re
+
+    from sealedlore.gui.isometric_view import ChooseViewDialog, ViewChoice, made_when
+
+    assert re.fullmatch(r"1[45] Oct 2026, \d\d:\d\d", made_when("2026-10-15T01:02:00+00:00"))
+    assert made_when("whenever") == "whenever"
+    choices = [
+        ViewChoice("b", None, painted_by="", made_at="", current=False, shown=False),
+        ViewChoice("a", None, painted_by="qwen-image", made_at="", current=True, shown=True),
+    ]
+    assert choices[0].label() == "A picture of your own\nout of date"
+    assert choices[1].label() == "Painted by qwen-image\nof the map as it is now\n✓ On the map now"
+    dialog = ChooseViewDialog("Hellsville", choices)
+    assert dialog.list.count() == 2 and dialog.list.currentRow() == 1  # the one shown, first
+    assert dialog.windowTitle() == "Hellsville: choose the view to show"
+    dialog.list.setCurrentRow(0)
+    dialog.accept()
+    assert dialog.chosen == "b" and dialog.result() == QDialog.Accepted
+    dialog = ChooseViewDialog("Hellsville", choices)
+    dialog.reject()
+    assert dialog.chosen is None
 
 
 def test_the_stories_dock_stays_with_no_story_open(window):

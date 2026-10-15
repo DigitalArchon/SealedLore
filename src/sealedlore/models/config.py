@@ -123,21 +123,27 @@ RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
         ),
     ),
     "map_isometric_model": (
-        # With the clearer prompt it showed the change 6/6 and kept the layout.
+        # Given the program's isometric render of the plan (gui/map_iso.py),
+        # blind-judged on layout 1-5 (SealedLoreDocs design/map.md, Oct 15 2026).
         RecommendedModel(
-            id="qwen-image",
+            id="flux-2-klein-9b",
             tag="default",
-            label="Qwen Image",
-            note="Keeps the map's layout and shows what has changed, at about $0.02 a view "
-            "(free within a NanoGPT subscription's daily allowance). Now and then it "
-            "writes a name on a place.",
+            label="FLUX.2 klein 9B",
+            note="Keeps the layout (3.1 of 5 from the render) and paints it handsomely, at "
+            "about $0.016 a view; fences the whole area now and then and letters its signs.",
         ),
         RecommendedModel(
-            id="nano-banana-pro-edit",
-            label="Nano Banana Pro",
+            id="qwen-image",
+            label="Qwen Image",
+            note="Free within a NanoGPT subscription's daily allowance ($0.02 after): keeps the "
+            "layout as well (3.1 to 3.5) but paints it plainly.",
+        ),
+        RecommendedModel(
+            id="bytedance/seedream-v5.0-pro/edit",
+            label="Seedream 5.0 Pro",
             tag="premium",
-            note="The most faithful of the 13 models tried, with no writing on the picture, "
-            "at about $0.14 a view: seven times Qwen's.",
+            note="The most faithful (3.5, the building count exact) and the best looking, at "
+            "about $0.09 a view; ahead of Nano Banana Pro at two thirds of its price.",
         ),
     ),
 }
@@ -682,12 +688,12 @@ class Config(BaseModel):
     map_picture_model: str = "qwen-image"
     map_picture_daily_limit: int = 40
     # The isometric view of the local map (Map → Isometric), painted from the
-    # program's own render of the plan when the author asks, never on its
-    # own. Qwen Image with the clearer prompt kept the layout and showed the
-    # change 6/6, at $0.02 a view; Nano Banana Pro edit, the most faithful
-    # of 13, is the premium choice at $0.14 (the author's call, Oct 15 2026;
+    # program's own isometric render of the plan when the author asks, never
+    # on its own. FLUX.2 klein 9B keeps the render's layout and looks best of
+    # the cheap models at $0.016 a view; Qwen Image is the free alternative,
+    # Seedream 5.0 Pro the premium one (the author's call, Oct 15 2026;
     # RECOMMENDED_IMAGE_MODELS, SealedLoreDocs design/map.md).
-    map_isometric_model: str = "qwen-image"
+    map_isometric_model: str = "flux-2-klein-9b"
 
     # Pictures (engine/image_prompt.py, providers/images.py). The image model
     # takes reference pictures: Seedream 5.0 Pro was the author's pick for

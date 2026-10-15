@@ -255,6 +255,7 @@ def test_the_isometric_view_is_painted_only_when_asked_from_the_plan(session, tm
     from sealedlore.engine.world_pictures import isometric_state
 
     session.config.map_pictures = False  # the press is the approval
+    session.config.map_isometric_model = "qwen-image"
     session.config.image_models = [
         {
             "id": "qwen-image",
@@ -267,7 +268,7 @@ def test_the_isometric_view_is_painted_only_when_asked_from_the_plan(session, tm
     model, _price, problem = session.isometric_offer()
     assert model == "qwen-image" and problem is None
     assert session.map_picture_jobs() == []  # nothing painted on its own
-    assert session.start_isometric("farm", lambda: png(16, 12))
+    assert session.start_isometric("farm", lambda size: png(16, 12))
     session._isometric_thread.join(10)
     art = session.map_art_copy()
     view = art.picture_for("isometric", "farm")
@@ -275,7 +276,7 @@ def test_the_isometric_view_is_painted_only_when_asked_from_the_plan(session, tm
     payload = FakeImages.sent[-1]
     assert payload["model"] == "qwen-image"
     assert payload["size"] == "1024x576"  # the plan's shape, near enough
-    assert "Redraw this game map as an isometric view" in payload["prompt"]
+    assert "Repaint it as 16-bit pixel art" in payload["prompt"]
     assert "data:image/png;base64" in json.dumps(payload)  # the plan's picture went with it
     log_file = tmp_path / "stories" / session.story.id / "api_log.jsonl"
     requests = [
@@ -287,71 +288,135 @@ def test_the_isometric_view_is_painted_only_when_asked_from_the_plan(session, tm
     assert session.map_pictures_left_today() == 1  # counted like any map picture
     # Without a plan to paint from, nothing is sent.
     sent = len(FakeImages.sent)
-    assert session.start_isometric("farm", lambda: None)
+    assert session.start_isometric("farm", lambda size: None)
     session._isometric_thread.join(10)
     assert len(FakeImages.sent) == sent
 
 
-def test_the_isometric_view_is_painted_from_what_a_picture_shows_not_the_map_s_words(
+def test_the_isometric_view_is_painted_from_the_program_s_render_with_one_line(session, tmp_path):
+    """Measured (design/map.md, Oct 15 2026): sent the program's isometric
+    render instead of the top-down plan, every model kept the layout, and
+    one line of words beat the prompt writer's paragraph. So: the render at
+    the size the model paints, the area's first sentence, no writer call."""
+    from sealedlore.engine.world_pictures import one_line
+
+    session.config.map_pictures = False
+    session.config.map_isometric_model = "qwen-image"
+    session.config.image_models = [
+        {
+            "id": "qwen-image",
+            "supported_parameters": {
+                "resolutions": ["1024x768", "1024x576"],
+                "max_input_images": 3,
+            },
+        }
+    ]
+    sizes: list[tuple[int, int]] = []
+
+    def render(size: tuple[int, int]) -> bytes:
+        sizes.append(size)
+        return png(size[0] // 64, size[1] // 64)
+
+    assert session.start_isometric("farm", render)
+    session._isometric_thread.join(10)
+    assert sizes == [(1024, 576)]  # the render at the size painted: one shape in and out
+    prompt = FakeImages.sent[-1]["prompt"]
+    assert prompt.startswith("This picture is a plain isometric render of a game map")
+    farm = session.world().places["farm"]
+    assert f"What is on it: {one_line(farm)}" in prompt
+    assert one_line(farm) == "The farm."  # the fixture's farm has no description
+    assert "The barn" not in prompt  # no paragraph of the places' words
+    assert session.provider.requests == []  # and no prompt writer call
+    kinds = [
+        json.loads(line)["kind"]
+        for line in (tmp_path / "stories" / session.story.id / "api_log.jsonl")
+        .read_text()
+        .splitlines()
+    ]
+    assert "isometric_prompt_request" not in kinds
+
+
+def test_one_line_is_the_first_sentence_or_the_name():
+    from sealedlore.engine.world_pictures import one_line
+
+    assert one_line(WorldPlace(name="The yard", what="Mud and  straw.\nA dog.")) == "Mud and straw."
+    assert one_line(WorldPlace(name="The yard", what="Mud and straw")) == "Mud and straw."
+    assert one_line(WorldPlace(name="The yard", what="")) == "The yard."
+
+
+def test_the_view_shown_is_the_one_chosen_for_the_map_as_it_is_now():
+    """An area may have several views (Paint it again, pictures of one's
+    own), and the author chooses which lies over the map (the author, Oct
+    15 2026). The choice is for the map's state there: back on a branch
+    where the barn stands, the view chosen for that stands, not the one
+    chosen for it burning; a choice naming a picture that is gone falls
+    back to the latest that matches."""
+    from sealedlore.engine.world_pictures import chosen_view, isometric_state, shown_view, views_of
+
+    world = farm()
+    standing = isometric_state(world, "farm")
+    first = MapPicture(subject="isometric", subject_id="farm", name="F", state=standing, file="a")
+    second = MapPicture(subject="isometric", subject_id="farm", name="F", state=standing, file="b")
+    art = WorldArt(pictures=[first, second])
+    assert views_of(art, "farm") == [first, second]
+    assert shown_view(world, art, "farm") is second  # the latest, nothing chosen
+    art.chosen_views = {"farm": {standing: first.id}}
+    assert chosen_view(world, art, "farm") is first and shown_view(world, art, "farm") is first
+    # The barn burns: nothing chosen for that state, so the latest that matches.
+    burning = world.model_copy(deep=True)
+    burning.places["barn"] = burning.places["barn"].model_copy(update={"state": "burning"})
+    fire = MapPicture(
+        subject="isometric",
+        subject_id="farm",
+        name="F",
+        state=isometric_state(burning, "farm"),
+        file="c",
+    )
+    art.pictures.append(fire)
+    assert chosen_view(burning, art, "farm") is None and shown_view(burning, art, "farm") is fire
+    assert shown_view(world, art, "farm") is first  # the branch where it stands keeps its choice
+    # A choice of a picture that is gone: as if none.
+    art.chosen_views = {"farm": {standing: "gone"}}
+    assert shown_view(world, art, "farm") is second
+
+
+def test_painting_a_view_or_bringing_one_in_chooses_it_and_the_author_may_choose_another(
     session, tmp_path
 ):
-    """The places' own text carries names and story, and Qwen Image lettered
-    them onto the view (writing in 11 of 12, none once the prompt writer had
-    turned them into what can be seen). The writer gets the map's words; the
-    painter gets the writer's scene. If the writer fails, the map's words go."""
-    session.provider.responses = ["  A snowbound yard   with a red barn.  "]
-    assert session.start_isometric("farm", lambda: png(16, 12))
-    session._isometric_thread.join(10)
-    written = session.provider.payloads[-1]
-    system, notes = (m["content"] for m in written["messages"])
-    assert "describe only what can be seen" in json.dumps(system)
-    assert "The farm" in json.dumps(notes) and "The barn" in json.dumps(notes)
-    prompt = FakeImages.sent[-1]["prompt"]
-    assert "What is on it: A snowbound yard with a red barn." in prompt
-    assert "The barn" not in prompt  # the names stayed with the writer
-    kinds = [
-        json.loads(line)["kind"]
-        for line in (tmp_path / "stories" / session.story.id / "api_log.jsonl")
-        .read_text()
-        .splitlines()
-    ]
-    assert kinds.count("isometric_prompt_request") == 1
-    assert kinds.count("isometric_prompt_response") == 1
+    """The view just painted is the one over the map; so is a picture of
+    one's own; Choose a view… (or Media) puts another there, for the map as
+    it is now. Never a picture that isn't one of the area's views."""
+    from sealedlore.engine.world_pictures import isometric_state, shown_view
 
-    session.provider.error = ProviderError("down")
-    assert session.start_isometric("farm", lambda: png(16, 12))
+    session.config.map_pictures = False
+    session.config.map_picture_daily_limit = 5
+    state = isometric_state(session.world(), "farm")
+    assert session.start_isometric("farm", lambda size: png(16, 12))
     session._isometric_thread.join(10)
-    assert "What is on it: The farm" in FakeImages.sent[-1]["prompt"]
+    art = session.map_art_copy()
+    painted = art.picture_for("isometric", "farm")
+    assert painted is not None and art.chosen_views == {"farm": {state: painted.id}}
+    assert session.use_own_isometric("farm", png(20, 12), ".png")
+    art = session.map_art_copy()
+    own = art.picture_for("isometric", "farm")
+    assert own is not None and own.id != painted.id and own.model == ""
+    assert art.chosen_views["farm"][state] == own.id
+    assert shown_view(session.world(), art, "farm") is own
+    # Back to the painted one.
+    assert session.choose_isometric("farm", painted.id)
+    art = session.map_art_copy()
+    assert art.chosen_views["farm"][state] == painted.id
+    assert shown_view(session.world(), art, "farm").id == painted.id
+    # Not a picture of another area, not a picture that isn't a view, not a
+    # place that isn't on the map; the choice stands.
+    assert not session.choose_isometric("town", painted.id)
+    assert not session.choose_isometric("farm", "nothing")
+    assert not session.choose_isometric("nowhere", painted.id)
+    assert session.map_art_copy().chosen_views["farm"][state] == painted.id
+    # Kept with the art on disk.
+    from sealedlore.storage.world_art import load_world_art
 
-
-def test_a_scene_that_quotes_words_is_asked_for_again_and_never_lettered(session, tmp_path):
-    """The writer once wrote 'a bulkhead plaque lettered "PALE MARTYR"' and
-    the painter lettered it on: quotation marks get the scene asked for once
-    more, and what is still quoted the second time is left out."""
-    session.provider.responses = [
-        'A wreck with a plaque lettered "PALE MARTYR" on its hull.',
-        "A wreck half buried in ash.",
-    ]
-    assert session.start_isometric("farm", lambda: png(16, 12))
-    session._isometric_thread.join(10)
-    prompt = FakeImages.sent[-1]["prompt"]
-    assert "What is on it: A wreck half buried in ash." in prompt
-    session.provider.responses = [
-        'A plaque lettered "PALE MARTYR".',
-        "A plaque lettered “PALE MARTYR” on a hull.",
-    ]
-    assert session.start_isometric("farm", lambda: png(16, 12))
-    session._isometric_thread.join(10)
-    prompt = FakeImages.sent[-1]["prompt"]
-    assert "What is on it: A plaque lettered on a hull." in prompt
-    assert "MARTYR" not in prompt
-    kinds = [
-        json.loads(line)["kind"]
-        for line in (tmp_path / "stories" / session.story.id / "api_log.jsonl")
-        .read_text()
-        .splitlines()
-    ]
-    assert kinds.count("isometric_prompt_request") == 4  # each asked twice, each logged
+    assert load_world_art(session.story.id, tmp_path).chosen_views["farm"][state] == painted.id
 
 
 def test_the_isometric_view_names_a_change_first_and_goes_out_of_date_with_it():
@@ -481,11 +546,11 @@ def test_leaving_the_story_stops_its_isometric_view_and_writes_nothing(
     monkeypatch.setattr(session_world_art, "ImageClient", Slow)
     called: list[bool] = []
     session.on_map_art = lambda: called.append(True)
-    assert session.start_isometric("farm", lambda: png(16, 12))
+    assert session.start_isometric("farm", lambda size: png(16, 12))
     folder = tmp_path / "stories" / session.story.id
     session.close(wait_seconds=0)
     shutil.rmtree(folder)
     session._isometric_thread.join(10)
     assert not session._isometric_thread.is_alive()
     assert not folder.exists() and called == []
-    assert not session.start_isometric("farm", lambda: png(16, 12))  # left for good
+    assert not session.start_isometric("farm", lambda size: png(16, 12))  # left for good

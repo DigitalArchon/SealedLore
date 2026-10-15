@@ -132,15 +132,15 @@ def test_recommended_models_are_offered_beside_the_field_with_their_notes(app):
     from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS, recommended_model
 
     choices = RECOMMENDED_IMAGE_MODELS["map_isometric_model"]
-    assert choices[0].id == Config().map_isometric_model == "qwen-image"
-    assert recommended_model("map_isometric_model", "nano-banana-pro-edit") is not None
+    assert choices[0].id == Config().map_isometric_model == "flux-2-klein-9b"
+    assert recommended_model("map_isometric_model", "bytedance/seedream-v5.0-pro/edit") is not None
     field = ModelField("", recommended=choices)
     actions = [a for a in field.recommended_button.menu().actions() if not a.isSeparator()]
-    assert actions[0].text() == "Qwen Image (default)"
-    assert not actions[1].isEnabled() and "changed" in actions[1].text()  # the note
-    premium = next(a for a in actions if a.text().startswith("Nano Banana Pro"))
+    assert actions[0].text() == "FLUX.2 klein 9B (default)"
+    assert not actions[1].isEnabled() and "layout" in actions[1].text()  # the note
+    premium = next(a for a in actions if a.text().startswith("Seedream 5.0 Pro"))
     premium.trigger()
-    assert field.text() == "nano-banana-pro-edit"
+    assert field.text() == "bytedance/seedream-v5.0-pro/edit"
     assert ModelField("").recommended_button is None
 
 
