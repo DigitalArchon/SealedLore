@@ -36,8 +36,8 @@ from sealedlore.gui.crop_dialog import (  # noqa: E402
     fit_rect,
     from_corner,
     from_edge,
-    whole_pixels,
     moved,
+    whole_pixels,
 )
 from sealedlore.gui.ref_images import clean_incoming, image_of  # noqa: E402
 from sealedlore.models.config import Config  # noqa: E402
