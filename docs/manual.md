@@ -660,7 +660,10 @@ SealedLore (every plot file in `SampleStories/` but the format guide) are
 listed under **New story from a sample** in the File menu, in the AppImage as
 well: File → New story from a sample → Doomsville is the same as importing
 `Doomsville.md`, and **Doomsville with a map** is the same story with a map
-drawn up beforehand (a `# Map` section: see "The map"). Rather than
+drawn up beforehand (a `# Map` section: see "The map"). The Ashen Reach,
+The Silverwood, Brasshaven and The Ninth Furnace show other kinds of world
+(grimdark science fiction, traditional fantasy, steampunk and a hellscape),
+each with a plot, a map drawn up and a picture of every card. Rather than
 write the format by hand, **File → Plot file editor…** writes it for you: the
 world, opening, characters, places, lore, facts and events each get a form,
 conditions and what an event brings or sets are picked from what the file

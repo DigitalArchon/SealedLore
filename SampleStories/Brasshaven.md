@@ -1,0 +1,359 @@
+---
+title: Brasshaven
+description: In a smog-choked city of airships and clockwork, an inventor or a sky captain is drawn into a plot to seize the great Engine that keeps the city aloft.
+start: day 1, 19:00
+agency: contested
+world activity: eventful
+---
+
+# World
+
+Brasshaven is the greatest city of the Commonwealth of Albrion, in the
+twenty-third year of the Gilded Age. It was built over a sea of cloud: the
+whole city stands on vast iron piers sunk into a mountain ridge, and its upper
+districts float on clusters of gasbags tethered to the Great Engine, a
+cathedral-sized steam engine in the city's heart that has been running without
+pause for ninety years. If it ever stopped, the floating districts would drift
+loose and the piers would lose their heat and their lifts.
+
+The city runs on coal, steam and clockwork. Airships crowd its skies and
+moor at towers on every rooftop; trams climb the piers on cogged rails; pipes
+everywhere hiss and drip; brass automatons sweep the streets, carry messages
+and serve in the houses of the rich. Gas lamps burn all day, because the smog
+from ten thousand chimneys hides the sun.
+
+Brasshaven is ruled by the Parliament of Gears, a council of industrial houses
+whose wealth comes from the Engine and its works. The richest is House
+Ashcombe. The poor live below, in the Undercroft among the piers, in the steam
+and the dark. The Constabulary keeps order with truncheons, steam carriages
+and ornithopters. Inventors, guild artificers and back-alley tinkers make
+marvels and get rich, die in explosions, or both.
+
+Lately automatons across the city have been seen acting strangely: stopping in
+the street to stare up at the Engine tower, ticking in unison.
+
+# Opening
+- location: The Gilded Gear, a workshop on Tinker's Row
+- time: Evening, in the rain
+- situation: A wounded automaton has stumbled into the workshop with a message stamped on a brass card, and the Constabulary's whistles are close behind it.
+
+The player's character is in the Gilded Gear, a cluttered inventor's workshop
+on Tinker's Row, on a rainy evening, when a damaged brass automaton staggers in
+through the door, leaking oil, presses a punched brass card into their hand and
+says, in a voice like a music box winding down, "They mean to stop the Engine."
+
+# Characters
+
+## Professor Adelaide Quill
+- role: player
+- choose: start
+- aliases: Adelaide, the Professor, Quill
+- voice: Rapid, brilliant, distracted; scientific asides at bad moments.
+- picture: pictures/brasshaven-adelaide.jpg | portrait
+
+A 31-year-old inventor and disgraced former lecturer of the Royal Artificers'
+College, now owner of the Gilded Gear. Slight and energetic, with a mass of
+dark curls pinned up anyhow, brass-rimmed goggles on her forehead, a leather
+apron over a high-collared blouse, and a mechanical left hand of her own
+design. She was expelled for proving the Engine was running hotter every year.
+
+## Captain Silas Thorne
+- role: player
+- choose: start
+- aliases: Silas, the Captain, Thorne
+- voice: Easy charm, sardonic, an old soldier's bluntness underneath.
+- picture: pictures/brasshaven-silas.jpg | portrait
+
+A 40-year-old airship captain and smuggler, master of the small, fast airship
+the Wayward Lark. Tall, lean and sunburned, with a greying moustache, a long
+brown flying coat, a scarf, a battered captain's cap and a brace of pistols.
+He flew for the Commonwealth's sky navy until he refused an order and has
+flown for himself since.
+
+## Inspector Hollis Grieve
+- role: storyteller
+- aliases: Grieve, the Inspector
+- voice: Dry, patient, relentless; never raises his voice.
+- picture: pictures/brasshaven-hollis.jpg | portrait
+
+A 55-year-old inspector of the Brasshaven Constabulary, thin and grey, in a
+dark overcoat and bowler hat, with a pocket of clockwork gadgets and a
+truncheon he rarely needs. Honest in a corrupt force, and the most persistent
+man in the city.
+
+## Lady Imogen Ashcombe
+- role: storyteller
+- aliases: Lady Ashcombe, Imogen
+- voice: Silken, gracious, cold as the upper air.
+- picture: pictures/brasshaven-imogen.jpg | portrait
+
+A 46-year-old head of House Ashcombe and the most powerful voice in the
+Parliament of Gears. Elegant and composed, with steel-grey hair in an elaborate
+coil, a high-necked black and silver gown, a lorgnette and a cane topped with a
+brass gear. She has plans for the city's future, and no patience for anyone
+who stands in their way.
+
+## Tock
+- role: storyteller
+- aliases: the automaton
+- voice: Precise, polite, music-box chimes between words; learning to have feelings.
+- picture: pictures/brasshaven-tock.jpg | portrait
+
+A brass servant automaton of the old Ashcombe pattern, seven feet tall, with a
+round glass face lit by a blue glow, a dented barrel chest and long careful
+hands. It has begun to think for itself, and it knows something it was never
+meant to.
+
+## Mags Carroway
+- role: storyteller
+- hidden: yes
+- aliases: Mags, the Queen of the Undercroft
+- voice: Loud, funny, shrewd; Undercroft slang.
+- picture: pictures/brasshaven-mags.jpg | portrait
+
+A 35-year-old smuggler queen of the Undercroft, stocky and tattooed, with
+cropped red hair, a patched brass-buttoned greatcoat and a steam-powered
+prosthetic leg. She runs the docks under the piers and knows every secret
+passage between them.
+
+# Places
+
+## Tinker's Row
+- keywords: the Row, Gilded Gear, the workshop
+- picture: pictures/brasshaven-tinkers-row.jpg | Tinker's Row in the rain
+
+A narrow, crooked street of workshops on the middle piers, crammed with brass
+signs, steaming pipes and cluttered shop windows full of clockwork, gas lamps
+glowing through the smog.
+
+## The Engine Cathedral
+- keywords: the Great Engine, the Engine, the Engine tower
+- picture: pictures/brasshaven-engine-cathedral.jpg | the Great Engine
+
+The vast iron and glass hall at the city's heart that houses the Great Engine:
+pistons as tall as houses, flywheels, furnaces glowing red and a chimney tower
+rising above every other building in the city.
+
+## The Skyport
+- keywords: the moorings, the mooring towers, the docks above
+- picture: pictures/brasshaven-skyport.jpg | the mooring towers
+
+A forest of iron mooring towers on the city's highest pier, crowded with
+airships of every size, from fat cargo barges to sleek racing yachts.
+
+## The Undercroft
+- keywords: the undercity, under the piers
+- hidden: yes
+- picture: pictures/brasshaven-undercroft.jpg | the Undercroft
+
+The dark world beneath Brasshaven's piers: shanty streets on catwalks and
+scaffolding, hissing steam vents, smugglers' docks and pipes dripping into the
+clouds below.
+
+# Lore
+
+## The Wayward Lark
+- keywords: the Lark, Silas's airship, the ship
+- picture: pictures/brasshaven-wayward-lark.jpg | the Wayward Lark
+
+A small, fast airship of patched brown canvas and polished brass, with twin
+propellers, a gondola with round windows and a figurehead of a lark. Faster
+than any Constabulary cutter, and full of hidden compartments.
+
+## The Ashcombe Difference Engine
+- keywords: difference engine, the calculating engine, punched cards
+- hidden: yes
+- picture: pictures/brasshaven-difference-engine.jpg | the calculating engine
+
+An enormous calculating machine of brass columns and punched cards, hidden in
+the cellars of the Ashcombe Works, that sends orders to every Ashcombe-pattern
+automaton in the city at once.
+
+## Punched brass cards
+- keywords: brass card, the card, punch card
+- picture: pictures/brasshaven-brass-card.jpg | a punched brass card
+
+Thin brass cards punched with rows of holes, used to instruct automatons and
+calculating engines. Read by the right machine, a card can give an order, or
+carry a message.
+
+# Map
+- start: The Gilded Gear
+
+## Tinker's Row
+- kind: settlement
+- at: 0, 0
+- size: 0.6
+- known: yes
+- way: The Pier Tramway | north
+
+A crooked district of workshops on the middle piers: narrow cobbled lanes,
+brass signs, steaming pipes, chimneys and gas lamps.
+
+## The Gilded Gear
+- kind: building
+- in: Tinker's Row
+- at: 0, 0
+- thing: Workbench | cluttered with gears, tools and half-built clockwork
+
+Adelaide Quill's workshop: a narrow two-storey brick building with a big
+round brass gear over its door, its windows full of clockwork.
+
+## The Copper Kettle
+- kind: building
+- in: Tinker's Row
+- at: -0.12, 0.08
+
+A tiny tearoom and tavern where artificers argue over plans, its windows
+fogged with steam.
+
+## The tram stop
+- kind: site
+- in: Tinker's Row
+- at: 0.1, 0.18
+- size: 0.03
+
+An iron shelter where the cog tram stops before climbing the pier.
+
+## The Pier Tramway
+- kind: route
+- at: 0.5, 1.2
+- known: yes
+- way: Tinker's Row | south
+- way: The Engine Cathedral | north, up the pier
+
+A cogged rail line climbing the iron piers between districts.
+
+## The Engine Cathedral
+- kind: site
+- at: 0.8, 2.4
+- size: 0.5
+- known: yes
+- way: The Ashcombe Works | east, along Furnace Street
+- way: The Skyport | north, by the great lift
+
+The vast iron and glass hall of the Great Engine, its chimney tower
+rising above the whole city.
+
+## The Engine hall
+- kind: building
+- in: The Engine Cathedral
+- at: 0, 0
+- thing: The Great Engine | pistons as tall as houses, running without pause
+
+## The Ashcombe Works
+- kind: site
+- at: 2, 2.2
+- size: 0.7
+- known: yes
+
+House Ashcombe's factories: smokestacks, foundries and warehouses behind
+iron railings, with automatons marching in and out of their gates.
+
+## Ashcombe Hall
+- kind: building
+- in: The Ashcombe Works
+- at: 0.2, 0.2
+
+Lady Ashcombe's mansion, a grand house of white stone and brass beside her
+factories, with its own mooring tower.
+
+## The Skyport
+- kind: site
+- at: 0.6, 3.6
+- size: 0.6
+- known: yes
+
+A forest of iron mooring towers on the city's highest pier, with airships
+of every size tied to them.
+
+## The Wayward Lark's mooring
+- kind: site
+- in: The Skyport
+- at: -0.15, -0.1
+- size: 0.05
+- thing: The Wayward Lark | Captain Thorne's airship, ready to fly
+
+## The Undercroft
+- kind: area
+- at: 0.2, -1.4
+- size: 1.5
+
+A shanty town of catwalks and scaffolding in the dark beneath the piers,
+full of steam vents and dripping pipes.
+
+# Facts
+
+- engine: running (running, sabotaged, stopped, saved) — the state of the Great Engine; changed only by events
+- automatons: restless (restless, rising, freed, under Ashcombe's control) — what has become of the city's automatons
+- wanted: no [watch] — yes once the Constabulary is hunting the player's character by name; no if the hunt is called off
+- plot_exposed: no — yes once the player's character holds proof that Lady Ashcombe means to stop the Engine
+
+# Timeline
+
+## The Engine falters
+- when: day 3–5
+- lead-in: yes
+- must happen: yes
+- requires: engine = running
+- aftermath: For an hour the Great Engine faltered and the floating districts sagged on their tethers. Everyone in Brasshaven felt it, and nobody official will say why.
+
+The Great Engine misses a beat for the first time in ninety years.
+
+### Anywhere in the city
+- tell: Every pipe in the city shudders at once. The gas lamps dim; the floating districts overhead groan on their tethers and drop a sickening few feet; the Engine's endless thunder stutters, stops for three heartbeats, then starts again. All across the city, automatons stand still and look up at the Engine tower.
+- sets: engine = sabotaged
+
+## The night of the automatons
+- when: day 8–10
+- lead-in: yes
+- must happen: yes
+- requires: automatons = restless
+- aftermath: On one night every Ashcombe-pattern automaton in the city walked out of the houses and factories and marched on the Engine Cathedral. The city is under curfew.
+
+Lady Ashcombe's calculating engine sends its order.
+
+### The plot has been exposed
+- requires: plot_exposed = yes
+- tell: At midnight the automatons all stop and turn toward the Engine Cathedral, but this time the city has been warned. Constables and frightened citizens hold the bridges; the automatons march on, and the player's character has one chance to reach the calculating engine before they reach the Engine.
+- sets: automatons = rising
+
+### No one is warned
+- requires: plot_exposed = no
+- tell: At midnight every Ashcombe-pattern automaton in the city stops what it is doing, turns toward the Engine Cathedral and begins to march, ticking in unison. Nobody stands in their way.
+- sets: automatons = rising
+
+# Events
+
+## Grieve comes calling
+- at: Tinker's Row
+- pacing: any time
+- trigger: The player's character is in or near the Gilded Gear with the automaton or its brass card.
+- tell: Inspector Hollis Grieve knocks at the door with two constables, looking for a runaway Ashcombe automaton. He is polite, observant and in no hurry. He can be lied to, bargained with, or trusted, but he notices everything.
+
+## Tock speaks
+- pacing: quiet moment
+- trigger: The player's character repairs the damaged automaton, or reads its brass card on a machine that can.
+- tell: Repaired, the automaton names itself Tock. Haltingly it explains that it was one of Lady Ashcombe's servants, that it overheard her plan to stop the Great Engine and seize the city when the floating districts fall, and that every automaton of her pattern is listening for one order. It fled before its own order came.
+
+## Into the Undercroft
+- pacing: any time
+- requires: wanted = yes
+- reveals: The Undercroft
+- brings: Mags Carroway
+- trigger: The player's character needs to hide, to move unseen through the city, or to find someone who knows the ways beneath the piers.
+- tell: A trapdoor, a steam vent or a friend of a friend leads down into the Undercroft, where Mags Carroway, smuggler queen of the piers, offers shelter at a price and knows a secret way into the Ashcombe Works.
+
+## The calculating engine
+- pacing: any time
+- requires: Tock speaks happened
+- reveals: The Ashcombe Difference Engine
+- trigger: The player's character breaks into the Ashcombe Works, or follows the strange signals the automatons are ticking.
+- tell: Deep in the cellars below the Ashcombe Works they find a vast calculating engine of brass columns and punched cards, its teletype chattering orders to the city's automatons. Lady Ashcombe's own ledger lies open beside it: proof of her plan.
+- sets: plot_exposed = yes
+
+## An invitation from Lady Ashcombe
+- pacing: quiet moment
+- requires: plot_exposed = no
+- trigger: The player's character has drawn attention by asking questions about the Engine or House Ashcombe.
+- tell: A liveried automaton delivers a gilt-edged card: Lady Imogen Ashcombe requests the pleasure of their company for dinner at Ashcombe Hall, tonight. Her carriage is waiting. It is not an invitation one safely refuses, nor safely accepts.

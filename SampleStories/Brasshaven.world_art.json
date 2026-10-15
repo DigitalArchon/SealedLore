@@ -1,0 +1,2722 @@
+{
+ "sprites": [
+  {
+   "id": "1e3f747f-bf54-4aab-8cf7-7983db7e8320",
+   "subject": "place",
+   "subject_id": "0b14db0f-84e0-595d-9d72-2ea912b6f8e6",
+   "name": "Tinker's Row",
+   "state": "",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><rect x=\"4\" y=\"52\" width=\"56\" height=\"8\" fill=\"#5a3826\" /><rect x=\"4\" y=\"52\" width=\"56\" height=\"2\" fill=\"#94603e\" /><rect x=\"8\" y=\"56\" width=\"4\" height=\"4\" fill=\"#5a3826\" /><rect x=\"20\" y=\"56\" width=\"4\" height=\"4\" fill=\"#5a3826\" /><rect x=\"32\" y=\"56\" width=\"4\" height=\"4\" fill=\"#5a3826\" /><rect x=\"44\" y=\"56\" width=\"4\" height=\"4\" fill=\"#5a3826\" /><rect x=\"10\" y=\"46\" width=\"44\" height=\"6\" fill=\"#4a5468\" /><rect x=\"14\" y=\"48\" width=\"3\" height=\"2\" fill=\"#8f9bb0\" /><rect x=\"22\" y=\"47\" width=\"3\" height=\"2\" fill=\"#8f9bb0\" /><rect x=\"31\" y=\"48\" width=\"3\" height=\"2\" fill=\"#8f9bb0\" /><rect x=\"40\" y=\"47\" width=\"3\" height=\"2\" fill=\"#8f9bb0\" /><rect x=\"48\" y=\"48\" width=\"3\" height=\"2\" fill=\"#8f9bb0\" /><g transform=\"rotate(-3 16 38)\"><rect x=\"8\" y=\"34\" width=\"16\" height=\"14\" fill=\"#7d4a8f\" /><rect x=\"8\" y=\"34\" width=\"16\" height=\"2\" fill=\"#b3384a\" /><rect x=\"11\" y=\"38\" width=\"4\" height=\"4\" fill=\"#f6cf6e\" /><rect x=\"17\" y=\"38\" width=\"4\" height=\"6\" fill=\"#5a3826\" /><rect x=\"10\" y=\"28\" width=\"4\" height=\"6\" fill=\"#4a5468\" /></g><rect x=\"26\" y=\"30\" width=\"14\" height=\"18\" fill=\"#2a6b5c\" /><rect x=\"26\" y=\"30\" width=\"14\" height=\"2\" fill=\"#b3384a\" /><rect x=\"29\" y=\"34\" width=\"3\" height=\"4\" fill=\"#f6cf6e\" /><rect x=\"34\" y=\"34\" width=\"3\" height=\"4\" fill=\"#f6cf6e\" /><rect x=\"30\" y=\"42\" width=\"5\" height=\"6\" fill=\"#5a3826\" /><g transform=\"rotate(2 50 40)\"><rect x=\"42\" y=\"32\" width=\"16\" height=\"16\" fill=\"#3557b8\" /><rect x=\"42\" y=\"32\" width=\"16\" height=\"2\" fill=\"#b3384a\" /><rect x=\"45\" y=\"36\" width=\"4\" height=\"4\" fill=\"#f6cf6e\" /><rect x=\"51\" y=\"36\" width=\"4\" height=\"4\" fill=\"#6fd3e8\" /></g><rect x=\"24\" y=\"38\" width=\"2\" height=\"6\" fill=\"#4a5468\" /><circle cx=\"25\" cy=\"37\" r=\"2\" fill=\"#f6cf6e\" /><rect x=\"41\" y=\"44\" width=\"2\" height=\"4\" fill=\"#4a5468\" /><circle cx=\"42\" cy=\"43\" r=\"2\" fill=\"#f6cf6e\" /><rect x=\"24\" y=\"24\" width=\"3\" height=\"14\" fill=\"#4a5468\" /><rect x=\"22\" y=\"24\" width=\"7\" height=\"2\" fill=\"#8f9bb0\" /><circle cx=\"25.5\" cy=\"21\" r=\"2\" fill=\"#8f9bb0\" /><circle cx=\"26\" cy=\"17\" r=\"2.5\" fill=\"#8f9bb0\" /><rect x=\"46\" y=\"20\" width=\"4\" height=\"10\" fill=\"#5a3826\" /><rect x=\"45\" y=\"19\" width=\"6\" height=\"2\" fill=\"#1b1d2b\" /><circle cx=\"47\" cy=\"15\" r=\"2.5\" fill=\"#4a5468\" /><circle cx=\"48\" cy=\"11\" r=\"3\" fill=\"#4a5468\" /><rect x=\"18\" y=\"24\" width=\"3\" height=\"8\" fill=\"#94603e\" /><circle cx=\"19.5\" cy=\"21\" r=\"2\" fill=\"#8f9bb0\" /><rect x=\"12\" y=\"42\" width=\"1.5\" height=\"8\" fill=\"#1b1d2b\" /><rect x=\"10.5\" y=\"38\" width=\"4.5\" height=\"4\" fill=\"#f2f2ee\" /><rect x=\"10\" y=\"37\" width=\"5.5\" height=\"1.5\" fill=\"#1b1d2b\" /><rect x=\"56\" y=\"40\" width=\"1.5\" height=\"10\" fill=\"#1b1d2b\" /><rect x=\"54.5\" y=\"36\" width=\"4.5\" height=\"4\" fill=\"#f2f2ee\" /><rect x=\"54\" y=\"35\" width=\"5.5\" height=\"1.5\" fill=\"#1b1d2b\" /><circle cx=\"57\" cy=\"33\" r=\"1.5\" fill=\"#f6cf6e\" /></svg>",
+   "from_sprite": null,
+   "model": "z-ai/glm-5.3-flash",
+   "made_at": "2026-10-15T00:36:57.859575+00:00"
+  },
+  {
+   "id": "256b8245-5937-4276-babb-f369695abfb2",
+   "subject": "place",
+   "subject_id": "ac0ef798-71d7-5340-91a1-153b067faafd",
+   "name": "The Gilded Gear",
+   "state": "",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><rect x=\"16\" y=\"10\" width=\"32\" height=\"50\" fill=\"#94603e\" /><polygon points=\"13,12 51,12 44,4 20,4\" fill=\"#1b1d2b\" /><rect x=\"14\" y=\"10\" width=\"36\" height=\"4\" fill=\"#4a5468\" /><line x1=\"16\" y1=\"20\" x2=\"48\" y2=\"20\" stroke=\"#5a3826\" /><line x1=\"16\" y1=\"30\" x2=\"48\" y2=\"30\" stroke=\"#5a3826\" /><line x1=\"16\" y1=\"52\" x2=\"48\" y2=\"52\" stroke=\"#5a3826\" /><line x1=\"24\" y1=\"15\" x2=\"24\" y2=\"20\" stroke=\"#5a3826\" /><line x1=\"36\" y1=\"20\" x2=\"36\" y2=\"30\" stroke=\"#5a3826\" /><line x1=\"28\" y1=\"30\" x2=\"28\" y2=\"40\" stroke=\"#5a3826\" /><line x1=\"42\" y1=\"30\" x2=\"42\" y2=\"40\" stroke=\"#5a3826\" /><g><rect x=\"21\" y=\"22\" width=\"8\" height=\"10\" fill=\"#1b1d2b\" /><circle cx=\"25\" cy=\"27\" r=\"2.5\" fill=\"#f6cf6e\" /><line x1=\"25\" y1=\"27\" x2=\"25\" y2=\"25\" stroke=\"#f2f2ee\" /><line x1=\"25\" y1=\"27\" x2=\"26.5\" y2=\"28.5\" stroke=\"#f2f2ee\" /><rect x=\"36\" y=\"22\" width=\"8\" height=\"10\" fill=\"#1b1d2b\" /><circle cx=\"40\" cy=\"27\" r=\"2.5\" fill=\"#f6cf6e\" /><line x1=\"40\" y1=\"27\" x2=\"40\" y2=\"25\" stroke=\"#f2f2ee\" /><line x1=\"40\" y1=\"27\" x2=\"38.5\" y2=\"28.5\" stroke=\"#f2f2ee\" /></g><rect x=\"26\" y=\"44\" width=\"12\" height=\"16\" fill=\"#5a3826\" /><rect x=\"27\" y=\"45\" width=\"10\" height=\"14\" fill=\"#5a3826\" /><circle cx=\"34\" cy=\"52\" r=\"1\" fill=\"#f6cf6e\" /><g fill=\"#f6cf6e\" stroke=\"#1b1d2b\" stroke-width=\"1\"><circle cx=\"32\" cy=\"37\" r=\"7\" /><circle cx=\"32\" cy=\"37\" r=\"3\" fill=\"#e6773f\" /></g><g fill=\"#f6cf6e\"><rect x=\"30\" y=\"27\" width=\"4\" height=\"4\" /><rect x=\"30\" y=\"43\" width=\"4\" height=\"4\" /><rect x=\"22\" y=\"35\" width=\"4\" height=\"4\" /><rect x=\"38\" y=\"35\" width=\"4\" height=\"4\" /><rect x=\"25\" y=\"30\" width=\"4\" height=\"4\" /><rect x=\"35\" y=\"30\" width=\"4\" height=\"4\" /><rect x=\"25\" y=\"40\" width=\"4\" height=\"4\" /><rect x=\"35\" y=\"40\" width=\"4\" height=\"4\" /></g><g><rect x=\"17\" y=\"44\" width=\"6\" height=\"9\" fill=\"#1b1d2b\" /><circle cx=\"20\" cy=\"48.5\" r=\"2\" fill=\"#f6cf6e\" /><line x1=\"20\" y1=\"48.5\" x2=\"20\" y2=\"47\" stroke=\"#f2f2ee\" /><rect x=\"42\" y=\"44\" width=\"6\" height=\"9\" fill=\"#1b1d2b\" /><circle cx=\"45\" cy=\"48.5\" r=\"2\" fill=\"#f6cf6e\" /><line x1=\"45\" y1=\"48.5\" x2=\"46\" y2=\"49.5\" stroke=\"#f2f2ee\" /></g></svg>",
+   "from_sprite": null,
+   "model": "z-ai/glm-5.3-flash",
+   "made_at": "2026-10-15T00:37:05.657104+00:00"
+  },
+  {
+   "id": "0da6dcc4-43f9-41d1-b523-12805b4430fa",
+   "subject": "thing",
+   "subject_id": "1eed2055-00a2-5fdc-89bc-c3cc89860c23",
+   "name": "Workbench",
+   "state": "cluttered with gears, tools and half-built clockwork",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><g><rect x=\"12\" y=\"40\" width=\"5\" height=\"18\" fill=\"#5a3826\" /><rect x=\"47\" y=\"40\" width=\"5\" height=\"18\" fill=\"#5a3826\" /><rect x=\"6\" y=\"34\" width=\"52\" height=\"8\" fill=\"#94603e\" /><rect x=\"6\" y=\"32\" width=\"52\" height=\"4\" fill=\"#dcb08c\" /><circle cx=\"20\" cy=\"27\" r=\"7\" fill=\"#f6cf6e\" /><circle cx=\"20\" cy=\"27\" r=\"3\" fill=\"#e6773f\" /><circle cx=\"34\" cy=\"24\" r=\"6\" fill=\"#f6cf6e\" /><circle cx=\"34\" cy=\"24\" r=\"2.5\" fill=\"#e6773f\" /><polygon points=\"26,30 29,30 29,33 26,33\" fill=\"#f6cf6e\" /><polygon points=\"27,18 31,18 31,21 27,21\" fill=\"#f6cf6e\" /><polygon points=\"34,16 38,16 38,19 34,19\" fill=\"#f6cf6e\" /><rect x=\"40\" y=\"22\" width=\"12\" height=\"11\" fill=\"#4a5468\" /><rect x=\"42\" y=\"24\" width=\"8\" height=\"7\" fill=\"#8f9bb0\" /><circle cx=\"46\" cy=\"27.5\" r=\"2.5\" fill=\"#f6cf6e\" /><circle cx=\"46\" cy=\"27.5\" r=\"1\" fill=\"#e6773f\" /><circle cx=\"42\" cy=\"20\" r=\"4\" fill=\"#f2f2ee\" /><circle cx=\"42\" cy=\"20\" r=\"1.5\" fill=\"#4a5468\" /><rect x=\"10\" y=\"16\" width=\"3\" height=\"16\" fill=\"#94603e\" /><rect x=\"7\" y=\"13\" width=\"9\" height=\"5\" fill=\"#4a5468\" /><rect x=\"52\" y=\"14\" width=\"3\" height=\"14\" fill=\"#8f9bb0\" transform=\"rotate(15 53.5 21)\" /><circle cx=\"53\" cy=\"14\" r=\"3.5\" fill=\"#8f9bb0\" /><circle cx=\"53\" cy=\"14\" r=\"1.5\" fill=\"#1b1d2b\" /><circle cx=\"15\" cy=\"36\" r=\"1.5\" fill=\"#1b1d2b\" /><circle cx=\"31\" cy=\"36\" r=\"1.5\" fill=\"#1b1d2b\" /><circle cx=\"50\" cy=\"36\" r=\"1.5\" fill=\"#1b1d2b\" /><rect x=\"38\" y=\"35\" width=\"10\" height=\"2\" fill=\"#b3384a\" /></g></svg>",
+   "from_sprite": null,
+   "model": "z-ai/glm-5.3-flash",
+   "made_at": "2026-10-15T00:37:13.230223+00:00"
+  },
+  {
+   "id": "bab09306-38b2-4955-9669-a4d4c14697dc",
+   "subject": "thing",
+   "subject_id": "dbab77c7-6a92-543b-9a1d-175a8eaf41e3",
+   "name": "The Wayward Lark",
+   "state": "Captain Thorne's airship, ready to fly",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><ellipse cx=\"32\" cy=\"24\" rx=\"24\" ry=\"12\" fill=\"#dcb08c\" /><ellipse cx=\"32\" cy=\"24\" rx=\"24\" ry=\"12\" fill=\"none\" stroke=\"#5a3826\" stroke-width=\"2\" /><path d=\"M14 20 Q32 14 50 20\" fill=\"none\" stroke=\"#94603e\" stroke-width=\"2\" /><path d=\"M12 26 Q32 32 52 26\" fill=\"none\" stroke=\"#94603e\" stroke-width=\"2\" /><path d=\"M32 12 L32 36\" stroke=\"#94603e\" stroke-width=\"2\" /><circle cx=\"32\" cy=\"24\" r=\"6\" fill=\"#f6cf6e\" /><circle cx=\"32\" cy=\"24\" r=\"6\" fill=\"none\" stroke=\"#5a3826\" stroke-width=\"2\" /><polygon points=\"52,22 60,16 60,32\" fill=\"#e6773f\" stroke=\"#5a3826\" stroke-width=\"2\" /><polygon points=\"54,24 58,24 58,28 54,28\" fill=\"#b3384a\" stroke=\"#5a3826\" stroke-width=\"1\" /><line x1=\"20\" y1=\"33\" x2=\"24\" y2=\"44\" stroke=\"#4a5468\" stroke-width=\"1.5\" /><line x1=\"44\" y1=\"33\" x2=\"40\" y2=\"44\" stroke=\"#4a5468\" stroke-width=\"1.5\" /><line x1=\"32\" y1=\"37\" x2=\"32\" y2=\"42\" stroke=\"#4a5468\" stroke-width=\"1.5\" /><path d=\"M18 44 L46 44 L43 54 L21 54 Z\" fill=\"#94603e\" stroke=\"#5a3826\" stroke-width=\"2\" /><line x1=\"21\" y1=\"49\" x2=\"43\" y2=\"49\" stroke=\"#5a3826\" stroke-width=\"1.5\" /><rect x=\"20\" y=\"40\" width=\"24\" height=\"5\" fill=\"#a8dc6a\" stroke=\"#5a3826\" stroke-width=\"2\" /><circle cx=\"26\" cy=\"49\" r=\"2\" fill=\"#6fd3e8\" stroke=\"#5a3826\" stroke-width=\"1\" /><circle cx=\"33\" cy=\"49\" r=\"2\" fill=\"#6fd3e8\" stroke=\"#5a3826\" stroke-width=\"1\" /><circle cx=\"40\" cy=\"49\" r=\"2\" fill=\"#6fd3e8\" stroke=\"#5a3826\" stroke-width=\"1\" /><rect x=\"14\" y=\"45\" width=\"4\" height=\"8\" fill=\"#f6cf6e\" stroke=\"#5a3826\" stroke-width=\"2\" /></svg>",
+   "from_sprite": null,
+   "model": "z-ai/glm-5.3-flash",
+   "made_at": "2026-10-15T00:37:19.200946+00:00"
+  },
+  {
+   "id": "56fb7d4e-cce3-4e13-8fed-bd3a1a29badb",
+   "subject": "thing",
+   "subject_id": "4de7f381-5ea4-5d9f-8f9d-28b5345dd4a8",
+   "name": "The Great Engine",
+   "state": "pistons as tall as houses, running without pause",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><g><path d=\"M20 46 L20 22 L26 22 L26 46 Z\" fill=\"#4a5468\" /><path d=\"M38 46 L38 26 L44 26 L44 46 Z\" fill=\"#4a5468\" /><rect x=\"18\" y=\"44\" width=\"28\" height=\"8\" fill=\"#8f9bb0\" /><rect x=\"18\" y=\"44\" width=\"28\" height=\"3\" fill=\"#f2f2ee\" /><rect x=\"21\" y=\"14\" width=\"10\" height=\"10\" fill=\"#8f9bb0\" /><rect x=\"21\" y=\"14\" width=\"10\" height=\"3\" fill=\"#f2f2ee\" /><rect x=\"39\" y=\"18\" width=\"10\" height=\"10\" fill=\"#8f9bb0\" /><rect x=\"39\" y=\"18\" width=\"10\" height=\"3\" fill=\"#f2f2ee\" /><rect x=\"22\" y=\"24\" width=\"8\" height=\"22\" fill=\"#f2f2ee\" /><rect x=\"22\" y=\"30\" width=\"8\" height=\"4\" fill=\"#6fd3e8\" /><rect x=\"40\" y=\"28\" width=\"8\" height=\"18\" fill=\"#f2f2ee\" /><rect x=\"40\" y=\"36\" width=\"8\" height=\"4\" fill=\"#6fd3e8\" /><rect x=\"14\" y=\"50\" width=\"36\" height=\"6\" fill=\"#5a3826\" /><rect x=\"14\" y=\"50\" width=\"36\" height=\"2\" fill=\"#94603e\" /><rect x=\"24\" y=\"8\" width=\"4\" height=\"6\" fill=\"#8f9bb0\" /><rect x=\"42\" y=\"12\" width=\"4\" height=\"6\" fill=\"#8f9bb0\" /><circle cx=\"26\" cy=\"5\" r=\"3\" fill=\"#f2f2ee\" /><circle cx=\"30\" cy=\"9\" r=\"2.5\" fill=\"#e8e8e8\" /><circle cx=\"44\" cy=\"9\" r=\"3\" fill=\"#f2f2ee\" /><circle cx=\"48\" cy=\"13\" r=\"2\" fill=\"#e8e8e8\" /><circle cx=\"33\" cy=\"3\" r=\"2\" fill=\"#f2f2ee\" /></g></svg>",
+   "from_sprite": null,
+   "model": "z-ai/glm-5.3-flash",
+   "made_at": "2026-10-15T00:37:19.382019+00:00"
+  },
+  {
+   "id": "1f52438d-c7e1-413d-b36b-711a0e36f12f",
+   "subject": "place",
+   "subject_id": "aef595e1-5897-5cb8-ad17-770d8ea06711",
+   "name": "The tram stop",
+   "state": "",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><polygon points=\"8,16 56,16 60,10 4,10\" fill=\"#3557b8\" /><rect x=\"6\" y=\"14\" width=\"52\" height=\"4\" fill=\"#4a5468\" /><rect x=\"4\" y=\"8\" width=\"56\" height=\"3\" fill=\"#8f9bb0\" /><rect x=\"44\" y=\"18\" width=\"14\" height=\"30\" fill=\"#4a5468\" /><rect x=\"47\" y=\"22\" width=\"8\" height=\"10\" fill=\"#6fd3e8\" /><rect x=\"9\" y=\"18\" width=\"4\" height=\"30\" fill=\"#1b1d2b\" /><rect x=\"38\" y=\"18\" width=\"4\" height=\"30\" fill=\"#1b1d2b\" /><rect x=\"14\" y=\"34\" width=\"24\" height=\"4\" fill=\"#94603e\" /><rect x=\"15\" y=\"38\" width=\"2\" height=\"8\" fill=\"#5a3826\" /><rect x=\"35\" y=\"38\" width=\"2\" height=\"8\" fill=\"#5a3826\" /><rect x=\"2\" y=\"48\" width=\"60\" height=\"6\" fill=\"#8f9bb0\" /><rect x=\"2\" y=\"54\" width=\"60\" height=\"3\" fill=\"#4a5468\" /><rect x=\"0\" y=\"57\" width=\"64\" height=\"2\" fill=\"#1b1d2b\" /><rect x=\"0\" y=\"60\" width=\"64\" height=\"2\" fill=\"#1b1d2b\" /><rect x=\"24\" y=\"20\" width=\"4\" height=\"26\" fill=\"#8f9bb0\" /><circle cx=\"26\" cy=\"18\" r=\"6\" fill=\"#f6cf6e\" /><circle cx=\"26\" cy=\"18\" r=\"2.5\" fill=\"#e6773f\" /><rect x=\"52\" y=\"18\" width=\"2\" height=\"8\" fill=\"#1b1d2b\" /><circle cx=\"53\" cy=\"16\" r=\"3\" fill=\"#f6cf6e\" /></svg>",
+   "from_sprite": null,
+   "model": "z-ai/glm-5.3-flash",
+   "made_at": "2026-10-15T00:37:23.331638+00:00"
+  },
+  {
+   "id": "5ee3d6f5-c73a-4ea5-9715-b1dc110f4e31",
+   "subject": "place",
+   "subject_id": "8ed0e87a-f711-53e4-b4f1-629bdd6c3250",
+   "name": "The Engine Cathedral",
+   "state": "",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><g><rect x=\"40\" y=\"2\" width=\"12\" height=\"34\" fill=\"#4a5468\" /><rect x=\"42\" y=\"2\" width=\"4\" height=\"34\" fill=\"#8f9bb0\" /><rect x=\"38\" y=\"34\" width=\"16\" height=\"4\" fill=\"#1b1d2b\" /><rect x=\"39\" y=\"8\" width=\"3\" height=\"3\" fill=\"#e6773f\" /><rect x=\"44\" y=\"16\" width=\"3\" height=\"3\" fill=\"#e6773f\" /><rect x=\"40\" y=\"24\" width=\"3\" height=\"3\" fill=\"#e6773f\" /><rect x=\"6\" y=\"30\" width=\"34\" height=\"26\" fill=\"#4a5468\" /><rect x=\"8\" y=\"32\" width=\"30\" height=\"22\" fill=\"#1b1d2b\" /><rect x=\"10\" y=\"35\" width=\"6\" height=\"8\" fill=\"#6fd3e8\" /><rect x=\"20\" y=\"35\" width=\"6\" height=\"8\" fill=\"#6fd3e8\" /><rect x=\"30\" y=\"35\" width=\"6\" height=\"8\" fill=\"#6fd3e8\" /><rect x=\"10\" y=\"47\" width=\"6\" height=\"7\" fill=\"#f6cf6e\" /><rect x=\"20\" y=\"47\" width=\"6\" height=\"7\" fill=\"#6fd3e8\" /><rect x=\"30\" y=\"47\" width=\"6\" height=\"7\" fill=\"#6fd3e8\" /><polygon points=\"4,30 40,30 34,20 10,20\" fill=\"#b3384a\" /><polygon points=\"12,20 32,20 30,24 14,24\" fill=\"#7d4a8f\" /><circle cx=\"46\" cy=\"1\" r=\"2\" fill=\"#8f9bb0\" /></g></svg>",
+   "from_sprite": null,
+   "model": "z-ai/glm-5.3-flash",
+   "made_at": "2026-10-15T00:37:27.268551+00:00"
+  },
+  {
+   "id": "719ac53b-88c9-440c-a58a-be94b9c0d565",
+   "subject": "place",
+   "subject_id": "577329da-8261-500f-b79b-fb1c795b8be8",
+   "name": "The Copper Kettle",
+   "state": "",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><g><path d=\"M10 30 L32 18 L54 30 L54 52 L10 52 Z\" fill=\"#b3384a\" stroke=\"#1b1d2b\" stroke-width=\"2\" /><path d=\"M10 30 L32 18 L54 30 L54 34 L10 34 Z\" fill=\"#e6773f\" stroke=\"#1b1d2b\" stroke-width=\"2\" /><rect x=\"26\" y=\"38\" width=\"12\" height=\"14\" fill=\"#5a3826\" stroke=\"#1b1d2b\" stroke-width=\"2\" /><rect x=\"14\" y=\"38\" width=\"8\" height=\"8\" fill=\"#f6cf6e\" stroke=\"#1b1d2b\" stroke-width=\"2\" /><line x1=\"18\" y1=\"38\" x2=\"18\" y2=\"46\" stroke=\"#94603e\" stroke-width=\"1\" /><line x1=\"14\" y1=\"42\" x2=\"22\" y2=\"42\" stroke=\"#94603e\" stroke-width=\"1\" /><rect x=\"42\" y=\"38\" width=\"8\" height=\"8\" fill=\"#f6cf6e\" stroke=\"#1b1d2b\" stroke-width=\"2\" /><line x1=\"46\" y1=\"38\" x2=\"46\" y2=\"46\" stroke=\"#94603e\" stroke-width=\"1\" /><line x1=\"42\" y1=\"42\" x2=\"50\" y2=\"42\" stroke=\"#94603e\" stroke-width=\"1\" /><rect x=\"30\" y=\"8\" width=\"4\" height=\"12\" fill=\"#4a5468\" stroke=\"#1b1d2b\" stroke-width=\"2\" /><path d=\"M28 6 q2 -4 4 0 q2 4 4 0\" fill=\"none\" stroke=\"#8f9bb0\" stroke-width=\"2\" stroke-linecap=\"round\" /><path d=\"M30 2 q1 -2 2 0\" fill=\"none\" stroke=\"#8f9bb0\" stroke-width=\"2\" stroke-linecap=\"round\" /><g><rect x=\"24\" y=\"24\" width=\"16\" height=\"10\" fill=\"#94603e\" stroke=\"#1b1d2b\" stroke-width=\"2\" /><path d=\"M29 27 h4 a2 2 0 0 1 2 2 v1 a2 2 0 0 1 -2 2 h-4 z\" fill=\"#f6cf6e\" stroke=\"#1b1d2b\" stroke-width=\"1.5\" /><path d=\"M35 27 h2 v3\" fill=\"none\" stroke=\"#f6cf6e\" stroke-width=\"1.5\" /><line x1=\"26\" y1=\"28\" x2=\"26\" y2=\"31\" stroke=\"#e6773f\" stroke-width=\"1.5\" /><line x1=\"25\" y1=\"28.5\" x2=\"27\" y2=\"28.5\" stroke=\"#e6773f\" stroke-width=\"1\" /><line x1=\"25\" y1=\"30.5\" x2=\"27\" y2=\"30.5\" stroke=\"#e6773f\" stroke-width=\"1\" /></g></g></svg>",
+   "from_sprite": null,
+   "model": "z-ai/glm-5.3-flash",
+   "made_at": "2026-10-15T00:37:32.322385+00:00"
+  },
+  {
+   "id": "2bc49d2e-f167-4a8a-941d-2563ffbf58b1",
+   "subject": "place",
+   "subject_id": "85c1473f-0693-5a5d-be7b-c161eccb8ace",
+   "name": "The Engine hall",
+   "state": "",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><g><rect x=\"8\" y=\"22\" width=\"48\" height=\"34\" fill=\"#94603e\" /><rect x=\"8\" y=\"22\" width=\"48\" height=\"4\" fill=\"#5a3826\" /><rect x=\"8\" y=\"50\" width=\"48\" height=\"6\" fill=\"#5a3826\" /><rect x=\"8\" y=\"26\" width=\"48\" height=\"2\" fill=\"#5a3826\" /><rect x=\"12\" y=\"30\" width=\"10\" height=\"12\" fill=\"#1b1d2b\" /><rect x=\"13\" y=\"31\" width=\"8\" height=\"10\" fill=\"#e6773f\" /><rect x=\"28\" y=\"30\" width=\"10\" height=\"12\" fill=\"#1b1d2b\" /><rect x=\"29\" y=\"31\" width=\"8\" height=\"10\" fill=\"#e6773f\" /><rect x=\"44\" y=\"30\" width=\"10\" height=\"12\" fill=\"#1b1d2b\" /><rect x=\"45\" y=\"31\" width=\"8\" height=\"10\" fill=\"#e6773f\" /><path d=\"M26 56 v-12 q6 -6 12 0 v12 z\" fill=\"#1b1d2b\" /><path d=\"M28 56 v-10 q4 -4 8 0 v10 z\" fill=\"#5a3826\" /><circle cx=\"32\" cy=\"15\" r=\"8\" fill=\"#8f9bb0\" /><circle cx=\"32\" cy=\"15\" r=\"5\" fill=\"#1b1d2b\" /><circle cx=\"32\" cy=\"15\" r=\"2.5\" fill=\"#f6cf6e\" /><rect x=\"31\" y=\"3\" width=\"2\" height=\"6\" fill=\"#8f9bb0\" /><rect x=\"22\" y=\"14\" width=\"6\" height=\"2\" fill=\"#8f9bb0\" /><rect x=\"36\" y=\"14\" width=\"6\" height=\"2\" fill=\"#8f9bb0\" /><rect x=\"44\" y=\"10\" width=\"8\" height=\"14\" fill=\"#4a5468\" /><rect x=\"43\" y=\"8\" width=\"10\" height=\"3\" fill=\"#1b1d2b\" /><rect x=\"46\" y=\"4\" width=\"4\" height=\"5\" fill=\"#1b1d2b\" /><circle cx=\"48\" cy=\"5\" r=\"2\" fill=\"#8f9bb0\" /><rect x=\"14\" y=\"10\" width=\"6\" height=\"12\" fill=\"#4a5468\" /><rect x=\"13\" y=\"8\" width=\"8\" height=\"3\" fill=\"#1b1d2b\" /><rect x=\"15\" y=\"4\" width=\"4\" height=\"5\" fill=\"#1b1d2b\" /><circle cx=\"17\" cy=\"5\" r=\"2\" fill=\"#8f9bb0\" /><rect x=\"20\" y=\"19\" width=\"24\" height=\"3\" fill=\"#6fd3e8\" /><rect x=\"20\" y=\"18\" width=\"24\" height=\"1\" fill=\"#1b1d2b\" /><rect x=\"20\" y=\"22\" width=\"24\" height=\"1\" fill=\"#1b1d2b\" /></g></svg>",
+   "from_sprite": null,
+   "model": "z-ai/glm-5.3-flash",
+   "made_at": "2026-10-15T00:37:32.999787+00:00"
+  },
+  {
+   "id": "b5df682f-f96a-4c94-b3c6-fa13825d37b6",
+   "subject": "place",
+   "subject_id": "de95d84b-d756-58df-b3de-3f30effc79dc",
+   "name": "The Ashcombe Works",
+   "state": "",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><g><circle cx=\"22\" cy=\"8\" r=\"3\" fill=\"#8f9bb0\" /><circle cx=\"26\" cy=\"6\" r=\"2\" fill=\"#8f9bb0\" /><circle cx=\"42\" cy=\"10\" r=\"3\" fill=\"#8f9bb0\" /><circle cx=\"46\" cy=\"8\" r=\"2\" fill=\"#8f9bb0\" /><rect x=\"19\" y=\"14\" width=\"7\" height=\"18\" fill=\"#4a5468\" /><rect x=\"19\" y=\"14\" width=\"7\" height=\"3\" fill=\"#e6773f\" /><rect x=\"40\" y=\"12\" width=\"7\" height=\"20\" fill=\"#4a5468\" /><rect x=\"40\" y=\"12\" width=\"7\" height=\"3\" fill=\"#e6773f\" /><rect x=\"10\" y=\"30\" width=\"44\" height=\"22\" fill=\"#94603e\" /><rect x=\"10\" y=\"30\" width=\"44\" height=\"4\" fill=\"#5a3826\" /><rect x=\"12\" y=\"26\" width=\"4\" height=\"4\" fill=\"#4a5468\" /><rect x=\"30\" y=\"26\" width=\"4\" height=\"4\" fill=\"#4a5468\" /><rect x=\"48\" y=\"26\" width=\"4\" height=\"4\" fill=\"#4a5468\" /><rect x=\"15\" y=\"38\" width=\"5\" height=\"6\" fill=\"#f6cf6e\" /><rect x=\"24\" y=\"38\" width=\"5\" height=\"6\" fill=\"#1b1d2b\" /><rect x=\"35\" y=\"38\" width=\"5\" height=\"6\" fill=\"#f6cf6e\" /><rect x=\"44\" y=\"38\" width=\"5\" height=\"6\" fill=\"#1b1d2b\" /><rect x=\"27\" y=\"42\" width=\"10\" height=\"10\" fill=\"#1b1d2b\" /><path d=\"M27 42 h10 v4 h-10 z\" fill=\"#4a5468\" /><circle cx=\"32\" cy=\"25\" r=\"3\" fill=\"#f6cf6e\" /><circle cx=\"32\" cy=\"25\" r=\"1\" fill=\"#5a3826\" /><g stroke=\"#4a5468\" stroke-width=\"1\"><line x1=\"4\" y1=\"46\" x2=\"4\" y2=\"54\" /><line x1=\"9\" y1=\"46\" x2=\"9\" y2=\"54\" /><line x1=\"19\" y1=\"46\" x2=\"19\" y2=\"54\" /><line x1=\"24\" y1=\"46\" x2=\"24\" y2=\"54\" /><line x1=\"40\" y1=\"46\" x2=\"40\" y2=\"54\" /><line x1=\"45\" y1=\"46\" x2=\"45\" y2=\"54\" /><line x1=\"55\" y1=\"46\" x2=\"55\" y2=\"54\" /><line x1=\"60\" y1=\"46\" x2=\"60\" y2=\"54\" /></g><rect x=\"2\" y=\"46\" width=\"60\" height=\"2\" fill=\"#4a5468\" /><rect x=\"2\" y=\"53\" width=\"60\" height=\"2\" fill=\"#4a5468\" /><rect x=\"2\" y=\"55\" width=\"60\" height=\"5\" fill=\"#8f9bb0\" /><g><circle cx=\"14\" cy=\"58\" r=\"2\" fill=\"#f6cf6e\" /><rect x=\"13\" y=\"60\" width=\"2\" height=\"3\" fill=\"#4a5468\" /><circle cx=\"50\" cy=\"58\" r=\"2\" fill=\"#f6cf6e\" /><rect x=\"49\" y=\"60\" width=\"2\" height=\"3\" fill=\"#4a5468\" /></g></g></svg>",
+   "from_sprite": null,
+   "model": "z-ai/glm-5.3-flash",
+   "made_at": "2026-10-15T00:37:40.273311+00:00"
+  },
+  {
+   "id": "ade7782f-ed4c-42bf-9c65-fdeaf7b4fc5a",
+   "subject": "place",
+   "subject_id": "71f341d8-d0e1-580f-ab6e-26a1e1d52d75",
+   "name": "Ashcombe Hall",
+   "state": "",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><g><rect x=\"49\" y=\"8\" width=\"8\" height=\"10\" fill=\"#94603e\" /><rect x=\"51\" y=\"18\" width=\"4\" height=\"26\" fill=\"#5a3826\" /><rect x=\"48\" y=\"44\" width=\"10\" height=\"4\" fill=\"#f6cf6e\" /><rect x=\"47\" y=\"6\" width=\"12\" height=\"3\" fill=\"#f6cf6e\" /><line x1=\"53\" y1=\"22\" x2=\"53\" y2=\"40\" stroke=\"#f6cf6e\" stroke-width=\"1\" /><circle cx=\"53\" cy=\"5\" r=\"1.5\" fill=\"#f6cf6e\" /></g><rect x=\"8\" y=\"26\" width=\"38\" height=\"20\" fill=\"#f2f2ee\" /><rect x=\"8\" y=\"24\" width=\"38\" height=\"4\" fill=\"#8f9bb0\" /><polygon points=\"5,26 27,14 49,26\" fill=\"#b3384a\" /><polygon points=\"5,26 27,14 27,26\" fill=\"#7d2c3a\" /><polygon points=\"5,26 27,14 27,26\" fill=\"#b3384a\" /><line x1=\"16\" y1=\"20\" x2=\"38\" y2=\"20\" stroke=\"#7d2c3a\" stroke-width=\"1\" /><polygon points=\"49,26 27,14 27,26\" fill=\"#4a5468\" /><polyline points=\"5,26 27,14 49,26\" fill=\"none\" stroke=\"#f6cf6e\" stroke-width=\"2\" /><rect x=\"4\" y=\"32\" width=\"6\" height=\"14\" fill=\"#dcb08c\" /><rect x=\"44\" y=\"32\" width=\"6\" height=\"14\" fill=\"#dcb08c\" /><g fill=\"#3557b8\"><rect x=\"12\" y=\"30\" width=\"4\" height=\"5\" /><rect x=\"19\" y=\"30\" width=\"4\" height=\"5\" /><rect x=\"31\" y=\"30\" width=\"4\" height=\"5\" /><rect x=\"38\" y=\"30\" width=\"4\" height=\"5\" /><rect x=\"12\" y=\"38\" width=\"4\" height=\"5\" /><rect x=\"19\" y=\"38\" width=\"4\" height=\"5\" /><rect x=\"31\" y=\"38\" width=\"4\" height=\"5\" /><rect x=\"38\" y=\"38\" width=\"4\" height=\"5\" /></g><g fill=\"#f6cf6e\"><rect x=\"12\" y=\"30\" width=\"4\" height=\"1\" /><rect x=\"19\" y=\"30\" width=\"4\" height=\"1\" /><rect x=\"31\" y=\"30\" width=\"4\" height=\"1\" /><rect x=\"38\" y=\"30\" width=\"4\" height=\"1\" /><rect x=\"12\" y=\"38\" width=\"4\" height=\"1\" /><rect x=\"19\" y=\"38\" width=\"4\" height=\"1\" /><rect x=\"31\" y=\"38\" width=\"4\" height=\"1\" /><rect x=\"38\" y=\"38\" width=\"4\" height=\"1\" /></g><rect x=\"25\" y=\"38\" width=\"6\" height=\"8\" fill=\"#5a3826\" /><rect x=\"25\" y=\"38\" width=\"6\" height=\"1\" fill=\"#f6cf6e\" /><rect x=\"24\" y=\"46\" width=\"8\" height=\"2\" fill=\"#8f9bb0\" /><rect x=\"23\" y=\"48\" width=\"10\" height=\"2\" fill=\"#4a5468\" /><rect x=\"14\" y=\"16\" width=\"3\" height=\"6\" fill=\"#e6773f\" /><rect x=\"37\" y=\"16\" width=\"3\" height=\"6\" fill=\"#e6773f\" /><rect x=\"13.5\" y=\"15\" width=\"4\" height=\"2\" fill=\"#f6cf6e\" /><rect x=\"36.5\" y=\"15\" width=\"4\" height=\"2\" fill=\"#f6cf6e\" /></svg>",
+   "from_sprite": null,
+   "model": "z-ai/glm-5.3-flash",
+   "made_at": "2026-10-15T00:37:40.940017+00:00"
+  },
+  {
+   "id": "532693e1-5b36-4983-b2fc-a39f358af0ab",
+   "subject": "place",
+   "subject_id": "5b753152-c4fc-592b-852e-ee2f19471ed7",
+   "name": "The Wayward Lark's mooring",
+   "state": "",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><g><path d=\"M14 20 h28 v8 q0 4 -4 4 h-20 q-4 0 -4 -4 z\" fill=\"#94603e\" /><path d=\"M14 20 h28 v3 h-28 z\" fill=\"#5a3826\" /><rect x=\"18\" y=\"26\" width=\"4\" height=\"4\" fill=\"#f6cf6e\" /><rect x=\"26\" y=\"26\" width=\"4\" height=\"4\" fill=\"#f2f2ee\" /><rect x=\"34\" y=\"26\" width=\"4\" height=\"4\" fill=\"#6fd3e8\" /><ellipse cx=\"28\" cy=\"10\" rx=\"16\" ry=\"8\" fill=\"#e6773f\" /><ellipse cx=\"24\" cy=\"9\" rx=\"7\" ry=\"5\" fill=\"#f2f2ee\" /><ellipse cx=\"32\" cy=\"11\" rx=\"6\" ry=\"4\" fill=\"#b3384a\" /><path d=\"M20 17 v3 M36 17 v3\" stroke=\"#4a5468\" stroke-width=\"2\" fill=\"none\" /></g><rect x=\"6\" y=\"44\" width=\"52\" height=\"10\" fill=\"#94603e\" /><path d=\"M6 46 h52 M6 49 h52\" stroke=\"#5a3826\" stroke-width=\"2\" /><rect x=\"12\" y=\"54\" width=\"6\" height=\"6\" fill=\"#5a3826\" /><rect x=\"46\" y=\"54\" width=\"6\" height=\"6\" fill=\"#5a3826\" /><rect x=\"44\" y=\"30\" width=\"8\" height=\"16\" fill=\"#94603e\" /><rect x=\"42\" y=\"28\" width=\"12\" height=\"4\" fill=\"#5a3826\" /><rect x=\"44\" y=\"32\" width=\"8\" height=\"2\" fill=\"#dcb08c\" /><path d=\"M44 34 Q32 30 22 28\" stroke=\"#dcb08c\" stroke-width=\"3\" fill=\"none\" /><path d=\"M22 28 Q16 27 14 29\" stroke=\"#dcb08c\" stroke-width=\"3\" fill=\"none\" /></svg>",
+   "from_sprite": null,
+   "model": "z-ai/glm-5.3-flash",
+   "made_at": "2026-10-15T00:37:44.492844+00:00"
+  },
+  {
+   "id": "0c49bbec-1e83-41b2-b501-f824cf055a1b",
+   "subject": "place",
+   "subject_id": "3de664bb-929a-5f6b-9d8c-d010af9532f5",
+   "name": "The Skyport",
+   "state": "",
+   "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\"><ellipse cx=\"24\" cy=\"16\" rx=\"14\" ry=\"7\" fill=\"#b3384a\" /><ellipse cx=\"24\" cy=\"13\" rx=\"13\" ry=\"3\" fill=\"#e6773f\" /><polygon points=\"9,16 3,10 3,22\" fill=\"#e6773f\" /><rect x=\"20\" y=\"23\" width=\"9\" height=\"4\" fill=\"#5a3826\" /><rect x=\"22\" y=\"25\" width=\"2\" height=\"2\" fill=\"#f6cf6e\" /><line x1=\"34\" y1=\"18\" x2=\"44\" y2=\"30\" stroke=\"#4a5468\" stroke-width=\"1\" /><line x1=\"30\" y1=\"23\" x2=\"44\" y2=\"34\" stroke=\"#4a5468\" stroke-width=\"1\" /><polygon points=\"42,10 48,10 47,14 49,14 49,60 41,60 41,14 43,14\" fill=\"#8f9bb0\" /><rect x=\"40\" y=\"6\" width=\"10\" height=\"5\" fill=\"#4a5468\" /><rect x=\"42\" y=\"7\" width=\"6\" height=\"2\" fill=\"#f6cf6e\" /><line x1=\"41\" y1=\"22\" x2=\"49\" y2=\"26\" stroke=\"#4a5468\" stroke-width=\"1\" /><line x1=\"49\" y1=\"22\" x2=\"41\" y2=\"26\" stroke=\"#4a5468\" stroke-width=\"1\" /><line x1=\"41\" y1=\"36\" x2=\"49\" y2=\"40\" stroke=\"#4a5468\" stroke-width=\"1\" /><line x1=\"49\" y1=\"36\" x2=\"41\" y2=\"40\" stroke=\"#4a5468\" stroke-width=\"1\" /><rect x=\"4\" y=\"58\" width=\"56\" height=\"5\" fill=\"#5a3826\" /><rect x=\"4\" y=\"56\" width=\"56\" height=\"2\" fill=\"#94603e\" /><ellipse cx=\"54\" cy=\"42\" rx=\"7\" ry=\"4\" fill=\"#3557b8\" /><ellipse cx=\"54\" cy=\"40\" rx=\"6\" ry=\"1.5\" fill=\"#6fd3e8\" /><rect x=\"52\" y=\"46\" width=\"5\" height=\"3\" fill=\"#5a3826\" /><line x1=\"60\" y1=\"44\" x2=\"48\" y2=\"54\" stroke=\"#4a5468\" stroke-width=\"1\" /><rect x=\"6\" y=\"50\" width=\"2\" height=\"8\" fill=\"#5a3826\" /><rect x=\"16\" y=\"50\" width=\"2\" height=\"8\" fill=\"#5a3826\" /><rect x=\"56\" y=\"50\" width=\"2\" height=\"8\" fill=\"#5a3826\" /><rect x=\"6\" y=\"49\" width=\"2\" height=\"2\" fill=\"#f6cf6e\" /><rect x=\"16\" y=\"49\" width=\"2\" height=\"2\" fill=\"#f6cf6e\" /><rect x=\"56\" y=\"49\" width=\"2\" height=\"2\" fill=\"#f6cf6e\" /></svg>",
+   "from_sprite": null,
+   "model": "z-ai/glm-5.3-flash",
+   "made_at": "2026-10-15T00:37:46.449527+00:00"
+  }
+ ],
+ "layouts": {
+  "ac0ef798-71d7-5340-91a1-153b067faafd": {
+   "": {
+    "place_id": "ac0ef798-71d7-5340-91a1-153b067faafd",
+    "state": "",
+    "spec": {
+     "ground": "floor",
+     "features": [
+      {
+       "kind": "building",
+       "name": "The Gilded Gear",
+       "x": 0,
+       "y": 0,
+       "w": 40,
+       "h": 24,
+       "doors": [
+        {
+         "side": "south",
+         "at": 19
+        }
+       ],
+       "windows": [
+        {
+         "side": "south",
+         "at": 8
+        },
+        {
+         "side": "south",
+         "at": 30
+        },
+        {
+         "side": "north",
+         "at": 10
+        },
+        {
+         "side": "north",
+         "at": 29
+        }
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         0,
+         14
+        ],
+        [
+         26,
+         14
+        ]
+       ],
+       "gaps": [
+        [
+         12,
+         14
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         26,
+         0
+        ],
+        [
+         26,
+         24
+        ]
+       ],
+       "gaps": [
+        [
+         26,
+         7
+        ],
+        [
+         26,
+         18
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         26,
+         9
+        ],
+        [
+         39,
+         9
+        ]
+       ],
+       "gaps": [
+        [
+         33,
+         9
+        ]
+       ]
+      },
+      {
+       "kind": "object",
+       "name": "Workbench cluttered with gears, tools and half-built clockwork",
+       "x": 8,
+       "y": 18
+      },
+      {
+       "kind": "object",
+       "name": "Second workbench strewn with tiny brass cogs",
+       "x": 18,
+       "y": 18
+      },
+      {
+       "kind": "object",
+       "name": "Vice clamped to bench end",
+       "x": 22,
+       "y": 18
+      },
+      {
+       "kind": "object",
+       "name": "Shelves of clock parts in labelled drawers",
+       "x": 3,
+       "y": 21
+      },
+      {
+       "kind": "object",
+       "name": "Barrel of scrap brass",
+       "x": 15,
+       "y": 10
+      },
+      {
+       "kind": "object",
+       "name": "Stairway up to the second storey",
+       "x": 23,
+       "y": 21
+      },
+      {
+       "kind": "object",
+       "name": "Adelaide Quill's desk with ledger and lantern",
+       "x": 31,
+       "y": 3
+      },
+      {
+       "kind": "object",
+       "name": "Display cabinet of finished clocks",
+       "x": 36,
+       "y": 12
+      },
+      {
+       "kind": "object",
+       "name": "Stool and magnifying lamp for fine work",
+       "x": 35,
+       "y": 17
+      }
+     ]
+    },
+    "rows": [
+     "##########W##################W##########",
+     "#_________________________#____________#",
+     "#_________________________#____________#",
+     "#_________________________#____7_______#",
+     "#_________________________#____________#",
+     "#_________________________#____________#",
+     "#_________________________#____________#",
+     "#______________________________________#",
+     "#______________________________________#",
+     "#_________________________#######_######",
+     "#______________5_______________________#",
+     "#______________________________________#",
+     "#___________________________________8__#",
+     "#______________________________________#",
+     "############_##############____________#",
+     "#______________________________________#",
+     "#______________________________________#",
+     "#__________________________________9___#",
+     "#_______1_________2___3________________#",
+     "#_________________________#____________#",
+     "#_________________________#____________#",
+     "#__4___________________6__#____________#",
+     "#_________________________#____________#",
+     "########W##########+##########W#########"
+    ],
+    "objects": {
+     "1": "Workbench cluttered with gears, tools and half-built clockwork",
+     "2": "Second workbench strewn with tiny brass cogs",
+     "3": "Vice clamped to bench end",
+     "4": "Shelves of clock parts in labelled drawers",
+     "5": "Barrel of scrap brass",
+     "6": "Stairway up to the second storey",
+     "7": "Adelaide Quill's desk with ledger and lantern",
+     "8": "Display cabinet of finished clocks",
+     "9": "Stool and magnifying lamp for fine work"
+    },
+    "labels": {
+     "The Gilded Gear": [
+      20,
+      12
+     ]
+    },
+    "model": "z-ai/glm-5.3-flash",
+    "made_at": "2026-10-15T00:36:27.489999+00:00"
+   }
+  },
+  "577329da-8261-500f-b79b-fb1c795b8be8": {
+   "": {
+    "place_id": "577329da-8261-500f-b79b-fb1c795b8be8",
+    "state": "",
+    "spec": {
+     "ground": "floor",
+     "features": [
+      {
+       "kind": "building",
+       "name": "The Copper Kettle",
+       "x": 0,
+       "y": 0,
+       "w": 40,
+       "h": 24,
+       "doors": [
+        {
+         "side": "south",
+         "at": 19
+        }
+       ],
+       "windows": [
+        {
+         "side": "south",
+         "at": 8
+        },
+        {
+         "side": "south",
+         "at": 30
+        },
+        {
+         "side": "west",
+         "at": 6
+        },
+        {
+         "side": "west",
+         "at": 16
+        },
+        {
+         "side": "east",
+         "at": 6
+        },
+        {
+         "side": "east",
+         "at": 16
+        }
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         0,
+         9
+        ],
+        [
+         28,
+         9
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         0,
+         15
+        ],
+        [
+         28,
+         15
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         12,
+         16
+        ],
+        [
+         12,
+         23
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         28,
+         0
+        ],
+        [
+         28,
+         15
+        ]
+       ],
+       "gaps": [
+        [
+         28,
+         4
+        ],
+        [
+         28,
+         12
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         12,
+         9
+        ],
+        [
+         12,
+         1
+        ]
+       ],
+       "gaps": [
+        [
+         12,
+         5
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         0,
+         16
+        ],
+        [
+         0,
+         23
+        ]
+       ]
+      },
+      {
+       "kind": "object",
+       "name": "long taproom counter with copper kettles",
+       "x": 30,
+       "y": 3
+      },
+      {
+       "kind": "object",
+       "name": "barrel of spiced cider",
+       "x": 34,
+       "y": 6
+      },
+      {
+       "kind": "object",
+       "name": "stove with steaming kettle",
+       "x": 36,
+       "y": 12
+      },
+      {
+       "kind": "object",
+       "name": "corner table strewn with blueprints",
+       "x": 33,
+       "y": 18
+      },
+      {
+       "kind": "object",
+       "name": "round table with brass lamp",
+       "x": 16,
+       "y": 20
+      },
+      {
+       "kind": "object",
+       "name": "armchair by the hearth",
+       "x": 8,
+       "y": 21
+      },
+      {
+       "kind": "object",
+       "name": "chalkboard of arguing artificers' plans",
+       "x": 3,
+       "y": 12
+      },
+      {
+       "kind": "object",
+       "name": "workbench with tools and gears",
+       "x": 20,
+       "y": 2
+      },
+      {
+       "kind": "object",
+       "name": "coat rack by the door",
+       "x": 22,
+       "y": 22
+      }
+     ]
+    },
+    "rows": [
+     "########################################",
+     "#___________#_______________#__________#",
+     "#___________#_______8_______#__________#",
+     "#___________#_______________#_1________#",
+     "#___________#__________________________#",
+     "#______________________________________#",
+     "W___________#_____________________2____W",
+     "#___________#__________________________#",
+     "#___________#__________________________#",
+     "#############################__________#",
+     "#______________________________________#",
+     "#______________________________________#",
+     "#__7________________________________3__#",
+     "#___________________________#__________#",
+     "#___________________________#__________#",
+     "#############################__________#",
+     "#___________#__________________________W",
+     "#___________#__________________________#",
+     "#___________#____________________4_____#",
+     "#___________#__________________________#",
+     "#___________#___5______________________#",
+     "#_______6___#__________________________#",
+     "#___________#_________9________________#",
+     "########W##########+##########W#########"
+    ],
+    "objects": {
+     "1": "long taproom counter with copper kettles",
+     "2": "barrel of spiced cider",
+     "3": "stove with steaming kettle",
+     "4": "corner table strewn with blueprints",
+     "5": "round table with brass lamp",
+     "6": "armchair by the hearth",
+     "7": "chalkboard of arguing artificers' plans",
+     "8": "workbench with tools and gears",
+     "9": "coat rack by the door"
+    },
+    "labels": {
+     "The Copper Kettle": [
+      20,
+      12
+     ]
+    },
+    "model": "z-ai/glm-5.3-flash",
+    "made_at": "2026-10-15T00:36:31.331545+00:00"
+   }
+  },
+  "0b14db0f-84e0-595d-9d72-2ea912b6f8e6": {
+   "": {
+    "place_id": "0b14db0f-84e0-595d-9d72-2ea912b6f8e6",
+    "state": "",
+    "spec": {
+     "ground": "cobble",
+     "features": [
+      {
+       "kind": "area",
+       "fill": "floor",
+       "shape": "rect",
+       "x": 17,
+       "y": 0,
+       "w": 6,
+       "h": 24
+      },
+      {
+       "kind": "area",
+       "fill": "floor",
+       "shape": "rect",
+       "x": 25,
+       "y": 0,
+       "w": 6,
+       "h": 5
+      },
+      {
+       "kind": "area",
+       "fill": "floor",
+       "shape": "rect",
+       "x": 8,
+       "y": 4,
+       "w": 7,
+       "h": 13
+      },
+      {
+       "kind": "area",
+       "fill": "floor",
+       "shape": "rect",
+       "x": 15,
+       "y": 9,
+       "w": 3,
+       "h": 3
+      },
+      {
+       "kind": "area",
+       "fill": "floor",
+       "shape": "rect",
+       "x": 23,
+       "y": 16,
+       "w": 5,
+       "h": 4
+      },
+      {
+       "kind": "area",
+       "fill": "floor",
+       "shape": "rect",
+       "x": 28,
+       "y": 5,
+       "w": 4,
+       "h": 12
+      },
+      {
+       "kind": "area",
+       "fill": "floor",
+       "shape": "rect",
+       "x": 28,
+       "y": 10,
+       "w": 5,
+       "h": 2
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         19,
+         23
+        ],
+        [
+         19,
+         16
+        ]
+       ],
+       "width": 2
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         8,
+         10
+        ],
+        [
+         23,
+         10
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         19,
+         4
+        ],
+        [
+         19,
+         17
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         28,
+         5
+        ],
+        [
+         28,
+         16
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         12,
+         4
+        ],
+        [
+         12,
+         16
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "building",
+       "name": "The Gilded Gear",
+       "x": 19,
+       "y": 11,
+       "w": 4,
+       "h": 3,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": [
+        {
+         "side": "west",
+         "at": 1
+        },
+        {
+         "side": "south",
+         "at": 1
+        },
+        {
+         "side": "south",
+         "at": 2
+        }
+       ]
+      },
+      {
+       "kind": "building",
+       "name": "The Copper Kettle",
+       "x": 11,
+       "y": 6,
+       "w": 4,
+       "h": 3,
+       "doors": [
+        {
+         "side": "east",
+         "at": 1
+        }
+       ],
+       "windows": [
+        {
+         "side": "east",
+         "at": 1
+        },
+        {
+         "side": "south",
+         "at": 1
+        },
+        {
+         "side": "north",
+         "at": 1
+        }
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         26,
+         0
+        ],
+        [
+         29,
+         0
+        ]
+       ],
+       "gaps": [
+        [
+         27,
+         0
+        ]
+       ]
+      },
+      {
+       "kind": "building",
+       "name": "Quill's storeroom",
+       "x": 25,
+       "y": 12,
+       "w": 3,
+       "h": 4,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": [
+        {
+         "side": "west",
+         "at": 2
+        }
+       ]
+      },
+      {
+       "kind": "building",
+       "name": "Bolt & Filament works",
+       "x": 8,
+       "y": 5,
+       "w": 3,
+       "h": 4,
+       "doors": [
+        {
+         "side": "east",
+         "at": 1
+        }
+       ],
+       "windows": [
+        {
+         "side": "east",
+         "at": 2
+        }
+       ]
+      },
+      {
+       "kind": "building",
+       "name": "The Boilerworks",
+       "x": 8,
+       "y": 12,
+       "w": 4,
+       "h": 4,
+       "doors": [
+        {
+         "side": "east",
+         "at": 1
+        }
+       ],
+       "windows": [
+        {
+         "side": "east",
+         "at": 2
+        },
+        {
+         "side": "south",
+         "at": 2
+        }
+       ]
+      },
+      {
+       "kind": "building",
+       "name": "Cogwright's chandlery",
+       "x": 29,
+       "y": 5,
+       "w": 3,
+       "h": 4,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": [
+        {
+         "side": "west",
+         "at": 2
+        }
+       ]
+      },
+      {
+       "kind": "building",
+       "name": "Lamplighter's depot",
+       "x": 29,
+       "y": 11,
+       "w": 3,
+       "h": 4,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": [
+        {
+         "side": "west",
+         "at": 2
+        }
+       ]
+      },
+      {
+       "kind": "object",
+       "name": "iron tram shelter",
+       "x": 27,
+       "y": 1
+      },
+      {
+       "kind": "object",
+       "name": "gas lamp",
+       "x": 18,
+       "y": 8
+      },
+      {
+       "kind": "object",
+       "name": "gas lamp",
+       "x": 20,
+       "y": 15
+      },
+      {
+       "kind": "object",
+       "name": "gas lamp",
+       "x": 11,
+       "y": 10
+      },
+      {
+       "kind": "object",
+       "name": "gas lamp",
+       "x": 27,
+       "y": 9
+      },
+      {
+       "kind": "object",
+       "name": "brass sign: The Gilded Gear",
+       "x": 18,
+       "y": 12
+      },
+      {
+       "kind": "object",
+       "name": "steaming pipe run",
+       "x": 16,
+       "y": 10
+      },
+      {
+       "kind": "object",
+       "name": "chimney",
+       "x": 10,
+       "y": 13
+      },
+      {
+       "kind": "object",
+       "name": "chimney",
+       "x": 30,
+       "y": 6
+      },
+      {
+       "kind": "object",
+       "name": "mooring bollard",
+       "x": 21,
+       "y": 23
+      }
+     ]
+    },
+    "rows": [
+     ".................______.._#_##_.........",
+     ".................______..__1___.........",
+     ".................______..______.........",
+     ".................______..______.........",
+     "........____=__..__=___..______.........",
+     "........###_=__..__=___.....=###........",
+     "........#_+#W##..__=___.....=+9#........",
+     "........#_W#__+..__=___.....=W_#........",
+     "........####W##.._2=___.....=###........",
+     "........____=______=___....5=___........",
+     "........===4====7=======....=____.......",
+     "........____=______####.....=###_.......",
+     "........####=__.._6+__#..###=+_#........",
+     "........#_8+=__..__#WW#..+_#=W_#........",
+     "........#__W=__..__=___..W_#=###........",
+     "........##W#=__..__=3__..###=___........",
+     "........____=__..__==_______=___........",
+     ".................__==_______............",
+     ".................__==_______............",
+     ".................__==_______............",
+     ".................__==__.................",
+     ".................__==__.................",
+     ".................__==__.................",
+     ".................__==__................."
+    ],
+    "objects": {
+     "1": "iron tram shelter",
+     "2": "gas lamp",
+     "3": "gas lamp",
+     "4": "gas lamp",
+     "5": "gas lamp",
+     "6": "brass sign: The Gilded Gear",
+     "7": "steaming pipe run",
+     "8": "chimney",
+     "9": "chimney"
+    },
+    "labels": {
+     "The Gilded Gear": [
+      21,
+      12
+     ],
+     "The Copper Kettle": [
+      13,
+      7
+     ],
+     "Quill's storeroom": [
+      26,
+      14
+     ],
+     "Bolt & Filament works": [
+      9,
+      7
+     ],
+     "The Boilerworks": [
+      10,
+      14
+     ],
+     "Cogwright's chandlery": [
+      30,
+      7
+     ],
+     "Lamplighter's depot": [
+      30,
+      13
+     ]
+    },
+    "model": "z-ai/glm-5.3-flash",
+    "made_at": "2026-10-15T00:36:34.493850+00:00"
+   }
+  },
+  "8ed0e87a-f711-53e4-b4f1-629bdd6c3250": {
+   "": {
+    "place_id": "8ed0e87a-f711-53e4-b4f1-629bdd6c3250",
+    "state": "",
+    "spec": {
+     "ground": "floor",
+     "features": [
+      {
+       "kind": "area",
+       "fill": "dark",
+       "shape": "rect",
+       "x": 0,
+       "y": 0,
+       "w": 40,
+       "h": 24
+      },
+      {
+       "kind": "area",
+       "fill": "floor",
+       "shape": "rect",
+       "x": 2,
+       "y": 6,
+       "w": 36,
+       "h": 14
+      },
+      {
+       "kind": "building",
+       "name": "Engine Hall",
+       "x": 18,
+       "y": 11,
+       "w": 4,
+       "h": 3,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        },
+        {
+         "side": "east",
+         "at": 1
+        }
+       ],
+       "windows": [
+        {
+         "side": "north",
+         "at": 1
+        },
+        {
+         "side": "north",
+         "at": 2
+        },
+        {
+         "side": "south",
+         "at": 1
+        },
+        {
+         "side": "south",
+         "at": 2
+        }
+       ]
+      },
+      {
+       "kind": "object",
+       "name": "Chimney Tower",
+       "x": 19,
+       "y": 11
+      },
+      {
+       "kind": "object",
+       "name": "Great Engine",
+       "x": 20,
+       "y": 12
+      },
+      {
+       "kind": "passage",
+       "points": [
+        [
+         20,
+         10
+        ],
+        [
+         20,
+         6
+        ]
+       ],
+       "width": 2
+      },
+      {
+       "kind": "object",
+       "name": "Great Lift",
+       "x": 20,
+       "y": 7
+      },
+      {
+       "kind": "passage",
+       "points": [
+        [
+         22,
+         13
+        ],
+        [
+         36,
+         13
+        ]
+       ],
+       "width": 2
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         22,
+         12
+        ],
+        [
+         36,
+         12
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         22,
+         15
+        ],
+        [
+         36,
+         15
+        ]
+       ]
+      },
+      {
+       "kind": "object",
+       "name": "Furnace Street Gates",
+       "x": 36,
+       "y": 13
+      },
+      {
+       "kind": "object",
+       "name": "Tramway Dock",
+       "x": 19,
+       "y": 6
+      },
+      {
+       "kind": "object",
+       "name": "Boiler",
+       "x": 15,
+       "y": 12
+      },
+      {
+       "kind": "object",
+       "name": "Coal Store",
+       "x": 12,
+       "y": 10
+      },
+      {
+       "kind": "object",
+       "name": "Gantry Crane",
+       "x": 25,
+       "y": 12
+      },
+      {
+       "kind": "object",
+       "name": "Pressure Gauges",
+       "x": 26,
+       "y": 16
+      },
+      {
+       "kind": "object",
+       "name": "Vent Fan",
+       "x": 33,
+       "y": 8
+      }
+     ]
+    },
+    "rows": [
+     "                                        ",
+     "                                        ",
+     "                                        ",
+     "                                        ",
+     "                                        ",
+     "                                        ",
+     "  _________________5__________________  ",
+     "  __________________3_________________  ",
+     "  ____________________________________  ",
+     "  ____________________________________  ",
+     "  __________7_________________________  ",
+     "  ________________#WW#________________  ",
+     "  _____________6__+__+###8###########_  ",
+     "  ________________#WW#______________4_  ",
+     "  ____________________________________  ",
+     "  ____________________###############_  ",
+     "  ________________________9___________  ",
+     "  ____________________________________  ",
+     "  ____________________________________  ",
+     "  ____________________________________  ",
+     "                                        ",
+     "                                        ",
+     "                                        ",
+     "                                        "
+    ],
+    "objects": {
+     "1": "Chimney Tower",
+     "2": "Great Engine",
+     "3": "Great Lift",
+     "4": "Furnace Street Gates",
+     "5": "Tramway Dock",
+     "6": "Boiler",
+     "7": "Coal Store",
+     "8": "Gantry Crane",
+     "9": "Pressure Gauges"
+    },
+    "labels": {
+     "The Engine hall": [
+      20,
+      12
+     ]
+    },
+    "model": "z-ai/glm-5.3-flash",
+    "made_at": "2026-10-15T00:36:35.520080+00:00"
+   }
+  },
+  "85c1473f-0693-5a5d-be7b-c161eccb8ace": {
+   "": {
+    "place_id": "85c1473f-0693-5a5d-be7b-c161eccb8ace",
+    "state": "",
+    "spec": {
+     "ground": "floor",
+     "features": [
+      {
+       "kind": "building",
+       "name": "The Engine Hall",
+       "x": 0,
+       "y": 0,
+       "w": 40,
+       "h": 24,
+       "doors": [
+        {
+         "side": "south",
+         "at": 19
+        }
+       ],
+       "windows": [
+        {
+         "side": "east",
+         "at": 8
+        },
+        {
+         "side": "east",
+         "at": 16
+        },
+        {
+         "side": "east",
+         "at": 24
+        },
+        {
+         "side": "west",
+         "at": 12
+        },
+        {
+         "side": "west",
+         "at": 20
+        }
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         0,
+         7
+        ],
+        [
+         40,
+         7
+        ]
+       ],
+       "gaps": [
+        [
+         14,
+         7
+        ],
+        [
+         25,
+         7
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         0,
+         16
+        ],
+        [
+         40,
+         16
+        ]
+       ],
+       "gaps": [
+        [
+         20,
+         16
+        ],
+        [
+         33,
+         16
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         14,
+         7
+        ],
+        [
+         14,
+         16
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         26,
+         0
+        ],
+        [
+         26,
+         7
+        ]
+       ],
+       "gaps": [
+        [
+         26,
+         4
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         30,
+         0
+        ],
+        [
+         30,
+         7
+        ]
+       ],
+       "gaps": [
+        [
+         30,
+         3
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         8,
+         16
+        ],
+        [
+         8,
+         24
+        ]
+       ],
+       "gaps": [
+        [
+         8,
+         20
+        ]
+       ]
+      },
+      {
+       "kind": "passage",
+       "points": [
+        [
+         14,
+         7
+        ],
+        [
+         14,
+         16
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "object",
+       "name": "The Great Engine",
+       "x": 15,
+       "y": 9
+      },
+      {
+       "kind": "object",
+       "name": "boiler",
+       "x": 4,
+       "y": 10
+      },
+      {
+       "kind": "object",
+       "name": "boiler",
+       "x": 4,
+       "y": 13
+      },
+      {
+       "kind": "object",
+       "name": "coal heap",
+       "x": 5,
+       "y": 3
+      },
+      {
+       "kind": "object",
+       "name": "coal cart",
+       "x": 10,
+       "y": 4
+      },
+      {
+       "kind": "object",
+       "name": "shovel rack",
+       "x": 28,
+       "y": 2
+      },
+      {
+       "kind": "object",
+       "name": "stoker's rest bench",
+       "x": 28,
+       "y": 6
+      },
+      {
+       "kind": "object",
+       "name": "tool bench",
+       "x": 20,
+       "y": 19
+      },
+      {
+       "kind": "object",
+       "name": "spare piston rod crate",
+       "x": 35,
+       "y": 19
+      },
+      {
+       "kind": "object",
+       "name": "foreman's desk",
+       "x": 3,
+       "y": 20
+      },
+      {
+       "kind": "object",
+       "name": "oil barrels",
+       "x": 12,
+       "y": 21
+      }
+     ]
+    },
+    "rows": [
+     "########################################",
+     "#_________________________#___#________#",
+     "#_________________________#_6_#________#",
+     "#____4____________________#____________#",
+     "#_________5___________________#________#",
+     "#_________________________#___#________#",
+     "#_________________________#_7_#________#",
+     "##############____________##############",
+     "#______________________________________W",
+     "#______________1_______________________#",
+     "#___2__________________________________#",
+     "#______________________________________#",
+     "W______________________________________#",
+     "#___3__________________________________#",
+     "#______________________________________#",
+     "#______________________________________#",
+     "##############_#####______________######",
+     "#_______#______________________________#",
+     "#_______#______________________________#",
+     "#_______#___________8______________9___#",
+     "W______________________________________#",
+     "#_______#______________________________#",
+     "#_______#______________________________#",
+     "###################+####################"
+    ],
+    "objects": {
+     "1": "The Great Engine",
+     "2": "boiler",
+     "3": "boiler",
+     "4": "coal heap",
+     "5": "coal cart",
+     "6": "shovel rack",
+     "7": "stoker's rest bench",
+     "8": "tool bench",
+     "9": "spare piston rod crate"
+    },
+    "labels": {
+     "The Engine Hall": [
+      20,
+      12
+     ]
+    },
+    "model": "z-ai/glm-5.3-flash",
+    "made_at": "2026-10-15T00:36:38.569596+00:00"
+   }
+  },
+  "de95d84b-d756-58df-b3de-3f30effc79dc": {
+   "": {
+    "place_id": "de95d84b-d756-58df-b3de-3f30effc79dc",
+    "state": "",
+    "spec": {
+     "ground": "cobble",
+     "features": [
+      {
+       "kind": "road",
+       "points": [
+        [
+         0,
+         20
+        ],
+        [
+         39,
+         20
+        ]
+       ],
+       "width": 2
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         26,
+         0
+        ],
+        [
+         26,
+         20
+        ]
+       ],
+       "width": 2
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 0,
+       "y": 0,
+       "w": 4,
+       "h": 4
+      },
+      {
+       "kind": "building",
+       "name": "Great Foundry",
+       "x": 3,
+       "y": 2,
+       "w": 14,
+       "h": 9,
+       "doors": [
+        {
+         "side": "south",
+         "at": 6
+        },
+        {
+         "side": "east",
+         "at": 7
+        }
+       ],
+       "windows": [
+        {
+         "side": "south",
+         "at": 2
+        },
+        {
+         "side": "south",
+         "at": 10
+        }
+       ]
+      },
+      {
+       "kind": "object",
+       "name": "smokestack",
+       "x": 5,
+       "y": 0
+      },
+      {
+       "kind": "object",
+       "name": "smokestack",
+       "x": 9,
+       "y": 0
+      },
+      {
+       "kind": "object",
+       "name": "smokestack",
+       "x": 14,
+       "y": 0
+      },
+      {
+       "kind": "building",
+       "name": "Boiler House",
+       "x": 19,
+       "y": 3,
+       "w": 6,
+       "h": 6,
+       "doors": [
+        {
+         "side": "south",
+         "at": 2
+        }
+       ],
+       "windows": [
+        {
+         "side": "west",
+         "at": 4
+        }
+       ]
+      },
+      {
+       "kind": "object",
+       "name": "smokestack",
+       "x": 21,
+       "y": 1
+      },
+      {
+       "kind": "building",
+       "name": "Warehouse of Cogs",
+       "x": 4,
+       "y": 15,
+       "w": 11,
+       "h": 6,
+       "doors": [
+        {
+         "side": "north",
+         "at": 5
+        },
+        {
+         "side": "east",
+         "at": 3
+        }
+       ],
+       "windows": [
+        {
+         "side": "south",
+         "at": 4
+        }
+       ]
+      },
+      {
+       "kind": "building",
+       "name": "Pattern Shop",
+       "x": 18,
+       "y": 15,
+       "w": 7,
+       "h": 5,
+       "doors": [
+        {
+         "side": "north",
+         "at": 3
+        }
+       ],
+       "windows": [
+        {
+         "side": "south",
+         "at": 2
+        },
+        {
+         "side": "south",
+         "at": 4
+        }
+       ]
+      },
+      {
+       "kind": "building",
+       "name": "Automaton Assembly Shed",
+       "x": 28,
+       "y": 13,
+       "w": 9,
+       "h": 6,
+       "doors": [
+        {
+         "side": "west",
+         "at": 3
+        },
+        {
+         "side": "south",
+         "at": 4
+        }
+       ],
+       "windows": [
+        {
+         "side": "north",
+         "at": 4
+        }
+       ]
+      },
+      {
+       "kind": "building",
+       "name": "Ashcombe Hall",
+       "x": 30,
+       "y": 0,
+       "w": 4,
+       "h": 3,
+       "doors": [
+        {
+         "side": "south",
+         "at": 2
+        }
+       ],
+       "windows": [
+        {
+         "side": "east",
+         "at": 1
+        },
+        {
+         "side": "west",
+         "at": 1
+        }
+       ]
+      },
+      {
+       "kind": "object",
+       "name": "mooring tower",
+       "x": 35,
+       "y": 1
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         20,
+         12
+        ],
+        [
+         26,
+         12
+        ],
+        [
+         26,
+         9
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "passage",
+       "points": [
+        [
+         17,
+         6
+        ],
+        [
+         19,
+         6
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "passage",
+       "points": [
+        [
+         26,
+         9
+        ],
+        [
+         26,
+         12
+        ],
+        [
+         30,
+         12
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "passage",
+       "points": [
+        [
+         9,
+         11
+        ],
+        [
+         9,
+         15
+        ]
+       ],
+       "width": 2
+      },
+      {
+       "kind": "passage",
+       "points": [
+        [
+         25,
+         12
+        ],
+        [
+         25,
+         15
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         1,
+         1
+        ],
+        [
+         1,
+         19
+        ]
+       ],
+       "gaps": [
+        [
+         1,
+         12
+        ]
+       ]
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         1,
+         19
+        ],
+        [
+         37,
+         19
+        ]
+       ],
+       "gaps": [
+        [
+         9,
+         19
+        ],
+        [
+         31,
+         19
+        ]
+       ]
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         37,
+         19
+        ],
+        [
+         37,
+         1
+        ]
+       ],
+       "gaps": [
+        [
+         37,
+         12
+        ]
+       ]
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         37,
+         1
+        ],
+        [
+         27,
+         1
+        ],
+        [
+         27,
+         8
+        ]
+       ],
+       "gaps": [
+        [
+         29,
+         1
+        ]
+       ]
+      },
+      {
+       "kind": "object",
+       "name": "iron gate",
+       "x": 1,
+       "y": 12
+      },
+      {
+       "kind": "object",
+       "name": "iron gate",
+       "x": 9,
+       "y": 19
+      },
+      {
+       "kind": "object",
+       "name": "iron gate",
+       "x": 31,
+       "y": 19
+      },
+      {
+       "kind": "object",
+       "name": "coal heap",
+       "x": 20,
+       "y": 11
+      },
+      {
+       "kind": "object",
+       "name": "water tank",
+       "x": 12,
+       "y": 13
+      }
+     ]
+    },
+    "rows": [
+     "::::.1...2....3...........==..####......",
+     ":%::.................4....=%%.W__W%%%%..",
+     ":%:##############.........=%..##+#...%..",
+     ":%:#____________#..######.=%.........%..",
+     ".%.#____________#..#____#.=%.........%..",
+     ".%.#____________#..#____#.=%.........%..",
+     ".%.#____________#_______#.=%.........%..",
+     ".%.#____________#..W____#.=%.........%..",
+     ".%.#____________#..##+###.=%.........%..",
+     ".%.#____________+........._=.........%..",
+     ".%.##W###+###W###........._=.........%..",
+     ".%.......__.........9....._=.........%..",
+     ".6.......__.........=====______.........",
+     ".%.......__.............._==####W####%..",
+     ".%.......__.............._==#_______#%..",
+     ".%..#####__####...###+###_==#_______#%..",
+     ".%..#_________#...#_____#.==+_______#%..",
+     ".%..#_________#...#_____#.==#_______#%..",
+     ".%..#_________+...#_____#.==####+####%..",
+     ".%%%%%%%%7____#...##W#W##.==...8%%%%%%..",
+     "====####W######=========================",
+     "========================================",
+     "........................................",
+     "........................................"
+    ],
+    "objects": {
+     "1": "smokestack",
+     "2": "smokestack",
+     "3": "smokestack",
+     "4": "smokestack",
+     "5": "mooring tower",
+     "6": "iron gate",
+     "7": "iron gate",
+     "8": "iron gate",
+     "9": "coal heap"
+    },
+    "labels": {
+     "Great Foundry": [
+      10,
+      6
+     ],
+     "Boiler House": [
+      22,
+      6
+     ],
+     "Warehouse of Cogs": [
+      9,
+      18
+     ],
+     "Pattern Shop": [
+      21,
+      17
+     ],
+     "Automaton Assembly Shed": [
+      32,
+      16
+     ],
+     "Ashcombe Hall": [
+      32,
+      1
+     ]
+    },
+    "model": "z-ai/glm-5.3-flash",
+    "made_at": "2026-10-15T00:36:41.889794+00:00"
+   }
+  },
+  "71f341d8-d0e1-580f-ab6e-26a1e1d52d75": {
+   "": {
+    "place_id": "71f341d8-d0e1-580f-ab6e-26a1e1d52d75",
+    "state": "",
+    "spec": {
+     "ground": "floor",
+     "features": [
+      {
+       "kind": "building",
+       "name": "Ashcombe Hall",
+       "x": 0,
+       "y": 0,
+       "w": 40,
+       "h": 24,
+       "doors": [
+        {
+         "side": "south",
+         "at": 20
+        }
+       ],
+       "windows": [
+        {
+         "side": "north",
+         "at": 6
+        },
+        {
+         "side": "north",
+         "at": 20
+        },
+        {
+         "side": "north",
+         "at": 34
+        },
+        {
+         "side": "west",
+         "at": 5
+        },
+        {
+         "side": "west",
+         "at": 19
+        },
+        {
+         "side": "east",
+         "at": 5
+        },
+        {
+         "side": "east",
+         "at": 19
+        },
+        {
+         "side": "south",
+         "at": 8
+        },
+        {
+         "side": "south",
+         "at": 32
+        }
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         0,
+         13
+        ],
+        [
+         39,
+         13
+        ]
+       ],
+       "gaps": [
+        [
+         7,
+         13
+        ],
+        [
+         20,
+         13
+        ],
+        [
+         33,
+         13
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         13,
+         0
+        ],
+        [
+         13,
+         13
+        ]
+       ],
+       "gaps": [
+        [
+         13,
+         6
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         27,
+         0
+        ],
+        [
+         27,
+         13
+        ]
+       ],
+       "gaps": [
+        [
+         27,
+         6
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         13,
+         14
+        ],
+        [
+         13,
+         23
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         27,
+         14
+        ],
+        [
+         27,
+         23
+        ]
+       ],
+       "gaps": [
+        [
+         27,
+         18
+        ]
+       ]
+      },
+      {
+       "kind": "object",
+       "name": "brass chandelier",
+       "x": 20,
+       "y": 19
+      },
+      {
+       "kind": "object",
+       "name": "marble fountain",
+       "x": 6,
+       "y": 19
+      },
+      {
+       "kind": "object",
+       "name": "banquet table",
+       "x": 33,
+       "y": 19
+      },
+      {
+       "kind": "object",
+       "name": "grand staircase",
+       "x": 17,
+       "y": 14
+      },
+      {
+       "kind": "object",
+       "name": "gilded harp",
+       "x": 11,
+       "y": 16
+      },
+      {
+       "kind": "object",
+       "name": "brass orrery",
+       "x": 6,
+       "y": 6
+      },
+      {
+       "kind": "object",
+       "name": "mooring mast",
+       "x": 20,
+       "y": 1
+      },
+      {
+       "kind": "object",
+       "name": "iron stove",
+       "x": 33,
+       "y": 6
+      },
+      {
+       "kind": "object",
+       "name": "clockwork statue",
+       "x": 31,
+       "y": 15
+      }
+     ]
+    },
+    "rows": [
+     "######W#############W#############W#####",
+     "#____________#______7______#___________#",
+     "#____________#_____________#___________#",
+     "#____________#_____________#___________#",
+     "#____________#_____________#___________#",
+     "W____________#_____________#___________W",
+     "#_____6__________________________8_____#",
+     "#____________#_____________#___________#",
+     "#____________#_____________#___________#",
+     "#____________#_____________#___________#",
+     "#____________#_____________#___________#",
+     "#____________#_____________#___________#",
+     "#____________#_____________#___________#",
+     "#######______#_____________#______######",
+     "#____________#___4_________#___________#",
+     "#____________#_____________#___9_______#",
+     "#__________5_#_____________#___________#",
+     "#____________#_____________#___________#",
+     "#____________#_________________________#",
+     "W_____2______#______1______#_____3_____W",
+     "#____________#_____________#___________#",
+     "#____________#_____________#___________#",
+     "#____________#_____________#___________#",
+     "########W###########+###########W#######"
+    ],
+    "objects": {
+     "1": "brass chandelier",
+     "2": "marble fountain",
+     "3": "banquet table",
+     "4": "grand staircase",
+     "5": "gilded harp",
+     "6": "brass orrery",
+     "7": "mooring mast",
+     "8": "iron stove",
+     "9": "clockwork statue"
+    },
+    "labels": {
+     "Ashcombe Hall": [
+      20,
+      12
+     ]
+    },
+    "model": "z-ai/glm-5.3-flash",
+    "made_at": "2026-10-15T00:36:46.580289+00:00"
+   }
+  },
+  "3de664bb-929a-5f6b-9d8c-d010af9532f5": {
+   "": {
+    "place_id": "3de664bb-929a-5f6b-9d8c-d010af9532f5",
+    "state": "",
+    "spec": {
+     "ground": "floor",
+     "features": [
+      {
+       "kind": "road",
+       "points": [
+        [
+         20,
+         2
+        ],
+        [
+         20,
+         21
+        ]
+       ],
+       "width": 2
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         8,
+         12
+        ],
+        [
+         32,
+         12
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         8,
+         19
+        ],
+        [
+         19,
+         19
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "area",
+       "fill": "floor",
+       "shape": "rect",
+       "x": 20,
+       "y": 1,
+       "w": 4,
+       "h": 4
+      },
+      {
+       "kind": "object",
+       "name": "great lift down to the Engine Cathedral",
+       "x": 21,
+       "y": 2
+      },
+      {
+       "kind": "object",
+       "name": "mooring tower",
+       "x": 4,
+       "y": 3
+      },
+      {
+       "kind": "object",
+       "name": "mooring tower",
+       "x": 12,
+       "y": 3
+      },
+      {
+       "kind": "object",
+       "name": "mooring tower",
+       "x": 28,
+       "y": 3
+      },
+      {
+       "kind": "object",
+       "name": "mooring tower",
+       "x": 35,
+       "y": 4
+      },
+      {
+       "kind": "object",
+       "name": "mooring tower",
+       "x": 5,
+       "y": 8
+      },
+      {
+       "kind": "object",
+       "name": "mooring tower",
+       "x": 26,
+       "y": 8
+      },
+      {
+       "kind": "object",
+       "name": "mooring tower",
+       "x": 34,
+       "y": 10
+      },
+      {
+       "kind": "object",
+       "name": "mooring tower",
+       "x": 4,
+       "y": 14
+      },
+      {
+       "kind": "object",
+       "name": "mooring tower",
+       "x": 13,
+       "y": 15
+      },
+      {
+       "kind": "object",
+       "name": "mooring tower",
+       "x": 27,
+       "y": 16
+      },
+      {
+       "kind": "object",
+       "name": "mooring tower",
+       "x": 34,
+       "y": 18
+      },
+      {
+       "kind": "object",
+       "name": "mooring tower",
+       "x": 5,
+       "y": 21
+      },
+      {
+       "kind": "object",
+       "name": "mooring tower",
+       "x": 26,
+       "y": 21
+      },
+      {
+       "kind": "building",
+       "name": "harbourmaster's office",
+       "x": 29,
+       "y": 5,
+       "w": 5,
+       "h": 4,
+       "doors": [
+        {
+         "side": "south",
+         "at": 2
+        }
+       ],
+       "windows": [
+        {
+         "side": "west",
+         "at": 1
+        },
+        {
+         "side": "north",
+         "at": 2
+        }
+       ]
+      },
+      {
+       "kind": "building",
+       "name": "rope and chain store",
+       "x": 3,
+       "y": 18,
+       "w": 4,
+       "h": 3,
+       "doors": [
+        {
+         "side": "east",
+         "at": 1
+        }
+       ]
+      },
+      {
+       "kind": "object",
+       "name": "coiled mooring cables",
+       "x": 17,
+       "y": 13
+      },
+      {
+       "kind": "object",
+       "name": "crane",
+       "x": 22,
+       "y": 15
+      }
+     ]
+    },
+    "rows": [
+     "________________________________________",
+     "________________________________________",
+     "_____________________1__________________",
+     "____2_______3_______________4___________",
+     "___________________________________5____",
+     "____________________==_______##W##______",
+     "____________________==_______W___#______",
+     "____________________==_______#___#______",
+     "_____6______________==____7__##+##______",
+     "____________________==__________________",
+     "____________________==____________8_____",
+     "____________________==__________________",
+     "________=========================_______",
+     "____________________==__________________",
+     "____9_______________==__________________",
+     "____________________==__________________",
+     "____________________==__________________",
+     "____________________==__________________",
+     "___####_____________==__________________",
+     "___#__+_==============__________________",
+     "___####_____________==__________________",
+     "____________________==__________________",
+     "____________________=___________________",
+     "________________________________________"
+    ],
+    "objects": {
+     "1": "great lift down to the Engine Cathedral",
+     "2": "mooring tower",
+     "3": "mooring tower",
+     "4": "mooring tower",
+     "5": "mooring tower",
+     "6": "mooring tower",
+     "7": "mooring tower",
+     "8": "mooring tower",
+     "9": "mooring tower"
+    },
+    "labels": {
+     "harbourmaster's office": [
+      31,
+      7
+     ],
+     "rope and chain store": [
+      5,
+      19
+     ],
+     "The Wayward Lark's mooring": [
+      10,
+      19
+     ]
+    },
+    "model": "z-ai/glm-5.3-flash",
+    "made_at": "2026-10-15T00:37:12.544427+00:00"
+   }
+  }
+ },
+ "terrain": [
+  {
+   "id": "a9174576-279a-4f44-9fa0-461d6e7426f5",
+   "place_id": "0b14db0f-84e0-595d-9d72-2ea912b6f8e6",
+   "x": 0.0,
+   "y": 0.0,
+   "side": 2400.0,
+   "rows": [
+    "~~~~~~~~~~~~~~~~~~~~~~~~....==...~~~~~~~",
+    "~~~~~~~~~~~~~~~~~~~~~~~~....==...~~~~~~~",
+    "~~~~~~~~~~~~~~~~~~~~~~~~....==...~~~~~~~",
+    "~~~~~~~~~~~~~~~~~~~~~~~~....==...~~~~~~~",
+    "~~~~~~~~~~~~~~~~~~~~~~~~...==....~~~~~~~",
+    "~~~~~~~~~~~~~~~~~~~~~~~~...==....~~~~~~~",
+    "~~~~~~~~~~~~~~~~~~~~~~~~...==....~~~~~~~",
+    "~~~~~~~~~~~~~~~~~~~~~~~~..==.....~~~~~~~",
+    "~~~~~~~~~~~~~~............==.....~~~~~~~",
+    "~~~~~~~~~~~~~~...........==......~~~~~~~",
+    "~~~~~~~~~~~~~~..........==.......~~~~~~~",
+    "~~~~~~~~~~~~~~.........==........~~~~~~~",
+    "~~~~~~~~~~~~~~..::::::==:........~~~~~~~",
+    "~~~~~~~~~~~~~~..:::::==::........~~~~~~~",
+    "~~~~~~~~~~~~~~..::::==:::..~~~~~~~~~~~~~",
+    "~~~~~~~~~~~~~~..::::==:::..~~~~~~~~~~~~~",
+    "~~~~~~~~........::::==:::..~~~~~~~~~~~~~",
+    "~~~~~~~~........::::==:::..~~~~~~~~~~~~~",
+    "~~~~~~~~........::::==:::..~~~~~~~~~~~~~",
+    "~~~~~~~~........::::==:::..~~~~~~~~~~~~~",
+    "========================:........~~~~~~~",
+    "~~~~~~~~........::::=:::=====....~~~~~~~",
+    "~~~~~~~~........::::=::::....=======~~~~",
+    "~~~~~~~~........::::=::::........~~~====",
+    "~~~~~~~~........::::=::::........~~~~~~~",
+    "~~~~~~~~........::::=::::........~~~~~~~",
+    "~~~~~~~~~~~~~~..::::=::::........~~~~~~~",
+    "~~~~~~~~~~~~~~..::::=::::........~~~~~~~",
+    "~~~~~~~~~~~~~~......=......~~~~~~~~~~~~~",
+    "~~~~~~~~~~~~~~......=......~~~~~~~~~~~~~",
+    "~~~~~~~~~~~~~~......=......~~~~~~~~~~~~~",
+    "~~~~~~~~~~~~~~......=......~~~~~~~~~~~~~",
+    "~~~~~~~~~~~~~~~~~~~~=~~~~~~~~~~~~~~~~~~~",
+    "~~~~~~~~~~~~~~~~~~~~=~~~~~~~~~~~~~~~~~~~",
+    "~~~~~~~~~~~~~~~~~~~~=~~~~~~~~~~~~~~~~~~~",
+    "~~~~~~~~~~~~~~~~~~~~=~~~~~~~~~~~~~~~~~~~",
+    "~~~~~~~~~~~~~~~~~~~~=~~~~~~~~~~~~~~~~~~~",
+    "~~~~~~~~~~~~~~~~~~~~=~~~~~~~~~~~~~~~~~~~",
+    "~~~~~~~~~~~~~~~~~~~~=~~~~~~~~~~~~~~~~~~~",
+    "~~~~~~~~~~~~~~~~~~~~=~~~~~~~~~~~~~~~~~~~"
+   ],
+   "ground": "cobble",
+   "model": "z-ai/glm-5.3-flash",
+   "made_at": "2026-10-15T00:36:04.983498+00:00"
+  },
+  {
+   "id": "fd411e0c-dfc4-4d7c-ad1c-a8a01a772f0f",
+   "place_id": "8ed0e87a-f711-53e4-b4f1-629bdd6c3250",
+   "x": 800.0,
+   "y": 2400.0,
+   "side": 2000.0,
+   "rows": [
+    "~~~~~~^^^^^^^^^^^^^^=^^^^^^^^^^^^^^^^^^^",
+    "~~~~~~^^^^^^^^^^^^^^=^^^^^^^^^^^^^^^^^^^",
+    "~~~~~~::::::::::::::=:::::::::::::::::^^",
+    "~~~~~~::::::::::::::=:::::::::::::::::^^",
+    "~~~~~~::::::::::::::=:::::::::::::::::^^",
+    "~~~~~~::::::::::::::=:::::::::::::::::^^",
+    "~~~~~~::::::::::::::=:::::::::::::::::^^",
+    "~~~~~~::::::::::::::=:::::::::::::::::^^",
+    "~~~~~~::::::::::::..=..:::::::::::::::^^",
+    "~~~~~~::::::::::::..=.....::::::::::::^^",
+    "~~~~~~::::::::......=.....::::::::::::^^",
+    "~~~~~~::::::::......=.....::::::::::::^^",
+    "~~~~~~:::::.........=........:::::::::^^",
+    "~~~~~~::::..........=.........::::::::^^",
+    "~~~~~~:::...........=..........:::::::^^",
+    "~~~~~~:::...........=..........:::::::^^",
+    "~~~~~~:::...........=..........:::::::^^",
+    "~~~~~~::............=...........::::::^^",
+    "~~~~~~::............=...........::::::^^",
+    "~~~~~~::............=...........::::::^^",
+    "~~~~~~::......==========================",
+    "~~~~~~::............=...........::::::^^",
+    "~~~~~~::............=...........::::::^^",
+    "~~~~~~:::...........=..........:::::::^^",
+    "~~~~~~:::...........=..........:::::::^^",
+    "~~~~~~:::...........=..........:::::::^^",
+    "~~~~~~:::,,,,.......=.......::::::::::^^",
+    "~~~~~~::,,,,,,......=.......::::::::::^^",
+    "~~~~~~::,,,,,,......=.......::::::::::^^",
+    "~~~~~~::,,,,,,......=......:::::::::::^^",
+    "~~~~~~:::,,,,:......=.....::::::::::::^^",
+    "~~~~~~:::::::::::...=..:::::::::::::::^^",
+    "~~~~~~::::::::::::::=:::::::::::::::::^^",
+    "~~~~~~::::::::::::::=:::::::::::::::::^^",
+    "~~~~~~~~~~~~~~~~~~~~=:::::::::::::::::^^",
+    "~~~~~~~~~~~~~~~~~~~~::::::::::::::::::^^",
+    "~~~~~~~~~~~~~~~~~~~~::::::::::::::::::^^",
+    "~~~~~~~~~~~~~~~~~~~~::::::::::::::::::^^",
+    "~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^",
+    "~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^"
+   ],
+   "ground": "cobble",
+   "model": "z-ai/glm-5.3-flash",
+   "made_at": "2026-10-15T00:36:07.295590+00:00"
+  },
+  {
+   "id": "2c748b5f-7f1a-4c29-ad67-2fd702ba5b5d",
+   "place_id": "de95d84b-d756-58df-b3de-3f30effc79dc",
+   "x": 2000.0,
+   "y": 2200.0,
+   "side": 2800.0,
+   "rows": [
+    "^^^^^^          ................    ~~~~",
+    "^^^^^^          ................    ~~~~",
+    "^^^^^^          ................    ~~~~",
+    "^^^^^^          ................    ~~~~",
+    "^^^^^^          ....................~~~~",
+    "^^^^^^          ....................~~~~",
+    "        ....=...........................",
+    "        .....=..........................",
+    "        ......==..............      =   ",
+    "        ........=.............     =    ",
+    "        .........==...........    =     ",
+    "        ...........=..........   =      ",
+    "        ............=.........  =       ",
+    "        ............=......... =        ",
+    "        ....^^^^^^^^=^^^^^^^..=         ",
+    "        ....^^^^^^^^=^^^^^^^.=          ",
+    "............^^::::::=:::::^==.          ",
+    "..=========.^^::::::=:::::=^..          ",
+    "..........=.^^::::::=::===^^..          ",
+    "..........=.^^::::::=:=:::^^..          ",
+    "..........==============================",
+    "..........=.^^:::::::=::::^^............",
+    "....,,....=.^^::::::::=:::^^............",
+    "...,,,,...=.^^:::::::::=::^^............",
+    "..,,,,,,..=.^^^^^^^^^^^^=^^^............",
+    "..,,,,,,..=.^^^^^^^^^^^^^=^^............",
+    "..,,,,,,..=...............=.....::::::::",
+    "..,,,,,,..=................=....::::::::",
+    "...,,,,...=.................=...::::::::",
+    "....,,....=..................=..::::::::",
+    "........  =           ....,,,,=.::::::::",
+    "........ =            ...,,,,,,=::::::::",
+    "........=             ..,,,,,,,,=:::::::",
+    ".......=              ..,,,,,,,,:=::::::",
+    "......=.              ...,,,,,,.::=:::::",
+    ".....=..              ....,,,,..::::::::",
+    "....=...              ..................",
+    "........              ..................",
+    "........              ..................",
+    "........              .................."
+   ],
+   "ground": "cobble",
+   "model": "z-ai/glm-5.3-flash",
+   "made_at": "2026-10-15T00:36:22.106096+00:00"
+  }
+ ],
+ "failures": {},
+ "pictures": [
+  {
+   "id": "e8256ddf-dd1f-43b5-9a2a-f995a86b5ead",
+   "subject": "isometric",
+   "subject_id": "0b14db0f-84e0-595d-9d72-2ea912b6f8e6",
+   "name": "Tinker's Row",
+   "state": "",
+   "file": "map/brasshaven-tinkers-row-isometric.jpg",
+   "from_picture": null,
+   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: Tinker's Row, A crooked district of workshops on the middle piers: narrow cobbled lanes, brass signs, steaming pipes, chimneys and gas lamps. In it: The Gilded Gear: Adelaide Quill's workshop: a narrow two-storey brick building with a big round brass gear over its door, its windows full of clockwork; The Copper Kettle: A tiny tearoom and tavern where artificers argue over plans, its windows fogged with steam; The tram stop: An iron shelter where the cog tram stops before climbing the pier. Marked on the map: iron tram shelter, gas lamp, gas lamp, gas lamp, gas lamp, brass sign: The Gilded Gear, steaming pipe run, chimney, chimney. The ground: as the map shows it. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
+   "model": "qwen-image",
+   "made_at": "2026-10-15T00:45:21.060621+00:00"
+  }
+ ],
+ "pictures_by_day": {}
+}
