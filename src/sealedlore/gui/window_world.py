@@ -23,6 +23,7 @@ from sealedlore.engine.world_pictures import shown_view, view_current, views_of
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.isometric_view import CHOICE_THUMB, ChooseViewDialog, ViewChoice
 from sealedlore.gui.map_iso import iso_png
+from sealedlore.gui.map_tiles import texture_colours
 from sealedlore.gui.ref_images import PICTURE_FILTER, thumbnail_of
 from sealedlore.gui.world_view import WorldView
 
@@ -126,6 +127,10 @@ class WorldWindow:
         # Map-first: the ring and the fog follow where the character stands.
         self.world_view.me_place = session.here_place
         self.world_view.play_area = self._play_area_id
+        # The 2D map's roofs, walls and ground in the tile set's own colours,
+        # so the plan and the play view show one farmhouse.
+        info, read = session.tile_set()
+        self.world_view.look_colours = texture_colours(info.name, read) if info.name else None
         self.world_view.set_world(
             session.world(), session.map_art_copy(), held, keep_view=keep_view
         )
