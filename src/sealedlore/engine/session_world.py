@@ -110,7 +110,7 @@ class WorldRuntime:
             hidden=self.hidden_ids(path) if self.story.plot is not None else (),
         )
 
-    def map_context(self, path, held_id: str | None) -> str:
+    def map_context(self, path, held_id: str | None, *, turn_node_id: str | None = None) -> str:
         """The local map for the storyteller at the end of `path`, whenever
         the story keeps a map (the author's call: playing without one saves
         the tokens). A plot file's places in its own words, with distances;
@@ -126,8 +126,14 @@ class WorldRuntime:
             fixed={p.id for p in base.places} if base is not None else (),
         )
         # Map-first: where everyone stands, exactly (engine/session_area.py),
-        # and the spots the author's turn marks.
-        parts = [text, self.positions_context(path, held_id), self.marks_context(path)]
+        # and the spots the author's turn marks. `turn_node_id` is the turn
+        # being sent (a retake's leaf is the previous take, so it can't be
+        # found from the leaf).
+        parts = [
+            text,
+            self.positions_context(path, held_id, turn_node_id=turn_node_id),
+            self.marks_context(path, turn_node_id=turn_node_id),
+        ]
         return "\n\n".join(p for p in parts if p)
 
     def _prepare_world_read(self) -> _WorldRead | None:
@@ -229,18 +235,17 @@ class WorldRuntime:
         delta, refused = resolve_reply(pending.before, reply, source=pending.source, people=people)
         path = self._path_to(node.id)
         author = path[-2] if len(path) > 1 and path[-2].kind == "user" else None
+        held_name = self.map_held_name(node.meta.controlled_character_id)
         # Map-first: what the author marked is put exactly there, and what
-        # has nothing else to go on goes beside where they stand.
+        # has nothing else to go on goes beside where they stand (the turn's
+        # character, not whoever is held now).
         self.apply_marks(pending.before, delta, reply, author)
         near = None
         if self.map_first:
-            near = self.held_point(self._snapshot_on(path[:-1]), pending.before)
-        place_delta(
-            pending.before,
-            delta,
-            self.map_held_name(node.meta.controlled_character_id),
-            near,
-        )
+            near = self.held_point(self._snapshot_on(path[:-1]), pending.before, held=held_name)
+        place_delta(pending.before, delta, held_name, near)
+        # Someone sent to a marked spot, once every new place has its spot.
+        self.apply_marks_at(pending.before, delta, reply, author)
         if refused:
             self._log("world_refused", {"request_log_ref": log_ref, "refused": refused})
         node.meta.world = None if delta.empty() else delta

@@ -689,13 +689,9 @@ class MainWindow(
         elif self.map_shown():
             self.show_map(False)
         elif self.world_shown():
-            # From the isometric view back to the map; on the local map, Esc
-            # goes out to the region first.
-            if self.world_view.leave_isometric():
-                pass
-            elif self.world_view.level() == "local":
-                self.world_view.go_region()
-            else:
+            # From the isometric view back to the map; from the local level
+            # (the play view too) out to the region; then off the map.
+            if not self.world_view.escape():
                 self.show_world(False)
         elif self.find_open():
             self.close_find()
@@ -2465,6 +2461,7 @@ class MainWindow(
         looked as if they had failed, so a progress dialog says what's running
         and offers Stop.
         """
+        self._finish_walk_before_job()
         if question is not None:
             self.transcript.begin_aside(question)
         elif streaming:
@@ -3653,6 +3650,9 @@ class MainWindow(
         moved = self.session.hold(character_id or None)
         self._refresh_scene_panel()
         self._refresh_composer()
+        # The map follows the character taken up: the ring, the sight, the
+        # clock; the other character's unsent walk is theirs, not these.
+        self.refresh_world()
         if character_id:
             self.composer.select_speaker(character_id)
         self._reassemble_inspector()

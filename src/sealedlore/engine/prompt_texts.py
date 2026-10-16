@@ -4149,8 +4149,9 @@ SPOTS THE AUTHOR MARKED ON THE MAP IN THEIR TURN:
 A place the author's turn or the passage puts at one of these spots (something
 made, found or built there): add "mark" to its entry in "places", with the
 spot's coordinate copied exactly ("mark": "{example}"). Someone who goes to one:
-give their "where" as usual, and add "at": {"<person>": "{example}"} to the
-object, with that spot's coordinate.""",
+give their "where" as usual, and under "at" (the same "at" as for the spots near
+the author's character) give that spot's coordinate, copied exactly:
+"at": {"<person>": "{example}"}.""",
     (
         ("marks", "one line a spot: the spot and what is there"),
         ("example", "the first spot's coordinate, as an example"),

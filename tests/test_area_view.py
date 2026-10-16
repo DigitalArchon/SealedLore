@@ -4,6 +4,7 @@ gui/area_render.py). Offscreen."""
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 import pytest
@@ -17,10 +18,12 @@ from PySide6.QtGui import QColor, QImage  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from sealedlore.engine.area import build_area  # noqa: E402
+from sealedlore.engine.prompt import TurnRequest  # noqa: E402
 from sealedlore.engine.tile_sets import TileSetInfo  # noqa: E402
 from sealedlore.gui.area_render import TileSource, cut_out, render_area  # noqa: E402
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.models.world import WorldDelta  # noqa: E402
+from sealedlore.providers.mock import MockChatProvider  # noqa: E402
 from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
 from sealedlore.storage.world_art import save_world_art  # noqa: E402
 from tests.test_area import world_and_art  # noqa: E402
@@ -70,11 +73,20 @@ def test_a_map_story_opens_on_the_area_to_walk_on(window):
     assert view.area is not None and view.area.name == "The house"
     assert [w.name for w in view.walkers if w.held] == ["Serrik Vaun"]
     assert view.title.text() == "The house" and view.clock.text().startswith("Day 1")
-    # Plan is the area's plan as the map drew it; Local is back to walking.
-    window.world_view.go_plan()
+    # Region is the map; Local is back to walking, and stays so when the map
+    # is redrawn (it used to go back to the level fitted before).
+    window.world_view.go_region()
     assert not window.world_view.play_shown()
     window.world_view.go_local()
     assert window.world_view.play_shown()
+    window.composer.focus_input()
+    window.refresh_world(keep_view=True)
+    assert window.world_view.play_shown()
+    assert window.focusWidget() is not window.area_view  # a redraw never takes the keyboard
+    # Esc from the play view goes out to the region.
+    window._on_escape()
+    assert window.world_shown() and not window.world_view.play_shown()
+    assert window.world_view.level() == "region"
 
 
 def test_walking_into_the_door_goes_outside_and_a_menu_choice_fills_the_composer(app, window):
@@ -162,7 +174,19 @@ def test_go_here_walks_within_the_area_and_travels_to_another(app, window):
 
     point = tile_point(session.world(), farm, 30, 50)
     window._go_point(*point)
-    assert window.composer.text().startswith("I make my way to ⌖(")
+    text = window.composer.text()
+    assert text.startswith("I make my way to ⌖(")
+    # Still in the house until the turn is sent; there once it is.
+    assert session.area_state().spots["Serrik Vaun"].area == "house"
+    session.provider.responses = ["She goes.", "{}"]
+    list(
+        session.send(
+            TurnRequest(
+                speaker_id="char-serrik", user_text=text, controlled_character_id="char-serrik"
+            )
+        )
+    )
+    window.refresh_area()
     me = session.area_state().spots["Serrik Vaun"]
     assert me.area == "farm" and window.area_view.area.name == "The farm"
     # Now in the farm: a spot in it is walked to.
@@ -191,16 +215,69 @@ def test_me_centres_either_view_on_the_author_s_character(app, window):
     assert abs(middle.x() - me[0]) < 50 and abs(-middle.y() - me[1]) < 50
 
 
-def test_indoors_what_can_t_be_seen_is_shaded_and_someone_out_of_sight_is_faint(app, window):
+def test_indoors_what_can_t_be_seen_is_shaded_and_someone_out_of_sight_is_hidden(app, window):
+    from PySide6.QtCore import QPointF
+
+    from sealedlore.engine.area import sees
+    from sealedlore.gui.area_render import px_for
+    from sealedlore.models.area import LiveArea, Spot
+
     view = window.area_view
     assert view.area.indoor and view._shade is not None
-    me = view.held()
-    for name, person in view.people.items():
-        if name != me.name:
-            from sealedlore.engine.area import sees
+    session = window.session
+    # Maela in the other room, behind the wall: in the fog of war, not shown,
+    # not clickable; beside Serrik, shown.
+    state = session.area_state()
+    state.spots["Serrik Vaun"] = Spot(area="house", x=5, y=10)
+    state.spots["Maela Orr"] = Spot(area="house", x=30, y=10)
+    session.story.area_live = LiveArea(leaf_id=session.story.active_leaf_id, state=state)
+    window.refresh_area()
+    assert not sees(view.area, (5, 10), (30, 10))
+    assert not view.people["Maela Orr"].isVisible() and not view._tags["Maela Orr"].isVisible()
+    px = px_for(view.area)
+    assert view.person_at(QPointF(30.5 * px, 10.5 * px)) is None
+    state.spots["Maela Orr"] = Spot(area="house", x=7, y=10)
+    session.story.area_live = LiveArea(leaf_id=session.story.active_leaf_id, state=state)
+    window.refresh_area()
+    assert view.people["Maela Orr"].isVisible()
+    assert view.person_at(QPointF(7.5 * px, 10.5 * px)).name == "Maela Orr"
 
-            seen = sees(view.area, (me.x, me.y), (person.walker.x, person.walker.y))
-            assert person.opacity() == (1.0 if seen else 0.45)
+
+def test_a_turn_sent_mid_walk_carries_where_the_figure_is(app, window):
+    session = window.session
+    before = session.area_state().spots["Serrik Vaun"]
+    steps = session.walk_route(before.x + 6, before.y)
+    assert len(steps) > 4
+    window.area_view.walk(steps)
+    window.area_view._step()
+    window.area_view._step()  # two tiles shown
+    shown = (window.area_view.held().x, window.area_view.held().y)
+    assert shown != (before.x, before.y)
+    window._provider = MockChatProvider(["She stops.", "{}"])
+    window._refresh_composer()
+    window.composer.input.setPlainText("I stop.")
+    window.send_turn()
+    assert window._busy and not window.area_view.walking()
+    deadline = time.monotonic() + 20
+    while window._busy:
+        assert time.monotonic() < deadline, "the turn never finished"
+        app.processEvents()
+        time.sleep(0.005)
+    pump(app)
+    stamped = next(n for n in reversed(session.nodes) if n.kind == "user").meta.area
+    assert (stamped.spots["Serrik Vaun"].x, stamped.spots["Serrik Vaun"].y) == shown
+    assert session.story.area_live is None  # nothing of the walk written during the job
+
+
+def test_pins_keep_the_turn_s_numbering_when_a_mark_lies_elsewhere(app, window):
+    window.composer.input.setPlainText("")
+    window._mark_point(400.0, 8000.0)  # 1: on the region, not in this area
+    window._mark_tile(5, 5)  # 2: here
+    pump(app)
+    assert [pin.label for pin in window.area_view._pins] == ["2"]
+    assert [pin.label for pin in window.world_view._pins] == ["1", "2"]
+    window.composer.input.setPlainText("")
+    pump(app)
 
 
 def test_walking_off_an_area_s_edge_offers_what_lies_that_way(app, window):

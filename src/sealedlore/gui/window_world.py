@@ -123,6 +123,9 @@ class WorldWindow:
         self.world_view.isometric_offer = session.isometric_offer()
         self.world_view.isometric_painting = session.isometric_painting
         self.world_view.set_progress(*session.map_art_progress())
+        # Map-first: the ring and the fog follow where the character stands.
+        self.world_view.me_place = session.here_place
+        self.world_view.play_area = self._play_area_id
         self.world_view.set_world(
             session.world(), session.map_art_copy(), held, keep_view=keep_view
         )

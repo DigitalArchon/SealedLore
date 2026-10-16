@@ -20,7 +20,7 @@ import re
 from dataclasses import dataclass
 
 from sealedlore.engine.world_art import plan_rect
-from sealedlore.engine.world_layout import moves, size_of
+from sealedlore.engine.world_layout import position, size_of
 from sealedlore.models.world import WorldArt, WorldMap
 
 MARK = re.compile(r"[⌖@]\s*\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)")
@@ -62,9 +62,12 @@ def footprint(
     world: WorldMap, art: WorldArt, place_id: str
 ) -> tuple[float, float, float, float] | None:
     """(west, south, east, north) of a place on the map: its plan's rectangle
-    where it has a plan, else its square."""
+    where it has a plan, else its square. A vehicle (and what is inside one)
+    is where it is docked now (`position`): a mark on a ship's deck is on
+    the ship, not in the bay."""
     place = world.places.get(place_id)
-    if place is None or place.x is None or place.y is None or moves(world.places, place):
+    spot = position(world, place_id) if place is not None else None
+    if place is None or spot is None:
         return None
     if art.layout_shown(place.id, place.state) is not None:
         rect = plan_rect(world, place)
@@ -72,7 +75,7 @@ def footprint(
             west, north, width, height = rect
             return west, north - height, west + width, north
     half = size_of(place) / 2
-    return place.x - half, place.y - half, place.x + half, place.y + half
+    return spot[0] - half, spot[1] - half, spot[0] + half, spot[1] + half
 
 
 def place_at(world: WorldMap, art: WorldArt, x: float, y: float) -> str | None:

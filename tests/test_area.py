@@ -440,9 +440,17 @@ def test_travelling_moves_the_clock_by_the_way_s_length(tmp_path, story, cast):
     text = session.travel("town")
     assert text == "I set off for Hellsville."
     state = session.area_state()
-    assert state.walked == choices["Hellsville"] and "to Hellsville" in state.walked_words
-    assert "Serrik Vaun" not in state.spots  # Hellsville has no plan yet
+    # Nothing moves until the turn is sent: a turn rewritten travels nowhere.
+    assert state.walked == 0 and "Serrik Vaun" in state.spots
+    assert state.action.verb == "travel" and state.action.seconds == choices["Hellsville"]
+    list(session.send(turn("I stay where I am.")))
+    assert session.world().where["Serrik Vaun"] == "house"
+    assert session.path()[-2].meta.area.walked == 0
+    text = session.travel("town")
     list(session.send(turn(text)))
+    stamped = session.path()[-2].meta.area
+    assert stamped.walked == choices["Hellsville"] and "to Hellsville" in stamped.walked_words
+    assert "Serrik Vaun" not in stamped.spots  # Hellsville has no plan yet
     assert session.world().where["Serrik Vaun"] == "town"
 
 
@@ -556,10 +564,24 @@ def test_an_area_that_adjoins_is_walked_on_into(tmp_path, story, cast):
     _stand(session, "farm", 30, 0)
     choices = session.edge_choices("north")
     assert choices[0][:2] == ("area", "The meadow")
+    assert [c[1] for c in choices].count("The meadow") == 1  # once: as the walk on
     state = session.cross_edge("north")
     me = state.spots["Serrik Vaun"]
     assert me.area == "meadow" and me.y == session.area("meadow").height - 1
     assert 0 < state.walked < 30
+    # A river along the meadow's south edge bars the way: no crossing for free.
+    wet = {
+        "ground": "grass",
+        "features": [{"kind": "area", "fill": "water", "x": 0, "y": 20, "w": 40, "h": 4}],
+    }
+    rows, objects, _labels = rasterise(wet, 40, 24)
+    session.world_art.layouts["meadow"] = {
+        "": PlaceLayout(place_id="meadow", spec=wet, rows=rows, made_at="2")
+    }
+    session._area_cache = None
+    _stand(session, "farm", 30, 0)
+    assert session.cross_edge("north") is None
+    assert all(c[0] != "area" for c in session.edge_choices("north"))
 
 
 def test_one_asset_of_the_tile_set_is_changed_drawn_again_or_put_back(

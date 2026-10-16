@@ -47,6 +47,11 @@ class MapAction(BaseModel):
     # The turn's text as the menu wrote it: an author who replaces it has
     # written a turn of their own, and the action no longer applies.
     text: str = ""
+    # Travel: where the author's character will stand (None: a place with no
+    # area yet) and how long the way takes, applied when the turn is sent
+    # (`stamp_turn`), never before: a turn rewritten travels nowhere.
+    spot: Spot | None = None
+    seconds: int = 0
 
 
 class Mark(BaseModel):
@@ -89,6 +94,8 @@ class LiveArea(BaseModel):
     branch, a take swapped) makes it stale, and it is dropped."""
 
     leaf_id: str | None = None
+    # Whose walking it is: taking up another character drops it.
+    held: str | None = None
     state: AreaState = Field(default_factory=AreaState)
 
 

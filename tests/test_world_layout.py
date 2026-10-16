@@ -250,6 +250,7 @@ def test_a_place_in_a_wide_parent_is_put_by_the_author_s_character_not_off_its_f
         held="Elowen",
     )
     x, y = at(world, "The rift")
-    assert abs(x - 2000) <= 8000 and abs(y - 8000) <= 8000  # in the forest
-    assert math.hypot(x, y) <= 1000  # beside the village
-    assert math.hypot(x, y) >= (800 + 300) / 2  # and not on top of it
+    # In the forest's drawn rectangle (16 km by 9.6 km round its spot), at
+    # the edge nearest the village: the plan's south edge is 3.2 km off.
+    assert abs(x - 2000) <= 8000 - 150 and abs(y - 8000) <= 4800 - 150
+    assert abs(x) <= 200 and y <= 3400

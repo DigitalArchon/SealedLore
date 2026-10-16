@@ -94,9 +94,11 @@ def test_going_to_a_spot_in_another_area_travels_there(tmp_path, story, cast):
     text = session.go_to_point(*point)
     assert text == f"I make my way to {mark_token(*point)}, in The farm."
     state = session.area_state()
-    me = state.spots["Serrik Vaun"]
+    assert state.spots["Serrik Vaun"].area == "house"  # not until the turn is sent
+    assert state.action.verb == "travel" and state.action.seconds > 0
+    list(session.send(turn(text)))
+    me = session.area_state().spots["Serrik Vaun"]
     assert me.area == "farm" and abs(me.x - 30) + abs(me.y - 50) <= 2
-    assert state.walked > 0 and state.action.verb == "travel"
     # In the area already: walking is the way, and nothing is written.
     assert session.go_to_point(*tile_point(session.world(), session.area("farm"), 31, 50)) == ""
 
@@ -129,3 +131,110 @@ def test_a_read_that_gives_a_spot_s_words_for_its_coordinate_still_puts_it_there
     assert (shrine.x, shrine.y) == (point.x, point.y)
     sent = session.provider.requests[-1].messages[-1].text
     assert f'"mark": "{token}"' in sent  # the coordinate to copy, shown
+
+
+def test_a_retake_is_told_the_turn_s_own_positions_and_marks(tmp_path, story, cast):
+    session = make_session(tmp_path, story, cast, ["One.", "{}", "Two.", "{}", "Three.", "{}"])
+    session.config.scene_reads = "manual"
+    house = session.area("house")
+    door = next(e for e in house.exits if e[1] == 23)
+    session.walked(session.walk_route(*door))
+    session.go_through()
+    token = session.mark_of_tile("farm", 30, 50)
+    list(session.send(turn(f"I point at {token}.")))
+    first = session.provider.requests[-2].messages[-1].text
+    assert "- Serrik Vaun: in The farm" in first and f"- {token}: " in first
+    # Walk on after the passage, then retake: the retake gets the turn's
+    # own snapshot and marks, not the walking done since (the review).
+    session.walked(session.walk_route(40, 50))
+    list(session.regenerate())
+    retake = session.provider.requests[-2].messages[-1].text
+    block = lambda t: t[t.index("Where everyone stands") :].split("\n\n")[0]  # noqa: E731
+    assert block(retake) == block(first) and f"- {token}: " in retake
+    # A Question carries neither a pending menu choice nor the live walk.
+    session.map_action("talk", "Maela Orr")
+    list(session.ask("Why is it cold?"))
+    asked = session.provider.requests[-1].messages[-1].text
+    assert "The author chose" not in asked and "Since the last passage" not in asked
+
+
+def test_an_edited_turn_s_marks_are_its_new_text_s(tmp_path, story, cast):
+    session = make_session(tmp_path, story, cast, ["One.", "{}"])
+    session.config.scene_reads = "manual"
+    list(session.send(turn("I look around.")))
+    user = session.path()[-2]
+    token = session.mark_of_tile("farm", 30, 50)
+    session.edit_node(user.id, f"I point at {token}.")
+    assert [m.token for m in user.meta.area.marks] == [token]
+    session.edit_node(user.id, "I look around again.")
+    assert user.meta.area.marks == []
+
+
+def test_a_named_spot_under_at_is_never_taken_for_the_one_mark(tmp_path, story, cast):
+    session = make_session(tmp_path, story, cast)
+    token = session.mark_of_tile("farm", 30, 50)
+    read = json.dumps(
+        {
+            "where": [{"who": "Maela", "place": "The house", "quote": "Maela came in"}],
+            "at": {"Maela": "the cast-iron stove"},
+            "places": [
+                {
+                    "name": "The cairn",
+                    "inside": "The farm",
+                    "kind": "site",
+                    "mark": "none",
+                    "quote": "a cairn",
+                }
+            ],
+        }
+    )
+    session.provider.responses = ["Maela came in. There is a cairn.", read]
+    session.config.scene_reads = "manual"
+    list(session.send(turn(f"I glance at {token}.")))
+    world = session.world()
+    assert world.where["Maela Orr"] == "house"  # the stove, in the house, not the mark
+    cairn = next(p for p in world.places.values() if p.name == "The cairn")
+    assert (cairn.x, cairn.y) != marks_in(token)[0].x or cairn.y != marks_in(token)[0].y
+
+
+def test_a_place_at_a_mark_inside_another_new_place_keeps_its_inside(tmp_path, story, cast):
+    session = make_session(tmp_path, story, cast)
+    a = session.mark_of_tile("farm", 30, 50)
+    b = session.mark_of_tile("farm", 32, 50)
+    read = json.dumps(
+        {
+            "places": [
+                {
+                    "name": "The camp",
+                    "inside": "The farm",
+                    "kind": "site",
+                    "mark": a,
+                    "size": 30,
+                    "quote": "a camp",
+                },
+                {
+                    "name": "The tent",
+                    "inside": "The camp",
+                    "kind": "building",
+                    "mark": b,
+                    "quote": "a tent",
+                },
+            ]
+        }
+    )
+    session.provider.responses = ["There is a camp, with a tent.", read]
+    session.config.scene_reads = "manual"
+    list(session.send(turn(f"Direction: a camp at {a}, its tent at {b}.")))
+    world = session.world()
+    camp = next(p for p in world.places.values() if p.name == "The camp")
+    tent = next(p for p in world.places.values() if p.name == "The tent")
+    assert tent.inside == camp.id and (tent.x, tent.y) == (marks_in(b)[0].x, marks_in(b)[0].y)
+
+
+def test_a_mark_on_a_docked_ship_is_on_the_ship():
+    from sealedlore.models.world import WorldPlace
+
+    world, art = world_and_art()
+    ship = WorldPlace(id="ship", name="The Wren", kind="vehicle", inside="town", size=25.0)
+    world.places["ship"] = ship
+    assert place_at(world, art, 0.0, 8000.0) == "ship"  # where the town is, the ship is docked

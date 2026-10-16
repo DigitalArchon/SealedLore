@@ -93,6 +93,10 @@ class TurnRequest:
     speaker_id: str
     user_text: str
     controlled_character_id: str | None = None
+    # The author's node this turn is, once attached (`send`, `regenerate`):
+    # the map section reads the turn's own snapshot by it, wherever the leaf
+    # is (a retake's leaf is the previous take).
+    turn_node_id: str | None = None
     ooc: str | None = None
     npc_scope: NpcScope = "all"
     npc_scope_ids: tuple[str, ...] = ()

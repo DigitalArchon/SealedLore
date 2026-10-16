@@ -102,6 +102,7 @@ class AreaWindow:
             self._area_story = session.story.id
             self._area_images.clear()
             self._walker_images.clear()
+            self.area_view.drop_walk()  # the last story's walk is nobody's
         state = session.area_state()
         held = session.held_name()
         me = state.spots.get(held or "")
@@ -212,6 +213,18 @@ class AreaWindow:
             self.area_view.set_locked(self._busy)
             self.world_view.locked = self._busy
 
+    def _finish_walk_before_job(self) -> None:
+        """Before any job starts: a walk still animating ends where the
+        figure is and goes to the session, so the turn carries it and
+        nothing of the walk is written while the worker runs."""
+        if hasattr(self, "area_view") and self.area_view.walking():
+            self._area_pending = None  # a menu choice mid-walk: the job came first
+            self.area_view.finish_walk()
+
+    def _play_area_id(self) -> str | None:
+        area = self.area_view.area if hasattr(self, "area_view") else None
+        return area.place_id if area is not None and self.world_view.play_shown() else None
+
     # --- walking ----------------------------------------------------------------
 
     def _area_walk(self, x: int, y: int, beside: bool) -> None:
@@ -227,8 +240,8 @@ class AreaWindow:
 
     def _area_walked(self, steps: list) -> None:
         session = self.session
-        if session is None:
-            return
+        if session is None or self._busy:
+            return  # a job runs: the worker is the only writer of the session
         session.walked([tuple(s) for s in steps])
         door = session.door_here()
         pending, self._area_pending = self._area_pending, None
@@ -334,10 +347,10 @@ class AreaWindow:
         tiles = []
         if session is not None and area is not None and points:
             world = session.world()
-            for x, y in points:
+            for number, (x, y) in enumerate(points, start=1):
                 tile = point_tile(world, area, x, y)
                 if tile is not None:
-                    tiles.append(tile)
+                    tiles.append((number, tile))
         self.area_view.set_marks(tiles)
 
     def _go_point(self, x: float, y: float) -> None:
@@ -384,6 +397,8 @@ class AreaWindow:
                 self.statusBar().showMessage(f"You walk on, {side}.", 4000)
                 session.start_tile_art()
                 self._sync_progress()
+            else:
+                self.statusBar().showMessage(f"The way {side} is barred here.", 4000)
             return
         self._area_travel(choice_id)
 

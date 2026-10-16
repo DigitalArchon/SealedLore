@@ -53,6 +53,10 @@ KIND_SIZE: dict[str | None, float] = {
 }
 # Children are drawn within their parent, never wider than this share of it.
 CHILD_SHARE = 0.45
+# A place's plan is drawn as a rectangle this many rows to its columns
+# (world_art.PLAN_ASPECT, 24/40): a child placed in the parent must lie in
+# that rectangle, not just the parent's square, or it falls off the plan.
+PLAN_ASPECT = 0.6
 
 _LENGTH_UNITS: dict[str, float] = {
     "millimetre": 0.001,
@@ -244,6 +248,21 @@ def _ancestors(places: dict[str, WorldPlace], place: WorldPlace) -> set[str]:
     return out
 
 
+def _bounds(parent: WorldPlace, size: float = 0.0) -> tuple[float, float]:
+    """(half width, half height) a place of `size` may be centred within,
+    inside the parent's drawn rectangle."""
+    half_w = size_of(parent) / 2 - size / 2
+    half_h = size_of(parent) * PLAN_ASPECT / 2 - size / 2
+    return half_w, half_h
+
+
+def _in_parent(parent: WorldPlace, x: float, y: float, size: float = 0.0) -> bool:
+    half_w, half_h = _bounds(parent, size)
+    if half_w <= 0 or half_h <= 0:
+        return False
+    return abs(x - parent.x) <= half_w + 1e-6 and abs(y - parent.y) <= half_h + 1e-6  # type: ignore[operator]
+
+
 def _within(
     parent: WorldPlace,
     size: float,
@@ -252,17 +271,18 @@ def _within(
     name: str,
 ) -> tuple[float, float] | None:
     """The free spot inside `parent` nearest `origin`, or None when there is
-    none. The parent is its square on the map, as its plan is drawn."""
-    half = size_of(parent) / 2 - size / 2
-    if half <= 0:
+    none. The parent is its drawn rectangle on the map (`PLAN_ASPECT`)."""
+    half_w, half_h = _bounds(parent, size)
+    half = max(half_w, half_h)
+    if half_w <= 0 or half_h <= 0:
         return None
     px, py = parent.x, parent.y  # type: ignore[assignment]
 
     def inside(x: float, y: float) -> bool:
-        return abs(x - px) <= half + 1e-6 and abs(y - py) <= half + 1e-6
+        return _in_parent(parent, x, y, size)
 
-    sx = min(max(origin[0], px - half), px + half)
-    sy = min(max(origin[1], py - half), py + half)
+    sx = min(max(origin[0], px - half_w), px + half_w)
+    sy = min(max(origin[1], py - half_h), py + half_h)
     if _clear(sx, sy, size, others):
         return sx, sy
     step = max(size / 2, 1.0)
@@ -280,10 +300,13 @@ def _within(
 
 
 def _near_enough(parent: WorldPlace, point: tuple[float, float]) -> bool:
-    """`point` (where the author's character is) in the parent, or at its
-    edge: within a quarter of its width outside it."""
-    reach = size_of(parent) / 2 * 1.25
-    return abs(point[0] - parent.x) <= reach and abs(point[1] - parent.y) <= reach  # type: ignore[operator]
+    """`point` (where the author's character is) in the parent's drawn
+    rectangle, or near it: within half its size outside (a village 3 km from
+    a 16 km forest's edge is at the forest; what the story puts in the
+    forest then goes to the edge nearest the village, not its middle)."""
+    half_w, half_h = _bounds(parent)
+    reach_w, reach_h = half_w + size_of(parent) / 2, half_h + size_of(parent) / 2
+    return abs(point[0] - parent.x) <= reach_w and abs(point[1] - parent.y) <= reach_h  # type: ignore[operator]
 
 
 def place_one(
@@ -325,9 +348,15 @@ def place_one(
         stated = metres(link.distance)
         close = bool(_CLOSE.search(link.direction or ""))
         distance = max(stated, gap) if stated is not None else gap * (1.0 if close else 1.5)
-        place.x, place.y = _spot(
+        x, y = _spot(
             (other.x, other.y), distance, angle, size, others, place.name, angle is not None
         )
+        if parent is not None and not _in_parent(parent, x, y, size):
+            # "Inside the forest, five miles north of the village" with the
+            # village outside the forest: inside wins, and the spot is found
+            # within the parent below (the review, Oct 16 2026).
+            break
+        place.x, place.y = x, y
         return
 
     if near_point is None:

@@ -787,18 +787,10 @@ class WorldView(QWidget):
             "asked first; the map art model draws it in the background.",
         )
         self.redraw_button.clicked.connect(self._redraw_requested)
-        # Map-first play: the area to walk on is the local map (gui/area_view.py,
-        # `attach_play`); Plan shows the area's plan as before, with its
-        # isometric views.
-        self.plan_button = self._button(
-            "Plan", "The plan of the area, as the map drew it: its isometric views are here"
-        )
-        self.plan_button.setCheckable(True)
-        self.plan_button.hide()
         header = WrapRow()
         header.add_group([self.title])
         header.add_group(
-            [self.local_button, self.plan_button, self.region_button, self.world_button]
+            [self.local_button, self.region_button, self.world_button]
         )
         header.add_group([self.me_button, self.zoom_out, self.zoom_in])
         header.add_group([self.inside_button, self.iso_button, self.redraw_button])
@@ -838,8 +830,7 @@ class WorldView(QWidget):
         self.me_button.clicked.connect(self.centre_on_me)
         self.zoom_out.clicked.connect(lambda: self.view.zoom_by(1 / ZOOM_STEP))
         self.zoom_in.clicked.connect(lambda: self.view.zoom_by(ZOOM_STEP))
-        self.local_button.clicked.connect(lambda: self.go_local())
-        self.plan_button.clicked.connect(lambda: self.go_plan())
+        self.local_button.clicked.connect(self._local_clicked)
         self.region_button.clicked.connect(lambda: self.go_region())
         self.world_button.clicked.connect(lambda: self.go_world())
         self.inside_button.toggled.connect(lambda _on: self._update_detail())
@@ -926,6 +917,11 @@ class WorldView(QWidget):
         self._iso_opacity = 1.0
         # The area the isometric bar is about now (`area_in_view`).
         self._focus: str | None = None
+        # Map-first (the window sets them): where the author's character
+        # stands now (the live spot's place, ahead of the map's `where`), and
+        # the area being played on.
+        self.me_place: Callable[[], str | None] = lambda: None
+        self.play_area: Callable[[], str | None] = lambda: None
         # Every item the scene holds is held here too: PySide lets a scene
         # item go with its Python wrapper, so the land vanished once built.
         self._items: list[_PlaceItem] = []
@@ -1000,8 +996,12 @@ class WorldView(QWidget):
         self.sync_isometric()
 
     def here(self) -> str | None:
-        """Where the author's character is: as the story last put them, or an
-        imported map's start before it has."""
+        """Where the author's character is: where they stand now on the play
+        view (walked, through a door, since the last turn), else as the
+        story last put them, or an imported map's start before it has."""
+        live = self.me_place()
+        if live is not None and live in self.world.places:
+            return live
         return self.world.where.get(self.held or "") or self.world.start
 
     def _visited(self) -> set[str]:
@@ -1897,7 +1897,6 @@ class WorldView(QWidget):
             ("world", self.world_button),
         ):
             button.setChecked(level == name and not (name == "local" and self.play is not None))
-        self.plan_button.setChecked(self.play is not None and level == "local")
         self.inside_button.setVisible(level == "local")
         area = self.area_in_view(level)
         self.iso_button.setVisible(self.iso_button.isChecked() or area is not None)
@@ -1928,6 +1927,9 @@ class WorldView(QWidget):
         the nearest whose plan is in sight. None on the region or the world,
         or with no area's plan in sight. (It was always the character's own:
         looking at the Ashcombe Works, Isometric showed Tinker's Row.)"""
+        if self.play_shown():
+            played = self.play_area()
+            return self.world.places.get(played) if played else None
         if not self.world.places or (level or self.level()) != "local":
             return None
         port = self.view.mapToScene(self.view.viewport().rect()).boundingRect()
@@ -1948,7 +1950,7 @@ class WorldView(QWidget):
     def sync_isometric(self) -> None:
         """The bar for the area in view, while the views are shown: its view
         and whether it is of the map as it is now, and the offer."""
-        on = self.iso_button.isChecked()
+        on = self.iso_button.isChecked() and not self.play_shown()
         area = self.area_in_view()
         self._focus = area.id if area is not None else None
         self.inside_button.setEnabled(not on)
@@ -2114,9 +2116,7 @@ class WorldView(QWidget):
         self._show_at(rect.center(), scale)
 
     def _go(self, level: str | None) -> None:
-        if level == "plan":
-            self.go_plan()
-        elif level == "local":
+        if level == "local":
             self.go_local()
         elif level == "region":
             self.go_region()
@@ -2127,7 +2127,6 @@ class WorldView(QWidget):
         """Map-first play: `play` is the local level from now on."""
         self.play = play
         self.stack.addWidget(play)
-        self.plan_button.show()
 
     def play_shown(self) -> bool:
         return self.play is not None and self.stack.currentWidget() is self.play
@@ -2143,34 +2142,45 @@ class WorldView(QWidget):
         # The play view has its own zoom, finding and coordinates.
         for widget in (self.zoom_out, self.zoom_in, self.me_button, self.coords):
             widget.setVisible(not on)
+        # Redraw plan… stays: it is the area played on that it redraws.
         if on:
             self.iso_button.hide()
-            self.redraw_button.hide()
             self.local_button.setChecked(True)
-            self.plan_button.setChecked(False)
             self.region_button.setChecked(False)
             self.world_button.setChecked(False)
-            self.play.setFocus()
         else:
             self.hint.show()
+            if self._veil is not None:
+                self.legend.show()
 
     def go_local(self) -> None:
         """The local level: with map-first play, the area to walk on;
-        otherwise (and under Plan) the area's plan."""
+        otherwise the area's plan. Never takes the keyboard: a refit on
+        every redraw used to (W, A, S, D typed into the composer walked)."""
         if self.play is not None and self.play_ready():
+            # Fitted at this level: a redraw refits it here, never back to
+            # the region it was at before Local was pressed (the review).
+            self._fitted = "local"
             self._show_play(True)
             return
         self._show_play(False)
         self._go_plan()
 
-    def go_plan(self) -> None:
-        """The area's plan, as the map drew it (map-first play's Plan)."""
-        self._show_play(False)
-        self._go_plan()
-        if self.play is not None:
-            self._fitted = "plan"
-            self.local_button.setChecked(False)
-            self.plan_button.setChecked(True)
+    def _local_clicked(self) -> None:
+        self.go_local()
+        if self.play_shown():
+            self.play.setFocus()
+
+    def escape(self) -> bool:
+        """Esc on the map: the isometric views off, else from the local
+        level (the play view too) out to the region; False when there is
+        nothing closer to go out from."""
+        if self.leave_isometric():
+            return True
+        if self.play_shown() or (self.world.places and self.level() == "local"):
+            self.go_region()
+            return True
+        return False
 
     def _go_plan(self) -> None:
         """The local map where the story is now: the area's plan fitted. With

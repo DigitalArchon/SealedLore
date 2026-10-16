@@ -18,7 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPixmap, QTransform
 from PySide6.QtWidgets import (
     QGraphicsItem,
     QGraphicsPixmapItem,
@@ -420,7 +420,9 @@ class AreaView(QWidget):
         """Show this area with these people (the window calls it whenever the
         session's state changes, and again once the picture is drawn)."""
         if self._timer.isActive():
-            return  # mid-walk: the walk's end refreshes it
+            if self.area is not None and self.area.place_id == area.place_id:
+                return  # mid-walk: the walk's end refreshes it
+            self.drop_walk()  # another area (or story): that walk is nobody's
         px = px_for(area)
         rebuild = (
             key != self._key
@@ -467,9 +469,10 @@ class AreaView(QWidget):
         self._place_people(area, walkers, px)
         self._place_pins()
 
-    def set_marks(self, tiles: list[tuple[int, int]]) -> None:
-        """Pins on the tiles marked in the turn being written, numbered in
-        the order the turn has them."""
+    def set_marks(self, tiles: list[tuple[int, tuple[int, int]]]) -> None:
+        """Pins on the tiles marked in the turn being written: (the mark's
+        number in the turn, its tile), so a pin here is numbered as the same
+        spot's pin on the map."""
         self._marks = list(tiles)
         self._place_pins()
 
@@ -480,7 +483,7 @@ class AreaView(QWidget):
         if self.area is None:
             return
         px = px_for(self.area)
-        for number, (x, y) in enumerate(self._marks, start=1):
+        for number, (x, y) in self._marks:
             pin = _Pin(str(number))
             pin.setPos((x + 0.5) * px, (y + 0.5) * px)
             self.scene.addItem(pin)
@@ -522,7 +525,8 @@ class AreaView(QWidget):
 
     def _sync_sight(self) -> None:
         """Line of sight from the author's character: indoors the tiles they
-        can't see are shaded; anyone out of sight is drawn faint."""
+        can't see are shaded, and anyone out of sight is not shown at all
+        (the author, Oct 16 2026: they are in the fog of war)."""
         held, area = self.held(), self.area
         if held is None or area is None:
             return
@@ -530,10 +534,10 @@ class AreaView(QWidget):
         for name, person in self.people.items():
             walker = person.walker
             seen = walker.held or sees(area, here, (walker.x, walker.y))
-            person.setOpacity(1.0 if seen else 0.45)
+            person.setVisible(seen)
             tag = self._tags.get(name)
             if tag is not None:
-                tag.setOpacity(1.0 if seen else 0.6)
+                tag.setVisible(seen)
         if not area.indoor or self._shade_from == here:
             return
         self._shade_from = here
@@ -556,14 +560,16 @@ class AreaView(QWidget):
             self._shade.setPixmap(pixmap)
 
     def _tag_at(self, name: str, x: float, y: float) -> None:
+        """The name centred over its figure at any zoom: the item ignores
+        transforms, so it is centred in its own pixels, never in scene units
+        at the zoom of the moment (the names drifted after a zoom)."""
         person, tag = self.people.get(name), self._tags.get(name)
         if person is None or tag is None:
             return
         px = person.px
-        top = (y + 1.0) * px - person.height
-        tag.setPos((x + 0.5) * px, top)
-        width = tag.boundingRect().width() / max(self.view.transform().m11(), 0.01)
-        tag.setPos((x + 0.5) * px - width / 2, top - 16 / max(self.view.transform().m11(), 0.01))
+        tag.setPos((x + 0.5) * px, (y + 1.0) * px - person.height)
+        rect = tag.boundingRect()
+        tag.setTransform(QTransform.fromTranslate(-rect.width() / 2, -rect.height() - 4))
 
     def _fit(self, area: Area) -> None:
         """Opened on an area: indoors the whole of it; outdoors close enough
@@ -727,6 +733,19 @@ class AreaView(QWidget):
         if self._timer.isActive():
             self._finish()
 
+    def finish_walk(self) -> None:
+        """A walk still animating is over now, where the figure is: its
+        steps so far go to the session before a job starts (a turn sent
+        mid-walk used to carry the walk's start, and the walk then wrote
+        session state under the worker; the review, Oct 16 2026)."""
+        self._stop_walking()
+
+    def drop_walk(self) -> None:
+        """A walk still animating is forgotten: nothing is told."""
+        if self._timer.isActive():
+            self._timer.stop()
+            self._walked, self._steps = [], []
+
     # --- clicks and keys -------------------------------------------------------------
 
     def tile_at(self, point: QPointF) -> tuple[int, int] | None:
@@ -739,13 +758,18 @@ class AreaView(QWidget):
         return None
 
     def person_at(self, point: QPointF) -> Walker | None:
+        """Whoever is shown at this point: someone out of sight is nobody."""
         for item in self.scene.items(point):
-            if isinstance(item, _Person):
+            if isinstance(item, _Person) and item.isVisible():
                 return item.walker
         if self.area is None:
             return None
         tile = self.tile_at(point)
-        return next((w for w in self.walkers if (w.x, w.y) == tile), None)
+        for walker in self.walkers:
+            person = self.people.get(walker.name)
+            if (walker.x, walker.y) == tile and (person is None or person.isVisible()):
+                return walker
+        return None
 
     def _clicked(self, point: QPointF, global_pos: QPoint) -> None:
         if self.area is None:

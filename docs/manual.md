@@ -664,7 +664,8 @@ well: File → New story from a sample → Doomsville is the same as importing
 drawn up beforehand (a `# Map` section: see "The map"). The Ashen Reach,
 The Silverwood, Brasshaven and The Ninth Furnace show other kinds of world
 (grimdark science fiction, traditional fantasy, steampunk and a hellscape),
-each with a plot, a map drawn up with an isometric view of every area, a
+each with a plot, a map drawn up and furnished, every thing and character
+drawn, a
 background picture, and a picture of every card. Rather than
 write the format by hand, **File → Plot file editor…** writes it for you: the
 world, opening, characters, places, lore, facts and events each get a form,
@@ -933,7 +934,7 @@ Everything drawn for the map stays with the story: a restart, Duplicate
 settings and a scenario file keep the art and the pictures. Story pictures
 (Image…) still show you every request first.
 
-Each area on the local map (a farm, a town, a works) can have an
+Each area on the map (a farm, a town, a works) can have an
 **isometric view**: the area painted in isometric by an image model (Settings
 → Images → **Isometric view model**: FLUX.2 klein 9B unless you choose
 another, about a cent and a half a view; **Recommended** beside it offers Qwen
@@ -963,7 +964,8 @@ says so and **Choose a view…** lets you swap between them (the choice is for
 the map as it is there now; a view painted after a change is chosen for that
 change). The views and the postcards are in Media too, under **Map**, the
 one on the map marked; right-click another there for **Show this view on
-the map**.
+the map**. While you play on an area, its own view isn't shown over it; zoom the
+Region in on another area to see that one's.
 
 A story that keeps a map makes it part of the window: the Inspector, beside
 the story, takes half the window with **Map** as its first page. **Map**,
@@ -1003,12 +1005,13 @@ within reach, the doorways out.
   to send as it is or add to; the storyteller is told what the choice means
   as long as the menu's words are still in the turn.
 - **Travel…** sets off for another place on the map, with how long it takes
-  on foot; the clock moves on by that much and the turn goes in the
-  composer. The next passage begins on arrival.
+  on foot; the turn goes in the composer, and when you send it the clock
+  moves on by that much and you stand there. A turn you rewrite before
+  sending travels nowhere. The next passage begins on arrival.
 - **Edges.** Walk off the edge of an outdoor area (the arrow keys past the
   last tile, or **Leave north ▾** when you stand on it) to walk on into the
-  area beyond, where one adjoins, or to set off for the places that lie that
-  way.
+  area beyond, where one adjoins and nothing bars the way (water, trees or
+  rock at the far edge do), or to set off for the places that lie that way.
 - **Marking a spot.** Right-click anywhere, on Local or on the map's Plan,
   Region and World, and choose **Mark this spot in your turn**: its
   coordinate goes into the composer at the cursor, as `⌖(412, -88)` (metres
@@ -1020,16 +1023,17 @@ within reach, the doorways out.
   on the map. A pin shows each spot the turn marks.
 - **Go here.** Right-click a spot on the map for **Go here**: a spot in the
   area you are in is walked to, one elsewhere is travelled to, as Travel…
-  does.
+  does (when the turn is sent).
 - **◎ Me** (or Home) centres the view on you, on Local and on the map.
 - **The clock** (Day 1, 08:00, beside the place's name) moves with walking
   and travel, and with the time the passages tell. In a story with a plot it
   is the plot's clock, so travel passes the plot's days. The storyteller is
   never told the day; it is told how far you walked since the last passage.
 - **Who can see whom.** Walls and rock stop sight; windows, fences and
-  doorways don't, and a few trees deep do. Indoors, what you can't see from
-  where you stand is shaded, and anyone out of sight is drawn faint. The
-  storyteller is told who is in sight of you and who is within earshot.
+  doorways don't, and a few trees deep do. What you can't see from where you
+  stand is the fog of war: indoors it is shaded, and anyone out of your sight
+  isn't shown at all until you can see them. The storyteller is told where
+  everyone is, and who is in sight of you and within earshot.
 - Nobody else moves on their own: people stand where the story last put
   them until a passage moves them.
 - Nothing can be walked while a passage is being written.
@@ -1055,18 +1059,12 @@ every picture the map is drawn with: the ground, walls and decoration,
 every thing and every character's sprite, with the words each was drawn
 from. Change the words and **Draw it again…** (the model and price are
 shown first), **Use a picture of your own…**, or go **Back to the set's
-own**; a change is for this story only. **Plan** shows the area's plan as the map
-drew it, with its isometric views.
+own**; a change is for this story only.
 
 It is one map, read at three levels by zooming; **Local**, **Region** and
-**World** jump to each. **Plan** is the area you are in (the
-farm, not just its farmhouse; a town; the caves), close up: its ground and
-paths, its buildings from outside where the map has them, the things the
-story marked there (hover one for what it is), and everyone the story has
-there, you ringed. Zoom in on a building and its inside takes the roof's
-place: its rooms and what the story put in them (**See inside** takes every
-roof off at once). Under the map, what the story has said of the place in
-view and who and what is there. A story opens on **Local**. **Region**
+**World** jump to each. **Local** is the area you are in (the farm, not just
+its farmhouse; a town; the caves), played on as above; before its plan is
+drawn it shows the region. A story opens on **Local**. **Region**
 is the country around you that the story has reached: each place with its
 picture, small when far, its name bright where you have been or can see now,
 dim where the story only told of it, ringed where you are now; it is where you
@@ -1076,7 +1074,7 @@ shows), country you know but aren't in lies under a grey haze, and anywhere
 unexplored is dark. **World** is the whole map zoomed out, its settlements and regions
 named large and the small places hidden. Scroll to zoom (places inside others
 appear as you zoom in), drag to move; double-click a place to go to it. Esc
-goes out from the local map to the region.
+goes out from Local to the region.
 
 The map is the storyteller's too: each turn it is told where you are on it,
 what is around and inside that place, the ways between them and the things

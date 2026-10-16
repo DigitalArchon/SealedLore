@@ -830,7 +830,12 @@ class StorySession(
                 ),
             )
         if not turn.the_map:
-            turn = replace(turn, the_map=self.map_context(nodes, turn.controlled_character_id))
+            turn = replace(
+                turn,
+                the_map=self.map_context(
+                    nodes, turn.controlled_character_id, turn_node_id=turn.turn_node_id
+                ),
+            )
         prompt = assemble_prompt(
             story=self.story,
             cast=self.visible_cast(),
@@ -1341,6 +1346,7 @@ class StorySession(
         # The walking done since the last turn goes with this one.
         self.stamp_turn(user_node)
         self._attach(user_node, parent=history[-1] if history else None)
+        turn = replace(turn, turn_node_id=user_node.id)
 
         turn = yield from self.direct_turn(turn, user_node, history)
         # A rebuild the author asked for goes in before this turn's prompt.
@@ -1778,6 +1784,7 @@ class StorySession(
             speaker_id=user_node.speaker_id,
             user_text=user_node.content,
             controlled_character_id=user_node.meta.controlled_character_id,
+            turn_node_id=user_node.id,
             ooc=user_node.ooc,
             npc_scope=user_node.meta.npc_scope or self.story.defaults.npc_scope,
             npc_scope_ids=tuple(user_node.meta.npc_scope_ids),
@@ -2434,6 +2441,16 @@ class StorySession(
         if node.kind == "assistant":
             # What was found in the old text may no longer be in it.
             self.prune_shortcuts(node)
+        elif node.meta.area is not None and self.map_first:
+            # The spots the turn marks are its text's: resolved again on the
+            # map the turn was written on (a mark edited in or out).
+            before = self._world_on(self._path_to(node.parent_id)) if node.parent_id else None
+            node.meta.area.marks = self.resolve_marks(
+                content,
+                before if before is not None else self.world(),
+                self.map_art_copy(),
+                node.meta.area,
+            )
 
         went_stale = mark_stale(self.bundle.summaries, node_id)
         # A part is merged again, not rebuilt: its chapters stand in meanwhile.

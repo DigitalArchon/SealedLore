@@ -22,6 +22,7 @@ where the story last put them until a passage moves them, and the read's
 from __future__ import annotations
 
 import math
+import re
 import threading
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -82,7 +83,7 @@ from sealedlore.engine.tile_sets import (
     slug,
 )
 from sealedlore.engine.validators import locate_quote
-from sealedlore.engine.world import applied, key
+from sealedlore.engine.world import _NOTHING_SAID, applied, key
 from sealedlore.engine.world_layout import (
     CHILD_SHARE,
     KIND_SIZE,
@@ -117,6 +118,10 @@ MAX_READ_MINUTES = 7 * 24 * 60
 EDGE_REACH = 120.0
 EDGE_ARC = 60
 EDGE_CHOICES = 8
+# Landing past an edge: how far along the far edge, and how far in, a tile
+# to stand on is looked for.
+EDGE_LANDING_ALONG = 3
+EDGE_LANDING_IN = 2
 EDGE_STEPS = {"north": (0, 1), "south": (0, -1), "east": (1, 0), "west": (-1, 0)}
 
 
@@ -331,6 +336,8 @@ class AreaRuntime:
         live = self.story.area_live
         if live is None or live.leaf_id != self.story.active_leaf_id:
             return None
+        if live.held is not None and live.held != self.held_name():
+            return None  # another character's walking: not this one's
         return live.state
 
     def area_state(self) -> AreaState:
@@ -369,17 +376,9 @@ class AreaRuntime:
                     where[name] = where[held]
         spots: dict[str, Spot] = {}
         order = ([held] if held in where else []) + [n for n in where if n != held]
-        travel = (
-            state.action if state.action is not None and state.action.verb == "travel" else None
-        )
         for name in order:
             place_id = where[name]
             spot = state.spots.get(name)
-            if name == held and walked and travel is not None and travel.target_id in world.places:
-                # Set off for somewhere: there, as far as the map has drawn it.
-                place_id = travel.target_id
-                if spot is None:
-                    continue
             target = area_of(world, art, place_id)
             if (
                 name == held
@@ -469,8 +468,19 @@ class AreaRuntime:
         return area.width // 2, area.height // 2
 
     def _set_live(self, state: AreaState) -> None:
-        self.story.area_live = LiveArea(leaf_id=self.story.active_leaf_id, state=state)
+        self.story.area_live = LiveArea(
+            leaf_id=self.story.active_leaf_id, held=self.held_name(), state=state
+        )
         self.save()
+
+    def here_place(self) -> str | None:
+        """The place the author's character stands in now: the live spot's
+        (walked, through a door, since the last turn), else the map's."""
+        if not self.map_first or self.in_private:
+            return None
+        world = self.world()
+        me = self.area_state().spots.get(self.held_name() or "")
+        return self.place_of_spot(me, world) or world.where.get(self.held_name() or "")
 
     def place_of_spot(self, spot: Spot | None, world: WorldMap) -> str | None:
         """The place a spot is in, for the map's `where`: the area's place
@@ -505,6 +515,11 @@ class AreaRuntime:
         me = state.spots.get(held or "")
         area = self.area(me.area if me else None)
         if me is None or area is None or not steps:
+            return state
+        # A walk is this character's, in this area, from where they stand:
+        # one finishing after another story or character was taken up, or
+        # after a read moved them, is not (the review, Oct 16 2026).
+        if tuple(steps[0]) != (me.x, me.y) or not all(area.walkable(x, y) for x, y in steps):
             return state
         seconds = walk_seconds(walk_metres(area, steps))
         x, y = steps[-1]
@@ -559,7 +574,18 @@ class AreaRuntime:
             spot = inside_door(there, entrance.side if entrance else None) or self._way_in(there)
         else:
             side = exit_side(here, me.x, me.y)
-            spot = front_of(there, here.place_id, side) or self._way_in(there)
+            spot = front_of(there, here.place_id, side)
+            if spot is None:
+                # The outside plan has no box for this building (a plan kept
+                # as rows alone): outside it where the map has it, not at
+                # the area's middle.
+                building = world.places.get(here.place_id)
+                point = (
+                    point_tile(world, there, building.x, building.y)
+                    if building is not None and building.x is not None and building.y is not None
+                    else None
+                )
+                spot = point or self._way_in(there)
         x, y = stand_near(there, spot, taken)
         state.spots[held] = Spot(area=there.place_id, x=x, y=y)
         self._add_time(state, DOOR_SECONDS, here.name, there.name)
@@ -577,7 +603,9 @@ class AreaRuntime:
         here = me.area if me is not None else world.where.get(self.held_name() or "")
         if here is None:
             return []
-        start = position(world, here)
+        # From where they stand, not from the area's middle: the way's length
+        # is what the clock moves by and the storyteller is told.
+        start = self.held_point(state, world, art) or position(world, here)
         out = []
         # Not where they are already: this area, what is in it, and (inside a
         # building) the area outside it.
@@ -631,22 +659,22 @@ class AreaRuntime:
         seconds = choices.get(place_id, 0)
         state = self.area_state()
         held = self.held_name()
-        me = state.spots.get(held or "")
-        frm = self.area(me.area, world, art).name if me and self.area(me.area, world, art) else ""
         target = area_of(world, art, place_id)
+        spot = None
         if target is not None:
             spot = self._stand(world, art, target, place_id, held or "", dict(state.spots), None)
-            if spot is not None and held is not None:
-                state.spots[held] = spot
-        elif held is not None:
-            state.spots.pop(held, None)
-        self._add_time(state, seconds, frm, place.name)
         text = self.texts.fill("map.turn.travel", name=place.name)
-        state.action = MapAction(verb="travel", target=place.name, target_id=place_id, text=text)
-        if target is None:
-            # Not drawn yet: where the turn takes them is said by the delta it
-            # carries (`stamp_turn`), and the map draws it after the passage.
-            state.action.target_id = place_id
+        # Nothing moves until the turn is sent (`stamp_turn`): a turn
+        # rewritten travels nowhere. A place not drawn yet: the turn's delta
+        # says where they went, and the map draws it after the passage.
+        state.action = MapAction(
+            verb="travel",
+            target=place.name,
+            target_id=place_id,
+            text=text,
+            spot=spot,
+            seconds=seconds,
+        )
         self._set_live(state)
         return text
 
@@ -686,11 +714,21 @@ class AreaRuntime:
         user_node.meta.area = state
         held = self.held_name()
         world = self.world()
+        to = None
+        action = state.action
+        if action is not None and action.verb == "travel" and held is not None:
+            # Set off, now that the turn goes: there, as far as the map has
+            # drawn it, the way's length on the clock.
+            here = state.spots.get(held)
+            frm = self.area(here.area, world) if here is not None else None
+            if action.spot is not None:
+                state.spots[held] = action.spot
+            else:
+                state.spots.pop(held, None)
+            self._add_time(state, action.seconds, frm.name if frm else "", action.target)
+            to = action.target_id or None
         # The spots the turn marks, resolved on the map it was written on.
         state.marks = self.resolve_marks(user_node.content, world, self.map_art_copy(), state)
-        to = None
-        if state.action is not None and state.action.verb == "travel":
-            to = state.action.target_id or None
         spot = state.spots.get(held or "")
         to = to or self.place_of_spot(spot, world)
         if held is not None and to is not None and world.where.get(held) != to:
@@ -751,7 +789,9 @@ class AreaRuntime:
             if spot is None or current is None or current.area != spot.area:
                 continue  # not where the map has them: settled at their place
             marked = self.area(spot.area, world, art)
-            taken = {(s.x, s.y) for n, s in state.spots.items() if n != person}
+            taken = {
+                (s.x, s.y) for n, s in state.spots.items() if n != person and s.area == spot.area
+            }
             x, y = stand_near(marked, (spot.x, spot.y), taken)  # type: ignore[arg-type]
             state.spots[person] = Spot(area=spot.area, x=x, y=y)
         area = self.area(me.area, world, art) if me is not None else None
@@ -764,7 +804,11 @@ class AreaRuntime:
                 current = state.spots.get(person)
                 if current is not None and current.area != area.place_id:
                     continue
-                taken = {(s.x, s.y) for n, s in state.spots.items() if n != person}
+                taken = {
+                    (s.x, s.y)
+                    for n, s in state.spots.items()
+                    if n != person and s.area == area.place_id
+                }
                 x, y = stand_near(area, tile, taken | {tile})
                 state.spots[person] = Spot(area=area.place_id, x=x, y=y)
         if self.story.plot is None:
@@ -803,22 +847,25 @@ class AreaRuntime:
         spots = anchors_near(area, me.x, me.y)
         return self.texts.fill("map_read.spots", spots=", ".join(spots)) if spots else ""
 
-    def positions_context(self, nodes: Sequence[Node], held_id: str | None) -> str:
+    def positions_context(
+        self, nodes: Sequence[Node], held_id: str | None, *, turn_node_id: str | None = None
+    ) -> str:
         """Where everyone stands, for the storyteller's map section (design
-        §5): from the turn being sent (its snapshot) or, before it is, the
-        walking since the last turn."""
+        §5): from the turn being sent (its snapshot, found by `turn_node_id`:
+        on a retake the leaf is the previous take, so the leaf can't say) or,
+        for a Question, where they stand now, with no turn's action or walk."""
         if not self.map_first or self.in_private:
             return ""
         held = self.map_held_name(held_id) if held_id is not None else self.held_name()
         if held is None:
             return ""
-        turn = self._turn_after(nodes)
+        turn = self._turn_node(nodes, turn_node_id)
         if turn is not None and turn.meta.area is not None:
-            state, action_node = turn.meta.area, turn
+            state = turn.meta.area
         else:
-            live = self._live() if turn is None else None
+            turn = None
+            live = self._live()
             state = live if live is not None else self._snapshot_on(nodes)
-            action_node = None
         if state is None:
             return ""
         world = self._world_on([*nodes, turn] if turn is not None else nodes)
@@ -829,14 +876,14 @@ class AreaRuntime:
             return ""
         action_line = ""
         action = state.action
-        if action is not None and (action_node is None or action.text in action_node.content):
+        if turn is not None and action is not None and action.text in turn.content:
             action_line = self.texts.fill(f"map.action.{action.verb}", name=action.target)
         text = render_positions(
             area,
             world,
             state.spots,
             held,
-            walked=state.walked_words if state.walked >= 30 else "",
+            walked=state.walked_words if turn is not None and state.walked >= 30 else "",
             action_line=action_line,
         )
         if not text:
@@ -844,8 +891,14 @@ class AreaRuntime:
         heading = self.texts["map.positions"]
         return text.replace(text.split("\n", 1)[0], heading, 1)
 
-    def _turn_after(self, nodes: Sequence[Node]) -> Node | None:
-        """The author's turn being sent after `nodes`, once it is attached."""
+    def _turn_node(self, nodes: Sequence[Node], turn_node_id: str | None) -> Node | None:
+        """The author's turn being sent after `nodes`: the one named, else
+        the leaf once it is attached there (a send; a retake names its turn,
+        since its leaf is the previous take)."""
+        if turn_node_id is not None:
+            turn = next((n for n in self.nodes if n.id == turn_node_id), None)
+            if turn is not None and turn.kind == "user":
+                return turn
         full = self.path()
         if len(full) != len(nodes) + 1 or full[-1].kind != "user":
             return None
@@ -892,8 +945,28 @@ class AreaRuntime:
             if spot is not None and spot.area != area.place_id:
                 there = self.area(spot.area, world, art)
                 if there is not None and not there.indoor:
-                    return spot, reach
+                    landing = self._landing(there, spot, side)
+                    if landing is None:
+                        return None  # water, trees or rock bar the way there
+                    return Spot(area=spot.area, x=landing[0], y=landing[1]), reach
             reach += step
+        return None
+
+    @staticmethod
+    def _landing(area: Area, spot: Spot, side: str) -> tuple[int, int] | None:
+        """A tile to stand on at the far area's edge near `spot`: along the
+        edge a few tiles either way and a tile or two in, walkable, never
+        past what bars it (`stand_near` would cross a river to the nearest
+        dry tile; the review, Oct 16 2026)."""
+        along = (1, 0) if side in ("north", "south") else (0, 1)
+        inward = {"north": (0, 1), "south": (0, -1), "east": (-1, 0), "west": (1, 0)}[side]
+        blocked = area.blocked()
+        for depth in range(0, EDGE_LANDING_IN + 1):
+            for offset in sorted(range(-EDGE_LANDING_ALONG, EDGE_LANDING_ALONG + 1), key=abs):
+                x = spot.x + along[0] * offset + inward[0] * depth
+                y = spot.y + along[1] * offset + inward[1] * depth
+                if area.walkable(x, y, blocked):
+                    return x, y
         return None
 
     def edge_choices(self, side: str) -> list[tuple[str, str, int]]:
@@ -912,10 +985,16 @@ class AreaRuntime:
         if me is None:
             return out
         want = {"north": 0, "east": 90, "south": 180, "west": 270}[side]
+        art = self.map_art_copy()
+        adjoining = beyond[0].area if beyond is not None else None
         for place_id, name, seconds in self.travel_choices():
             spot = position(world, place_id)
             if spot is None:
                 continue
+            if adjoining is not None and (
+                place_id == adjoining or area_of(world, art, place_id) == adjoining
+            ):
+                continue  # offered once, as the walk on
             angle = (math.degrees(math.atan2(spot[0] - me[0], spot[1] - me[1])) + 360) % 360
             if min(abs(angle - want), 360 - abs(angle - want)) <= EDGE_ARC:
                 out.append((place_id, name, seconds))
@@ -936,7 +1015,9 @@ class AreaRuntime:
         if here is None or there is None:
             return None
         taken = {(s.x, s.y) for n, s in state.spots.items() if n != held and s.area == spot.area}
-        x, y = stand_near(there, (spot.x, spot.y), taken)
+        x, y = (spot.x, spot.y)
+        if (x, y) in taken:
+            x, y = stand_near(there, (x, y), taken)
         state.spots[held] = Spot(area=spot.area, x=x, y=y)
         self._add_time(state, walk_seconds(metres), here.name, there.name)
         self._set_live(state)
@@ -945,13 +1026,19 @@ class AreaRuntime:
     # --- marked spots (engine/marks.py) ------------------------------------------
 
     def held_point(
-        self, state: AreaState | None = None, world: WorldMap | None = None, art=None
+        self,
+        state: AreaState | None = None,
+        world: WorldMap | None = None,
+        art=None,
+        *,
+        held: str | None = None,
     ) -> tuple[float, float] | None:
-        """Where the author's character stands, in metres (east, north): their
-        tile on the map, else their place's spot."""
+        """Where the author's character (`held`: the turn's, else the one
+        held now) stands, in metres (east, north): their tile on the map,
+        else their place's spot."""
         world = world if world is not None else self.world()
         art = art if art is not None else self.map_art_copy()
-        held = self.held_name()
+        held = held or self.held_name()
         if state is None:
             state = self.area_state() if self.map_first else AreaState()
         me = state.spots.get(held or "")
@@ -1021,12 +1108,12 @@ class AreaRuntime:
             )
         return out
 
-    def marks_context(self, nodes: Sequence[Node]) -> str:
+    def marks_context(self, nodes: Sequence[Node], *, turn_node_id: str | None = None) -> str:
         """The marks of the turn being sent, for the storyteller's map
         section (`map.marks`); "" when it marks none."""
         if not self.map_on or self.in_private:
             return ""
-        turn = self._turn_after(nodes)
+        turn = self._turn_node(nodes, turn_node_id)
         if turn is None or turn.meta.area is None or not turn.meta.area.marks:
             return ""
         lines = [f"- {m.token}: {m.words}." for m in turn.meta.area.marks]
@@ -1046,48 +1133,73 @@ class AreaRuntime:
         """What the read put at a marked spot is put there exactly: a new
         place on the point (inside whatever there holds it), and anyone sent
         to one in the place it lies in."""
-        marks = author.meta.area.marks if author is not None and author.meta.area else []
+        marks = self._turn_marks(author)
         if not marks:
             return
-        by_point = {(m.x, m.y): m for m in marks}
-
-        def mark_of(value: Any) -> Mark | None:
-            found = marks_in(str(value or ""))
-            if found:
-                return by_point.get((found[0].x, found[0].y))
-            # Live, the read copied the spot's words ("in the kitchen and eating
-            # area") for its coordinate: with one spot marked, that is the one.
-            return marks[0] if len(marks) == 1 and str(value or "").strip() else None
-
         new = {key(p.name): p for p in delta.places if p.x is None and p.id not in before.places}
         art = self.map_art_copy()
         for entry in reply.get("places") or []:
             if not isinstance(entry, dict):
                 continue
-            mark = mark_of(entry.get("mark"))
+            mark = self._mark_of(marks, entry.get("mark"), words=True)
             place = new.get(key(str(entry.get("name") or "")))
             if mark is None or place is None:
                 continue
             known = {**before.places, **{p.id: p for p in delta.places}}
             holder = known.get(place.inside or "")
-            box = footprint(before, art, holder.id) if holder is not None else None
-            if (
-                holder is None
-                or box is None
-                or not (box[0] <= mark.x <= box[2] and box[1] <= mark.y <= box[3])
-            ):
+            if holder is not None and holder.id not in before.places:
+                # Inside a place this same read made: held to its own mark
+                # when it has one, else as the read says.
+                keep = holder.x is None or (
+                    abs(mark.x - holder.x) <= size_of(holder) / 2
+                    and abs(mark.y - holder.y) <= size_of(holder) / 2  # type: ignore[operator]
+                )
+            else:
+                box = footprint(before, art, holder.id) if holder is not None else None
+                keep = box is not None and box[0] <= mark.x <= box[2] and box[1] <= mark.y <= box[3]
+            if not keep:
                 place.inside = place_at(before, art, mark.x, mark.y)
                 holder = known.get(place.inside or "")
             size = place.size if place.size is not None else KIND_SIZE.get(place.kind, 100.0)
             if holder is not None:
                 size = min(size, size_of(holder) * CHILD_SHARE)
             place.size, place.x, place.y = size, mark.x, mark.y
+
+    @staticmethod
+    def _turn_marks(author: Node | None) -> list[Mark]:
+        return list(author.meta.area.marks) if author is not None and author.meta.area else []
+
+    @staticmethod
+    def _mark_of(marks: Sequence[Mark], value: Any, *, words: bool = False) -> Mark | None:
+        """The mark a read's value names: by its coordinate; with `words`,
+        also by the spot's own description when one spot is marked (live,
+        the read copied "in the kitchen and eating area" for its coordinate),
+        never for "none" or the like, nor for words the spot wasn't given."""
+        text = str(value or "").strip()
+        found = marks_in(text)
+        by_point = {(m.x, m.y): m for m in marks}
+        if found:
+            return by_point.get((found[0].x, found[0].y))
+        if not words or len(marks) != 1 or not text or _NOTHING_SAID.match(text.strip(" .")):
+            return None
+        given = {w for w in re.findall(r"[a-z]{3,}", marks[0].words.lower())}
+        said = {w for w in re.findall(r"[a-z]{3,}", text.lower())}
+        return marks[0] if len(given & said) >= 2 else None
+
+    def apply_marks_at(
+        self, before: WorldMap, delta: WorldDelta, reply: dict[str, Any], author: Node | None
+    ) -> None:
+        """Someone the read sends to a marked spot (its coordinate, never a
+        named spot's words: those are `area_after_read`'s) is put in the
+        place it lies in, once every new place has its spot."""
+        marks = self._turn_marks(author)
         at = reply.get("at") if isinstance(reply.get("at"), dict) else {}
-        if not at:
+        if not marks or not at:
             return
+        art = self.map_art_copy()
         after = applied(before, delta)
         for name, value in at.items():
-            mark = mark_of(value)
+            mark = self._mark_of(marks, value)
             person = self._map_person(str(name))
             if mark is None or person is None:
                 continue
@@ -1125,21 +1237,26 @@ class AreaRuntime:
         start = self.held_point(state, world, art)
         metres = math.hypot(x - start[0], y - start[1]) * WINDING if start else 0.0
         seconds = int(metres / WALK_M_PER_S)
-        frm = here.name if here is not None else ""
         area = self.area(spot.area, world, art) if spot is not None else None
+        landing = None
         if spot is not None and area is not None:
             taken = {
                 (s.x, s.y) for n, s in state.spots.items() if n != held and s.area == spot.area
             }
             sx, sy = stand_near(area, (spot.x, spot.y), taken)
-            state.spots[held] = Spot(area=spot.area, x=sx, y=sy)
-        else:
-            state.spots.pop(held, None)
+            landing = Spot(area=spot.area, x=sx, y=sy)
         place = world.places[place_id]
-        self._add_time(state, seconds, frm, place.name)
         token = mark_token(x, y)
         text = self.texts.fill("map.turn.go", name=place.name, mark=token)
-        state.action = MapAction(verb="travel", target=place.name, target_id=place_id, text=text)
+        # Applied when the turn is sent (`stamp_turn`), as Travel… is.
+        state.action = MapAction(
+            verb="travel",
+            target=place.name,
+            target_id=place_id,
+            text=text,
+            spot=landing,
+            seconds=seconds,
+        )
         self._set_live(state)
         return text
 

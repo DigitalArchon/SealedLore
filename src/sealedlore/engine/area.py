@@ -911,6 +911,11 @@ def build_area(
                 dict(layout.objects),
                 {n: [v[0] * k + k // 2, v[1] * k + k // 2] for n, v in layout.labels.items()},
             )
+            # The map's buildings stamped on where it has them, so they get
+            # doors and lead inside (without shapes `with_fixed` had nothing
+            # to draw them into, and a building could neither be entered nor
+            # left but at the area's middle; the review, Oct 16 2026).
+            rows, big = _stamp_fixed(rows, fixed, k)
         labels = {n: (int(v[0]), int(v[1])) for n, v in raw_labels.items() if len(v) >= 2}
         for f in fixed:  # what the map has here that isn't a building: labelled where it is
             if f["kind"] != "building":
@@ -986,6 +991,27 @@ def build_area(
                     room.purpose = " ".join(purpose.split())[:60]
             area.placements += furnish(area, plan, density)
     return area
+
+
+def _stamp_fixed(
+    rows: list[str], fixed: Sequence[dict[str, Any]], k: int
+) -> tuple[list[str], dict[str, Any]]:
+    """The fixed buildings as walls on a rows-only plan, `k` times scaled,
+    and as features for the door and entrance pass to find."""
+    grid = [list(r) for r in rows]
+    features = []
+    for f in fixed:
+        if f.get("kind") != "building":
+            continue
+        x0, y0 = int(f["x"]) * k, int(f["y"]) * k
+        w, h = int(f["w"]) * k, int(f["h"]) * k
+        for y in range(y0, y0 + h):
+            for x in range(x0, x0 + w):
+                if 0 <= y < len(grid) and 0 <= x < len(grid[0]):
+                    edge = y in (y0, y0 + h - 1) or x in (x0, x0 + w - 1)
+                    grid[y][x] = "#" if edge else "_"
+        features.append({"kind": "building", "name": f["name"], "x": x0, "y": y0, "w": w, "h": h})
+    return ["".join(r) for r in grid], {"features": features}
 
 
 # A gap in a building's outer wall wider than this is a wall the plan lost
@@ -1355,7 +1381,14 @@ def front_of(area: Area, place_id: str, side: str | None = None) -> tuple[int, i
     doors = [e for e in area.entrances if e.place_id == place_id]
     if not doors:
         return None
-    chosen = next((e for e in doors if e.side == side), doors[0])
+    x0, y0, x1, y1 = area.buildings[place_id]
+    # No door on that side: the one nearest that wall (the inside's way out
+    # and the outside's door are drawn by different plans).
+    toward = {"north": lambda e: e.y - y0, "south": lambda e: y1 - e.y}
+    toward |= {"west": lambda e: e.x - x0, "east": lambda e: x1 - e.x}
+    chosen = next((e for e in doors if e.side == side), None)
+    if chosen is None:
+        chosen = min(doors, key=toward[side]) if side in toward else doors[0]
     return _front(chosen, area.buildings[place_id])
 
 
@@ -1371,7 +1404,11 @@ def inside_door(area: Area, side: str | None = None) -> tuple[int, int] | None:
         distances = {"north": y, "south": h - 1 - y, "west": x, "east": w - 1 - x}
         return min(distances, key=distances.get)
 
-    chosen = next((e for e in area.exits if side_of(*e) == side), area.exits[0])
+    toward = {"north": lambda e: e[1], "south": lambda e: h - 1 - e[1]}
+    toward |= {"west": lambda e: e[0], "east": lambda e: w - 1 - e[0]}
+    chosen = next((e for e in area.exits if side_of(*e) == side), None)
+    if chosen is None:
+        chosen = min(area.exits, key=toward[side]) if side in toward else area.exits[0]
     x, y = chosen
     for dx, dy in ((0, -1), (0, 1), (1, 0), (-1, 0)):
         n = (x + dx, y + dy)
@@ -1682,12 +1719,27 @@ def _line(a: tuple[int, int], b: tuple[int, int]) -> list[tuple[int, int]]:
     return out
 
 
+def _opaque(area: Area) -> frozenset[str]:
+    """What stops sight here: walls and rock, and off a deck the blank
+    tiles too (unlit rock or the dark inside a building's plan; on a deck
+    they are open space)."""
+    return OPAQUE if area.look == "space" else OPAQUE | {" "}
+
+
 def sees(area: Area, a: tuple[int, int], b: tuple[int, int]) -> bool:
-    """Whether someone at tile a can see tile b: nothing opaque between."""
+    """Whether someone at tile a can see tile b: nothing opaque between. A
+    line never slips between two opaque tiles that touch at a corner (the
+    corner rule `path` keeps)."""
+    opaque = _opaque(area)
     trees = 0
-    for x, y in _line(a, b)[1:-1]:
+    line = _line(a, b)
+    for (px, py), (x, y) in zip(line, line[1:], strict=False):
+        if px != x and py != y and area.at(x, py) in opaque and area.at(px, y) in opaque:
+            return False
+        if (x, y) == b:
+            break
         ch = area.at(x, y)
-        if ch in OPAQUE:
+        if ch in opaque:
             return False
         if ch == "T":
             trees += 1
