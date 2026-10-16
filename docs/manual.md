@@ -1073,11 +1073,36 @@ within reach, the doorways out.
 - **Travel…** sets off for another place on the map, with how long it takes
   on foot; the turn goes in the composer, and when you send it the clock
   moves on by that much and you stand there. A turn you rewrite before
-  sending travels nowhere. The next passage begins on arrival.
+  sending travels nowhere. The next passage begins on arrival. A place
+  whose plan isn't drawn yet lands you on the open country at its door.
 - **Edges.** Walk off the edge of an outdoor area (the arrow keys past the
   last tile, or **Leave north ▾** when you stand on it) to walk on into the
   area beyond, where one adjoins and nothing bars the way (water, trees or
   rock at the far edge do), or to set off for the places that lie that way.
+  Where no place adjoins, **Walk on into open country** does.
+- **Open country.** Between places, in a region, a desert or a forest, or
+  in no place the map names, you stand on the land itself: a stretch of it
+  (1.6 km across, 40 m a tile) drawn by the map art model as you go, the
+  stretch under you and the ones your edges lead to, three at most after
+  each passage, with plain ground of the nearest land to stand on until a
+  stretch is drawn. Places the map has there stand where they are, a
+  settlement or a building entered by its door, and the storyteller is told
+  you are "in open country, 3.2 km north-east of Hellsville, in the Great
+  Erg". The world has no edge: the map grows as far as you walk, at the
+  cost of the land's drawings. A city too wide to walk tile by tile (up to
+  8 km) gets a plan at a coarser grain.
+- **Changing the map by Direction.** A Direction or Narration states what
+  is so, on the map too. Besides adding a place (at a marked spot, or by
+  its distance and bearing from one) and changing what state a place is in
+  ("The barn is a furnace now"), it can take a place off the map ("The barn
+  is gone": whatever was in it stands in the place around it), rename one
+  ("The inn is now called The Drowned Rat"; the old name still finds it),
+  resize one ("The castle is a vast fortress, three hundred metres across";
+  its plan is drawn again at the new size), move one (to a marked spot, or
+  "the mill now stands two kilometres north of the village"; what is inside
+  goes with it) or put one inside another. The map read quotes your words
+  for each change, a passage can't make them, and a place your turn doesn't
+  name stays as it is. The notice under the turn says what the map did.
 - **Marking a spot.** Right-click anywhere, on Local or on the Region and
   World maps, and choose **Mark this spot in your turn**: its
   coordinate goes into the composer at the cursor, as `⌖(412, -88)` (metres
