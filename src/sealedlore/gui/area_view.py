@@ -260,6 +260,10 @@ class AreaView(QWidget):
     own_look_requested = Signal()
     # Mark this tile in the turn being written (⌖).
     mark_requested = Signal(int, int)
+    # At an outdoor area's edge: where on past it (`set_edge_choices`), and
+    # the choice (the side, "area" or a place id).
+    edge_wanted = Signal(str)
+    edge_chosen = Signal(str, str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -302,6 +306,18 @@ class AreaView(QWidget):
         self.zoom_in.setObjectName("viewToggleButton")
         self.zoom_in.setText("+")
         self.zoom_in.setToolTip("Zoom in (+, or the mouse wheel)")
+        self.edge_button = QToolButton()
+        self.edge_button.setObjectName("viewToggleButton")
+        self.edge_button.setToolTip(
+            "You are at the edge of this area: walk on into the next, or set off for a place "
+            "that lies this way"
+        )
+        self.edge_button.setPopupMode(QToolButton.InstantPopup)
+        self.edge_menu = QMenu(self)
+        self.edge_menu.aboutToShow.connect(lambda: self.edge_wanted.emit(self._edge or ""))
+        self.edge_button.setMenu(self.edge_menu)
+        self.edge_button.hide()
+        self._edge: str | None = None
         self.me_button = QToolButton()
         self.me_button.setObjectName("viewToggleButton")
         self.me_button.setText("◎ Me")
@@ -320,7 +336,14 @@ class AreaView(QWidget):
         header.add_group([self.title])
         header.add_group([self.clock])
         header.add_group(
-            [self.travel_button, self.look_button, self.me_button, self.zoom_out, self.zoom_in]
+            [
+                self.edge_button,
+                self.travel_button,
+                self.look_button,
+                self.me_button,
+                self.zoom_out,
+                self.zoom_in,
+            ]
         )
         header.add_group([self.coords])
         self.view = _Graphics()
@@ -607,6 +630,38 @@ class AreaView(QWidget):
             action.setEnabled(not self.locked)
             action.triggered.connect(lambda _c=False, pid=place_id: self.travel_chosen.emit(pid))
 
+    def set_edge(self, side: str | None) -> None:
+        """The author's character stands on this side's edge (None: not on one)."""
+        self._edge = side
+        self.edge_button.setText(f"Leave {side} ▾" if side else "")
+        self.edge_button.setVisible(side is not None)
+
+    def set_edge_choices(self, side: str, choices: list[tuple[str, str]]) -> None:
+        """The edge menu's entries: (an id, what it says)."""
+        self.edge_menu.clear()
+        if not choices:
+            action = self.edge_menu.addAction(f"Nothing known lies {side} of here")
+            action.setEnabled(False)
+            return
+        for choice_id, label in choices:
+            action = self.edge_menu.addAction(label)
+            action.setEnabled(not self.locked)
+            action.triggered.connect(lambda _c=False, c=choice_id: self.edge_chosen.emit(side, c))
+
+    def _off_the_edge(self, x: int, y: int) -> str | None:
+        area = self.area
+        if area is None or area.indoor:
+            return None
+        if y < 0:
+            return "north"
+        if y >= area.height:
+            return "south"
+        if x < 0:
+            return "west"
+        if x >= area.width:
+            return "east"
+        return None
+
     def set_looks(self, choices: list[tuple[str, str]], current: str, chosen: str) -> None:
         """Look ▾'s entries: (name, title) of each set, the one drawn in now
         ticked, and whether the author chose it or the program did."""
@@ -786,6 +841,16 @@ class AreaView(QWidget):
         step = WALK_KEYS.get(event.key())
         if step is not None and held is not None and not self.locked and not self.walking():
             dx, dy = step
+            side = self._off_the_edge(held.x + dx, held.y + dy)
+            if side is not None:
+                # Walking on past the edge: where to.
+                self.set_edge(side)
+                self.edge_wanted.emit(side)
+                person = self.people.get(held.name)
+                point = person.scenePos() if person is not None else QPointF()
+                at = self.view.viewport().mapToGlobal(self.view.mapFromScene(point))
+                self.edge_menu.popup(at)
+                return
             self.walk_requested.emit(held.x + dx, held.y + dy, False)
             return
         if event.key() in (Qt.Key_Plus, Qt.Key_Equal):

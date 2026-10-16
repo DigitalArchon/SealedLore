@@ -1005,6 +1005,10 @@ within reach, the doorways out.
 - **Travel…** sets off for another place on the map, with how long it takes
   on foot; the clock moves on by that much and the turn goes in the
   composer. The next passage begins on arrival.
+- **Edges.** Walk off the edge of an outdoor area (the arrow keys past the
+  last tile, or **Leave north ▾** when you stand on it) to walk on into the
+  area beyond, where one adjoins, or to set off for the places that lie that
+  way.
 - **Marking a spot.** Right-click anywhere, on Local or on the map's Plan,
   Region and World, and choose **Mark this spot in your turn**: its
   coordinate goes into the composer at the cursor, as `⌖(412, -88)` (metres

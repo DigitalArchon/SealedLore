@@ -38,6 +38,7 @@ from sealedlore.engine.area import (
     exit_side,
     front_of,
     inside_door,
+    metres_per_tile,
     path,
     point_tile,
     render_positions,
@@ -105,6 +106,13 @@ BESIDE = 3
 # stood at it again.
 AT_A_PLACE = 8
 MAX_READ_MINUTES = 7 * 24 * 60
+# Past an outdoor area's edge: how far straight on another area may start
+# and still be walked into, the way a place must lie to be offered, and how
+# many are.
+EDGE_REACH = 120.0
+EDGE_ARC = 60
+EDGE_CHOICES = 8
+EDGE_STEPS = {"north": (0, 1), "south": (0, -1), "east": (1, 0), "west": (-1, 0)}
 
 
 class AreaRuntime:
@@ -766,6 +774,95 @@ class AreaRuntime:
         if nodes and full[-2].id != nodes[-1].id:
             return None
         return full[-1]
+
+    # --- an area's edges -----------------------------------------------------------
+
+    def edge_here(self) -> str | None:
+        """The side ("north"…) of an outdoor area whose edge the author's
+        character stands on, or None."""
+        state = self.area_state()
+        me = state.spots.get(self.held_name() or "")
+        area = self.area(me.area if me else None)
+        if me is None or area is None or area.indoor:
+            return None
+        if me.y == 0:
+            return "north"
+        if me.y == area.height - 1:
+            return "south"
+        if me.x == 0:
+            return "west"
+        if me.x == area.width - 1:
+            return "east"
+        return None
+
+    def _beyond(self, side: str) -> tuple[Spot, float] | None:
+        """The first tile of another area straight on past this edge, within
+        EDGE_REACH metres, and how far it is."""
+        world, art = self.world(), self.map_art_copy()
+        state = self.area_state()
+        me = state.spots.get(self.held_name() or "")
+        area = self.area(me.area if me else None, world, art)
+        start = tile_point(world, area, me.x, me.y) if me and area else None
+        if start is None or area is None:
+            return None
+        dx, dy = EDGE_STEPS[side]
+        step = max(metres_per_tile(world, area), 1.0)
+        reach = step
+        while reach <= EDGE_REACH:
+            x, y = start[0] + dx * reach, start[1] + dy * reach
+            spot = self._mark_spot(Mark(token="", x=x, y=y), world, art)
+            if spot is not None and spot.area != area.place_id:
+                there = self.area(spot.area, world, art)
+                if there is not None and not there.indoor:
+                    return spot, reach
+            reach += step
+        return None
+
+    def edge_choices(self, side: str) -> list[tuple[str, str, int]]:
+        """Where the author's character can go on past this edge: ("area",
+        its name, seconds) for an area straight on that adjoins this one,
+        then ("place id", name, seconds on foot) for the known places that
+        lie that way, nearest first."""
+        out: list[tuple[str, str, int]] = []
+        beyond = self._beyond(side)
+        if beyond is not None:
+            spot, metres = beyond
+            name = self.world().places[spot.area].name
+            out.append(("area", name, int(metres / WALK_M_PER_S)))
+        world = self.world()
+        me = self.held_point()
+        if me is None:
+            return out
+        want = {"north": 0, "east": 90, "south": 180, "west": 270}[side]
+        for place_id, name, seconds in self.travel_choices():
+            spot = position(world, place_id)
+            if spot is None:
+                continue
+            angle = (math.degrees(math.atan2(spot[0] - me[0], spot[1] - me[1])) + 360) % 360
+            if min(abs(angle - want), 360 - abs(angle - want)) <= EDGE_ARC:
+                out.append((place_id, name, seconds))
+        return out[:EDGE_CHOICES]
+
+    def cross_edge(self, side: str) -> AreaState | None:
+        """On past the edge into the area that adjoins it, as through a door:
+        no turn written, the clock moved on by the gap."""
+        beyond = self._beyond(side)
+        if beyond is None:
+            return None
+        spot, metres = beyond
+        world, art = self.world(), self.map_art_copy()
+        state = self.area_state()
+        held = self.held_name()
+        here = self.area(state.spots[held].area, world, art)
+        there = self.area(spot.area, world, art)
+        if here is None or there is None:
+            return None
+        taken = {(s.x, s.y) for n, s in state.spots.items() if n != held and s.area == spot.area}
+        x, y = stand_near(there, (spot.x, spot.y), taken)
+        state.spots[held] = Spot(area=spot.area, x=x, y=y)
+        self._add_time(state, walk_seconds(metres), here.name, there.name)
+        self._set_live(state)
+        return state
 
     # --- marked spots (engine/marks.py) ------------------------------------------
 

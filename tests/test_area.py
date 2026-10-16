@@ -521,3 +521,42 @@ def test_walls_stop_sight_and_the_storyteller_is_told_who_is_out_of_sight():
     }
     text = render_positions(house, world, spots, "Jane")
     assert "(another room); out of sight." in text
+
+
+def _stand(session, area_id: str, x: int, y: int) -> None:
+    from sealedlore.models.area import LiveArea
+
+    state = session.area_state()
+    state.spots["Serrik Vaun"] = Spot(area=area_id, x=x, y=y)
+    session.story.area_live = LiveArea(leaf_id=session.story.active_leaf_id, state=state)
+
+
+def test_at_an_area_s_edge_the_places_that_way_are_offered(tmp_path, story, cast):
+    session = make_session(tmp_path, story, cast)
+    _stand(session, "farm", 30, 0)
+    assert session.edge_here() == "north"
+    choices = session.edge_choices("north")
+    assert [c[1] for c in choices] == ["Hellsville"]  # 8 km north
+    assert session.edge_choices("south") == []
+    assert session.cross_edge("north") is None  # nothing adjoins
+
+
+def test_an_area_that_adjoins_is_walked_on_into(tmp_path, story, cast):
+    session = make_session(tmp_path, story, cast)
+    # A meadow whose plan starts 5 m past the farm's north edge.
+    meadow = WorldPlace(id="meadow", name="The meadow", kind="site", x=0.0, y=245.0, size=400.0)
+    session.story.world_base.places.append(meadow)
+    session.story.world_base.seen.append("meadow")
+    rows, objects, _labels = rasterise({"ground": "grass", "features": []}, 40, 24)
+    session.world_art.layouts["meadow"] = {
+        "": PlaceLayout(
+            place_id="meadow", spec={"ground": "grass", "features": []}, rows=rows, made_at="1"
+        )
+    }
+    _stand(session, "farm", 30, 0)
+    choices = session.edge_choices("north")
+    assert choices[0][:2] == ("area", "The meadow")
+    state = session.cross_edge("north")
+    me = state.spots["Serrik Vaun"]
+    assert me.area == "meadow" and me.y == session.area("meadow").height - 1
+    assert 0 < state.walked < 30

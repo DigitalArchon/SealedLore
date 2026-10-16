@@ -201,3 +201,24 @@ def test_indoors_what_can_t_be_seen_is_shaded_and_someone_out_of_sight_is_faint(
 
             seen = sees(view.area, (me.x, me.y), (person.walker.x, person.walker.y))
             assert person.opacity() == (1.0 if seen else 0.45)
+
+
+def test_walking_off_an_area_s_edge_offers_what_lies_that_way(app, window):
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QKeyEvent
+
+    from sealedlore.models.area import LiveArea, Spot
+
+    session = window.session
+    state = session.area_state()
+    state.spots["Serrik Vaun"] = Spot(area="farm", x=30, y=0)
+    session.story.area_live = LiveArea(leaf_id=session.story.active_leaf_id, state=state)
+    window.refresh_area()
+    view = window.area_view
+    assert view.edge_button.isVisible() or view.edge_button.text() == "Leave north ▾"
+    view.keyPressEvent(QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Up, Qt.NoModifier))
+    labels = [a.text() for a in view.edge_menu.actions()]
+    assert labels and labels[0].startswith("Hellsville — ")
+    view.edge_menu.hide()
+    view.edge_menu.actions()[0].trigger()
+    assert window.composer.text() == "I set off for Hellsville."

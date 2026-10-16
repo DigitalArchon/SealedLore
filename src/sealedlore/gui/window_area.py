@@ -68,6 +68,8 @@ class AreaWindow:
         self.world_view.go_requested.connect(self._go_point)
         self.world_view.me_point = self._me_point
         self.composer.input.textChanged.connect(self._sync_marks)
+        self.area_view.edge_wanted.connect(self._area_edge)
+        self.area_view.edge_chosen.connect(self._area_edge_go)
         self._painted = _Painted()
         self._painted.done.connect(self._area_painted)
         self._area_images: dict[object, QImage] = {}
@@ -119,6 +121,7 @@ class AreaWindow:
         clock_text = f"Day {clock[0]}, {clock[1] // 60:02d}:{clock[1] % 60:02d}" if clock else ""
         self.area_view.set_locked(self._busy)
         self.area_view.set_area(area, image, walkers, key=key, clock=clock_text)
+        self.area_view.set_edge(session.edge_here())
         self._sync_marks()
 
     def _no_area_words(self, session) -> str:
@@ -353,6 +356,33 @@ class AreaWindow:
         self.refresh_area()
         if self._area_ready():
             self.world_view.go_local()
+
+    # --- an area's edges ---------------------------------------------------------------
+
+    def _area_edge(self, side: str) -> None:
+        session = self.session
+        if session is None or not side:
+            return
+        choices = []
+        for choice_id, name, seconds in session.edge_choices(side):
+            if choice_id == "area":
+                choices.append(("area", f"Walk on into {name}"))
+            else:
+                choices.append((choice_id, f"{name} — {_duration(seconds)}"))
+        self.area_view.set_edge_choices(side, choices)
+
+    def _area_edge_go(self, side: str, choice_id: str) -> None:
+        session = self.session
+        if session is None or self._busy:
+            return
+        if choice_id == "area":
+            if session.cross_edge(side) is not None:
+                self.refresh_area()
+                self.statusBar().showMessage(f"You walk on, {side}.", 4000)
+                session.start_tile_art()
+                self._sync_progress()
+            return
+        self._area_travel(choice_id)
 
     # --- travel -------------------------------------------------------------------
 
