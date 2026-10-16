@@ -1523,7 +1523,15 @@ def render_positions(
         ),
         key=lambda item: item[0],
     )
-    close = [f"the {_bare(p.name)} ({metres_words(m)})" for m, p in reach if m <= 4.0][:limit]
+    nearest: dict[str, tuple[float, int]] = {}
+    for m, p in reach:
+        if m <= 4.0:
+            first, count = nearest.get(_bare(p.name), (m, 0))
+            nearest[_bare(p.name)] = (first, count + 1)
+    close = [
+        f"the {name} ({metres_words(m)}" + (f"; {n - 1} more near)" if n > 1 else ")")
+        for name, (m, n) in nearest.items()
+    ][:limit]
     if close:
         lines.append("Within reach: " + "; ".join(close) + ".")
     if area.indoor and my_room is not None:

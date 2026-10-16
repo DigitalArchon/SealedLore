@@ -359,6 +359,14 @@ class AreaRuntime:
         where = dict(world.where)
         if held is not None and held not in where and world.start is not None:
             where[held] = world.start
+        if held in where:
+            # Whoever the scene has here and the map hasn't placed is with the
+            # author's character (live, Brasshaven's Silas stood in the
+            # workshop's doorway and the map read never named him: he was
+            # nowhere on the map, told to nobody, and Talk couldn't find him).
+            for name in self._present_names():
+                if name != held and name not in where:
+                    where[name] = where[held]
         spots: dict[str, Spot] = {}
         order = ([held] if held in where else []) + [n for n in where if n != held]
         travel = (
@@ -405,6 +413,17 @@ class AreaRuntime:
                 spots[name] = new
         state.spots = spots
         return state
+
+    def _present_names(self) -> list[str]:
+        """The people the scene has here, by the names the map uses."""
+        if self.story.chat:
+            return []
+        scene = self.story.scene
+        names = [c.name for c in self.visible_cast() if c.id in scene.present_character_ids]
+        for other in scene.present_others:
+            person = self._map_person(other)
+            names.append(person or other)
+        return list(dict.fromkeys(names))
 
     def _still_at(self, area: Area, world: WorldMap, spot: Spot, place_id: str) -> bool:
         anchor = anchor_of(area, world, place_id)

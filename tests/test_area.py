@@ -609,3 +609,33 @@ def test_a_story_s_own_tile_set_and_its_changes_go_into_a_new_playthrough():
     assert carried.tile_assets == {"floor": "images/map/tileset/floor-1.png"}  # only with a file
     assert carried.tile_overrides == {"out-road": "images/map/tileset/road-1.png", "rug": ""}
     assert out == files
+
+
+def test_someone_the_scene_has_here_and_the_map_never_placed_stands_with_the_author(
+    tmp_path, story, cast
+):
+    story.scene.present_character_ids = ["char-serrik", "char-maela"]
+    session = make_session(tmp_path, story, cast)
+    assert "Maela Orr" not in session.world().where
+    state = session.area_state()
+    me, maela = state.spots["Serrik Vaun"], state.spots["Maela Orr"]
+    assert maela.area == me.area == "house"
+    session.story.scene.present_character_ids = ["char-serrik"]
+    assert "Maela Orr" not in session.area_state().spots  # gone from the scene: from the map
+
+
+def test_several_of_one_thing_within_reach_are_named_once():
+    world, art = world_and_art()
+    house = build_area(world, art, "house")
+    from sealedlore.engine.area import Placement
+
+    stools = [
+        Placement(
+            id=f"s{i}", name="a wooden stool", x=5 + i, y=10, w=1, h=1, kind="furniture", verbs=()
+        )
+        for i in range(3)
+    ]
+    house.placements = [*house.placements, *stools]
+    text = render_positions(house, world, {"Jane": Spot(area="house", x=5, y=11)}, "Jane")
+    reach = next(line for line in text.splitlines() if line.startswith("Within reach"))
+    assert reach.count("wooden stool") == 1 and "2 more near" in reach
