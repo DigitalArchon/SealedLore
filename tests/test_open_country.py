@@ -159,11 +159,14 @@ def test_in_open_country_the_land_under_the_character_is_the_area():
     # The land's rock and water are where its rows have them, in the plan's legend.
     assert window.rows[6][31] == "^" and window.rows[31][6] == "~"
     assert all(ch in TILES for row in window.rows for ch in row)
-    # The wreck lies in the patch: a box with a door that leads into its plan.
+    # The wreck lies in the patch: a box with a door that leads into its plan,
+    # fenced round pavement (a site's grounds, not one roofed building:
+    # the renderer roofs walled rings only).
     assert "wreck" in window.buildings and [e.place_id for e in window.entrances] == ["wreck"]
     assert any("gave The wreck a door" in r for r in window.repairs)
     x0, y0, x1, y1 = window.buildings["wreck"]
-    assert x1 - x0 + 1 >= 4 and window.rows[y0][x0] == "#"
+    assert x1 - x0 + 1 >= 4 and window.rows[y0][x0] == "%"
+    assert window.rows[y0 + 1][x0 + 1] == "_" and window.walkable(x0 + 1, y0 + 1)
     assert build_window(world, art, "wreck") is None  # not a window's id
 
 
@@ -184,7 +187,7 @@ def test_without_land_a_plain_window_stands_in_and_the_patch_is_wanted():
     assert window_rect(art, 2000.0, 800.0) == (1600.0, 1600.0, 1600.0)
     plain = build_window(world, art, "window:1600:1600:1600")
     assert plain.patch_id == "" and plain.look == "sand"
-    assert set("".join(plain.rows)) <= set("s#+_ ")  # sand, and the oasis boxed at its edge
+    assert set("".join(plain.rows)) <= set("s%+_")  # sand, and the oasis fenced at its edge
     assert "oasis" in plain.buildings and plain.entrances == []  # no plan of its own yet
     assert build_window(WorldMap(), WorldArt(), "window:0:0:1600").look == "dirt"
     # In open country the land under the character is asked for (the cell

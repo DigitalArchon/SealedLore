@@ -1110,8 +1110,8 @@ def _fix_buildings(
     # here, anyone stood "at" it was stood under the roof and could walk
     # in without its door (the second review). Blank: no walking, no sight.
     for f in big.get("features", []):
-        if not isinstance(f, dict) or f.get("kind") != "building":
-            continue
+        if not isinstance(f, dict) or f.get("kind") != "building" or f.get("yard"):
+            continue  # a yard's grounds stay pavement, walked on
         x0, y0 = int(f["x"]), int(f["y"])
         x1, y1 = x0 + int(f["w"]) - 1, y0 + int(f["h"]) - 1
         for y in range(y0 + 1, y1):
@@ -1185,6 +1185,10 @@ def window_places(
         out.append(
             {
                 "kind": "building" if boxed else "place",
+                # A farm, a village or a wreck on the land is its grounds, not
+                # one roofed building: fenced, with a gate, paved inside (a
+                # 400 m farm drew as one barn with a shingled roof).
+                "yard": boxed and place.kind not in ("building", "vehicle"),
                 "name": place.name,
                 "place_id": pid,
                 "place_kind": place.kind or "place",
@@ -1321,12 +1325,18 @@ def _stamp_fixed(
             continue
         x0, y0 = int(f["x"]) * k, int(f["y"]) * k
         w, h = int(f["w"]) * k, int(f["h"]) * k
+        yard = bool(f.get("yard"))
         for y in range(y0, y0 + h):
             for x in range(x0, x0 + w):
                 if 0 <= y < len(grid) and 0 <= x < len(grid[0]):
                     edge = y in (y0, y0 + h - 1) or x in (x0, x0 + w - 1)
-                    grid[y][x] = "#" if edge else "_"
-        features.append({"kind": "building", "name": f["name"], "x": x0, "y": y0, "w": w, "h": h})
+                    # A yard (a place's grounds on a window of open country)
+                    # is a fence round pavement, not a wall: the renderer
+                    # roofs only walled rings.
+                    grid[y][x] = ("%" if yard else "#") if edge else "_"
+        features.append(
+            {"kind": "building", "name": f["name"], "x": x0, "y": y0, "w": w, "h": h, "yard": yard}
+        )
     return ["".join(r) for r in grid], {"features": features}
 
 
