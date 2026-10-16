@@ -1,4 +1,4 @@
-"""Settings → Endpoint → Speaks: choosing Anthropic's own API. Offscreen."""
+"""Settings → Endpoints → Speaks: choosing Anthropic's own API. Offscreen."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QApplication  # noqa: E402
 from sealedlore.gui.settings_dialog import SettingsDialog  # noqa: E402
 from sealedlore.models.config import Config, ProviderConfig  # noqa: E402
 from sealedlore.providers.anthropic import AnthropicProvider  # noqa: E402
+from sealedlore.providers.endpoints import EndpointsProvider  # noqa: E402
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider  # noqa: E402
 
 
@@ -48,20 +49,24 @@ def test_the_choice_round_trips_and_the_note_says_how_the_key_is_sent(app):
 
 
 def test_browse_lists_the_models_through_the_chosen_client(app):
+    """Browse… goes through the routing provider (providers/endpoints.py),
+    which makes each endpoint's client as the endpoint is typed."""
     dialog = SettingsDialog(config(), None)
     provider, _url, _owned = dialog._model_source()
-    assert isinstance(provider, OpenAICompatibleProvider)
+    assert isinstance(provider, EndpointsProvider)
+    assert isinstance(provider.provider_for("x"), OpenAICompatibleProvider)
     provider.close()
 
     dialog.base_url.setText("https://api.anthropic.com")
     provider, url, _owned = dialog._model_source()
-    assert isinstance(provider, AnthropicProvider) and url == "https://api.anthropic.com"
+    assert isinstance(provider.provider_for("x"), AnthropicProvider)
+    assert "https://api.anthropic.com" in url, "the catalog is keyed by the endpoints"
     provider.close()
 
     # Chosen outright, for a proxy that speaks Anthropic's API on another host.
     dialog.base_url.setText("https://proxy.example/v1")
     dialog.chat_api.setCurrentIndex(dialog.chat_api.findData("anthropic"))
     provider, _url, _owned = dialog._model_source()
-    assert isinstance(provider, AnthropicProvider)
+    assert isinstance(provider.provider_for("x"), AnthropicProvider)
     provider.close()
     assert all(t.settings.api == "anthropic" for t in dialog.speed_targets())

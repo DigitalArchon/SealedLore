@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from sealedlore.models.config import split_model
 from sealedlore.providers.http import make_client
 
 RELAY_MODELS_PATH = "/api/v1/private/tinfoil/models"
@@ -36,15 +37,29 @@ def offers_private_mode(base_url: str) -> bool:
 
 
 def _key(model_id: str) -> str:
-    return model_id.split("/", 1)[-1].lower().replace(".", "-")
+    return split_model(model_id)[1].split("/", 1)[-1].lower().replace(".", "-")
+
+
+def _kind(model_id: str) -> str:
+    """ "TEE", "private" or "" for a model reference, by its bare id."""
+    bare = split_model(model_id)[1]
+    return bare.split("/", 1)[0] if bare.startswith(("TEE/", "private/")) else ""
+
+
+def _twin(model_id: str, ids: Iterable[str], kind: str) -> str | None:
+    """The `kind` model among `ids` that is the same model as `model_id` on
+    the same endpoint: a reference names its endpoint (models/config.py),
+    and a twin on another endpoint is another key and another bill."""
+    endpoint, key = split_model(model_id)[0], _key(model_id)
+    return next(
+        (i for i in ids if _kind(i) == kind and _key(i) == key and split_model(i)[0] == endpoint),
+        None,
+    )
 
 
 def tee_counterpart(model_id: str, ids: Iterable[str]) -> str | None:
     """The `TEE/` model among `ids` that a `private/` model is."""
-    if not model_id.startswith("private/"):
-        return None
-    key = _key(model_id)
-    return next((i for i in ids if i.startswith("TEE/") and _key(i) == key), None)
+    return _twin(model_id, ids, "TEE") if _kind(model_id) == "private" else None
 
 
 def private_entries(
@@ -116,22 +131,22 @@ def offered(model_id: str, ids: Iterable[str]) -> bool | None:
 
 def encrypted_counterpart(model_id: str, ids) -> str | None:
     """The private/ model that is this TEE/ model end-to-end encrypted, if any."""
-    if not model_id.startswith("TEE/"):
-        return None
-    key = _key(model_id)
-    return next((i for i in ids if i.startswith("private/") and _key(i) == key), None)
+    return _twin(model_id, ids, "private") if _kind(model_id) == "TEE" else None
 
 
 def private_alternatives(model_id: str, ids) -> list[str]:
-    """The other TEE and end-to-end encrypted versions of the same model:
-    what a private model can move to when its one host is slow (Help → Model
-    trouble). The encrypted twin first."""
-    if not model_id.startswith(("TEE/", "private/")):
+    """The other TEE and end-to-end encrypted versions of the same model on
+    its endpoint: what a private model can move to when its one host is slow
+    (Help → Model trouble). The encrypted twin first."""
+    if not _kind(model_id):
         return []
-    key = _key(model_id)
-    same = [i for i in ids if i != model_id and i.startswith(("TEE/", "private/"))]
-    same = [i for i in same if _key(i) == key]
-    return sorted(dict.fromkeys(same), key=lambda i: (not i.startswith("private/"), i))
+    endpoint, key = split_model(model_id)[0], _key(model_id)
+    same = [
+        i
+        for i in ids
+        if i != model_id and _kind(i) and _key(i) == key and split_model(i)[0] == endpoint
+    ]
+    return sorted(dict.fromkeys(same), key=lambda i: (_kind(i) != "private", i))
 
 
 E2EE_NOTE = (
@@ -147,8 +162,9 @@ TEE_NOTE = (
 
 def privacy_label(model_id: str) -> tuple[str, str]:
     """(short label, explanation) for a model's privacy, or ("", "")."""
-    if model_id.startswith("private/"):
+    kind = _kind(model_id)
+    if kind == "private":
         return "🔐 End-to-end encrypted", E2EE_NOTE
-    if model_id.startswith("TEE/"):
+    if kind == "TEE":
         return "TEE", TEE_NOTE
     return "", ""

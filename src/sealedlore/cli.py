@@ -30,6 +30,7 @@ from sealedlore.models.character import Character
 from sealedlore.models.config import (
     DEFAULT_BASE_URL,
     DEFAULT_STORY_MODEL,
+    ENDPOINT_SEPARATOR,
     Config,
     ProviderConfig,
     recommended_models,
@@ -45,7 +46,7 @@ from sealedlore.models.node import (
     ResponseStyle,
 )
 from sealedlore.models.story import Story
-from sealedlore.providers import make_chat_provider
+from sealedlore.providers import make_session_provider
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError, TextDelta
 from sealedlore.providers.embeddings import OpenAICompatibleEmbeddings
 from sealedlore.providers.mock import MockChatProvider
@@ -118,20 +119,29 @@ Anything else is your turn, spoken by the current speaker."""
 
 
 def build_provider(config: Config, *, mock: bool) -> ChatProvider:
+    """The one provider every call goes through: it sends each request to
+    the endpoint its model names (providers/endpoints.py)."""
     if mock:
         return MockChatProvider()
-    provider_config = config.active_provider()
-    if provider_config is None:
+    if config.active_provider() is None:
         raise SystemExit(
             "No provider configured. Run `sealedlore configure --api-key ...`, or pass --mock."
         )
-    return make_chat_provider(provider_config)
+    return make_session_provider(config)
 
 
 def cmd_configure(args: argparse.Namespace) -> int:
+    """Save an endpoint. `--name` (the default endpoint, where a model named
+    without an endpoint goes) or `--endpoint-name` (another endpoint beside
+    it: "Anthropic", reached as "Anthropic::claude-opus-5-5", and made the
+    default only with `--make-default` or when it is the first)."""
     root: Path | None = args.data_dir
     config = load_config(root=root)
-    name = args.name
+    if args.endpoint_name is not None and args.name is not None:
+        raise SystemExit("Give --name (the default endpoint) or --endpoint-name, not both.")
+    name = args.endpoint_name if args.endpoint_name is not None else (args.name or "default")
+    if ENDPOINT_SEPARATOR in name:
+        raise SystemExit(f"An endpoint's name can't hold '{ENDPOINT_SEPARATOR}'.")
     try:
         # Assignment below skips the model's validator; check here so the
         # answer comes now and not at the next start.
@@ -149,19 +159,27 @@ def cmd_configure(args: argparse.Namespace) -> int:
         provider.model = args.model
     if args.api is not None:
         provider.api = args.api
+    first = not config.providers
     if existing is None:
-        if not config.providers:
+        if first:
             # A first setup starts with the recommended models for the small
             # per-turn calls, as Settings does; a blank one already saved stays.
             for field, model in recommended_models(provider.base_url).items():
                 if not getattr(config, field):
                     setattr(config, field, model)
         config.providers.append(provider)
-    config.active_provider_name = name
+    if args.endpoint_name is None or args.make_default or first:
+        config.active_provider_name = name
     if args.key_storage is not None:
         config.key_storage = args.key_storage
     save_config(config, root=root)
-    print(f"Saved provider {name!r} -> {provider.base_url} (model: {provider.model or 'unset'})")
+    default = " (the default endpoint)" if config.active_provider_name == name else ""
+    print(
+        f"Saved endpoint {name!r}{default} -> {provider.base_url} "
+        f"(model: {provider.model or 'unset'})"
+    )
+    if not default:
+        print(f"Its models are named {name}::<model id> in Settings and stories.")
     if provider.api_key:
         print(f"API key: {key_place(config, f'provider:{name}', root)}")
     return 0
@@ -907,8 +925,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--data-dir", type=Path, default=None, help="override the data directory")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    configure = subparsers.add_parser("configure", help="save provider settings")
-    configure.add_argument("--name", default="default")
+    configure = subparsers.add_parser("configure", help="save an endpoint's settings")
+    configure.add_argument(
+        "--name",
+        default=None,
+        help='the default endpoint\'s name (default: "default"): a model named without '
+        "an endpoint goes there",
+    )
+    configure.add_argument(
+        "--endpoint-name",
+        default=None,
+        help="another endpoint beside the default, e.g. Anthropic with its own key; its "
+        "models are then chosen as NAME::model (Settings → Endpoints). Kept as the "
+        "default only with --make-default, or when it is the first endpoint",
+    )
+    configure.add_argument(
+        "--make-default",
+        action="store_true",
+        help="with --endpoint-name: make that endpoint the default one",
+    )
     configure.add_argument("--base-url", default=DEFAULT_BASE_URL)
     configure.add_argument("--api-key")
     configure.add_argument("--model")

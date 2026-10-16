@@ -110,10 +110,13 @@ class _Run(QObject):
         try:
             if self._stopping:
                 return SpeedResult(model=target.model, stopped=True)
+            # Prices are kept by the model's reference (its endpoint named);
+            # the request names the bare id.
+            price = self._prices.get(target.reference) or self._prices.get(target.model)
             return run_speed_test(
                 provider,
                 target.model,
-                prices=self._prices,
+                prices={target.model: price} if price is not None else None,
                 attest=False,
                 attested=attested,
                 route=target.route,

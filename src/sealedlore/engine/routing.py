@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from sealedlore.models.config import Config, on_nanogpt
+from sealedlore.models.config import Config, on_nanogpt, split_model
 from sealedlore.models.node import Usage
 from sealedlore.models.route import ROUTE_ROLES, ModelRoute
 from sealedlore.providers.tee import is_tee
@@ -42,7 +42,9 @@ def route_body(route: ModelRoute | None, model: str) -> dict[str, Any]:
         return {}
     provider: dict[str, Any] = {}
     if route.priority == "host":
-        if not route.host or route.host_model != model:
+        # By bare id: a host is NanoGPT's, whichever NanoGPT endpoint the
+        # model's reference names (models/config.py).
+        if not route.host or split_model(route.host_model)[1] != split_model(model)[1]:
             return {}
         provider["order"] = [route.host]
     else:
@@ -93,8 +95,9 @@ def config_role_model(config: Config, role: str) -> tuple[str, str]:
 
 def config_route(config: Config, role: str, model: str) -> dict[str, Any]:
     """`route_body` for a call made with no story open (a premise draft):
-    the role's route, or its fallback's when its own model is blank."""
-    provider = config.active_provider()
+    the role's route, or its fallback's when its own model is blank. Only
+    on the NanoGPT endpoint the model is reached through."""
+    provider = config.endpoint_for(model)
     if provider is None or not routable(provider.base_url, model):
         return {}
     own = {

@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from sealedlore.engine.pricing import estimate_cost
-from sealedlore.models.config import ModelPrice
+from sealedlore.models.config import ModelPrice, split_model
 from sealedlore.providers.base import parse_usage
 
 # Response entry kinds, and what each call was for.
@@ -151,6 +151,24 @@ def usage_fields(entry: Any) -> dict[str, Any]:
     return kept
 
 
+def price_of(prices: Mapping[str, ModelPrice], model: str) -> ModelPrice | None:
+    """The listed price for the model a request entry names.
+
+    The entry holds the payload as sent, so its model is the bare id the
+    endpoint knows, while prices are kept by the model's reference, which
+    names its endpoint when that isn't the default (models/config.py). The
+    reference is tried first; failing that, the first price kept for the
+    same bare id on any endpoint. Two endpoints listing one id at different
+    prices would be told apart only by the reference, which the payload
+    can't carry; the estimate is marked as one either way.
+    """
+    found = prices.get(model)
+    if found is not None:
+        return found
+    bare = split_model(model)[1]
+    return next((price for ref, price in prices.items() if split_model(ref)[1] == bare), None)
+
+
 def usage_report(
     entries: Iterable[dict[str, Any]],
     prices: Mapping[str, ModelPrice] | None = None,
@@ -176,7 +194,7 @@ def usage_report(
         if not isinstance(raw, dict):
             raw = {}
         model = model_of.get(_text(entry.get("request_log_ref")))
-        price = prices.get(model) if model else None
+        price = price_of(prices, model) if model else None
         by_kind.setdefault(kind, UsageLine(KIND_LABELS[kind])).add(
             raw, model, price, cache_ttl=cache_ttl
         )

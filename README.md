@@ -237,14 +237,16 @@ Windows offers weaker privacy on the machine itself (see
 
 ## First five minutes
 
-1. **Point it at an endpoint.** File → Settings → Endpoint takes a base URL
+1. **Point it at an endpoint.** File → Settings → Endpoints takes a base URL
    and an API key. Any endpoint that speaks the OpenAI `/chat/completions`
    protocol works; the defaults assume [NanoGPT](https://nano-gpt.com)
    (`https://nano-gpt.com/api/v1`), and [OpenRouter](https://openrouter.ai)
    (`https://openrouter.ai/api/v1`) or a local server on `localhost` work the
    same way. Anthropic's own API works directly too, with an Anthropic key
-   and `https://api.anthropic.com` as the base URL (Settings → Endpoint →
-   Speaks reads it from the address). The key is kept in the system
+   and `https://api.anthropic.com` as the base URL (Settings → Endpoints →
+   Speaks reads it from the address). Several endpoints can be set up at
+   once, each with its own key, and the model picker's Provider column
+   shows which endpoint each model is from. The key is kept in the system
    keychain (GNOME Keyring or
    KWallet on Linux, Credential Manager on Windows), or in plain text in the
    data folder on a computer without one; Settings says which under each key

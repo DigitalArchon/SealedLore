@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QHBoxLayout, QWidget
 
 from sealedlore.engine.routing import routable
 from sealedlore.gui.status import ElidingLabel
+from sealedlore.models.config import model_label
 from sealedlore.providers.private_catalog import privacy_label
 from sealedlore.providers.tee import is_private_mode, is_tee
 
@@ -40,10 +41,13 @@ def _privacy(model: str, tee_state: str) -> str:
 def describe_session(session, *, tee_state: str = "") -> tuple[str, str]:
     """(the one line, its tooltip) for the open story or chat."""
     story = session.story
-    provider = session.config.active_provider()
+    # The endpoint the story's model names, else the default (models/config.py).
+    provider = session.config.endpoint_for(session.model)
     base_url = provider.base_url if provider is not None else ""
     host = urlparse(base_url).hostname or "no endpoint set"
     model = session.model or "(no model)"
+    # As the author reads it: "claude-opus-5-5 · Anthropic" off the default endpoint.
+    shown = model_label(model)
     span = session.open_span
 
     parts: list[str] = []
@@ -64,10 +68,10 @@ def describe_session(session, *, tee_state: str = "") -> tuple[str, str]:
         tips.append("A story, saved on disk.")
 
     privacy = _privacy(model, tee_state)
-    parts.append(model + (f" · {privacy}" if privacy else ""))
+    parts.append(shown + (f" · {privacy}" if privacy else ""))
     label, note = privacy_label(model)
     seen = f" {label}: {note}" if label else " The endpoint and the model's host see every message."
-    tips.append(f"Model: {model} on {host}.{seen}")
+    tips.append(f"Model: {shown} on {host}.{seen}")
     parts.append(f"via {host}")
 
     if routable(base_url, model):
@@ -92,7 +96,7 @@ def describe_session(session, *, tee_state: str = "") -> tuple[str, str]:
     if not story.chat:
         roles = []
         for role, name in ROLE_NAMES.items():
-            role_model = session.role_model(role)
+            role_model = model_label(session.role_model(role))
             route = session.route_text(role)
             roles.append(f"  {name}: {role_model}" + (f" ({route}, paid)" if route else ""))
         tips.append("The story's other calls:\n" + "\n".join(roles))

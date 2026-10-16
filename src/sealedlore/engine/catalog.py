@@ -17,10 +17,14 @@ from sealedlore.engine.pricing import parse_price
 
 @dataclass(frozen=True)
 class ModelInfo:
+    # The model's reference: its id, named with its endpoint when that isn't
+    # the default one ("Anthropic::claude-opus-5-5", models/config.py).
     id: str
     name: str = ""
     owner: str = ""
     description: str = ""
+    # The endpoint it is listed by (its name in Settings → Endpoints).
+    endpoint: str = ""
     context_length: int | None = None
     max_output_tokens: int | None = None
     reasoning: bool = False
@@ -77,6 +81,7 @@ def model_info(model_id: str, entry: Mapping[str, Any]) -> ModelInfo:
         name=_text(entry.get("name")),
         owner=_text(entry.get("owned_by")),
         description=_text(entry.get("description")),
+        endpoint=_text(entry.get("endpoint")),
         context_length=_int(entry.get("context_length")),
         max_output_tokens=_int(entry.get("max_output_tokens")),
         reasoning=capabilities.get("reasoning") is True,
@@ -99,8 +104,9 @@ def chat_models(listing: Mapping[str, Mapping[str, Any]]) -> dict[str, ModelInfo
 
 
 def matches(info: ModelInfo, query: str) -> bool:
-    """Every word of the query appears in the id, name or owner (case-insensitive)."""
-    haystack = f"{info.id} {info.name} {info.owner}".lower()
+    """Every word of the query appears in the id, name, owner or the
+    endpoint's name (case-insensitive)."""
+    haystack = f"{info.id} {info.name} {info.owner} {info.endpoint}".lower()
     return all(word in haystack for word in query.lower().split())
 
 

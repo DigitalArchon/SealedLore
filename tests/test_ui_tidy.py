@@ -232,7 +232,7 @@ def test_settings_tabs_and_every_model_in_one_place(app, window: MainWindow):
     tabs = dialog.tabs
     names = [tabs.tabText(i) for i in range(tabs.count())]
     assert names == [
-        "Endpoint",
+        "Endpoints",
         "Models",
         "Generation",
         "Context",

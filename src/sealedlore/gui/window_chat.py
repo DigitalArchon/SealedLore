@@ -19,8 +19,7 @@ from sealedlore.engine.session import StorySession
 from sealedlore.gui.new_chat_dialog import NewChatDialog
 from sealedlore.models.node import CHAT_USER_ID
 from sealedlore.models.story import Story
-from sealedlore.providers.base import ChatProvider
-from sealedlore.providers.private_mode import PrivateModeProvider
+from sealedlore.providers.base import ChatProvider, ProviderError
 from sealedlore.providers.tee import is_private_mode, move_refusal
 from sealedlore.storage.repository import StoryBundle, save_story_bundle
 
@@ -28,8 +27,6 @@ MEMORY_TITLE = "(in memory only)"
 
 
 class ChatWindow:
-    _sealed_provider: PrivateModeProvider | None = None
-
     def _chat_actions(self, file_menu) -> None:
         """Called from `_build_actions`: File → New simple chat…"""
         self.new_chat_action = QAction("New simple &chat…", self)
@@ -60,6 +57,7 @@ class ChatWindow:
             browse=self._browse_models,
             parent=self,
             endpoint=None if self.use_mock else provider,
+            config=None if self.use_mock else self.config,
             browse_route=self._browse_models_and_route,
             hosts_of=self._hosts_of,
         )
@@ -203,10 +201,13 @@ class ChatWindow:
         changes, as a private scene is when it begins."""
         if self.session is None or not self.session.tee_chat or self.use_mock:
             return
-        settings = self.config.active_provider()
+        # The endpoint the chat's model names, sent the bare id (models/config.py).
+        settings = self.config.endpoint_for(self.session.model)
         if settings is None:
             return
-        self._attest_or_say_not(settings.model_copy(update={"model": self.session.model}))
+        self._attest_or_say_not(
+            settings.model_copy(update={"model": self.config.bare_model(self.session.model)})
+        )
 
     def _chat_model_changed(self) -> None:
         """A TEE chat's new model is attested before anything else is sent:
@@ -222,10 +223,11 @@ class ChatWindow:
         self._sync_chat_ui()
         self._attest_chat()
 
-    def _chat_provider(self) -> ChatProvider | None:
-        """An end-to-end encrypted chat's provider: sealed to its attested
-        enclave, built once per endpoint like the window's own
-        (MainWindow._current_provider). None for any other chat or a story."""
+    def _sealed_chat_provider(self) -> ChatProvider | None:
+        """An end-to-end encrypted chat's client: the one the session's
+        routing provider sends its model to, sealed to its attested enclave
+        (providers/endpoints.py makes a `private/` model's endpoint its
+        sealing client). None for any other chat or a story."""
         if (
             self.session is None
             or not self.session.story.chat
@@ -233,18 +235,14 @@ class ChatWindow:
             or self.use_mock
         ):
             return None
-        settings = self.config.active_provider()
-        if settings is None:
-            return None
-        if self._sealed_provider is None or self._sealed_provider.config != settings:
-            self._discard_sealed_provider()
-            self._sealed_provider = PrivateModeProvider(settings)
-        return self._sealed_provider
-
-    def _discard_sealed_provider(self) -> None:
-        provider, self._sealed_provider = self._sealed_provider, None
-        if provider is not None:
-            provider.close()
+        provider = self._current_provider()
+        provider_for = getattr(provider, "provider_for", None)
+        if not callable(provider_for):
+            return provider  # a test's stand-in
+        try:
+            return provider_for(self.session.model)
+        except ProviderError:
+            return None  # an endpoint the model names that isn't set up
 
     def _toggle_keep_full(self, node_id: str, keep: bool) -> None:
         if self.session is None or self._busy:

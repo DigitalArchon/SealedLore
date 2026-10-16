@@ -80,7 +80,7 @@ def test_a_model_with_one_host_has_no_route_to_choose(app):
 
 def test_a_fields_route_shows_beside_it_and_follows_its_model(app):
     endpoint = [NANO]
-    field = ModelField(GLM, route_endpoint=lambda: endpoint[0])
+    field = ModelField(GLM, route_endpoint=lambda _model: endpoint[0])
     assert not field.route_button.isHidden() and field.route_button.text() == "Route…"
     field.set_route(ModelRoute(priority="latency"))
     assert field.route_button.text() == "⚡ Fastest start"
@@ -104,7 +104,9 @@ def test_the_picker_offers_a_route_for_a_model_with_hosts(app, monkeypatch):
         "anthropic/x": ModelInfo(id="anthropic/x"),
     }
     catalog._endpoint, catalog._fetched_at = "e", datetime.now(UTC)
-    dialog = ModelPickerDialog(catalog, lambda: (None, "e", False), route_endpoint=NANO)
+    dialog = ModelPickerDialog(
+        catalog, lambda: (None, "e", False), route_endpoint=lambda _model: NANO
+    )
     rows = {dialog.table.topLevelItem(i).text(0): dialog.table.topLevelItem(i) for i in range(2)}
     dialog.table.setCurrentItem(rows["anthropic/x"])
     assert not dialog.route_button.isEnabled()

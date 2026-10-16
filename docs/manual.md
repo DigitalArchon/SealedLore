@@ -311,11 +311,38 @@ For developers: there is no need to activate the venv (PowerShell refuses
 sealedlore-gui            # or: sealedlore-gui --mock  (no endpoint needed)
 ```
 
-Set the base URL and API key under File → Settings → Endpoint, and the model
+Set the base URL and API key under File → Settings → Endpoints, and the model
 under File → Settings → Models. `--data-dir` points at an alternative data
 directory, `--story <id>` opens one on start, and `--version` prints the
 version (Help → About SealedLore shows it too, with the data folder). Until an endpoint is set, anything that would call a model says so
 and does nothing.
+
+**Several endpoints.** Settings → Endpoints lists every endpoint you have
+set up, each with its own address, protocol (**Speaks**) and API key; **Add**
+makes another, **Remove** takes one out (its key with it, when you Save), and
+**Make default** chooses the one a model named without an endpoint is sent to.
+The fields below the list are the selected endpoint's. To use Anthropic's own
+API beside NanoGPT: Add, name it `Anthropic`, give it
+`https://api.anthropic.com` and your Anthropic key, Save. Browse… on the Models
+page then lists both endpoints' models together, with a **Provider** column
+saying which endpoint each is from, and the search finds an endpoint's name
+too; NanoGPT and Anthropic both serve Claude Opus 5.5, and with a key for
+each you choose which row. A model chosen from an endpoint that isn't the
+default is written as `Anthropic::claude-opus-5-5`: the endpoint's name, two
+colons, the model's id as that endpoint knows it, and the field shows the
+endpoint's name beside it, as the model button in the status bar does. A
+model named without an endpoint (`anthropic/claude-sonnet-4.6`, as every
+field read before this) goes to the default endpoint, so nothing you had set
+changes meaning. Each role's model can be on a different endpoint: the
+storyteller on Anthropic, the scene read on NanoGPT. Route… applies only to
+a model on a NanoGPT endpoint; prices and reasoning facts are kept per
+reference, so the same id on two endpoints is two entries. Making another
+endpoint the default renames the models on the Models page to keep what
+they mean; a story's own model named without an endpoint then means the new
+default. A model naming an endpoint you have removed is left as it is and
+says so when it is sent. The terminal client adds an endpoint with
+`sealedlore configure --endpoint-name Anthropic --base-url
+https://api.anthropic.com --api-key …`.
 
 **The defaults assume NanoGPT.** The base URL, the lore picker's model
 (`deepseek/deepseek-v4.1-flash`), the Jev decision model, the image model
@@ -324,8 +351,9 @@ another endpoint the chat model works as it is; set the lore, scene, plot and
 image models to ones your endpoint lists (Browse… shows them), or the calls
 that use them fail and fall back where they can.
 
-**Anthropic's own API.** With an Anthropic key, set the base URL under
-Settings → Endpoint to `https://api.anthropic.com`: **Speaks** reads the
+**Anthropic's own API.** With an Anthropic key, set an endpoint's base URL
+under Settings → Endpoints to `https://api.anthropic.com` (the default one,
+or one added beside NanoGPT, above): **Speaks** reads the
 protocol from the address, or choose **Anthropic** there outright for a
 proxy that speaks Anthropic's Messages API elsewhere. The key is sent as
 Anthropic's `x-api-key` header, and the note under the key field says so.
@@ -1729,11 +1757,12 @@ Nothing leaves your machine except what the features below send, and every
 endpoint must be `https://` (plain `http://` is accepted only for
 `localhost`). There is no telemetry, no update check and no crash reporting.
 
-- **The chat endpoint** (Settings → Endpoint) gets every prompt: the world,
+- **The chat endpoints** (Settings → Endpoints) get every prompt: the world,
   cast, lore, the recent story and your turn; the chapter summaries, scene
   and plot reads, character scans, settings reviews and image prompts made
-  from the story; and a request for its model list when a price or the model
-  picker needs one.
+  from the story; and a request for each one's model list when a price or
+  the model picker needs one. Each call goes to the endpoint its model
+  names, with that endpoint's key alone.
 - **The embeddings endpoint** (Settings → Lore, off by default) gets the lore
   entries and a query built from the last few passages. Its key is only
   filled in from the chat key when it is the same host. A large lorebook's
@@ -1773,7 +1802,7 @@ SealedLore shows where). API keys are kept in the system keychain (GNOME
 Keyring or KWallet through the Secret Service on Linux, Credential Manager
 on Windows) and left blank in `config.json`. A computer without a keychain
 keeps them in `config.json` in plain text, and so does choosing "config.json,
-in plain text" under File → Settings → Endpoint → Keep API keys in (for the
+in plain text" under File → Settings → Endpoints → Keep API keys in (for the
 command line or a test setup: `sealedlore configure --key-storage file`).
 The note under each key field says where that key goes. A key already in
 `config.json` from an older version moves into the keychain the first time

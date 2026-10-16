@@ -122,16 +122,17 @@ from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.ids import utc_now_iso
 from sealedlore.models.authoring import SettingsChange, SettingsReview
 from sealedlore.models.character import Character
-from sealedlore.models.config import on_nanogpt
+from sealedlore.models.config import model_label, on_nanogpt, split_model
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID, Node
 from sealedlore.models.route import ROUTE_ROLES, ModelRoute
 from sealedlore.models.scene import SceneState
 from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
 from sealedlore.models.world import WorldArt, WorldMap
-from sealedlore.providers import make_chat_provider
+from sealedlore.providers import make_session_provider
 from sealedlore.providers.base import ChatProvider, UnconfiguredProvider
 from sealedlore.providers.embeddings import EmbeddingBackend, OpenAICompatibleEmbeddings
+from sealedlore.providers.endpoints import listing_key
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.providers.model_hosts import Host
 from sealedlore.providers.tee import is_tee
@@ -1954,13 +1955,12 @@ class MainWindow(
     def _current_provider(self) -> ChatProvider:
         """The provider for this session, built once and reused.
 
-        Rebuilt only when the settings change: a fresh OpenAI-compatible
-        provider opens its own httpx client, so building one per turn would
-        leak a connection pool every turn.
+        Rebuilt only when the settings change: each endpoint's client opens
+        its own httpx client, so building one per turn would leak a
+        connection pool every turn. One provider routes every request to
+        the endpoint its model names (providers/endpoints.py); an
+        end-to-end encrypted chat's sealing client is made there too.
         """
-        sealed = self._chat_provider()
-        if sealed is not None:
-            return sealed  # an end-to-end encrypted chat (window_chat)
         if self._provider is None:
             self._provider = self._build_provider()
         return self._provider
@@ -1968,12 +1968,11 @@ class MainWindow(
     def _build_provider(self) -> ChatProvider:
         if self.use_mock:
             return MockChatProvider()
-        provider_config = self.config.active_provider()
-        if provider_config is None:
+        if self.config.active_provider() is None:
             # Never the mock by accident: a job started without an endpoint
             # fails with the reason instead of saving canned text as story.
             return UnconfiguredProvider()
-        return make_chat_provider(provider_config)
+        return make_session_provider(self.config)
 
     def _current_embeddings(self) -> EmbeddingBackend | None:
         """The embeddings client, built once. None means keyword retrieval (§7)."""
@@ -1984,7 +1983,6 @@ class MainWindow(
         return self._embeddings
 
     def _discard_provider(self) -> None:
-        self._discard_sealed_provider()
         provider, self._provider = self._provider, None
         close = getattr(provider, "close", None)
         if close is not None:
@@ -2732,9 +2730,15 @@ class MainWindow(
 
     def _trouble_context(self) -> TroubleContext:
         """Each distinct model and route as play uses them now, and whether the
-        story's last prompt may go to other hosts (and if not, why)."""
-        endpoint = self.config.active_provider()
+        story's last prompt may go to other hosts (and if not, why). The
+        hosts are the story model's endpoint's (NanoGPT's); a role whose
+        model is on another endpoint is left out, since its hosts aren't
+        that endpoint's to choose."""
         session = self.session
+        story_model = session.model if session is not None else ""
+        endpoint = (
+            self.config.endpoint_for(story_model) if story_model else self.config.active_provider()
+        )
         roles: list[TroubleRole] = []
         if session is not None and session.in_private:
             # Nothing reaches the main endpoint while a scene is open.
@@ -2752,7 +2756,8 @@ class MainWindow(
                     used, model = session.route_role(role), session.role_model(role)
                 else:
                     used, model = config_role_model(self.config, role)
-                if model:
+                on_endpoint = self.config.endpoint_for(model) if model else None
+                if model and (endpoint is None or on_endpoint is endpoint):
                     groups.setdefault((used, model), []).append(TROUBLE_ROLE_NAMES[role])
             for (used, model), names in groups.items():
                 kind = "story" if used == "story" else "side"
@@ -2762,7 +2767,9 @@ class MainWindow(
                 else:
                     route = config_route(self.config, used, model)
                     reasoning = config_reasoning(self.config, kind, model)
-                roles.append(TroubleRole(used, ", ".join(names), model, route, reasoning))
+                # The endpoint is sent the bare id.
+                bare = split_model(model)[1]
+                roles.append(TroubleRole(used, ", ".join(names), bare, route, reasoning))
         prompt, tokens, why = None, 0, ""
         if session is None:
             why = "Open a story first: this uses what its storyteller was last sent."
@@ -3116,29 +3123,45 @@ class MainWindow(
     # --- models -------------------------------------------------------------
 
     def _model_source(self) -> tuple[ChatProvider, str, bool]:
-        provider_config = self.config.active_provider()
-        if provider_config is None and not self.use_mock:
+        """Every endpoint's models, through the session's routing provider
+        (each endpoint with its own key); keyed by the endpoints as saved."""
+        if self.config.active_provider() is None and not self.use_mock:
             raise ValueError("Set a base URL and API key in Settings first.")
-        endpoint = provider_config.base_url if provider_config else "mock"
+        endpoint = listing_key(self.config) if not self.use_mock else "mock"
         return self._current_provider(), endpoint, False
 
     def _browse_models(self, current: str, **limits) -> str | None:
         return pick_model(self.catalog, self._model_source, current, self, **limits)
 
+    def _route_endpoint_of(self, model: str) -> str | None:
+        """The address of the endpoint a model's reference resolves to, for
+        its route (NanoGPT's); None when it has none."""
+        if self.use_mock:
+            return None
+        provider = self.config.endpoint_for(model)
+        return provider.base_url if provider is not None else None
+
     def _browse_models_and_route(self, current: str, route):
         """Browse… for a field with a route (New simple chat)."""
-        provider = self.config.active_provider()
-        endpoint = provider.base_url if provider is not None and not self.use_mock else None
         return pick_model_and_route(
-            self.catalog, self._model_source, current, route, endpoint, self
+            self.catalog, self._model_source, current, route, self._route_endpoint_of, self
         )
+
+    def _nanogpt_url(self) -> str | None:
+        """A NanoGPT endpoint's address, the default's first: the hosts
+        listing is public and the same from any of them."""
+        default = self.config.active_provider()
+        ordered = [default, *self.config.providers] if default is not None else []
+        return next((p.base_url for p in ordered if p is not None and on_nanogpt(p.base_url)), None)
 
     def _host_price(self, model: str, host: str) -> HostPrice | None:
         """A host's listed price, if its model's hosts have been fetched. On
         the reply's thread: it reads the catalog's kept list and fetches
         nothing (`_fetch_host_prices` does, when a story opens)."""
-        provider = self.config.active_provider()
-        found = hosts_catalog().hosts(provider.base_url, model) if provider else None
+        provider = self.config.endpoint_for(model)
+        found = (
+            hosts_catalog().hosts(provider.base_url, split_model(model)[1]) if provider else None
+        )
         listed = found.host(host) if found is not None else None
         if listed is None or listed.input_price is None or listed.output_price is None:
             return None
@@ -3147,15 +3170,15 @@ class MainWindow(
     def _fetch_host_prices(self) -> None:
         """The hosts of every model routed to one host, so its replies can
         be checked against its price."""
-        provider = self.config.active_provider()
-        if provider is None or self.use_mock:
+        url = self._nanogpt_url()
+        if url is None or self.use_mock:
             return
         routes = list(self.config.model_routes.values())
         if self.session is not None and self.session.story.defaults.main_route:
             routes.append(self.session.story.defaults.main_route)
         for route in routes:
             if route.priority == "host" and route.host_model:
-                hosts_catalog().ensure(provider.base_url, route.host_model)
+                hosts_catalog().ensure(url, split_model(route.host_model)[1])
 
     def _hosts_of(self, model: str) -> tuple[str, ...] | None:
         """A model's hosts from the endpoint's list; None until it's loaded."""
@@ -3196,10 +3219,14 @@ class MainWindow(
             self.model_button.setVisible(True)
             return
         model = self.session.model if self.session else ""
-        # The id's last part reads best in a status bar: "claude-sonnet-4.6".
-        self.model_button.setText(f"{model.rsplit('/', 1)[-1] or 'no model'} ▾")
+        # The id's last part reads best in a status bar: "claude-sonnet-4.6",
+        # with its endpoint when that isn't the default: "opus-5-5 · Anthropic".
+        endpoint, bare = split_model(model)
+        short = bare.rsplit("/", 1)[-1] or "no model"
+        self.model_button.setText(f"{short}{f' · {endpoint}' if endpoint else ''} ▾")
         self.model_button.setToolTip(
-            f"Storyteller model: {model or 'none set'}. Click to choose another."
+            f"Storyteller model: {model_label(model) if model else 'none set'}. Click to "
+            "choose another."
         )
         self.model_button.setVisible(self.session is not None)
         self.model_button.setEnabled(self.session is not None and not self._busy)
@@ -3235,8 +3262,8 @@ class MainWindow(
         encrypted model), a model with one host, or a private scene or part."""
         if self.session is None or self.in_private or self.use_mock:
             return None
-        provider = self.config.active_provider()
         model = self.session.model
+        provider = self.config.endpoint_for(model)
         if provider is None or not routable(provider.base_url, model):
             return None
         hosts = self._hosts_of(model)
@@ -3280,7 +3307,10 @@ class MainWindow(
         endpoint = self._story_route_endpoint()
         if endpoint is None or self._busy:
             return
-        dialog = RouteDialog(endpoint, self.session.model, self._story_route(), self)
+        # NanoGPT's hosts are listed by the bare id.
+        dialog = RouteDialog(
+            endpoint, split_model(self.session.model)[1], self._story_route(), self
+        )
         try:
             if dialog.exec() != QDialog.Accepted:
                 return

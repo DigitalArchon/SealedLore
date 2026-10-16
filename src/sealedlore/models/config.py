@@ -329,6 +329,40 @@ def chat_api(base_url: str, api: str = "auto") -> str:
     return "openai"
 
 
+# A model reference may name the endpoint it is reached through:
+# "<endpoint name>::<model id>" (the author, Oct 2026: NanoGPT and Anthropic
+# both serve Opus 5.5, and a key for each means a choice). A bare id means
+# the default endpoint (`Config.active_provider_name`), so every config and
+# story from before keeps working unchanged. Endpoint names may hold spaces;
+# model ids hold "/", "." and ":" ("anthropic/claude-sonnet-4.6:thinking"),
+# never two colons.
+ENDPOINT_SEPARATOR = "::"
+
+
+def split_model(ref: str) -> tuple[str | None, str]:
+    """(the endpoint named, or None for the default; the bare model id)."""
+    if ENDPOINT_SEPARATOR not in ref:
+        return None, ref
+    name, model = ref.split(ENDPOINT_SEPARATOR, 1)
+    return name.strip() or None, model
+
+
+def qualify(endpoint_name: str | None, model_id: str, default: str | None = None) -> str:
+    """The reference for `model_id` on `endpoint_name`: bare when that is the
+    default endpoint (or no endpoint), so a default endpoint's models read as
+    they always did. A blank id stays blank."""
+    if not model_id or endpoint_name is None or endpoint_name == default:
+        return model_id
+    return f"{endpoint_name}{ENDPOINT_SEPARATOR}{model_id}"
+
+
+def model_label(ref: str) -> str:
+    """How a reference reads to the author: "claude-opus-5-5 · Anthropic"
+    for a model on a named endpoint, the id alone on the default one."""
+    name, model = split_model(ref)
+    return f"{model} · {name}" if name else model
+
+
 class ProviderConfig(BaseModel):
     # A URL assigned later (Settings, the CLI) is checked like one parsed.
     model_config = ConfigDict(validate_assignment=True)
@@ -341,7 +375,7 @@ class ProviderConfig(BaseModel):
     # Escape hatch for endpoint-specific request fields (e.g. OpenRouter's
     # {"usage": {"include": true}}); merged into the payload last.
     extra_body: dict[str, Any] = Field(default_factory=dict)
-    # What the endpoint speaks (Settings → Endpoint → Speaks); "auto" reads
+    # What the endpoint speaks (Settings → Endpoints → Speaks); "auto" reads
     # it from the address.
     api: ChatApi = "auto"
 
@@ -848,9 +882,29 @@ class Config(BaseModel):
         )
 
     def active_provider(self) -> ProviderConfig | None:
+        """The default endpoint: where a bare model id is sent."""
         if self.active_provider_name is None:
             return None
-        return next((p for p in self.providers if p.name == self.active_provider_name), None)
+        return self.endpoint_named(self.active_provider_name)
+
+    def endpoint_named(self, name: str) -> ProviderConfig | None:
+        return next((p for p in self.providers if p.name == name), None)
+
+    def endpoint_for(self, ref: str) -> ProviderConfig | None:
+        """The endpoint a model reference is reached through: the one it
+        names, else the default. None when it names one that isn't set up
+        (never the default in its place: the id and the key would be
+        another endpoint's) or there is no default."""
+        name, _model = split_model(ref)
+        return self.active_provider() if name is None else self.endpoint_named(name)
+
+    def bare_model(self, ref: str) -> str:
+        """The model id without its endpoint, as the endpoint knows it."""
+        return split_model(ref)[1]
+
+    def qualify(self, endpoint_name: str | None, model_id: str) -> str:
+        """`qualify` against this config's default endpoint."""
+        return qualify(endpoint_name, model_id, self.active_provider_name)
 
     def _chat_to_inherit(self) -> ProviderConfig | None:
         """The chat endpoint, for pictures and embeddings to take a blank

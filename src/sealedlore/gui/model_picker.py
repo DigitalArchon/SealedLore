@@ -1,10 +1,15 @@
 """Choosing a model from the endpoint's own list, instead of copying ids from a website.
 
 `ModelCatalog` fetches the list off the GUI thread and keeps it for an hour per
-endpoint. `ModelPickerDialog` shows it searchable and sortable; `ModelField` is
-a text box with a Browse… button, used wherever a chat model is chosen. Typing
-an id by hand still works — other endpoints, local servers, a model the list
-leaves out.
+set of endpoints. `ModelPickerDialog` shows it searchable and sortable, every
+endpoint's models together with a Provider column saying which (the author:
+NanoGPT and Anthropic both serve Opus 5.5, and with a key for each the choice
+must be theirs); what it stores is the model's reference, which names its
+endpoint when that isn't the default ("Anthropic::claude-opus-5-5",
+models/config.py). `ModelField` is a text box with a Browse… button, used
+wherever a chat model is chosen, with the endpoint's name beside it for a
+model off the default endpoint. Typing an id by hand still works — other
+endpoints, local servers, a model the list leaves out.
 """
 
 from __future__ import annotations
@@ -38,7 +43,7 @@ from sealedlore.engine.routing import describe, routable, route_body
 from sealedlore.gui.fields import line_edit, set_field_text
 from sealedlore.gui.route_dialog import RouteDialog
 from sealedlore.gui.worker import GenerationWorker
-from sealedlore.models.config import ProviderConfig, RecommendedModel
+from sealedlore.models.config import ProviderConfig, RecommendedModel, split_model
 from sealedlore.models.route import ModelRoute
 from sealedlore.providers.base import ChatProvider
 from sealedlore.providers.private_catalog import encrypted_counterpart, privacy_label
@@ -46,17 +51,22 @@ from sealedlore.providers.tee import is_tee
 
 CATALOG_MAX_AGE = timedelta(hours=1)
 
-# A provider to fetch with, the endpoint it talks to (the cache key), and
+# A provider to fetch with, the endpoints it talks to (the cache key), and
 # whether it was made just for this fetch (and so is closed after); or a
 # ValueError saying why there's none (no endpoint set, not https…).
 ProviderSource = Callable[[], tuple[ChatProvider, str, bool]]
-# Opens the picker for a field's current text; the chosen id, or None.
+# Opens the picker for a field's current text; the chosen reference, or None.
 Browse = Callable[[str], "str | None"]
 # Browse… for a field that takes a route: (current model, its route) → the
 # model and route chosen, or None if cancelled.
 BrowseRoute = Callable[[str, "ModelRoute | None"], "tuple[str, ModelRoute | None] | None"]
-# The endpoint's base URL as it stands, for a field's route; None: no routes.
-RouteEndpoint = Callable[[], "str | None"]
+# The base URL of the endpoint a model's reference resolves to, as it
+# stands, for the model's route; None when it has no endpoint (and so no
+# route). Routes are NanoGPT's: `routable` reads the address.
+RouteEndpoint = Callable[[str], "str | None"]
+# A recommended model's id (NanoGPT's) as the field should hold it: named
+# with the NanoGPT endpoint when that isn't the default one.
+Qualify = Callable[[str], str]
 
 SHORT_ROUTES = {
     "latency": "⚡ Fastest start",
@@ -82,11 +92,25 @@ def route_label(route: ModelRoute | None) -> tuple[str, str]:
     )
 
 
-COLUMNS = ("Model", "Name", "Privacy", "Context", "In $/M", "Out $/M", "Reasoning", "Hosts")
+# The model's id first, as the author knows it, its endpoint beside it
+# (every endpoint's models are listed together), then the rest.
+COLUMNS = (
+    "Model",
+    "Provider",
+    "Name",
+    "Privacy",
+    "Context",
+    "In $/M",
+    "Out $/M",
+    "Reasoning",
+    "Hosts",
+)
+_COL = {name: index for index, name in enumerate(COLUMNS)}
+_NUMERIC = tuple(_COL[name] for name in ("Context", "In $/M", "Out $/M", "Reasoning", "Hosts"))
 
 
 class ModelCatalog(QObject):
-    """The endpoint's chat models, fetched on a worker thread and cached."""
+    """The endpoints' chat models, fetched on a worker thread and cached."""
 
     changed = Signal()
 
@@ -94,6 +118,9 @@ class ModelCatalog(QObject):
         super().__init__(parent)
         self.models: dict[str, ModelInfo] | None = None
         self.error: str | None = None
+        # An endpoint whose listing couldn't be fetched while the others'
+        # could, by name: said under the list, never an error.
+        self.notes: dict[str, str] = {}
         self._endpoint: str | None = None
         self._fetched_at: datetime | None = None
         self._thread: QThread | None = None
@@ -127,10 +154,14 @@ class ModelCatalog(QObject):
         self._endpoint = endpoint
         self.error = None
         result: dict[str, dict] = {}
+        notes: dict[str, str] = {}
 
         def job():
             try:
                 result.update(provider.fetch_model_prices())
+                # The routing provider lists what it could and names the
+                # endpoint it couldn't (providers/endpoints.py).
+                notes.update(getattr(provider, "listing_problems", None) or {})
             finally:
                 close = getattr(provider, "close", None)
                 if owned and close is not None:
@@ -144,7 +175,7 @@ class ModelCatalog(QObject):
         thread.started.connect(worker.run)
         worker.failed.connect(self._on_failed)
         worker.finished.connect(thread.quit)
-        thread.finished.connect(lambda: self._on_finished(result))
+        thread.finished.connect(lambda: self._on_finished(result, notes))
         self._worker, self._thread = worker, thread
         self.changed.emit()
         thread.start()
@@ -152,8 +183,9 @@ class ModelCatalog(QObject):
     def _on_failed(self, message: str) -> None:
         self.error = message
 
-    def _on_finished(self, listing: dict[str, dict]) -> None:
+    def _on_finished(self, listing: dict[str, dict], notes: dict[str, str] | None = None) -> None:
         self._worker, self._thread = None, None
+        self.notes = dict(notes or {})
         if self.error is None:
             models = chat_models(listing)
             if models:
@@ -210,11 +242,12 @@ class ModelPickerDialog(QDialog):
         parent: QWidget | None = None,
         allowed: Callable[[str], bool] | None = None,
         allowed_note: str = "",
-        route_endpoint: str | None = None,
+        route_endpoint: RouteEndpoint | None = None,
         route: ModelRoute | None = None,
     ) -> None:
-        """`route_endpoint`: the base URL, when the model is chosen for a field
-        that takes a route (Settings → Models); its current `route`."""
+        """`route_endpoint`: a model's endpoint's base URL, when the model is
+        chosen for a field that takes a route (Settings → Models); its
+        current `route`."""
         super().__init__(parent)
         self.setWindowTitle("Choose a model")
         self.route_endpoint = route_endpoint
@@ -228,7 +261,9 @@ class ModelPickerDialog(QDialog):
         self.current = current.strip()
 
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Search — e.g. “sonnet 4.6”, “opus”, “llama 70b”")
+        self.search.setPlaceholderText(
+            "Search — e.g. “sonnet 4.6”, “opus”, “llama 70b”, or an endpoint's name"
+        )
         self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(self._filter)
 
@@ -244,13 +279,15 @@ class ModelPickerDialog(QDialog):
         self.table.sortByColumn(0, Qt.AscendingOrder)
         header = self.table.header()
         # Ids are what matter and run long ("anthropic/claude-sonnet-4.6:thinking"):
-        # a wide, adjustable column for them, the rest of the width to the name.
+        # a wide, adjustable column for them, the endpoint's name as wide as
+        # it is, the rest of the width to the name.
         header.setStretchLastSection(False)
-        header.setSectionResizeMode(0, QHeaderView.Interactive)
-        header.resizeSection(0, 330)
-        header.setSectionResizeMode(1, QHeaderView.Stretch)
-        for column in range(2, len(COLUMNS)):
-            header.setSectionResizeMode(column, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(_COL["Model"], QHeaderView.Interactive)
+        header.resizeSection(_COL["Model"], 330)
+        header.setSectionResizeMode(_COL["Name"], QHeaderView.Stretch)
+        for column in range(len(COLUMNS)):
+            if column not in (_COL["Model"], _COL["Name"]):
+                header.setSectionResizeMode(column, QHeaderView.ResizeToContents)
         self.table.itemDoubleClicked.connect(lambda *_: self._accept())
         self.table.currentItemChanged.connect(self._sync_buttons)
 
@@ -275,6 +312,11 @@ class ModelPickerDialog(QDialog):
         self.route_button.setVisible(route_endpoint is not None)
         self.route_button.setEnabled(False)
         self._twin: str | None = None
+        # The endpoint whose listing failed, under the list (ModelCatalog.notes).
+        self.listing_note = QLabel()
+        self.listing_note.setObjectName("hintLabel")
+        self.listing_note.setWordWrap(True)
+        self.listing_note.hide()
         # Test the chosen TEE/ or private/ model's enclave before using it.
         from sealedlore.gui.attest_check import AttestationButton
 
@@ -295,6 +337,7 @@ class ModelPickerDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(self.search)
         layout.addWidget(self.table, 1)
+        layout.addWidget(self.listing_note)
         layout.addWidget(self.privacy_note)
         layout.addWidget(self.twin_button, 0, Qt.AlignLeft)
         layout.addWidget(self.route_button, 0, Qt.AlignLeft)
@@ -327,6 +370,13 @@ class ModelPickerDialog(QDialog):
         if models:
             for info in models.values():
                 self.table.addTopLevelItem(self._row(info))
+        notes = self.catalog.notes
+        self.listing_note.setText(
+            "Not listed: " + "; ".join(f"{name} ({why})" for name, why in notes.items())
+            if notes
+            else ""
+        )
+        self.listing_note.setVisible(bool(notes))
         self.table.setSortingEnabled(True)
         self._filter()
         self._select_current()
@@ -335,7 +385,8 @@ class ModelPickerDialog(QDialog):
         privacy, note = self._privacy(info.id)
         row = _Row(
             [
-                info.id,
+                split_model(info.id)[1],
+                info.endpoint,
                 info.name,
                 privacy,
                 short_count(info.context_length),
@@ -345,20 +396,27 @@ class ModelPickerDialog(QDialog):
                 _hosts(info),
             ]
         )
+        # The reference, endpoint and all, is what choosing a row stores.
         row.setData(0, Qt.UserRole + 1, info.id)
-        row.setData(3, Qt.UserRole, info.context_length)
-        row.setData(4, Qt.UserRole, info.prompt_price)
-        row.setData(5, Qt.UserRole, info.completion_price)
+        row.setData(_COL["Context"], Qt.UserRole, info.context_length)
+        row.setData(_COL["In $/M"], Qt.UserRole, info.prompt_price)
+        row.setData(_COL["Out $/M"], Qt.UserRole, info.completion_price)
         if _hosts(info) not in ("", "—"):
-            row.setData(7, Qt.UserRole, len(info.hosts))
-        for column in (3, 4, 5, 6, 7):
+            row.setData(_COL["Hosts"], Qt.UserRole, len(info.hosts))
+        for column in _NUMERIC:
             row.setTextAlignment(column, Qt.AlignRight | Qt.AlignVCenter)
         tip = info.description or info.name or info.id
         if info.max_output_tokens:
             tip += f"\n\nWrites up to {info.max_output_tokens:,} tokens per reply."
         for column in range(len(COLUMNS)):
-            row.setToolTip(column, note if column == 2 and note else tip)
-        row.setToolTip(7, _hosts_tip(info))
+            row.setToolTip(column, note if column == _COL["Privacy"] and note else tip)
+        row.setToolTip(_COL["Hosts"], _hosts_tip(info))
+        if info.endpoint:
+            row.setToolTip(
+                _COL["Provider"],
+                f"Listed by the endpoint {info.endpoint} (Settings → Endpoints): chosen "
+                "here, the model is sent there with that endpoint's key.",
+            )
         return row
 
     def _matches(self, info: ModelInfo, query: str) -> bool:
@@ -370,7 +428,7 @@ class ModelPickerDialog(QDialog):
             words = "tee private encrypted e2ee end-to-end"
         else:
             words = "tee" if label else ""
-        haystack = f"{info.id} {info.name} {info.owner} {words}".lower()
+        haystack = f"{info.id} {info.name} {info.owner} {info.endpoint} {words}".lower()
         return matches(info, query) or all(word in haystack for word in query.lower().split())
 
     def _privacy(self, model_id: str) -> tuple[str, str]:
@@ -451,20 +509,25 @@ class ModelPickerDialog(QDialog):
         return row.data(0, Qt.UserRole + 1) if row is not None and not row.isHidden() else None
 
     def _attest_settings(self) -> ProviderConfig | None:
-        """The endpoint this picker lists, with the chosen model, for Test attestation."""
+        """The endpoint the chosen model is reached through, with its bare
+        id, for Test attestation: the routing provider resolves a reference
+        (providers/endpoints.py); a single endpoint's client is that endpoint."""
         chosen = self.selected_model()
         try:
             provider, _endpoint, owned = self.source()
         except ValueError:
             return None
-        config = getattr(provider, "config", None)
+        endpoint_for = getattr(provider, "endpoint_for", None)
+        config = endpoint_for(chosen or "") if callable(endpoint_for) else None
+        if config is None:
+            config = getattr(provider, "config", None)
         if owned:
             close = getattr(provider, "close", None)
             if close is not None:
                 close()
         if not chosen or not isinstance(config, ProviderConfig):
             return None
-        return config.model_copy(update={"model": chosen})
+        return config.model_copy(update={"model": split_model(chosen)[1]})
 
     def _choose_twin(self) -> None:
         """Select the encrypted twin and take it."""
@@ -479,21 +542,25 @@ class ModelPickerDialog(QDialog):
                 self._accept()
                 return
 
+    def _endpoint_url(self, model: str) -> str | None:
+        """The base URL of the endpoint `model` resolves to, for its route."""
+        return self.route_endpoint(model) if self.route_endpoint is not None else None
+
     def _routable_row(self) -> bool:
         chosen = self.selected_model()
         info = (self.catalog.models or {}).get(chosen or "")
-        return (
-            self.route_endpoint is not None
-            and info is not None
-            and routable(self.route_endpoint, info.id)
-            and len(info.hosts) >= 2
-        )
+        if info is None:
+            return False
+        url = self._endpoint_url(info.id)
+        return url is not None and routable(url, info.id) and len(info.hosts) >= 2
 
     def _choose_route(self) -> None:
         chosen = self.selected_model()
-        if not chosen or self.route_endpoint is None:
+        url = self._endpoint_url(chosen) if chosen else None
+        if not chosen or url is None:
             return
-        dialog = RouteDialog(self.route_endpoint, chosen, self.chosen_route, self)
+        # NanoGPT's hosts are listed by the bare id.
+        dialog = RouteDialog(url, split_model(chosen)[1], self.chosen_route, self)
         if dialog.exec() == QDialog.Accepted:
             self.chosen_route = dialog.route()
         dialog.deleteLater()
@@ -507,7 +574,8 @@ def recommended_button(
     choices: tuple[RecommendedModel, ...], choose: Callable[[str], None]
 ) -> QToolButton | None:
     """ "Recommended ▾": the models recommended for a role, each with its
-    note under its name; choosing one puts it in the field."""
+    note under its name; choosing one puts it in the field (`choose` is
+    given the id as listed: NanoGPT's)."""
     if not choices:
         return None
     button = QToolButton()
@@ -550,26 +618,34 @@ class ModelField(QWidget):
         browse_route: BrowseRoute | None = None,
         hosts_of: Callable[[str], tuple[str, ...] | None] | None = None,
         recommended: tuple[RecommendedModel, ...] = (),
+        qualify_recommended: Qualify | None = None,
     ) -> None:
         """`route_endpoint` (held weakly) gives the field a route: NanoGPT's
         host for its model, chosen from the label beside it; `browse_route`
         is then Browse…, and returns the route with the model. `hosts_of`
-        (held weakly): a model's hosts from the endpoint's list, None while
+        (held weakly): a model's hosts from the endpoints' list, None while
         unknown; a model with fewer than two has no route. `recommended`:
-        offered under Recommended beside the field, each with its note."""
+        offered under Recommended beside the field, each with its note;
+        `qualify_recommended` (held weakly) names the NanoGPT endpoint on a
+        chosen id when that endpoint isn't the default."""
         super().__init__()
         self.route: ModelRoute | None = None
         self._route_endpoint = _weak(route_endpoint) if route_endpoint else None
         self._hosts_of = _weak(hosts_of) if hosts_of else None
         self._browse_route = _weak(browse_route) if browse_route else None
+        self._qualify = _weak(qualify_recommended) if qualify_recommended else None
         self.edit = line_edit(text)
         self.edit.textChanged.connect(self.textChanged)
         self.button = QToolButton()
         self.button.setText("Browse…")
-        self.button.setToolTip("Choose from the models your endpoint offers")
+        self.button.setToolTip("Choose from the models your endpoints offer")
         self.button.setVisible(browse is not None or browse_route is not None)
         self._browse = browse
         self.button.clicked.connect(self._open)
+        # Says, beside the field, which endpoint the model is on when that
+        # isn't the default one ("Anthropic::claude-opus-5-5" → "Anthropic").
+        self.endpoint_label = QLabel()
+        self.endpoint_label.setObjectName("hintLabel")
         # Says, beside the field, whether the model is end-to-end encrypted or
         # only TEE; the tooltip says what each protects.
         self.privacy = QLabel()
@@ -579,20 +655,38 @@ class ModelField(QWidget):
         self.route_button = QToolButton()
         self.route_button.setObjectName("routeButton")
         self.route_button.clicked.connect(self._edit_route)
-        self.recommended_button = recommended_button(recommended, self.setText)
+        self.recommended_button = recommended_button(recommended, self._choose_recommended)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
         layout.addWidget(self.edit, 1)
+        layout.addWidget(self.endpoint_label)
         layout.addWidget(self.privacy)
         layout.addWidget(self.route_button)
         if self.recommended_button is not None:
             layout.addWidget(self.recommended_button)
         layout.addWidget(self.button)
         self.edit.textChanged.connect(self._show_privacy)
+        self.edit.textChanged.connect(self._show_endpoint)
         self.edit.textChanged.connect(lambda _text: self._show_route())
         self._show_privacy(text)
+        self._show_endpoint(text)
         self._show_route()
+
+    def _choose_recommended(self, model: str) -> None:
+        qualify = self._qualify() if self._qualify is not None else None
+        self.setText(qualify(model) if qualify is not None else model)
+
+    def _show_endpoint(self, text: str) -> None:
+        name, _model = split_model(text.strip())
+        self.endpoint_label.setText(f"· {name}" if name else "")
+        self.endpoint_label.setToolTip(
+            f"On the endpoint {name} (Settings → Endpoints), with its key. A model named "
+            "without an endpoint is sent to the default one."
+            if name
+            else ""
+        )
+        self.endpoint_label.setVisible(bool(name))
 
     def text(self) -> str:
         return self.edit.text()
@@ -638,8 +732,9 @@ class ModelField(QWidget):
     # --- the route --------------------------------------------------------
 
     def _endpoint(self) -> str | None:
+        """The base URL of the endpoint the model in the field resolves to."""
         getter = self._route_endpoint() if self._route_endpoint is not None else None
-        return getter() if getter is not None else None
+        return getter(self.edit.text().strip()) if getter is not None else None
 
     def set_route(self, route: ModelRoute | None) -> None:
         self.route = route if route is not None and route.paid else None
@@ -678,7 +773,8 @@ class ModelField(QWidget):
         model = self.edit.text().strip()
         if endpoint is None or not model:
             return
-        dialog = RouteDialog(endpoint, model, self.effective_route(), self)
+        # NanoGPT's hosts are listed by the bare id.
+        dialog = RouteDialog(endpoint, split_model(model)[1], self.effective_route(), self)
         if dialog.exec() == QDialog.Accepted:
             self.set_route(dialog.route())
         dialog.deleteLater()
@@ -712,11 +808,12 @@ def pick_model_and_route(
     source: ProviderSource,
     current: str,
     route: ModelRoute | None,
-    endpoint: str | None,
+    endpoint: RouteEndpoint | None,
     parent: QWidget | None,
 ) -> tuple[str, ModelRoute | None] | None:
     """The picker for a field that takes a route: the model chosen and its
-    route (Choose a route…, or the one it had), or None if cancelled."""
+    route (Choose a route…, or the one it had), or None if cancelled.
+    `endpoint`: a model's endpoint's base URL, for its route."""
     dialog = ModelPickerDialog(
         catalog, source, current=current, parent=parent, route_endpoint=endpoint, route=route
     )

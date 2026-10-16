@@ -42,6 +42,7 @@ from urllib.parse import quote, urlparse
 
 import httpx
 
+from sealedlore.models.config import split_model
 from sealedlore.models.private import Attestation
 from sealedlore.providers import dcap, nras
 from sealedlore.providers.base import ProviderError
@@ -83,14 +84,16 @@ def _jwt_claims(value: Any) -> list[dict[str, Any]]:
 
 def is_tee(model: str) -> bool:
     """A model that runs in a trusted execution environment: nano-gpt's
-    `TEE/*` (attested and signed) or `private/*` (end-to-end encrypted)."""
-    return model.startswith(("TEE/", "private/"))
+    `TEE/*` (attested and signed) or `private/*` (end-to-end encrypted).
+    Read from the bare id: the model may name its endpoint
+    ("NanoGPT::TEE/glm-5.3", models/config.py)."""
+    return split_model(model)[1].startswith(("TEE/", "private/"))
 
 
 def is_private_mode(model: str) -> bool:
     """nano-gpt's Private Mode: end-to-end encrypted to an attested enclave
     (providers/private_mode.py). Never sent any other way."""
-    return model.startswith("private/")
+    return split_model(model)[1].startswith("private/")
 
 
 def move_refusal(current: str, new: str) -> str | None:

@@ -675,13 +675,14 @@ class StorySession(
         encrypted model, or in a private scene (its calls are the private
         model's). A chat's own model has its own route. `model`: the one the
         call is actually sent to, when a caller chose it (the picture dialog's
-        prompt writer)."""
-        provider = self.config.active_provider()
-        if provider is None or self.open_span is not None:
+        prompt writer). Only when the model's reference resolves to a NanoGPT
+        endpoint (models/config.py): another endpoint has no routes."""
+        if self.open_span is not None:
             return {}
         role, in_use = self._role_in_use(role)
         model = model or in_use
-        if not routable(provider.base_url, model):
+        provider = self.config.endpoint_for(model)
+        if provider is None or not routable(provider.base_url, model):
             return {}
         if role == "story" and self.story.chat:
             route = self.story.defaults.main_route
@@ -930,7 +931,7 @@ class StorySession(
         client = self._decisions()
         if client is None:
             raise ProviderError("no chat endpoint to ask")
-        model = self.config.lore_decision_model
+        model = self.config.bare_model(self.config.lore_decision_model)
         state = jev_state(
             [node.content for node in history],
             turn.user_text,
@@ -1082,8 +1083,9 @@ class StorySession(
         self.save()
 
     def _decisions(self) -> DecisionsClient | None:
-        """Jev rides on the chat endpoint and key; built once."""
-        provider = self.config.active_provider()
+        """Jev rides on the endpoint its model names (the chat endpoint for a
+        bare id) and that endpoint's key; built once."""
+        provider = self.config.endpoint_for(self.config.lore_decision_model)
         if provider is None:
             return None
         if self._decisions_client is None:

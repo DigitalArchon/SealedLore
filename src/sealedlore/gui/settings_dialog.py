@@ -8,6 +8,7 @@ the story, and the archival knobs sit across both.
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import urlparse
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
     QMessageBox,
     QPushButton,
     QScrollArea,
@@ -61,6 +63,7 @@ from sealedlore.models.config import (
     DEFAULT_BASE_URL,
     DEFAULT_EMBEDDING_MODEL,
     DEFAULT_STORY_MODEL,
+    ENDPOINT_SEPARATOR,
     MEDIA_API_LABELS,
     RECOMMENDED_IMAGE_MODELS,
     RECOMMENDED_MODELS,
@@ -72,9 +75,11 @@ from sealedlore.models.config import (
     _same_host,
     chat_api,
     on_nanogpt,
+    qualify,
     recommended_model,
     recommended_models,
     require_https,
+    split_model,
 )
 from sealedlore.models.generation import (
     REASONING_LEVELS,
@@ -87,6 +92,7 @@ from sealedlore.models.story import Story
 from sealedlore.providers import make_chat_provider
 from sealedlore.providers.base import ChatProvider
 from sealedlore.providers.context_probe import detect_context
+from sealedlore.providers.endpoints import EndpointsProvider, listing_key
 from sealedlore.providers.images import parse_image_models
 from sealedlore.providers.tee import move_refusal
 from sealedlore.storage import keychain
@@ -179,7 +185,7 @@ class SettingsDialog(QDialog):
         # its last rows were drawn over. Every text model is on Models, by
         # what it does; the rest of each tab is that feature's own options.
         self.tabs = QTabWidget()
-        self.tabs.addTab(_scrolled(self._endpoint_tab()), "Endpoint")
+        self.tabs.addTab(_scrolled(self._endpoint_tab()), "Endpoints")
         self.tabs.addTab(_scrolled(self._models_tab()), "Models")
         self.tabs.addTab(_scrolled(self._generation_tab()), "Generation")
         # Always: most of it is app-wide, and it used to be reachable (and
@@ -206,31 +212,340 @@ class SettingsDialog(QDialog):
     # --- tabs -------------------------------------------------------------
 
     def _model_source(self) -> tuple[ChatProvider, str, bool]:
-        url = self.base_url.text().strip()
-        if not url:
-            raise ValueError("Set the base URL first.")
-        require_https(url)
-        provider = make_chat_provider(
-            ProviderConfig(
-                name="browse",
-                base_url=url,
-                api_key=self.api_key.text(),
-                api=self.chat_api.currentData(),
-            )
+        """Browse… lists every endpoint's models as the endpoints stand in
+        the dialog, saved or not, each fetched with its own key, through
+        the routing provider (providers/endpoints.py)."""
+        endpoints = self._endpoints_as_typed()
+        for settings in endpoints:
+            if not settings.base_url.strip():
+                raise ValueError(
+                    f"Set the base URL of {settings.name or 'the new endpoint'} first."
+                )
+            require_https(settings.base_url.strip())
+        config = Config(providers=endpoints, active_provider_name=self._default_endpoint().name)
+        return EndpointsProvider(config), listing_key(config), True
+
+    # --- endpoints -------------------------------------------------------------
+
+    def _endpoints_as_typed(self) -> list[ProviderConfig]:
+        """Every endpoint as it stands in the dialog: the selected one's
+        fields written into its copy first."""
+        self._store_endpoint_fields()
+        return self._endpoints
+
+    def _default_endpoint(self) -> ProviderConfig:
+        return self._endpoints_as_typed()[self._default_index]
+
+    def _resolve(self, ref: str) -> tuple[ProviderConfig | None, str]:
+        """(the endpoint a model reference resolves to, as typed, or None
+        when it names one the dialog hasn't; its bare id)."""
+        name, bare = split_model(ref.strip())
+        endpoints = self._endpoints_as_typed()
+        if name is None:
+            return endpoints[self._default_index], bare
+        return next((p for p in endpoints if p.name == name), None), bare
+
+    def _nanogpt_endpoint(self) -> ProviderConfig | None:
+        """The NanoGPT endpoint the recommended models (NanoGPT's ids) are
+        for: the default one when it is NanoGPT's, else the first that is."""
+        endpoints = self._endpoints_as_typed()
+        default = endpoints[self._default_index]
+        ordered = [default, *(p for p in endpoints if p is not default)]
+        return next((p for p in ordered if on_nanogpt(p.base_url)), None)
+
+    def _qualify_recommended(self, model_id: str) -> str:
+        """A recommended id as a field should hold it: named with the NanoGPT
+        endpoint when that isn't the default (models/config.py)."""
+        nano = self._nanogpt_endpoint()
+        if nano is None:
+            return model_id
+        return qualify(nano.name, model_id, self._default_endpoint().name)
+
+    def _store_endpoint_fields(self) -> None:
+        """The fields into the selected endpoint's copy. Unvalidated (a
+        half-typed address): Save checks every endpoint."""
+        if self._selected is None or self._loading_endpoint:
+            return
+        copy = self._endpoints[self._selected]
+        self._endpoints[self._selected] = copy.model_copy(
+            update={
+                "name": self.provider_name.text().strip(),
+                "base_url": self.base_url.text().strip(),
+                "api_key": self.api_key.text(),
+                "api": self.chat_api.currentData(),
+            }
         )
-        return provider, url, True
+
+    def _load_endpoint_fields(self) -> None:
+        copy = self._endpoints[self._selected]
+        self._loading_endpoint = True
+        try:
+            self.provider_name.setText(copy.name)
+            self.base_url.setText(copy.base_url)
+            self.api_key.setText(copy.api_key)
+            self.chat_api.setCurrentIndex(max(0, self.chat_api.findData(copy.api)))
+        finally:
+            self._loading_endpoint = False
+        self._sync_api_note()
+
+    def _endpoint_row_text(self, index: int) -> str:
+        copy = self._endpoints[index]
+        host = urlparse(copy.base_url.strip()).hostname or "no address yet"
+        text = f"{copy.name or '(unnamed)'} — {host}"
+        return text + ("  (default)" if index == self._default_index else "")
+
+    def _refresh_endpoint_rows(self) -> None:
+        self._loading_rows = True
+        try:
+            self.endpoint_list.clear()
+            for index in range(len(self._endpoints)):
+                self.endpoint_list.addItem(self._endpoint_row_text(index))
+            if self._selected is not None:
+                self.endpoint_list.setCurrentRow(self._selected)
+        finally:
+            self._loading_rows = False
+        self.remove_endpoint.setEnabled(len(self._endpoints) > 1)
+        self.make_default.setEnabled(self._selected != self._default_index)
+
+    def _on_endpoint_row(self, row: int) -> None:
+        if row < 0 or self._loading_rows:
+            return
+        self._store_endpoint_fields()
+        self._selected = row
+        self._load_endpoint_fields()
+        self.make_default.setEnabled(self._selected != self._default_index)
+        self._show_routes()
+
+    def _endpoint_fields_changed(self, *_args) -> None:
+        """A name or address typed: the list's row follows, and the model
+        fields' routes (an address off NanoGPT has none)."""
+        if self._selected is None or self._loading_endpoint:
+            return
+        self._store_endpoint_fields()
+        item = self.endpoint_list.item(self._selected)
+        if item is not None:
+            item.setText(self._endpoint_row_text(self._selected))
+        self._show_routes()
+
+    def _unique_endpoint_name(self, base: str) -> str:
+        taken = {p.name for p in self._endpoints}
+        if base not in taken:
+            return base
+        number = 2
+        while f"{base} {number}" in taken:
+            number += 1
+        return f"{base} {number}"
+
+    def _add_endpoint(self) -> None:
+        """A fresh endpoint, its address to be typed (https://api.anthropic.com
+        for Anthropic's own API, with an Anthropic key)."""
+        self._store_endpoint_fields()
+        name = self._unique_endpoint_name("New endpoint")
+        self._endpoints.append(ProviderConfig(name=name).model_copy(update={"base_url": ""}))
+        self._origins.append(None)
+        self._selected = len(self._endpoints) - 1
+        self._load_endpoint_fields()
+        self._refresh_endpoint_rows()
+        self.endpoints_note.setText(
+            f"Added {name}. Give it a name, its address and its key; Browse… on the Models "
+            "page then lists its models beside the others', and a model chosen from it "
+            'names it ("Name::model").'
+        )
+        self.provider_name.setFocus()
+        self.provider_name.selectAll()
+
+    def _remove_endpoint(self) -> None:
+        if self._selected is None or len(self._endpoints) < 2:
+            self.endpoints_note.setText("Keep at least one endpoint: the default one.")
+            return
+        self._store_endpoint_fields()
+        index = self._selected
+        name = self._endpoints[index].name
+        naming = [
+            label for label, field in self._model_fields() if split_model(field.text())[0] == name
+        ]
+        if self.story is not None and split_model(self.story.defaults.main_model or "")[0] == name:
+            naming.append("this story's own model")
+        del self._endpoints[index]
+        del self._origins[index]
+        if self._default_index == index:
+            self._default_index = 0
+        elif self._default_index > index:
+            self._default_index -= 1
+        self._selected = min(index, len(self._endpoints) - 1)
+        self._load_endpoint_fields()
+        self._refresh_endpoint_rows()
+        note = f"Removed {name}; its key goes from the keychain when you Save."
+        if naming:
+            note += (
+                f" {', '.join(naming)} still name it and are left as they are: they will "
+                f"fail to send until you change them or add an endpoint called {name} again."
+            )
+        self.endpoints_note.setText(note)
+
+    def _model_fields(self) -> list[tuple[str, ModelField]]:
+        """Every model field on the Models page, with its label."""
+        if not hasattr(self, "_route_fields"):
+            return []
+        labels = {
+            "story": "Story model",
+            "summarisation": "Summarisation model",
+            "authoring": "Authoring model",
+            "scene": "Scene model",
+            "plot": "Plot model",
+            "lore": "Lore model",
+            "image_prompt": "Image prompt writer",
+            "map": "Map model",
+            "map_art": "Map art model",
+        }
+        return [(labels.get(role, role), field) for role, field in self._route_fields.items()]
+
+    def _make_default(self) -> None:
+        """The selected endpoint becomes where a model named without an
+        endpoint is sent. The model fields on the Models page are renamed
+        to keep what they mean (a bare id now names the old default; one
+        naming the new default goes bare); other stories' own models aren't."""
+        if self._selected is None or self._selected == self._default_index:
+            return
+        self._store_endpoint_fields()
+        old = self._endpoints[self._default_index].name
+        new = self._endpoints[self._selected].name
+        for _label, field in self._model_fields():
+            text = field.text().strip()
+            if not text:
+                continue
+            name, bare = split_model(text)
+            field.setText(qualify(name or old, bare, new))
+        self._default_index = self._selected
+        self._refresh_endpoint_rows()
+        self.endpoints_note.setText(
+            f"{new} is the default: a model named without an endpoint goes there. The "
+            f"models on the Models page keep their endpoints ({old} is named where it was "
+            "meant); a story's own model named without one now means this endpoint."
+        )
+
+    def _check_endpoints(self, endpoints: list[ProviderConfig]) -> None:
+        """Raises ValueError naming what is wrong: a blank or repeated name,
+        an address that isn't https."""
+        seen: set[str] = set()
+        for settings in endpoints:
+            if not settings.name:
+                raise ValueError("Every endpoint needs a name (Endpoints).")
+            if settings.name in seen:
+                raise ValueError(f"Two endpoints are called {settings.name!r}: rename one.")
+            seen.add(settings.name)
+            if ENDPOINT_SEPARATOR in settings.name:
+                raise ValueError(f"An endpoint's name can't hold '{ENDPOINT_SEPARATOR}'.")
+            try:
+                require_https(settings.base_url.strip())
+            except ValueError as exc:
+                raise ValueError(f"{settings.name}: {exc}") from exc
+
+    def _carry_keys(self, endpoints: list[ProviderConfig]) -> None:
+        """A renamed endpoint's key follows it: its keychain slot is its
+        name's (storage/keychain.py), and a key the keychain holds but
+        couldn't give back this session is read now, or the rename refused,
+        rather than lost with the old slot."""
+        for origin, settings in zip(self._origins, endpoints, strict=True):
+            if origin is None or origin == settings.name or settings.api_key:
+                continue
+            slot = f"provider:{origin}"
+            if slot not in self.config.keychain_slots:
+                continue
+            try:
+                value = keychain.read(slot, self._root)
+            except keychain.KeychainError:
+                value = None
+            if not value:
+                raise ValueError(
+                    f"The key for {origin!r} is in {keychain.where()} and couldn't be read, so "
+                    f"renaming it to {settings.name!r} would lose it: enter the key again, or "
+                    "keep the name."
+                )
+            settings.api_key = value
 
     def _endpoint_tab(self) -> QWidget:
-        """Where the story's calls go, and how they are cached."""
+        """Where the story's calls go: every endpoint with its key, one the
+        default (a model named without an endpoint goes there), and how
+        calls are cached."""
         provider = self.config.active_provider()
         widget = QWidget()
         form = QFormLayout(widget)
 
-        self.provider_name = QLineEdit(provider.name if provider else "default")
+        # Working copies: the list is written back on Save. `_origins` keeps
+        # each one's saved name, for its key's keychain slot on a rename.
+        self._endpoints = [p.model_copy(deep=True) for p in self.config.providers]
+        self._origins: list[str | None] = [p.name for p in self.config.providers]
+        if not self._endpoints:
+            self._endpoints = [ProviderConfig(name="default", base_url=DEFAULT_BASE_URL)]
+            self._origins = [None]
+        self._default_index = next(
+            (
+                i
+                for i, p in enumerate(self._endpoints)
+                if provider is not None and p.name == provider.name
+            ),
+            0,
+        )
+        self._selected: int | None = self._default_index
+        self._loading_endpoint = False
+        self._loading_rows = False
         self._provider_at_open = provider.name if provider else None
-        self.base_url = QLineEdit(provider.base_url if provider else DEFAULT_BASE_URL)
-        self.api_key = QLineEdit(provider.api_key if provider else "")
+
+        intro = QLabel(
+            "Each endpoint has an address and a key of its own; a model chosen from one "
+            'names it ("Anthropic::claude-opus-5-5"), and a model named without an '
+            "endpoint goes to the default one. NanoGPT and Anthropic both serve Claude: with "
+            "a key for each, Browse… on the Models page shows which is which."
+        )
+        intro.setObjectName("hintLabel")
+        intro.setWordWrap(True)
+        form.addRow(intro)
+
+        self.endpoint_list = QListWidget()
+        self.endpoint_list.setObjectName("endpointList")
+        self.endpoint_list.setMaximumHeight(96)
+        self.endpoint_list.setToolTip(
+            "The endpoints set up; the fields below are the selected one's."
+        )
+        self.endpoint_list.currentRowChanged.connect(self._on_endpoint_row)
+        self.add_endpoint = QPushButton("Add")
+        self.add_endpoint.setToolTip("Another endpoint, with its own address and key")
+        self.add_endpoint.clicked.connect(self._add_endpoint)
+        self.remove_endpoint = QPushButton("Remove")
+        self.remove_endpoint.setToolTip(
+            "Take the selected endpoint out. Model fields that name it are left as they are."
+        )
+        self.remove_endpoint.clicked.connect(self._remove_endpoint)
+        self.make_default = QPushButton("Make default")
+        self.make_default.setToolTip(
+            "A model named without an endpoint is sent to the default one. The fields on the "
+            "Models page are renamed to keep what they mean."
+        )
+        self.make_default.clicked.connect(self._make_default)
+        buttons = QHBoxLayout()
+        buttons.setContentsMargins(0, 0, 0, 0)
+        buttons.addWidget(self.add_endpoint)
+        buttons.addWidget(self.remove_endpoint)
+        buttons.addWidget(self.make_default)
+        buttons.addStretch(1)
+        self.endpoints_note = _note_label()
+        form.addRow(self.endpoint_list)
+        form.addRow(buttons)
+        form.addRow(self.endpoints_note)
+
+        self.provider_name = QLineEdit()
+        self.provider_name.setToolTip(
+            'How the endpoint is named in a model\'s reference ("Name::model") and in the '
+            "picker's Provider column."
+        )
+        self.base_url = QLineEdit()
+        self.base_url.setPlaceholderText("https://api.anthropic.com")
+        self.api_key = QLineEdit()
         self.api_key.setEchoMode(QLineEdit.Password)
+        self.provider_name.textChanged.connect(self._endpoint_fields_changed)
+        self.base_url.textChanged.connect(self._endpoint_fields_changed)
+        self.api_key.textChanged.connect(self._endpoint_fields_changed)
         self.key_storage = QComboBox()
         self.key_storage.addItem("System keychain", "keychain")
         self.key_storage.addItem("config.json, in plain text", "file")
@@ -247,15 +562,13 @@ class SettingsDialog(QDialog):
         self.chat_api = QComboBox()
         for value, label in CHAT_API_LABELS.items():
             self.chat_api.addItem(label, value)
-        self.chat_api.setCurrentIndex(
-            max(0, self.chat_api.findData(provider.api if provider else "auto"))
-        )
         self.chat_api.setToolTip(
             "Which protocol the address speaks. From the address takes api.anthropic.com "
             "as Anthropic's own API and anything else as OpenAI-compatible."
         )
         self.api_note = _note_label()
         self.chat_api.currentIndexChanged.connect(self._sync_api_note)
+        self.chat_api.currentIndexChanged.connect(self._endpoint_fields_changed)
         self.base_url.textChanged.connect(self._sync_api_note)
 
         self.cache_mode = QComboBox()
@@ -284,13 +597,14 @@ class SettingsDialog(QDialog):
         hint = QLabel(
             "Any OpenAI-compatible /chat/completions endpoint, or Anthropic's own API "
             "(https://api.anthropic.com with an Anthropic key). Caching on 'auto' "
-            "applies cache_control blocks only to Anthropic models. Which models it "
-            "runs is on the Models tab."
+            "applies cache_control blocks only to Anthropic models, on every endpoint. "
+            "Which models run where is on the Models tab."
         )
         hint.setObjectName("hintLabel")
         hint.setWordWrap(True)
         form.addRow(hint)
-        self._sync_api_note()
+        self._load_endpoint_fields()
+        self._refresh_endpoint_rows()
         return widget
 
     def _sync_api_note(self, *_args) -> None:
@@ -334,9 +648,11 @@ class SettingsDialog(QDialog):
         for label in self._key_notes:
             label.setText(text)
 
-    def _route_endpoint(self) -> str | None:
-        """The endpoint as typed, for the model fields' routes."""
-        return self.base_url.text().strip() or None
+    def _route_endpoint(self, model: str) -> str | None:
+        """The address of the endpoint a model's reference resolves to, as
+        typed, for the field's route; None for one the dialog hasn't."""
+        endpoint, _bare = self._resolve(model)
+        return (endpoint.base_url.strip() or None) if endpoint is not None else None
 
     def _routed_field(self, text: str, role: str = "") -> ModelField:
         """A role's model field, with its route beside it (NanoGPT only) and
@@ -349,6 +665,7 @@ class SettingsDialog(QDialog):
             browse_route=browse,
             hosts_of=self._hosts_of,
             recommended=RECOMMENDED_TEXT_MODELS.get(role, ()),
+            qualify_recommended=self._qualify_recommended,
         )
 
     def _hosts_of(self, model: str) -> tuple[str, ...] | None:
@@ -361,11 +678,11 @@ class SettingsDialog(QDialog):
 
     def _browse_route(self, current: str, route: ModelRoute | None):
         return pick_model_and_route(
-            self._catalog, self._model_source, current, route, self._route_endpoint(), self
+            self._catalog, self._model_source, current, route, self._route_endpoint, self
         )
 
     def _show_routes(self, *_args) -> None:
-        for field in self._route_fields.values():
+        for field in getattr(self, "_route_fields", {}).values():
             field._show_route()
 
     def _models_tab(self) -> QWidget:
@@ -433,7 +750,7 @@ class SettingsDialog(QDialog):
         form.addRow(self.keep_scene)
         # A new setup starts with the recommended models for the small calls
         # (models/config.py); one already saved keeps what it has, blanks too.
-        fresh = recommended_models(self.base_url.text()) if provider is None else {}
+        fresh = recommended_models(self._default_endpoint().base_url) if provider is None else {}
         self.scene_model = self._routed_field(
             self.config.scene_model or fresh.get("scene_model", ""), "scene_model"
         )
@@ -563,34 +880,34 @@ class SettingsDialog(QDialog):
         self._watching_catalog = self._catalog is not None
         if self._catalog is not None:
             self._catalog.changed.connect(self._show_routes)
-            if self._fetch_models and on_nanogpt(self.base_url.text()):
+            if self._fetch_models and any(on_nanogpt(p.base_url) for p in self._endpoints):
                 self._catalog.ensure(self._model_source)
         return widget
 
     def speed_targets(self) -> list[SpeedTarget]:
-        """Every distinct model the fields name, as they stand. Raises
-        ValueError when the endpoint can't be used as typed."""
-        url = self.base_url.text().strip()
-        if not url:
-            raise ValueError("Set the base URL first.")
-        require_https(url)
-        main = ProviderConfig(
-            name="speed test",
-            base_url=url,
-            api_key=self.api_key.text(),
-            api=self.chat_api.currentData(),
-        )
+        """Every distinct model the fields name, as they stand, each on the
+        endpoint its reference resolves to (as typed). Raises ValueError
+        when an endpoint can't be used as typed."""
+        endpoints = self._endpoints_as_typed()
+        for settings in endpoints:
+            if not settings.base_url.strip():
+                raise ValueError(
+                    f"Set the base URL of {settings.name or 'the new endpoint'} first."
+                )
+            require_https(settings.base_url.strip())
 
         def role(
             name: str, field: ModelField, fallback: str | None = None, kind: CallKind = "side"
         ) -> Role:
-            # Each field's route, as its role sends it (engine/routing.py).
+            # Each field's route, as its role sends it (engine/routing.py);
+            # a reference naming an endpoint the dialog hasn't is left out.
             model = field.text().strip()
+            endpoint, _bare = self._resolve(model) if model else (None, "")
             route = field.effective_route()
             return Role(
                 name,
                 field.text(),
-                main,
+                endpoint,
                 fallback,
                 route_body(route, model),
                 describe(route),
@@ -602,8 +919,15 @@ class SettingsDialog(QDialog):
         if own and own != self.model.text().strip():
             # A chat's own route is its own; a story's model takes the Story route.
             route = self.story.defaults.main_route if self.story.chat else self.model.route
-            body = route_body(route, own) if routable(url, own) else {}
-            roles.append(Role("This story", own, main, None, body, describe(route), kind="story"))
+            endpoint, _bare = self._resolve(own)
+            body = (
+                route_body(route, own)
+                if endpoint is not None and routable(endpoint.base_url, own)
+                else {}
+            )
+            roles.append(
+                Role("This story", own, endpoint, None, body, describe(route), kind="story")
+            )
         roles += [
             role("Summarisation", self.summarization_model, "Story"),
             role("Authoring", self.authoring_model, "Story"),
@@ -633,14 +957,19 @@ class SettingsDialog(QDialog):
 
     def _fill_recommended(self) -> None:
         """Put the recommended model in each field it has one for. The ids are
-        NanoGPT's, so another endpoint is told where to look instead."""
-        found = recommended_models(self.base_url.text())
+        NanoGPT's: named with the NanoGPT endpoint when that isn't the default
+        one, and with no NanoGPT endpoint the author is told where to look."""
+        nano = self._nanogpt_endpoint()
+        found = recommended_models(nano.base_url) if nano is not None else {}
+        filled = []
         for name, model in found.items():
-            getattr(self, name).setText(model)
+            ref = self._qualify_recommended(model)
+            getattr(self, name).setText(ref)
+            filled.append(ref)
         self.recommended_note.setText(
-            "Filled in: " + ", ".join(found.values()) + ". Save to keep them."
+            "Filled in: " + ", ".join(filled) + ". Save to keep them."
             if found
-            else "The recommendations are NanoGPT model ids. On this endpoint, choose a "
+            else "The recommendations are NanoGPT model ids. On these endpoints, choose a "
             "small, fast model for the scene and plot with Browse…"
         )
         self.recommended_note.show()
@@ -653,7 +982,7 @@ class SettingsDialog(QDialog):
         if (
             self._provider_at_open is None
             and text in RECOMMENDED_MODELS.values()
-            and not recommended_models(self.base_url.text())
+            and not recommended_models(self._default_endpoint().base_url)
         ):
             return ""
         return text
@@ -907,8 +1236,10 @@ class SettingsDialog(QDialog):
         if not url:
             raise ValueError("Set the private endpoint's base URL first.")
         require_https(url)
+        # A blank key is the default endpoint's, on its own host (Config.private).
+        default = self._default_endpoint()
         key = self.private_key.text() or (
-            self.api_key.text() if _same_host(url, self.base_url.text().strip()) else ""
+            default.api_key if _same_host(url, default.base_url.strip()) else ""
         )
         provider = make_chat_provider(
             ProviderConfig(name="private-browse", base_url=url, api_key=key)
@@ -1413,10 +1744,10 @@ class SettingsDialog(QDialog):
     # --- saving -----------------------------------------------------------
 
     def _save(self) -> None:
-        url = self.base_url.text().strip()
+        endpoints = self._endpoints_as_typed()
         embed_url = self.embed_base_url.text().strip()
         try:
-            require_https(url)
+            self._check_endpoints(endpoints)
             if self.embeddings_enabled.isChecked() and embed_url:
                 require_https(embed_url)
             for media_url in (self.image_url.text().strip(), self.video_url.text().strip()):
@@ -1424,30 +1755,24 @@ class SettingsDialog(QDialog):
                     require_https(media_url)
             if self.private_url.text().strip():
                 require_https(self.private_url.text().strip())
+            self._carry_keys(endpoints)
         except ValueError as exc:
             self.error.setText(str(exc))
             self.error.show()
             return
 
-        name = self.provider_name.text().strip() or "default"
-        provider = next((p for p in self.config.providers if p.name == name), None)
-        if provider is None and self._provider_at_open is not None:
-            # A changed name renames the entry: adding a second one left the
-            # old, key included, in the file.
-            provider = next(
-                (p for p in self.config.providers if p.name == self._provider_at_open), None
-            )
-            if provider is not None:
-                provider.name = name
-        if provider is None:
-            provider = ProviderConfig(name=name, base_url=url)
-            self.config.providers.append(provider)
-        provider.base_url = url
-        provider.api_key = self.api_key.text()
-        provider.api = self.chat_api.currentData()
+        # The list as it stands replaces the saved one: a renamed endpoint is
+        # the same entry under its new name (its key with it, `_carry_keys`),
+        # a removed one is gone, key and all (storage/repository.py drops its
+        # keychain slot). Every copy was checked above; the fields it doesn't
+        # show (timeout, extra_body) rode along in the copy.
+        self.config.providers[:] = [
+            p.model_copy(update={"base_url": p.base_url.strip()}) for p in endpoints
+        ]
+        provider = self.config.providers[self._default_index]
         self.config.key_storage = self.key_storage.currentData()
         provider.model = self.model.text().strip()
-        self.config.active_provider_name = name
+        self.config.active_provider_name = provider.name
         summariser = self.summarization_model.text().strip()
         if summariser != self._summariser_at_open:
             self.config.summarization_model = summariser or None

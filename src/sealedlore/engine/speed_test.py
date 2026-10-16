@@ -28,7 +28,7 @@ from sealedlore.engine.pricing import estimate_cost
 from sealedlore.engine.reasoning import CallKind
 from sealedlore.engine.tokens import TokenEstimator
 from sealedlore.messages import ContentPart, PromptMessage
-from sealedlore.models.config import ModelPrice, ProviderConfig
+from sealedlore.models.config import ModelPrice, ProviderConfig, model_label, split_model
 from sealedlore.models.generation import GenerationParams, ReasoningConfig
 from sealedlore.models.node import Usage
 from sealedlore.providers.base import (
@@ -60,8 +60,10 @@ MIN_SPAN = 0.05
 @dataclass(frozen=True)
 class Role:
     """One use of a model, as Settings has it: the model as typed (blank to
-    fall back), the role it falls back to, and its route (`route`: the
-    request fields, engine/routing.py; `route_label`: how it reads)."""
+    fall back; a reference may name its endpoint, models/config.py), the
+    endpoint that reference resolves to, the role it falls back to, and its
+    route (`route`: the request fields, engine/routing.py; `route_label`:
+    how it reads)."""
 
     name: str
     model: str
@@ -89,15 +91,26 @@ class SpeedTarget:
     messages: tuple[PromptMessage, ...] | None = None
     max_tokens: int = MAX_TOKENS
     key: str = ""
+    # The model's reference as Settings has it, naming its endpoint when
+    # that isn't the default: what prices and reasoning facts are kept by.
+    # Blank means the bare id is the reference.
+    ref: str = ""
 
     @property
     def model(self) -> str:
+        """The bare id, as its endpoint is sent it."""
         return self.settings.model
 
     @property
+    def reference(self) -> str:
+        return self.ref or self.model
+
+    @property
     def label(self) -> str:
-        """The model as the table names it: with its route, if it has one."""
-        return f"{self.model} · {self.route_label}" if self.route else self.model
+        """The model as the table names it: its endpoint when that isn't the
+        default, and its route, if it has one."""
+        shown = model_label(self.reference)
+        return f"{shown} · {self.route_label}" if self.route else shown
 
 
 @dataclass(frozen=True)
@@ -187,8 +200,11 @@ def plan_targets(
         source = resolved(role)
         if source is None or source.endpoint is None:
             continue
-        settings = source.endpoint.model_copy(update={"model": source.model.strip()})
-        reasoning = reasoning_for(role.kind, settings.model) if reasoning_for else ReasoningConfig()
+        # The endpoint is sent the bare id; the reference keys what is known
+        # about the model (its reasoning facts, its price).
+        ref = source.model.strip()
+        settings = source.endpoint.model_copy(update={"model": split_model(ref)[1]})
+        reasoning = reasoning_for(role.kind, ref) if reasoning_for else ReasoningConfig()
         key = _endpoint_key(settings, source.route, reasoning)
         found.setdefault(key, (settings, [], source))[1].append(role.name)
     return [
@@ -198,6 +214,7 @@ def plan_targets(
             route=source.route,
             route_label=source.route_label,
             reasoning=reasoning,
+            ref=source.model.strip(),
         )
         for (*_key, reasoning_json), (settings, names, source) in found.items()
         for reasoning in (ReasoningConfig.model_validate_json(reasoning_json),)

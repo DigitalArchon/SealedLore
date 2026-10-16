@@ -152,7 +152,8 @@ class PrivateWindow:
             if self.session is not None and self.session.tee_chat:
                 # A TEE chat reads as a private scene does.
                 where = "memory only" if self.session.memory_only else "kept on disk"
-                return f"🔒 {self.session.model.rsplit('/', 1)[-1]} · {where}{self._tee_badge()}"
+                short = self.config.bare_model(self.session.model).rsplit("/", 1)[-1]
+                return f"🔒 {short} · {where}{self._tee_badge()}"
             return None
         where = "memory only" if span.keep == "memory" else "kept on disk"
         return f"🔒 {span.model.rsplit('/', 1)[-1]} · {where}{self._tee_badge()}"
@@ -330,7 +331,9 @@ class PrivateWindow:
         if is_private_mode(settings.model):
             # The sealing provider attests before it sends anything itself.
             self.session.tee_block = None
-            sealed = self.session.private_provider if span is not None else self._current_provider()
+            sealed = (
+                self.session.private_provider if span is not None else self._sealed_chat_provider()
+            )
             if not isinstance(sealed, PrivateModeProvider):
                 return  # a test's stand-in
 

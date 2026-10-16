@@ -377,8 +377,13 @@ def test_an_encrypted_chat_is_sent_only_through_the_sealing_client(app, window, 
         [ProviderConfig(name="n", base_url="https://nano-gpt.com/api/v1", api_key="k")],
     )
     monkeypatch.setattr(window.config, "active_provider_name", "n")
-    sealed = window._current_provider()
-    assert isinstance(sealed, PrivateModeProvider) and window._current_provider() is sealed
+    window._discard_provider()  # the mock built for the chat; the real one now
+    # The session's provider routes by endpoint (providers/endpoints.py); the
+    # chat's model, a private/ one, gets that endpoint's sealing client, once.
+    provider = window._current_provider()
+    sealed = window._sealed_chat_provider()
+    assert isinstance(sealed, PrivateModeProvider) and window._sealed_chat_provider() is sealed
+    assert provider.provider_for(window.session.model) is sealed
     private = window._make_private_provider(
         ProviderConfig(name="p", base_url="https://nano-gpt.com/api/v1", model="private/kimi-k3")
     )

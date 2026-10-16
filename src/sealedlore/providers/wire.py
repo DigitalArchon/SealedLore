@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 from sealedlore.messages import PART_JOINER, PromptMessage
-from sealedlore.models.config import CacheControlMode
+from sealedlore.models.config import CacheControlMode, split_model
 
 if TYPE_CHECKING:
     from sealedlore.providers.base import ChatRequest
@@ -44,7 +44,8 @@ def should_use_cache_control(
         return True
     if mode == "off":
         return False
-    lowered = model.lower()
+    # The bare id: a reference may name its endpoint (models/config.py).
+    lowered = split_model(model)[1].lower()
     return any(pattern.lower() in lowered for pattern in patterns)
 
 

@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.gui.attest_check import AttestationButton
 from sealedlore.gui.model_picker import Browse, BrowseRoute, ModelField
-from sealedlore.models.config import ProviderConfig
+from sealedlore.models.config import Config, ProviderConfig, split_model
 from sealedlore.providers.tee import is_private_mode, is_tee
 
 # Any other model: memory only is about this computer, not about the model.
@@ -66,14 +66,19 @@ class NewChatDialog(QDialog):
         browse: Browse | None = None,
         parent: QWidget | None = None,
         endpoint: ProviderConfig | None = None,
+        config: Config | None = None,
         browse_route: BrowseRoute | None = None,
         hosts_of: Callable[[str], tuple[str, ...] | None] | None = None,
     ) -> None:
-        """`browse_route` and `hosts_of`: the chat's route, beside its model
-        (on NanoGPT); it is the chat's own, never saved in the settings."""
+        """`endpoint`: the default endpoint; `config`, when given, resolves
+        a model naming another endpoint ("Anthropic::claude-opus-5-5",
+        models/config.py). `browse_route` and `hosts_of`: the chat's route,
+        beside its model (on NanoGPT); it is the chat's own, never saved in
+        the settings."""
         super().__init__(parent)
         self.setWindowTitle("New simple chat")
         self.setMinimumWidth(560)
+        self._config = config
         intro = QLabel(
             "A plain conversation with the model: your system prompt and your messages, "
             "none of the storytelling around them. Branches, pictures and summaries of a "
@@ -167,17 +172,27 @@ class NewChatDialog(QDialog):
         self.world_map.toggled.connect(self.chat_character.setEnabled)
         self._sync()
 
-    def _route_endpoint(self) -> str | None:
-        return self._endpoint.base_url if self._endpoint is not None else None
+    def _endpoint_of(self, model: str) -> ProviderConfig | None:
+        """The endpoint a model's reference resolves to: through the config
+        when there is one, else the default for a bare id alone."""
+        if self._config is not None:
+            return self._config.endpoint_for(model)
+        return self._endpoint if split_model(model)[0] is None else None
+
+    def _route_endpoint(self, model: str) -> str | None:
+        endpoint = self._endpoint_of(model)
+        return endpoint.base_url if endpoint is not None else None
 
     def route(self):
         """The route chosen for the chat's model; None: the subscription's."""
         return self.model.effective_route()
 
     def _attest_settings(self) -> ProviderConfig | None:
-        if self._endpoint is None:
+        model = self.model.text().strip()
+        endpoint = self._endpoint_of(model)
+        if endpoint is None:
             return None
-        return self._endpoint.model_copy(update={"model": self.model.text().strip()})
+        return endpoint.model_copy(update={"model": split_model(model)[1]})
 
     @property
     def tee(self) -> bool:
