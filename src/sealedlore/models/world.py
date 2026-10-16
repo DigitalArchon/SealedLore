@@ -39,7 +39,10 @@ class WorldPlace(BaseModel):
     # Where it is on the map, in metres east (x) and north (y) of the first
     # place, and how wide: set by the program when the place first appears
     # (engine/world_layout.py) and never moved after. Once the story has been
-    # somewhere, that is where it is.
+    # somewhere, that is where it is. The one exception is the author's
+    # Direction or Narration (the author, Oct 16 2026: "The Director must be
+    # able to make as broad and complete changes as possible"): what it says
+    # about a place's spot, size, name or whereabouts is so (`WorldDelta`).
     x: float | None = None
     y: float | None = None
     size: float | None = None
@@ -86,10 +89,27 @@ class WorldDelta(BaseModel):
     # under fog until then (only its `known` ones are seen from the start);
     # a passage's own places, and any it names, are seen as it applies.
     seen: list[str] = Field(default_factory=list)
+    # What the author's Direction or Narration did to places already on the
+    # map (engine/world.py `resolve_reply`, on such a turn only): the ids
+    # taken off the map (what was inside one goes to its parent, as does
+    # anyone or anything there), the ids renamed with their new names (the
+    # old name stays an alias on every fold), and the ids given a new spot
+    # (what was inside one goes with it; its old ways are dropped).
+    removed: list[str] = Field(default_factory=list)
+    renamed: dict[str, str] = Field(default_factory=dict)
+    moved: list[str] = Field(default_factory=list)
 
     def empty(self) -> bool:
         return not (
-            self.places or self.links or self.where or self.things or self.conflicts or self.seen
+            self.places
+            or self.links
+            or self.where
+            or self.things
+            or self.conflicts
+            or self.seen
+            or self.removed
+            or self.renamed
+            or self.moved
         )
 
 

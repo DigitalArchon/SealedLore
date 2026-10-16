@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Collection, Iterable, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from typing import Any
 
 from sealedlore.engine.jsonreply import extract_json
@@ -27,8 +27,10 @@ from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.scene_state import same_person
 from sealedlore.engine.validators import locate_quote
 from sealedlore.engine.world_layout import (
+    bearing,
     describe_metres,
     geometry_conflicts,
+    metres,
     moves,
     place_new,
     position,
@@ -393,26 +395,57 @@ def _said(value: Any) -> str | None:
     return None if not text or _NOTHING_SAID.match(text.strip(" .")) else text
 
 
+# Why a change to a place already on the map is refused on an ordinary turn.
+_ONLY_AUTHOR = "only the author's Direction or Narration"
+
+
 def resolve_reply(
     world: WorldMap,
     reply: dict[str, Any],
     *,
     source: str,
     people: Sequence[Character],
+    author_says: bool = False,
+    marked: Mapping[str, tuple[float, float]] | None = None,
 ) -> tuple[WorldDelta, list[str]]:
     """What the reply changes, as a delta on `world`, and what was refused
     and why (for the log and the panel). `source` is the author's turn and
-    the passage: every entry's quote must be found in it."""
-    delta = WorldDelta()
+    the passage: every entry's quote must be found in it.
+
+    `author_says`: the turn is the author's Direction or Narration, which
+    state what is so (the author, Oct 16 2026: "The Director must be able to
+    make as broad and complete changes as possible"). Then, and only then, a
+    place already on the map may be taken off it ("gone"), renamed ("was"
+    beside its new "name", or "renamed"), resized ("size"), put inside
+    another ("inside") or moved: to a spot the author marked (`marked`: the
+    spots the reply's place entries name, by the entry's name as compared
+    with `key`, resolved by the session from the turn's marks), or by a link
+    with a direction and a distance from a place that has its spot. On any
+    other turn those are refused, said in `refused`, and the map stands:
+    places are placed once (engine/world_layout.py)."""
+    # `added` is always a list from here: a delta that changes known places
+    # and makes none must still skip their copies on a fold without them.
+    delta = WorldDelta(added=[])
     refused: list[str] = []
+    marked = marked or {}
 
     def quoted(entry: dict[str, Any]) -> str | None:
         quote = _text(entry.get("quote"))
         span = locate_quote(source, quote) if quote else None
         return source[span[0] : span[1]] if span else None
 
+    def unplace(place: WorldPlace) -> None:
+        place.x, place.y = None, None
+        if place.id not in delta.moved:
+            delta.moved.append(place.id)
+
     # Places first, so links and people can name places added in this reply.
-    for entry in _entries(reply, "places"):
+    # A "renamed" entry is a place entry with "was" beside its new name.
+    entries = _entries(reply, "places") + [
+        {"name": e.get("now"), "was": e.get("was"), "quote": e.get("quote")}
+        for e in _entries(reply, "renamed")
+    ]
+    for entry in entries:
         name = _text(entry.get("name"))
         if not name or quoted(entry) is None:
             refused.append(f"place {name or '(unnamed)'}: no quote found")
@@ -423,6 +456,21 @@ def resolve_reply(
         existing = find_place(world, name, delta.places)
         inside_name = _text(entry.get("inside"))
         inside = find_place(world, inside_name, delta.places) if inside_name else None
+        was = _text(entry.get("was"))
+        rename: str | None = None
+        if was:
+            old_id = find_place(world, was, delta.places)
+            if old_id is None:
+                refused.append(f"rename {was} -> {name}: {was} is not on the map")
+            elif existing is not None and existing != old_id:
+                refused.append(f"rename {was} -> {name}: {name} is another place's name")
+                existing = old_id
+            elif not author_says:
+                refused.append(f"rename {was} -> {name}: {_ONLY_AUTHOR} renames a place")
+                existing = old_id  # the entry is about the old place, under its name
+            else:
+                existing = old_id
+                rename = name
         if existing is not None:
             pending = next((p for p in delta.places if p.id == existing), None)
             old = pending or world.places[existing]
@@ -440,21 +488,49 @@ def resolve_reply(
             changed.state = state or changed.state
             changed.kind = changed.kind or kind  # type: ignore[assignment]
             known_places = {**world.places, **{p.id: p for p in delta.places}}
+            if rename is not None and key(rename) != key(changed.name):
+                # The old name stays an alias: a later read (or the author)
+                # naming it so finds this place rather than making a second.
+                if changed.name not in changed.aliases:
+                    changed.aliases.append(changed.name)
+                changed.name = rename
+                delta.renamed[existing] = rename
+            renest = (
+                inside is not None
+                and inside != changed.inside
+                and not _would_loop(world, delta, changed.id, inside)
+            )
             if (
                 # A vehicle (or a room in one) has no spot of its own and
                 # goes where the passage docks it; once in a bay, it stayed
                 # there for good (the review, Oct 15 2026).
                 (changed.inside is None or moves(known_places, changed))
                 and changed.x is None  # a placed place has its spot: never moved
-                and inside is not None
-                and inside != changed.inside
-                and not _would_loop(world, delta, changed.id, inside)
+                and renest
             ):
                 changed.inside = inside
+            elif renest and not author_says:
+                refused.append(f"place {name}: {_ONLY_AUTHOR} puts a place inside another")
+            elif renest:  # the author's say: inside it, placed there anew
+                changed.inside = inside
+                if not moves(known_places, changed):
+                    unplace(changed)
+            size = _size(entry.get("size"))
+            if size is not None and size != size_of(changed):
+                if author_says:
+                    changed.size = size
+                else:
+                    refused.append(f"place {name}: {_ONLY_AUTHOR} resizes a place")
+            spot = marked.get(key(name)) or (marked.get(key(was)) if was else None)
+            if spot is not None and not moves(known_places, changed):
+                if author_says:
+                    changed.x, changed.y = spot  # the session fits it in what is there
+                    if changed.id not in delta.moved:
+                        delta.moved.append(changed.id)
+                else:
+                    refused.append(f"place {name}: {_ONLY_AUTHOR} moves a place")
             delta.places = [p for p in delta.places if p.id != existing] + [changed]
         else:
-            if delta.added is None:
-                delta.added = []
             delta.places.append(
                 WorldPlace(
                     name=name,
@@ -470,6 +546,27 @@ def resolve_reply(
                 )
             )
             delta.added.append(delta.places[-1].id)
+    for entry in _entries(reply, "gone"):
+        name = _text(entry.get("name"))
+        if not name or quoted(entry) is None:
+            refused.append(f"gone {name or '(unnamed)'}: no quote found")
+            continue
+        gone = find_place(world, name, delta.places)
+        if gone is None:
+            refused.append(f"gone {name}: not on the map")
+            continue
+        if not author_says:
+            refused.append(f"gone {name}: {_ONLY_AUTHOR} removes a place")
+            continue
+        delta.places = [p for p in delta.places if p.id != gone]
+        if delta.added is not None and gone in delta.added:
+            delta.added.remove(gone)  # made and unmade in one reply: nothing
+            continue
+        delta.renamed.pop(gone, None)
+        if gone in delta.moved:
+            delta.moved.remove(gone)
+        if gone not in delta.removed:
+            delta.removed.append(gone)
     for entry in _entries(reply, "links"):
         label = f"{_text(entry.get('from'))} -> {_text(entry.get('to'))}"
         quote = quoted(entry)
@@ -481,6 +578,9 @@ def resolve_reply(
         if a is None or b is None or a == b:
             refused.append(f"link {label}: a place not on the map")
             continue
+        if a in delta.removed or b in delta.removed:
+            refused.append(f"link {label}: taken off the map")
+            continue
         if _is_vehicle(world, delta, a) or _is_vehicle(world, delta, b):
             refused.append(f"link {label}: a vehicle moves, so it has no fixed link")
             continue
@@ -489,11 +589,12 @@ def resolve_reply(
         if direction and words and not any(w.lower() in quote.lower() for w in words):
             direction = None  # a direction its own quote doesn't carry is a guess
         distance = _said(entry.get("distance"))
+        mover = _link_mover(world, delta, a, b, direction, distance) if author_says else None
         old = next(
             (link for link in [*world.links, *delta.links] if {link.a, link.b} == {a, b}),
             None,
         )
-        if old is not None:
+        if old is not None and mover is None:
             if old.distance and distance and key(distance) != key(old.distance):
                 delta.conflicts.append(
                     f"{place_name_any(world, delta, a)} – {place_name_any(world, delta, b)}: "
@@ -503,6 +604,11 @@ def resolve_reply(
             distance = distance or old.distance
             if direction is None and old.direction and old.a == a:
                 direction = old.direction
+        if mover is not None:
+            # The author's say: the place is where the link puts it, placed
+            # again from the other end (`place_new` reads this link first).
+            unplace(mover)
+            delta.places = [p for p in delta.places if p.id != mover.id] + [mover]
         delta.links = [k for k in delta.links if {k.a, k.b} != {a, b}]
         delta.links.append(WorldLink(a=a, b=b, direction=direction, distance=distance))
     for entry in _entries(reply, "where"):
@@ -522,6 +628,9 @@ def resolve_reply(
         if place is None:
             refused.append(f"where {who} @ {_text(entry.get('place'))}: not on the map")
             continue
+        if place in delta.removed:
+            refused.append(f"where {who} @ {_text(entry.get('place'))}: taken off the map")
+            continue
         canonical = person_name(who, people, [*world.where, *delta.where])
         delta.where[canonical] = place
     for entry in _entries(reply, "things"):
@@ -539,9 +648,96 @@ def resolve_reply(
         elif at:
             thing.at = find_place(world, at, delta.places)
             thing.carried_by = None
+        if thing.at in delta.removed:  # as the fold leaves it: where the place was
+            thing.at = world.places[thing.at].inside
         thing.state = _text(entry.get("state")) or thing.state
         delta.things = [t for t in delta.things if t.id != thing.id] + [thing]
     return delta, refused
+
+
+def _link_mover(
+    world: WorldMap,
+    delta: WorldDelta,
+    a: str,
+    b: str,
+    direction: str | None,
+    distance: str | None,
+) -> WorldPlace | None:
+    """On the author's turn, the place a link moves: the end the read gave
+    again in this reply (the "to" end first) that is on the map with a spot,
+    measured from an end that has its spot, by a compass direction and a
+    distance in metres the layout can read. None when the link moves nothing
+    (a way between two standing places, noted as a conflict if they
+    disagree). The mover leaves the place it was in when the other end lies
+    outside it, or is it: "two miles east of Hellsville" is not inside
+    Hellsville, nor inside the farm it stood in."""
+    stated = metres(distance)
+    if bearing(direction) is None or stated is None:
+        return None
+    copies = {p.id: p for p in delta.places}
+    for mover_id, anchor_id in ((b, a), (a, b)):
+        mover = copies.get(mover_id)
+        before = world.places.get(mover_id)
+        # Moved already in this reply (a mark, which is exact): that stands.
+        if mover is None or before is None or before.x is None or mover_id in delta.moved:
+            continue
+        anchor = copies.get(anchor_id) or world.places.get(anchor_id)
+        if anchor is None or position_any(world, delta, anchor_id) is None:
+            continue
+        known = {**world.places, **copies}
+        if moves(known, mover) or mover_id in _ancestors(known, anchor_id):
+            continue  # a vehicle, or its own container measured from it
+        if anchor_id in _ancestors(known, mover_id):
+            # Measured from what it is in: outside it only when the distance
+            # says so, else it stays where it is (the author said no more).
+            if stated <= size_of(anchor) / 2:
+                continue
+            mover.inside = anchor.inside
+        elif mover.inside is not None and mover.inside not in {
+            anchor_id,
+            *_ancestors(known, anchor_id),
+        }:
+            mover.inside = anchor.inside  # beside the other end, at its level
+        return mover
+    return None
+
+
+def position_any(world: WorldMap, delta: WorldDelta, place_id: str) -> tuple[float, float] | None:
+    """Where a place is, the delta's copy first (`position` for the rest)."""
+    seen: set[str] = set()
+    copies = {p.id: p for p in delta.places}
+    current: str | None = place_id
+    while current is not None and current not in seen:
+        seen.add(current)
+        place = copies.get(current) or world.places.get(current)
+        if place is None:
+            return None
+        if place.x is not None and place.y is not None:
+            return place.x, place.y
+        current = place.inside
+    return None
+
+
+def _ancestors(places: Mapping[str, WorldPlace], place_id: str) -> set[str]:
+    out: set[str] = set()
+    current = places.get(place_id)
+    current = places.get(current.inside or "") if current is not None else None
+    while current is not None and current.id not in out:
+        out.add(current.id)
+        current = places.get(current.inside or "")
+    return out
+
+
+def within_ids(world: WorldMap, place_id: str) -> set[str]:
+    """Every place inside `place_id`, at any depth."""
+    found = {place_id}
+    grew = True
+    while grew:
+        more = {p.id for p in world.places.values() if p.inside in found and p.id not in found}
+        found |= more
+        grew = bool(more)
+    found.discard(place_id)
+    return found
 
 
 def _is_vehicle(world: WorldMap, delta: WorldDelta, place_id: str) -> bool:
@@ -594,7 +790,25 @@ def describe_delta(world: WorldMap, delta: WorldDelta) -> str:
         if p.id in world.places and p.state != world.places[p.id].state
     ]
     parts.extend(changed_state)
+    # The author's Direction: taken off, renamed, moved, resized, put inside.
+    gone = [world.places[pid].name for pid in delta.removed if pid in world.places]
+    if gone:
+        parts.append("gone: " + ", ".join(gone))
+    for pid, new_name in delta.renamed.items():
+        if pid in world.places:
+            parts.append(f"{world.places[pid].name} now {new_name}")
+    for pid in delta.moved:
+        if pid in world.places:
+            parts.append(f"{place_name_any(world, delta, pid)} moved")
     after = applied(world, delta)
+    for p in delta.places:
+        old = world.places.get(p.id)
+        if old is None:
+            continue
+        if p.size is not None and p.size != size_of(old):
+            parts.append(f"{p.name} now {describe_metres(p.size)}")
+        if p.inside != old.inside and p.inside is not None:
+            parts.append(f"{p.name} now in {place_name_any(world, delta, p.inside)}")
     for who, place_id in delta.where.items():
         if world.where.get(who) != place_id:
             parts.append(f"{who} at {place_name(after, place_id)}")
@@ -620,8 +834,21 @@ def applied(
     folded.
 
     A passage's places, and the places it puts people or ways between, are
-    seen; an imported map (`base`) shows only the places it says are known."""
+    seen; an imported map (`base`) shows only the places it says are known.
+
+    What the author's Direction did to known places (`removed`, `renamed`,
+    `moved`) is applied here too, so every fold of the path agrees: a place
+    moved takes what is inside it along and loses its old ways; a renamed
+    one keeps its old name as an alias; a removed one leaves what was inside
+    it, and anyone or anything there, to its parent."""
     out = world if in_place else world.model_copy(deep=True)
+    # Where each moved place was, before its copy lands (`in_place` writes
+    # over `world`): what is inside it moves by the same step.
+    moved_from = {
+        pid: (p.x, p.y)
+        for pid in delta.moved
+        if (p := world.places.get(pid)) is not None and p.x is not None and p.y is not None
+    }
     # A known place the delta changed is carried whole; one not on this
     # fold's map and not made here was another take's (`WorldDelta.added`).
     places = [
@@ -650,6 +877,27 @@ def applied(
         fixed = {}
     for place in places:
         out.places[place.id] = fixed.get(place.id) or place.model_copy(deep=True)
+    for pid, (from_x, from_y) in moved_from.items():
+        moved = out.places.get(pid)
+        if moved is None or moved.x is None or moved.y is None:
+            continue
+        dx, dy = moved.x - from_x, moved.y - from_y
+        for child_id in within_ids(out, pid):
+            child = out.places[child_id]
+            # Not one placed in this fold (it was placed within the moved
+            # place where it is now), nor one the author moved on its own.
+            if child_id in fixed or child_id in delta.moved or child.x is None:
+                continue
+            child.x, child.y = child.x + dx, child.y + dy  # type: ignore[operator]
+        # Its ways measured from where it was; the delta's are added below.
+        out.links = [k for k in out.links if pid not in (k.a, k.b)]
+    for pid, new_name in delta.renamed.items():
+        renamed = out.places.get(pid)
+        if renamed is None:
+            continue
+        if key(renamed.name) != key(new_name) and renamed.name not in renamed.aliases:
+            renamed.aliases.append(renamed.name)
+        renamed.name = new_name
     for link in delta.links:
         out.links = [k for k in out.links if {k.a, k.b} != {link.a, link.b}]
         out.links.append(link.model_copy())
@@ -661,6 +909,8 @@ def applied(
     for thing in delta.things:
         out.things[thing.id] = thing.model_copy(deep=True)
     out.conflicts.extend(delta.conflicts)
+    for pid in delta.removed:
+        _remove(out, pid)
     seen = list(delta.seen)
     if not base:
         seen += [p.id for p in delta.places]
@@ -671,6 +921,36 @@ def applied(
             out.seen.append(place_id)
     _prune(out)
     return out
+
+
+def _remove(world: WorldMap, place_id: str) -> None:
+    """A place taken off the map by the author's Direction: what was inside
+    it is inside its parent now (where it stands), as are anyone and
+    anything that were there (nowhere, with no parent); its ways go. The
+    rest (seen, visited) `_prune` cleans."""
+    gone = world.places.pop(place_id, None)
+    if gone is None:
+        return
+    parent = gone.inside if gone.inside in world.places else None
+    for place in world.places.values():
+        if place.inside == place_id:
+            place.inside = parent
+    world.links = [k for k in world.links if place_id not in (k.a, k.b)]
+    where: dict[str, str] = {}
+    for who, at in world.where.items():
+        if at != place_id:
+            where[who] = at
+        elif parent is not None:
+            where[who] = parent
+            been = world.visited.setdefault(who, [])
+            if parent not in been:
+                been.append(parent)
+    world.where = where
+    for thing in world.things.values():
+        if thing.at == place_id:
+            thing.at = parent
+    if world.start == place_id:
+        world.start = parent
 
 
 def _prune(world: WorldMap) -> None:
@@ -704,7 +984,10 @@ def place_delta(
     (`near_point`: exactly where they stand, when the program knows)."""
     near = world.where.get(held or "")
     place_new(world, delta.places, delta.links, near, near_point)
-    for note in geometry_conflicts(world, delta.links):
+    # A way that moved a place (the author's Direction) is its new spot, not
+    # a disagreement with where the map had it.
+    standing = [k for k in delta.links if k.a not in delta.moved and k.b not in delta.moved]
+    for note in geometry_conflicts(world, standing):
         if note not in delta.conflicts:
             delta.conflicts.append(note)
 

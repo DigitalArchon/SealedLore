@@ -3,7 +3,10 @@
 A place is placed once, when it first appears, and never moved: the story
 has been there, so that is where it is. That is also how the map grows past
 its edge: a journey into unmapped country brings new places, placed beyond
-the old ones, and they are as fixed as the rest from then on.
+the old ones, and they are as fixed as the rest from then on. The one
+exception is the author's Direction or Narration (engine/world.py
+`resolve_reply`): a place it moves is placed again, by the same rules, from
+what it said.
 
 Positions are metres east (x) and north (y) of the first place. What the
 story said decides them, in this order:
@@ -467,7 +470,9 @@ def place_new(
     known = {p.id: p for p in world.places.values()}
     for place in places:
         known[place.id] = place
-    all_links = [*world.links, *links]
+    # This passage's links first: a place the author's Direction moved is
+    # placed by the way it stated, not by a way the map had for it before.
+    all_links = [*links, *world.links]
     waiting = [p for p in places if (p.x is None or p.y is None) and not moves(known, p)]
     for vehicle in places:
         if vehicle.kind == "vehicle" and vehicle.size is None:

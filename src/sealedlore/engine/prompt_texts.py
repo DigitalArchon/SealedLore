@@ -1875,6 +1875,12 @@ _text(
 # 55 that differed judged blind by two Claude judges: preferred 18-14 and
 # 20-12 (23 ties each), errors 28 -> 22 and 40 -> 25. It invents a sub-place
 # now and then ("The porch" for the porch step), which the judges counted.
+# "unless the author's Direction changes it" on the size line (Oct 16 2026,
+# the author: "The Director must be able to make as broad and complete
+# changes as possible"): the read is now shown, on a Direction or Narration
+# turn only and in the user message (`map_read.direction`), the fields that
+# take a place off the map, rename, move or resize it, so every other read
+# is sent as measured. Not measured.
 
 _text(
     "map_read.system",
@@ -1939,7 +1945,8 @@ Places
   sense of its scale, else null. For scale: a room 5, a cottage 10, a house
   15, a barn 25, a warehouse 40, a manor 60, a castle or a fort 150, a hamlet
   300, a village 600, a town 1500, a city 4000. A vast castle with towers is
-  200 or more; a hut is 5. A place already on the map keeps its size.
+  200 or more; a hut is 5. A place already on the map keeps its size unless
+  the author's Direction changes it.
 
 Links
 
@@ -2435,6 +2442,38 @@ unless the author's Direction or Narration adds a place or changes one: that
 is true from this turn, and the map follows it. Anywhere not on it is
 unmapped; when the story goes there, decide what is found, and it becomes
 part of the map.""",
+)
+
+
+# The author's Direction or Narration may change places already on the map
+# (Oct 16 2026, the author: "The Director must be able to make as broad and
+# complete changes as possible"). The read is told so in the user message on
+# such a turn only, so every other read is sent exactly as measured; the
+# program holds each of these to its quote too, and refuses them on any other
+# turn (engine/world.py `resolve_reply`). Not measured.
+_text(
+    "map_read.direction",
+    MAP,
+    "The map read: the author's Direction or Narration",
+    "Added to the map read's request when the author's turn is Direction or Narration, "
+    "which state what is so: the fields that take a place already on the map off it, "
+    "rename, move or resize it, or put it inside another. Every one needs its quote, and "
+    "the program refuses them on any other turn.",
+    """\
+THE AUTHOR'S TURN IS DIRECTION OR NARRATION: what it says about the map is so,
+and places already on the map may change by it. Besides the usual fields you
+may give, each with its "quote" (the author's own words count):
+- a place taken off the map: "gone": [{"name": "<its name on the map>", "quote": "..."}];
+- a place renamed: in "places", "was": "<its name on the map>" beside its new "name";
+- a place moved: in "places", under its name on the map, "mark" with a spot the
+  author marked, or a link to it in "links" with a direction and a distance from
+  a place on the map;
+- a place resized: "size" on a place already on the map;
+- a place now inside another: "inside" on a place already on the map.
+For example: {"places": [{"name": "The Drowned Rat", "was": "The inn", "quote":
+"The inn is now called The Drowned Rat"}], "gone": [{"name": "The barn", "quote":
+"The barn is gone"}], "links": [], "where": [], "things": []}
+Only what this turn or the passage says: a place neither changes stays as it is.""",
 )
 
 

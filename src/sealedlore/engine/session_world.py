@@ -19,21 +19,26 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
+from typing import Any
 
+from sealedlore.engine.marks import footprint, place_at
 from sealedlore.engine.session_plot import SessionNotice
 from sealedlore.engine.world import (
     build_world_read_messages,
     describe_delta,
     established,
+    key,
     parse_world_reply,
     place_delta,
     render_map_context,
     resolve_reply,
+    within_ids,
     world_at,
 )
+from sealedlore.engine.world_layout import CHILD_SHARE, size_of
 from sealedlore.models.character import Character
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID, Node
-from sealedlore.models.world import WorldMap
+from sealedlore.models.world import WorldDelta, WorldMap
 from sealedlore.providers.base import ChatRequest, ProviderError
 
 # Room for a model that reasons a little before its JSON (DeepSeek V4.1 Flash
@@ -155,14 +160,19 @@ class WorldRuntime:
         held = self.map_held_name(node.meta.controlled_character_id)
         author_text = author.content if author is not None else ""
         note = ""
+        # On the author's Direction or Narration the read is told, in the
+        # user message only, what it may change about places already on the
+        # map (`map_read.direction`); every other read is sent as measured.
+        direction = ""
         if self.story.chat:
             label = "The user's message"
             note = self.texts.fill("map_read.chat", name=self.chat_name)
         elif author is None:
             label = "The author's turn"
-        elif author.speaker_id in (DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID):
+        elif self._author_says(author):
             kind = "Direction" if author.speaker_id == DIRECTOR_SPEAKER_ID else "Narration"
             label = f"The author's turn: {kind} (what it says happens)"
+            direction = self.texts["map_read.direction"]
         else:
             speaker = self._character(author.speaker_id)
             name = speaker.name if speaker is not None else (held or "")
@@ -187,6 +197,7 @@ class WorldRuntime:
                         self.read_spots(path[:-1], held),
                         self.read_minutes(author),
                         self.read_marks(author),
+                        direction,
                     )
                     if n
                 ),
@@ -240,15 +251,27 @@ class WorldRuntime:
             return
         finally:
             self.map_reading = None
-        people = self.map_people(self._path_to(node.id))
-        delta, refused = resolve_reply(pending.before, reply, source=pending.source, people=people)
         path = self._path_to(node.id)
         author = path[-2] if len(path) > 1 and path[-2].kind == "user" else None
+        people = self.map_people(path)
+        # The author's Direction or Narration may change what is on the map
+        # already (remove, rename, resize, move, put inside); a known place
+        # it puts at a spot the author marked goes exactly there.
+        says = author is not None and self._author_says(author)
+        delta, refused = resolve_reply(
+            pending.before,
+            reply,
+            source=pending.source,
+            people=people,
+            author_says=says,
+            marked=self._marked_places(reply, author),  # refused, and logged, in character
+        )
         held_name = self.map_held_name(node.meta.controlled_character_id)
         # Map-first: what the author marked is put exactly there, and what
         # has nothing else to go on goes beside where they stand (the turn's
         # character, not whoever is held now).
         self.apply_marks(pending.before, delta, reply, author)
+        self._nest_moved(pending.before, delta)
         near = None
         if self.map_first:
             near = self.held_point(self._snapshot_on(path[:-1]), pending.before, held=held_name)
@@ -261,6 +284,8 @@ class WorldRuntime:
         if refused:
             self._log("world_refused", {"request_log_ref": log_ref, "refused": refused})
         node.meta.world = None if delta.empty() else delta
+        if says:
+            self._redraw_resized(pending.before, delta)
         # Map-first: everyone settled on the map the passage left.
         self.area_after_read(node, reply, pending.source)
         self.save()
@@ -268,3 +293,87 @@ class WorldRuntime:
         # the background (session_world_art.py): the passage never waits.
         self.start_map_art()
         yield SessionNotice(f"Map: {describe_delta(pending.before, delta)}")
+
+    # --- the author's Direction and the map -----------------------------------------
+
+    @staticmethod
+    def _author_says(author: Node) -> bool:
+        """The author's turn states what is so: Direction or Narration."""
+        return author.speaker_id in (DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID)
+
+    def _marked_places(
+        self, reply: dict[str, Any], author: Node | None
+    ) -> dict[str, tuple[float, float]]:
+        """The spots the reply's place entries put places at, by the entry's
+        name as compared (`key`) and by the name it was known under ("was"):
+        the turn's own marks, resolved as `apply_marks` resolves them for a
+        new place. For `resolve_reply`, which moves a known place there on
+        the author's Direction."""
+        marks = self._turn_marks(author)
+        out: dict[str, tuple[float, float]] = {}
+        if not marks:
+            return out
+        for entry in reply.get("places") or []:
+            if not isinstance(entry, dict):
+                continue
+            mark = self._mark_of(marks, entry.get("mark"), words=True)
+            if mark is None:
+                continue
+            for field in ("name", "was"):
+                name = key(str(entry.get(field) or ""))
+                if name:
+                    out[name] = (mark.x, mark.y)
+        return out
+
+    def _nest_moved(self, before: WorldMap, delta: WorldDelta) -> None:
+        """A known place the author's Direction moved to a marked spot lies
+        in whatever the map has there (as a new place at a mark does), never
+        in itself or in what is inside it, unless the spot is still within
+        the place it was in; its size is kept, within what the holder
+        allows. A place moved by a link has no spot yet: `place_delta`
+        places it from the link."""
+        moved = [p for p in delta.places if p.id in delta.moved and p.x is not None]
+        if not moved:
+            return
+        art = self.map_art_copy()
+        for place in moved:
+            x, y = place.x, place.y
+            holder = before.places.get(place.inside or "")
+            box = footprint(before, art, holder.id) if holder is not None else None
+            if box is not None and box[0] <= x <= box[2] and box[1] <= y <= box[3]:
+                continue
+            excluded = {place.id, *within_ids(before, place.id)}
+            others = before.model_copy(
+                update={"places": {k: v for k, v in before.places.items() if k not in excluded}}
+            )
+            place.inside = place_at(others, art, x, y)
+            holder = before.places.get(place.inside or "")
+            if holder is not None:
+                place.size = min(size_of(place), size_of(holder) * CHILD_SHARE)
+
+    def _redraw_resized(self, before: WorldMap, delta: WorldDelta) -> None:
+        """A place the author's Direction resized has its plan drawn again,
+        as Redraw plan… does (the plan it has stays until the new one is
+        drawn; session_world_art.py `redraw_plan`), so the plan's grid
+        follows the size. One with no plan yet is drawn at its size when
+        it is drawn."""
+        resized = [
+            p.id
+            for p in delta.places
+            if p.id in before.places
+            and p.size is not None
+            and p.size != size_of(before.places[p.id])
+        ]
+        if not resized:
+            return
+        art = self.world_art
+        with self._lock():
+            queued = False
+            for pid in resized:
+                if art.layout_for(pid) is None or pid in art.redraw:
+                    continue
+                art.redraw.append(pid)
+                art.failures.pop(f"layout:{pid}:redraw", None)
+                queued = True
+            if queued:
+                self._save_art(art)

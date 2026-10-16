@@ -232,6 +232,31 @@ def test_a_place_at_a_mark_inside_another_new_place_keeps_its_inside(tmp_path, s
     assert tent.inside == camp.id and (tent.x, tent.y) == (marks_in(b)[0].x, marks_in(b)[0].y)
 
 
+def test_a_mark_on_a_known_place_moves_it_only_on_the_author_s_direction(tmp_path, story, cast):
+    """Placed once: in character, a read that puts a known place at the
+    turn's mark is refused and logged; the author's Direction moves it
+    (tests/test_director_map.py)."""
+    from sealedlore.storage.repository import read_api_log
+
+    session = make_session(tmp_path, story, cast)
+    token = session.mark_of_tile("farm", 100, 50)
+    read = json.dumps(
+        {"places": [{"name": "The house", "mark": token, "quote": "The house stood there"}]}
+    )
+    session.provider.responses = ["The house stood there.", read]
+    session.config.scene_reads = "manual"
+    list(session.send(turn(f"I walk to the house, at {token}.")))
+    house = session.world().places["house"]
+    assert (house.x, house.y) == (20.0, 30.0)
+    refused = [
+        e for e in read_api_log(session.story.id, root=tmp_path) if e["kind"] == "world_refused"
+    ]
+    assert (
+        refused
+        and "only the author's Direction or Narration moves a place" in refused[0]["refused"][0]
+    )
+
+
 def test_a_mark_on_a_docked_ship_is_on_the_ship():
     from sealedlore.models.world import WorldPlace
 

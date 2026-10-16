@@ -569,6 +569,9 @@ def fixed_in_plan(world: WorldMap, place: WorldPlace) -> list[dict[str, Any]]:
             {
                 "kind": "building" if child.kind == "building" else "place",
                 "name": child.name,
+                # The names it has had: a plan drawn before the author's
+                # Direction renamed it names its box by the old one.
+                "aliases": list(child.aliases),
                 "place_id": child.id,
                 "place_kind": child.kind or "place",
                 "x": x,
@@ -888,26 +891,33 @@ def _fixed_lines(fixed: Sequence[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _fixed_match(feature: dict[str, Any], fixed_one: dict[str, Any]) -> bool:
+    """Whether a building the model drew is this fixed one: by place id when
+    the shape carries one (`with_fixed` drew it), else by its name, under
+    the place's name now or any it has had (`fixed_in_plan`'s aliases): a
+    building the author's Direction renamed keeps its box."""
+    if feature.get("place_id"):
+        return feature["place_id"] == fixed_one.get("place_id")
+    name = key(str(feature.get("name") or ""))
+    known = {key(fixed_one["name"]), *(key(a) for a in fixed_one.get("aliases") or ())}
+    return bool(name) and name in known
+
+
 def with_fixed(spec: dict[str, Any], fixed: Sequence[dict[str, Any]]) -> dict[str, Any]:
     """The model's shapes with the map's buildings where the map has them:
     a building the model drew under a fixed name is dropped (its doors and
     windows kept), and each fixed building is drawn at its own box."""
-    names = {key(f["name"]) for f in fixed if f["kind"] == "building"}
+    buildings = [f for f in fixed if f["kind"] == "building"]
     features = [f for f in spec.get("features", []) if isinstance(f, dict)]
-    own = {
-        key(str(f.get("name") or "")): f
-        for f in features
-        if f.get("kind") == "building" and f.get("name")
-    }
     kept = [
         f
         for f in features
-        if not (f.get("kind") == "building" and key(str(f.get("name") or "")) in names)
+        if not (f.get("kind") == "building" and any(_fixed_match(f, b) for b in buildings))
     ]
-    for f in fixed:
-        if f["kind"] != "building":
-            continue
-        drawn = own.get(key(f["name"]))
+    for f in buildings:
+        drawn = next(
+            (s for s in features if s.get("kind") == "building" and _fixed_match(s, f)), None
+        )
         doors = [d for d in (drawn or {}).get("doors") or [] if isinstance(d, dict)]
         windows = [d for d in (drawn or {}).get("windows") or [] if isinstance(d, dict)]
         for opening in (*doors, *windows):  # within the box's own sides
@@ -917,6 +927,7 @@ def with_fixed(spec: dict[str, Any], fixed: Sequence[dict[str, Any]]) -> dict[st
             {
                 "kind": "building",
                 "name": f["name"],
+                "place_id": f.get("place_id"),
                 "x": f["x"],
                 "y": f["y"],
                 "w": f["w"],
