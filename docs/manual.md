@@ -818,10 +818,11 @@ sprite model draw it from the portrait, or from what the card says of them
 when they have none; the model and price are shown first, and it counts
 against the day's map pictures. **Choose a file…** takes a figure of your
 own (on a plain white or transparent ground), and **Back to the set's own**
-puts the tile set's figure back. When a new portrait lands on a card (drawn
-or chosen from a file) and the character already has an avatar, you are
-offered a new one drawn from it; a character with none yet gets theirs
-drawn in the background as usual. The same changes can be made under Look →
+puts the tile set's figure back. When new portraits land on cards (drawn
+or chosen from a file) whose characters already have an avatar, you are
+asked once whether to draw their avatars again from them, and they are
+drawn one after another; a character with none yet gets theirs drawn in
+the background as usual. The same changes can be made under Look →
 **Edit the tile set…** on the map.
 
 Two checkboxes on a cast sheet decide who writes that character:
@@ -1006,9 +1007,13 @@ exactly: where you stand, who is how far from you and which way, what is
 within reach, the doorways out.
 
 - **Walking.** Click anywhere to walk there (the arrow keys or WASD take a
-  step). Walking costs no model call and moves the clock a little; walk into
-  a door to go through it, into a building or back out. Drag or use the
-  wheel to look around; **−** and **+** zoom.
+  step); the tile under the pointer shows gold where you can stand and red
+  where you can't, and a click while you are still walking goes on from
+  where you are. Walking costs no model call and moves the clock a little;
+  walk into a door to go through it, into a building or back out. Drag or
+  use the wheel to look around; **−** and **+** zoom, up to twice the art's
+  own pixels. The hour tints the area (blue at night, amber at dawn and
+  dusk), and indoors the rooms you can see into are lit and the rest dimmed.
 - **People.** Click someone for **Talk** (you walk up to them, and they
   react as themselves: someone who knows you notices you and says hello,
   someone hostile may not), **Look** (you stay out of sight and watch what
@@ -1026,8 +1031,8 @@ within reach, the doorways out.
   last tile, or **Leave north ▾** when you stand on it) to walk on into the
   area beyond, where one adjoins and nothing bars the way (water, trees or
   rock at the far edge do), or to set off for the places that lie that way.
-- **Marking a spot.** Right-click anywhere, on Local or on the map's Plan,
-  Region and World, and choose **Mark this spot in your turn**: its
+- **Marking a spot.** Right-click anywhere, on Local or on the Region and
+  World maps, and choose **Mark this spot in your turn**: its
   coordinate goes into the composer at the cursor, as `⌖(412, -88)` (metres
   east and north on the map; the readout beside the buttons shows the
   coordinate under the pointer). Write what happens there: "A dark rift
