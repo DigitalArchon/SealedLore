@@ -194,7 +194,8 @@ def test_a_named_spot_under_at_is_never_taken_for_the_one_mark(tmp_path, story, 
     world = session.world()
     assert world.where["Maela Orr"] == "house"  # the stove, in the house, not the mark
     cairn = next(p for p in world.places.values() if p.name == "The cairn")
-    assert (cairn.x, cairn.y) != marks_in(token)[0].x or cairn.y != marks_in(token)[0].y
+    point = marks_in(token)[0]
+    assert (cairn.x, cairn.y) != (point.x, point.y)
 
 
 def test_a_place_at_a_mark_inside_another_new_place_keeps_its_inside(tmp_path, story, cast):

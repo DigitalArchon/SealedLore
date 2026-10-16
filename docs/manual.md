@@ -1040,9 +1040,12 @@ within reach, the doorways out.
   does (when the turn is sent).
 - **◎ Me** (or Home) centres the view on you, on Local and on the map.
 - **The clock** (Day 1, 08:00, beside the place's name) moves with walking
-  and travel, and with the time the passages tell. In a story with a plot it
-  is the plot's clock, so travel passes the plot's days. The storyteller is
-  never told the day; it is told how far you walked since the last passage.
+  and travel, with the time the passages tell, and with a Direction or
+  Narration that says time goes by ("Three weeks pass"). In a story with a
+  plot it is the plot's clock, so travel passes the plot's days. The
+  storyteller is never told the day; it is told how far you walked since the
+  last passage, and the reads that keep time are told that walk is counted
+  already.
 - **Who can see whom.** Walls and rock stop sight; windows, fences and
   doorways don't, and a few trees deep do. What you can't see from where you
   stand is the fog of war: indoors it is shaded, and anyone out of your sight
@@ -1143,8 +1146,9 @@ timeline. Esc or **Back to the story** returns.
 On your own turns the ⋯ menu also offers **Take back this turn**, which
 returns the text and its settings to the composer and removes the turn and
 everything after it — for when you want to reword what you wrote, or change a
-setting, and send it again. Double-clicking a chapter in **Story so far**
-jumps to it.
+setting, and send it again. In a story played on its map the walking and
+travel the turn carried come back with it, so the turn sent again stands
+where it stood. Double-clicking a chapter in **Story so far** jumps to it.
 
 **Story → Export → Story backup…** writes everything (every branch, summaries,
 questions, reviews, pictures and the API log) to one file; **File → Import…**

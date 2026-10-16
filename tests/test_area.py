@@ -436,7 +436,12 @@ def test_travelling_moves_the_clock_by_the_way_s_length(tmp_path, story, cast):
     session = make_session(tmp_path, story, cast)
     choices = {name: seconds for _pid, name, seconds in session.travel_choices()}
     assert "The farm" not in choices and "The house" not in choices
-    assert 5000 < choices["Hellsville"] < 9000  # 8 km, winding, on foot
+    from sealedlore.engine.area import WALK_M_PER_S
+    from sealedlore.engine.session_area import WINDING
+
+    straight = 8000.0 - 30.0  # from the house's spot to Hellsville's
+    expected = straight * WINDING / WALK_M_PER_S
+    assert abs(choices["Hellsville"] - expected) < expected * 0.05  # winding, on foot
     text = session.travel("town")
     assert text == "I set off for Hellsville."
     state = session.area_state()
