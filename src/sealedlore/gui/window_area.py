@@ -195,7 +195,7 @@ class AreaWindow:
         rows = zlib.crc32("".join(area.rows).encode())
         things = tuple((p.name, p.x, p.y, p.w, p.h) for p in area.placements)
         return (
-            area.place_id,
+            area.id,
             rows,
             things,
             session.tile_set_name(art),
@@ -278,7 +278,12 @@ class AreaWindow:
 
     def _play_area_id(self) -> str | None:
         area = self.area_view.area if hasattr(self, "area_view") else None
-        return area.place_id if area is not None and self.world_view.play_shown() else None
+        # A window of open country has no plan to redraw: nothing to act on.
+        return (
+            area.place_id
+            if area is not None and not area.window and self.world_view.play_shown()
+            else None
+        )
 
     # --- walking ----------------------------------------------------------------
 
@@ -293,9 +298,9 @@ class AreaWindow:
             # the figure snapped back). A menu choice being walked up to is
             # dropped: the click is the author's new mind.
             self._area_pending = None
-            before = self.area_view.area.place_id if self.area_view.area is not None else None
+            before = self.area_view.area.id if self.area_view.area is not None else None
             self.area_view.finish_walk()
-            after = self.area_view.area.place_id if self.area_view.area is not None else None
+            after = self.area_view.area.id if self.area_view.area is not None else None
             if after != before:
                 return  # the walk ended on a door and went through
         steps = session.walk_route(x, y, beside=beside)
@@ -430,7 +435,7 @@ class AreaWindow:
             return
         area = self.area_view.area
         spot = session.spot_of_point(x, y)
-        if area is not None and spot is not None and spot.area == area.place_id:
+        if area is not None and spot is not None and spot.area == area.id:
             self.world_view.go_local()
             free = area.walkable(spot.x, spot.y, area.blocked())
             self._area_walk(spot.x, spot.y, not free)

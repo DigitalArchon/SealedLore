@@ -38,6 +38,8 @@ from sealedlore.engine.area import (
     area_of,
     bare,
     build_area,
+    build_window,
+    clamped_tile,
     exit_side,
     front_of,
     inside_door,
@@ -87,6 +89,7 @@ from sealedlore.engine.tile_sets import (
 )
 from sealedlore.engine.validators import locate_quote
 from sealedlore.engine.world import _NOTHING_SAID, applied, key
+from sealedlore.engine.world_art import is_window, parse_window, patch_at, patch_under
 from sealedlore.engine.world_layout import (
     CHILD_SHARE,
     KIND_SIZE,
@@ -318,12 +321,15 @@ class AreaRuntime:
     def area(
         self, area_id: str | None, world: WorldMap | None = None, art: WorldArt | None = None
     ) -> Area | None:
-        """The area of `area_id`, built from the map at the leaf (kept while
-        nothing it is built from changes)."""
+        """The area of `area_id`, a place's plan or a window of open
+        country (engine/area.py `build_window`), built from the map at the
+        leaf (kept while nothing it is built from changes)."""
         if area_id is None:
             return None
         world = world if world is not None else self.world()
         art = art if art is not None else self.map_art_copy()
+        if is_window(area_id):
+            return self._window(area_id, world, art)
         place = world.places.get(area_id)
         if place is None:
             return None
@@ -367,6 +373,54 @@ class AreaRuntime:
                 density=self.story.defaults.map_density,
                 people=self.area_people(),
             )
+            if len(self._area_cache) > 24:
+                self._area_cache.clear()
+            self._area_cache[cache_key] = found
+        return found
+
+    def _window(self, area_id: str, world: WorldMap, art: WorldArt) -> Area | None:
+        """A window of open country, kept while the land under it, the
+        places in it and the people are the same."""
+        parsed = parse_window(area_id)
+        if parsed is None:
+            return None
+        west, north, side = parsed
+        patch = patch_at(art, west, north, side) or patch_under(
+            art, west + side / 2, north - side / 2
+        )
+        inside = tuple(
+            sorted(
+                (
+                    p.id,
+                    p.x,
+                    p.y,
+                    p.size,
+                    p.kind,
+                    p.state,
+                    p.inside,
+                    art.layout_shown(p.id, p.state) is not None,
+                )
+                for p in world.places.values()
+                if p.x is not None
+                and p.y is not None
+                and abs(p.x - (west + side / 2)) <= side
+                and abs(p.y - (north - side / 2)) <= side
+            )
+        )
+        cache_key = (
+            area_id,
+            patch.id if patch is not None else "",
+            patch.made_at if patch is not None else "",
+            len(patch.rows) if patch is not None else 0,
+            tuple(sorted((p.id, p.ground) for p in art.terrain)),
+            inside,
+            tuple(self.area_people()),
+        )
+        if self._area_cache is None:
+            self._area_cache = {}
+        found = self._area_cache.get(cache_key)
+        if found is None:
+            found = build_window(world, art, area_id, people=self.area_people())
             if len(self._area_cache) > 24:
                 self._area_cache.clear()
             self._area_cache[cache_key] = found
@@ -432,8 +486,10 @@ class AreaRuntime:
         they stand while that is still where the map puts them, else stood
         at their place's spot (a building's door, a room), beside the
         author's character when the map has them in the same place, or near
-        the way in. `walked`: the author's character's own walking stands as
-        walked (the map catches up when the turn is sent)."""
+        the way in; in open country (a window of the land, engine/area.py)
+        at their own point on the map. `walked`: the author's character's
+        own walking stands as walked (the map catches up when the turn is
+        sent); off, the place the map names wins (a read moved them)."""
         held = self.held_name()
         where = dict(world.where)
         if held is not None and held not in where and world.start is not None:
@@ -451,7 +507,13 @@ class AreaRuntime:
         for name in order:
             place_id = where[name]
             spot = state.spots.get(name)
-            target = area_of(world, art, place_id)
+            # Where they stand on the map, for the window of open country
+            # there: their tile's point; with the author's character, theirs.
+            point = self._spot_point(spot, world, art)
+            mine = spots.get(held or "")
+            if point is None and name != held and place_id == where.get(held or ""):
+                point = self._spot_point(mine, world, art)
+            target = area_of(world, art, place_id, point)
             if (
                 name == held
                 and walked
@@ -472,14 +534,22 @@ class AreaRuntime:
             ):
                 spots[name] = spot
                 continue
-            mine = spots.get(held or "")
             near_me = (
                 name != held
                 and mine is not None
                 and mine.area == target
                 and place_id == where.get(held or "")
             )
-            new = self._stand(world, art, target, place_id, name, spots, mine if near_me else None)
+            new = self._stand(
+                world,
+                art,
+                target,
+                place_id,
+                name,
+                spots,
+                mine if near_me else None,
+                point=point if area.window else None,
+            )
             if new is not None:
                 spots[name] = new
         # Nobody stands in fire or a wall a redrawn plan put under them
@@ -520,7 +590,13 @@ class AreaRuntime:
         name: str,
         spots: dict[str, Spot],
         beside: Spot | None,
+        *,
+        point: tuple[float, float] | None = None,
     ) -> Spot | None:
+        """A tile for `name` in the area: beside `beside`, else at their
+        place's spot in it (a door's front, a label), else, on a window of
+        open country, at `point` (where they stand on the map), else near
+        the way in."""
         area = self.area(area_id, world, art)
         if area is None:
             return None
@@ -530,10 +606,22 @@ class AreaRuntime:
             x, y = stand_near(area, near, taken | {near}, seed=name, reach=BESIDE)
             return Spot(area=area_id, x=x, y=y)
         near = anchor_of(area, world, place_id)
+        if near is None and area.window:
+            at = point if point is not None else position(world, place_id)
+            near = clamped_tile(world, area, *at) if at is not None else None
         if near is None:
             near = self._way_in(area)
-        x, y = stand_near(area, near, taken, seed=name, reach=2)
+        x, y = stand_near(area, near, taken, seed=name, reach=0 if area.window else 2)
         return Spot(area=area_id, x=x, y=y)
+
+    def _spot_point(
+        self, spot: Spot | None, world: WorldMap, art: WorldArt
+    ) -> tuple[float, float] | None:
+        """Where a spot is on the map, in metres; None for none."""
+        if spot is None:
+            return None
+        area = self.area(spot.area, world, art)
+        return tile_point(world, area, spot.x, spot.y) if area is not None else None
 
     @staticmethod
     def _way_in(area: Area) -> tuple[int, int]:
@@ -575,10 +663,18 @@ class AreaRuntime:
 
     def place_of_spot(self, spot: Spot | None, world: WorldMap) -> str | None:
         """The place a spot is in, for the map's `where`: the area's place
-        (a building's inside is that building)."""
+        (a building's inside is that building); on a window of open country
+        the place holding the window (a region), or None in no place (the
+        map's `where` has no word for nowhere: it keeps the last place)."""
         if spot is None:
             return None
-        return spot.area if spot.area in world.places else None
+        if spot.area in world.places:
+            return spot.area
+        if is_window(spot.area):
+            area = self.area(spot.area, world)
+            if area is not None and area.place_id in world.places:
+                return area.place_id
+        return None
 
     # --- moving ----------------------------------------------------------------
 
@@ -662,9 +758,7 @@ class AreaRuntime:
         there = self.area(door[0], world, art)
         if here is None or there is None:
             return None
-        taken = {
-            (s.x, s.y) for n, s in state.spots.items() if n != held and s.area == there.place_id
-        }
+        taken = {(s.x, s.y) for n, s in state.spots.items() if n != held and s.area == there.id}
         if not here.indoor:
             entrance = here.entrance_at(me.x, me.y)
             spot = inside_door(there, entrance.side if entrance else None) or self._way_in(there)
@@ -683,7 +777,7 @@ class AreaRuntime:
                 )
                 spot = point or self._way_in(there)
         x, y = stand_near(there, spot, taken)
-        state.spots[held] = Spot(area=there.place_id, x=x, y=y)
+        state.spots[held] = Spot(area=there.id, x=x, y=y)
         self._add_time(state, DOOR_SECONDS, here.name, there.name)
         self._set_live(state)
         return state
@@ -876,15 +970,13 @@ class AreaRuntime:
         state.marks = []
         world, art = self._world_on(path), self.map_art_copy()
         held = self.held_name()
-        me = state.spots.get(held or "")
-        moved = (
-            held is not None
-            and me is not None
-            and area_of(world, art, world.where.get(held)) not in (None, me.area)
-        )
-        if moved:
-            state.spots.pop(held, None)  # the passage took them elsewhere
-        state = self.settle(state, world, art, walked=False)
+        # The read placed the author's character (with a quote): the place
+        # it names wins over where they stand, and they are stood at its
+        # spot; otherwise they stay where they walked to (a window of open
+        # country has no word in the map's `where`, so a stale place there
+        # must not pull them back).
+        moved = held is not None and held in (node.meta.world.where if node.meta.world else {})
+        state = self.settle(state, world, art, walked=not moved)
         me = state.spots.get(held or "")
         at = reply.get("at") if isinstance(reply.get("at"), dict) else {}
         by_point = {(m.x, m.y): m for m in marks}
@@ -920,15 +1012,13 @@ class AreaRuntime:
                 if person is None or tile is None or person not in placed:
                     continue
                 current = state.spots.get(person)
-                if current is not None and current.area != area.place_id:
+                if current is not None and current.area != area.id:
                     continue
                 taken = {
-                    (s.x, s.y)
-                    for n, s in state.spots.items()
-                    if n != person and s.area == area.place_id
+                    (s.x, s.y) for n, s in state.spots.items() if n != person and s.area == area.id
                 }
                 x, y = stand_near(area, tile, taken | {tile})
-                state.spots[person] = Spot(area=area.place_id, x=x, y=y)
+                state.spots[person] = Spot(area=area.id, x=x, y=y)
         if self.story.plot is None:
             minutes = reply.get("minutes")
             quote = str(reply.get("minutes_quote") or "")
@@ -1072,8 +1162,10 @@ class AreaRuntime:
         return None
 
     def _beyond(self, side: str) -> tuple[Spot, float] | None:
-        """The first tile of another area straight on past this edge, within
-        EDGE_REACH metres, and how far it is."""
+        """The first tile of another area straight on past this edge, and
+        how far it is: a place's plan within EDGE_REACH metres (across a
+        gap of open country, as before windows), else the window of open
+        country just past the edge (the author: the world is limitless)."""
         world, art = self.world(), self.map_art_copy()
         state = self.area_state()
         me = state.spots.get(self.held_name() or "")
@@ -1084,18 +1176,23 @@ class AreaRuntime:
         dx, dy = EDGE_STEPS[side]
         step = max(metres_per_tile(world, area), 1.0)
         reach = step
+        window: tuple[Spot, float] | None = None
         while reach <= EDGE_REACH:
             x, y = start[0] + dx * reach, start[1] + dy * reach
             spot = self._mark_spot(Mark(token="", x=x, y=y), world, art)
-            if spot is not None and spot.area != area.place_id:
+            if spot is not None and spot.area != area.id:
                 there = self.area(spot.area, world, art)
                 if there is not None and not there.indoor:
                     landing = self._landing(there, spot, side)
-                    if landing is None:
+                    if there.window:
+                        if window is None and landing is not None:
+                            window = Spot(area=spot.area, x=landing[0], y=landing[1]), reach
+                    elif landing is None:
                         return None  # water, trees or rock bar the way there
-                    return Spot(area=spot.area, x=landing[0], y=landing[1]), reach
+                    else:
+                        return Spot(area=spot.area, x=landing[0], y=landing[1]), reach
             reach += step
-        return None
+        return window
 
     @staticmethod
     def _landing(area: Area, spot: Spot, side: str) -> tuple[int, int] | None:
@@ -1121,25 +1218,29 @@ class AreaRuntime:
         lie that way, nearest first."""
         out: list[tuple[str, str, int]] = []
         beyond = self._beyond(side)
+        world = self.world()
+        art = self.map_art_copy()
         if beyond is not None:
             spot, metres = beyond
-            name = self.world().places[spot.area].name
+            there = self.area(spot.area, world, art)
+            name = there.name if there is not None else "open country"
+            if there is not None and there.within:
+                name = f"{name} ({there.within})"
             out.append(("area", name, int(metres / WALK_M_PER_S)))
-        world = self.world()
         me = self.held_point()
         if me is None:
             return out
         want = {"north": 0, "east": 90, "south": 180, "west": 270}[side]
-        art = self.map_art_copy()
         adjoining = beyond[0].area if beyond is not None else None
         for place_id, name, seconds in self.travel_choices():
             spot = position(world, place_id)
             if spot is None:
                 continue
             if adjoining is not None and (
-                place_id == adjoining or area_of(world, art, place_id) == adjoining
+                place_id == adjoining
+                or (not is_window(adjoining) and area_of(world, art, place_id) == adjoining)
             ):
-                continue  # offered once, as the walk on
+                continue  # offered once, as the walk on (a plan's; a window is wide)
             angle = (math.degrees(math.atan2(spot[0] - me[0], spot[1] - me[1])) + 360) % 360
             if min(abs(angle - want), 360 - abs(angle - want)) <= EDGE_ARC:
                 out.append((place_id, name, seconds))
@@ -1217,19 +1318,23 @@ class AreaRuntime:
             place_id = place_at(world, art, mark.x, mark.y)
             spot = None
             parts: list[str] = []
-            area_id = area_of(world, art, place_id) if place_id else None
+            area_id = area_of(world, art, place_id, (mark.x, mark.y))
             area = self.area(area_id, world, art) if area_id else None
             tile = point_tile(world, area, mark.x, mark.y) if area is not None else None
             if area is not None and tile is not None:
-                spot = Spot(area=area.place_id, x=tile[0], y=tile[1])
+                spot = Spot(area=area.id, x=tile[0], y=tile[1])
             if place_id:
                 parts.append(chain_words(world, place_id))
             else:
                 near = nearest_place(world, mark.x, mark.y)
+                words = "open country"
                 if near is not None:
                     other = world.places[near[0]]
                     way = compass(mark.x - other.x, mark.y - other.y)  # type: ignore[operator]
-                    parts.append(f"open country, {describe_metres(near[1])} {way} of {other.name}")
+                    words += f", {describe_metres(near[1])} {way} of {other.name}"
+                if area is not None and area.within:  # the region it lies in
+                    words += f", in {area.within}"
+                parts.append(words)
             if area is not None and tile is not None:
                 where = where_words(area, *tile)
                 if where:
@@ -1368,11 +1473,12 @@ class AreaRuntime:
                 delta.where[person] = place_id
 
     def _mark_spot(self, mark: Mark, world: WorldMap, art: WorldArt) -> Spot | None:
-        """The tile a mark lies on, on the map as it is now."""
+        """The tile a mark lies on, on the map as it is now: in the place
+        there, or on the window of open country there."""
         place_id = place_at(world, art, mark.x, mark.y)
-        area = self.area(area_of(world, art, place_id), world, art) if place_id else None
+        area = self.area(area_of(world, art, place_id, (mark.x, mark.y)), world, art)
         tile = point_tile(world, area, mark.x, mark.y) if area is not None else None
-        return Spot(area=area.place_id, x=tile[0], y=tile[1]) if tile else None
+        return Spot(area=area.id, x=tile[0], y=tile[1]) if tile else None
 
     def spot_of_point(self, x: float, y: float) -> Spot | None:
         """The tile a point on the map lies on: in the innermost place there
@@ -1386,13 +1492,13 @@ class AreaRuntime:
         world, art = self.world(), self.map_art_copy()
         place_id = place_at(world, art, x, y)
         held = self.held_name()
-        if place_id is None or held is None:
+        if held is None:
             return ""
         state = self.area_state()
         me = state.spots.get(held)
         here = self.area(me.area, world, art) if me is not None else None
         spot = self._mark_spot(Mark(token="", x=x, y=y), world, art)
-        if here is not None and spot is not None and spot.area == here.place_id:
+        if here is not None and spot is not None and spot.area == here.id:
             return ""  # in this area: walking is the way
         start = self.held_point(state, world, art)
         metres = math.hypot(x - start[0], y - start[1]) * WINDING if start else 0.0
@@ -1405,14 +1511,16 @@ class AreaRuntime:
             }
             sx, sy = stand_near(area, (spot.x, spot.y), taken)
             landing = Spot(area=spot.area, x=sx, y=sy)
-        place = world.places[place_id]
+        place = world.places.get(place_id or "")
+        # Open country: named by what holds it (a region), else as such.
+        name = place.name if place is not None else (area.within if area else "") or "open country"
         token = mark_token(x, y)
-        text = self.texts.fill("map.turn.go", name=place.name, mark=token)
+        text = self.texts.fill("map.turn.go", name=name, mark=token)
         # Applied when the turn is sent (`stamp_turn`), as Travel… is.
         state.action = MapAction(
             verb="travel",
-            target=place.name,
-            target_id=place_id,
+            target=name,
+            target_id=place_id or "",
             text=text,
             spot=landing,
             seconds=seconds,

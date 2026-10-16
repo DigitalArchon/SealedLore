@@ -111,6 +111,16 @@ MIN_PLAN_TILE = 0.5
 # is at most this wide: the farm for its farmhouse, the town for its diner,
 # the caves and not the hills they are in. Wider places are country.
 LOCAL_MAX_SIZE = 2_500.0
+# A place wider than a local area still gets a plan when it is the innermost
+# place someone stands in (a 4 km city with nothing finer round the
+# character), up to this wide: on the 80-column grid a plan's tile is the
+# width over 80, so 4 km is 50 m a tile and 8 km 100 m, which the grid can
+# still carry (coarse, but there). Open country wider than this, a region, a
+# desert, a sea, or no place at all, is played on windows of the land
+# instead (`window_rect`; engine/area.py `build_window`): the author, Oct 16
+# 2026, "the world should be limitless, short of the limits of the player's
+# hardware and funds for API calls".
+PLAN_MAX_SIZE = 8_000.0
 # A building fixed in its parent's plan is at least this many tiles across.
 MIN_BUILDING_TILES = 4
 TERRAIN_TILES = 40
@@ -118,6 +128,18 @@ TERRAIN_TILES = 40
 TERRAIN_MIN_SIDE, TERRAIN_MAX_SIDE = 400.0, 40_000.0
 # Land along a way between two known places is drawn in patches this wide.
 WAY_PATCH_SIDE = 1_600.0
+# Open country is played on windows of the land (engine/area.py
+# `build_window`): the land patch under the character where one is drawn
+# and no wider than WINDOW_SIDE, else a cell of a fixed grid this wide
+# (40 m a tile at 40 columns), or a finer cell where the grid cell's middle
+# is already under land (a place's own patch lies anywhere, never on the
+# grid): 800 m (20 m a tile), then 400 m (10 m a tile). A cell is drawn as a
+# land patch when the character stands on it, and the cells its edges lead
+# to next, WINDOW_PATCHES at most a read, so a walk across a desert costs a
+# patch or two at a time.
+WINDOW_SIDE = WAY_PATCH_SIDE
+WINDOW_LEVELS = (1, 2, 4)
+WINDOW_PATCHES = 3
 # A way longer than this many patches gets none: it isn't country the player
 # has walked, and a link read in light-years ("Bajor, five light-years away")
 # planned 3e13 patches and hung the thread that asked (the review, Oct 15
@@ -563,16 +585,175 @@ def fixed_in_plan(world: WorldMap, place: WorldPlace) -> list[dict[str, Any]]:
 OPEN_GROUND = frozenset({"snow", "grass", "dirt", "sand"})
 
 
+def patch_under(art: WorldArt, x: float, y: float) -> TerrainPatch | None:
+    """The finest land drawn under a point, or None."""
+    for patch in sorted(art.terrain, key=lambda p: p.side):
+        half = patch.side / 2
+        if abs(x - patch.x) <= half and abs(y - patch.y) <= half:
+            return patch
+    return None
+
+
 def land_under(world: WorldMap, art: WorldArt, place: WorldPlace) -> str:
     """The ground of the finest land drawn under a place, or ""."""
     spot = position(world, place.id)
     if spot is None:
         return ""
-    for patch in sorted(art.terrain, key=lambda p: p.side):
-        half = patch.side / 2
-        if abs(spot[0] - patch.x) <= half and abs(spot[1] - patch.y) <= half:
-            return patch.ground
-    return ""
+    patch = patch_under(art, *spot)
+    return patch.ground if patch is not None else ""
+
+
+# --- Whose plan someone stands on, and the windows of open country ------------
+
+
+def has_inside(art: WorldArt, place: WorldPlace) -> bool:
+    """A building (or room) with a plan of its own: its inside is an area."""
+    return (
+        place.kind in ("building", "room", "vehicle")
+        and art.layout_shown(place.id, place.state) is not None
+    )
+
+
+def is_deck(world: WorldMap, art: WorldArt, place_id: str | None) -> bool:
+    """A station or ship: a plan whose ground is space. Its rooms are drawn
+    on the deck and joined by it, so they are the deck's, not areas of their
+    own."""
+    place = world.places.get(place_id or "")
+    if place is None:
+        return False
+    layout = art.layout_shown(place.id, place.state)
+    if layout is None:
+        return False
+    # Its own ground, or the land it stands on: the enclosed prompt asks for
+    # the hull as "floor" with space outside, so the deck's own word is
+    # seldom "space" (the second review).
+    ground = str((layout.spec or {}).get("ground") or "")
+    return ground == "space" or land_under(world, art, place) == "space"
+
+
+def _chain(world: WorldMap, place_id: str | None) -> list[WorldPlace]:
+    out: list[WorldPlace] = []
+    seen: set[str] = set()
+    current = world.places.get(place_id or "")
+    while current is not None and current.id not in seen:
+        seen.add(current.id)
+        out.append(current)
+        current = world.places.get(current.inside or "")
+    return out
+
+
+def plan_place(world: WorldMap, art: WorldArt, place_id: str | None) -> WorldPlace | None:
+    """The place whose plan someone at `place_id` stands on: the innermost
+    building round them with an inside of its own, else the local area's
+    plan (the farm for its yard, the town for its street), else a wider
+    place up the chain that has one (a city too wide for a local area, drawn
+    at PLAN_MAX_SIZE's grain). A room of a deck is the deck. None where no
+    plan is drawn: open country, played on a window of the land."""
+    chain = _chain(world, place_id)
+    decks = [p for p in chain if is_deck(world, art, p.id)]
+    if decks:
+        return decks[-1]
+    for place in chain:
+        if has_inside(art, place):
+            return place
+    local = local_area(world, place_id)
+    if local is not None and art.layout_shown(local.id, local.state) is not None:
+        return local
+    for place in chain:
+        if (
+            place.kind in LAYOUT_KINDS
+            and size_of(place) <= PLAN_MAX_SIZE
+            and art.layout_shown(place.id, place.state) is not None
+        ):
+            return place
+    return None
+
+
+def in_open_country(world: WorldMap, art: WorldArt, place_id: str | None) -> bool:
+    """Whether someone at `place_id` is in country no plan will cover: on no
+    plan now, and the local area there is none, a region or a route, or too
+    wide for a plan. Someone at a place whose plan is still to be drawn is
+    not: its plan is on the way."""
+    if plan_place(world, art, place_id) is not None:
+        return False
+    local = local_area(world, place_id)
+    return (
+        local is None
+        or local.kind in ("region", "route")
+        or local.kind not in LAYOUT_KINDS
+        or size_of(local) > PLAN_MAX_SIZE
+    )
+
+
+def _window_covered(patches: Sequence[TerrainPatch], x: float, y: float, side: float) -> bool:
+    return any(_covers(p, x, y, side) for p in patches)
+
+
+def window_cell(patches: Sequence[TerrainPatch], x: float, y: float) -> tuple[float, float, float]:
+    """(west, north, side) of the grid cell to play on at a point under no
+    land of its own: the WINDOW_SIDE cell holding the point, or, where that
+    cell's middle is already under land at least half as wide (so a patch
+    for it would be dropped, `adopt`), the finer cell holding it, down to
+    the finest level; the coarsest cell when every level's middle is covered
+    (a strip beside a patch: plain ground, walked across)."""
+    for level in WINDOW_LEVELS:
+        side = WINDOW_SIDE / level
+        west, south = math.floor(x / side) * side, math.floor(y / side) * side
+        if not _window_covered(patches, west + side / 2, south + side / 2, side):
+            return west, south + side, side
+    side = WINDOW_SIDE
+    return math.floor(x / side) * side, math.floor(y / side) * side + side, side
+
+
+def window_rect(art: WorldArt, x: float, y: float) -> tuple[float, float, float]:
+    """(west, north, side) of the window of open country at a point: the
+    land patch under it when one is drawn no wider than WINDOW_SIDE (its own
+    rows at its own tile), else the grid cell there (`window_cell`), whose
+    rows are the coarser land's under it resampled, or plain ground until
+    its patch is drawn."""
+    patch = patch_under(art, x, y)
+    if patch is not None and patch.side <= WINDOW_SIDE + 1.0:
+        return patch.x - patch.side / 2, patch.y + patch.side / 2, patch.side
+    return window_cell(art.terrain, x, y)
+
+
+WINDOW_PREFIX = "window:"
+
+
+def window_id(west: float, north: float, side: float) -> str:
+    """An area id for a window of open country: its rectangle on the map,
+    so it needs no state and stands whether or not its land is drawn yet
+    (`Spot.area`, engine/area.py)."""
+    return f"{WINDOW_PREFIX}{west:.0f}:{north:.0f}:{side:.0f}"
+
+
+def is_window(area_id: str | None) -> bool:
+    return bool(area_id) and str(area_id).startswith(WINDOW_PREFIX)
+
+
+def parse_window(area_id: str | None) -> tuple[float, float, float] | None:
+    """(west, north, side) a window id names, or None for any other id."""
+    if not is_window(area_id):
+        return None
+    try:
+        west, north, side = (float(v) for v in str(area_id)[len(WINDOW_PREFIX) :].split(":"))
+    except ValueError:
+        return None
+    if not (math.isfinite(west) and math.isfinite(north) and math.isfinite(side)) or side <= 0:
+        return None
+    return west, north, side
+
+
+def patch_at(art: WorldArt, west: float, north: float, side: float) -> TerrainPatch | None:
+    """The land patch drawn exactly at this rectangle (within a metre), or None."""
+    for patch in art.terrain:
+        if (
+            abs(patch.side - side) < 1.0
+            and abs(patch.x - patch.side / 2 - west) < 1.0
+            and abs(patch.y + patch.side / 2 - north) < 1.0
+        ):
+            return patch
+    return None
 
 
 # Gaps of up to this many blank tiles between a deck's rooms, along a row or
@@ -836,7 +1017,7 @@ def terrain_patch(place: WorldPlace) -> tuple[float, float, float] | None:
 
 def terrain_messages(
     world: WorldMap,
-    place: WorldPlace,
+    place: WorldPlace | None,
     patch: tuple[float, float, float],
     setting: str,
     texts: PromptTexts,
@@ -846,11 +1027,14 @@ def terrain_messages(
     nearby_ground: str = "",
 ) -> list[PromptMessage]:
     """The land in `patch`: around `place` (what the story said of it), or,
-    with `what`, the country along a way (`ways`: its words). `nearby_ground`
-    is what the land already drawn nearest to it is on, so the country
-    stays one country (live, the farm's land was snow, the town's dirt and
-    the road's grass: the setting line said nothing of winter)."""
+    with `what`, the country along a way or a window of open country
+    (`ways`: its words; `place` may then be None). `nearby_ground` is what
+    the land already drawn nearest to it is on, so the country stays one
+    country (live, the farm's land was snow, the town's dirt and the road's
+    grass: the setting line said nothing of winter)."""
     x0, y0, side = patch
+    if place is None:
+        what, ways = what or "open country", ways or []
     if nearby_ground:
         setting = f"{setting}. " + texts.fill("map.terrain.nearby", ground=nearby_ground)
     tiles = TERRAIN_TILES
@@ -865,14 +1049,14 @@ def terrain_messages(
         if 0 <= col < tiles and 0 <= row < tiles:
             found.append(f"- {_what(other)}: at x {col}, y {row}")
     if ways is None:
-        ways = _ways(world, place)
+        ways = _ways(world, place) if place is not None else []
     return [
         _message("system", _grid_fill(texts, "map.terrain", tiles, tiles, _tile_words(tile))),
         _message(
             "user",
             texts.fill(
                 "map.terrain.ask",
-                place=what or _what(place),
+                place=what or _what(place),  # type: ignore[arg-type]
                 places="\n".join(found) or "(none but this one)",
                 ways=("Ways out: " + "; ".join(ways)) if ways else "",
                 setting=setting,
@@ -918,12 +1102,16 @@ def plan_art(
     texts: PromptTexts = DEFAULT_TEXTS,
     limit: int = 12,
     sprites: bool = True,
+    point: tuple[float, float] | None = None,
 ) -> list[ArtJob]:
     """What the map still needs drawn, nearest the story first: the land
     around and the layout of every place the story has been, then sprites of
     places and things, a changed thing redrawn from its last sprite. Nothing
     already drawn, and nothing that has failed too often, is asked again.
-    `sprites` off: an image model draws them instead (engine/world_pictures.py)."""
+    `sprites` off: an image model draws them instead (engine/world_pictures.py).
+    `point`: where the author's character stands, in metres (their tile on
+    the map; else `here`'s spot): in open country the window of land under
+    it is drawn, and the windows its edges lead to."""
     jobs: list[ArtJob] = []
     visited = {pid for places in world.visited.values() for pid in places}
     if world.start is not None:
@@ -1045,15 +1233,25 @@ def plan_art(
                     order=0,
                 )
             )
+    # Open country (a region, a desert, between places; the author: the
+    # world is limitless): the window of land the character stands on, and
+    # the windows its edges lead to, nearest first, a few at a time. Only
+    # where no plan will cover them: at a place whose plan is still to be
+    # drawn they stand on the land already there until it is.
+    spot = point if point is not None else (position(world, here) if here else None)
+    if spot is not None and in_open_country(world, art, here):
+        jobs += _window_jobs(world, art, spot, here, setting, texts, planned, failed, ground_near)
     # Plans: the local area of every place the character is or has been
-    # (the farm, not only its farmhouse), and the inside of each building.
+    # (the farm, not only its farmhouse), and the inside of each building;
+    # a place wider than a local area, with nothing finer round the
+    # character, up to PLAN_MAX_SIZE (coarse, but there).
     wanted: dict[str, WorldPlace] = {}
     for pid in visited:
         place = world.places.get(pid)
         if place is None:
             continue
         area = local_area(world, pid)
-        if area is not None and area.kind in LAYOUT_KINDS and size_of(area) <= LOCAL_MAX_SIZE:
+        if area is not None and area.kind in LAYOUT_KINDS and size_of(area) <= PLAN_MAX_SIZE:
             wanted[area.id] = area
         if place.kind in ("building", "vehicle"):
             wanted[pid] = place  # a ship's plan is its decks, drawn once aboard
@@ -1164,6 +1362,124 @@ def plan_art(
     return jobs[:limit]
 
 
+def holding_place(
+    world: WorldMap, west: float, north: float, side: float, *, min_size: float = 0.0
+) -> WorldPlace | None:
+    """The smallest place at least `min_size` wide whose square holds the
+    whole rectangle (a region, a desert, a city too wide for a plan), or
+    None in no place at all."""
+    best: tuple[float, WorldPlace] | None = None
+    for place in world.places.values():
+        if place.x is None or place.y is None or moves(world.places, place):
+            continue
+        if size_of(place) < min_size:
+            continue
+        half = size_of(place) / 2
+        if (
+            place.x - half <= west
+            and west + side <= place.x + half
+            and place.y - half <= north - side
+            and north <= place.y + half
+        ):
+            if best is None or size_of(place) < best[0]:
+                best = (size_of(place), place)
+    return best[1] if best is not None else None
+
+
+def _compass(dx: float, dy: float) -> str:
+    names = ("north", "north-east", "east", "south-east", "south", "south-west", "west")
+    names = (*names, "north-west")
+    angle = (math.degrees(math.atan2(dx, dy)) + 360) % 360
+    return names[round(angle / 45) % 8]
+
+
+def open_country_words(world: WorldMap, x: float, y: float) -> str:
+    """'3.2 km north-east of Hellsville, in the Great Erg': where a point
+    in open country is, by the nearest known place and what holds it."""
+    parts: list[str] = []
+    nearest: tuple[float, WorldPlace] | None = None
+    for place in world.places.values():
+        if place.x is None or place.y is None or place.kind == "region":
+            continue
+        if place.id not in world.seen or moves(world.places, place):
+            continue
+        d = math.hypot(place.x - x, place.y - y)
+        if nearest is None or d < nearest[0]:
+            nearest = (d, place)
+    if nearest is not None:
+        d, place = nearest
+        far = f"{d / 1000:.1f} km" if d >= 950 else f"{round(d, -1):.0f} m"
+        parts.append(f"{far} {_compass(x - place.x, y - place.y)} of {place.name}")  # type: ignore[operator]
+    holder = holding_place(world, x, y, 0.0, min_size=LOCAL_MAX_SIZE)
+    if holder is not None:
+        parts.append(f"in {holder.name}")
+    return ", ".join(parts)
+
+
+def _window_jobs(
+    world: WorldMap,
+    art: WorldArt,
+    spot: tuple[float, float],
+    here: str | None,
+    setting: str,
+    texts: PromptTexts,
+    planned: list[TerrainPatch],
+    failed,
+    ground_near,
+) -> list[ArtJob]:
+    """Land for the window under `spot` and the cells its edges lead to,
+    those nearest the character first, WINDOW_PATCHES at most, where no
+    land is drawn or planned. A cell is asked for at the grid's own
+    rectangle, so the window the character stands on fills in under them
+    when its patch comes back (`window_rect`)."""
+    jobs: list[ArtJob] = []
+    west, north, side = window_rect(art, *spot)
+    cx, cy = west + side / 2, north - side / 2
+    wanted: list[tuple[float, tuple[float, float, float]]] = [
+        (0.0, window_cell(art.terrain, *spot))
+    ]
+    for dx, dy in ((0.0, 1.0), (1.0, 0.0), (0.0, -1.0), (-1.0, 0.0)):
+        # Just past the middle of each edge, into the cell there.
+        px, py = cx + dx * (side / 2 + 1.0), cy + dy * (side / 2 + 1.0)
+        wanted.append((math.hypot(px - spot[0], py - spot[1]), window_cell(art.terrain, px, py)))
+    seen: set[tuple[float, float, float]] = set()
+    for _distance, (w, n, s) in sorted(wanted, key=lambda item: item[0]):
+        if (w, n, s) in seen or len(jobs) >= WINDOW_PATCHES:
+            continue
+        seen.add((w, n, s))
+        x, y = w + s / 2, n - s / 2
+        key = f"terrain:window:{w:.0f}:{n:.0f}:{s:.0f}"
+        if _window_covered([*art.terrain, *planned], x, y, s) or failed(key):
+            continue
+        holder = holding_place(world, w, n, s)
+        patch = (x, y, s)
+        planned.append(
+            TerrainPatch(place_id=holder.id if holder else "", x=x, y=y, side=s, rows=[])
+        )
+        jobs.append(
+            ArtJob(
+                key,
+                "terrain",
+                terrain_messages(
+                    world,
+                    holder,
+                    patch,
+                    setting,
+                    texts,
+                    what=texts.fill("map.terrain.open", where=open_country_words(world, x, y)),
+                    ways=[],
+                    nearby_ground=ground_near(x, y),
+                ),
+                here or "",  # sorted as where the character is: first
+                name="open country",
+                patch=patch,
+                order=0,
+                extra={"place_id": holder.id if holder else ""},
+            )
+        )
+    return jobs
+
+
 def finish(
     job: ArtJob, text: str, *, model: str, made_at: str
 ) -> WorldSprite | PlaceLayout | TerrainPatch:
@@ -1210,7 +1526,7 @@ def finish(
     rows, _objects, _labels = rasterise(spec, TERRAIN_TILES, TERRAIN_TILES)
     x, y, side = job.patch  # type: ignore[misc]
     return TerrainPatch(
-        place_id=job.subject_id,
+        place_id=str(job.extra.get("place_id", job.subject_id)),
         x=x,
         y=y,
         side=side,

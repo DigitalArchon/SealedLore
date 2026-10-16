@@ -142,7 +142,9 @@ def test_someone_at_a_place_stands_in_the_area_round_them():
     world, art = world_and_art()
     assert area_of(world, art, "house") == "house"  # it has an inside of its own
     assert area_of(world, art, "farm") == "farm"
-    assert area_of(world, art, "town") is None  # no plan drawn yet
+    # No plan drawn yet: a window of the open country there (the author:
+    # the world is limitless), named by its rectangle on the map.
+    assert area_of(world, art, "town") == "window:0:9600:1600"
 
 
 def test_furniture_keeps_doorways_and_walkways_clear_and_cuts_nothing_off():
@@ -455,7 +457,8 @@ def test_travelling_moves_the_clock_by_the_way_s_length(tmp_path, story, cast):
     list(session.send(turn(text)))
     stamped = session.path()[-2].meta.area
     assert stamped.walked == choices["Hellsville"] and "to Hellsville" in stamped.walked_words
-    assert "Serrik Vaun" not in stamped.spots  # Hellsville has no plan yet
+    # Hellsville has no plan yet: they stand on the open country at its door.
+    assert stamped.spots["Serrik Vaun"].area.startswith("window:")
     assert session.world().where["Serrik Vaun"] == "town"
 
 
@@ -549,9 +552,12 @@ def test_at_an_area_s_edge_the_places_that_way_are_offered(tmp_path, story, cast
     _stand(session, "farm", 30, 0)
     assert session.edge_here() == "north"
     choices = session.edge_choices("north")
-    assert [c[1] for c in choices] == ["Hellsville"]  # 8 km north
-    assert session.edge_choices("south") == []
-    assert session.cross_edge("north") is None  # nothing adjoins
+    # The open country past the edge (a window of the land, drawn as the
+    # story goes there: tests/test_open_country.py), then the places that way.
+    assert [c[1] for c in choices] == ["open country", "Hellsville"]  # 8 km north
+    assert session.edge_choices("south") == []  # the far side: still the farm
+    state = session.cross_edge("north")  # open country adjoins everywhere
+    assert state.spots["Serrik Vaun"].area.startswith("window:")
 
 
 def test_an_area_that_adjoins_is_walked_on_into(tmp_path, story, cast):
@@ -807,21 +813,22 @@ def test_a_travel_told_to_the_storyteller_lands_the_character_though_nothing_is_
 ):
     """Travel… to a place with no plan: the map section used to say the
     character was still at the place they left, and the positions block
-    (no area to stand in) dropped the journey and the choice."""
+    (no area to stand in) dropped the journey and the choice. Now they stand
+    on the open country at the place's door until its plan is drawn."""
     session = make_session(tmp_path, story, cast, ["He walked.", "{}"])
     session.config.scene_reads = "manual"
     text = session.travel("town")
     list(session.send(turn(text)))
     sent = session.provider.requests[0].messages[-1].text
     assert "Serrik Vaun is at: Hellsville" in sent
-    assert "- Serrik Vaun: at Hellsville (just arrived; nothing of it is drawn yet)." in sent
+    assert "- Serrik Vaun: in open country, outside Hellsville." in sent
     assert "Since the last passage:" in sent and "to Hellsville" in sent
     assert "The author chose" in sent  # the travel's own line
     # Without a plot, the map read is asked for the passage's minutes and
     # told the walk is counted; its answer is capped at a week, not dropped.
     read = session.provider.requests[-1].messages[-1].text
     assert '"minutes": <a number>' in read and "already counted" in read
-    assert "SPOTS NEAR" not in read  # nowhere to stand: no spots, still the minutes
+    assert "SPOTS NEAR" not in read  # nothing to stand by in open country: no spots
 
 
 def test_without_a_plot_a_director_skip_moves_the_map_s_clock_and_a_long_read_is_capped(

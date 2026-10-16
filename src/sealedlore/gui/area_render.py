@@ -410,7 +410,7 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
     # 1. the ground: stars where a deck's void is, else dark; then the floor,
     # and water where the plan has it (a flooded cellar, a pool)
     if deck:
-        base = _stars(W, HX, _seed(area.place_id))
+        base = _stars(W, HX, _seed(area.id))
     else:
         base = QImage(W, HX, QImage.Format_RGB32)
         base.fill(QColor(20, 18, 16))
@@ -451,7 +451,7 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
     # to show its floor as new)
     rubble = source.image("out-rubble")
     flames: list[tuple[QImage, int, int]] = []
-    hot = np.random.default_rng(_seed(area.place_id) + 3)
+    hot = np.random.default_rng(_seed(area.id) + 3)
     for y in range(h):
         for x in range(w):
             c = at(x, y)
@@ -486,7 +486,7 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
     for room in area.rooms if dress else []:
         x0, y0, x1, y1 = room.box
         rw, rh = x1 - x0 + 1, y1 - y0 + 1
-        rr0 = np.random.default_rng(500 + room.index + _seed(area.place_id) % 1000)
+        rr0 = np.random.default_rng(500 + room.index + _seed(area.id) % 1000)
         if rw >= 6 and rh >= 4 and room.cells >= 30 and rr0.random() < 0.55:
             rug = _scaled(source.image("rug"), int(min(rh * rr0.uniform(0.35, 0.5), rw * 0.3) * px))
             if rug is not None:
@@ -505,7 +505,7 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
                         rug,
                     )
                     p.setOpacity(1.0)
-        rr = np.random.default_rng(1000 + room.index + _seed(area.place_id) % 1000)
+        rr = np.random.default_rng(1000 + room.index + _seed(area.id) % 1000)
         spots = [
             (x, y)
             for y in range(y0, y1 + 1)
@@ -790,7 +790,7 @@ def _render_outdoor(area: Area, source: TileSource) -> QImage:
     p.setRenderHint(QPainter.SmoothPixmapTransform, True)
     p.setRenderHint(QPainter.Antialiasing, True)
     lights: list[tuple[float, float, float]] = []
-    rng = np.random.default_rng(_seed(area.place_id))
+    rng = np.random.default_rng(_seed(area.id))
     # 3. everything that stands, back to front by its foot
     stand: list[tuple[float, str, object]] = []
     placed = {(f.x, f.y): f for f in area.placements}

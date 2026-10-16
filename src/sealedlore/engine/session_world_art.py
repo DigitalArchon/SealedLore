@@ -200,6 +200,9 @@ class WorldArtRuntime:
             texts=self.texts,
             limit=limit,
             sprites=not self.map_pictures_on,
+            # Map-first: where the character stands, for the window of open
+            # country under them and the ones its edges lead to.
+            point=self.held_point(world=world) if self.map_first else None,
         )
 
     def map_setting(self) -> str:

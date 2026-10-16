@@ -31,19 +31,32 @@ from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from sealedlore.engine.marks import footprint
 from sealedlore.engine.tile_sets import LIGHT_WORDS
 from sealedlore.engine.world import key
 from sealedlore.engine.world_art import (
     FILLS,
+    GROUND,
+    TERRAIN_TILES,
+    TILES,
     decked,
     fixed_in_plan,
+    has_inside,
+    holding_place,
+    is_deck,  # noqa: F401  (moved to world_art; still imported from here by tests)
     land_under,
-    local_area,
+    parse_window,
+    patch_at,
+    patch_under,
+    plan_place,
     plan_rect,
     plan_tile,
     rasterise,
+    window_id,
+    window_rect,
     with_fixed,
 )
+from sealedlore.engine.world_layout import position, size_of
 from sealedlore.models.area import FurnishPlan, Spot
 from sealedlore.models.world import WorldArt, WorldMap, WorldPlace
 
@@ -256,6 +269,8 @@ class Entrance:
 
 @dataclass
 class Area:
+    # The place whose plan this is; for a window of open country, the place
+    # holding the whole window (a region, a desert) or "" in no place.
     place_id: str
     name: str
     indoor: bool
@@ -280,6 +295,25 @@ class Area:
     names: dict[str, str] = field(default_factory=dict)
     # What the rules repaired, for the log and the tests.
     repairs: list[str] = field(default_factory=list)
+    # A window of open country (`build_window`): its rectangle on the map
+    # (west, north, width, height) in metres, the land patch it is built
+    # from ("" while none is drawn there), and the name of the place holding
+    # it ("" in no place), for "in open country, in the Great Erg".
+    rect: tuple[float, float, float, float] | None = None
+    patch_id: str = ""
+    within: str = ""
+
+    @property
+    def id(self) -> str:
+        """What a `Spot.area` names: the place's id, or a window's own id."""
+        if self.rect is None:
+            return self.place_id
+        west, north, width, _height = self.rect
+        return window_id(west, north, width)
+
+    @property
+    def window(self) -> bool:
+        return self.rect is not None
 
     @property
     def width(self) -> int:
@@ -317,58 +351,29 @@ class Area:
 # --- Which area a place is in ---------------------------------------------
 
 
-def _chain(world: WorldMap, place_id: str | None) -> list[WorldPlace]:
-    out: list[WorldPlace] = []
-    seen: set[str] = set()
-    current = world.places.get(place_id or "")
-    while current is not None and current.id not in seen:
-        seen.add(current.id)
-        out.append(current)
-        current = world.places.get(current.inside or "")
-    return out
-
-
-def has_inside(art: WorldArt, place: WorldPlace) -> bool:
-    """A building (or room) with a plan of its own: its inside is an area."""
-    return (
-        place.kind in ("building", "room", "vehicle")
-        and art.layout_shown(place.id, place.state) is not None
-    )
-
-
-def is_deck(world: WorldMap, art: WorldArt, place_id: str | None) -> bool:
-    """A station or ship: a plan whose ground is space. Its rooms are drawn
-    on the deck and joined by it, so they are the deck's, not areas of their
-    own."""
-    place = world.places.get(place_id or "")
-    if place is None:
-        return False
-    layout = art.layout_shown(place.id, place.state)
-    if layout is None:
-        return False
-    # Its own ground, or the land it stands on: the enclosed prompt asks for
-    # the hull as "floor" with space outside, so the deck's own word is
-    # seldom "space" (the second review).
-    ground = str((layout.spec or {}).get("ground") or "")
-    return ground == "space" or land_under(world, art, place) == "space"
-
-
-def area_of(world: WorldMap, art: WorldArt, place_id: str | None) -> str | None:
+def area_of(
+    world: WorldMap,
+    art: WorldArt,
+    place_id: str | None,
+    point: tuple[float, float] | None = None,
+) -> str | None:
     """The area someone at `place_id` stands in: the innermost building
     round them with an inside of its own, else the local area's plan (the
-    farm for its yard, the town for its street). A room of a deck is the
-    deck. None where no plan is drawn yet."""
-    chain = _chain(world, place_id)
-    decks = [p for p in chain if is_deck(world, art, p.id)]
-    if decks:
-        return decks[-1].id
-    for place in chain:
-        if has_inside(art, place):
-            return place.id
-    local = local_area(world, place_id)
-    if local is not None and art.layout_shown(local.id, local.state) is not None:
-        return local.id
-    return None
+    farm for its yard, the town for its street), else a wider place's up
+    the chain (`world_art.plan_place`; a room of a deck is the deck). Where
+    no plan covers them (a region, a desert, between places, no place at
+    all) a window of the land at `point` (their tile on the map; else the
+    place's spot), so wherever they are there is ground to stand on: the
+    author, Oct 16 2026, the world is limitless. None only where there is
+    no point to stand at either."""
+    place = plan_place(world, art, place_id)
+    if place is not None:
+        return place.id
+    if point is None:
+        point = position(world, place_id)
+    if point is None:
+        return None
+    return window_id(*window_rect(art, *point))
 
 
 # --- Building an area ---------------------------------------------------------
@@ -1011,55 +1016,7 @@ def build_area(
         # map is wide.
         tile_m = plan_tile(place) / k
         exits = []
-        by_name = {key(f["name"]): f for f in fixed if f["kind"] == "building"}
-        grid = [list(r) for r in rows]
-        for f in big.get("features", []):
-            if not isinstance(f, dict) or f.get("kind") != "building":
-                continue
-            fixed_one = by_name.get(key(str(f.get("name") or "")))
-            if fixed_one is None:
-                continue
-            x0, y0 = int(f["x"]), int(f["y"])
-            x1, y1 = x0 + int(f["w"]) - 1, y0 + int(f["h"]) - 1
-            box = (x0, y0, x1, y1)
-            child = world.places.get(fixed_one["place_id"])
-            if child is None:
-                continue
-            buildings[child.id] = box
-            state_plan = art.layout_for(child.id, child.state) if child.state else None
-            if state_plan is not None and state_plan.rows:
-                # Blown up, burnt: its box as its own plan has it, rubble
-                # where the walls fell (and so no roof), fire inside, instead
-                # of a whole roofed building (the second review).
-                _stamp_state(grid, box, state_plan.rows)
-            doors = [
-                (x, y)
-                for y in range(max(y0, 0), min(y1, len(grid) - 1) + 1)
-                for x in range(max(x0, 0), min(x1, len(grid[0]) - 1) + 1)
-                if grid[y][x] == "+" and (x in (x0, x1) or y in (y0, y1))
-            ]
-            if not doors:
-                door = _door_for(grid, box)
-                if door is not None:
-                    doors = [door]
-                    grid[door[1]][door[0]] = "+"
-                    repairs.append(f"gave {child.name} a door")
-            for x, y in doors:
-                if has_inside(art, child):
-                    entrances.append(Entrance(x, y, child.id, _door_side(box, x, y)))
-        # A building's inside is its own area, under its roof: drawn as floor
-        # here, anyone stood "at" it was stood under the roof and could walk
-        # in without its door (the second review). Blank: no walking, no sight.
-        for f in big.get("features", []):
-            if not isinstance(f, dict) or f.get("kind") != "building":
-                continue
-            x0, y0 = int(f["x"]), int(f["y"])
-            x1, y1 = x0 + int(f["w"]) - 1, y0 + int(f["h"]) - 1
-            for y in range(y0 + 1, y1):
-                for x in range(x0 + 1, x1):
-                    if 0 <= y < len(grid) and 0 <= x < len(grid[0]) and grid[y][x] == "_":
-                        grid[y][x] = " "
-        rows = ["".join(r) for r in grid]
+        rows, entrances, buildings = _fix_buildings(world, art, rows, big, fixed, repairs)
     # Objects named for people are people.
     for digit, name in list(objects.items()):
         if key(name) in people_keys:
@@ -1095,6 +1052,260 @@ def build_area(
                 if purpose:
                     room.purpose = " ".join(purpose.split())[:60]
             area.placements += furnish(area, plan, density)
+    return area
+
+
+def _fix_buildings(
+    world: WorldMap,
+    art: WorldArt,
+    rows: list[str],
+    big: dict[str, Any],
+    fixed: Sequence[dict[str, Any]],
+    repairs: list[str],
+) -> tuple[list[str], list[Entrance], dict[str, tuple[int, int, int, int]]]:
+    """The map's buildings in an outdoor grid, by the rules: each has a
+    door, a changed one shows its state, and each with an inside of its own
+    leads into it. (rows, the entrances, each building's box by place id)."""
+    entrances: list[Entrance] = []
+    buildings: dict[str, tuple[int, int, int, int]] = {}
+    by_name = {key(f["name"]): f for f in fixed if f["kind"] == "building"}
+    grid = [list(r) for r in rows]
+    for f in big.get("features", []):
+        if not isinstance(f, dict) or f.get("kind") != "building":
+            continue
+        fixed_one = by_name.get(key(str(f.get("name") or "")))
+        if fixed_one is None:
+            continue
+        x0, y0 = int(f["x"]), int(f["y"])
+        x1, y1 = x0 + int(f["w"]) - 1, y0 + int(f["h"]) - 1
+        box = (x0, y0, x1, y1)
+        child = world.places.get(fixed_one["place_id"])
+        if child is None:
+            continue
+        buildings[child.id] = box
+        state_plan = art.layout_for(child.id, child.state) if child.state else None
+        if state_plan is not None and state_plan.rows:
+            # Blown up, burnt: its box as its own plan has it, rubble
+            # where the walls fell (and so no roof), fire inside, instead
+            # of a whole roofed building (the second review).
+            _stamp_state(grid, box, state_plan.rows)
+        doors = [
+            (x, y)
+            for y in range(max(y0, 0), min(y1, len(grid) - 1) + 1)
+            for x in range(max(x0, 0), min(x1, len(grid[0]) - 1) + 1)
+            if grid[y][x] == "+" and (x in (x0, x1) or y in (y0, y1))
+        ]
+        if not doors:
+            door = _door_for(grid, box)
+            if door is not None:
+                doors = [door]
+                grid[door[1]][door[0]] = "+"
+                repairs.append(f"gave {child.name} a door")
+        for x, y in doors:
+            # Into the building's inside, or, on a window of open country,
+            # into a place with a plan of its own (`build_window` boxes it).
+            if has_inside(art, child) or plan_place(world, art, child.id) is child:
+                entrances.append(Entrance(x, y, child.id, _door_side(box, x, y)))
+    # A building's inside is its own area, under its roof: drawn as floor
+    # here, anyone stood "at" it was stood under the roof and could walk
+    # in without its door (the second review). Blank: no walking, no sight.
+    for f in big.get("features", []):
+        if not isinstance(f, dict) or f.get("kind") != "building":
+            continue
+        x0, y0 = int(f["x"]), int(f["y"])
+        x1, y1 = x0 + int(f["w"]) - 1, y0 + int(f["h"]) - 1
+        for y in range(y0 + 1, y1):
+            for x in range(x0 + 1, x1):
+                if 0 <= y < len(grid) and 0 <= x < len(grid[0]) and grid[y][x] == "_":
+                    grid[y][x] = " "
+    return ["".join(r) for r in grid], entrances, buildings
+
+
+# A place boxed on a window of open country is at least this many tiles
+# across, as a building fixed in a plan is (`fixed_in_plan`): a ring, a door
+# and an inside need the room. These kinds are boxed (each gets a plan of
+# its own once the story goes there); the rest are labelled.
+WINDOW_BOX_TILES = 4
+WINDOW_BOXED = frozenset({"building", "settlement", "site", "vehicle"})
+
+
+def window_places(
+    world: WorldMap, art: WorldArt, rect: tuple[float, float, float, float], tile: float
+) -> list[dict[str, Any]]:
+    """What the map has on a window of open country, as `fixed_in_plan`
+    gives a plan's: the outermost places whose footprint reaches into the
+    window (not those inside one of them: a farm's barn is reached from the
+    farm's own plan; not a place wider than the window, which holds it),
+    each as a tile box, cut at the window's edge where it runs past (a town
+    lies across several windows, a part in each). A building, or a place
+    with a plan of its own, is a "building" box with a door that leads into
+    its area; the rest are labelled where they are."""
+    west, north, width, height = rect
+    candidates: dict[str, tuple[float, float, float, float]] = {}
+    for place in world.places.values():
+        if place.kind in ("region", "route") or size_of(place) > width:
+            continue
+        box = footprint(world, art, place.id)
+        if box is None:
+            continue
+        w0, s0, e0, n0 = box
+        if e0 <= west or w0 >= west + width or s0 >= north or n0 <= north - height:
+            continue
+        candidates[place.id] = box
+    out: list[dict[str, Any]] = []
+    columns, rows = round(width / tile), round(height / tile)
+    for pid, (w0, s0, e0, n0) in candidates.items():
+        place = world.places[pid]
+        inner = False
+        seen: set[str] = set()
+        current = world.places.get(place.inside or "")
+        while current is not None and current.id not in seen:
+            seen.add(current.id)
+            if current.id in candidates:
+                inner = True
+                break
+            current = world.places.get(current.inside or "")
+        if inner:
+            continue
+        x0, y0 = math.floor((w0 - west) / tile), math.floor((north - n0) / tile)
+        x1, y1 = math.ceil((e0 - west) / tile) - 1, math.ceil((north - s0) / tile) - 1
+        w = max(WINDOW_BOX_TILES, x1 - x0 + 1)
+        h = max(3, y1 - y0 + 1)
+        x0 -= (w - (x1 - x0 + 1)) // 2
+        y0 -= (h - (y1 - y0 + 1)) // 2
+        # Cut at the window's edge: the part of it that lies here.
+        x1, y1 = min(x0 + w - 1, columns - 1), min(y0 + h - 1, rows - 1)
+        x0, y0 = max(x0, 0), max(y0, 0)
+        w, h = x1 - x0 + 1, y1 - y0 + 1
+        if w < 2 or h < 2:
+            continue
+        # A place that is, or gets, a plan of its own is a box to enter by
+        # its door; a pond or a clearing is a label where it is.
+        boxed = place.kind in WINDOW_BOXED or plan_place(world, art, pid) is place
+        out.append(
+            {
+                "kind": "building" if boxed else "place",
+                "name": place.name,
+                "place_id": pid,
+                "place_kind": place.kind or "place",
+                "x": x0,
+                "y": y0,
+                "w": w,
+                "h": h,
+                "what": place.what,
+            }
+        )
+    return out
+
+
+def _resampled(
+    patch_rows: Sequence[str],
+    source: tuple[float, float, float],
+    rect: tuple[float, float, float, float],
+    columns: int,
+    rows: int,
+) -> list[str]:
+    """The land's tiles under each tile of a window lying within a coarser
+    patch: nearest-neighbour, so the window keeps the map's own ground."""
+    sx, sy, side = source
+    west, north, width, height = rect
+    ph = len(patch_rows)
+    pw = len(patch_rows[0]) if ph else 0
+    if not pw:
+        return ["." * columns for _ in range(rows)]
+    out = []
+    for r in range(rows):
+        my = north - (r + 0.5) * height / rows
+        py = min(ph - 1, max(0, int((sy + side / 2 - my) / side * ph)))
+        line = []
+        for c in range(columns):
+            mx = west + (c + 0.5) * width / columns
+            px = min(pw - 1, max(0, int((mx - (sx - side / 2)) / side * pw)))
+            line.append(patch_rows[py][px] if px < len(patch_rows[py]) else ".")
+        out.append("".join(line))
+    return out
+
+
+def build_window(
+    world: WorldMap,
+    art: WorldArt,
+    area_id: str,
+    *,
+    people: Collection[str] = (),
+) -> Area | None:
+    """The area of a window of open country (`area_of` names one by its
+    rectangle): the land patch drawn there, its rows at its own tile (side
+    over columns: 40 m for a 1.6 km patch, a long stride on the clock, and
+    honest), the map's places in it boxed with doors (`window_places`), the
+    land's trees, water and rock as its rows have them. No patch there yet:
+    the coarser land under it resampled, else plain ground of the land
+    drawn nearest (or dirt), so there is always ground to stand on while
+    the patch is drawn (`world_art.plan_art`). The land's tiles are the
+    plan's own legend (`world_art.TILES`: every ground and fill the land
+    model may use is a plan tile too), so the view draws a window as it
+    draws any outdoor plan. None for an id that names no window."""
+    parsed = parse_window(area_id)
+    if parsed is None:
+        return None
+    west, north, side = parsed
+    rect = (west, north, side, side)
+    patch = patch_at(art, west, north, side)
+    repairs: list[str] = []
+    if patch is not None and patch.rows:
+        rows = [r.ljust(len(patch.rows[0])) for r in patch.rows]
+        ground = patch.ground
+    else:
+        columns = rows_count = TERRAIN_TILES
+        under = patch_under(art, west + side / 2, north - side / 2)
+        if under is not None and under.rows:
+            rows = _resampled(under.rows, (under.x, under.y, under.side), rect, columns, rows_count)
+            ground = under.ground
+        else:
+            drawn = [p for p in art.terrain if p.ground]
+            nearest = (
+                min(
+                    drawn,
+                    key=lambda p: math.hypot(p.x - (west + side / 2), p.y - (north - side / 2)),
+                )
+                if drawn
+                else None
+            )
+            ground = nearest.ground if nearest is not None else "dirt"
+            rows = [GROUND.get(ground, ".") * columns for _ in range(rows_count)]
+    rows = [
+        "".join(ch if ch in TILES else "." for ch in row) for row in rows
+    ]  # the legend, whatever the record holds
+    columns, rows_count = len(rows[0]), len(rows)
+    tile = side / columns
+    fixed = window_places(world, art, rect, tile)
+    rows, big = _stamp_fixed(rows, fixed, 1)
+    labels: dict[str, tuple[int, int]] = {}
+    for f in fixed:
+        labels[f["name"][:60]] = (f["x"] + f["w"] // 2, f["y"] + f["h"] // 2)
+    rows, entrances, buildings = _fix_buildings(world, art, rows, big, fixed, repairs)
+    objects: dict[str, str] = {}
+    holder = holding_place(world, west, north, side)
+    area = Area(
+        place_id=holder.id if holder is not None else "",
+        name="open country",
+        indoor=False,
+        look=ground or "dirt",
+        rows=rows,
+        tile_m=tile,
+        objects=objects,
+        labels=labels,
+        doorways=openings(rows),
+        entrances=entrances,
+        buildings=buildings,
+        names={pid: world.places[pid].name for pid in buildings if pid in world.places},
+        exits=[],
+        parent=None,
+        repairs=repairs,
+        rect=rect,
+        patch_id=patch.id if patch is not None else "",
+        within=holder.name if holder is not None else "",
+    )
+    area.placements = _object_placements(area)
     return area
 
 
@@ -1186,7 +1397,7 @@ def _object_placements(area: Area) -> list[Placement]:
                 room = area.room_at(x, y)
                 out.append(
                     Placement(
-                        id=f"{area.place_id}:object:{ch}:{x}:{y}",
+                        id=f"{area.id}:object:{ch}:{x}:{y}",
                         name=name,
                         x=x,
                         y=y,
@@ -1655,16 +1866,18 @@ def render_positions(
     and how far they walked since the last passage. Never the clock's day
     (the author's ruling: the day is the plot's)."""
     me = spots.get(held)
-    if me is None or me.area != area.place_id:
+    if me is None or me.area != area.id:
         return ""
     here = (me.x, me.y)
     lines = ["Where everyone stands (the map is exact: keep to it):"]
     words = where_words(area, *here)
-    lines.append(f"- {held}: in {area.name}" + (f", {words}" if words else "") + ".")
+    # A window of open country: "in open country, in the Great Erg".
+    place = f"in {area.name}" + (f", in {area.within}" if area.within else "")
+    lines.append(f"- {held}: {place}" + (f", {words}" if words else "") + ".")
     my_room = area.room_at(*here)
     others = []
     for name, spot in spots.items():
-        if name == held or spot.area != area.place_id:
+        if name == held or spot.area != area.id:
             continue
         metres = math.hypot(spot.x - me.x, spot.y - me.y) * area.tile_m
         others.append((metres, name, spot))
@@ -1781,14 +1994,22 @@ def fills_word(ch: str) -> str:
 
 # --- The map's metres and an area's tiles --------------------------------------
 # An area is its place's plan laid over the plan's rectangle on the map
-# (`plan_rect`), so a tile is a point in metres east and north, as marks
-# (engine/marks.py) and the map's places are.
+# (`plan_rect`), or a window of open country over its own rectangle, so a
+# tile is a point in metres east and north, as marks (engine/marks.py) and
+# the map's places are.
+
+
+def area_rect(world: WorldMap, area: Area) -> tuple[float, float, float, float] | None:
+    """(west, north, width, height) in metres of the area on the map."""
+    if area.rect is not None:
+        return area.rect
+    place = world.places.get(area.place_id)
+    return plan_rect(world, place) if place is not None else None
 
 
 def tile_point(world: WorldMap, area: Area, x: float, y: float) -> tuple[float, float] | None:
     """The point in metres (east, north) at the middle of tile (x, y)."""
-    place = world.places.get(area.place_id)
-    rect = plan_rect(world, place) if place is not None else None
+    rect = area_rect(world, area)
     if rect is None or not area.width or not area.height:
         return None
     west, north, width, height = rect
@@ -1797,8 +2018,7 @@ def tile_point(world: WorldMap, area: Area, x: float, y: float) -> tuple[float, 
 
 def point_tile(world: WorldMap, area: Area, mx: float, my: float) -> tuple[int, int] | None:
     """The tile of the area at a point in metres; None outside it."""
-    place = world.places.get(area.place_id)
-    rect = plan_rect(world, place) if place is not None else None
+    rect = area_rect(world, area)
     if rect is None or not area.width or not area.height:
         return None
     west, north, width, height = rect
@@ -1809,9 +2029,23 @@ def point_tile(world: WorldMap, area: Area, mx: float, my: float) -> tuple[int, 
     return None
 
 
+def clamped_tile(world: WorldMap, area: Area, mx: float, my: float) -> tuple[int, int] | None:
+    """The tile at a point, or the nearest tile of the area to a point
+    outside it (someone placed at a window's very edge); None with no
+    rectangle."""
+    rect = area_rect(world, area)
+    if rect is None or not area.width or not area.height:
+        return None
+    west, north, width, height = rect
+    x = math.floor((mx - west) / width * area.width)
+    y = math.floor((north - my) / height * area.height)
+    return min(max(x, 0), area.width - 1), min(max(y, 0), area.height - 1)
+
+
 def metres_per_tile(world: WorldMap, area: Area) -> float:
     """How wide a tile of the area is on the map (its plan's rectangle over
-    its tiles; outdoors that is the walking scale)."""
+    its tiles; outdoors that is the walking scale; a window's the land's
+    own)."""
     return area.tile_m  # one scale for the grid and the map (`build_area`)
 
 

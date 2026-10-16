@@ -413,9 +413,11 @@ def test_walking_off_an_area_s_edge_offers_what_lies_that_way(app, window):
     assert view.edge_button.isVisible() or view.edge_button.text() == "Leave north ▾"
     view.keyPressEvent(QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Up, Qt.NoModifier))
     labels = [a.text() for a in view.edge_menu.actions()]
-    assert labels and labels[0].startswith("Hellsville — ")
+    # The open country past the edge first (tests/test_open_country.py),
+    # then the places that way.
+    assert labels[0] == "Walk on into open country" and labels[1].startswith("Hellsville — ")
     view.edge_menu.hide()
-    view.edge_menu.actions()[0].trigger()
+    view.edge_menu.actions()[1].trigger()
     assert window.composer.text() == "I set off for Hellsville."
 
 

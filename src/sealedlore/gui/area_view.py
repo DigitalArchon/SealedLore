@@ -609,14 +609,14 @@ class AreaView(QWidget):
         area (None: daylight). `failed`: the picture couldn't be painted, so
         the plain map stands in for good."""
         if self._timer.isActive():
-            if self.area is not None and self.area.place_id == area.place_id:
+            if self.area is not None and self.area.id == area.id:
                 return  # mid-walk: the walk's end refreshes it
             self.drop_walk()  # another area (or story): that walk is nobody's
         px = px_for(area)
         rebuild = (
             key != self._key
             or self.area is None
-            or self.area.place_id != area.place_id
+            or self.area.id != area.id
             or (image is not None and self._background is None)
         )
         self.area, self.walkers = area, walkers
@@ -625,7 +625,7 @@ class AreaView(QWidget):
         self.hint.setText(hint or self._hint())
         if rebuild:
             centre = self.view.mapToScene(self.view.viewport().rect().center())
-            same_place = self._fitted_for == area.place_id
+            same_place = self._fitted_for == area.id
             self.scene.clear()
             self.people, self._tags, self._hover = {}, {}, None
             self._note = None
@@ -836,7 +836,7 @@ class AreaView(QWidget):
     def _fit(self, area: Area) -> None:
         """Opened on an area: indoors the whole of it; outdoors close enough
         to see who is who, on the author's character."""
-        self._fitted_for = area.place_id
+        self._fitted_for = area.id
         self._fitted = True
         px = px_for(area)
         port = self.view.viewport().rect()

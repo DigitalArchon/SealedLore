@@ -2245,6 +2245,24 @@ _text(
     (("start", "The place the way starts from"), ("end", "The place it leads to")),
 )
 
+# Not measured: open country the author's character walks into (a region, a
+# desert, between places), drawn a window at a time (engine/world_art.py
+# `_window_jobs`; the author, Oct 16 2026: the world is limitless).
+_text(
+    "map.terrain.open",
+    MAP,
+    "Map art: a window of open country",
+    "What a land request for a window of open country under the author's character is of, "
+    "in place of a place: where it lies by the nearest known place and what holds it.",
+    "the open country {where}",
+    (
+        (
+            "where",
+            "Where the window lies: distance and bearing from the nearest place, and what it is in",
+        ),
+    ),
+)
+
 
 # Map pictures from an image model (engine/world_pictures.py), under the
 # standing approval of Settings → Images → Draw map pictures. Measured in
