@@ -176,6 +176,8 @@ class WorldArtRuntime:
             done, total = done + self._own_set_done, total + self._own_set_total
         if self.isometric_painting is not None:
             total += 1
+        if getattr(self, "tile_asset_drawing", None) is not None:
+            total += 1
         return min(done, total), total
 
     @property
@@ -666,6 +668,7 @@ class WorldArtRuntime:
             getattr(self, "_tile_client", None),
             getattr(self, "_tile_text", None),
             getattr(self, "_own_set_client", None),
+            getattr(self, "_asset_client", None),
         ]
         for client in (self._picture_client, self._isometric_client, *tile_clients):
             if client is not None:
@@ -679,6 +682,7 @@ class WorldArtRuntime:
             self._isometric_thread,
             getattr(self, "_tile_thread", None),
             getattr(self, "_own_set_thread", None),
+            getattr(self, "_asset_thread", None),
         )
         for thread in threads:
             if thread is not None and wait_seconds > 0:

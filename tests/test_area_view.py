@@ -222,3 +222,24 @@ def test_walking_off_an_area_s_edge_offers_what_lies_that_way(app, window):
     view.edge_menu.hide()
     view.edge_menu.actions()[0].trigger()
     assert window.composer.text() == "I set off for Hellsville."
+
+
+def test_the_tile_set_editor_lists_every_asset_and_finds_one(app, window):
+    from sealedlore.gui.tile_set_editor import ROLE, TileSetEditor
+
+    dialog = TileSetEditor(window.session, window)
+    roles = [dialog.list.item(i).data(ROLE) for i in range(dialog.list.count())]
+    assert "floor" in roles and "walker/Serrik Vaun" in roles
+    assert dialog._current() is not None and dialog.label.text()
+    for _ in range(40):
+        dialog._read_icons()
+    assert not dialog._unread
+    dialog.search.setText("roads")
+    shown = [
+        dialog.list.item(i).data(ROLE)
+        for i in range(dialog.list.count())
+        if not dialog.list.item(i).isHidden()
+    ]
+    assert shown == ["out-road"]
+    dialog.deleteLater()
+    pump(app)

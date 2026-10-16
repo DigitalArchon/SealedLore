@@ -560,3 +560,52 @@ def test_an_area_that_adjoins_is_walked_on_into(tmp_path, story, cast):
     me = state.spots["Serrik Vaun"]
     assert me.area == "meadow" and me.y == session.area("meadow").height - 1
     assert 0 < state.walked < 30
+
+
+def test_one_asset_of_the_tile_set_is_changed_drawn_again_or_put_back(
+    tmp_path, story, cast, monkeypatch
+):
+    from sealedlore.engine import session_area
+    from tests.test_world_pictures import FakeImages, png
+
+    FakeImages.sent = []
+    monkeypatch.setattr(session_area, "ImageClient", FakeImages)
+    session = make_session(tmp_path, story, cast)
+    session.config.providers[0].api_key = "k"
+    assets = {a.role: a for a in session.tile_set_assets()}
+    assert {"floor", "out-road", "walker/Serrik Vaun"} <= set(assets)
+    assert any(role.startswith("items/") for role in assets)
+    assert assets["floor"].source == "the set's"
+    shipped_floor = session.tile_asset_bytes("floor")
+    # A picture of the author's own, then back to the set's.
+    session.use_own_tile_asset("floor", png(16, 16))
+    assert session.tile_asset_bytes("floor") != shipped_floor
+    assets = {a.role: a for a in session.tile_set_assets()}
+    assert assets["floor"].source == "changed for this story"
+    session.reset_tile_asset("floor")
+    assert session.tile_asset_bytes("floor") == shipped_floor
+    # Drawn again from the author's words: the map takes it once it is in.
+    model, _price, problem = session.tile_asset_offer("out-road", "wet cobbles")
+    assert problem is None and model == session.config.map_tile_model
+    assert session.redraw_tile_asset("out-road", "wet cobbles")
+    session._asset_thread.join(5)
+    sent = FakeImages.sent[-1]
+    assert "wet cobbles" in sent["prompt"] and sent["enable_prompt_expansion"] is False
+    assert session.map_art_copy().tile_overrides["out-road"].startswith("images/map/tileset/")
+    # A walker of the author's own stands in for the drawn one.
+    session.use_own_tile_asset("walker/Serrik Vaun", png(12, 20))
+    assert session.walker_file("Serrik Vaun").startswith("images/map/tileset/")
+
+
+def test_a_story_s_own_tile_set_and_its_changes_go_into_a_new_playthrough():
+    from sealedlore.storage.world_art import carried_art
+
+    art = WorldArt(
+        tile_assets={"floor": "images/map/tileset/floor-1.png", "cap": "images/map/gone.png"},
+        tile_overrides={"out-road": "images/map/tileset/road-1.png", "rug": ""},
+    )
+    files = {"images/map/tileset/floor-1.png": b"F", "images/map/tileset/road-1.png": b"R"}
+    carried, out = carried_art(art, files.get)
+    assert carried.tile_assets == {"floor": "images/map/tileset/floor-1.png"}  # only with a file
+    assert carried.tile_overrides == {"out-road": "images/map/tileset/road-1.png", "rug": ""}
+    assert out == files

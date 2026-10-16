@@ -59,6 +59,18 @@ def carried_art(
         files[picture.file] = data
         kept.append(picture)
     carried.pictures = kept
+    # The story's own tile set and the author's changes to single assets,
+    # each only with its file.
+    for field in ("tile_assets", "tile_overrides"):
+        roles: dict[str, str] = getattr(carried, field)
+        for role, file in list(roles.items()):
+            if not file:
+                continue
+            data = read(file)
+            if data is None:
+                roles.pop(role)
+            else:
+                files[file] = data
     return carried, files
 
 

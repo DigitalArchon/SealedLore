@@ -1050,7 +1050,12 @@ set doesn't have are drawn as the story needs them, with **Draw map pictures
 with an image model** on (Settings → Images; FLUX.3 Klein, about a cent
 each): each kind of thing once, and each character from their portrait.
 Until then a thing is a plain crate and a character a small figure. The
-samples come with all of theirs. **Plan** shows the area's plan as the map
+samples come with all of theirs. **Edit the tile set…** (under Look) lists
+every picture the map is drawn with: the ground, walls and decoration,
+every thing and every character's sprite, with the words each was drawn
+from. Change the words and **Draw it again…** (the model and price are
+shown first), **Use a picture of your own…**, or go **Back to the set's
+own**; a change is for this story only. **Plan** shows the area's plan as the map
 drew it, with its isometric views.
 
 It is one map, read at three levels by zooming; **Local**, **Region** and

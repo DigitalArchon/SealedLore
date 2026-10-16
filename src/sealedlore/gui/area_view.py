@@ -258,6 +258,7 @@ class AreaView(QWidget):
     looks_wanted = Signal()
     look_chosen = Signal(str)
     own_look_requested = Signal()
+    edit_look_requested = Signal()
     # Mark this tile in the turn being written (⌖).
     mark_requested = Signal(int, int)
     # At an outdoor area's edge: where on past it (`set_edge_choices`), and
@@ -680,6 +681,9 @@ class AreaView(QWidget):
         own = self.look_menu.addAction("Draw a tile set for this story…")
         own.setEnabled(not self.locked)
         own.triggered.connect(self.own_look_requested.emit)
+        edit = self.look_menu.addAction("Edit the tile set…")
+        edit.setEnabled(not self.locked)
+        edit.triggered.connect(self.edit_look_requested.emit)
 
     # --- walking -------------------------------------------------------------------
 

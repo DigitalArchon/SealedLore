@@ -223,6 +223,11 @@ class WorldArt(BaseModel):
     # "decor0") to its file under images/map/, and the words it was drawn from.
     tile_assets: dict[str, str] = Field(default_factory=dict)
     tile_words: dict[str, str] = Field(default_factory=dict)
+    # The author's changes to single assets, over whichever set is in use
+    # (Look ▾ → Edit the tile set…): a role ("floor", "items/a-stone-well",
+    # "walker/Jane Doe") to the file drawn or chosen for it; "" goes back to
+    # the set's own, past anything drawn for the story.
+    tile_overrides: dict[str, str] = Field(default_factory=dict)
 
     def furnishing_for(self, place_id: str, state: str) -> FurnishPlan | None:
         """A place's furnishing in `state`, else as the place was."""

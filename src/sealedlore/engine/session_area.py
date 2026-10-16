@@ -24,6 +24,7 @@ from __future__ import annotations
 import math
 import threading
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from sealedlore.engine.area import (
@@ -59,6 +60,7 @@ from sealedlore.engine.marks import (
     nearest_place,
     place_at,
 )
+from sealedlore.engine.session_world_art import _today
 from sealedlore.engine.tile_draw import (
     RUN_LIMIT,
     SPRITE_SIZE,
@@ -72,10 +74,12 @@ from sealedlore.engine.tile_draw import (
 )
 from sealedlore.engine.tile_sets import (
     OUTDOOR_SPRITES,
+    SPRITES,
     TEXTURES,
     TileSetInfo,
     choose_set,
     item_slugs,
+    slug,
 )
 from sealedlore.engine.validators import locate_quote
 from sealedlore.engine.world import applied, key
@@ -92,9 +96,10 @@ from sealedlore.models.area import AreaState, LiveArea, MapAction, Mark, Spot
 from sealedlore.models.node import Node, Usage
 from sealedlore.models.world import WorldArt, WorldDelta, WorldMap
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError
-from sealedlore.providers.images import ImageClient, build_image_payload
+from sealedlore.providers.images import ImageClient, build_image_payload, data_url, loggable_payload
 from sealedlore.storage import tile_sets as shipped
 from sealedlore.storage.image_meta import MetadataError, picture_kind, strip_metadata
+from sealedlore.storage.images import MEDIA_TYPES
 
 # Seconds taken going through a door.
 DOOR_SECONDS = 3
@@ -115,8 +120,49 @@ EDGE_CHOICES = 8
 EDGE_STEPS = {"north": (0, 1), "south": (0, -1), "east": (1, 0), "west": (-1, 0)}
 
 
+@dataclass
+class TileAsset:
+    """One asset of the tile set in use, as the editor lists it."""
+
+    role: str
+    label: str
+    group: str
+    # "the set's", "drawn for this story", "changed for this story".
+    source: str
+    # What it shows, in words: what a redraw is drawn from.
+    words: str
+
+
+ASSET_LABELS = {
+    "floor": "Floor",
+    "cap": "Wall tops",
+    "face": "Wall faces",
+    "out-ground": "Ground",
+    "out-road": "Roads",
+    "out-water": "Water",
+    "out-pave": "Paving",
+    "out-canopy": "Tree canopy",
+    "out-roof": "Roofs",
+    "out-wall": "Outer walls",
+    "rug": "Rug",
+    "decor0": "Decoration 1",
+    "decor1": "Decoration 2",
+    "decor2": "Decoration 3",
+    "out-tree0": "Tree 1",
+    "out-tree1": "Tree 2",
+    "out-bush": "Bush",
+    "out-rock": "Rock",
+    "out-rubble": "Rubble",
+    "out-fence": "Fence",
+    "out-door": "Door",
+}
+
+
 class AreaRuntime:
     _area_cache: dict | None = None
+    _asset_thread: threading.Thread | None = None
+    _asset_client: ImageClient | None = None
+    _asset_role: str | None = None
     _tile_thread: threading.Thread | None = None
     _tile_client: ImageClient | None = None
     _tile_text: ChatProvider | None = None
@@ -176,9 +222,19 @@ class AreaRuntime:
             info = TileSetInfo(name="")
         items = {p.subject_id: p.file for p in art.pictures if p.subject == "item"}
         own = dict(art.tile_assets)
+        changed = dict(art.tile_overrides)
         reader = self.pictures.read
 
         def read(role: str) -> bytes | None:
+            if role in changed:
+                # The author's change to this one asset: theirs, or ("") the
+                # set's own, past anything drawn for the story.
+                if changed[role]:
+                    data = reader(changed[role])
+                    if data:
+                        return data
+                else:
+                    return shipped.read_asset(folder, role) if folder is not None else None
             if role.startswith("items/") and role[6:] in items:
                 data = reader(items[role[6:]])
                 if data:
@@ -200,6 +256,9 @@ class AreaRuntime:
     def walker_file(self, name: str, art: WorldArt | None = None) -> str | None:
         """The file of a person's walking sprite, if one is drawn."""
         art = art or self.map_art_copy()
+        changed = art.tile_overrides.get(f"walker/{name}")
+        if changed is not None:
+            return changed or None  # "": the set's generic people
         found = art.picture_for("walker", name)
         return found.file if found is not None else None
 
@@ -1395,13 +1454,24 @@ class AreaRuntime:
         size: str,
         model: str,
         info,
+        reference: bytes | None = None,
     ) -> str | None:
-        """One picture of the story's own tile set, logged, stripped and
-        kept under images/map/tileset/; its file, or None."""
-        payload = build_image_payload(model, prompt, size, 1, [], api=client.api)
+        """One picture of the story's own tile set (or one asset redrawn),
+        logged, stripped and kept under images/map/tileset/; its file, or
+        None. `reference`: a picture it is drawn from (a portrait)."""
+        references = []
+        if reference is not None:
+            references.append(data_url(reference, MEDIA_TYPES[picture_kind(reference)]))
+        payload = build_image_payload(model, prompt, size, 1, references, api=client.api)
         if client.api == "nanogpt":
             payload["enable_prompt_expansion"] = False
-        log_ref = self._log("map_picture_request", {"job": f"tile:{role}", "payload": payload})
+        log_ref = self._log(
+            "map_picture_request",
+            {
+                "job": f"tile:{role}",
+                "payload": loggable_payload(payload, ["the portrait"] if reference else []),
+            },
+        )
         try:
             reply = client.generate(payload)
             data = strip_metadata(reply.images[0])
@@ -1414,7 +1484,8 @@ class AreaRuntime:
             usage = {"cost": info.price(size), "cost_estimated": True}
         else:
             usage = {"cost_reported": False}
-        relative = f"{MAP_PICTURES_DIR}/tileset/{role}-{new_id()[:8]}{picture_kind(data) or '.png'}"
+        name = slug(role) or "asset"
+        relative = f"{MAP_PICTURES_DIR}/tileset/{name}-{new_id()[:8]}{picture_kind(data) or '.png'}"
         with self._closing:
             if self._art_stop or self._closed or not self.pictures.alive():
                 return None
@@ -1428,6 +1499,203 @@ class AreaRuntime:
             )
         )
         return relative
+
+    # --- one asset at a time (Look ▾ → Edit the tile set…) -------------------------
+
+    def tile_set_assets(self) -> list[TileAsset]:
+        """Every asset the map is drawn with, as the editor lists them: the
+        set's ground, walls and decoration, every thing it or the story has
+        a sprite for (and every thing in the areas near the story), and
+        every character's walking sprite."""
+        art = self.map_art_copy()
+        info, read = self.tile_set(art)
+        name = self.tile_set_name(art)
+        found = shipped.shipped_sets().get(name)
+        folder = found[1] if found else None
+        words = {**info.words, **(art.tile_words if name == "own" else {})}
+        story_items = {p.subject_id for p in art.pictures if p.subject == "item"}
+        out: list[TileAsset] = []
+
+        def source(role: str, drawn: bool) -> str:
+            changed = art.tile_overrides.get(role)
+            if changed:
+                return "changed for this story"
+            if changed is None and (drawn or (name == "own" and role in art.tile_assets)):
+                return "drawn for this story"
+            return "the set's"
+
+        for role in (*TEXTURES, *SPRITES):
+            out.append(
+                TileAsset(
+                    role=role,
+                    label=ASSET_LABELS.get(role, role),
+                    group="Ground and walls" if role in TEXTURES else "Decoration and nature",
+                    source=source(role, False),
+                    words=words.get(role, ""),
+                )
+            )
+        slugs = set(shipped.asset_names(folder, "items")) if folder is not None else set()
+        slugs = {s.removeprefix("items/") for s in slugs} | story_items
+        for area in self._near_areas(self.world(), art):
+            for placement in area.placements:
+                keys = item_slugs(placement.name)
+                if keys and not any(k in slugs for k in keys):
+                    slugs.add(keys[0])
+        for key_ in sorted(slugs):
+            role = f"items/{key_}"
+            out.append(
+                TileAsset(
+                    role=role,
+                    label=key_.replace("-", " "),
+                    group="Things",
+                    source=source(role, key_ in story_items),
+                    words=key_.replace("-", " "),
+                )
+            )
+        for card in (*self.visible_cast(), *self.visible_supporting()):
+            role = f"walker/{card.name}"
+            out.append(
+                TileAsset(
+                    role=role,
+                    label=card.name,
+                    group="People",
+                    source=source(role, art.picture_for("walker", card.name) is not None),
+                    words=looks_of(card.summary, card.full_description),
+                )
+            )
+        return out
+
+    def tile_asset_bytes(self, role: str) -> bytes | None:
+        """The picture an asset is drawn with now."""
+        if role.startswith("walker/"):
+            file = self.walker_file(role[7:])
+            return self.pictures.read(file) if file else None
+        _info, read = self.tile_set()
+        return read(role)
+
+    def _asset_job(self, role: str, words: str) -> tuple[str, str, str, bytes | None]:
+        """(prompt, size, model, the picture it is drawn from) for redrawing
+        one asset from these words."""
+        art = self.map_art_copy()
+        info, _read = self.tile_set(art)
+        world = world_words({**info.words, **art.tile_words}, self.map_setting())
+        what = " ".join(words.split()) or role.split("/")[-1].replace("-", " ")
+        if role in TEXTURES:
+            view = (
+                "straight from the front"
+                if role in ("face", "out-wall")
+                else "from directly overhead"
+            )
+            prompt = self.texts.fill("map.tile.texture", what=what, world=world, view=view)
+            return prompt, TEXTURE_SIZE, self.config.map_tile_model, None
+        if role == "rug":
+            prompt = self.texts.fill("map.tile.rug", what=what, world=world)
+        elif role in OUTDOOR_SPRITES:
+            prompt = self.texts.fill("map.tile.nature", what=what, world=world)
+        elif role.startswith("walker/"):
+            name = role[7:]
+            card = next(
+                (c for c in (*self.visible_cast(), *self.visible_supporting()) if c.name == name),
+                None,
+            )
+            portrait = card.reference_images[0].file if card and card.reference_images else None
+            looks = looks_of(card.summary, card.full_description) if card else ""
+            data = self.pictures.read(portrait) if portrait and what == looks else None
+            if data is not None:
+                try:
+                    data = strip_metadata(data)
+                except MetadataError:
+                    data = None  # never sent unstripped: drawn from the words
+            if data is not None:
+                prompt = self.texts["map.tile.portrait"]
+                return prompt, SPRITE_SIZE, self.config.map_sprite_model, data
+            prompt = self.texts.fill("map.tile.person", what=f"{name}, {what}", world=world)
+        else:
+            prompt = self.texts.fill("map.tile.sprite", what=what, world=world)
+        return prompt, SPRITE_SIZE, self.config.map_tile_model, None
+
+    def tile_asset_offer(self, role: str, words: str) -> tuple[str, float | None, str | None]:
+        """(the model it would be drawn by, its listed price, why it can't be
+        drawn now)."""
+        _prompt, size, model, _ref = self._asset_job(role, words)
+        listed = self._listed_image_model(model)
+        price = listed.price(size) if listed is not None else None
+        if self.in_private or self.tee_chat:
+            return model, price, "Not in a private scene or a private chat."
+        media = self.config.images()
+        if media is None or not media.api_key:
+            return model, price, "Pictures have no endpoint or key (Settings → Images)."
+        if self.map_pictures_left_today(self.map_art_copy()) <= 0:
+            return model, price, "Today's map pictures are all drawn (Settings → Images)."
+        thread = self._asset_thread
+        if thread is not None and thread.is_alive():
+            return model, price, "Another asset is being drawn now."
+        return model, price, None
+
+    def redraw_tile_asset(self, role: str, words: str) -> bool:
+        """Draw one asset again from these words (the author asked, with the
+        price shown), in the background; the map takes it when it is in."""
+        if self.tile_asset_offer(role, words)[2] is not None or self._map_closed:
+            return False
+        prompt, size, model, reference = self._asset_job(role, words)
+        media = self.config.images()
+        client = ImageClient(media.base_url, media.api_key, api=media.api)
+        self._asset_client = client
+        self._art_stop = False
+        art = self.world_art
+        with self._lock():
+            day = _today()
+            art.pictures_by_day[day] = art.pictures_by_day.get(day, 0) + 1
+            self._save_art(art)
+
+        def run() -> None:
+            try:
+                file = self._draw_tile(
+                    client, role, prompt, size, model, self._listed_image_model(model), reference
+                )
+                if file is None:
+                    return
+                with self._closing:
+                    if self._art_stop or self._closed:
+                        return
+                    with self._lock():
+                        art.tile_overrides[role] = file
+                        self._save_art(art)
+                callback = self.on_map_art
+                if callback is not None:
+                    callback()
+            finally:
+                client.close()
+
+        thread = threading.Thread(target=run, name="map-tile-asset", daemon=True)
+        self._asset_thread = thread
+        self._asset_role = role
+        thread.start()
+        return True
+
+    @property
+    def tile_asset_drawing(self) -> str | None:
+        """The asset being drawn now, or None."""
+        thread = self._asset_thread
+        return self._asset_role if thread is not None and thread.is_alive() else None
+
+    def use_own_tile_asset(self, role: str, data: bytes) -> None:
+        """A picture of the author's own for one asset (already stripped by
+        the crop dialog), kept with the story's pictures."""
+        kind = picture_kind(data) or ".png"
+        relative = f"{MAP_PICTURES_DIR}/tileset/{slug(role) or 'asset'}-{new_id()[:8]}{kind}"
+        self.pictures.write(relative, strip_metadata(data))
+        art = self.world_art
+        with self._lock():
+            art.tile_overrides[role] = relative
+            self._save_art(art)
+
+    def reset_tile_asset(self, role: str) -> None:
+        """Back to the set's own picture for this asset."""
+        art = self.world_art
+        with self._lock():
+            art.tile_overrides[role] = ""
+            self._save_art(art)
 
 
 def item_sprite_key(name: str) -> str:

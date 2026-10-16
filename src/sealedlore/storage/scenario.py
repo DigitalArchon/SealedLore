@@ -186,6 +186,10 @@ def bundle_from_scenario(
         # puts it beside the reference pictures); the counts start afresh.
         art = scenario.world_art.model_copy(deep=True)
         art.pictures = [p for p in art.pictures if p.file in bundle.pending_files]
+        art.tile_assets = {r: f for r, f in art.tile_assets.items() if f in bundle.pending_files}
+        art.tile_overrides = {
+            r: f for r, f in art.tile_overrides.items() if not f or f in bundle.pending_files
+        }
         art.pictures_by_day, art.failures = {}, {}
         bundle.world_art = art
     if scenario.background_image in bundle.pending_files:

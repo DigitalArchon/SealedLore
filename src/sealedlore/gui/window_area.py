@@ -24,6 +24,7 @@ from sealedlore.engine.marks import mark_token, marks_in
 from sealedlore.gui.area_render import TileSource, render_area, sprite_image
 from sealedlore.gui.area_view import AreaView, Walker
 from sealedlore.gui.map_tiles import person_sprite
+from sealedlore.gui.tile_set_editor import TileSetEditor
 
 # Areas kept painted, most recent first.
 PAINTED_KEPT = 6
@@ -61,6 +62,7 @@ class AreaWindow:
         self.area_view.looks_wanted.connect(self._area_looks)
         self.area_view.look_chosen.connect(self._area_look)
         self.area_view.own_look_requested.connect(self._area_own_look)
+        self.area_view.edit_look_requested.connect(self._area_edit_look)
         # Marks (⌖): a spot clicked on either view goes into the turn.
         self.area_view.mark_requested.connect(self._mark_tile)
         self.area_view.point_of = self._point_of_tile
@@ -148,6 +150,7 @@ class AreaWindow:
             session.tile_set_name(art),
             items,
             tuple(sorted(art.tile_assets.items())),
+            tuple(sorted(art.tile_overrides.items())),
             session.story.defaults.map_density,
         )
 
@@ -449,3 +452,17 @@ class AreaWindow:
         if session.start_own_tile_set():
             self._sync_progress()
             self.statusBar().showMessage("Drawing this story's tile set in the background…", 6000)
+
+    def _area_edit_look(self) -> None:
+        """Every asset the map is drawn with, one at a time
+        (gui/tile_set_editor.py)."""
+        session = self.session
+        if session is None or self._busy:
+            return
+        dialog = TileSetEditor(session, self)
+        try:
+            dialog.exec()
+        finally:
+            dialog.deleteLater()
+        self._walker_images.clear()
+        self.refresh_area()
