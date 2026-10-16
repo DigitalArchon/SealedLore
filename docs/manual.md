@@ -1022,6 +1022,10 @@ within reach, the doorways out.
   and travel, and with the time the passages tell. In a story with a plot it
   is the plot's clock, so travel passes the plot's days. The storyteller is
   never told the day; it is told how far you walked since the last passage.
+- **Who can see whom.** Walls and rock stop sight; windows, fences and
+  doorways don't, and a few trees deep do. Indoors, what you can't see from
+  where you stand is shaded, and anyone out of sight is drawn faint. The
+  storyteller is told who is in sight of you and who is within earshot.
 - Nobody else moves on their own: people stand where the story last put
   them until a passage moves them.
 - Nothing can be walked while a passage is being written.

@@ -189,3 +189,15 @@ def test_me_centres_either_view_on_the_author_s_character(app, window):
     window.world_view.centre_on_me()
     middle = window.world_view.view.mapToScene(window.world_view.view.viewport().rect().center())
     assert abs(middle.x() - me[0]) < 50 and abs(-middle.y() - me[1]) < 50
+
+
+def test_indoors_what_can_t_be_seen_is_shaded_and_someone_out_of_sight_is_faint(app, window):
+    view = window.area_view
+    assert view.area.indoor and view._shade is not None
+    me = view.held()
+    for name, person in view.people.items():
+        if name != me.name:
+            from sealedlore.engine.area import sees
+
+            seen = sees(view.area, (me.x, me.y), (person.walker.x, person.walker.y))
+            assert person.opacity() == (1.0 if seen else 0.45)

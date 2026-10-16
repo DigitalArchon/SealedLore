@@ -224,6 +224,7 @@ def test_the_storyteller_is_told_where_everyone_stands_and_never_the_day():
     text = render_positions(house, world, spots, "Jane", walked="about 2 minutes on foot")
     assert "- Jane: in The house, in the smaller central hall, by the cast-iron stove." in text
     assert "- Marcus: 4 m east of Jane" in text
+    assert "; in sight, within earshot." in text
     assert "Ben" not in text  # not in this area
     assert "Within reach: the cast-iron stove" in text
     assert "Since the last passage: about 2 minutes on foot." in text
@@ -501,3 +502,22 @@ def test_the_ground_s_cover_never_cuts_any_ground_off():
     }
     assert ground - reached == set()
     assert sum(row.count("T") for row in farm.rows) > 100  # still a wooded farm
+
+
+def test_walls_stop_sight_and_the_storyteller_is_told_who_is_out_of_sight():
+    from sealedlore.engine.area import in_earshot, seen_tiles, sees
+
+    world, art = world_and_art()
+    house = build_area(world, art, "house")
+    jane, marcus, ben = (5, 10), (30, 10), (15, 5)
+    assert not sees(house, jane, marcus) and sees(house, jane, ben)
+    assert sees(house, (5, 12), (30, 12))  # through the doorway in the wall
+    assert in_earshot(house, jane, ben) and not in_earshot(house, jane, marcus)
+    grid = seen_tiles(house, jane)
+    assert grid[10][15] and not grid[10][30]
+    spots = {
+        "Jane": Spot(area="house", x=jane[0], y=jane[1]),
+        "Marcus": Spot(area="house", x=marcus[0], y=marcus[1]),
+    }
+    text = render_positions(house, world, spots, "Jane")
+    assert "(another room); out of sight." in text

@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from sealedlore.engine.area import Area, Placement
+from sealedlore.engine.area import Area, Placement, seen_tiles, sees
 from sealedlore.gui.area_render import px_for
 from sealedlore.gui.wrap_row import WrapRow
 
@@ -362,6 +362,9 @@ class AreaView(QWidget):
         # Tiles marked in the turn being written, and their pins.
         self._marks: list[tuple[int, int]] = []
         self._pins: list[_Pin] = []
+        # Indoors, what the author's character can't see is shaded.
+        self._shade: QGraphicsPixmapItem | None = None
+        self._shade_from: tuple[int, int] | None = None
         self.set_message("No area here yet.")
 
     # --- what is shown -----------------------------------------------------------
@@ -374,6 +377,7 @@ class AreaView(QWidget):
         self.scene.clear()
         self.people, self._tags, self._background, self._hover = {}, {}, None, None
         self._pins = []
+        self._shade, self._shade_from = None, None
         label = self.scene.addSimpleText(text)
         label.setBrush(QColor(200, 200, 210))
         self.title.setText("")
@@ -410,6 +414,7 @@ class AreaView(QWidget):
             self.scene.clear()
             self.people, self._tags, self._hover = {}, {}, None
             self._pins = []
+            self._shade, self._shade_from = None, None
             self._key = key
             if image is not None:
                 self._background = self.scene.addPixmap(QPixmap.fromImage(image))
@@ -489,6 +494,42 @@ class AreaView(QWidget):
         held = self.held()
         if held is not None:
             self._follow(held.x, held.y)
+        self._sync_sight()
+
+    def _sync_sight(self) -> None:
+        """Line of sight from the author's character: indoors the tiles they
+        can't see are shaded; anyone out of sight is drawn faint."""
+        held, area = self.held(), self.area
+        if held is None or area is None:
+            return
+        here = (held.x, held.y)
+        for name, person in self.people.items():
+            walker = person.walker
+            seen = walker.held or sees(area, here, (walker.x, walker.y))
+            person.setOpacity(1.0 if seen else 0.45)
+            tag = self._tags.get(name)
+            if tag is not None:
+                tag.setOpacity(1.0 if seen else 0.6)
+        if not area.indoor or self._shade_from == here:
+            return
+        self._shade_from = here
+        grid = seen_tiles(area, here)
+        image = QImage(area.width, area.height, QImage.Format_ARGB32)
+        image.fill(QColor(0, 0, 0, 0))
+        dark = QColor(8, 8, 14, 150)
+        for y, row in enumerate(grid):
+            for x, seen in enumerate(row):
+                if not seen:
+                    image.setPixelColor(x, y, dark)
+        px = px_for(area)
+        pixmap = QPixmap.fromImage(image)
+        if self._shade is None:
+            self._shade = self.scene.addPixmap(pixmap)
+            self._shade.setZValue(5)
+            self._shade.setTransformationMode(Qt.FastTransformation)
+            self._shade.setScale(px)
+        else:
+            self._shade.setPixmap(pixmap)
 
     def _tag_at(self, name: str, x: float, y: float) -> None:
         person, tag = self.people.get(name), self._tags.get(name)
@@ -614,6 +655,7 @@ class AreaView(QWidget):
             person.place_at(x, y)
             self._tag_at(held.name, x, y)
         self._follow(x, y)
+        self._sync_sight()
         if not self._steps:
             self._finish()
 

@@ -1515,7 +1515,7 @@ def render_positions(
         way = bearing(here, (spot.x, spot.y))
         how = f"beside {held}" if far == "beside" else f"{far} {way} of {held}"
         tail = f", {where}" if where and not apart else apart
-        lines.append(f"- {name}: {how}{tail}.")
+        lines.append(f"- {name}: {how}{tail}; {sight_words(area, here, (spot.x, spot.y))}.")
     reach = sorted(
         (
             (math.hypot(p.centre[0] - me.x - 0.5, p.centre[1] - me.y - 0.5) * area.tile_m, p)
@@ -1644,3 +1644,76 @@ def metres_per_tile(world: WorldMap, area: Area) -> float:
     if rect is None or not area.width:
         return area.tile_m
     return rect[2] / area.width
+
+
+# --- Who can see whom (design §3: line of sight across the grid) ---------------
+# Walls and rock stop sight; windows, fences, doorways and furniture don't;
+# trees thin it, and a few deep stop it. Earshot is a sight line within a
+# few strides, or the same room. Told to the storyteller with the positions
+# (not measured), and shown on the play view; the scene's roster is still the
+# scene read's.
+
+OPAQUE = frozenset("#^")
+TREES_BLOCK = 3
+EARSHOT_M = 20.0
+
+
+def _line(a: tuple[int, int], b: tuple[int, int]) -> list[tuple[int, int]]:
+    """The tiles a straight line from the middle of a to the middle of b
+    crosses, both ends included."""
+    (x0, y0), (x1, y1) = a, b
+    steps = max(abs(x1 - x0), abs(y1 - y0))
+    if steps == 0:
+        return [a]
+    out: list[tuple[int, int]] = []
+    for i in range(steps + 1):
+        t = i / steps
+        tile = (round(x0 + (x1 - x0) * t), round(y0 + (y1 - y0) * t))
+        if not out or out[-1] != tile:
+            out.append(tile)
+    return out
+
+
+def sees(area: Area, a: tuple[int, int], b: tuple[int, int]) -> bool:
+    """Whether someone at tile a can see tile b: nothing opaque between."""
+    trees = 0
+    for x, y in _line(a, b)[1:-1]:
+        ch = area.at(x, y)
+        if ch in OPAQUE:
+            return False
+        if ch == "T":
+            trees += 1
+            if trees >= TREES_BLOCK:
+                return False
+    return True
+
+
+def in_earshot(area: Area, a: tuple[int, int], b: tuple[int, int]) -> bool:
+    """Whether people at a and b can hear each other speak."""
+    metres = math.hypot(a[0] - b[0], a[1] - b[1]) * area.tile_m
+    if metres > EARSHOT_M:
+        return False
+    room_a, room_b = area.room_at(*a), area.room_at(*b)
+    if room_a is not None and room_b is not None and room_a.index == room_b.index:
+        return True
+    return sees(area, a, b)
+
+
+def sight_words(area: Area, a: tuple[int, int], b: tuple[int, int]) -> str:
+    """'in sight, within earshot', 'out of sight', for the positions."""
+    seen, heard = sees(area, a, b), in_earshot(area, a, b)
+    if seen:
+        return "in sight, within earshot" if heard else "in sight"
+    return "out of sight, within earshot" if heard else "out of sight"
+
+
+def seen_tiles(area: Area, origin: tuple[int, int]) -> list[list[bool]]:
+    """Which tiles someone at `origin` can see: a ray to each. Indoors only
+    (an area of 40 x 24 tiles is ~20 ms); outdoors the people's lines are
+    enough."""
+    w, h = area.width, area.height
+    out = [[False] * w for _ in range(h)]
+    for y in range(h):
+        for x in range(w):
+            out[y][x] = sees(area, origin, (x, y))
+    return out
