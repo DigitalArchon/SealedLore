@@ -22,7 +22,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QSize, Qt, QTimer
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -43,6 +43,7 @@ from PySide6.QtWidgets import (
 from sealedlore.engine.session_area import ASSET_LABELS, CARD_ROLES, TileSetCard
 from sealedlore.engine.tile_draw import DESIGNER_MODELS, PROMPT_KEY, tile_jobs, world_words
 from sealedlore.engine.tile_sets import SPRITES, TEXTURES
+from sealedlore.gui.image_codec import image_from_data
 from sealedlore.gui.model_picker import ModelField
 
 THUMB = 56
@@ -130,7 +131,7 @@ class TileSetGallery(QDialog):
                 return
             label, read = self._pending.pop(0)
             data = read()
-            image = QImage.fromData(data) if data else QImage()
+            image = image_from_data(data)
             if image.isNull():
                 label.setText("·")
                 continue

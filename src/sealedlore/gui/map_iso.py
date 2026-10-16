@@ -16,11 +16,12 @@ from __future__ import annotations
 
 import zlib
 
-from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QPointF, Qt
+from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPolygonF
 
 from sealedlore.engine.world_art import changed_buildings, plan_ground
 from sealedlore.engine.world_pictures import seen_change
+from sealedlore.gui.image_codec import encoded
 from sealedlore.gui.map_render import drawn_box
 from sealedlore.gui.map_tiles import LOOKS, Look, building_boxes
 from sealedlore.models.world import WorldArt, WorldMap
@@ -407,9 +408,4 @@ def iso_png(world: WorldMap, art: WorldArt, area_id: str, size: tuple[int, int])
     image = iso_image(world, art, area_id, size)
     if image is None:
         return None
-    data = QByteArray()
-    buffer = QBuffer(data)
-    buffer.open(QIODevice.WriteOnly)
-    image.save(buffer, "PNG")
-    buffer.close()
-    return bytes(data)
+    return encoded(image, "PNG")

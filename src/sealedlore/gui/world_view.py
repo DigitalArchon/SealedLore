@@ -83,6 +83,7 @@ from sealedlore.engine.world_art import (
 from sealedlore.engine.world_layout import position, size_of
 from sealedlore.engine.world_pictures import shown_view, view_current, views_of
 from sealedlore.gui import text_size
+from sealedlore.gui.image_codec import image_from_data
 from sealedlore.gui.isometric_view import IsometricBar, IsometricDialog
 from sealedlore.gui.map_art import FOG, picture_sprite, sprite_pixmap
 from sealedlore.gui.map_render import drawn_box, label_key
@@ -1901,7 +1902,7 @@ class WorldView(QWidget):
     def _set_postcard(self, place: WorldPlace) -> None:
         picture = self.art.picture_shown("postcard", place.id, place.state)
         data = self.picture_reader(picture.file) if picture and self.picture_reader else None
-        image = QImage.fromData(data) if data else QImage()
+        image = image_from_data(data)
         if image.isNull():
             self._postcard = None
             self.postcard_button.hide()
@@ -1921,7 +1922,7 @@ class WorldView(QWidget):
         dialog.setAttribute(Qt.WA_DeleteOnClose)  # a child of the map, kept with it otherwise
         dialog.setWindowTitle(name)
         label = QLabel()
-        image = QImage.fromData(data)
+        image = image_from_data(data)
         screen = self.screen()
         if screen is not None:
             room = screen.availableGeometry()

@@ -27,6 +27,7 @@ from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QTransform
 
 from sealedlore.engine.area import Area, Placement
 from sealedlore.engine.tile_sets import LIGHT_WORDS, TEXTURES, TileSetInfo, item_slugs
+from sealedlore.gui.image_codec import image_from_data
 
 # Pixels a tile, indoors and out: the view scales the picture to the zoom.
 # Outdoors 24: at 16 the default fit on a 1080p screen scaled the art up 1.2x
@@ -135,7 +136,7 @@ def sprite_image(data: bytes | None) -> QImage | None:
     for the story)."""
     if not data:
         return None
-    image = QImage.fromData(data)
+    image = image_from_data(data)
     if image.isNull():
         return None
     if image.hasAlphaChannel():
@@ -163,7 +164,7 @@ class TileSource:
         if role not in self._images:
             data = self.read(role)
             if is_texture(role):
-                image = QImage.fromData(data) if data else QImage()
+                image = image_from_data(data)
                 if not image.isNull() and (self.info.name == "own" or self.from_story(role)):
                     image = tileable(image)
                 found = None if image.isNull() else image

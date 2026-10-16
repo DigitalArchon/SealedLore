@@ -18,6 +18,7 @@ from PySide6.QtCore import QByteArray, Qt
 from PySide6.QtGui import QColor, QImage, QPainter, QPixmap
 
 from sealedlore.engine.world_art import PALETTE
+from sealedlore.gui.image_codec import image_from_data
 
 SPRITE_PIXELS = 32
 OUTLINE = QColor(PALETTE["k"])
@@ -190,7 +191,7 @@ def picture_sprite(key: str, height: int, read: Callable[[], bytes | None]) -> Q
         _PICTURE_SPRITES.move_to_end((key, height))
         return cached
     data = read()
-    image = QImage.fromData(data) if data else QImage()
+    image = image_from_data(data)
     if image.isNull():
         return None
     work = image.scaled(256, 256, Qt.KeepAspectRatio, Qt.SmoothTransformation)

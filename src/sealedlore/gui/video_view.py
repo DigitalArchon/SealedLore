@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.gui.image_codec import encoded
 from sealedlore.gui.ref_images import pixmap_within
 from sealedlore.models.video import GeneratedVideo
 
@@ -96,12 +97,7 @@ def _set_source(player, source: Path | bytes, owner: QObject) -> QBuffer | None:
 
 def image_jpeg(image: QImage, quality: int = 88) -> bytes:
     """A frame as JPEG bytes, with no text blocks (Qt adds none to JPEG)."""
-    data = QByteArray()
-    buffer = QBuffer(data)
-    buffer.open(QIODevice.WriteOnly)
-    image.save(buffer, "JPEG", quality)
-    buffer.close()
-    return bytes(data)
+    return encoded(image, "JPEG", quality)
 
 
 class FrameGrabber(QObject):

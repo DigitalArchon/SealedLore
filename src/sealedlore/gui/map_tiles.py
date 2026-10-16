@@ -26,6 +26,8 @@ from functools import lru_cache
 from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtGui import QColor, QImage, QPainter, QPixmap
 
+from sealedlore.gui.image_codec import image_from_data
+
 TILE = 16
 # A ring of walls wider than this is a town's wall or a barricade, not a
 # building to roof over (live, Hellsville's closed barricade roofed the town).
@@ -268,7 +270,7 @@ def texture_colours(name: str, read: Callable[[str], bytes | None]) -> LookColou
         roles = (("ground", "out-ground"), ("wall", "out-wall"), ("roof", "out-roof"))
         for field_name, role in roles:
             data = read(role)
-            image = QImage.fromData(data) if data else QImage()
+            image = image_from_data(data)
             if image.isNull():
                 continue
             pixel = image.scaled(1, 1, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)

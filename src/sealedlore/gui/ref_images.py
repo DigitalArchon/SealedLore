@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.plot_md import ParsedPlotFile, PlotProblem
+from sealedlore.gui.image_codec import encoded, read_image
 from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.ids import new_id
 from sealedlore.models.image import ImageRef
@@ -58,21 +59,14 @@ StoryPictures = Callable[[], "PictureStore | None"]
 
 
 def _encoded(image: QImage, fmt: str, quality: int = -1) -> bytes:
-    data = QByteArray()
-    buffer = QBuffer(data)
-    buffer.open(QIODevice.WriteOnly)
-    image.save(buffer, fmt, quality)
-    buffer.close()
-    return bytes(data.data())
+    return encoded(image, fmt, quality)  # under the process's codec lock
 
 
 def load_image(path: Path) -> QImage:
     """A picture file as it should be seen: its EXIF orientation applied, and
     one pixel a pixel (Qt reads "face@2x.png" as twice as dense, and the crop
     dialog drew it at half size under a full-size frame)."""
-    reader = QImageReader(str(path))
-    reader.setAutoTransform(True)
-    image = reader.read()
+    image = read_image(lambda: QImageReader(str(path)))
     image.setDevicePixelRatio(1.0)
     return image
 
@@ -89,9 +83,7 @@ def image_of(data: bytes | None) -> QImage:
     array = QByteArray(data)
     buffer = QBuffer(array)
     buffer.open(QIODevice.ReadOnly)
-    reader = QImageReader(buffer)
-    reader.setAutoTransform(True)
-    image = reader.read()
+    image = read_image(lambda: QImageReader(buffer))
     buffer.close()
     return image
 

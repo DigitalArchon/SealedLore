@@ -33,6 +33,7 @@ from sealedlore.engine.picture_shapes import FREE, SQUARE
 from sealedlore.engine.session_area import TileAsset
 from sealedlore.engine.tile_sets import TEXTURES
 from sealedlore.gui.crop_dialog import cropped_picture
+from sealedlore.gui.image_codec import image_from_data
 from sealedlore.gui.ref_images import PICTURE_FILTER
 
 ICON = 48
@@ -183,7 +184,7 @@ class TileSetEditor(QDialog):
             data = self._read(role)
         if not data:
             return None
-        image = QImage.fromData(data)
+        image = image_from_data(data)
         return None if image.isNull() else image
 
     def _filter(self, text: str) -> None:

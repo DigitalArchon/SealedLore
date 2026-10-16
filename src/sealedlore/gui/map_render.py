@@ -7,10 +7,11 @@ QImage alone: it runs on the map pictures' thread, not the GUI's.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QRect, Qt
+from PySide6.QtCore import QRect, Qt
 from PySide6.QtGui import QImage, QPainter
 
 from sealedlore.engine.world_art import changed_buildings, decked, plan_ground
+from sealedlore.gui.image_codec import encoded
 from sealedlore.gui.map_tiles import TILE, building_boxes, render_tiles
 from sealedlore.models.world import PlaceLayout, WorldArt, WorldMap, WorldPlace
 
@@ -91,9 +92,4 @@ def plan_png(world: WorldMap, art: WorldArt, area_id: str) -> bytes | None:
     image = plan_image(world, art, area_id)
     if image is None:
         return None
-    data = QByteArray()
-    buffer = QBuffer(data)
-    buffer.open(QIODevice.WriteOnly)
-    image.save(buffer, "PNG")
-    buffer.close()
-    return bytes(data)
+    return encoded(image, "PNG")
