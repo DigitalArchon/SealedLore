@@ -19,8 +19,8 @@ from sealedlore.gui.private_dialogs import FitDialog, PrivateSummaryDialog, chat
 from sealedlore.gui.winprivacy import exclude_from_capture
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.config import ProviderConfig
+from sealedlore.providers import make_chat_provider
 from sealedlore.providers.base import ChatProvider
-from sealedlore.providers.openai_compat import OpenAICompatibleProvider
 from sealedlore.providers.private_mode import ModelRetired, PrivateModeProvider
 from sealedlore.providers.tee import TeeClient, is_private_mode, is_tee, move_refusal
 from sealedlore.storage.repository import save_config
@@ -101,9 +101,7 @@ class PrivateWindow:
     def _make_private_provider(self, settings: ProviderConfig) -> ChatProvider:
         if self.private_provider_factory is not None:
             return self.private_provider_factory(settings)
-        if is_private_mode(settings.model):
-            return PrivateModeProvider(settings)
-        return OpenAICompatibleProvider(settings)
+        return make_chat_provider(settings)
 
     def _wants_attestation(self, model: str) -> bool:
         """An end-to-end encrypted model is always attested: its key is what

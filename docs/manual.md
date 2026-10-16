@@ -324,6 +324,25 @@ another endpoint the chat model works as it is; set the lore, scene, plot and
 image models to ones your endpoint lists (Browse… shows them), or the calls
 that use them fail and fall back where they can.
 
+**Anthropic's own API.** With an Anthropic key, set the base URL under
+Settings → Endpoint to `https://api.anthropic.com`: **Speaks** reads the
+protocol from the address, or choose **Anthropic** there outright for a
+proxy that speaks Anthropic's Messages API elsewhere. The key is sent as
+Anthropic's `x-api-key` header, and the note under the key field says so.
+Models are Anthropic's own ids (`claude-sonnet-4-6`, `claude-opus-5-5`;
+Browse… lists them), so set the story model to one of them: NanoGPT's
+default, `anthropic/claude-sonnet-4.6`, isn't a name Anthropic knows.
+Prompt caching works as on NanoGPT, and every model field falls back to the
+story model as usual. What differs: every call is
+**unpriced**, since Anthropic lists no prices, so the story's cost shows
+calls rather than dollars; pictures, videos and embeddings are not
+Anthropic's to make, so Settings → Images, Video and Lore need endpoints
+of their own (with none, lore is matched by keywords alone); and thinking
+follows the reasoning levels under Settings → Generation (As low as
+possible sends nothing to a model that thinks only when asked, and the
+lowest effort to one whose thinking can't be turned off, such as Opus 5.5).
+NanoGPT's routes and private models don't apply.
+
 **Choosing a model.** Every model field has a **Browse…** button. It lists the
 models your endpoint offers, fetched from the endpoint itself, and the list is
 searchable ("sonnet 4.6", "llama 70b") and sortable by context size or price.

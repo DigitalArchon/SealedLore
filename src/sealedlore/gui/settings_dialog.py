@@ -57,6 +57,7 @@ from sealedlore.gui.model_picker import (
 from sealedlore.gui.speed_test import SpeedTestDialog, speed_tests
 from sealedlore.gui.video_jobs import VideoCatalog
 from sealedlore.models.config import (
+    CHAT_API_LABELS,
     DEFAULT_BASE_URL,
     DEFAULT_EMBEDDING_MODEL,
     DEFAULT_STORY_MODEL,
@@ -69,6 +70,7 @@ from sealedlore.models.config import (
     MediaEndpoint,
     ProviderConfig,
     _same_host,
+    chat_api,
     on_nanogpt,
     recommended_model,
     recommended_models,
@@ -82,9 +84,10 @@ from sealedlore.models.generation import (
 )
 from sealedlore.models.route import ModelRoute
 from sealedlore.models.story import Story
+from sealedlore.providers import make_chat_provider
+from sealedlore.providers.base import ChatProvider
 from sealedlore.providers.context_probe import detect_context
 from sealedlore.providers.images import parse_image_models
-from sealedlore.providers.openai_compat import OpenAICompatibleProvider
 from sealedlore.providers.tee import move_refusal
 from sealedlore.storage import keychain
 from sealedlore.storage.paths import config_file
@@ -202,13 +205,18 @@ class SettingsDialog(QDialog):
 
     # --- tabs -------------------------------------------------------------
 
-    def _model_source(self) -> tuple[OpenAICompatibleProvider, str, bool]:
+    def _model_source(self) -> tuple[ChatProvider, str, bool]:
         url = self.base_url.text().strip()
         if not url:
             raise ValueError("Set the base URL first.")
         require_https(url)
-        provider = OpenAICompatibleProvider(
-            ProviderConfig(name="browse", base_url=url, api_key=self.api_key.text())
+        provider = make_chat_provider(
+            ProviderConfig(
+                name="browse",
+                base_url=url,
+                api_key=self.api_key.text(),
+                api=self.chat_api.currentData(),
+            )
         )
         return provider, url, True
 
@@ -233,6 +241,22 @@ class SettingsDialog(QDialog):
             "command line and test setups."
         )
         self.key_storage.currentIndexChanged.connect(self._sync_key_notes)
+        # What the endpoint speaks: OpenAI's /chat/completions, or Anthropic's
+        # own Messages API (providers/anthropic.py). From the address knows
+        # Anthropic's host; anything else is OpenAI-compatible.
+        self.chat_api = QComboBox()
+        for value, label in CHAT_API_LABELS.items():
+            self.chat_api.addItem(label, value)
+        self.chat_api.setCurrentIndex(
+            max(0, self.chat_api.findData(provider.api if provider else "auto"))
+        )
+        self.chat_api.setToolTip(
+            "Which protocol the address speaks. From the address takes api.anthropic.com "
+            "as Anthropic's own API and anything else as OpenAI-compatible."
+        )
+        self.api_note = _note_label()
+        self.chat_api.currentIndexChanged.connect(self._sync_api_note)
+        self.base_url.textChanged.connect(self._sync_api_note)
 
         self.cache_mode = QComboBox()
         self.cache_mode.addItems(["auto", "on", "off"])
@@ -249,21 +273,40 @@ class SettingsDialog(QDialog):
 
         form.addRow("Name", self.provider_name)
         form.addRow("Base URL", self.base_url)
+        form.addRow("Speaks", self.chat_api)
         form.addRow("API key", self.api_key)
+        form.addRow(self.api_note)
         form.addRow("Keep API keys in", self.key_storage)
         form.addRow(self._key_note())
         form.addRow("Prompt caching", self.cache_mode)
         form.addRow("Cache lifetime", self.cache_ttl)
 
         hint = QLabel(
-            "Any OpenAI-compatible /chat/completions endpoint. Caching on 'auto' "
+            "Any OpenAI-compatible /chat/completions endpoint, or Anthropic's own API "
+            "(https://api.anthropic.com with an Anthropic key). Caching on 'auto' "
             "applies cache_control blocks only to Anthropic models. Which models it "
             "runs is on the Models tab."
         )
         hint.setObjectName("hintLabel")
         hint.setWordWrap(True)
         form.addRow(hint)
+        self._sync_api_note()
         return widget
+
+    def _sync_api_note(self, *_args) -> None:
+        """What the key is sent as, and what the choice of protocol means."""
+        if chat_api(self.base_url.text(), self.chat_api.currentData()) == "anthropic":
+            self.api_note.setText(
+                "Anthropic's own Messages API: the key is sent as its x-api-key header. "
+                "Models are Anthropic's own ids (claude-sonnet-4-6); every call is "
+                "unpriced, since Anthropic lists no prices; thinking follows the reasoning "
+                "levels under Generation; pictures, videos and embeddings need endpoints "
+                "of their own."
+            )
+        else:
+            self.api_note.setText(
+                "An OpenAI-compatible endpoint: the key is sent as a Bearer token."
+            )
 
     def _key_place(self) -> str:
         """Where a key typed here goes, as the choice stands."""
@@ -531,7 +574,12 @@ class SettingsDialog(QDialog):
         if not url:
             raise ValueError("Set the base URL first.")
         require_https(url)
-        main = ProviderConfig(name="speed test", base_url=url, api_key=self.api_key.text())
+        main = ProviderConfig(
+            name="speed test",
+            base_url=url,
+            api_key=self.api_key.text(),
+            api=self.chat_api.currentData(),
+        )
 
         def role(
             name: str, field: ModelField, fallback: str | None = None, kind: CallKind = "side"
@@ -854,7 +902,7 @@ class SettingsDialog(QDialog):
             self._catalog.changed.disconnect(self._show_routes)
         super().done(result)
 
-    def _private_source(self) -> tuple[OpenAICompatibleProvider, str, bool]:
+    def _private_source(self) -> tuple[ChatProvider, str, bool]:
         url = self.private_url.text().strip()
         if not url:
             raise ValueError("Set the private endpoint's base URL first.")
@@ -862,7 +910,7 @@ class SettingsDialog(QDialog):
         key = self.private_key.text() or (
             self.api_key.text() if _same_host(url, self.base_url.text().strip()) else ""
         )
-        provider = OpenAICompatibleProvider(
+        provider = make_chat_provider(
             ProviderConfig(name="private-browse", base_url=url, api_key=key)
         )
         return provider, url, True
@@ -1396,6 +1444,7 @@ class SettingsDialog(QDialog):
             self.config.providers.append(provider)
         provider.base_url = url
         provider.api_key = self.api_key.text()
+        provider.api = self.chat_api.currentData()
         self.config.key_storage = self.key_storage.currentData()
         provider.model = self.model.text().strip()
         self.config.active_provider_name = name

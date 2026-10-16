@@ -242,7 +242,10 @@ Windows offers weaker privacy on the machine itself (see
    protocol works; the defaults assume [NanoGPT](https://nano-gpt.com)
    (`https://nano-gpt.com/api/v1`), and [OpenRouter](https://openrouter.ai)
    (`https://openrouter.ai/api/v1`) or a local server on `localhost` work the
-   same way. The key is kept in the system keychain (GNOME Keyring or
+   same way. Anthropic's own API works directly too, with an Anthropic key
+   and `https://api.anthropic.com` as the base URL (Settings → Endpoint →
+   Speaks reads it from the address). The key is kept in the system
+   keychain (GNOME Keyring or
    KWallet on Linux, Credential Manager on Windows), or in plain text in the
    data folder on a computer without one; Settings says which under each key
    field. It is used for nothing else. NanoGPT is the recommended endpoint: it also serves the

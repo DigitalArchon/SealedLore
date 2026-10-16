@@ -41,7 +41,6 @@ from sealedlore.providers.base import (
     TextDelta,
     error_detail,
 )
-from sealedlore.providers.tee import is_private_mode
 
 # Short, so it costs next to nothing, and long enough to time: a rate taken
 # over a dozen tokens is mostly the network's jitter.
@@ -207,14 +206,11 @@ def plan_targets(
 
 def provider_for(settings: ProviderConfig) -> ChatProvider:
     """The client a model is reached through: an end-to-end encrypted one is
-    never sent in the clear, here as anywhere."""
-    if is_private_mode(settings.model):
-        from sealedlore.providers.private_mode import PrivateModeProvider
+    never sent in the clear, and Anthropic's own API gets its native client,
+    here as anywhere (`providers.make_chat_provider`)."""
+    from sealedlore.providers import make_chat_provider
 
-        return PrivateModeProvider(settings)
-    from sealedlore.providers.openai_compat import OpenAICompatibleProvider
-
-    return OpenAICompatibleProvider(settings)
+    return make_chat_provider(settings)
 
 
 def _reasoning_tokens(completed: StreamCompleted) -> int | None:

@@ -45,10 +45,10 @@ from sealedlore.models.node import (
     ResponseStyle,
 )
 from sealedlore.models.story import Story
+from sealedlore.providers import make_chat_provider
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError, TextDelta
 from sealedlore.providers.embeddings import OpenAICompatibleEmbeddings
 from sealedlore.providers.mock import MockChatProvider
-from sealedlore.providers.openai_compat import OpenAICompatibleProvider
 from sealedlore.storage import keychain
 from sealedlore.storage.archive import ArchiveError, import_archive, write_archive
 from sealedlore.storage.images import all_image_files, reference_files
@@ -125,7 +125,7 @@ def build_provider(config: Config, *, mock: bool) -> ChatProvider:
         raise SystemExit(
             "No provider configured. Run `sealedlore configure --api-key ...`, or pass --mock."
         )
-    return OpenAICompatibleProvider(provider_config)
+    return make_chat_provider(provider_config)
 
 
 def cmd_configure(args: argparse.Namespace) -> int:
@@ -147,6 +147,8 @@ def cmd_configure(args: argparse.Namespace) -> int:
         provider.api_key = args.api_key
     if args.model is not None:
         provider.model = args.model
+    if args.api is not None:
+        provider.api = args.api
     if existing is None:
         if not config.providers:
             # A first setup starts with the recommended models for the small
@@ -910,6 +912,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     configure.add_argument("--base-url", default=DEFAULT_BASE_URL)
     configure.add_argument("--api-key")
     configure.add_argument("--model")
+    configure.add_argument(
+        "--api",
+        choices=["auto", "openai", "anthropic"],
+        help="what the endpoint speaks: OpenAI's /chat/completions or Anthropic's own "
+        "API (the default, auto, reads it from the address)",
+    )
     configure.add_argument(
         "--key-storage",
         choices=["keychain", "file"],

@@ -77,5 +77,7 @@ def welcome_html(missing: list[str], *, partly_set: bool) -> str:
         "<li><b>Save</b>, then start a story.</li>"
         "</ol>"
         "<p>Any other OpenAI-compatible endpoint (OpenRouter, a local server) "
-        "works too: put its base URL on the Endpoint tab instead.</p>"
+        "works too: put its base URL on the Endpoint tab instead. So does "
+        "Anthropic's own API, with an Anthropic key and "
+        "<b>https://api.anthropic.com</b> as the base URL.</p>"
     )

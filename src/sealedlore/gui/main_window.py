@@ -129,11 +129,11 @@ from sealedlore.models.scene import SceneState
 from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
 from sealedlore.models.world import WorldArt, WorldMap
+from sealedlore.providers import make_chat_provider
 from sealedlore.providers.base import ChatProvider, UnconfiguredProvider
 from sealedlore.providers.embeddings import EmbeddingBackend, OpenAICompatibleEmbeddings
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.providers.model_hosts import Host
-from sealedlore.providers.openai_compat import OpenAICompatibleProvider
 from sealedlore.providers.tee import is_tee
 from sealedlore.storage import keychain
 from sealedlore.storage.archive import (
@@ -1973,7 +1973,7 @@ class MainWindow(
             # Never the mock by accident: a job started without an endpoint
             # fails with the reason instead of saving canned text as story.
             return UnconfiguredProvider()
-        return OpenAICompatibleProvider(provider_config)
+        return make_chat_provider(provider_config)
 
     def _current_embeddings(self) -> EmbeddingBackend | None:
         """The embeddings client, built once. None means keyword retrieval (§7)."""

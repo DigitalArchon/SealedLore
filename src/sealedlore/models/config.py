@@ -304,6 +304,31 @@ def _same_host(first: str, second: str) -> bool:
     )
 
 
+# The protocol the chat endpoint speaks: OpenAI's /chat/completions (NanoGPT,
+# OpenRouter, a local server) or Anthropic's own Messages API
+# (providers/anthropic.py). "auto" reads it from the host (`chat_api`).
+ChatApi = Literal["auto", "openai", "anthropic"]
+CHAT_API_LABELS: dict[str, str] = {
+    "auto": "From the address",
+    "openai": "OpenAI-compatible",
+    "anthropic": "Anthropic",
+}
+ANTHROPIC_HOST = "api.anthropic.com"
+_CHAT_HOSTS = {ANTHROPIC_HOST: "anthropic"}
+
+
+def chat_api(base_url: str, api: str = "auto") -> str:
+    """The protocol a chat endpoint speaks: `api` unless "auto", otherwise
+    Anthropic's for its own host and OpenAI's for anything else."""
+    if api != "auto":
+        return api
+    host = (urlparse(base_url.strip()).hostname or "").lower()
+    for known, name in _CHAT_HOSTS.items():
+        if host == known or host.endswith("." + known):
+            return name
+    return "openai"
+
+
 class ProviderConfig(BaseModel):
     # A URL assigned later (Settings, the CLI) is checked like one parsed.
     model_config = ConfigDict(validate_assignment=True)
@@ -316,11 +341,18 @@ class ProviderConfig(BaseModel):
     # Escape hatch for endpoint-specific request fields (e.g. OpenRouter's
     # {"usage": {"include": true}}); merged into the payload last.
     extra_body: dict[str, Any] = Field(default_factory=dict)
+    # What the endpoint speaks (Settings → Endpoint → Speaks); "auto" reads
+    # it from the address.
+    api: ChatApi = "auto"
 
     @field_validator("base_url")
     @classmethod
     def _check_scheme(cls, value: str) -> str:
         return require_https(value)
+
+    def speaks(self) -> str:
+        """The protocol this endpoint speaks, "openai" or "anthropic" (`chat_api`)."""
+        return chat_api(self.base_url, self.api)
 
 
 # The protocol a picture or video endpoint speaks. "auto" reads it from the
@@ -789,7 +821,7 @@ class Config(BaseModel):
         """Where pictures are made, blanks filled from the chat endpoint.
         None when there is nowhere to send them."""
         settings = self.image_endpoint
-        chat = self.active_provider()
+        chat = self._chat_to_inherit()
         base_url = settings.base_url or (chat.base_url if chat is not None else "")
         if not base_url:
             return None
@@ -820,6 +852,13 @@ class Config(BaseModel):
             return None
         return next((p for p in self.providers if p.name == self.active_provider_name), None)
 
+    def _chat_to_inherit(self) -> ProviderConfig | None:
+        """The chat endpoint, for pictures and embeddings to take a blank
+        address or key from; none when it is Anthropic's own API, which
+        makes no pictures and no vectors."""
+        chat = self.active_provider()
+        return None if chat is None or chat.speaks() == "anthropic" else chat
+
     def embeddings(self) -> EmbeddingProviderConfig | None:
         """The embeddings endpoint with blanks filled from the chat provider.
 
@@ -829,7 +868,7 @@ class Config(BaseModel):
         settings = self.embedding_provider
         if settings is None or not settings.model:
             return None
-        chat = self.active_provider()
+        chat = self._chat_to_inherit()
         resolved = settings.model_copy()
         if not resolved.base_url:
             if chat is None:
