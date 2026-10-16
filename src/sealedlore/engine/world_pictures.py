@@ -53,7 +53,7 @@ class Person:
 @dataclass(frozen=True)
 class PictureJob:
     key: str
-    subject: Literal["person", "place", "thing", "postcard", "isometric"]
+    subject: Literal["person", "place", "thing", "postcard", "isometric", "walker", "item"]
     subject_id: str
     name: str
     prompt: str

@@ -108,6 +108,7 @@ from sealedlore.gui.transcript import (
 )
 from sealedlore.gui.usage_dialog import UsageDialog
 from sealedlore.gui.welcome import setup_missing, welcome_html
+from sealedlore.gui.window_area import AreaWindow
 from sealedlore.gui.window_chat import ChatWindow
 from sealedlore.gui.window_find import FindWindow
 from sealedlore.gui.window_images import ImagesWindow
@@ -193,6 +194,7 @@ class MainWindow(
     ChatWindow,
     FindWindow,
     WorldWindow,
+    AreaWindow,
     ImagesWindow,
     VideosWindow,
     PrivateWindow,
@@ -332,6 +334,7 @@ class MainWindow(
         # Wraps under a large text size rather than widening the window.
         self._build_find()
         self._build_world()
+        self._build_area()
         self._build_stories_button()
         self.top_row = WrapRow(spacing=6, group_spacing=12)
         self.top_row.add_group([self.stories_button, self.view_toggle])
@@ -3786,6 +3789,7 @@ class MainWindow(
         busy = self._busy
         has_story = self.session is not None
         self._refresh_model_button()
+        self._sync_area_lock()
         self.composer.set_busy(
             busy,
             has_story=has_story,

@@ -15,6 +15,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from sealedlore.ids import new_id
+from sealedlore.models.area import FurnishPlan
 
 PlaceKind = Literal["region", "settlement", "building", "room", "area", "route", "vehicle", "site"]
 
@@ -152,8 +153,11 @@ class MapPicture(BaseModel):
     place's postcard. The file is in the story's pictures, under images/map/."""
 
     id: str = Field(default_factory=new_id)
-    subject: Literal["person", "place", "thing", "postcard", "isometric"]
-    # A place's or thing's id; a person's name.
+    # "walker": a person's sprite for map-first play, drawn from their
+    # portrait; "item": a sprite of a kind of thing, by its name's slug
+    # (engine/tile_sets.py `slug`), for a story whose tile set lacks it.
+    subject: Literal["person", "place", "thing", "postcard", "isometric", "walker", "item"]
+    # A place's or thing's id; a person's name; an item's slug.
     subject_id: str
     name: str
     # As for sprites: the state it shows, drawn from the picture before it.
@@ -208,6 +212,22 @@ class WorldArt(BaseModel):
     # or bringing one in chooses it; a choice naming a picture that is gone
     # falls back to the latest.
     chosen_views: dict[str, dict[str, str]] = Field(default_factory=dict)
+    # Map-first play (models/area.py): each place's furnishing, by place id
+    # and then by state, as a plan's are.
+    furnishings: dict[str, dict[str, FurnishPlan]] = Field(default_factory=dict)
+    # The tile set the map is drawn in (engine/tile_sets.py): a shipped set's
+    # name, "own" for the one drawn for this story, or "" for the program to
+    # choose from the setting.
+    tile_set: str = ""
+    # The story's own tile set: each asset's role ("floor", "out-road",
+    # "decor0") to its file under images/map/, and the words it was drawn from.
+    tile_assets: dict[str, str] = Field(default_factory=dict)
+    tile_words: dict[str, str] = Field(default_factory=dict)
+
+    def furnishing_for(self, place_id: str, state: str) -> FurnishPlan | None:
+        """A place's furnishing in `state`, else as the place was."""
+        drawn = self.furnishings.get(place_id) or {}
+        return drawn.get(state) or drawn.get("")
 
     def picture_for(
         self, subject: str, subject_id: str, state: str | None = None

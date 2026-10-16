@@ -13,6 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from sealedlore.models.area import Density
 from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef
 from sealedlore.models.lore import LoreEntry
@@ -53,6 +54,8 @@ class Scenario(BaseModel):
     # The map that grows as the story goes (models/world.py): a choice for the
     # story, so a new playthrough keeps it.
     world_map: bool = False
+    # How full its rooms are (map-first play, models/area.py).
+    map_density: Density = "normal"
     # A map drawn up beforehand (a plot file's `# Map`): its places, ways and
     # things, fixed from the start, and where the story begins on it.
     world_base: WorldDelta | None = None

@@ -126,6 +126,8 @@ class WorldWindow:
         self.world_view.set_world(
             session.world(), session.map_art_copy(), held, keep_view=keep_view
         )
+        # Map-first play: the area to walk on (gui/window_area.py).
+        self.refresh_area()
 
     def _sync_world(self) -> None:
         """The window laid out for a map or not, and the map's art under way.

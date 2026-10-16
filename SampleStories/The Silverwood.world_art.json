@@ -2771,7 +2771,817 @@
    "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: Seen from above, a ring of nine enormous trees encircles a still, dark pool of water at the centre of a clearing. The trees stand spaced evenly apart, their massive trunks grey-silver bark, each one broad and gnarled with age. Their canopies spread wide, the leaves pale grey rather than green. Dark, viscous sap runs down the trunks in black streaks, glistening where it catches the light. The ground between the trees is a mix of grass and bare earth, with fallen grey leaves scattered around the base of each trunk and drifting at the pool's edge. The pool itself is circular, its surface motionless and reflective, mirroring the ring of grey canopy above it. The overall palette is muted: silver, grey, black, and the deep stillness of the water. The ground: green countryside. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
    "model": "nano-banana-pro-edit",
    "made_at": "2026-10-15T02:26:57.432553+00:00"
+  },
+  {
+   "id": "1d83d514-c06a-4d34-8097-9b41b70a482f",
+   "subject": "walker",
+   "subject_id": "Queen Ysolde",
+   "name": "Queen Ysolde",
+   "state": "",
+   "file": "pictures/map/walker-silverwood-ysolde.webp",
+   "from_picture": null,
+   "prompt": "Create a small full-body game character sprite of the person in image 1, in hand-painted 16-bit pixel art in the style of Stardew Valley: standing, facing the viewer, the whole figure from head to feet with chibi proportions and a large head, keeping their hair colour and style, skin tone, build, and the clothes and colours they wear in image 1. Centred alone on a plain pure white background with a wide white margin on every side, crisp dark outline.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-16T12:02:44.216989+00:00",
+   "plan": ""
+  },
+  {
+   "id": "6475714f-8eaa-46d6-93b3-936dfcf6318a",
+   "subject": "walker",
+   "subject_id": "Brannoc Hale",
+   "name": "Brannoc Hale",
+   "state": "",
+   "file": "pictures/map/walker-silverwood-brannoc.webp",
+   "from_picture": null,
+   "prompt": "Create a small full-body game character sprite of the person in image 1, in hand-painted 16-bit pixel art in the style of Stardew Valley: standing, facing the viewer, the whole figure from head to feet with chibi proportions and a large head, keeping their hair colour and style, skin tone, build, and the clothes and colours they wear in image 1. Centred alone on a plain pure white background with a wide white margin on every side, crisp dark outline.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-16T12:02:44.483610+00:00",
+   "plan": ""
+  },
+  {
+   "id": "88958a3b-661b-4454-8585-0664c3de80a0",
+   "subject": "walker",
+   "subject_id": "The Hollow King",
+   "name": "The Hollow King",
+   "state": "",
+   "file": "pictures/map/walker-silverwood-hollow-king.webp",
+   "from_picture": null,
+   "prompt": "Create a small full-body game character sprite of the person in image 1, in hand-painted 16-bit pixel art in the style of Stardew Valley: standing, facing the viewer, the whole figure from head to feet with chibi proportions and a large head, keeping their hair colour and style, skin tone, build, and the clothes and colours they wear in image 1. Centred alone on a plain pure white background with a wide white margin on every side, crisp dark outline.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-16T12:02:44.878343+00:00",
+   "plan": ""
+  },
+  {
+   "id": "653bfcda-6aec-470a-b935-61fdf8958ca0",
+   "subject": "walker",
+   "subject_id": "Elowen Thistledown",
+   "name": "Elowen Thistledown",
+   "state": "",
+   "file": "pictures/map/walker-silverwood-elowen.webp",
+   "from_picture": null,
+   "prompt": "Create a small full-body game character sprite of the person in image 1, in hand-painted 16-bit pixel art in the style of Stardew Valley: standing, facing the viewer, the whole figure from head to feet with chibi proportions and a large head, keeping their hair colour and style, skin tone, build, and the clothes and colours they wear in image 1. Centred alone on a plain pure white background with a wide white margin on every side, crisp dark outline.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-16T12:02:44.953219+00:00",
+   "plan": ""
+  },
+  {
+   "id": "e422fdac-279a-4594-b0ff-cd2e13043796",
+   "subject": "walker",
+   "subject_id": "Durra Flintmantle",
+   "name": "Durra Flintmantle",
+   "state": "",
+   "file": "pictures/map/walker-silverwood-durra.webp",
+   "from_picture": null,
+   "prompt": "Create a small full-body game character sprite of the person in image 1, in hand-painted 16-bit pixel art in the style of Stardew Valley: standing, facing the viewer, the whole figure from head to feet with chibi proportions and a large head, keeping their hair colour and style, skin tone, build, and the clothes and colours they wear in image 1. Centred alone on a plain pure white background with a wide white margin on every side, crisp dark outline.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-16T12:02:45.553128+00:00",
+   "plan": ""
+  },
+  {
+   "id": "288eb141-dff2-490e-bfcc-38498795d700",
+   "subject": "walker",
+   "subject_id": "Mother Wenna",
+   "name": "Mother Wenna",
+   "state": "",
+   "file": "pictures/map/walker-silverwood-wenna.webp",
+   "from_picture": null,
+   "prompt": "Create a small full-body game character sprite of the person in image 1, in hand-painted 16-bit pixel art in the style of Stardew Valley: standing, facing the viewer, the whole figure from head to feet with chibi proportions and a large head, keeping their hair colour and style, skin tone, build, and the clothes and colours they wear in image 1. Centred alone on a plain pure white background with a wide white margin on every side, crisp dark outline.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-16T12:04:37.584342+00:00",
+   "plan": ""
   }
  ],
- "pictures_by_day": {}
+ "pictures_by_day": {},
+ "furnishings": {
+  "86ce636d-eac4-58c0-abe7-93dfc8284d86": {
+   "": {
+    "place_id": "86ce636d-eac4-58c0-abe7-93dfc8284d86",
+    "state": "",
+    "rooms": [
+     {
+      "room": 0,
+      "purpose": "miller's combined workspace and living quarters",
+      "items": [
+       {
+        "name": "a large millstone on timber frame",
+        "w": 3,
+        "h": 3,
+        "where": "middle",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a wooden grain hopper above millstone",
+        "w": 2,
+        "h": 2,
+        "where": "middle",
+        "count": 1,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "a heavy flour barrel",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 3,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a sack of grain",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 4,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a rough wooden table with bread and lamp",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "eat"
+        ]
+       },
+       {
+        "name": "a wooden stool",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a stone hearth with banked embers",
+        "w": 2,
+        "h": 2,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a simple wooden bed with straw mattress",
+        "w": 2,
+        "h": 3,
+        "where": "corner",
+        "count": 1,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "a wooden tool rack with miller's tools",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a wooden storage chest",
+        "w": 2,
+        "h": 1,
+        "where": "corner",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a waterwheel mechanism with dripping timber axle",
+        "w": 3,
+        "h": 2,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a wooden flour scoop hanging on peg",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       }
+      ]
+     }
+    ],
+    "model": "anthropic/claude-sonnet-4.6",
+    "made_at": "2026-10-16T11:52:17.176418+00:00"
+   }
+  },
+  "3e4d2b9c-20d7-50fa-aa89-f16642b4beed": {
+   "": {
+    "place_id": "3e4d2b9c-20d7-50fa-aa89-f16642b4beed",
+    "state": "",
+    "rooms": [
+     {
+      "room": 0,
+      "purpose": "main hall and taproom",
+      "items": [
+       {
+        "name": "long trestle table with benches",
+        "w": 4,
+        "h": 2,
+        "where": "middle",
+        "count": 4,
+        "verbs": [
+         "use",
+         "eat",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a round wooden table with stools",
+        "w": 2,
+        "h": 2,
+        "where": "middle",
+        "count": 5,
+        "verbs": [
+         "use",
+         "eat",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a heavy oak chair with worn cushion",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 4,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a wooden barrel stool",
+        "w": 1,
+        "h": 1,
+        "where": "middle",
+        "count": 6,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a mounted stag antler rack",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a tall wooden coat and weapon rack",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a low wooden bench",
+        "w": 3,
+        "h": 1,
+        "where": "wall",
+        "count": 3,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a small side table with candle holder",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 3,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a wooden crate of firewood",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a tall wooden cupboard with pewter mugs",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a spittoon",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 2,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       }
+      ]
+     }
+    ],
+    "model": "anthropic/claude-sonnet-4.6",
+    "made_at": "2026-10-16T11:52:17.546699+00:00"
+   }
+  },
+  "74bd477f-0a05-5908-89a7-7700ee430bdd": {
+   "": {
+    "place_id": "74bd477f-0a05-5908-89a7-7700ee430bdd",
+    "state": "",
+    "rooms": [
+     {
+      "room": 0,
+      "purpose": "throne hall open to the sky",
+      "items": [
+       {
+        "name": "a long silverwood bench",
+        "w": 4,
+        "h": 1,
+        "where": "wall",
+        "count": 4,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "a stone offering pedestal",
+        "w": 1,
+        "h": 1,
+        "where": "middle",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a tall silverwood standard pole",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 4,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a carved stone brazier",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 4,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 1,
+      "purpose": "queen's bedchamber",
+      "items": [
+       {
+        "name": "a carved silverwood wardrobe",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a small silverwood writing desk",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "a cushioned silverwood chair",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "a low silverwood chest",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a small round side table",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a tall silver mirror on a stand",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 1,
+        "verbs": [
+         "use"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 2,
+      "purpose": "palace kitchen",
+      "items": [
+       {
+        "name": "a wooden barrel",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 3,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a stone prep table",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "a wooden storage shelf",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a small wooden stool",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       }
+      ]
+     }
+    ],
+    "model": "anthropic/claude-sonnet-4.6",
+    "made_at": "2026-10-16T11:52:18.582574+00:00"
+   }
+  },
+  "96269afd-2226-58fd-afd4-8e85caf9c5c8": {
+   "": {
+    "place_id": "96269afd-2226-58fd-afd4-8e85caf9c5c8",
+    "state": "",
+    "rooms": [
+     {
+      "room": 0,
+      "purpose": "kitchen and workroom",
+      "items": [
+       {
+        "name": "a heavy oak worktable",
+        "w": 3,
+        "h": 2,
+        "where": "middle",
+        "count": 1,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "a tall wooden herb cabinet",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a wooden stool",
+        "w": 1,
+        "h": 1,
+        "where": "middle",
+        "count": 2,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "a clay pot shelf",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a battered wooden chest",
+        "w": 2,
+        "h": 1,
+        "where": "corner",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a mortar and pestle on a stand",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "a bucket of water",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 1,
+      "purpose": "sleeping quarters",
+      "items": [
+       {
+        "name": "a narrow rope bed with wool blanket",
+        "w": 2,
+        "h": 4,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "a small bedside table",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a wooden wardrobe",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a low wooden chest",
+        "w": 2,
+        "h": 1,
+        "where": "corner",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a rocking chair",
+        "w": 1,
+        "h": 2,
+        "where": "corner",
+        "count": 1,
+        "verbs": [
+         "use"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 2,
+      "purpose": "storeroom and pantry",
+      "items": [
+       {
+        "name": "a set of rough wooden shelves",
+        "w": 3,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a large clay storage jar",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 4,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a sack of dried roots",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 2,
+        "verbs": [
+         "take",
+         "eat"
+        ]
+       },
+       {
+        "name": "a small wooden barrel",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a wicker basket",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 3,
+      "purpose": "herb drying and preparation room",
+      "items": [
+       {
+        "name": "a long narrow drying table",
+        "w": 4,
+        "h": 2,
+        "where": "middle",
+        "count": 1,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "a wooden stool",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "a small locked cabinet",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a bundle of tied herb cuttings on a rack",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "take"
+        ]
+       }
+      ]
+     }
+    ],
+    "model": "anthropic/claude-sonnet-4.6",
+    "made_at": "2026-10-16T11:52:19.501958+00:00"
+   }
+  }
+ },
+ "tile_set": "silverwood"
 }

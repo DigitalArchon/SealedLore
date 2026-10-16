@@ -980,15 +980,67 @@ the story as it was when the scene began, nothing from the scene is read into
 it, and nothing is drawn or painted. Once you approve the scene's summary, the
 summary is read like any passage and the map catches up.
 
+### Playing on the map
+
+A story that keeps a map is played on it. **Local** is the place you are in,
+drawn tile by tile in a tile set: the farm and its buildings, the inside of
+the farmhouse with its rooms and furniture, everyone where the story put
+them, you ringed in gold. The map is exact, and the storyteller is told it
+exactly: where you stand, who is how far from you and which way, what is
+within reach, the doorways out.
+
+- **Walking.** Click anywhere to walk there (the arrow keys or WASD take a
+  step). Walking costs no model call and moves the clock a little; walk into
+  a door to go through it, into a building or back out. Drag or use the
+  wheel to look around; **−** and **+** zoom.
+- **People.** Click someone for **Talk** (you walk up to them, and they
+  react as themselves: someone who knows you notices you and says hello,
+  someone hostile may not), **Look** (you stay out of sight and watch what
+  they are doing) or **Attack**.
+- **Things.** Click a thing for what can be done with it: **Use**, and
+  **Take**, **Eat** or **Destroy** where they fit. You walk up to it first.
+- A choice puts its turn in the composer ("I walk over to Jane."), for you
+  to send as it is or add to; the storyteller is told what the choice means
+  as long as the menu's words are still in the turn.
+- **Travel…** sets off for another place on the map, with how long it takes
+  on foot; the clock moves on by that much and the turn goes in the
+  composer. The next passage begins on arrival.
+- **The clock** (Day 1, 08:00, beside the place's name) moves with walking
+  and travel, and with the time the passages tell. In a story with a plot it
+  is the plot's clock, so travel passes the plot's days. The storyteller is
+  never told the day; it is told how far you walked since the last passage.
+- Nobody else moves on their own: people stand where the story last put
+  them until a passage moves them.
+- Nothing can be walked while a passage is being written.
+
+The map's rules hold everywhere: every room can be reached (a plan that left
+one sealed gets a door), roads never run through buildings, doorways and
+walkways stay clear of furniture. **Rooms** on Story → Setup → About sets
+how full the rooms are (Sparse, Normal, Full); a building is furnished by the
+map art model the first time the story is in or beside it.
+
+**Look** chooses the tile set the map is drawn in: one of those that come
+with SealedLore (a snowbound farm, an elven forest, a steampunk city, an
+industrial wasteland, Hell, a space station), chosen for the setting unless
+you choose, or **Draw a tile set for this story…**, which has the map art
+model write what each picture should show from your world and an image model
+draw them (about 30 pictures, the price shown first). Things and people the
+set doesn't have are drawn as the story needs them, with **Draw map pictures
+with an image model** on (Settings → Images; FLUX.3 Klein, about a cent
+each): each kind of thing once, and each character from their portrait.
+Until then a thing is a plain crate and a character a small figure. The
+samples come with all of theirs. **Plan** shows the area's plan as the map
+drew it, with its isometric views.
+
 It is one map, read at three levels by zooming; **Local**, **Region** and
-**World** jump to each. **Local** is the area you are in (the
+**World** jump to each. **Plan** is the area you are in (the
 farm, not just its farmhouse; a town; the caves), close up: its ground and
 paths, its buildings from outside where the map has them, the things the
 story marked there (hover one for what it is), and everyone the story has
 there, you ringed. Zoom in on a building and its inside takes the roof's
 place: its rooms and what the story put in them (**See inside** takes every
 roof off at once). Under the map, what the story has said of the place in
-view and who and what is there. A story opens on its local map. **Region**
+view and who and what is there. A story opens on **Local**. **Region**
 is the country around you that the story has reached: each place with its
 picture, small when far, its name bright where you have been or can see now,
 dim where the story only told of it, ringed where you are now; it is where you

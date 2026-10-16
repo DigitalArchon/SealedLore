@@ -144,6 +144,7 @@ from sealedlore.engine.scene_update import (
     strict_perspective,
 )
 from sealedlore.engine.session_archival import LEDGER_MAX_TOKENS, ArchivalRuntime
+from sealedlore.engine.session_area import AreaRuntime
 from sealedlore.engine.session_images import ImageRuntime
 from sealedlore.engine.session_merge import MergeRuntime, _close
 from sealedlore.engine.session_plot import PlotRuntime, SessionNotice
@@ -423,6 +424,7 @@ class StorySession(
     PlotRuntime,
     WorldRuntime,
     WorldArtRuntime,
+    AreaRuntime,
     MergeRuntime,
     ArchivalRuntime,
     RebuildRuntime,
@@ -1336,6 +1338,8 @@ class StorySession(
             # A chat's first message usually sets it up: kept in full unless
             # the author says otherwise.
             user_node.meta.keep_full = True
+        # The walking done since the last turn goes with this one.
+        self.stamp_turn(user_node)
         self._attach(user_node, parent=history[-1] if history else None)
 
         turn = yield from self.direct_turn(turn, user_node, history)

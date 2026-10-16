@@ -1,0 +1,55 @@
+{
+ "name": "brasshaven",
+ "title": "Steampunk city",
+ "light": [
+  255,
+  200,
+  120
+ ],
+ "grade": [
+  1.0,
+  0.94,
+  0.86
+ ],
+ "lava": false,
+ "deck": false,
+ "decor_lights": [
+  true,
+  false,
+  false
+ ],
+ "keywords": [
+  "steampunk",
+  "brass",
+  "clockwork",
+  "victorian",
+  "airship",
+  "steam",
+  "gaslight",
+  "automaton",
+  "cog"
+ ],
+ "words": {
+  "world": "Brasshaven, a steampunk city of brass and steam",
+  "floor": "polished dark mahogany floorboards",
+  "cap": "the top of a red brick wall with a brass pipe running along it",
+  "face": "a red brick wall with brass pipes, valves and gauges",
+  "rug": "a rectangular Persian rug in deep red and gold",
+  "decor0": "a brass gas lamp on a stand",
+  "decor1": "a wooden barrel of ale",
+  "decor2": "a brass clockwork automaton standing idle",
+  "out-ground": "old grey cobblestones, wet and uneven",
+  "out-road": "worn grey granite setts, no rails or lines",
+  "out-water": "dark green harbour water with small ripples",
+  "out-pave": "weathered brown wooden pier boardwalk planks",
+  "out-canopy": "a dense green tree canopy seen from directly above",
+  "out-roof": "a slate roof of dark blue-grey tiles with brass flashing",
+  "out-wall": "a red brick building facade with brass trim, seen from the front",
+  "out-tree0": "a small green street tree in an iron grate",
+  "out-bush": "a potted green shrub",
+  "out-rock": "a stack of old crates",
+  "out-rubble": "a pile of scrap brass and broken gears",
+  "out-fence": "a short section of brass railing",
+  "out-door": "a green wooden shop door with brass handle and a small step"
+ }
+}

@@ -1,0 +1,59 @@
+{
+ "name": "doomsville",
+ "title": "Snowbound farm",
+ "light": [
+  255,
+  196,
+  120
+ ],
+ "grade": [
+  1.0,
+  0.95,
+  0.88
+ ],
+ "lava": false,
+ "deck": false,
+ "decor_lights": [
+  false,
+  false,
+  true
+ ],
+ "keywords": [
+  "farm",
+  "winter",
+  "snow",
+  "apocalyp",
+  "survivor",
+  "ranch",
+  "rural",
+  "cabin",
+  "western",
+  "frontier",
+  "zombie",
+  "outbreak"
+ ],
+ "words": {
+  "world": "a snowbound Canadian farm after the end of the world",
+  "floor": "worn honey-coloured pine floor planks running left to right, narrow boards with dark seams and knots",
+  "cap": "the top of a thick timber wall: dark chestnut log ends and beams",
+  "face": "a log cabin wall: dark chestnut horizontal logs with chinking between them",
+  "rug": "an oval braided rag rug in faded red, cream and green",
+  "decor0": "a potted fern in a clay pot",
+  "decor1": "a small wooden chair",
+  "decor2": "a woven basket of firewood",
+  "out-ground": "deep fresh snow with soft drifts and faint blue shadows",
+  "out-road": "packed grey-brown frozen earth with patches of trodden snow, no lines or tracks",
+  "out-water": "thick pale blue ice with white frost cracks",
+  "out-pave": "weathered grey wooden porch planks dusted with snow",
+  "out-canopy": "a dense snowy pine forest canopy seen from directly above",
+  "out-roof": "a snow-covered wooden shingle roof, rows of dark shingles under white snow",
+  "out-wall": "a weathered grey wooden plank wall of a farmhouse, seen from the front",
+  "out-tree0": "a tall dark green pine tree with snow on its branches",
+  "out-tree1": "a small snowy fir tree",
+  "out-bush": "a low snow-covered shrub",
+  "out-rock": "a grey boulder capped with snow",
+  "out-rubble": "a few broken boards half buried in snow",
+  "out-fence": "a short section of a wooden split-rail fence, two posts and two rails",
+  "out-door": "a wooden farmhouse front door with a small porch step"
+ }
+}

@@ -1,0 +1,55 @@
+{
+ "name": "furnace",
+ "title": "Hell's furnace",
+ "light": [
+  255,
+  90,
+  40
+ ],
+ "grade": [
+  0.95,
+  0.82,
+  0.8
+ ],
+ "lava": true,
+ "deck": false,
+ "decor_lights": [
+  true,
+  false,
+  true
+ ],
+ "keywords": [
+  "hell",
+  "demon",
+  "devil",
+  "infernal",
+  "lava",
+  "damned",
+  "fiend",
+  "brimstone",
+  "abyss"
+ ],
+ "words": {
+  "world": "the Ninth Furnace, a burning realm of Hell",
+  "floor": "black basalt flagstones veined with faint glowing red cracks",
+  "cap": "the top of a thick black stone wall: rough black basalt blocks",
+  "face": "a dungeon wall of black basalt blocks with faint red veins",
+  "rug": "a long crimson ritual carpet with black trim",
+  "decor0": "a black iron brazier with burning coals",
+  "decor1": "a pile of human skulls",
+  "decor2": "a black iron candelabra with red candles",
+  "out-ground": "cracked black volcanic ash ground with thin glowing ember cracks",
+  "out-road": "worn dark basalt cobbles, no lines or edges",
+  "out-water": "molten lava, bright orange and yellow with dark crust",
+  "out-pave": "black basalt flagstones veined with faint red",
+  "out-canopy": "jagged black volcanic rock seen from directly above",
+  "out-roof": "a black iron roof with rivets and a dull red sheen",
+  "out-wall": "a wall of black basalt blocks with faint red veins, seen from the front",
+  "out-tree0": "a dead black charred tree with bare branches",
+  "out-bush": "a cluster of black thorny brambles",
+  "out-rock": "a jagged black volcanic rock spire",
+  "out-rubble": "a heap of broken black basalt rubble",
+  "out-fence": "a short section of black iron spiked fence",
+  "out-door": "a heavy black iron door with red rivets"
+ }
+}

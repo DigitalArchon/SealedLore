@@ -279,6 +279,10 @@ find "$SRC/SampleStories" -maxdepth 1 -name '*.world_art.json' -exec cp {} "$APP
 if [ -d "$SRC/SampleStories/pictures" ]; then
     cp -r "$SRC/SampleStories/pictures" "$APPDIR/usr/share/sealedlore/samples/"
 fi
+# The tile sets map-first play draws its maps in (storage/tile_sets.py).
+if [ -d "$SRC/SampleStories/tilesets" ]; then
+    cp -r "$SRC/SampleStories/tilesets" "$APPDIR/usr/share/sealedlore/samples/"
+fi
 
 log "Launcher, desktop entry, icon"
 install -m 755 "$SRC/packaging/appimage/AppRun" "$APPDIR/AppRun"

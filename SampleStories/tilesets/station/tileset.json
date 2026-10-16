@@ -1,0 +1,48 @@
+{
+ "name": "station",
+ "title": "Space station",
+ "light": [
+  170,
+  220,
+  255
+ ],
+ "grade": [
+  0.9,
+  0.96,
+  1.05
+ ],
+ "lava": false,
+ "deck": true,
+ "decor_lights": [
+  false,
+  false,
+  false
+ ],
+ "keywords": [
+  "space",
+  "station",
+  "starship",
+  "ship",
+  "orbit",
+  "galaxy",
+  "alien",
+  "sci-fi",
+  "star",
+  "planet",
+  "federation",
+  "empire",
+  "warp",
+  "hyperspace",
+  "spacecraft"
+ ],
+ "words": {
+  "world": "a busy trading space station in deep space",
+  "floor": "grey steel deck plating in square panels with rivets and thin seams",
+  "cap": "the top of a space station bulkhead: pale blue-grey riveted metal",
+  "face": "a space station bulkhead wall of pale blue-grey metal panels with small lit indicator lights",
+  "rug": "a plain square dark grey rubber floor mat with no markings",
+  "decor0": "a small computer console with a glowing screen",
+  "decor1": "a sealed grey supply locker",
+  "decor2": "a potted plant in a metal planter"
+ }
+}

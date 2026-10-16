@@ -4020,3 +4020,265 @@ _text(
     "Length: {text}.",
     (("text", "the author's wording, without its full stop"),),
 )
+
+
+# --- Map-first play (engine/area.py, engine/furnish.py, engine/tile_draw.py) --
+#
+# The tile and sprite prompts are word for word as measured in SealedLoreDocs
+# tools/bakeoff/ (tiles_v2.py, tiles_out.py, sprites2.py, furnish.py; design/
+# map.md, "Tiles v2"), except that each names the world, which the
+# measurements showed it must ("an ops table" came out wooden on a station).
+# The rest (the positions heading, the menu's turns and what they mean, the
+# read's spots) were written for the build and are not measured.
+
+_text(
+    "map.positions",
+    MAP,
+    "Map-first: where everyone stands",
+    "Heads the exact positions in the map section of the tail, in a story played on the "
+    "map: the author's character, who else is in the area with distance and bearing, what "
+    "is within reach, the doorways out, and how far they walked since the last passage.",
+    "Where everyone stands (the map is exact: keep to it):",
+)
+
+for _verb, _turn, _means in (
+    (
+        "talk",
+        "I walk over to {name}.",
+        "The author chose Talk on the map: their character only walks up to {name}. Write "
+        "how {name} reacts as themselves, by what they know of the author's character: "
+        "someone who knows them notices them coming and greets them; someone hostile may "
+        "get defensive, or attack. The author's character says nothing the author didn't "
+        "write.",
+    ),
+    (
+        "look",
+        "I keep out of sight and watch {name}, to see what they are doing.",
+        "The author chose Look on the map: their character stays out of view and watches "
+        "{name}. Show what {name} is doing. {name} doesn't notice them unless the story "
+        "gives a reason.",
+    ),
+    (
+        "attack",
+        "I attack {name}.",
+        "The author chose Attack on the map: their character attacks {name}. It is an "
+        "attempt; the outcome is as the story's outcome rules say.",
+    ),
+    (
+        "use",
+        "I use the {name}.",
+        "The author chose Use on the map: their character uses the {name}, which stands "
+        "where the map has it.",
+    ),
+    (
+        "take",
+        "I take the {name}.",
+        "The author chose Take on the map: their character picks up the {name}.",
+    ),
+    (
+        "destroy",
+        "I destroy the {name}.",
+        "The author chose Destroy on the map: their character sets about destroying the "
+        "{name}. It is an attempt; the outcome is as the story's outcome rules say.",
+    ),
+    (
+        "eat",
+        "I eat the {name}.",
+        "The author chose Eat on the map: their character eats the {name}.",
+    ),
+    (
+        "travel",
+        "I set off for {name}.",
+        "The author chose to travel on the map: their character has gone to {name}, as "
+        "the map's distance says; this passage begins on arrival.",
+    ),
+):
+    _text(
+        f"map.turn.{_verb}",
+        MAP,
+        f"Map-first: the turn {_verb.capitalize()} writes",
+        f"Put in the composer when the author chooses {_verb.capitalize()} on the map, "
+        "for them to send as it is or add to.",
+        _turn,
+        (("name", "who or what it is done to"),),
+    )
+    _text(
+        f"map.action.{_verb}",
+        MAP,
+        f"Map-first: what {_verb.capitalize()} means",
+        f"In the map section of the tail on a turn the author began with {_verb.capitalize()} "
+        "on the map and sent as the menu wrote it (or added to it).",
+        _means,
+        (("name", "who or what it is done to"),),
+    )
+
+_text(
+    "map_read.spots",
+    MAP,
+    "Map-first: the read's named spots",
+    "Added to the map read's request in a story played on the map: the named spots near "
+    "the author's character, and the two optional fields the read may give.",
+    """\
+SPOTS NEAR THE AUTHOR'S CHARACTER: {spots}
+
+Two more fields you may add to the object, only when the passage says so:
+"at": {"<person>": "<one of the spots above, as written>"} for anyone the
+passage puts at one of those spots, and "minutes": <a number> for how much
+story time the passage itself covers, when it says ("an hour later", "they
+talked until dark"), with "minutes_quote": "<the words that say it>".""",
+    (("spots", "the spots, comma-separated"),),
+)
+
+_text(
+    "map.furnish.system",
+    MAP,
+    "Map-first: furnishing a building",
+    "The system message for planning a building's furniture (engine/furnish.py): the "
+    "program places what it lists, with walkways and doorways kept clear.",
+    (
+        "You furnish rooms for a top-down RPG map. You are given a building and its rooms "
+        "(each with its size in tiles, where it sits, its doorways and anything already in "
+        "it). For each room decide what the room is and list the furniture it would hold at a"
+        ' normal density, as a JSON object: {"rooms": [{"room": <the room\'s number>, '
+        '"purpose": <a few words>, "items": [{"name": <what it is, a few words a painter '
+        'could draw, e.g. "a wooden bunk bed">, "w": <width in tiles>, "h": <depth in tiles>,'
+        ' "where": "wall" | "middle" | "corner", "count": <how many>, "verbs": <what someone '
+        'can do with it, from "use", "take", "eat", "destroy">}]}]}. One tile is about 1.5 '
+        "metres. Sizes are whole tiles, 1 to 4. Keep it plausible for the building and the "
+        "world, and leave room to walk: a room should stay mostly floor. Furniture only, "
+        "things that stand on the floor; no doors, stairs, windows, rugs, people or lights on"
+        " walls. Answer with the JSON only."
+    ),
+)
+
+_text(
+    "map.furnish.user",
+    MAP,
+    "Map-first: the building to furnish",
+    "The user message for planning a building's furniture: the building, the world, and "
+    "each room the program found in its plan.",
+    "The world: {setting}\nThe building: {name}: {what}\n{rooms}",
+    (
+        ("setting", "the setting, briefly"),
+        ("name", "the building's name"),
+        ("what", "what the story says of it"),
+        ("rooms", "a line per room: its size, doorways and what is already in it"),
+    ),
+)
+
+_PIXEL = "Hand-painted 16-bit pixel art in the style of Stardew Valley"
+
+_text(
+    "map.tile.texture",
+    MAP,
+    "Map-first: a texture",
+    "Draws one of a tile set's textures (a floor, a wall, the ground, a roof) by text to "
+    "image. Made to wrap by the program.",
+    f"{_PIXEL}, a seamless tileable texture filling the whole square frame edge to edge: "
+    "{what}, in {world}. Seen {view}, flat even light with no shadows, no vignette and no "
+    "perspective; the pattern continues off every edge.",
+    (
+        ("what", "what the texture is"),
+        ("world", "the world, in a few words"),
+        ("view", "from directly overhead, or straight from the front"),
+    ),
+)
+
+_text(
+    "map.tile.sprite",
+    MAP,
+    "Map-first: a thing's sprite",
+    "Draws one kind of thing (a piece of furniture, a decoration, an object) by text to "
+    "image, cut out of its white ground by the program. Text alone matches the set: with "
+    "the set's sprites as references Klein copied one 12 times in 12.",
+    f"{_PIXEL} game sprite: {{what}}, as found in {{world}}, drawn front-on in the classic "
+    "top-down RPG three-quarter view, its top surface and its front face both visible, "
+    "square to the frame and facing the viewer, not rotated and not isometric. Centred "
+    "alone on a plain pure white background with a wide white margin on every side, crisp "
+    "dark outline, soft light from the upper left.",
+    (("what", "the thing"), ("world", "the world, in a few words")),
+)
+
+_text(
+    "map.tile.rug",
+    MAP,
+    "Map-first: a rug",
+    "Draws a tile set's rug, laid flat in some rooms by the program.",
+    f"{_PIXEL} game sprite: {{what}}, as found in {{world}}, seen from directly above, "
+    "lying flat, square to the frame, centred alone on a plain pure white background with "
+    "a wide white margin on every side.",
+    (("what", "the rug"), ("world", "the world, in a few words")),
+)
+
+_text(
+    "map.tile.nature",
+    MAP,
+    "Map-first: a tree, bush or rock",
+    "Draws a tile set's standing outdoor sprites: trees, bushes, rocks, rubble, a fence, a door.",
+    f"{_PIXEL} game sprite: {{what}}, in {{world}}, drawn front-on in the classic top-down "
+    "RPG three-quarter view, standing upright, square to the frame, not rotated and not "
+    "isometric. Centred alone on a plain pure white background with a wide white margin on "
+    "every side, crisp dark outline, soft light from the upper left.",
+    (("what", "the sprite"), ("world", "the world, in a few words")),
+)
+
+_text(
+    "map.tile.portrait",
+    MAP,
+    "Map-first: a character's sprite from their portrait",
+    "Draws a character's walking sprite as an edit of their portrait, the portrait alone "
+    "sent (measured: nine of nine kept hair, skin, build, clothes and colours; with the "
+    "set's sprites as style references one came back a chair).",
+    "Create a small full-body game character sprite of the person in image 1, in "
+    "hand-painted 16-bit pixel art in the style of Stardew Valley: standing, facing the "
+    "viewer, the whole figure from head to feet with chibi proportions and a large head, "
+    "keeping their hair colour and style, skin tone, build, and the clothes and colours "
+    "they wear in image 1. Centred alone on a plain pure white background with a wide white "
+    "margin on every side, crisp dark outline.",
+)
+
+_text(
+    "map.tile.person",
+    MAP,
+    "Map-first: a character's sprite from words",
+    "Draws a walking sprite for someone with no portrait, from how their card describes "
+    "them; and the set's generic people.",
+    f"{_PIXEL} game character sprite: {{what}}, in {{world}}, standing, facing the viewer, "
+    "the whole figure from head to feet with chibi proportions and a large head. Centred "
+    "alone on a plain pure white background with a wide white margin on every side, crisp "
+    "dark outline.",
+    (("what", "who they are and how they look"), ("world", "the world, in a few words")),
+)
+
+_text(
+    "map.tileset.system",
+    MAP,
+    "Map-first: a tile set from the world",
+    "The system message for writing what a story's own tile set shows, from its world "
+    "(engine/tile_draw.py). Each answer becomes one picture's prompt, shown to the author "
+    "with the price before anything is drawn.",
+    """\
+You design the look of a top-down 2D RPG map in the style of Stardew Valley for a story's world.
+Write short, concrete descriptions a pixel artist could paint, each a few words, as a JSON
+object with exactly these keys:
+"world": the world in a few words, for every prompt ("a snowbound Canadian farm after the end of
+the world");
+"floor": an indoor floor seen from above, with no direction or pattern running across it;
+"cap": the top of a thick indoor wall seen from above;
+"face": an indoor wall seen from the front;
+"rug": a rug or floor covering;
+"decor": three small decorations that stand against a wall, as a list;
+"out-ground": the open ground outdoors, seen from above;
+"out-road": a road or path surface with no lines, edges or direction ("packed earth with small
+pebbles");
+"out-water": the water (or ice, or lava) of this world, seen from above;
+"out-pave": paving or decking outdoors;
+"out-canopy": a dense forest canopy (or rock, or slag) seen from above;
+"out-roof": a roof seen from above;
+"out-wall": a building's outside wall seen from the front;
+"trees": two kinds of tree, as a list;
+"out-bush", "out-rock", "out-rubble", "out-fence", "out-door": one each;
+"light": the colour of lamplight here as [r, g, b];
+"lava": true if the water is molten.
+Keep everything in the world's own materials and climate. Answer with the JSON only.""",
+)

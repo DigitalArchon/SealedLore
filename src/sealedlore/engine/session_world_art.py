@@ -168,6 +168,12 @@ class WorldArtRuntime:
         thread = self._picture_thread
         if thread is not None and thread.is_alive():
             done, total = done + self._picture_done, total + self._picture_total
+        thread = getattr(self, "_tile_thread", None)
+        if thread is not None and thread.is_alive():
+            done, total = done + self._tile_done, total + self._tile_total
+        thread = getattr(self, "_own_set_thread", None)
+        if thread is not None and thread.is_alive():
+            done, total = done + self._own_set_done, total + self._own_set_total
         if self.isometric_painting is not None:
             total += 1
         return min(done, total), total
@@ -469,6 +475,7 @@ class WorldArtRuntime:
         model: str | None = None,
         info: ImageModelInfo | None = None,
         plan: bytes | None = None,
+        extra: dict | None = None,
     ) -> None:
         """One map picture: counted against the day's limit first, drawn,
         stripped, kept. `model` and `info` stand in for the map picture
@@ -502,6 +509,8 @@ class WorldArtRuntime:
                 references.append(data_url(data, MEDIA_TYPES[picture_kind(data)]))
                 names.append(f"{job.name}: {job.reference}")
         payload = build_image_payload(model, job.prompt, size, 1, references, api=client.api)
+        if extra and client.api == "nanogpt":
+            payload.update(extra)
         log_ref = self._log(
             "map_picture_request",
             {"job": job.key, "payload": loggable_payload(payload, names)},
@@ -581,6 +590,8 @@ class WorldArtRuntime:
         if self._map_closed:
             return False
         pictures = self._start_map_pictures()
+        # Map-first play's furnishing and sprites (engine/session_area.py).
+        pictures = self._start_tile_art() or pictures
         if self.map_art_running:
             return pictures
         jobs = self.map_art_jobs()
@@ -651,13 +662,25 @@ class WorldArtRuntime:
                 client.cancel()
             except Exception:  # noqa: BLE001 - stopping must never fail
                 pass
-        for client in (self._picture_client, self._isometric_client):
+        tile_clients = [
+            getattr(self, "_tile_client", None),
+            getattr(self, "_tile_text", None),
+            getattr(self, "_own_set_client", None),
+        ]
+        for client in (self._picture_client, self._isometric_client, *tile_clients):
             if client is not None:
                 try:
                     client.cancel()
                 except Exception:  # noqa: BLE001 - stopping must never fail
                     pass
-        for thread in (self._art_thread, self._picture_thread, self._isometric_thread):
+        threads = (
+            self._art_thread,
+            self._picture_thread,
+            self._isometric_thread,
+            getattr(self, "_tile_thread", None),
+            getattr(self, "_own_set_thread", None),
+        )
+        for thread in threads:
             if thread is not None and wait_seconds > 0:
                 thread.join(wait_seconds)
 

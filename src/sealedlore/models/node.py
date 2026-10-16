@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from sealedlore.ids import new_id, utc_now_iso
+from sealedlore.models.area import AreaState
 from sealedlore.models.plot import Chronicle, Direction
 from sealedlore.models.scene import SceneShortcut, SceneState
 from sealedlore.models.world import WorldDelta
@@ -93,6 +94,11 @@ class NodeMeta(BaseModel):
     # or changed (models/world.py). The map anywhere is these, applied in
     # order along the path.
     world: WorldDelta | None = None
+    # Map-first play (models/area.py): where everyone stood on the map's
+    # tiles after this node, and the map's clock. On an author's turn, the
+    # walking done before it was sent; on a passage, after the read placed
+    # whoever it moved.
+    area: AreaState | None = None
     # On a passage, for a lorebook too big to send whole: the entries the lore
     # model picked for the passage after it (`Config.lore_selector` "picker"),
     # read in the background. None = not picked; [] = picked, and none needed.

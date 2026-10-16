@@ -60,6 +60,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QProgressBar,
     QScrollArea,
+    QStackedWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -734,9 +735,19 @@ class WorldView(QWidget):
             "asked first; the map art model draws it in the background.",
         )
         self.redraw_button.clicked.connect(self._redraw_requested)
+        # Map-first play: the area to walk on is the local map (gui/area_view.py,
+        # `attach_play`); Plan shows the area's plan as before, with its
+        # isometric views.
+        self.plan_button = self._button(
+            "Plan", "The plan of the area, as the map drew it: its isometric views are here"
+        )
+        self.plan_button.setCheckable(True)
+        self.plan_button.hide()
         header = WrapRow()
         header.add_group([self.title])
-        header.add_group([self.local_button, self.region_button, self.world_button])
+        header.add_group(
+            [self.local_button, self.plan_button, self.region_button, self.world_button]
+        )
         header.add_group([self.zoom_out, self.zoom_in])
         header.add_group([self.inside_button, self.iso_button, self.redraw_button])
         # How far the drawing has got (the author: the hint's small text said
@@ -772,6 +783,7 @@ class WorldView(QWidget):
         self.zoom_out.clicked.connect(lambda: self.view.zoom_by(1 / ZOOM_STEP))
         self.zoom_in.clicked.connect(lambda: self.view.zoom_by(ZOOM_STEP))
         self.local_button.clicked.connect(lambda: self.go_local())
+        self.plan_button.clicked.connect(lambda: self.go_plan())
         self.region_button.clicked.connect(lambda: self.go_region())
         self.world_button.clicked.connect(lambda: self.go_world())
         self.inside_button.toggled.connect(lambda _on: self._update_detail())
@@ -827,8 +839,14 @@ class WorldView(QWidget):
         self.legend.hide()
         layout.addWidget(self.legend)
         layout.addWidget(self.iso_bar)
-        layout.addWidget(self.view, 1)
+        self.stack = QStackedWidget()
+        self.stack.addWidget(self.view)
+        layout.addWidget(self.stack, 1)
         layout.addWidget(self.card)
+        self.play: QWidget | None = None
+        # Whether there is an area to walk on now (the window sets it): with
+        # none, Local is the plan as before (the region, until one is drawn).
+        self.play_ready: Callable[[], bool] = lambda: False
         self.world = WorldMap()
         self.art = WorldArt()
         self.held: str | None = None
@@ -1744,13 +1762,16 @@ class WorldView(QWidget):
     # --- moving about ------------------------------------------------------------
 
     def _sync_buttons(self) -> None:
+        if self.play_shown():
+            return
         level = self.level() if self.world.places else "region"
         for name, button in (
             ("local", self.local_button),
             ("region", self.region_button),
             ("world", self.world_button),
         ):
-            button.setChecked(level == name)
+            button.setChecked(level == name and not (name == "local" and self.play is not None))
+        self.plan_button.setChecked(self.play is not None and level == "local")
         self.inside_button.setVisible(level == "local")
         area = self.area_in_view(level)
         self.iso_button.setVisible(self.iso_button.isChecked() or area is not None)
@@ -1967,14 +1988,65 @@ class WorldView(QWidget):
         self._show_at(rect.center(), scale)
 
     def _go(self, level: str | None) -> None:
-        if level == "local":
+        if level == "plan":
+            self.go_plan()
+        elif level == "local":
             self.go_local()
         elif level == "region":
             self.go_region()
         elif level == "world":
             self.go_world()
 
+    def attach_play(self, play: QWidget) -> None:
+        """Map-first play: `play` is the local level from now on."""
+        self.play = play
+        self.stack.addWidget(play)
+        self.plan_button.show()
+
+    def play_shown(self) -> bool:
+        return self.play is not None and self.stack.currentWidget() is self.play
+
+    def _show_play(self, on: bool) -> None:
+        if self.play is None:
+            return
+        self.stack.setCurrentWidget(self.play if on else self.view)
+        for widget in (self.hint, self.card, self.legend, self.iso_bar):
+            if on:
+                widget.hide()
+        self.inside_button.setVisible(not on and self.inside_button.isVisible())
+        # The play view has its own zoom.
+        self.zoom_out.setVisible(not on)
+        self.zoom_in.setVisible(not on)
+        if on:
+            self.iso_button.hide()
+            self.redraw_button.hide()
+            self.local_button.setChecked(True)
+            self.plan_button.setChecked(False)
+            self.region_button.setChecked(False)
+            self.world_button.setChecked(False)
+            self.play.setFocus()
+        else:
+            self.hint.show()
+
     def go_local(self) -> None:
+        """The local level: with map-first play, the area to walk on;
+        otherwise (and under Plan) the area's plan."""
+        if self.play is not None and self.play_ready():
+            self._show_play(True)
+            return
+        self._show_play(False)
+        self._go_plan()
+
+    def go_plan(self) -> None:
+        """The area's plan, as the map drew it (map-first play's Plan)."""
+        self._show_play(False)
+        self._go_plan()
+        if self.play is not None:
+            self._fitted = "plan"
+            self.local_button.setChecked(False)
+            self.plan_button.setChecked(True)
+
+    def _go_plan(self) -> None:
         """The local map where the story is now: the area's plan fitted. With
         no plan drawn yet there is nothing to see close up, so the region
         shows until it is (the hint says so), and then this opens on it."""
@@ -1996,6 +2068,7 @@ class WorldView(QWidget):
 
     def go_region(self) -> None:
         """The country round the character: where to go next."""
+        self._show_play(False)
         self._fitted = "region"
         scales = self._fit_scales()
         if scales is None:
@@ -2005,6 +2078,7 @@ class WorldView(QWidget):
 
     def go_world(self) -> None:
         """The whole map, zoomed out past the region so only the big names show."""
+        self._show_play(False)
         self._fitted = "world"
         scales = self._fit_scales()
         if scales is None:
@@ -2014,6 +2088,7 @@ class WorldView(QWidget):
 
     def go_to(self, place_id: str) -> None:
         """A place in view: its plan when it has one, else close around it."""
+        self._show_play(False)
         self._fitted = None
         plan = self._plans.get(place_id)
         if plan is not None:

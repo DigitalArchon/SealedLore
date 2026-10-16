@@ -3091,7 +3091,1090 @@
    "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: A plain of drifted grey ash holds the broken hull of a crashed frigate, its dark metal half buried, the long spine of the keel rising at an angle toward the sky. A rectangular airlock hatch hangs open along the hull's flank. Nearby lie a shattered idol of a machine figure, a cluster of frost-rimed corpses, and a skeleton in the faded colours of a uniform. Loose salvaged cables snake over the ash, throwing blue-white sparks. An upturned command throne rests beside a sturdily built reliquary crate, and a breach-scorched plaque is bolted to a blackened bulkhead. Hard light falls from one side, casting long shadows from the raised keel across the pale ground. The ground: bare earth. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
    "model": "qwen-image",
    "made_at": "2026-10-15T02:17:18.068809+00:00"
+  },
+  {
+   "id": "f04f5aa5-838e-464b-9fd5-ed0502b6a698",
+   "subject": "walker",
+   "subject_id": "Confessor Ondine Hesk",
+   "name": "Confessor Ondine Hesk",
+   "state": "",
+   "file": "pictures/map/walker-reach-ondine.webp",
+   "from_picture": null,
+   "prompt": "Create a small full-body game character sprite of the person in image 1, in hand-painted 16-bit pixel art in the style of Stardew Valley: standing, facing the viewer, the whole figure from head to feet with chibi proportions and a large head, keeping their hair colour and style, skin tone, build, and the clothes and colours they wear in image 1. Centred alone on a plain pure white background with a wide white margin on every side, crisp dark outline.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-16T11:59:39.191441+00:00",
+   "plan": ""
+  },
+  {
+   "id": "09ab0b52-c5da-476c-8d4e-abb5edfbe6f9",
+   "subject": "walker",
+   "subject_id": "Overseer Callum Drask",
+   "name": "Overseer Callum Drask",
+   "state": "",
+   "file": "pictures/map/walker-reach-callum.webp",
+   "from_picture": null,
+   "prompt": "Create a small full-body game character sprite of the person in image 1, in hand-painted 16-bit pixel art in the style of Stardew Valley: standing, facing the viewer, the whole figure from head to feet with chibi proportions and a large head, keeping their hair colour and style, skin tone, build, and the clothes and colours they wear in image 1. Centred alone on a plain pure white background with a wide white margin on every side, crisp dark outline.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-16T11:59:39.897917+00:00",
+   "plan": ""
+  },
+  {
+   "id": "3fbcb88a-44f1-4f9b-90c5-db6983c9f003",
+   "subject": "walker",
+   "subject_id": "Rook",
+   "name": "Rook",
+   "state": "",
+   "file": "pictures/map/walker-reach-rook.webp",
+   "from_picture": null,
+   "prompt": "Create a small full-body game character sprite of the person in image 1, in hand-painted 16-bit pixel art in the style of Stardew Valley: standing, facing the viewer, the whole figure from head to feet with chibi proportions and a large head, keeping their hair colour and style, skin tone, build, and the clothes and colours they wear in image 1. Centred alone on a plain pure white background with a wide white margin on every side, crisp dark outline.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-16T11:59:40.204207+00:00",
+   "plan": ""
+  },
+  {
+   "id": "6ec3898f-8fb8-4cbb-a015-5771fd83cc0f",
+   "subject": "walker",
+   "subject_id": "Investigator Teodor Vance",
+   "name": "Investigator Teodor Vance",
+   "state": "",
+   "file": "pictures/map/walker-reach-teodor.webp",
+   "from_picture": null,
+   "prompt": "Create a small full-body game character sprite of the person in image 1, in hand-painted 16-bit pixel art in the style of Stardew Valley: standing, facing the viewer, the whole figure from head to feet with chibi proportions and a large head, keeping their hair colour and style, skin tone, build, and the clothes and colours they wear in image 1. Centred alone on a plain pure white background with a wide white margin on every side, crisp dark outline.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-16T11:59:40.406937+00:00",
+   "plan": ""
+  },
+  {
+   "id": "f571e649-b111-4129-b5dc-5c762f75eba2",
+   "subject": "walker",
+   "subject_id": "Brother Kael",
+   "name": "Brother Kael",
+   "state": "",
+   "file": "pictures/map/walker-reach-kael.webp",
+   "from_picture": null,
+   "prompt": "Create a small full-body game character sprite of the person in image 1, in hand-painted 16-bit pixel art in the style of Stardew Valley: standing, facing the viewer, the whole figure from head to feet with chibi proportions and a large head, keeping their hair colour and style, skin tone, build, and the clothes and colours they wear in image 1. Centred alone on a plain pure white background with a wide white margin on every side, crisp dark outline.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-16T11:59:40.564862+00:00",
+   "plan": ""
+  },
+  {
+   "id": "bce0159e-94e9-499b-8573-8fe6abeb03c9",
+   "subject": "walker",
+   "subject_id": "Sergeant Ilsa Marrow",
+   "name": "Sergeant Ilsa Marrow",
+   "state": "",
+   "file": "pictures/map/walker-reach-ilsa.webp",
+   "from_picture": null,
+   "prompt": "Create a small full-body game character sprite of the person in image 1, in hand-painted 16-bit pixel art in the style of Stardew Valley: standing, facing the viewer, the whole figure from head to feet with chibi proportions and a large head, keeping their hair colour and style, skin tone, build, and the clothes and colours they wear in image 1. Centred alone on a plain pure white background with a wide white margin on every side, crisp dark outline.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-16T11:59:40.870324+00:00",
+   "plan": ""
   }
  ],
- "pictures_by_day": {}
+ "pictures_by_day": {},
+ "furnishings": {
+  "02bd023a-b279-5eac-9990-8255f1ddeb5f": {
+   "": {
+    "place_id": "02bd023a-b279-5eac-9990-8255f1ddeb5f",
+    "state": "",
+    "rooms": [
+     {
+      "room": 0,
+      "purpose": "penal barracks sleeping hall",
+      "items": [
+       {
+        "name": "iron bunk bed",
+        "w": 2,
+        "h": 3,
+        "where": "wall",
+        "count": 8,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "battered iron footlocker",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 8,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "iron wash basin on stand",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 4,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "rough wooden bench",
+        "w": 3,
+        "h": 1,
+        "where": "middle",
+        "count": 4,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "iron bucket",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 4,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 1,
+      "purpose": "guard post and duty room",
+      "items": [
+       {
+        "name": "iron stove",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "wooden stool",
+        "w": 1,
+        "h": 1,
+        "where": "middle",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "worn wooden table",
+        "w": 2,
+        "h": 2,
+        "where": "middle",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "weapon rack of iron-shod clubs",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "wooden crate of ration tins",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take",
+         "eat",
+         "destroy"
+        ]
+       }
+      ]
+     }
+    ],
+    "model": "anthropic/claude-sonnet-4.6",
+    "made_at": "2026-10-16T11:51:52.297995+00:00"
+   }
+  },
+  "43a157dd-3a17-5345-a673-f6ec9a0ad295": {
+   "": {
+    "place_id": "43a157dd-3a17-5345-a673-f6ec9a0ad295",
+    "state": "",
+    "rooms": [
+     {
+      "room": 0,
+      "purpose": "nave and congregation hall",
+      "items": [
+       {
+        "name": "heavy iron pew",
+        "w": 4,
+        "h": 1,
+        "where": "middle",
+        "count": 6,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "iron kneeling rail",
+        "w": 3,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "stone offering bowl on plinth",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "gear-etched confession booth",
+        "w": 2,
+        "h": 2,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "tall iron candle stand",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 4,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 1,
+      "purpose": "overflow congregation hall and processional",
+      "items": [
+       {
+        "name": "heavy iron pew",
+        "w": 4,
+        "h": 1,
+        "where": "middle",
+        "count": 7,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "iron kneeling rail",
+        "w": 3,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "stone tithe collection chest",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "tall iron candle stand",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 4,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "propaganda placard on iron stand",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 3,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 2,
+      "purpose": "sanctum and high altar chamber",
+      "items": [
+       {
+        "name": "iron-banded reliquary cabinet",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "stone prayer dais",
+        "w": 3,
+        "h": 2,
+        "where": "middle",
+        "count": 1,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "tall iron candle stand",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 4,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "iron scripture lectern",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "black stone offering table",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       }
+      ]
+     }
+    ],
+    "model": "anthropic/claude-sonnet-4.6",
+    "made_at": "2026-10-16T11:51:54.740156+00:00"
+   }
+  },
+  "281b15cc-0b6e-5f18-92a9-cbcbfcf9f822": {
+   "": {
+    "place_id": "281b15cc-0b6e-5f18-92a9-cbcbfcf9f822",
+    "state": "",
+    "rooms": [
+     {
+      "room": 0,
+      "purpose": "garrison hall and command floor",
+      "items": [
+       {
+        "name": "a heavy iron stove",
+        "w": 2,
+        "h": 2,
+        "where": "corner",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a scarred wooden footlocker",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 4,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a metal pail and mop stand",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a tall iron filing cabinet",
+        "w": 1,
+        "h": 2,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a wooden stool",
+        "w": 1,
+        "h": 1,
+        "where": "middle",
+        "count": 6,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a notice board nailed to a post",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a crate of ration tins",
+        "w": 2,
+        "h": 2,
+        "where": "corner",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "eat",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a barrel of brackish water with ladle",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "eat"
+        ]
+       },
+       {
+        "name": "a heavy iron brazier on legs",
+        "w": 2,
+        "h": 2,
+        "where": "middle",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 1,
+      "purpose": "overseer's private quarters",
+      "items": [
+       {
+        "name": "a wooden wardrobe with iron fittings",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a small writing desk with chair",
+        "w": 2,
+        "h": 2,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a locked iron strongbox",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a wooden side table with washbasin",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "a tall candle stand",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 2,
+      "purpose": "detention and storage cell",
+      "items": [
+       {
+        "name": "a heavy iron manacle post set in the floor",
+        "w": 1,
+        "h": 1,
+        "where": "middle",
+        "count": 2,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a wooden crate of confiscated goods",
+        "w": 2,
+        "h": 2,
+        "where": "corner",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a rough straw pallet",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a slop bucket with lid",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a tall locked cage of iron bars",
+        "w": 2,
+        "h": 3,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       }
+      ]
+     }
+    ],
+    "model": "anthropic/claude-sonnet-4.6",
+    "made_at": "2026-10-16T11:51:55.899424+00:00"
+   }
+  },
+  "866ddc54-5aea-5df3-882b-2d49ebf8790d": {
+   "": {
+    "place_id": "866ddc54-5aea-5df3-882b-2d49ebf8790d",
+    "state": "",
+    "rooms": [
+     {
+      "room": 0,
+      "purpose": "main refinery floor",
+      "items": [
+       {
+        "name": "heavy iron pressure gauge stand",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 3,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "wheeled barrel trolley",
+        "w": 1,
+        "h": 2,
+        "where": "middle",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "corroded metal drum stack",
+        "w": 2,
+        "h": 2,
+        "where": "corner",
+        "count": 2,
+        "verbs": [
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "iron waste collection bin",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 3,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "pipe wrench rack",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 1,
+      "purpose": "parts storage and maintenance",
+      "items": [
+       {
+        "name": "heavy iron shelving unit",
+        "w": 3,
+        "h": 1,
+        "where": "wall",
+        "count": 3,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "battered wooden crate pile",
+        "w": 2,
+        "h": 2,
+        "where": "corner",
+        "count": 2,
+        "verbs": [
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "grease-stained workbench",
+        "w": 3,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "locked iron strongbox",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "coiled hose reel",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 2,
+      "purpose": "foreman's office and records",
+      "items": [
+       {
+        "name": "rusted metal filing cabinet",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 3,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "wooden chair",
+        "w": 1,
+        "h": 1,
+        "where": "middle",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "tall iron notice board",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "low iron safe",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 3,
+      "purpose": "worker rest and break room",
+      "items": [
+       {
+        "name": "rough wooden bench",
+        "w": 3,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "battered tin locker",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 4,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "low wooden table",
+        "w": 2,
+        "h": 1,
+        "where": "middle",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 4,
+      "purpose": "valve control and monitoring station",
+      "items": [
+       {
+        "name": "iron valve control panel",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "pressure monitoring gauge cluster",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "iron operator stool",
+        "w": 1,
+        "h": 1,
+        "where": "middle",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       }
+      ]
+     }
+    ],
+    "model": "anthropic/claude-sonnet-4.6",
+    "made_at": "2026-10-16T11:51:56.395823+00:00"
+   }
+  },
+  "49de5e4b-2761-5290-8a26-afc6d7149ad6": {
+   "": {
+    "place_id": "49de5e4b-2761-5290-8a26-afc6d7149ad6",
+    "state": "",
+    "rooms": [
+     {
+      "room": 0,
+      "purpose": "winding engine hall",
+      "items": [
+       {
+        "name": "a massive iron winding drum",
+        "w": 4,
+        "h": 4,
+        "where": "middle",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a headwheel gear assembly of iron cogs",
+        "w": 4,
+        "h": 3,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a heavy oak overseer's desk with papers",
+        "w": 2,
+        "h": 2,
+        "where": "corner",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a tall iron cabinet with padlock",
+        "w": 1,
+        "h": 2,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a cast iron coal brazier on legs",
+        "w": 2,
+        "h": 2,
+        "where": "middle",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a stack of oil barrels banded in iron",
+        "w": 2,
+        "h": 2,
+        "where": "wall",
+        "count": 3,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a rough wooden crate of rivets",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 4,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "heavy shaft edge timber baulks",
+        "w": 3,
+        "h": 1,
+        "where": "middle",
+        "count": 2,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a worn wooden tool bench",
+        "w": 3,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a battered iron tool chest",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a rough wooden stool",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a coil of thick iron cable",
+        "w": 2,
+        "h": 2,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       }
+      ]
+     }
+    ],
+    "model": "anthropic/claude-sonnet-4.6",
+    "made_at": "2026-10-16T11:52:02.728291+00:00"
+   }
+  }
+ },
+ "tile_set": "ashen"
 }

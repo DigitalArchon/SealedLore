@@ -694,6 +694,14 @@ class Config(BaseModel):
     # Seedream 5.0 Pro the premium one (the author's call, Oct 15 2026;
     # RECOMMENDED_IMAGE_MODELS, SealedLoreDocs design/map.md).
     map_isometric_model: str = "flux-2-klein-9b"
+    # Map-first play's sprites (engine/tile_draw.py), under the same standing
+    # approval and daily limit as map pictures: things by text to image, a
+    # character from their portrait by an edit of it, and a story's own tile
+    # set when the author asks for one. FLUX.3 Klein, open weights, ~1¢ a
+    # picture (SealedLoreDocs design/map.md, "Tiles v2"; the author chose the
+    # look, Oct 16 2026).
+    map_tile_model: str = "blackforestlabs/flux-3/klein/text-to-image"
+    map_sprite_model: str = "blackforestlabs/flux-3/klein/edit-image"
 
     # Pictures (engine/image_prompt.py, providers/images.py). The image model
     # takes reference pictures: Seedream 5.0 Pro was the author's pick for

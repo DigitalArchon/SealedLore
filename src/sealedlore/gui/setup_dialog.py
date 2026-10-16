@@ -44,6 +44,14 @@ from sealedlore.models.node import DIRECTOR_SPEAKER_ID, Node
 from sealedlore.models.scene import SceneState
 from sealedlore.models.story import Story
 
+# How full the map's rooms are (models/area.py `Density`).
+DENSITY_LABELS = {
+    "sparse": "Sparse: the bare essentials",
+    "normal": "Normal",
+    "full": "Full: lived in, cluttered",
+}
+
+
 GENERATE_LABEL = "The model writes the opening from these notes"
 AS_WRITTEN_LABEL = "Use exactly as written — this is the opening passage"
 
@@ -270,10 +278,27 @@ class SetupDialog(QDialog):
         form.addRow("Map", self.world_map)
         form.addRow(
             _hint(
-                "After each passage a small model notes the places the story goes to, how "
-                "they connect, who is where and the things that matter, and the map grows "
-                "with the story (Map, above the story). One more small call after every "
-                "passage; the map's pictures are drawn in the background."
+                "The story is played on its map: you walk where you like in each place, "
+                "click people and things for what you can do, and travel between places. "
+                "After each passage a small model notes the places the story goes to and "
+                "who is where, and the map grows with the story. One more small call after "
+                "every passage; the map's pictures are drawn in the background."
+            )
+        )
+        self.map_density = QComboBox()
+        for value, label in DENSITY_LABELS.items():
+            self.map_density.addItem(label, value)
+        self.map_density.setCurrentIndex(
+            max(0, self.map_density.findData(self.story.defaults.map_density))
+        )
+        self.map_density.setEnabled(self.story.defaults.world_map)
+        self.world_map.toggled.connect(self.map_density.setEnabled)
+        form.addRow("Rooms", self.map_density)
+        form.addRow(
+            _hint(
+                "How full the map's rooms are: the furniture each building is planned with, "
+                "halved, as planned, or two thirds more. Decorations are left out of sparse "
+                "rooms. Furniture stands in the way, as it would."
             )
         )
         self.image_style = line_edit(self.story.image_style)
@@ -513,6 +538,7 @@ class SetupDialog(QDialog):
         story.defaults.agency_mode = self.agency.currentData()
         story.defaults.world_activity = self.world_activity.currentData()
         story.defaults.world_map = self.world_map.isChecked()
+        story.defaults.map_density = self.map_density.currentData()
         story.style = self.style
         story.image_style = self.image_style.text().strip()
         story.private_prompt.mode = self.private_mode.currentData()

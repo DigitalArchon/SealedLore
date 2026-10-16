@@ -119,12 +119,15 @@ class WorldRuntime:
         if not self.map_on or self.in_private:
             return ""
         base = self.story.world_base
-        return render_map_context(
+        text = render_map_context(
             established(self._world_on(path), base),
             self.map_held_name(held_id),
             self.texts,
             fixed={p.id for p in base.places} if base is not None else (),
         )
+        # Map-first: where everyone stands, exactly (engine/session_area.py).
+        positions = self.positions_context(path, held_id)
+        return f"{text}\n\n{positions}" if text and positions else text or positions
 
     def _prepare_world_read(self) -> _WorldRead | None:
         """The map read's request for the latest passage, logged; None when
@@ -168,7 +171,7 @@ class WorldRuntime:
                 author_turn=author_text,
                 passage=node.content,
                 texts=self.texts,
-                note=note,
+                note="\n".join(n for n in (note, self.read_spots(path[:-1])) if n),
             ),
             params=self.side_params(model, max_tokens=WORLD_MAX_TOKENS),
         )
@@ -225,6 +228,8 @@ class WorldRuntime:
         if refused:
             self._log("world_refused", {"request_log_ref": log_ref, "refused": refused})
         node.meta.world = None if delta.empty() else delta
+        # Map-first: everyone settled on the map the passage left.
+        self.area_after_read(node, reply, pending.source)
         self.save()
         # Whatever the map still needs drawn goes to the art model now, in
         # the background (session_world_art.py): the passage never waits.

@@ -2752,7 +2752,969 @@
    "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: An isometric view of a narrow district of cobbled lanes on wooden piers over water. A two-storey brick building with a large round brass gear mounted above its door, its windows filled with clockwork devices. Beside it, a tiny tearoom building with fogged, steam-covered windows. An iron tram shelter stands along the lane. Steaming pipes run between buildings, and two brick chimneys rise from the rooftops. Brass signs hang over doorways. Four gas lamps line the crooked lanes, casting warm light. The scene is rendered in warm browns, coppers, and brass tones, with steam drifting across the cobblestones. The ground: cobbled streets. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
    "model": "nano-banana-pro-edit",
    "made_at": "2026-10-15T02:30:43.405989+00:00"
+  },
+  {
+   "id": "522a55a7-5c9f-4a6a-9b2f-b01c4839ecbc",
+   "subject": "walker",
+   "subject_id": "Lady Imogen Ashcombe",
+   "name": "Lady Imogen Ashcombe",
+   "state": "",
+   "file": "pictures/map/walker-brasshaven-imogen.webp",
+   "from_picture": null,
+   "prompt": "Create a small full-body game character sprite of the person in image 1, in hand-painted 16-bit pixel art in the style of Stardew Valley: standing, facing the viewer, the whole figure from head to feet with chibi proportions and a large head, keeping their hair colour and style, skin tone, build, and the clothes and colours they wear in image 1. Centred alone on a plain pure white background with a wide white margin on every side, crisp dark outline.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-16T11:57:19.627437+00:00",
+   "plan": ""
+  },
+  {
+   "id": "06f5a2ee-3de7-403d-9490-c7db1d85388b",
+   "subject": "walker",
+   "subject_id": "Captain Silas Thorne",
+   "name": "Captain Silas Thorne",
+   "state": "",
+   "file": "pictures/map/walker-brasshaven-silas.webp",
+   "from_picture": null,
+   "prompt": "Create a small full-body game character sprite of the person in image 1, in hand-painted 16-bit pixel art in the style of Stardew Valley: standing, facing the viewer, the whole figure from head to feet with chibi proportions and a large head, keeping their hair colour and style, skin tone, build, and the clothes and colours they wear in image 1. Centred alone on a plain pure white background with a wide white margin on every side, crisp dark outline.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-16T11:57:19.628267+00:00",
+   "plan": ""
+  },
+  {
+   "id": "e3c35c5f-a4ad-4148-bd35-2d0a5749ff0c",
+   "subject": "walker",
+   "subject_id": "Professor Adelaide Quill",
+   "name": "Professor Adelaide Quill",
+   "state": "",
+   "file": "pictures/map/walker-brasshaven-adelaide.webp",
+   "from_picture": null,
+   "prompt": "Create a small full-body game character sprite of the person in image 1, in hand-painted 16-bit pixel art in the style of Stardew Valley: standing, facing the viewer, the whole figure from head to feet with chibi proportions and a large head, keeping their hair colour and style, skin tone, build, and the clothes and colours they wear in image 1. Centred alone on a plain pure white background with a wide white margin on every side, crisp dark outline.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-16T11:57:19.628424+00:00",
+   "plan": ""
+  },
+  {
+   "id": "ab69deb4-a5d1-4a52-8419-208d7cbc8afd",
+   "subject": "walker",
+   "subject_id": "Tock",
+   "name": "Tock",
+   "state": "",
+   "file": "pictures/map/walker-brasshaven-tock.webp",
+   "from_picture": null,
+   "prompt": "Create a small full-body game character sprite of the person in image 1, in hand-painted 16-bit pixel art in the style of Stardew Valley: standing, facing the viewer, the whole figure from head to feet with chibi proportions and a large head, keeping their hair colour and style, skin tone, build, and the clothes and colours they wear in image 1. Centred alone on a plain pure white background with a wide white margin on every side, crisp dark outline.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-16T11:57:28.690063+00:00",
+   "plan": ""
+  },
+  {
+   "id": "6a7636a0-9eb2-40d9-a100-d93a60021c10",
+   "subject": "walker",
+   "subject_id": "Mags Carroway",
+   "name": "Mags Carroway",
+   "state": "",
+   "file": "pictures/map/walker-brasshaven-mags.webp",
+   "from_picture": null,
+   "prompt": "Create a small full-body game character sprite of the person in image 1, in hand-painted 16-bit pixel art in the style of Stardew Valley: standing, facing the viewer, the whole figure from head to feet with chibi proportions and a large head, keeping their hair colour and style, skin tone, build, and the clothes and colours they wear in image 1. Centred alone on a plain pure white background with a wide white margin on every side, crisp dark outline.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-16T11:57:29.033881+00:00",
+   "plan": ""
+  },
+  {
+   "id": "16a9e1ae-fd7d-4c9f-b19a-1d983a26a485",
+   "subject": "walker",
+   "subject_id": "Inspector Hollis Grieve",
+   "name": "Inspector Hollis Grieve",
+   "state": "",
+   "file": "pictures/map/walker-brasshaven-hollis.webp",
+   "from_picture": null,
+   "prompt": "Create a small full-body game character sprite of the person in image 1, in hand-painted 16-bit pixel art in the style of Stardew Valley: standing, facing the viewer, the whole figure from head to feet with chibi proportions and a large head, keeping their hair colour and style, skin tone, build, and the clothes and colours they wear in image 1. Centred alone on a plain pure white background with a wide white margin on every side, crisp dark outline.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-16T11:57:29.885770+00:00",
+   "plan": ""
   }
  ],
- "pictures_by_day": {}
+ "pictures_by_day": {},
+ "furnishings": {
+  "ac0ef798-71d7-5340-91a1-153b067faafd": {
+   "": {
+    "place_id": "ac0ef798-71d7-5340-91a1-153b067faafd",
+    "state": "",
+    "rooms": [
+     {
+      "room": 0,
+      "purpose": "main workshop and shopfront",
+      "items": [
+       {
+        "name": "tall wooden shelving unit with brass fittings",
+        "w": 4,
+        "h": 1,
+        "where": "wall",
+        "count": 3,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "iron tool chest on wheels",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "wooden stool",
+        "w": 1,
+        "h": 1,
+        "where": "middle",
+        "count": 3,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "brass oil can on a low shelf",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "wooden crate of raw brass stock",
+        "w": 2,
+        "h": 2,
+        "where": "corner",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "tall glass-fronted display cabinet of pocket watches",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "low wooden parts cabinet with many small drawers",
+        "w": 3,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "heavy iron anvil block on a timber stand",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "wicker waste basket full of metal shavings",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 2,
+        "verbs": [
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "wall-mounted bracket shelf holding finished clock mechanisms",
+        "w": 3,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       }
+      ]
+     }
+    ],
+    "model": "anthropic/claude-sonnet-4.6",
+    "made_at": "2026-10-16T11:51:44.833588+00:00"
+   }
+  },
+  "577329da-8261-500f-b79b-fb1c795b8be8": {
+   "": {
+    "place_id": "577329da-8261-500f-b79b-fb1c795b8be8",
+    "state": "",
+    "rooms": [
+     {
+      "room": 0,
+      "purpose": "main taproom and gathering hall",
+      "items": [
+       {
+        "name": "a wooden bar stool",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 6,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a round tavern table with brass fittings",
+        "w": 2,
+        "h": 2,
+        "where": "middle",
+        "count": 3,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a ladder-back wooden chair",
+        "w": 1,
+        "h": 1,
+        "where": "middle",
+        "count": 8,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a tall bookshelf of technical manuals",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a copper pipe rack with hanging mugs",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a small side table with a tea service",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 2,
+        "verbs": [
+         "use",
+         "eat",
+         "destroy"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 1,
+      "purpose": "private meeting room for artificers",
+      "items": [
+       {
+        "name": "a long rectangular oak table",
+        "w": 4,
+        "h": 2,
+        "where": "middle",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a wooden chair with padded seat",
+        "w": 1,
+        "h": 1,
+        "where": "middle",
+        "count": 6,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a narrow shelf of rolled blueprints",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a brass-framed display case with gear samples",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 2,
+      "purpose": "cosy reading and smoking lounge",
+      "items": [
+       {
+        "name": "a padded wingback chair",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 2,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a small round side table",
+        "w": 1,
+        "h": 1,
+        "where": "middle",
+        "count": 2,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a low wooden bookcase of periodicals",
+        "w": 3,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a tobacco pipe stand with pipes",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a footstool with embroidered top",
+        "w": 1,
+        "h": 1,
+        "where": "middle",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 3,
+      "purpose": "artificers' workshop and debate room",
+      "items": [
+       {
+        "name": "a heavy wooden drafting table",
+        "w": 3,
+        "h": 2,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a tall stool for drafting",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a wooden crate of spare components",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a narrow parts cabinet with brass handles",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       }
+      ]
+     }
+    ],
+    "model": "anthropic/claude-sonnet-4.6",
+    "made_at": "2026-10-16T11:51:46.967022+00:00"
+   }
+  },
+  "71f341d8-d0e1-580f-ab6e-26a1e1d52d75": {
+   "": {
+    "place_id": "71f341d8-d0e1-580f-ab6e-26a1e1d52d75",
+    "state": "",
+    "rooms": [
+     {
+      "room": 0,
+      "purpose": "Grand Entrance Hall",
+      "items": [
+       {
+        "name": "a marble reception desk with brass fittings",
+        "w": 3,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "a tall brass umbrella stand",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a carved wooden bench with velvet cushion",
+        "w": 3,
+        "h": 1,
+        "where": "wall",
+        "count": 4,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "a marble pedestal with bronze bust",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 3,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a brass coat and hat stand",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 4,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a tall potted palm in brass planter",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 4,
+        "verbs": [
+         "destroy"
+        ]
+       },
+       {
+        "name": "a gilded writing table with inkwell",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 1,
+      "purpose": "Music and Receiving Room",
+      "items": [
+       {
+        "name": "a velvet chaise longue",
+        "w": 3,
+        "h": 1,
+        "where": "wall",
+        "count": 3,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "a wingback armchair in burgundy velvet",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 4,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "a low mahogany side table",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 4,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a glass-topped display cabinet with curiosities",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a brass music stand",
+        "w": 1,
+        "h": 1,
+        "where": "middle",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a round mahogany occasional table",
+        "w": 2,
+        "h": 2,
+        "where": "middle",
+        "count": 1,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "a tall brass bookcase with glass doors",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 2,
+      "purpose": "Dining Hall and Servants' Staging Room",
+      "items": [
+       {
+        "name": "a high-backed oak dining chair",
+        "w": 1,
+        "h": 1,
+        "where": "middle",
+        "count": 8,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a mahogany sideboard with brass handles",
+        "w": 3,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a brass drinks trolley",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a china cabinet with glass front",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "a carved wooden serving table",
+        "w": 3,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "a brass coal scuttle",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "a tall potted fern in ceramic pot",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 2,
+        "verbs": [
+         "destroy"
+        ]
+       }
+      ]
+     }
+    ],
+    "model": "anthropic/claude-sonnet-4.6",
+    "made_at": "2026-10-16T11:51:47.308492+00:00"
+   }
+  },
+  "85c1473f-0693-5a5d-be7b-c161eccb8ace": {
+   "": {
+    "place_id": "85c1473f-0693-5a5d-be7b-c161eccb8ace",
+    "state": "",
+    "rooms": [
+     {
+      "room": 0,
+      "purpose": "main engine floor",
+      "items": [
+       {
+        "name": "heavy iron workbench",
+        "w": 3,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "oil drum barrel",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 4,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "iron pipe rack",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "heavy wooden crate of spare parts",
+        "w": 2,
+        "h": 2,
+        "where": "corner",
+        "count": 3,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "pressure gauge stand",
+        "w": 1,
+        "h": 1,
+        "where": "middle",
+        "count": 2,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "chain hoist gantry frame",
+        "w": 3,
+        "h": 2,
+        "where": "middle",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       },
+       {
+        "name": "metal waste bin",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 3,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 1,
+      "purpose": "engineers' office and records room",
+      "items": [
+       {
+        "name": "large oak writing desk",
+        "w": 2,
+        "h": 2,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "tall wooden filing cabinet",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 3,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "wooden bookshelf",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "padded leather chair",
+        "w": 1,
+        "h": 1,
+        "where": "middle",
+        "count": 2,
+        "verbs": [
+         "use"
+        ]
+       },
+       {
+        "name": "small side table",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 1,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 2,
+      "purpose": "coal and fuel storage",
+      "items": [
+       {
+        "name": "large coal bin",
+        "w": 3,
+        "h": 2,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "wooden barrel of lamp oil",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 3,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "iron wheelbarrow",
+        "w": 1,
+        "h": 2,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "heavy wooden pallet",
+        "w": 2,
+        "h": 1,
+        "where": "wall",
+        "count": 2,
+        "verbs": [
+         "use",
+         "destroy"
+        ]
+       }
+      ]
+     },
+     {
+      "room": 3,
+      "purpose": "stokers' anteroom and equipment alcove",
+      "items": [
+       {
+        "name": "iron hook rack for coats",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       },
+       {
+        "name": "small wooden stool",
+        "w": 1,
+        "h": 1,
+        "where": "corner",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take",
+         "destroy"
+        ]
+       },
+       {
+        "name": "water bucket and stand",
+        "w": 1,
+        "h": 1,
+        "where": "wall",
+        "count": 1,
+        "verbs": [
+         "use",
+         "take"
+        ]
+       }
+      ]
+     }
+    ],
+    "model": "anthropic/claude-sonnet-4.6",
+    "made_at": "2026-10-16T11:51:47.473508+00:00"
+   }
+  }
+ },
+ "tile_set": "brasshaven"
 }

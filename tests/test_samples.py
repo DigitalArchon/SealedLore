@@ -145,7 +145,10 @@ def test_a_sample_s_shipped_map_art_fits_its_map():
         listed = json.loads(sidecar_art_path(path).read_text(encoding="utf-8"))["pictures"]
         with_files, files = load_sidecar(path)
         assert len(with_files.pictures) == len(listed), f"{path.name}: a map picture is missing"
-        assert {p.subject_id for p in with_files.pictures} <= ids
+        places = {p.subject_id for p in with_files.pictures if p.subject != "walker"}
+        assert places <= ids
+        walkers = {p.subject_id for p in with_files.pictures if p.subject == "walker"}
+        assert walkers <= {c.name for c in scenario.cast}
         assert sorted(files) == sorted(p.file for p in with_files.pictures)
         # A showcase: every area with a plan comes with its isometric view
         # (the author, Oct 15 2026: several areas each, not the start alone).
@@ -235,3 +238,37 @@ def test_media_lists_only_the_views_the_map_shows(app, tmp_path: Path):
     assert sorted(names) == ["Hollowmouth", "Shaft Nine"]
     window._chat_allows_close = lambda: True
     window.close()
+
+
+def test_a_map_sample_is_ready_to_play_on_its_map():
+    """Map-first play (engine/area.py): a sample that keeps a map ships its
+    tile set, every building with a plan furnished, a walking sprite for
+    every character, and a sprite for every thing in every area, so nothing
+    is drawn when it is played."""
+    from sealedlore.engine.area import build_area
+    from sealedlore.engine.tile_sets import item_slugs
+    from sealedlore.storage.tile_sets import read_asset, shipped_sets
+    from sealedlore.storage.world_art import load_sidecar, sidecar_art_path
+
+    sets = shipped_sets(SAMPLES)
+    for path in sorted(SAMPLES.glob("*.md")):
+        if not sidecar_art_path(path).exists():
+            continue
+        art, _files = load_sidecar(path)
+        scenario = parse_plot_markdown(path.read_text(encoding="utf-8")).scenario
+        assert art.tile_set in sets, f"{path.name}: no tile set {art.tile_set!r}"
+        _info, folder = sets[art.tile_set]
+        world = applied(WorldMap(), scenario.world_base, base=True)
+        walkers = {p.subject_id for p in art.pictures if p.subject == "walker"}
+        assert walkers == {c.name for c in scenario.cast}, f"{path.name}: walkers"
+        names = [c.name for c in scenario.cast]
+        for pid in art.layouts:
+            area = build_area(world, art, pid, people=names)
+            if area is None:
+                continue
+            if area.indoor and world.places[pid].kind in ("building", "room") and area.rooms:
+                assert art.furnishing_for(pid, "") is not None, f"{area.name}: not furnished"
+            for thing in area.placements:
+                assert any(read_asset(folder, f"items/{s}") for s in item_slugs(thing.name)), (
+                    f"{path.name}: {area.name}: no sprite for {thing.name!r}"
+                )

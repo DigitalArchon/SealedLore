@@ -12,6 +12,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from sealedlore.ids import new_id, utc_now_iso
+from sealedlore.models.area import Density, LiveArea
 from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef
 from sealedlore.models.node import AgencyMode, NpcScope, ResponseStyle
@@ -75,6 +76,9 @@ class StoryDefaults(BaseModel):
     # The map that grows as the story goes (models/world.py): off unless the
     # author turns it on, since its read is one more call after every passage.
     world_map: bool = False
+    # How full the map's rooms are (models/area.py, engine/area.py): the
+    # furnishing's counts, halved or raised by two thirds.
+    map_density: Density = "normal"
     # The author's testing (Sept 2026): Sonnet 4.5/4.6 storytelling degrades
     # quickly past ~60k tokens of context, so 60k is the ceiling as well as
     # the default. Existing stories keep what they were saved with.
@@ -159,6 +163,9 @@ class Story(BaseModel):
     # its window (engine/chronicle.schedule). Shared by every branch; a
     # restart is a new story and draws again.
     plot_schedule: dict[str, int] = Field(default_factory=dict)
+    # Map-first play (models/area.py): walking done since the last turn,
+    # carried by the next one.
+    area_live: LiveArea | None = None
     # How pictures of this story should look ("painterly sci-fi concept art"),
     # given to whoever writes an image prompt. Never reaches the storyteller.
     image_style: str = ""

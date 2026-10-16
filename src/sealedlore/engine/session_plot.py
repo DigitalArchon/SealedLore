@@ -640,6 +640,9 @@ class PlotRuntime:
         # Conditions are about the character the author now holds.
         switched = take_viewpoint(chronicle, turn.controlled_character_id)
         skipped = self._author_skip(user_node, chronicle)
+        # Map-first: the walking and travel since the last passage move the
+        # plot's clock too (the author's ruling: the map keeps the time).
+        skipped = bool(self.walk_into_plot(user_node, chronicle)) or skipped
         resolution = resolve_due(plot, chronicle, days, node_id=user_node.id)
         fired = list(resolution.happened)
         gap = list(resolution.gap)
