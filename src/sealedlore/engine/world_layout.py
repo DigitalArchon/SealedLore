@@ -129,12 +129,6 @@ _COMPASS: dict[str, float] = {
     "northwest": 315,
     "north-west": 315,
     "north-northwest": 337.5,
-    "up": 45,
-    "upstairs": 45,
-    "above": 45,
-    "down": 225,
-    "downstairs": 225,
-    "below": 225,
 }
 _BEARING = re.compile(
     r"\b(" + "|".join(sorted(map(re.escape, _COMPASS), key=len, reverse=True)) + r")\b",
@@ -152,10 +146,23 @@ def bearing(direction: str | None) -> float | None:
     return _COMPASS[match.group(1).lower()] if match else None
 
 
+# The smallest a place is made to fit its parent.
+MIN_PLACED_SIZE = 4.0
+# The farthest a stated distance places anything: light-years put a place at
+# 1e16 m, where a tile's width is below the float's grain (the second review).
+MAX_DISTANCE = 1_000_000.0
+
+
 def metres(distance: str | None) -> float | None:
-    """How far a distance in the text's words is, in metres; None when it
-    says nothing measurable ("a long way"). A travel time counts at the pace
-    the words name (on foot, by car…), on foot when they name none."""
+    """How far a distance in the text's words is, in metres, at most
+    `MAX_DISTANCE`; None when it says nothing measurable ("a long way"). A
+    travel time counts at the pace the words name (on foot, by car…), on
+    foot when they name none."""
+    found = _metres(distance)
+    return min(found, MAX_DISTANCE) if found is not None else None
+
+
+def _metres(distance: str | None) -> float | None:
     text = " ".join((distance or "").lower().split())
     if not text:
         return None
@@ -363,7 +370,7 @@ def place_one(
         anchor = places.get(near or "")
         if anchor is not None and anchor.x is not None and anchor.y is not None:
             near_point = (anchor.x, anchor.y)
-    if parent is not None and near_point is not None and _near_enough(parent, near_point):
+    if parent is not None:
         # Where the story is: everything placed but what it is in, and what
         # is as big as its parent (a range of hills it lies in by position).
         crowd = [
@@ -378,11 +385,19 @@ def place_one(
             and abs(p.y - parent.y) <= (size_of(parent) + size_of(p)) / 2  # type: ignore[operator]
             and not moves(places, p)
         ]
-        spot = _within(parent, size, crowd, near_point, place.name)
-        if spot is not None:
-            place.x, place.y = spot
-            return
-    if parent is not None:
+        near_me = near_point is not None and _near_enough(parent, near_point)
+        origin = near_point if near_me else (parent.x, parent.y)
+        # In its parent's rectangle, at its size; no room there, smaller
+        # (down to a quarter) rather than outside the plan, where the view
+        # clamped its box to the edge and the map disagreed (the second review).
+        for shrink in (1.0, 0.75, 0.5, 0.25):
+            smaller = max(MIN_PLACED_SIZE, size * shrink)
+            spot = _within(parent, smaller, crowd, origin, place.name)  # type: ignore[arg-type]
+            if spot is not None:
+                if shrink < 1.0:
+                    place.size = smaller
+                place.x, place.y = spot
+                return
         radius = size_of(parent) / 2 - size / 2
         if radius <= 0 or not others:
             place.x, place.y = parent.x, parent.y

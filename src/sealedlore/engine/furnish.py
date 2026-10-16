@@ -60,7 +60,8 @@ def furnish_messages(
         "map.furnish.user",
         setting=setting or "(not said)",
         name=place.name,
-        what=" ".join(place.what.split()) or "(not said)",
+        what=(" ".join(place.what.split()) or "(not said)")
+        + (f" As the story has it now: {place.state}." if place.state else ""),
         rooms=room_lines(area),
     )
     return [

@@ -313,9 +313,14 @@ def test_a_building_the_story_changed_is_planned_anew_though_nobody_went_in():
     jobs = plan_art(world, WorldArt(layouts={barn.id: {"": before}}), here="house", setting="x")
     job = next(j for j in jobs if j.key == f"layout:{barn.id}:blown up and burning")
     assert '"fill": "fire"' in job.messages[-1].text
-    world.places[barn.id] = barn  # unchanged again: no plan of its own
+    world.places[barn.id] = barn  # unchanged again: planned, for it stands in the farm
     keys = [j.key for j in plan_art(world, WorldArt(), here="house", setting="x")]
-    assert not any(k.startswith(f"layout:{barn.id}") for k in keys)
+    assert f"layout:{barn.id}" in keys  # every building of the area the story is in
+    # A building in another area, unchanged and never entered, gets none.
+    shop = WorldPlace(id="shop", name="The store", kind="building", inside="town", x=0.0, y=8100.0)
+    world.places[shop.id] = shop
+    keys = [j.key for j in plan_art(world, WorldArt(), here="house", setting="x")]
+    assert not any(k.startswith("layout:shop") for k in keys)
 
 
 def test_a_place_that_isn_t_a_building_is_told_how_to_lay_out_a_station():

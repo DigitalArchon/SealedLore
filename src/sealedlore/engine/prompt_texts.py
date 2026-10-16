@@ -1550,6 +1550,20 @@ Events
 # writing an event themselves (the Jem'Hadar boarding in their own Between
 # Stars story) was never recognised, and the plot scheduled it again.
 _text(
+    "plot.chronicle_read.walked",
+    PLOT,
+    "The chronicle read: walking already on the clock",
+    "Added to the read in a story played on its map when the author's character walked or "
+    "travelled since the last passage: the program put that time on the clock already "
+    "(`walk_into_plot`), so the read counts only what the passage adds. Before, the read "
+    "was shown the clock from before the walk and the walk was lost.",
+    "The author's character walked or travelled for about {minutes} minutes before this "
+    "passage; that time is on the clock above already. Count only the time the passage "
+    "itself adds beyond it: a passage that tells that same walk adds nothing.",
+    (("minutes", "the minutes walked, as a number"),),
+)
+
+_text(
     "plot.chronicle_read.authors_events",
     PLOT,
     "The chronicle read: events the author may have written",
@@ -4151,9 +4165,8 @@ SPOTS THE AUTHOR MARKED ON THE MAP IN THEIR TURN:
 A place the author's turn or the passage puts at one of these spots (something
 made, found or built there): add "mark" to its entry in "places", with the
 spot's coordinate copied exactly ("mark": "{example}"). Someone who goes to one:
-give their "where" as usual, and under "at" (the same "at" as for the spots near
-the author's character) give that spot's coordinate, copied exactly:
-"at": {"<person>": "{example}"}.""",
+give their "where" as usual, with its quote, and under a top-level "at" give that
+spot's coordinate, copied exactly: "at": {"<person>": "{example}"}.""",
     (
         ("marks", "one line a spot: the spot and what is there"),
         ("example", "the first spot's coordinate, as an example"),
@@ -4169,12 +4182,36 @@ _text(
     """\
 SPOTS NEAR THE AUTHOR'S CHARACTER: {spots}
 
-Two more fields you may add to the object, only when the passage says so:
+One more field you may add to the object, only when the passage says so:
 "at": {"<person>": "<one of the spots above, as written>"} for anyone the
-passage puts at one of those spots, and "minutes": <a number> for how much
-story time the passage itself covers, when it says ("an hour later", "they
-talked until dark"), with "minutes_quote": "<the words that say it>".""",
+passage puts at one of those spots; give their "where" too, with its quote.""",
     (("spots", "the spots, comma-separated"),),
+)
+
+_text(
+    "map_read.minutes",
+    MAP,
+    "Map-first: the read's story time",
+    "Added to the map read's request in a story played on the map that has no plot (the "
+    "plot's own clock read keeps time there): the field for how much story time the "
+    "passage covers, which moves the map's clock.",
+    'One more field you may add to the object, only when the passage says so: "minutes": '
+    '<a number> for how much story time the passage itself covers, when it says ("an hour '
+    'later", "they talked until dark"), with "minutes_quote": "<the words that say it>".'
+    "{walked}",
+    (("walked", "map_read.walked when the author's character walked first, else nothing"),),
+)
+
+_text(
+    "map_read.walked",
+    MAP,
+    "Map-first: the read told of the walk already counted",
+    "Follows map_read.minutes when the author's character walked or travelled since the "
+    "last passage: the program counted that time already (the second review found a "
+    "travel counted at the turn and again by the read of a passage that told it).",
+    " The author's character walked or travelled for about {minutes} minutes before this "
+    "passage, already counted: give only the time the passage adds beyond that walk.",
+    (("minutes", "the minutes walked, as a number"),),
 )
 
 _text(

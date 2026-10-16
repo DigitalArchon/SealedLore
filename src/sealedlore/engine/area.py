@@ -37,6 +37,7 @@ from sealedlore.engine.world_art import (
     FILLS,
     decked,
     fixed_in_plan,
+    land_under,
     local_area,
     plan_rect,
     plan_tile,
@@ -102,6 +103,10 @@ SMALL = (
     "radio",
 )
 BIG = (
+    "chest",
+    "crate",
+    "trunk",
+    "cupboard",
     "table",
     "bed",
     "bunk",
@@ -326,7 +331,8 @@ def _chain(world: WorldMap, place_id: str | None) -> list[WorldPlace]:
 def has_inside(art: WorldArt, place: WorldPlace) -> bool:
     """A building (or room) with a plan of its own: its inside is an area."""
     return (
-        place.kind in ("building", "room") and art.layout_shown(place.id, place.state) is not None
+        place.kind in ("building", "room", "vehicle")
+        and art.layout_shown(place.id, place.state) is not None
     )
 
 
@@ -338,7 +344,13 @@ def is_deck(world: WorldMap, art: WorldArt, place_id: str | None) -> bool:
     if place is None:
         return False
     layout = art.layout_shown(place.id, place.state)
-    return layout is not None and str((layout.spec or {}).get("ground") or "") == "space"
+    if layout is None:
+        return False
+    # Its own ground, or the land it stands on: the enclosed prompt asks for
+    # the hull as "floor" with space outside, so the deck's own word is
+    # seldom "space" (the second review).
+    ground = str((layout.spec or {}).get("ground") or "")
+    return ground == "space" or land_under(world, art, place) == "space"
 
 
 def area_of(world: WorldMap, art: WorldArt, place_id: str | None) -> str | None:
@@ -743,8 +755,8 @@ def _exits(rows: list[str]) -> list[tuple[int, int]]:
                 near = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
                 if edge or any(n in outside for n in near):
                     out.append((x, y))
-            elif edge and ch == "_":
-                out.append((x, y))
+            elif edge and ch in WALKABLE:
+                out.append((x, y))  # floor, or rubble where a wall fell
     return out
 
 
@@ -813,6 +825,69 @@ def _open_sealed(rows: list[str], exits: list[tuple[int, int]], repairs: list[st
     return ["".join(r) for r in grid]
 
 
+# What a door may open onto: open ground, never water, canopy or a wall.
+OPEN_GROUND_TILES = frozenset(".,:=s_")
+# A room the story keeps shut gets no door cut for it.
+_SEALED = re.compile(
+    r"\b(locked|sealed|bricked up|walled up|no way out|cannot leave|can't leave)\b", re.I
+)
+
+
+def _stamp_state(grid: list[list[str]], box: tuple[int, int, int, int], rows: list[str]) -> None:
+    """A changed building's box drawn from the plan of its state: the ring
+    is wall where that plan's outer wall stands, rubble where it fell, a
+    door where it has one; the inside shows fire, rubble and water."""
+    x0, y0, x1, y1 = box
+    w, h = x1 - x0 + 1, y1 - y0 + 1
+    pw, ph = len(rows[0]) if rows else 0, len(rows)
+    if w <= 0 or h <= 0 or pw == 0 or ph == 0:
+        return
+    for y in range(y0, y1 + 1):
+        for x in range(x0, x1 + 1):
+            if not (0 <= y < len(grid) and 0 <= x < len(grid[0])):
+                continue
+            px = min(pw - 1, int((x - x0 + 0.5) * pw / w))
+            py = min(ph - 1, int((y - y0 + 0.5) * ph / h))
+            if x in (x0, x1):
+                px = 0 if x == x0 else pw - 1
+            if y in (y0, y1):
+                py = 0 if y == y0 else ph - 1
+            tile = rows[py][px]
+            ring = x in (x0, x1) or y in (y0, y1)
+            if tile in WALLS:
+                grid[y][x] = "#"
+            elif tile == "+":
+                grid[y][x] = "+"
+            elif tile in "*:~":
+                grid[y][x] = tile
+            else:
+                grid[y][x] = ":" if ring else " "
+
+
+def _door_for(grid: list[list[str]], box: tuple[int, int, int, int]) -> tuple[int, int] | None:
+    """Where a map building with no door gets one: the middle of the first
+    side (south, north, east, west) with open ground in front of it, else
+    the south side with its front cleared (a door opened onto a pond the
+    plan drew, and onto the grid's edge: the second review)."""
+    x0, y0, x1, y1 = box
+    h, w = len(grid), len(grid[0]) if grid else 0
+    sides = [
+        ((x0 + x1) // 2, y1, (x0 + x1) // 2, y1 + 1),
+        ((x0 + x1) // 2, y0, (x0 + x1) // 2, y0 - 1),
+        (x1, (y0 + y1) // 2, x1 + 1, (y0 + y1) // 2),
+        (x0, (y0 + y1) // 2, x0 - 1, (y0 + y1) // 2),
+    ]
+    sides = [(x, y, fx, fy) for x, y, fx, fy in sides if 0 <= x < w and 0 <= y < h]
+    for x, y, fx, fy in sides:
+        if 0 <= fx < w and 0 <= fy < h and grid[fy][fx] in OPEN_GROUND_TILES:
+            return x, y
+    for x, y, fx, fy in sides:
+        if 0 <= fx < w and 0 <= fy < h and grid[fy][fx] not in WALLS:
+            grid[fy][fx] = "."
+            return x, y
+    return (sides[0][0], sides[0][1]) if sides else None
+
+
 def _door_side(box: tuple[int, int, int, int], x: int, y: int) -> str:
     x0, y0, x1, y1 = box
     if y == y1:
@@ -865,7 +940,9 @@ def build_area(
         return None
     spec = layout.spec if isinstance(layout.spec, dict) else {}
     look = str(spec.get("ground") or "")
-    indoor = place.kind in ("building", "room") or look == "space"
+    if look != "space" and land_under(world, art, place) == "space":
+        look = "space"  # a deck: its own word is "floor", the void around it space
+    indoor = place.kind in ("building", "room", "vehicle") or look == "space"
     repairs: list[str] = []
     entrances: list[Entrance] = []
     buildings: dict[str, tuple[int, int, int, int]] = {}
@@ -876,11 +953,19 @@ def build_area(
             rows = list(decked(rows))
         objects = dict(layout.objects)
         labels = {k: (int(v[0]), int(v[1])) for k, v in layout.labels.items() if len(v) >= 2}
-        tile_m = max(plan_tile(place), 1.0) if place.kind in ("building", "room") else 1.5
-        if place.kind in ("building", "room"):
+        # The map's own scale (the plan's rectangle over its tiles): the
+        # positions, earshot, walking and the marks used to disagree by up
+        # to 25x on a deck (the second review).
+        tile_m = plan_tile(place)
+        # A plan drawn for the place's state shows what the story did to it
+        # (walls gone, a breach): the wall rules would undo it. A room the
+        # story sealed keeps no door either.
+        as_drawn = bool(place.state) and layout.state == place.state
+        sealed = _SEALED.search(f"{place.what} {place.state}") is not None
+        if place.kind in ("building", "room") and not as_drawn:
             rows = _whole_outer_wall(rows, repairs)
         exits = _exits(rows)
-        if not exits and place.kind in ("building", "room"):
+        if not exits and place.kind in ("building", "room") and not (as_drawn or sealed):
             rows, exits = _add_exit(rows, repairs)
         rows = _open_sealed(rows, exits, repairs)
         exits = _exits(rows)
@@ -941,19 +1026,39 @@ def build_area(
             if child is None:
                 continue
             buildings[child.id] = box
+            state_plan = art.layout_for(child.id, child.state) if child.state else None
+            if state_plan is not None and state_plan.rows:
+                # Blown up, burnt: its box as its own plan has it, rubble
+                # where the walls fell (and so no roof), fire inside, instead
+                # of a whole roofed building (the second review).
+                _stamp_state(grid, box, state_plan.rows)
             doors = [
                 (x, y)
                 for y in range(max(y0, 0), min(y1, len(grid) - 1) + 1)
                 for x in range(max(x0, 0), min(x1, len(grid[0]) - 1) + 1)
                 if grid[y][x] == "+" and (x in (x0, x1) or y in (y0, y1))
             ]
-            if not doors and 0 <= y1 < len(grid) and 0 <= (x0 + x1) // 2 < len(grid[0]):
-                doors = [((x0 + x1) // 2, y1)]
-                grid[y1][(x0 + x1) // 2] = "+"
-                repairs.append(f"gave {child.name} a door")
+            if not doors:
+                door = _door_for(grid, box)
+                if door is not None:
+                    doors = [door]
+                    grid[door[1]][door[0]] = "+"
+                    repairs.append(f"gave {child.name} a door")
             for x, y in doors:
                 if has_inside(art, child):
                     entrances.append(Entrance(x, y, child.id, _door_side(box, x, y)))
+        # A building's inside is its own area, under its roof: drawn as floor
+        # here, anyone stood "at" it was stood under the roof and could walk
+        # in without its door (the second review). Blank: no walking, no sight.
+        for f in big.get("features", []):
+            if not isinstance(f, dict) or f.get("kind") != "building":
+                continue
+            x0, y0 = int(f["x"]), int(f["y"])
+            x1, y1 = x0 + int(f["w"]) - 1, y0 + int(f["h"]) - 1
+            for y in range(y0 + 1, y1):
+                for x in range(x0 + 1, x1):
+                    if 0 <= y < len(grid) and 0 <= x < len(grid[0]) and grid[y][x] == "_":
+                        grid[y][x] = " "
         rows = ["".join(r) for r in grid]
     # Objects named for people are people.
     for digit, name in list(objects.items()):
@@ -1037,7 +1142,7 @@ def _whole_outer_wall(rows: list[str], repairs: list[str]) -> list[str]:
     for edge in edges:
         runs: list[list[tuple[int, int]]] = []
         for x, y in edge:
-            if grid[y][x] == "_":
+            if grid[y][x] in WALKABLE and grid[y][x] != "+":
                 if runs and runs[-1][-1] in ((x - 1, y), (x, y - 1)):
                     runs[-1].append((x, y))
                 else:
@@ -1352,10 +1457,9 @@ def anchor_of(area: Area, world: WorldMap, place_id: str | None) -> tuple[int, i
     if place_id in area.buildings:
         doors = [e for e in area.entrances if e.place_id == place_id]
         box = area.buildings[place_id]
-        if doors:
-            return _front(doors[0], box)
         x0, y0, x1, y1 = box
-        return (x0 + x1) // 2, y1 + 1
+        front = _front(doors[0], box) if doors else ((x0 + x1) // 2, y1 + 1)
+        return _outside_near(area, box, front)
     place = world.places.get(place_id)
     if place is None:
         return None
@@ -1367,6 +1471,29 @@ def anchor_of(area: Area, world: WorldMap, place_id: str | None) -> tuple[int, i
         if room.purpose and key(room.purpose) == wanted:
             return int(room.cx), int(room.cy)
     return None
+
+
+def _outside_near(
+    area: Area, box: tuple[int, int, int, int], near: tuple[int, int]
+) -> tuple[int, int]:
+    """`near` when one can stand on it, else the nearest tile outside the
+    box one can (a door's front was a pond, and the ring search gave the
+    door tile itself; the second review)."""
+    x0, y0, x1, y1 = box
+    if area.walkable(*near):
+        return near
+    best = None
+    for radius in range(1, 6):
+        for dy in range(-radius, radius + 1):
+            for dx in range(-radius, radius + 1):
+                x, y = near[0] + dx, near[1] + dy
+                if x0 <= x <= x1 and y0 <= y <= y1:
+                    continue
+                if area.walkable(x, y) and (best is None or dx * dx + dy * dy < best[0]):
+                    best = (dx * dx + dy * dy, (x, y))
+        if best is not None:
+            return best[1]
+    return near
 
 
 def _front(entrance: Entrance, box: tuple[int, int, int, int]) -> tuple[int, int]:
@@ -1566,7 +1693,8 @@ def render_positions(
             first, count = nearest.get(_bare(p.name), (m, 0))
             nearest[_bare(p.name)] = (first, count + 1)
     close = [
-        f"the {name} ({metres_words(m)}" + (f"; {n - 1} more near)" if n > 1 else ")")
+        f"the {name} ({'at hand' if m < 1.5 else metres_words(m)}"
+        + (f"; {n - 1} more near)" if n > 1 else ")")
         for name, (m, n) in nearest.items()
     ][:limit]
     if close:
@@ -1684,11 +1812,7 @@ def point_tile(world: WorldMap, area: Area, mx: float, my: float) -> tuple[int, 
 def metres_per_tile(world: WorldMap, area: Area) -> float:
     """How wide a tile of the area is on the map (its plan's rectangle over
     its tiles; outdoors that is the walking scale)."""
-    place = world.places.get(area.place_id)
-    rect = plan_rect(world, place) if place is not None else None
-    if rect is None or not area.width:
-        return area.tile_m
-    return rect[2] / area.width
+    return area.tile_m  # one scale for the grid and the map (`build_area`)
 
 
 # --- Who can see whom (design §3: line of sight across the grid) ---------------

@@ -100,15 +100,12 @@ class WorldRuntime:
         """The map at a message (the leaf by default), on its path."""
         return self._world_on(self.path() if node_id is None else self._path_to(node_id))
 
-    def _world_on(self, path) -> WorldMap:
+    def _world_on(self, path, *, whole: bool = False) -> WorldMap:
         """The map at the end of `path`: the story's imported map under it,
-        less what the plot is keeping hidden at that point."""
-        return world_at(
-            path,
-            self.story.world_base,
-            start=self.story.world_start,
-            hidden=self.hidden_ids(path) if self.story.plot is not None else (),
-        )
+        less what the plot is keeping hidden at that point (`whole`: with
+        it, for placing new places clear of what is hidden)."""
+        hidden = self.hidden_ids(path) if self.story.plot is not None and not whole else ()
+        return world_at(path, self.story.world_base, start=self.story.world_start, hidden=hidden)
 
     def map_context(self, path, held_id: str | None, *, turn_node_id: str | None = None) -> str:
         """The local map for the storyteller at the end of `path`, whenever
@@ -119,8 +116,13 @@ class WorldRuntime:
         if not self.map_on or self.in_private:
             return ""
         base = self.story.world_base
+        # The turn being sent moved the author's character (its walking, its
+        # travel): the map it is told is the one with the turn on it, or "X
+        # is at" named the place they left (the second review).
+        turn = self._turn_node(path, turn_node_id)
+        shown = self._world_on([*path, turn]) if turn is not None else self._world_on(path)
         text = render_map_context(
-            established(self._world_on(path), base),
+            established(shown, base),
             self.map_held_name(held_id),
             self.texts,
             fixed={p.id for p in base.places} if base is not None else (),
@@ -179,7 +181,14 @@ class WorldRuntime:
                 passage=node.content,
                 texts=self.texts,
                 note="\n\n".join(
-                    n for n in (note, self.read_spots(path[:-1]), self.read_marks(author)) if n
+                    n
+                    for n in (
+                        note,
+                        self.read_spots(path[:-1], held),
+                        self.read_minutes(author),
+                        self.read_marks(author),
+                    )
+                    if n
                 ),
             ),
             params=self.side_params(model, max_tokens=WORLD_MAX_TOKENS),
@@ -243,7 +252,10 @@ class WorldRuntime:
         near = None
         if self.map_first:
             near = self.held_point(self._snapshot_on(path[:-1]), pending.before, held=held_name)
-        place_delta(pending.before, delta, held_name, near)
+        # Placed clear of the plot's hidden places too (revealed, one shared
+        # a spot with a place the read put beside the character).
+        whole = self._world_on(path[:-1], whole=True) if self.story.plot is not None else None
+        place_delta(whole if whole is not None else pending.before, delta, held_name, near)
         # Someone sent to a marked spot, once every new place has its spot.
         self.apply_marks_at(pending.before, delta, reply, author)
         if refused:

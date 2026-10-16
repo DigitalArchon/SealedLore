@@ -127,7 +127,7 @@ MAX_OBJECTS = 9
 # Places drawn as a sprite on the map; regions, routes, areas and rooms are
 # drawn as land and layouts instead.
 SPRITE_KINDS = frozenset({"settlement", "building", "site", "vehicle", None})
-LAYOUT_KINDS = frozenset({"settlement", "building", "site", "area", "room", None})
+LAYOUT_KINDS = frozenset({"settlement", "building", "site", "area", "room", "vehicle", None})
 # A job that keeps failing is let be after this many tries.
 MAX_FAILURES = 2
 SPRITE_MAX_TOKENS = 4000
@@ -759,7 +759,7 @@ def layout_messages(
     parts: list[str] = []
     if place.kind == "building":
         parts.append(texts["map.layout.building"])
-    else:
+    else:  # a vehicle's plan is its decks, as a station's
         parts.append(texts["map.layout.enclosed"])
     fixed_ids = {f["place_id"] for f in fixed}
     inside = [
@@ -1055,8 +1055,17 @@ def plan_art(
         area = local_area(world, pid)
         if area is not None and area.kind in LAYOUT_KINDS and size_of(area) <= LOCAL_MAX_SIZE:
             wanted[area.id] = area
-        if place.kind == "building":
-            wanted[pid] = place
+        if place.kind in ("building", "vehicle"):
+            wanted[pid] = place  # a ship's plan is its decks, drawn once aboard
+    # The buildings standing in the area the character is in: a Director's
+    # watchtower at a mark could not be walked into until a read had put
+    # someone in it (the second review).
+    if here is not None and here in world.places:
+        local = local_area(world, here)
+        if local is not None and local.id in wanted:
+            for child in world.places.values():
+                if child.inside == local.id and child.kind == "building":
+                    wanted.setdefault(child.id, child)
     # A building the story changed, standing in one of those plans, is drawn
     # anew in its state though nobody has been inside: the local map shows
     # it open in its plan (live, a barn blown up and burning stayed an

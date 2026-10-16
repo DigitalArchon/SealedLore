@@ -20,6 +20,7 @@ came out wooden on a space station.
 from __future__ import annotations
 
 import re
+import zlib
 from collections.abc import Iterable, Mapping
 
 from pydantic import BaseModel, Field
@@ -91,7 +92,12 @@ class TileSetInfo(BaseModel):
 def slug(name: str) -> str:
     """A thing's name as a file name: "a heavy pine dining table" is
     "a-heavy-pine-dining-table"."""
-    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:48]
+    found = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:48]
+    if found or not name.strip():
+        return found
+    # A name in another script has no ASCII to slug: a stable one from its
+    # bytes, so it still gets a sprite and a place in the editor.
+    return "x" + format(zlib.crc32(name.strip().encode("utf-8")), "08x")
 
 
 def item_slugs(name: str) -> list[str]:
@@ -121,7 +127,14 @@ def choose_set(
     looks = {look for look in looks if look}
     best, score = "", 0
     for name, info in shipped.items():
-        hits = sum(len(re.findall(rf"\b{re.escape(k.lower())}", text)) for k in info.keywords)
+        # Whole words (and their plurals): "star" took "starts", "inn"
+        # "inner" (the second review); each keyword counts once, so one
+        # word said often doesn't outweigh the rest.
+        hits = sum(
+            1
+            for k in info.keywords
+            if re.search(rf"\b{re.escape(k.lower())}(?:e?s)?\b", text) is not None
+        )
         if info.deck and looks & {"space", "metal"}:
             hits += 5
         if hits > score:

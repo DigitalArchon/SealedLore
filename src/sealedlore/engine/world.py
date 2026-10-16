@@ -258,6 +258,8 @@ def _around(world: WorldMap, here: str | None, place: WorldPlace, fixed: Collect
     where = _how_far(world, here, place.id, fixed)
     head = f"{place.name} ({place.kind or 'place'}" + (f", {where}" if where else "") + ")"
     what = " ".join(place.what.split())
+    if place.state:  # what the story did to it, else the map says a barn stands burnt
+        what = (what + " " if what else "") + f"Now: {' '.join(place.state.split())}."
     return f"{head}: {what}" if what else head
 
 
@@ -284,8 +286,11 @@ def render_map_context(
     who = held or "The author's character"  # a Question before anyone is held
     verb = "are" if who.lower() == "you" else "is"  # a chat's user, unnamed
     lines.append(f"{who} {verb} at: " + here.name + "".join(f", in {o.name}" for o in chain[1:]))
-    if here.what:
-        lines.append("  " + " ".join(here.what.split()))
+    if here.what or here.state:
+        said = " ".join(here.what.split())
+        if here.state:
+            said = (said + " " if said else "") + f"Now: {' '.join(here.state.split())}."
+        lines.append("  " + said)
     inside = [p for p in world.places.values() if p.inside == here.id][:MAP_LIST_LIMIT]
     if inside:
         lines.append("Inside it: " + "; ".join(_around(world, origin, p, fixed) for p in inside))
@@ -313,11 +318,13 @@ def render_map_context(
     near = {p.id for p in chain} | {p.id for p in inside}
     things = [
         t
-        for t in world.things.values()
+        for t in reversed(list(world.things.values()))  # the newest first
         # Carried by the held character, never "carried by nobody": with no
         # one held yet, every thing on the map was "here".
         if (held is not None and t.carried_by == held) or (t.at is not None and t.at in near)
-    ][:MAP_LIST_LIMIT]
+    ]
+    carried = [t for t in things if t.carried_by == held]
+    things = (carried + [t for t in things if t.carried_by != held])[:MAP_LIST_LIMIT]
     if things:
         lines.append("Things here:")
         for thing in things:
@@ -366,6 +373,15 @@ def _size(value: Any) -> float | None:
 
 # What a read writes when the passage said nothing ("unknown" went into a way,
 # live): no words at all, or it reaches the storyteller as a fact.
+# A state that says the place is as it was again: back to "" rather than a
+# state drawn as a change for good ("rebuilt" stood as burnt and open; the
+# second review).
+_RESTORED = re.compile(
+    r"\b(rebuilt|repaired|restored|mended|patched up|put right|as (good as )?new|"
+    r"intact again|as it was|back to normal|whole again)\b",
+    re.IGNORECASE,
+)
+
 _NOTHING_SAID = re.compile(
     r"^(unknown|unclear|unspecified|not (stated|given|specified|known)|none|n/?a|-+|\?+)$",
     re.IGNORECASE,
@@ -417,7 +433,11 @@ def resolve_reply(
             # far end of the street, south of where Jane stood"). What a passage
             # does to it is its state.
             changed.what = changed.what or _text(entry.get("what"))
-            changed.state = _text(entry.get("state")) or changed.state
+            state = _text(entry.get("state"))
+            if state and changed.state and _RESTORED.search(state):
+                state = ""  # rebuilt, repaired: as it was, not a state of its own
+                changed.state = ""
+            changed.state = state or changed.state
             changed.kind = changed.kind or kind  # type: ignore[assignment]
             known_places = {**world.places, **{p.id: p for p in delta.places}}
             if (
@@ -433,6 +453,8 @@ def resolve_reply(
                 changed.inside = inside
             delta.places = [p for p in delta.places if p.id != existing] + [changed]
         else:
+            if delta.added is None:
+                delta.added = []
             delta.places.append(
                 WorldPlace(
                     name=name,
@@ -447,6 +469,7 @@ def resolve_reply(
                     size=_size(entry.get("size")),
                 )
             )
+            delta.added.append(delta.places[-1].id)
     for entry in _entries(reply, "links"):
         label = f"{_text(entry.get('from'))} -> {_text(entry.get('to'))}"
         quote = quoted(entry)
@@ -565,6 +588,12 @@ def describe_delta(world: WorldMap, delta: WorldDelta) -> str:
     new = [p.name for p in delta.places if p.id not in world.places]
     if new:
         parts.append("new " + ", ".join(new))
+    changed_state = [
+        f"{p.name} now {p.state or 'as it was'}"
+        for p in delta.places
+        if p.id in world.places and p.state != world.places[p.id].state
+    ]
+    parts.extend(changed_state)
     after = applied(world, delta)
     for who, place_id in delta.where.items():
         if world.where.get(who) != place_id:
@@ -593,18 +622,33 @@ def applied(
     A passage's places, and the places it puts people or ways between, are
     seen; an imported map (`base`) shows only the places it says are known."""
     out = world if in_place else world.model_copy(deep=True)
-    known = {**world.places, **{p.id: p for p in delta.places}}
+    # A known place the delta changed is carried whole; one not on this
+    # fold's map and not made here was another take's (`WorldDelta.added`).
+    places = [
+        p
+        for p in delta.places
+        if p.id in world.places or delta.added is None or p.id in delta.added
+    ]
+    known = {**world.places, **{p.id: p for p in places}}
     unplaced = [
         p.model_copy(deep=True)
-        for p in delta.places
+        for p in places
         if (p.x is None or p.y is None) and not moves(known, p)
     ]
     if unplaced:
-        place_new(world, unplaced, delta.links, None)
+        # Placed against the map with the delta's placed places on it: an
+        # imported map's place with `in:` and no `at:` was placed with its
+        # parent unseen, at the origin (the second review).
+        seeded = world.model_copy()
+        seeded.places = {
+            **world.places,
+            **{p.id: p for p in places if p.x is not None and p.y is not None},
+        }
+        place_new(seeded, unplaced, delta.links, None)
         fixed = {p.id: p for p in unplaced}
     else:
         fixed = {}
-    for place in delta.places:
+    for place in places:
         out.places[place.id] = fixed.get(place.id) or place.model_copy(deep=True)
     for link in delta.links:
         out.links = [k for k in out.links if {k.a, k.b} != {link.a, link.b}]

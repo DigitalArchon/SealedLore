@@ -20,10 +20,13 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from sealedlore.engine.area import Area
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
-from sealedlore.engine.tile_sets import INDOOR_SPRITES, OUTDOOR_SPRITES, TEXTURES, item_slugs
+from sealedlore.engine.tile_sets import OUTDOOR_SPRITES, TEXTURES, item_slugs
 from sealedlore.engine.world_pictures import PictureJob
 from sealedlore.messages import ContentPart, PromptMessage
 
+# The roles a story's own tile set must have words for; the rest are drawn
+# when the world has them.
+CORE_ROLES = ("floor", "cap", "face", "rug", "out-ground", "out-road", "out-wall")
 # Sprites are drawn square at this size, textures at TEXTURE_SIZE.
 SPRITE_SIZE = "768x768"
 TEXTURE_SIZE = "1024x1024"
@@ -150,8 +153,10 @@ def parse_tile_words(text: str) -> dict[str, str]:
         words[f"out-tree{i}"] = said(item)
     for role in ("out-bush", "out-rock", "out-rubble", "out-fence", "out-door"):
         words[role] = said(data.get(role))
-    missing = [r for r in (*TEXTURES, *INDOOR_SPRITES, *OUTDOOR_SPRITES) if not words.get(r)]
-    missing = [r for r in missing if r != "out-tree1"]
+    # Only what every map needs: a world with no roofs, trees or fences
+    # (a steppe, a city under the sea) still gets its set; the rest draw
+    # when given, else the program's plain stand-ins.
+    missing = [r for r in CORE_ROLES if not words.get(r)]
     if missing or not words["world"]:
         raise ValueError("the tile set is missing " + ", ".join(missing or ["the world"]))
     light = data.get("light")
@@ -169,6 +174,8 @@ def tile_jobs(
     style = style_words(words)
     out: list[tuple[str, str, str]] = []
     for role in TEXTURES:
+        if not words.get(role):
+            continue  # a world without it: the program's stand-in draws
         view = (
             "straight from the front" if role in ("face", "out-wall") else "from directly overhead"
         )
@@ -176,8 +183,9 @@ def tile_jobs(
             "map.tile.texture", what=words[role], world=world, view=view, style=style
         )
         out.append((role, prompt, TEXTURE_SIZE))
-    prompt = texts.fill("map.tile.rug", what=words["rug"], world=world, style=style)
-    out.append(("rug", prompt, SPRITE_SIZE))
+    if words.get("rug"):
+        prompt = texts.fill("map.tile.rug", what=words["rug"], world=world, style=style)
+        out.append(("rug", prompt, SPRITE_SIZE))
     for i in range(3):
         role = f"decor{i}"
         if words.get(role):

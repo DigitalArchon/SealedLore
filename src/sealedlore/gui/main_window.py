@@ -2209,6 +2209,7 @@ class MainWindow(
             return
 
         self.composer.restore_turn(node)
+        self.session.restore_area(node)  # its walking and travel, live again
         self.session.delete_from(node_id)
         self.reload_transcript()
         self.refresh_panels()

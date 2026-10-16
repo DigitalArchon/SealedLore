@@ -769,3 +769,123 @@ def test_a_card_s_avatar_is_drawn_from_the_portrait_in_the_set_s_style_and_a_cho
     assert session.take_card_pictures() == ["Serrik Vaun"]
     assert session.portraits_taken == [serrik.id]
     assert session.take_card_pictures() == [] and session.portraits_taken == []
+
+
+# --- the clock, the second review ------------------------------------------------------
+
+
+def test_the_plot_s_read_is_told_the_walk_already_on_the_clock():
+    """A walk's minutes went into the author turn's `elapsed` and the read
+    rewound them with the skip, so a successful read lost the walk."""
+    from sealedlore.engine.chronicle_read import build_read_messages
+    from sealedlore.models.plot import Chronicle
+    from tests.test_chronicle import plot
+
+    messages = build_read_messages(
+        plot=plot(),
+        chronicle=Chronicle(minutes=600),
+        author_turn="I set off.",
+        passage="He reached the gate.",
+        walked=120,
+    )
+    text = messages[-1].text
+    assert "walked or travelled for about 120 minutes" in text
+    assert "THE CLOCK, before the author's turn: Day 1 · 10:00" in text
+    plain = build_read_messages(
+        plot=plot(), chronicle=Chronicle(minutes=600), author_turn="", passage="x"
+    )
+    assert "walked or travelled" not in plain[-1].text
+
+
+def test_a_travel_told_to_the_storyteller_lands_the_character_though_nothing_is_drawn(
+    tmp_path, story, cast
+):
+    """Travel… to a place with no plan: the map section used to say the
+    character was still at the place they left, and the positions block
+    (no area to stand in) dropped the journey and the choice."""
+    session = make_session(tmp_path, story, cast, ["He walked.", "{}"])
+    session.config.scene_reads = "manual"
+    text = session.travel("town")
+    list(session.send(turn(text)))
+    sent = session.provider.requests[0].messages[-1].text
+    assert "Serrik Vaun is at: Hellsville" in sent
+    assert "- Serrik Vaun: at Hellsville (just arrived; nothing of it is drawn yet)." in sent
+    assert "Since the last passage:" in sent and "to Hellsville" in sent
+    assert "The author chose" in sent  # the travel's own line
+    # Without a plot, the map read is asked for the passage's minutes and
+    # told the walk is counted; its answer is capped at a week, not dropped.
+    read = session.provider.requests[-1].messages[-1].text
+    assert '"minutes": <a number>' in read and "already counted" in read
+    assert "SPOTS NEAR" not in read  # nowhere to stand: no spots, still the minutes
+
+
+def test_without_a_plot_a_director_skip_moves_the_map_s_clock_and_a_long_read_is_capped(
+    tmp_path, story, cast
+):
+    from sealedlore.models.node import DIRECTOR_SPEAKER_ID
+
+    read = json.dumps({"minutes": 30 * 24 * 60, "minutes_quote": "A month went by"})
+    session = make_session(tmp_path, story, cast, ["Weeks passed.", "{}", "A month went by.", read])
+    session.config.scene_reads = "manual"
+    skip = TurnRequest(
+        speaker_id=DIRECTOR_SPEAKER_ID,
+        user_text="Three weeks pass. Serrik mends the roof.",
+        controlled_character_id="char-serrik",
+    )
+    list(session.send(skip))
+    assert session.map_clock()[0] == 22  # day 1 + 21
+    list(session.send(turn("I wait.")))
+    assert session.map_clock()[0] == 22 + 7  # a month, capped at a week
+
+
+def test_take_back_keeps_the_turn_s_walking_and_a_moved_leaf_drops_a_walk(tmp_path, story, cast):
+    session = make_session(tmp_path, story, cast, ["One.", "{}", "Two.", "{}"])
+    session.config.scene_reads = "manual"
+    text = session.travel("town")
+    list(session.send(turn(text)))
+    user = session.path()[-2]
+    # Take back: the travel stands (applied once), ready for the turn again.
+    session.restore_area(user)
+    session.delete_from(user.id)
+    live = session.story.area_live
+    assert live is not None and live.leaf_id == session.story.active_leaf_id
+    walked = live.state.walked
+    assert walked > 0 and live.state.action.seconds == 0  # the way's length, once
+    list(session.send(turn(text)))
+    assert session.world().where["Serrik Vaun"] == "town"
+    stamped = session.path()[-2].meta.area
+    assert stamped.walked == walked and "to Hellsville" in stamped.walked_words
+
+
+def test_a_walk_after_the_passage_is_dropped_by_a_retake_and_gone_for_good(
+    tmp_path, story, cast
+):
+    session = make_session(tmp_path, story, cast, ["A.", "{}", "B.", "{}"])
+    session.config.scene_reads = "manual"
+    list(session.send(turn("I look.")))
+    house = session.area("house")
+    door = next(e for e in house.exits if e[1] == 23)
+    session.walked(session.walk_route(*door))
+    assert session.story.area_live is not None
+    old_leaf = session.story.active_leaf_id
+    list(session.regenerate())
+    assert session.story.active_leaf_id != old_leaf
+    session.area_state()
+    assert session.story.area_live is None  # not kept to come back on ‹
+
+
+def test_at_moves_nobody_the_read_did_not_place(tmp_path, story, cast):
+    """`at` alone used to move people the passage left where they were: the
+    read echoed the turn's intent."""
+    session = make_session(tmp_path, story, cast)
+    token = session.mark_of_tile("farm", 30, 50)
+    read = json.dumps({"at": {"Maela": token, "Serrik": "the cast-iron stove"}})
+    session.provider.responses = ["Maela stayed by the stove.", read]
+    session.config.scene_reads = "manual"
+    session.story.scene.present_character_ids = ["char-serrik", "char-maela"]
+    before = session.area_state().spots["Maela Orr"]
+    list(session.send(turn(f"I wave Maela over to {token}.")))
+    world = session.world()
+    assert world.where.get("Maela Orr") in (None, "house")  # not sent to the farm
+    after = session.path()[-1].meta.area.spots["Maela Orr"]
+    assert (after.area, after.x, after.y) == (before.area, before.x, before.y)

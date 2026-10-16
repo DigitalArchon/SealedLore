@@ -70,6 +70,12 @@ class WorldDelta(BaseModel):
     one replaces the old by id); `where` maps a person's name to a place id."""
 
     places: list[WorldPlace] = Field(default_factory=list)
+    # The ids among `places` this passage made (the rest are known places
+    # it changed, carried whole). A delta read against another take's map
+    # names that take's places: on a fold where they aren't, a changed copy
+    # is skipped rather than brought back as a ghost (the second review).
+    # None (a delta from before this): every place counts as made.
+    added: list[str] | None = None
     links: list[WorldLink] = Field(default_factory=list)
     where: dict[str, str] = Field(default_factory=dict)
     things: list[WorldThing] = Field(default_factory=list)
@@ -230,8 +236,13 @@ class WorldArt(BaseModel):
     tile_overrides: dict[str, str] = Field(default_factory=dict)
 
     def furnishing_for(self, place_id: str, state: str) -> FurnishPlan | None:
-        """A place's furnishing in `state`, else as the place was."""
+        """A place's furnishing in `state`; else, when the state has no plan
+        of its own (its rooms are the unchanged plan's), as the place was. A
+        redrawn plan numbers its rooms afresh, so the old furnishing can't
+        stand in for it (the second review): None until it is furnished."""
         drawn = self.furnishings.get(place_id) or {}
+        if state and self.layout_for(place_id, state) is not None:
+            return drawn.get(state)
         return drawn.get(state) or drawn.get("")
 
     def picture_for(

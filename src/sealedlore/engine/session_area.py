@@ -31,6 +31,7 @@ from typing import Any
 from sealedlore.engine.area import (
     WALK_M_PER_S,
     Area,
+    _front,
     anchor_of,
     anchor_tile,
     anchors_near,
@@ -51,6 +52,7 @@ from sealedlore.engine.area import (
     walked_words,
     where_words,
 )
+from sealedlore.engine.chronicle_read import stated_skip
 from sealedlore.engine.furnish import FURNISH_MAX_TOKENS, furnish_messages, parse_furnishing
 from sealedlore.engine.marks import (
     chain_words,
@@ -89,13 +91,14 @@ from sealedlore.engine.world_layout import (
     CHILD_SHARE,
     KIND_SIZE,
     describe_metres,
+    moves,
     position,
     size_of,
 )
 from sealedlore.engine.world_pictures import MAP_PICTURES_DIR, PictureJob, looks_of
 from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.area import AreaState, LiveArea, MapAction, Mark, Spot
-from sealedlore.models.node import Node, Usage
+from sealedlore.models.node import DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID, Node, Usage
 from sealedlore.models.world import WorldArt, WorldDelta, WorldMap
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError
 from sealedlore.providers.images import ImageClient, build_image_payload, data_url, loggable_payload
@@ -169,6 +172,10 @@ class AreaRuntime:
     _asset_thread: threading.Thread | None = None
     _asset_client: ImageClient | None = None
     _asset_role: str | None = None
+    # The roles queued after the one being drawn (several avatars at once).
+    _asset_queue: list[tuple[str, str]] = []
+    # The picture jobs of the tile run under way (`tile_art_jobs`'s keys).
+    _tile_keys: set[str] = set()
     _tile_thread: threading.Thread | None = None
     _tile_client: ImageClient | None = None
     _tile_text: ChatProvider | None = None
@@ -234,13 +241,17 @@ class AreaRuntime:
         def read(role: str) -> bytes | None:
             if role in changed:
                 # The author's change to this one asset: theirs, or ("") the
-                # set's own, past anything drawn for the story.
+                # set's own, past anything drawn for the story: the shipped
+                # set's where it has one, else what the story drew (an own
+                # set's floor, an item of the story's: once lost for good).
                 if changed[role]:
                     data = reader(changed[role])
                     if data:
                         return data
-                else:
-                    return shipped.read_asset(folder, role) if folder is not None else None
+                elif folder is not None:
+                    data = shipped.read_asset(folder, role)
+                    if data:
+                        return data
             if role.startswith("items/") and role[6:] in items:
                 data = reader(items[role[6:]])
                 if data:
@@ -251,6 +262,16 @@ class AreaRuntime:
                     return data
             return shipped.read_asset(folder, role) if folder is not None else None
 
+        def from_story(role: str) -> bool:
+            """Whether the asset read is one drawn or chosen for the story
+            (not pre-made to wrap, as the shipped sets' are)."""
+            if changed.get(role):
+                return True
+            if changed.get(role) == "" and folder is not None and shipped.read_asset(folder, role):
+                return False
+            return role in own or (role.startswith("items/") and role[6:] in items)
+
+        read.from_story = from_story  # type: ignore[attr-defined]
         return info, read
 
     def generic_people(self) -> list[str]:
@@ -285,7 +306,14 @@ class AreaRuntime:
         the map: the tile set's own (`tile_draw.style_words`)."""
         art = art or self.map_art_copy()
         info, _read = self.tile_set(art)
-        return style_words({**info.words, **art.tile_words})
+        return style_words(self._set_words(art, info))
+
+    def _set_words(self, art: WorldArt, info: TileSetInfo) -> dict[str, str]:
+        """The words every prompt names the world and style by: the set in
+        use's; a story's own words only while its own set is the one in use
+        (they leaked into a shipped set's prompts; the second review)."""
+        own = art.tile_words if info.name == "own" else {}
+        return {**info.words, **own}
 
     def area(
         self, area_id: str | None, world: WorldMap | None = None, art: WorldArt | None = None
@@ -354,11 +382,35 @@ class AreaRuntime:
 
     def _live(self) -> AreaState | None:
         live = self.story.area_live
-        if live is None or live.leaf_id != self.story.active_leaf_id:
+        if live is None:
             return None
-        if live.held is not None and live.held != self.held_name():
-            return None  # another character's walking: not this one's
+        if live.leaf_id != self.story.active_leaf_id or (
+            live.held is not None and live.held != self.held_name()
+        ):
+            # A moved leaf (a retake, a branch) or another character's
+            # walking: dropped, not kept to come back on a switch back.
+            self.story.area_live = None
+            return None
         return live.state
+
+    def restore_area(self, node: Node) -> None:
+        """Take back this turn: where everyone stood as the turn carried it
+        (the walking and travel before it, applied) is live again at the
+        leaf the turn comes off, so the turn sent again carries it again.
+        It used to be lost with the node, and the same turn moved nobody."""
+        if not self.map_first or node.meta.area is None:
+            return
+        state = node.meta.area.model_copy(deep=True)
+        if state.action is not None:
+            # Applied already: its time never counted twice, its destination
+            # (a place with no plan yet has no spot to stand on) kept.
+            state.action = state.action.model_copy(update={"seconds": 0})
+        state.marks = []
+        self.story.area_live = LiveArea(
+            leaf_id=node.parent_id,
+            held=self.map_held_name(node.meta.controlled_character_id),
+            state=state,
+        )
 
     def area_state(self) -> AreaState:
         """Where everyone stands now: the walking since the last turn, else
@@ -430,6 +482,15 @@ class AreaRuntime:
             new = self._stand(world, art, target, place_id, name, spots, mine if near_me else None)
             if new is not None:
                 spots[name] = new
+        # Nobody stands in fire or a wall a redrawn plan put under them
+        # (kept there, every walk was refused; the second review).
+        for name, spot in list(spots.items()):
+            area = self.area(spot.area, world, art)
+            if area is None or area.walkable(spot.x, spot.y):
+                continue
+            taken = {(s.x, s.y) for n, s in spots.items() if n != name and s.area == spot.area}
+            x, y = stand_near(area, (spot.x, spot.y), taken, seed=name)
+            spots[name] = Spot(area=spot.area, x=x, y=y)
         state.spots = spots
         return state
 
@@ -483,8 +544,18 @@ class AreaRuntime:
             if area.rooms:
                 room = area.rooms[0]
                 return int(room.cx), int(room.cy)
-        if area.labels:
-            return next(iter(area.labels.values()))
+        # Outdoors: in front of a building's door, else at a label one can
+        # stand on (the first label was a building's centre, under its roof;
+        # the second review), else the middle.
+        for entrance in area.entrances:
+            box = area.buildings.get(entrance.place_id)
+            if box is not None:
+                fx, fy = _front(entrance, box)
+                if area.walkable(fx, fy):
+                    return fx, fy
+        for x, y in area.labels.values():
+            if area.walkable(x, y):
+                return x, y
         return area.width // 2, area.height // 2
 
     def _set_live(self, state: AreaState) -> None:
@@ -523,7 +594,7 @@ class AreaRuntime:
             return []
         others = {(s.x, s.y) for n, s in state.spots.items() if n != held and s.area == me.area}
         goal = (x, y)
-        if beside:
+        if beside or goal in others:  # never onto someone's tile
             goal = stand_near(area, goal, others | area.blocked() | {goal})
         return path(area, (me.x, me.y), goal, blocked=others)
 
@@ -539,7 +610,12 @@ class AreaRuntime:
         # A walk is this character's, in this area, from where they stand:
         # one finishing after another story or character was taken up, or
         # after a read moved them, is not (the review, Oct 16 2026).
-        if tuple(steps[0]) != (me.x, me.y) or not all(area.walkable(x, y) for x, y in steps):
+        others = {(s.x, s.y) for n, s in state.spots.items() if n != held and s.area == me.area}
+        if (
+            tuple(steps[0]) != (me.x, me.y)
+            or not all(area.walkable(x, y) for x, y in steps)
+            or (len(steps) > 1 and tuple(steps[-1]) in others)
+        ):
             return state
         seconds = walk_seconds(walk_metres(area, steps))
         x, y = steps[-1]
@@ -747,6 +823,16 @@ class AreaRuntime:
                 state.spots.pop(held, None)
             self._add_time(state, action.seconds, frm.name if frm else "", action.target)
             to = action.target_id or None
+        if self.story.plot is None and user_node.speaker_id in (
+            DIRECTOR_SPEAKER_ID,
+            NARRATOR_SPEAKER_ID,
+        ):
+            # "Three weeks pass": the author's own statement moves the
+            # map's clock, as `_author_skip` moves the plot's.
+            now = state.seconds // 60
+            skip = stated_skip(user_node.content, now)
+            if skip is not None and skip[0] > now:
+                state.seconds += (skip[0] - now) * 60
         # The spots the turn marks, resolved on the map it was written on.
         state.marks = self.resolve_marks(user_node.content, world, self.map_art_copy(), state)
         spot = state.spots.get(held or "")
@@ -757,13 +843,18 @@ class AreaRuntime:
                 user_node.meta.world = WorldDelta(where={held: to})
         self.story.area_live = None
 
-    def walk_into_plot(self, user_node: Node, chronicle) -> int:
-        """The minutes this turn's walking took, added to the plot's clock
-        (as the author's skip is: the read counts on from there)."""
+    @staticmethod
+    def walk_minutes(user_node: Node) -> int:
+        """The minutes a turn's walking and travel took, whole."""
         state = user_node.meta.area
         if state is None or state.walked <= 0:
             return 0
-        minutes = int(round(state.walked / 60))
+        return max(0, int(round(state.walked / 60)))
+
+    def walk_into_plot(self, user_node: Node, chronicle) -> int:
+        """The minutes this turn's walking took, added to the plot's clock
+        (as the author's skip is: the read counts on from there)."""
+        minutes = AreaRuntime.walk_minutes(user_node)
         if minutes <= 0:
             return 0
         chronicle.minutes += minutes
@@ -797,11 +888,18 @@ class AreaRuntime:
         me = state.spots.get(held or "")
         at = reply.get("at") if isinstance(reply.get("at"), dict) else {}
         by_point = {(m.x, m.y): m for m in marks}
+        # Only someone the read also placed (with a quote): `at` alone moved
+        # people the passage left where they were (the second review).
+        placed = {
+            self._map_person(str(entry.get("who") or ""))
+            for entry in (reply.get("where") or [])
+            if isinstance(entry, dict)
+        }
         for name, spot_name in list(at.items()):
             found = marks_in(str(spot_name or ""))
             mark = by_point.get((found[0].x, found[0].y)) if found else None
             person = self._map_person(str(name))
-            if mark is None or person is None:
+            if mark is None or person is None or person not in placed:
                 continue
             at.pop(name)
             spot = self._mark_spot(mark, world, art)
@@ -819,7 +917,7 @@ class AreaRuntime:
             for name, spot_name in at.items():
                 person = self._map_person(str(name))
                 tile = anchor_tile(area, str(spot_name))
-                if person is None or tile is None:
+                if person is None or tile is None or person not in placed:
                     continue
                 current = state.spots.get(person)
                 if current is not None and current.area != area.place_id:
@@ -837,11 +935,11 @@ class AreaRuntime:
             if (
                 isinstance(minutes, (int, float))
                 and not isinstance(minutes, bool)
-                and 0 < minutes <= MAX_READ_MINUTES
+                and minutes > 0
                 and quote
                 and locate_quote(source, quote) is not None
             ):
-                state.seconds += int(minutes) * 60
+                state.seconds += int(min(minutes, MAX_READ_MINUTES)) * 60
         node.meta.area = state
 
     def _map_person(self, name: str) -> str | None:
@@ -852,20 +950,31 @@ class AreaRuntime:
                 return person.name
         return None
 
-    def read_spots(self, path: Sequence[Node]) -> str:
-        """The spots near the author's character, for the map read
-        (`map_read.spots`); "" when the story isn't played on a map."""
+    def read_spots(self, path: Sequence[Node], held: str | None = None) -> str:
+        """The spots near the author's character (`held`: the passage's, else
+        the one held now), for the map read (`map_read.spots`); "" when the
+        story isn't played on a map."""
         if not self.map_first:
             return ""
         before = self._snapshot_on(path)
         if before is None:
             return ""
-        me = before.spots.get(self.held_name() or "")
+        me = before.spots.get(held or self.held_name() or "")
         area = self.area(me.area if me else None)
         if me is None or area is None:
             return ""
         spots = anchors_near(area, me.x, me.y)
         return self.texts.fill("map_read.spots", spots=", ".join(spots)) if spots else ""
+
+    def read_minutes(self, author: Node | None) -> str:
+        """The story time the passage covers, asked of the map read where the
+        map keeps the clock (no plot), with the walk already counted named
+        (`map_read.minutes`, `map_read.walked`); "" otherwise."""
+        if not self.map_first or self.story.plot is not None:
+            return ""
+        walked = self.walk_minutes(author) if author is not None else 0
+        already = self.texts.fill("map_read.walked", minutes=str(walked)) if walked > 0 else ""
+        return self.texts.fill("map_read.minutes", walked=already)
 
     def positions_context(
         self, nodes: Sequence[Node], held_id: str | None, *, turn_node_id: str | None = None
@@ -892,12 +1001,28 @@ class AreaRuntime:
         art = self.map_art_copy()
         me = state.spots.get(held)
         area = self.area(me.area if me else None, world, art)
-        if me is None or area is None:
-            return ""
         action_line = ""
         action = state.action
         if turn is not None and action is not None and action.text in turn.content:
             action_line = self.texts.fill(f"map.action.{action.verb}", name=action.target)
+        if me is None or area is None:
+            # Nowhere to stand yet (a place whose plan isn't drawn): the
+            # journey and the choice still stand, or the storyteller wrote
+            # the departure from the place left (the second review).
+            if turn is None or (state.walked < 30 and not action_line):
+                return ""
+            place = world.places.get(world.where.get(held) or "")
+            lines = [
+                self.texts["map.positions"],
+                f"- {held}: at {place.name} (just arrived; nothing of it is drawn yet)."
+                if place is not None
+                else f"- {held}: on the way.",
+            ]
+            if state.walked >= 30 and state.walked_words:
+                lines.append(f"Since the last passage: {state.walked_words}.")
+            if action_line:
+                lines.append(action_line)
+            return "\n".join(lines)
         text = render_positions(
             area,
             world,
@@ -1183,7 +1308,22 @@ class AreaRuntime:
             size = place.size if place.size is not None else KIND_SIZE.get(place.kind, 100.0)
             if holder is not None:
                 size = min(size, size_of(holder) * CHILD_SHARE)
-            place.size, place.x, place.y = size, mark.x, mark.y
+            place.size = size
+            if moves(known, place):
+                continue  # aboard a vehicle: it goes where the vehicle goes
+            place.x, place.y = mark.x, mark.y
+        # A thing the read puts at a marked spot is at the place there.
+        after = applied(before, delta)
+        for entry in reply.get("things") or []:
+            if not isinstance(entry, dict):
+                continue
+            mark = self._mark_of(marks, entry.get("at"))
+            if mark is None:
+                continue
+            name = key(str(entry.get("name") or ""))
+            thing = next((t for t in delta.things if key(t.name) == name), None)
+            if thing is not None and thing.at is None and not thing.carried_by:
+                thing.at = place_at(after, art, mark.x, mark.y)
 
     @staticmethod
     def _turn_marks(author: Node | None) -> list[Mark]:
@@ -1221,8 +1361,8 @@ class AreaRuntime:
         for name, value in at.items():
             mark = self._mark_of(marks, value)
             person = self._map_person(str(name))
-            if mark is None or person is None:
-                continue
+            if mark is None or person is None or person not in delta.where:
+                continue  # placed by the read with a quote, or not at all
             place_id = place_at(after, art, mark.x, mark.y)
             if place_id is not None:
                 delta.where[person] = place_id
@@ -1329,7 +1469,6 @@ class AreaRuntime:
             for a in areas
             if a.indoor
             and a.rooms
-            and world.places[a.place_id].kind in ("building", "room")
             and art.furnishing_for(a.place_id, world.places[a.place_id].state) is None
             and art.failures.get(f"furnish:{a.place_id}", 0) < 2
         ]
@@ -1347,8 +1486,8 @@ class AreaRuntime:
         def failed(job_key: str) -> bool:
             return art.failures.get(job_key, 0) >= 2
 
-        words = world_words({**info.words, **art.tile_words}, self.map_setting())
-        style = style_words({**info.words, **art.tile_words})
+        words = world_words(self._set_words(art, info), self.map_setting())
+        style = style_words(self._set_words(art, info))
         jobs = item_jobs(areas, has_sprite, words, self.texts, style=style, failed=failed)
         here = {name for name, spot in self.area_state().spots.items()}
         people = []
@@ -1366,6 +1505,9 @@ class AreaRuntime:
             )
 
         jobs = walker_jobs(people, has_walker, words, self.texts, style=style, failed=failed) + jobs
+        drawing = self.tile_asset_drawing  # the author's own draw of the same figure
+        if drawing is not None:
+            jobs = [j for j in jobs if j.key != _asset_key(drawing)]
         return furnish, jobs[: min(RUN_LIMIT, room)]
 
     def _start_tile_art(self) -> bool:
@@ -1380,6 +1522,7 @@ class AreaRuntime:
         if not furnish and not pictures:
             return False
         self._tile_total, self._tile_done = len(furnish) + len(pictures), 0
+        self._tile_keys = {job.key for job in pictures}
         detached = getattr(self.provider, "detached", None)
         self._tile_text = detached() if callable(detached) and furnish else None
         media = self.config.images()
@@ -1422,7 +1565,7 @@ class AreaRuntime:
                 if self._art_stop:
                     return
                 if text is not None:
-                    self._furnish_one(area, text)
+                    self._tile_job(f"furnish:{area.place_id}", self._furnish_one, area, text)
                 self._tile_done += 1
             if client is None:
                 return
@@ -1432,7 +1575,9 @@ class AreaRuntime:
                 model = (
                     self.config.map_sprite_model if job.reference else self.config.map_tile_model
                 )
-                self._picture_one(
+                self._tile_job(
+                    job.key,
+                    self._picture_one,
                     job,
                     client,
                     SPRITE_SIZE,
@@ -1444,6 +1589,23 @@ class AreaRuntime:
         finally:
             if client is not None:
                 client.close()
+            _close_quietly(text)
+
+    def _tile_job(self, key: str, work, *args, **kwargs) -> None:
+        """One job of the tile run: an exception it doesn't expect (a disk
+        full, a reply of the wrong shape) used to end the thread silently,
+        uncounted, and the job was asked again every passage. Logged and
+        counted as a failure instead."""
+        try:
+            work(*args, **kwargs)
+        except Exception as exc:  # noqa: BLE001
+            if self._art_stop or self._closed:
+                return
+            with self._lock():
+                art = self.world_art
+                art.failures[key] = art.failures.get(key, 0) + 1
+                self._save_art(art)
+            self._log("map_tile_error", {"job": key, "error": f"{type(exc).__name__}: {exc}"[:300]})
 
     def _furnish_one(self, area: Area, client: ChatProvider) -> None:
         """One building furnished: the plan asked of the map art model, held
@@ -1488,12 +1650,14 @@ class AreaRuntime:
                 self._save_art(art)
             self._log("map_furnish_error", {"request_log_ref": log_ref, "error": str(exc)[:300]})
             return
-        with self._closing:
-            if self._art_stop or self._closed:
-                return
-            with self._lock():
-                art.furnishings.setdefault(place.id, {})[place.state] = plan
-                self._save_art(art)
+        # `_lock()` first, never inside `_closing`: `_save_art` takes
+        # `_closing` under `_lock()`, and the picture thread saves that way
+        # at the same time (an ABBA deadlock, found in the second review).
+        if self._art_stop or self._closed:
+            return
+        with self._lock():
+            art.furnishings.setdefault(place.id, {})[place.state] = plan
+            self._save_art(art)
         callback = self.on_map_art
         if callback is not None:
             callback()
@@ -1520,8 +1684,13 @@ class AreaRuntime:
         """(pictures, listed price for them, why it can't be drawn now)."""
         count = len(TEXTURES) + 1 + 3 + len(OUTDOOR_SPRITES)
         model = self._listed_image_model(self.config.map_tile_model)
-        price = model.price(TEXTURE_SIZE) if model is not None else None
-        total = price * count if price is not None else None
+        texture = model.price(TEXTURE_SIZE) if model is not None else None
+        sprite = model.price(SPRITE_SIZE) if model is not None else None
+        total = (
+            texture * len(TEXTURES) + sprite * (count - len(TEXTURES))
+            if texture is not None and sprite is not None
+            else None
+        )
         if self.in_private or self.tee_chat:
             return count, total, "Not in a private scene or a private chat."
         media = self.config.images()
@@ -1594,19 +1763,21 @@ class AreaRuntime:
             if not all(role in assets for role in TEXTURES):
                 return  # not whole: the set the map has stays
             art = self.world_art
-            with self._closing:
-                if self._art_stop or self._closed:
-                    return
-                with self._lock():
-                    art.tile_assets = assets
-                    art.tile_words = words
-                    art.tile_set = "own"
-                    self._save_art(art)
+            if self._art_stop or self._closed:
+                return
+            with self._lock():  # never inside `_closing` (see `_furnish_one`)
+                art.tile_assets = assets
+                art.tile_words = words
+                art.tile_set = "own"
+                self._save_art(art)
             callback = self.on_map_art
             if callback is not None:
                 callback()
+        except Exception as exc:  # noqa: BLE001 - a thread dies silently otherwise
+            self._log("map_tileset_error", {"error": f"{type(exc).__name__}: {exc}"[:300]})
         finally:
             client.close()
+            _close_quietly(text)
 
     def _draw_tile(
         self,
@@ -1740,8 +1911,8 @@ class AreaRuntime:
         one asset from these words."""
         art = self.map_art_copy()
         info, _read = self.tile_set(art)
-        world = world_words({**info.words, **art.tile_words}, self.map_setting())
-        style = style_words({**info.words, **art.tile_words})
+        world = world_words(self._set_words(art, info), self.map_setting())
+        style = style_words(self._set_words(art, info))
         what = " ".join(words.split()) or role.split("/")[-1].replace("-", " ")
         if role in TEXTURES:
             view = (
@@ -1798,48 +1969,86 @@ class AreaRuntime:
         thread = self._asset_thread
         if thread is not None and thread.is_alive():
             return model, price, "Another asset is being drawn now."
+        run = self._tile_thread
+        if run is not None and run.is_alive() and _asset_key(role) in self._tile_keys:
+            return model, price, "It is being drawn now, under the standing approval."
         return model, price, None
 
     def redraw_tile_asset(self, role: str, words: str) -> bool:
         """Draw one asset again from these words (the author asked, with the
         price shown), in the background; the map takes it when it is in."""
-        if self.tile_asset_offer(role, words)[2] is not None or self._map_closed:
+        return self.redraw_tile_assets([(role, words)])
+
+    def redraw_tile_assets(self, wanted: Sequence[tuple[str, str]]) -> bool:
+        """Several assets drawn again, one after another on one thread (the
+        avatars of every card a new portrait landed on): each counted
+        against the day as it is sent, the map taking each as it is in.
+        False when the first can't be drawn now."""
+        wanted = [(role, " ".join(words.split())) for role, words in wanted]
+        if not wanted or self._map_closed:
             return False
-        prompt, size, model, reference = self._asset_job(role, words)
+        if self.tile_asset_offer(wanted[0][0], wanted[0][1])[2] is not None:
+            return False
         media = self.config.images()
         client = ImageClient(media.base_url, media.api_key, api=media.api)
         self._asset_client = client
         self._art_stop = False
         art = self.world_art
+        self._asset_queue = list(wanted[1:])
+
+        def run() -> None:
+            try:
+                role, words = wanted[0]
+                while True:
+                    if self._art_stop or self._closed:
+                        return
+                    self._asset_role = role
+                    self._draw_asset(client, art, role, words)
+                    if not self._asset_queue:
+                        return
+                    role, words = self._asset_queue.pop(0)
+                    with self._lock():
+                        if self.map_pictures_left_today(art) <= 0:
+                            return  # the day's pictures all drawn: the rest wait
+                        day = _today()
+                        art.pictures_by_day[day] = art.pictures_by_day.get(day, 0) + 1
+                        self._save_art(art)
+            finally:
+                client.close()
+                self._asset_queue = []
+
         with self._lock():
             day = _today()
             art.pictures_by_day[day] = art.pictures_by_day.get(day, 0) + 1
             self._save_art(art)
-
-        def run() -> None:
-            try:
-                file = self._draw_tile(
-                    client, role, prompt, size, model, self._listed_image_model(model), reference
-                )
-                if file is None:
-                    return
-                with self._closing:
-                    if self._art_stop or self._closed:
-                        return
-                    with self._lock():
-                        art.tile_overrides[role] = file
-                        self._save_art(art)
-                callback = self.on_map_art
-                if callback is not None:
-                    callback()
-            finally:
-                client.close()
-
         thread = threading.Thread(target=run, name="map-tile-asset", daemon=True)
         self._asset_thread = thread
-        self._asset_role = role
+        self._asset_role = wanted[0][0]
         thread.start()
         return True
+
+    def _draw_asset(self, client: ImageClient, art: WorldArt, role: str, words: str) -> None:
+        """One asset of a redraw run: drawn, kept as the author's change,
+        said to the window either way (the Cast page's avatar waits on it)."""
+        try:
+            prompt, size, model, reference = self._asset_job(role, words)
+            file = self._draw_tile(
+                client, role, prompt, size, model, self._listed_image_model(model), reference
+            )
+            if file is None or self._art_stop or self._closed:
+                return
+            with self._lock():  # never inside `_closing` (see `_furnish_one`)
+                art.tile_overrides[role] = file
+                self._save_art(art)
+        except Exception as exc:  # noqa: BLE001 - a thread dies silently otherwise
+            self._log(
+                "map_picture_error",
+                {"job": f"tile:{role}", "error": f"{type(exc).__name__}: {exc}"[:300]},
+            )
+        finally:
+            callback = self.on_map_art
+            if callback is not None and not self._closed:
+                callback()
 
     @property
     def tile_asset_drawing(self) -> str | None:
@@ -1864,6 +2073,26 @@ class AreaRuntime:
         with self._lock():
             art.tile_overrides[role] = ""
             self._save_art(art)
+
+
+def _asset_key(role: str) -> str:
+    """The tile run's job key for an editor role ("walker/Jane" is
+    "walker:Jane", "items/a-chest" is "item:a-chest")."""
+    if role.startswith("walker/"):
+        return f"walker:{role[7:]}"
+    if role.startswith("items/"):
+        return f"item:{role[6:]}"
+    return role
+
+
+def _close_quietly(client: ChatProvider | None) -> None:
+    """A detached text client closed once its run is over (they were never)."""
+    close = getattr(client, "close", None)
+    if callable(close):
+        try:
+            close()
+        except Exception:  # noqa: BLE001 - closing is best effort
+            pass
 
 
 def item_sprite_key(name: str) -> str:

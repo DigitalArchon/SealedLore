@@ -92,10 +92,14 @@ def place_at(world: WorldMap, art: WorldArt, x: float, y: float) -> str | None:
         if not (west <= x <= east and south <= y <= north):
             continue
         depth = _depth(world, place.id)
-        candidate = (size_of(place), -depth, place.id)
+        spot = position(world, place.id)
+        near = math.hypot(x - spot[0], y - spot[1]) if spot is not None else math.inf
+        # The smallest, the deepest, then the one whose middle is nearest:
+        # two sheds' footprints are 20 m wide whatever their size.
+        candidate = (size_of(place), -depth, near, place.id)
         if best is None or candidate < best:
             best = candidate
-    return best[2] if best is not None else None
+    return best[3] if best is not None else None
 
 
 def _depth(world: WorldMap, place_id: str) -> int:

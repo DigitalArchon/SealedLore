@@ -152,6 +152,12 @@ def load_sidecar(plot_path: Path) -> tuple[WorldArt | None, dict[str, bytes]]:
         picture.file = relative
         kept.append(picture)
     art.pictures = kept
+    # A story's own set and the author's changes name files the new story
+    # won't have: dropped (a kept record stopped the figure being drawn).
+    art.tile_assets = {}
+    art.tile_overrides = {role: file for role, file in art.tile_overrides.items() if file == ""}
+    if art.tile_set == "own":
+        art.tile_set = ""
     return art, files
 
 

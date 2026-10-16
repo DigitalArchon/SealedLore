@@ -9,6 +9,7 @@ problem with its line number, and an error stops the import.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from typing import Literal, get_args
@@ -985,6 +986,8 @@ class _Parser:
                     if len(parts) != 2:
                         raise ValueError
                     at = (float(parts[0]), float(parts[1]))
+                    if not all(math.isfinite(v) for v in at):
+                        raise ValueError
                 except ValueError:
                     self.error(
                         line, f"`at` is two numbers, east and north (“1.5, -2”), not “{text}”."
@@ -994,7 +997,7 @@ class _Parser:
                 line, text = values["size"]
                 try:
                     size = float(text) * unit
-                    if size <= 0:
+                    if size <= 0 or not math.isfinite(size):
                         raise ValueError
                 except ValueError:
                     self.error(

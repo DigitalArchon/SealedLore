@@ -347,6 +347,12 @@ class PlotRuntime:
             if author is not None and author.meta.chronicle is not None
             else 0
         )
+        # Map-first: the walking since the last passage is on the clock too
+        # (`walk_into_plot`) and stays there: the read counts on from after
+        # it, and is told so. Rewound with the skip, the walk was lost on
+        # every read (the second review).
+        walked = self.walk_minutes(author) if author is not None else 0
+        skipped = max(0, skipped - walked)
         at_least = None
         if skipped > 0:
             at_least = before.minutes - before.minutes % MINUTES_PER_DAY
@@ -377,6 +383,7 @@ class PlotRuntime:
                 places=places,
                 held=held.name if held is not None else None,
                 authors_events=render_authors_candidates(plot, offered),
+                walked=walked,
                 texts=self.texts,
             ),
             params=self.side_params(self.scene_model, max_tokens=CHRONICLE_MAX_TOKENS),
