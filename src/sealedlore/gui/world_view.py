@@ -87,15 +87,21 @@ from sealedlore.gui.isometric_view import IsometricBar, IsometricDialog
 from sealedlore.gui.map_art import FOG, picture_sprite, sprite_pixmap
 from sealedlore.gui.map_render import drawn_box, label_key
 from sealedlore.gui.map_tiles import (
+    LOOKS,
     TILE,
+    LookColours,
     building_boxes,
+    ground_pixmap,
+    land_pixmap,
     person_sprite,
     prop_sprite,
+    texture_colours,
     tiles_pixmap,
 )
 from sealedlore.gui.ref_images import image_of
 from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.models.world import MapPicture, PlaceLayout, WorldArt, WorldMap, WorldPlace
+from sealedlore.storage.tile_sets import read_asset, shipped_sets
 
 LEVELS = ("local", "region", "world")
 # A place's picture on the region: scaled with the map, within these (a
@@ -139,10 +145,15 @@ PERSON_STEP = 16
 # A postcard's thumbnail on a place's card.
 POSTCARD_THUMB = (176, 100)
 # An area's isometric view lies over its plan: above every plan (2 to 2.9)
-# and below the places' pictures and names (3 and up). Its mark, under the
-# area's name on the region, stands above the names so it can be clicked.
+# and below the places' pictures and names (3 and up).
 ISO_Z = 2.95
-ISO_MARK_Z = 4.5
+# One flat ground under the region's land patches and the ways between
+# them, below the land (0) and the links (1), fading out at its edge over
+# GROUND_FADE of its smaller side: the patches used to lie each on the fog,
+# and Local and Region didn't read as one world.
+GROUND_Z = -0.5
+GROUND_FADE = 0.08
+GROUND_PX = 512
 # The fog has three shades (the author, Oct 15 2026: black where nothing is
 # known and full colour for everything else said nothing of where the
 # character is now). Unexplored is the bare FOG ground; country known but
@@ -160,8 +171,11 @@ LEGEND_LAND = "#7d8a5c"
 # A view is held no wider than this (the map shows it no wider); seen whole,
 # it is read from its file again.
 ISO_HELD_WIDTH = 1600
-# What marks an area that has a view, while the views aren't shown.
+# What marks an area that has a view, while the views aren't shown: a badge
+# at its plan's corner on the local map, a small ◆ after its name on the
+# region and the world (the badges were the most prominent thing there).
 ISO_MARK = "◆"
+MARK_TIP = "This area has an isometric view: click to lay it over the map"
 ISO_TIP = (
     "Each area's isometric view laid over the map where it is: painted by an image model "
     "from the map when you ask, or a picture of your own. The 2D map stays the story's "
@@ -213,8 +227,10 @@ class _PlaceItem(QGraphicsItem):
         visited: bool,
         current: bool,
         painted: bool = False,
+        on_mark: Callable[[str], None] | None = None,
     ) -> None:
-        """`painted`: the place has an isometric view, marked before its name."""
+        """`painted`: the place has an isometric view, marked with a small ◆
+        after its name; a click on the ◆ calls `on_mark` with the place."""
         super().__init__()
         self.place = place
         self._picture = picture
@@ -229,10 +245,15 @@ class _PlaceItem(QGraphicsItem):
         self.setAcceptHoverEvents(True)
         self.setOpacity(1.0 if visited or current else 0.55)
         self.setZValue(4 if current else 3)
-        # An area with an isometric view carries its mark (`_BadgeItem`)
-        # under its name, not a sign in the name (the author, Oct 15 2026:
-        # a ◆ before the name was too little to tell an area had one).
+        # An area with an isometric view carries a ◆ after its name, with
+        # the badge's tooltip and click (Oct 16 2026: the badges under the
+        # names were the most prominent thing on the region and the world;
+        # the badge stays at a plan's corner on the local map, where there
+        # is room for it).
         self.painted = painted
+        self._on_mark = on_mark
+        self._pressed = False
+        self._card_tip = ""
         self._name = place.name + (f" ({place.state})" if place.state else "")
         self._fonts()
         self.set_pixels(MIN_PLACE_PX)
@@ -248,9 +269,50 @@ class _PlaceItem(QGraphicsItem):
         # name; the people are elided to it.
         metrics, bold = QFontMetricsF(self._font), QFontMetricsF(self._bold)
         self._line = max(metrics.height(), bold.height())
+        self._label = self._name + (f" {ISO_MARK}" if self.painted else "")
         width = LABEL_WIDTH * text_size.scale() * (1.3 if self.big else 1.0)
-        self._width = min(max(width, bold.horizontalAdvance(self._name) + 12), 2 * width)
+        self._width = min(max(width, bold.horizontalAdvance(self._label) + 12), 2 * width)
         self._who = metrics.elidedText(", ".join(self.people), Qt.ElideRight, self._width - 4)
+        # Where the ◆ falls in the centred label, for the click and its tip.
+        start = -bold.horizontalAdvance(self._label) / 2 + bold.horizontalAdvance(self._name + " ")
+        self._mark_x = (start - 3, bold.horizontalAdvance(ISO_MARK) + 6)
+
+    def mark_rect(self) -> QRectF:
+        """The ◆ after the name, in the item's (screen) pixels; empty when
+        the place has no view."""
+        if not self.painted:
+            return QRectF()
+        left, width = self._mark_x
+        return QRectF(left, self._half() + LABEL_GAP, width, self._line)
+
+    def set_card_tip(self, text: str) -> None:
+        """The hover card; the ◆ shows the mark's tip instead."""
+        self._card_tip = text
+        self.setToolTip(text)
+
+    def hoverMoveEvent(self, event) -> None:  # noqa: N802 - Qt's name
+        on_mark = self.painted and self.mark_rect().contains(event.pos())
+        self.setToolTip(MARK_TIP if on_mark else self._card_tip)
+        super().hoverMoveEvent(event)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt's name
+        # Only the ◆ takes a click; anywhere else the map drags as before.
+        if (
+            self.painted
+            and event.button() == Qt.LeftButton
+            and self.mark_rect().contains(event.pos())
+        ):
+            self._pressed = True
+            event.accept()
+            return
+        self._pressed = False
+        event.ignore()
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt's name
+        if self._pressed and self.mark_rect().contains(event.pos()) and self._on_mark:
+            self._on_mark(self.place.id)
+        self._pressed = False
+        event.accept()
 
     def set_pixels(self, pixels: int) -> None:
         """The picture this many pixels across on screen."""
@@ -287,11 +349,6 @@ class _PlaceItem(QGraphicsItem):
         height = half + 6 + LABEL_GAP + 2 * self._line + 2
         return QRectF(-self._width / 2 - 2, -half - 6, self._width + 4, height)
 
-    def label_bottom(self) -> float:
-        """Where the label ends, in screen pixels below the spot: under the
-        name, or under the people when there are any."""
-        return self._half() + LABEL_GAP + self._line * (2 if self._who else 1) + 2
-
     def paint(self, painter: QPainter, _option, _widget=None) -> None:
         half = self._half()
         if self.ringed:
@@ -308,7 +365,7 @@ class _PlaceItem(QGraphicsItem):
             painter.setBrush(colour)
             painter.drawEllipse(QPointF(0, 0), half, half)
         top = half + LABEL_GAP
-        self._text(painter, self._name, top, self._bold)
+        self._text(painter, self._label, top, self._bold)
         if self._who:
             self._text(painter, self._who, top + self._line, self._font)
 
@@ -415,6 +472,7 @@ class _PlanItem(QGraphicsPixmapItem):
         self.tile = plan_tile(place)
         self.rows = tuple(layout.rows)
         self.roofs = True
+        self.colours: LookColours | None = None
         self.cleared: tuple[tuple[int, int, int, int], ...] = ()
         # Boxes of the buildings in it drawn open for their changed state,
         # where people at them stand at the front (`_stand`).
@@ -453,10 +511,16 @@ class _PlanItem(QGraphicsPixmapItem):
         self.setPos(self.west, -self.north)
 
     def render(
-        self, ground: str, roofs: bool, cleared: tuple[tuple[int, int, int, int], ...]
+        self,
+        ground: str,
+        roofs: bool,
+        cleared: tuple[tuple[int, int, int, int], ...],
+        colours: LookColours | None = None,
     ) -> None:
-        self.ground, self.roofs, self.cleared = ground, roofs, cleared
-        self.setPixmap(tiles_pixmap(self.drawn_rows(), ground, roofs, cleared))
+        """Drawn in `ground`'s look, in the tile set's `colours` where it
+        gives them (the farmhouse the one colour here and on the play view)."""
+        self.ground, self.roofs, self.cleared, self.colours = ground, roofs, cleared, colours
+        self.setPixmap(tiles_pixmap(self.drawn_rows(), ground, roofs, cleared, colours))
 
     def drawn_rows(self) -> tuple[str, ...]:
         """The rows as drawn: a deck's blank between its rooms is floor
@@ -655,11 +719,12 @@ class _IsoItem(QGraphicsItem):
 
 
 class _BadgeItem(QGraphicsItem):
-    """The mark on an area that has an isometric view, wherever the view
-    itself isn't drawn, the same size whatever the zoom: at its plan's top
-    left on the local map, and under its name on the region (the author,
-    Oct 15 2026: which areas have one must show without going into them).
-    A click shows the views, centred on this area."""
+    """The badge on an area that has an isometric view, at its plan's top
+    left on the local map while the view itself isn't drawn, the same size
+    whatever the zoom (the author, Oct 15 2026: which areas have one must
+    show without going into them; on the region and the world the place's
+    name carries a small ◆ instead, `_PlaceItem`). A click shows the views,
+    centred on this area."""
 
     def __init__(self, area_id: str, text: str, on_click: Callable[[str], None]) -> None:
         super().__init__()
@@ -670,28 +735,20 @@ class _BadgeItem(QGraphicsItem):
         self.setZValue(ISO_Z)
         self.setCursor(Qt.PointingHandCursor)
         self.setAcceptedMouseButtons(Qt.LeftButton)
-        self.setToolTip("This area has an isometric view: click to lay it over the map")
+        self.setToolTip(MARK_TIP)
         self._font = QFont()
         self._font.setPointSizeF(text_size.points(8.5))
         self._font.setBold(True)
         metrics = QFontMetricsF(self._font)
         self._size = (metrics.horizontalAdvance(text) + 14, metrics.height() + 6)
-        # Inside the plan's corner, a few pixels in, until anchored.
+        # Inside the plan's corner, a few pixels in.
         self._box = QRectF(6, 6, *self._size)
 
     def at_corner(self, spot: QPointF) -> None:
         """Inside a plan's top left corner (`spot`), a few pixels in."""
-        self._anchor(spot, 6.0, 6.0, ISO_Z)
-
-    def under_name(self, spot: QPointF, drop: float) -> None:
-        """Centred under a place's label, `drop` pixels below its `spot`."""
-        self._anchor(spot, -self._size[0] / 2, drop, ISO_MARK_Z)
-
-    def _anchor(self, spot: QPointF, x: float, y: float, z: float) -> None:
         self.prepareGeometryChange()
         self.setPos(spot)
-        self._box = QRectF(x, y, *self._size)
-        self.setZValue(z)
+        self._box = QRectF(6.0, 6.0, *self._size)
 
     def boundingRect(self) -> QRectF:  # noqa: N802 - Qt's name
         return self._box.adjusted(-1, -1, 1, 1)
@@ -900,6 +957,11 @@ class WorldView(QWidget):
         # Whether the map is being drawn (Settings → Models → Draw the map;
         # the window sets it): off, a plan "not drawn yet" never will be.
         self.art_on = True
+        # The tile set's colours for the land and the plans (the window may
+        # set it from the session's set, overrides and all); None, and a
+        # shipped set the art names gives them (`_colours`), else the looks'
+        # own.
+        self.look_colours: LookColours | None = None
         # Whether art is on its way now (the window sets it): said in the hint.
         self.drawing = False
         # The isometric view's model, price and why it can't be painted now
@@ -930,6 +992,7 @@ class WorldView(QWidget):
         self._boxes: dict[str, tuple[str, tuple[int, int, int, int]]] = {}
         self._links: list[QGraphicsLineItem] = []
         self._land: list[QGraphicsPixmapItem] = []
+        self._ground: QGraphicsPixmapItem | None = None
         self._veil: _VeilItem | None = None
         self.people: list[_PersonItem] = []
         self._card_place: WorldPlace | None = None
@@ -1115,6 +1178,7 @@ class WorldView(QWidget):
         self._plans = {}
         self._links = []
         self._land = []
+        self._ground = None
         self._isos = {}
         self._badges = {}
         self.people = []
@@ -1144,6 +1208,7 @@ class WorldView(QWidget):
         self._open = self._out_of_the_fog()
         self._build_land()
         self._build_links()
+        self._build_ground()
         self._build_plans()
         self._build_isometric()
         self._build_places()
@@ -1232,18 +1297,31 @@ class WorldView(QWidget):
             return
         known = QPainterPath()
         known.setFillRule(Qt.WindingFill)
-        for item in [*self._land, *self._plans.values(), *self._isos.values()]:
+        ground = [self._ground] if self._ground is not None else []
+        for item in [*ground, *self._land, *self._plans.values(), *self._isos.values()]:
             known.addRect(item.sceneBoundingRect())
         self._veil = _VeilItem(known.simplified(), sight)
         self.scene.addItem(self._veil)
 
+    def _colours(self) -> LookColours | None:
+        """The tile set's colours for the drawing: the window's, else a
+        shipped set's the art names (kept once read), else none."""
+        if self.look_colours is not None:
+            return self.look_colours
+        found = shipped_sets().get(self.art.tile_set)
+        if found is None:
+            return None
+        _info, folder = found
+        return texture_colours(self.art.tile_set, lambda role: read_asset(folder, role))
+
     def _build_land(self) -> None:
         # Coarse land first, finer on top: a town's six kilometres under the
-        # road's patches.
+        # road's patches. Each fades out at its edge (`land_pixmap`).
+        colours = self._colours()
         for patch in sorted(self.art.terrain, key=lambda p: -p.side):
             if not patch.rows:
                 continue
-            item = QGraphicsPixmapItem(tiles_pixmap(tuple(patch.rows), patch.ground))
+            item = QGraphicsPixmapItem(land_pixmap(tuple(patch.rows), patch.ground, colours))
             item.setTransformationMode(Qt.FastTransformation)
             item.setShapeMode(QGraphicsPixmapItem.BoundingRectShape)
             item.setScale(patch.side / (max(len(patch.rows[0]), 1) * TILE))
@@ -1251,6 +1329,39 @@ class WorldView(QWidget):
             item.setZValue(0)
             self.scene.addItem(item)
             self._land.append(item)
+
+    def _build_ground(self) -> None:
+        """One flat ground, in the land's base colour, under the patches and
+        the ways between them, fading into the fog at its edge; nothing
+        with no land and no ways."""
+        rect = QRectF()
+        for item in [*self._land, *self._links]:
+            rect = rect.united(item.sceneBoundingRect())
+        if rect.isEmpty():
+            return
+        colours = self._colours()
+        base = colours.base if colours is not None else None
+        if base is None:
+            by_ground: dict[str, float] = {}
+            for patch in self.art.terrain:
+                by_ground[patch.ground] = by_ground.get(patch.ground, 0.0) + patch.side**2
+            main = max(by_ground, key=by_ground.get) if by_ground else ""
+            base = LOOKS.get(main, LOOKS[""]).base
+        fade = GROUND_FADE * min(rect.width(), rect.height())
+        rect = rect.adjusted(-fade, -fade, fade, fade)
+        longer = max(rect.width(), rect.height())
+        width = max(1, round(GROUND_PX * rect.width() / longer))
+        height = max(1, round(GROUND_PX * rect.height() / longer))
+        item = QGraphicsPixmapItem(
+            ground_pixmap(width, height, base, max(1, round(fade * GROUND_PX / longer)))
+        )
+        item.setTransformationMode(Qt.SmoothTransformation)
+        item.setShapeMode(QGraphicsPixmapItem.BoundingRectShape)
+        item.setTransform(QTransform.fromScale(rect.width() / width, rect.height() / height))
+        item.setPos(rect.topLeft())
+        item.setZValue(GROUND_Z)
+        self.scene.addItem(item)
+        self._ground = item
 
     def _build_links(self) -> None:
         world = self.world
@@ -1384,12 +1495,14 @@ class WorldView(QWidget):
                 visited=place.id in visited or sight.contains(QPointF(spot[0], -spot[1])),
                 current=place.id == here,
                 painted=painted,
+                on_mark=self._badge_clicked,
             )
             item.setPos(spot[0], -spot[1])
-            item.setToolTip(
+            item.set_card_tip(
                 place_card(world, place)
                 + (
-                    f"<br><br>{ISO_MARK} It has an isometric view: Isometric, close up."
+                    f"<br><br>{ISO_MARK} It has an isometric view: click the {ISO_MARK} "
+                    "to lay it over the map."
                     if painted
                     else ""
                 )
@@ -1537,26 +1650,16 @@ class WorldView(QWidget):
             self.sync_isometric()  # the bar follows the area in view
 
     def _place_marks(self, shown_plans: set[str]) -> None:
-        """Each area's mark wherever its view isn't drawn: at its plan's
-        corner on the local map, else under its name where the region shows
-        it (the author: which areas have a view must show without going
-        into them). Hidden where the view lies over the map, or where the
-        area isn't drawn at all. After the places' pixels are set: the mark
-        hangs under the label."""
-        by_place = {item.place.id: item for item in self._items}
+        """Each area's badge at its plan's corner on the local map while its
+        view isn't drawn over it; hidden where the view lies over the map,
+        and wherever the plan isn't drawn (on the region and the world the
+        place's name carries a ◆, `_PlaceItem.painted`)."""
         for pid, badge in self._badges.items():
             plan = self._plans.get(pid)
-            item = by_place.get(pid)
-            if self._isos[pid].isVisible():
-                badge.setVisible(False)
-            elif pid in shown_plans and plan is not None:
+            shown = not self._isos[pid].isVisible() and pid in shown_plans and plan is not None
+            if shown:
                 badge.at_corner(plan.rect().topLeft())
-                badge.setVisible(True)
-            elif item is not None and item.isVisible():
-                badge.under_name(item.pos(), item.label_bottom())
-                badge.setVisible(True)
-            else:
-                badge.setVisible(False)
+            badge.setVisible(shown)
 
     def _dress_plan(
         self,
@@ -1582,7 +1685,7 @@ class WorldView(QWidget):
         rows = plan.drawn_rows()
         pictured = self._pictured_buildings(rows, layout.labels, opened) if roofs else {}
         cleared = tuple(sorted({*opened, *pictured}))
-        plan.render(ground, roofs, cleared)
+        plan.render(ground, roofs, cleared, self._colours())
         for (x0, x1, _y0, y1), image in pictured.items():
             building = QGraphicsPixmapItem(QPixmap.fromImage(image), plan)
             building.setTransformationMode(Qt.FastTransformation)

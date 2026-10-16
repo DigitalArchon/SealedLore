@@ -381,23 +381,65 @@ def test_each_area_s_isometric_view_lies_over_it_on_the_map(app):
     assert view.leave_isometric() and not view.leave_isometric()
     assert view._badges["farm"].text.endswith("out of date") and view.iso_bar.isHidden()
     # Out to the region: no area in view, the views close up only; the farm
-    # is still marked, under its name (the author: which areas have a view
-    # must show without going into them; a ◆ in the name was too little).
+    # is still marked, by a small ◆ after its name with the badge's tip and
+    # click (Oct 16 2026: the badges under the names were the most
+    # prominent thing on the region and the world; the badge keeps to a
+    # plan's corner on the local map), and the works, with no view, isn't.
     view.go_region()
     assert view.area_in_view() is None
     farm_item = next(i for i in view._items if i.place.id == "farm")
+    works_item = next(i for i in view._items if i.place.id == "works")
     assert farm_item.isVisible() and farm_item._name == "The farm"
     badge = view._badges["farm"]
-    assert badge.isVisible() and badge.pos() == farm_item.pos()
-    assert badge.boundingRect().top() >= farm_item.label_bottom() - 1  # under the label
-    assert badge.boundingRect().center().x() == pytest.approx(0, abs=1)  # centred on it
-    assert badge.zValue() > farm_item.zValue()  # above the names, to be clicked
+    assert not badge.isVisible()
+    assert farm_item.painted and farm_item._label == "The farm ◆"
+    assert not works_item.painted and works_item.mark_rect().isEmpty()
+    mark = farm_item.mark_rect()
+    assert not mark.isEmpty() and mark.top() >= farm_item._half()  # on the name's line
+    assert mark.left() > 0  # after the name, which is centred on the spot
+    # Hovered on the ◆, the tip is the badge's; elsewhere, the place's card.
+    from PySide6.QtCore import QEvent
+    from PySide6.QtWidgets import QGraphicsSceneHoverEvent, QGraphicsSceneMouseEvent
+
+    def hover(at: QPointF) -> None:
+        event = QGraphicsSceneHoverEvent(QEvent.GraphicsSceneHoverMove)
+        event.setPos(at)
+        farm_item.hoverMoveEvent(event)
+
+    def press_and_release(at: QPointF) -> bool:
+        """A left click at `at` (item pixels): whether the item took it."""
+        press = QGraphicsSceneMouseEvent(QEvent.GraphicsSceneMousePress)
+        press.setButton(Qt.LeftButton)
+        press.setPos(at)
+        farm_item.mousePressEvent(press)
+        release = QGraphicsSceneMouseEvent(QEvent.GraphicsSceneMouseRelease)
+        release.setButton(Qt.LeftButton)
+        release.setPos(at)
+        farm_item.mouseReleaseEvent(release)
+        return press.isAccepted()
+
+    assert "click the ◆" in farm_item.toolTip()
+    hover(mark.center())
+    assert farm_item.toolTip() == "This area has an isometric view: click to lay it over the map"
+    hover(QPointF(0, 0))
+    assert "click the ◆" in farm_item.toolTip()
+    # A click elsewhere on the place is left to the map (a drag starts);
+    # on the ◆ it shows that area, with the views over the map.
+    assert not press_and_release(QPointF(0, 0)) and not view.iso_button.isChecked()
+    assert press_and_release(mark.center())
+    assert view.iso_button.isChecked() and view.area_in_view().id == "farm"
+    assert view._isos["farm"].isVisible() and not badge.isVisible()
     # Isometric on at the region: the views are drawn close up only, so the
-    # mark still stands for the farm's.
-    view.iso_button.setChecked(True)
-    assert not view._isos["farm"].isVisible() and badge.isVisible()
+    # ◆ still stands for the farm's.
+    view.go_region()
+    assert not view._isos["farm"].isVisible() and not badge.isVisible()
+    assert farm_item.isVisible() and farm_item.painted
     view.go_to("farm")
     assert view._isos["farm"].isVisible() and not badge.isVisible()
+    # At the world level the name is large, the ◆ still after it.
+    view.leave_isometric()
+    view.go_world()
+    assert farm_item.big and not farm_item.mark_rect().isEmpty() and not badge.isVisible()
 
 
 def test_an_area_with_several_views_offers_a_choice(app):
@@ -1092,6 +1134,93 @@ def test_the_fog_veils_known_country_and_leaves_the_area_you_are_in_clear(app):
     assert veil.shape().isEmpty()
     assert veil not in view.scene.items(QPointF(0.0, -8000.0))
     assert not view.legend.isHidden() and "Jane" in view.legend.here_label.text()
+
+
+def test_the_land_fades_at_its_edge_over_one_ground_in_the_set_s_colours(app):
+    """Local and Region didn't read as one world (Oct 16 2026): each patch of
+    land ended hard on the fog, the fog showed between a town's land and the
+    road's, and the farmhouse was one colour on the plan and another on the
+    play view. Now a patch fades out at its edge, one flat ground lies under
+    the patches and the ways in the land's base colour, and the plans and
+    land take the roof, wall and ground colours of the tile set, from the
+    window (`look_colours`) or the shipped set the art names."""
+    from PySide6.QtCore import QBuffer, QIODevice
+    from PySide6.QtGui import QColor, QImage
+
+    from sealedlore.gui.map_tiles import (
+        LOOKS,
+        LookColours,
+        land_pixmap,
+        look_with,
+        render_tiles,
+        texture_colours,
+    )
+    from sealedlore.gui.world_view import GROUND_Z
+
+    farm = WorldPlace(id="farm", name="The farm", kind="site", x=0.0, y=0.0, size=400)
+    town = WorldPlace(id="town", name="Hellsville", kind="settlement", x=0.0, y=8000.0)
+    world = WorldMap(places={"farm": farm, "town": town}, seen=["town"], visited={"Jane": ["farm"]})
+    world.where = {"Jane": "farm"}
+    land = [
+        TerrainPatch(place_id="farm", x=0, y=0, side=2000, rows=["." * 40] * 40, ground="snow"),
+        TerrainPatch(place_id="town", x=0, y=8000, side=2000, rows=["." * 40] * 40, ground="dirt"),
+    ]
+    view = WorldView()
+    view.resize(800, 600)
+    view.set_world(world, WorldArt(terrain=land), "Jane", keep_view=False)
+    # A patch's corner is faded out, its middle solid.
+    patch = view._land[0].pixmap().toImage()
+    assert patch.pixelColor(1, 1).alpha() < 40 and patch.pixelColor(320, 320).alpha() == 255
+    # One ground under both patches, below the land, in the (larger) land's
+    # base colour; it lies under the veil too, and fades into the fog.
+    ground = view._ground
+    assert ground is not None and ground.zValue() == GROUND_Z < view._land[0].zValue()
+    for item in view._land:
+        assert ground.sceneBoundingRect().contains(item.sceneBoundingRect())
+    image = ground.pixmap().toImage()
+    middle = image.pixelColor(image.width() // 2, image.height() // 2)
+    assert middle.name() in (LOOKS["snow"].base, LOOKS["dirt"].base) and middle.alpha() == 255
+    assert image.pixelColor(0, 0).alpha() < 40
+    assert view._veil is not None and view._veil.veiled.contains(QPointF(0.0, -4000.0))
+    # No land and no ways: no ground.
+    view.set_world(world, WorldArt(), "Jane")
+    assert view._ground is None and view._land == []
+    # A set's colours are the mean of its textures, cached by the set's name.
+    red = QImage(8, 8, QImage.Format_RGB32)
+    red.fill(QColor("#c81e1e"))
+    buffer = QBuffer()
+    buffer.open(QIODevice.WriteOnly)
+    red.save(buffer, "PNG")
+    data = bytes(buffer.data())
+    reads: list[str] = []
+
+    def read(role: str) -> bytes | None:
+        reads.append(role)
+        return data if role == "out-roof" else None
+
+    colours = texture_colours("test-set", read)
+    assert colours == LookColours(roof=(200, 30, 30)) and colours.base is None
+    assert texture_colours("test-set", read) is colours and len(reads) == 3
+    assert look_with("snow", colours).roof[1] == "#c81e1e"
+    assert look_with("snow", colours).base == LOOKS["snow"].base  # no ground given
+    assert look_with("snow", LookColours(ground=(100, 100, 100))).base == "#646464"
+    assert look_with("floor", LookColours(ground=(100, 100, 100))).base == LOOKS["floor"].base
+    # The window's hook colours the plans' roofs; the land's pixmap takes
+    # them too.
+    from tests.test_map_tiles import FARM
+
+    plain = render_tiles(FARM, "snow", roofs=True)
+    tinted = render_tiles(FARM, "snow", roofs=True, colours=colours)
+    roof = (7 * 16 + 8, 2 * 16 + 8)
+    assert plain.pixelColor(*roof) != tinted.pixelColor(*roof)
+    assert tinted.pixelColor(*roof).red() > tinted.pixelColor(*roof).green() + 80
+    assert land_pixmap(tuple(FARM), "snow", colours) is land_pixmap(tuple(FARM), "snow", colours)
+    plan = PlaceLayout(place_id="farm", rows=list(FARM), spec={"ground": "snow"})
+    view.look_colours = colours
+    view.set_world(world, WorldArt(layouts={"farm": {"": plan}}), "Jane", keep_view=False)
+    assert view.level() == "local" and view._plans["farm"].colours is colours
+    drawn = view._plans["farm"].pixmap().toImage()
+    assert drawn.pixelColor(*roof) == tinted.pixelColor(*roof)
 
 
 def test_a_place_in_sight_is_lit_though_never_visited(app):

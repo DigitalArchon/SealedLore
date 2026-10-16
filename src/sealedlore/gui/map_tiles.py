@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import random
 import zlib
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, replace
 from functools import lru_cache
 
 from PySide6.QtCore import QPoint, QRect, Qt
@@ -30,6 +30,10 @@ TILE = 16
 # A ring of walls wider than this is a town's wall or a barricade, not a
 # building to roof over (live, Hellsville's closed barricade roofed the town).
 MAX_ROOF_TILES = 16
+# A patch of land on the region fades out over this many tiles at its edge,
+# into the ground under it or the fog, instead of ending hard (Oct 16 2026:
+# Local and Region didn't read as one world, each patch a hard-edged card).
+LAND_FADE_TILES = 6
 
 
 @dataclass(frozen=True)
@@ -200,6 +204,79 @@ LOOKS["cobble"] = Look(
     floor="flags",
 )
 LOOKS[""] = LOOKS["grass"]
+
+
+@dataclass(frozen=True)
+class LookColours:
+    """A tile set's colours for the region's drawing: the mean of its
+    out-ground, out-wall and out-roof textures (`texture_colours`), so a
+    farmhouse is the one colour on the plan and on the play view. A colour
+    left None keeps the Look's own."""
+
+    ground: tuple[int, int, int] | None = None
+    wall: tuple[int, int, int] | None = None
+    roof: tuple[int, int, int] | None = None
+
+    @property
+    def base(self) -> str | None:
+        return _hex(self.ground) if self.ground else None
+
+
+def _hex(rgb: tuple[int, int, int], factor: float = 1.0) -> str:
+    return "#" + "".join(f"{min(255, max(0, round(c * factor))):02x}" for c in rgb)
+
+
+def _shades(rgb: tuple[int, int, int]) -> tuple[str, str, str]:
+    """(dark, mid, light) round a mean colour."""
+    return _hex(rgb, 0.72), _hex(rgb), _hex(rgb, 1.22)
+
+
+# The looks whose open ground isn't a set's out-ground: a floor, a deck.
+INDOOR_LOOKS = frozenset({"floor", "space", "metal"})
+
+
+def look_with(look_name: str, colours: LookColours | None) -> Look:
+    """The look in the set's colours where the set gives them. The open
+    ground's shades are kept for the indoor and deck looks (INDOOR_LOOKS): a
+    set's out-ground isn't their floor."""
+    look = LOOKS.get(look_name, LOOKS[""])
+    if colours is None:
+        return look
+    changes: dict = {}
+    if colours.ground and look_name not in INDOOR_LOOKS:
+        changes.update(
+            base=_hex(colours.ground),
+            light=_hex(colours.ground, 1.12),
+            shade=_hex(colours.ground, 0.86),
+            deep=_hex(colours.ground, 0.72),
+        )
+    if colours.wall:
+        changes["wall"] = _shades(colours.wall)
+    if colours.roof:
+        changes["roof"] = _shades(colours.roof)
+    return replace(look, **changes) if changes else look
+
+
+_SET_COLOURS: dict[str, LookColours] = {}
+
+
+def texture_colours(name: str, read: Callable[[str], bytes | None]) -> LookColours:
+    """The colours of the set `name` (read by `read`, by role), kept once
+    read: the mean of each texture, by scaling it to a pixel."""
+    if name not in _SET_COLOURS:
+        found: dict[str, tuple[int, int, int]] = {}
+        roles = (("ground", "out-ground"), ("wall", "out-wall"), ("roof", "out-roof"))
+        for field_name, role in roles:
+            data = read(role)
+            image = QImage.fromData(data) if data else QImage()
+            if image.isNull():
+                continue
+            pixel = image.scaled(1, 1, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+            colour = pixel.pixelColor(0, 0)
+            found[field_name] = (colour.red(), colour.green(), colour.blue())
+        _SET_COLOURS[name] = LookColours(**found)
+    return _SET_COLOURS[name]
+
 
 OUTLINE = "#1b1d2b"
 WOOD = ("#6e4c30", "#8b6340", "#a97a4f")  # dark, mid, light: walls, fences, trunks
@@ -605,14 +682,16 @@ def render_tiles(
     roofs: bool = False,
     seed: int = 0,
     cleared: Sequence[tuple[int, int, int, int]] = (),
+    colours: LookColours | None = None,
 ) -> QImage:
     """`rows` drawn, `TILE` pixels a tile. `roofs` draws each closed building
     from outside, roofed; otherwise its floor and furniture show (a plan).
     `cleared` buildings (their boxes) are left as open ground: a picture of
-    the building stands there instead (gui/world_view.py)."""
+    the building stands there instead (gui/world_view.py). `colours`: the
+    tile set's, over the look's own (`look_with`)."""
     grid = _Grid(rows)
     look_name = ground if ground in LOOKS else ""
-    look = LOOKS[look_name]
+    look = look_with(look_name, colours)
     image = _image(max(grid.w, 1) * TILE, max(grid.h, 1) * TILE)
     p = QPainter(image)
     roofed: set[tuple[int, int]] = set()
@@ -904,8 +983,11 @@ def _roof(p: QPainter, grid: _Grid, house: set[tuple[int, int]], look: Look) -> 
             p.fillRect(col, row, 1, 3, _c(look.roof[0]))
         if n % 3 == 1:
             p.fillRect(rl, row, rr - rl, 1, _c(look.roof[2]))
-    p.fillRect(rl, ridge - 1, rr - rl, 2, _c("#5f2321"))
-    p.fillRect(rl, roof_bottom - 2, rr - rl, 2, _c("#5f2321"))  # the eave's shadow line
+    # The ridge and the eave's shadow line, in the roof's own dark (a fixed
+    # dark red sat on a set's grey shingles).
+    ridge_line = _c(look.roof[0]).darker(125)
+    p.fillRect(rl, ridge - 1, rr - rl, 2, ridge_line)
+    p.fillRect(rl, roof_bottom - 2, rr - rl, 2, ridge_line)
     if look.snow:
         p.fillRect(rl, roof_top, rr - rl, ridge - roof_top + 1, _c("#f2f6fa"))
         for col in range(rl, rr, 2):
@@ -943,9 +1025,53 @@ def tiles_pixmap(
     ground: str = "",
     roofs: bool = False,
     cleared: tuple[tuple[int, int, int, int], ...] = (),
+    colours: LookColours | None = None,
 ) -> QPixmap:
     """`render_tiles`, kept: a scene is drawn again on every redraw of the view."""
-    return QPixmap.fromImage(render_tiles(rows, ground, roofs=roofs, cleared=cleared))
+    return QPixmap.fromImage(
+        render_tiles(rows, ground, roofs=roofs, cleared=cleared, colours=colours)
+    )
+
+
+def faded_edges(image: QImage, fade: int) -> QImage:
+    """`image` with its alpha ramped to nothing over `fade` pixels at each
+    edge (never more than a quarter of its smaller side, so a small picture
+    keeps a solid middle)."""
+    import numpy as np
+
+    fade = min(fade, min(image.width(), image.height()) // 4)
+    if fade <= 0:
+        return image
+    work = image.convertToFormat(QImage.Format_ARGB32_Premultiplied)
+    h, w = work.height(), work.width()
+    a = np.frombuffer(work.constBits(), np.uint8).reshape(h, work.bytesPerLine())[:, : w * 4]
+    a = a.reshape(h, w, 4).astype(np.float32)
+    ys = np.minimum(np.arange(h) + 0.5, h - np.arange(h) - 0.5)[:, None]
+    xs = np.minimum(np.arange(w) + 0.5, w - np.arange(w) - 0.5)[None, :]
+    ramp = np.clip(np.minimum(ys, xs) / fade, 0, 1)
+    # Premultiplied: every channel takes the ramp, which keeps the colour.
+    out = np.ascontiguousarray((a * ramp[..., None]).astype(np.uint8))
+    return QImage(out.data, w, h, w * 4, QImage.Format_ARGB32_Premultiplied).copy()
+
+
+@lru_cache(maxsize=48)
+def land_pixmap(
+    rows: tuple[str, ...], ground: str = "", colours: LookColours | None = None
+) -> QPixmap:
+    """A patch of land for the region: `render_tiles`, fading out over
+    LAND_FADE_TILES at its edge, kept."""
+    image = render_tiles(rows, ground, colours=colours)
+    return QPixmap.fromImage(faded_edges(image, LAND_FADE_TILES * TILE))
+
+
+@lru_cache(maxsize=8)
+def ground_pixmap(width: int, height: int, colour: str, fade: int) -> QPixmap:
+    """A flat ground in `colour`, `width` by `height`, fading out over
+    `fade` pixels at its edge: laid under the region's patches and the
+    ways between them, so they lie on one country and not each on the fog."""
+    image = _image(max(width, 1), max(height, 1))
+    image.fill(_c(colour))
+    return QPixmap.fromImage(faded_edges(image, fade))
 
 
 def building_boxes(rows: Sequence[str]) -> list[tuple[int, int, int, int]]:
