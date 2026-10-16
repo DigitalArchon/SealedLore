@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QElapsedTimer, QPoint, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPixmap, QTransform
 from PySide6.QtWidgets import (
     QGraphicsItem,
@@ -33,14 +33,55 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from sealedlore.engine.area import Area, Placement, seen_tiles, sees
+from sealedlore.engine.area import Area, Placement, sees
+from sealedlore.gui import text_size
 from sealedlore.gui.area_render import px_for
+from sealedlore.gui.avatar_view import pixel_scaled
+from sealedlore.gui.map_art import FOG
 from sealedlore.gui.wrap_row import WrapRow
 
 # Tiles a second the author's character walks on screen.
 STEPS_PER_SECOND = 9
+# The walk is drawn this often, the figure between one tile and the next
+# (it used to jump a tile at a time, 111 ms apart).
+FRAME_MS = 16
 # A person's sprite, in tiles tall, indoors and out.
 PERSON_TILES = {True: 2.1, False: 2.6}
+# The view's zoom: never closer than twice the art's own pixels (a sprite
+# resampled past that is a blur), never further than this.
+ZOOM_MIN = 0.15
+ZOOM_MAX = 2.0
+# Room round the area in the scene, in tiles: three above for the names
+# over the heads in the top row (they were cut off), one around.
+PAD_ABOVE = 3
+PAD_AROUND = 1
+# Indoors, what the author's character can't see is dimmed this much (of
+# 255): by room, feathered at the edges, never a hard black checker.
+SHADE_ALPHA = 110
+# The shade's mask is drawn at this many pixels a tile and scaled smoothly
+# to the tiles, so its edges are soft.
+FEATHER = 8
+GOLD = QColor(246, 207, 110)
+RED = QColor(220, 90, 80)
+WHITE = (255, 255, 255)
+# The sky's colour over the area by the hour, multiplied over it: (hour,
+# the hue, how far from white it is taken). Nothing from 8:00 to 17:00;
+# amber at dawn and dusk; deep blue at night, about 45% at midnight.
+NIGHT = (36, 52, 128)
+DAWN = (255, 176, 90)
+DUSK = (255, 150, 70)
+TINT_KEYS: tuple[tuple[float, tuple[int, int, int], float], ...] = (
+    (0.0, NIGHT, 0.45),
+    (4.0, NIGHT, 0.42),
+    (5.5, DAWN, 0.30),
+    (7.0, DAWN, 0.14),
+    (8.0, WHITE, 0.0),
+    (17.0, WHITE, 0.0),
+    (18.5, DUSK, 0.24),
+    (20.0, DUSK, 0.32),
+    (21.5, NIGHT, 0.40),
+    (24.0, NIGHT, 0.45),
+)
 VERB_LABELS = {
     "talk": "Talk",
     "look": "Look (stay out of sight and watch)",
@@ -78,11 +119,73 @@ class Walker:
     held: bool = False
 
 
+def tint_colour(minute: int) -> QColor | None:
+    """The colour multiplied over the area at this minute of the day (see
+    `TINT_KEYS`), or None in daylight, when nothing is laid over it."""
+    hour = (minute % (24 * 60)) / 60
+    keys = TINT_KEYS
+    for (h0, hue0, s0), (h1, hue1, s1) in zip(keys, keys[1:], strict=False):
+        if h0 <= hour <= h1:
+            t = (hour - h0) / (h1 - h0) if h1 > h0 else 0.0
+            # Each key's colour is its hue taken that far from white, and the
+            # minute's colour lies between the two keys' colours.
+            c0 = [255 - (255 - c) * s0 for c in hue0]
+            c1 = [255 - (255 - c) * s1 for c in hue1]
+            rgb = [round(a + (b - a) * t) for a, b in zip(c0, c1, strict=True)]
+            if all(c >= 255 for c in rgb):
+                return None
+            return QColor(*rgb)
+    return None
+
+
+def lit_rooms(area: Area, here: tuple[int, int]) -> set[int]:
+    """The rooms lit from `here`: the one the author's character is in, and
+    every room a doorway in sight opens into."""
+    lit: set[int] = set()
+    room = area.room_at(*here)
+    if room is not None:
+        lit.add(room.index)
+    for door in area.doorways:
+        if not any(sees(area, here, tile) for tile in door.tiles()):
+            continue
+        for x, y in door.tiles():
+            # A door in a wall running east-west opens north and south.
+            beside = ((x, y - 1), (x, y + 1)) if door.way == "h" else ((x - 1, y), (x + 1, y))
+            for nx, ny in beside:
+                other = area.room_at(nx, ny)
+                if other is not None:
+                    lit.add(other.index)
+    return lit
+
+
+def sight_mask(area: Area, here: tuple[int, int]) -> QImage:
+    """What the author's character can't see from `here`, one pixel a tile:
+    clear where it is lit, `SHADE_ALPHA` dark where it isn't. Lit by room
+    (`lit_rooms`); only where there is no room (doorways, corridors, the
+    walls) does a ray to each tile decide."""
+    lit = lit_rooms(area, here)
+    image = QImage(area.width, area.height, QImage.Format_ARGB32_Premultiplied)
+    image.fill(QColor(0, 0, 0, 0))
+    dark = QColor(8, 8, 14, SHADE_ALPHA)
+    for y in range(area.height):
+        for x in range(area.width):
+            index = area.room_of[y][x] if area.room_of else -1
+            if index >= 0:
+                shaded = index not in lit
+            else:
+                shaded = not sees(area, here, (x, y))
+            if shaded:
+                image.setPixelColor(x, y, dark)
+    return image
+
+
 class _Graphics(QGraphicsView):
     clicked = Signal(QPointF, QPoint)
     # A right-click: what can be done at a spot (mark it, walk there).
     context = Signal(QPointF, QPoint)
     hovered = Signal(QPointF)
+    # The pointer left the view.
+    left = Signal()
     zoomed = Signal()
 
     def __init__(self) -> None:
@@ -92,7 +195,9 @@ class _Graphics(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.StrongFocus)
-        self.setBackgroundBrush(QColor(12, 12, 16))
+        # The region map's fog: the area's edge is the edge of what is
+        # drawn, not of the world (it was near-black).
+        self.setBackgroundBrush(QColor(FOG))
         self._press: QPoint | None = None
         self._dragging = False
 
@@ -100,13 +205,17 @@ class _Graphics(QGraphicsView):
 
     def zoom_by(self, factor: float) -> None:
         scale = self.transform().m11() * factor
-        if 0.15 <= scale <= 6.0:
+        if ZOOM_MIN <= scale <= ZOOM_MAX:
             self.scale(factor, factor)
             self.zoomed.emit()
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt's name
         super().resizeEvent(event)
         self.resized.emit()
+
+    def leaveEvent(self, event) -> None:  # noqa: N802 - Qt's name
+        self.left.emit()
+        super().leaveEvent(event)
 
     def wheelEvent(self, event) -> None:  # noqa: N802 - Qt's name
         self.zoom_by(ZOOM_STEP if event.angleDelta().y() > 0 else 1 / ZOOM_STEP)
@@ -153,21 +262,30 @@ class _Graphics(QGraphicsView):
 
 class _Person(QGraphicsItem):
     """A person on the map: their sprite, standing on their tile, their name
-    over them."""
+    over them. The sprite is kept whole and drawn into the height it stands
+    at, so every zoom resamples it from the source (pre-scaled and scaled
+    again by the view, pixel art came out blurred); one smaller than that
+    height is scaled up by whole pixels first."""
 
     def __init__(self, walker: Walker, px: int, indoor: bool) -> None:
         super().__init__()
         self.walker = walker
         self.px = px
-        height = int(px * PERSON_TILES[indoor])
+        self.height = int(px * PERSON_TILES[indoor])
         image = walker.image
-        self.pixmap = (
-            QPixmap.fromImage(image.scaledToHeight(height, Qt.SmoothTransformation))
-            if image is not None and not image.isNull()
-            else None
+        self.pixmap: QPixmap | None = None
+        if image is not None and not image.isNull():
+            if image.height() < self.height:
+                image = pixel_scaled(image, self.height)
+            self.pixmap = QPixmap.fromImage(image)
+        self.width = (
+            self.height * self.pixmap.width() / self.pixmap.height()
+            if self.pixmap is not None and self.pixmap.height()
+            else self.height * 0.6
         )
-        self.height = height
-        self.width = self.pixmap.width() if self.pixmap else int(height * 0.6)
+        # Facing west (the sprite mirrored), and a step's bob, while walking.
+        self.mirrored = False
+        self.bob = 0.0
         self.setZValue(10 + walker.y)
         self.setAcceptHoverEvents(False)
         self.place_at(walker.x, walker.y)
@@ -176,25 +294,73 @@ class _Person(QGraphicsItem):
         self.setPos((x + 0.5) * self.px, (y + 1.0) * self.px)
         self.setZValue(10 + y)
 
+    def set_mirrored(self, mirrored: bool) -> None:
+        if mirrored != self.mirrored:
+            self.mirrored = mirrored
+            self.update()
+
+    def set_bob(self, bob: float) -> None:
+        if bob != self.bob:
+            self.bob = bob
+            self.update()
+
+    def _ring(self) -> tuple[QPointF, float, float, float]:
+        """The held character's ring: centre, radii, pen width."""
+        centre = QPointF(0, -self.px * 0.08)
+        return centre, self.width * 0.55, self.px * 0.32, max(2, self.px * 0.08)
+
     def boundingRect(self) -> QRectF:  # noqa: N802 - Qt's name
-        return QRectF(-self.width / 2 - 2, -self.height - 4, self.width + 4, self.height + 8)
+        # Wide enough for the ring and its pen (it painted outside and
+        # smeared while walking), and for the bob.
+        centre, rx, ry, pen = self._ring()
+        half = max(self.width / 2 + 2, rx + pen + 1)
+        bottom = max(4.0, centre.y() + ry + pen + 1)
+        top = -self.height - 4 - 1
+        return QRectF(-half, top, 2 * half, bottom - top)
 
     def paint(self, painter: QPainter, _option, _widget=None) -> None:
         painter.setPen(Qt.NoPen)
         painter.setBrush(QColor(0, 0, 0, 80))
         painter.drawEllipse(QPointF(0, -self.px * 0.08), self.width * 0.4, self.px * 0.22)
         if self.walker.held:
-            painter.setPen(QPen(QColor(246, 207, 110), max(2, self.px * 0.08)))
+            centre, rx, ry, pen = self._ring()
+            painter.setPen(QPen(GOLD, pen))
             painter.setBrush(Qt.NoBrush)
-            painter.drawEllipse(QPointF(0, -self.px * 0.08), self.width * 0.55, self.px * 0.32)
+            painter.drawEllipse(centre, rx, ry)
         if self.pixmap is not None:
-            painter.drawPixmap(int(-self.width / 2), int(-self.height), self.pixmap)
+            target = QRectF(-self.width / 2, -self.height - self.bob, self.width, self.height)
+            source = QRectF(self.pixmap.rect())
+            if self.mirrored:
+                painter.save()
+                painter.scale(-1, 1)
+                painter.drawPixmap(target, self.pixmap, source)
+                painter.restore()
+            else:
+                painter.drawPixmap(target, self.pixmap, source)
         else:
             painter.setPen(QColor(20, 20, 26))
             painter.setBrush(QColor(90, 110, 170))
             painter.drawRoundedRect(
-                QRectF(-self.width / 2, -self.height, self.width, self.height), 6, 6
+                QRectF(-self.width / 2, -self.height - self.bob, self.width, self.height), 6, 6
             )
+
+
+class _Tint(QGraphicsRectItem):
+    """The time of day over the area: its colour multiplied over the
+    picture, so the art keeps its own colours, darkened. Under the names,
+    pins and hover (z 90), over the people, who are in the night too."""
+
+    def __init__(self, rect: QRectF) -> None:
+        super().__init__(rect)
+        self.setPen(QPen(Qt.NoPen))
+        self.setZValue(90)
+        self.colour = QColor(255, 255, 255)
+
+    def paint(self, painter: QPainter, _option, _widget=None) -> None:
+        painter.save()
+        painter.setCompositionMode(QPainter.CompositionMode_Multiply)
+        painter.fillRect(self.rect(), self.colour)
+        painter.restore()
 
 
 class _Tag(QGraphicsSimpleTextItem):
@@ -203,12 +369,15 @@ class _Tag(QGraphicsSimpleTextItem):
     def __init__(self, text: str, held: bool) -> None:
         super().__init__(text)
         font = QFont()
-        font.setPointSizeF(9.0)
+        font.setPointSizeF(text_size.points(9.0))
         font.setBold(held)
         self.setFont(font)
         self.setBrush(QColor(255, 236, 170) if held else QColor(244, 241, 232))
         self.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
         self.setZValue(100)
+        # How far it is lifted over its own place, in pixels, clear of a
+        # neighbour's name (`AreaView._lift_tags`).
+        self.lift = 0.0
 
     def paint(self, painter: QPainter, option, widget=None) -> None:
         rect = self.boundingRect().adjusted(-3, -1, 3, 1)
@@ -238,7 +407,7 @@ class _Pin(QGraphicsItem):
         painter.drawLine(QPointF(0, -10), QPointF(0, 0))
         painter.setPen(QColor(20, 16, 8))
         font = QFont()
-        font.setPointSizeF(7.5)
+        font.setPointSizeF(text_size.points(7.5))
         font.setBold(True)
         painter.setFont(font)
         painter.drawText(QRectF(-8, -26, 16, 16), Qt.AlignCenter, self.label)
@@ -353,6 +522,7 @@ class AreaView(QWidget):
         self.view.clicked.connect(self._clicked)
         self.view.context.connect(self._context)
         self.view.hovered.connect(self._hovered)
+        self.view.left.connect(self._left)
         self.view.zoomed.connect(self._zoomed)
         self.view.resized.connect(self._resized)
         # Fitted to the area until the author zooms (then it is theirs).
@@ -371,14 +541,20 @@ class AreaView(QWidget):
         self.people: dict[str, _Person] = {}
         self._tags: dict[str, _Tag] = {}
         self._background: QGraphicsPixmapItem | None = None
+        # With no picture yet: the word over the plain map.
+        self._note: QGraphicsSimpleTextItem | None = None
         self._hover: QGraphicsRectItem | None = None
         self._key: object = None
         self.locked = False
+        # The walk being shown: the tiles still to go, those done (the
+        # figure stands on the last), and how far it is to the next (0-1).
         self._steps: list[tuple[int, int]] = []
         self._walked: list[tuple[int, int]] = []
+        self._progress = 0.0
         self._timer = QTimer(self)
-        self._timer.setInterval(int(1000 / STEPS_PER_SECOND))
-        self._timer.timeout.connect(self._step)
+        self._timer.setInterval(FRAME_MS)
+        self._timer.timeout.connect(self._tick)
+        self._clock = QElapsedTimer()
         self._fitted_for: str | None = None
         # The map's point (metres east, north) at a tile of the area shown,
         # or None (the window sets it).
@@ -386,9 +562,14 @@ class AreaView(QWidget):
         # Tiles marked in the turn being written, and their pins.
         self._marks: list[tuple[int, int]] = []
         self._pins: list[_Pin] = []
-        # Indoors, what the author's character can't see is shaded.
+        # Indoors, what the author's character can't see is shaded: the
+        # mask one pixel a tile (the tests read it), and the item over the area.
         self._shade: QGraphicsPixmapItem | None = None
         self._shade_from: tuple[int, int] | None = None
+        self._shade_mask: QImage | None = None
+        # The time of day over the area.
+        self._tint: _Tint | None = None
+        self._minute: int | None = None
         self.set_message("No area here yet.")
 
     # --- what is shown -----------------------------------------------------------
@@ -400,12 +581,15 @@ class AreaView(QWidget):
         self._stop_walking()
         self.scene.clear()
         self.people, self._tags, self._background, self._hover = {}, {}, None, None
+        self._note = None
         self._pins = []
-        self._shade, self._shade_from = None, None
+        self._shade, self._shade_from, self._shade_mask = None, None, None
+        self._tint, self._minute = None, None
         label = self.scene.addSimpleText(text)
         label.setBrush(QColor(200, 200, 210))
         self.title.setText("")
         self.hint.setText(text)
+        self.view.viewport().setCursor(Qt.ArrowCursor)
 
     def set_area(
         self,
@@ -416,9 +600,14 @@ class AreaView(QWidget):
         key: object,
         clock: str = "",
         hint: str = "",
+        minute: int | None = None,
+        failed: bool = False,
     ) -> None:
         """Show this area with these people (the window calls it whenever the
-        session's state changes, and again once the picture is drawn)."""
+        session's state changes, and again once the picture is drawn).
+        `minute`: the map clock's minute of the day, for the light over the
+        area (None: daylight). `failed`: the picture couldn't be painted, so
+        the plain map stands in for good."""
         if self._timer.isActive():
             if self.area is not None and self.area.place_id == area.place_id:
                 return  # mid-walk: the walk's end refreshes it
@@ -439,26 +628,32 @@ class AreaView(QWidget):
             same_place = self._fitted_for == area.place_id
             self.scene.clear()
             self.people, self._tags, self._hover = {}, {}, None
+            self._note = None
             self._pins = []
-            self._shade, self._shade_from = None, None
+            self._shade, self._shade_from, self._shade_mask = None, None, None
+            self._tint = None
             self._key = key
+            bounds = QRectF(0, 0, area.width * px, area.height * px)
             if image is not None:
                 self._background = self.scene.addPixmap(QPixmap.fromImage(image))
                 self._background.setZValue(0)
             else:
                 self._background = None
-                rect = self.scene.addRect(
-                    QRectF(0, 0, area.width * px, area.height * px),
-                    QPen(Qt.NoPen),
-                    QColor(24, 26, 32),
-                )
+                rect = self.scene.addRect(bounds, QPen(Qt.NoPen), QColor(24, 26, 32))
                 rect.setZValue(0)
-                note = self.scene.addSimpleText(f"Drawing {area.name}…")
-                note.setBrush(QColor(210, 210, 220))
-                note.setPos(px, px)
-            self.scene.setSceneRect(QRectF(0, 0, area.width * px, area.height * px))
+                self._note = self.scene.addSimpleText("")
+                self._note.setBrush(QColor(210, 210, 220))
+                self._note.setPos(px, px)
+            # Room round the area: the names over the top row's heads were
+            # cut off at the scene's edge.
+            self.scene.setSceneRect(
+                bounds.adjusted(-PAD_AROUND * px, -PAD_ABOVE * px, PAD_AROUND * px, PAD_AROUND * px)
+            )
+            self._tint = _Tint(bounds)
+            self._tint.hide()
+            self.scene.addItem(self._tint)
             self._hover = QGraphicsRectItem()
-            self._hover.setPen(QPen(QColor(246, 207, 110, 200), 2))
+            self._hover.setPen(QPen(QColor(GOLD.red(), GOLD.green(), GOLD.blue(), 200), 2))
             self._hover.setZValue(200)
             self._hover.hide()
             self.scene.addItem(self._hover)
@@ -466,8 +661,30 @@ class AreaView(QWidget):
                 self._fit(area)
             else:
                 self.view.centerOn(centre)
+        if self._note is not None:
+            # Said on the same key too: the painting fails after the view
+            # was built waiting for it.
+            self._note.setText(
+                f"{area.name} couldn't be drawn: a plain map stands in"
+                if failed
+                else f"Drawing {area.name}…"
+            )
+        self._sync_tint(minute)
         self._place_people(area, walkers, px)
         self._place_pins()
+
+    def _sync_tint(self, minute: int | None) -> None:
+        """The light over the area for this minute of the map's day."""
+        self._minute = minute
+        if self._tint is None:
+            return
+        colour = tint_colour(minute) if minute is not None else None
+        if colour is None:
+            self._tint.hide()
+            return
+        self._tint.colour = colour
+        self._tint.show()
+        self._tint.update()
 
     def set_marks(self, tiles: list[tuple[int, tuple[int, int]]]) -> None:
         """Pins on the tiles marked in the turn being written: (the mark's
@@ -522,11 +739,13 @@ class AreaView(QWidget):
         if held is not None:
             self._follow(held.x, held.y)
         self._sync_sight()
+        self._lift_tags()
 
     def _sync_sight(self) -> None:
-        """Line of sight from the author's character: indoors the tiles they
-        can't see are shaded, and anyone out of sight is not shown at all
-        (the author, Oct 16 2026: they are in the fog of war)."""
+        """Line of sight from the author's character: indoors the rooms they
+        can't see into are dimmed (`sight_mask`), and anyone out of sight is
+        not shown at all (the author, Oct 16 2026: they are in the fog of
+        war)."""
         held, area = self.held(), self.area
         if held is None or area is None:
             return
@@ -541,35 +760,78 @@ class AreaView(QWidget):
         if not area.indoor or self._shade_from == here:
             return
         self._shade_from = here
-        grid = seen_tiles(area, here)
-        image = QImage(area.width, area.height, QImage.Format_ARGB32)
-        image.fill(QColor(0, 0, 0, 0))
-        dark = QColor(8, 8, 14, 150)
-        for y, row in enumerate(grid):
-            for x, seen in enumerate(row):
-                if not seen:
-                    image.setPixelColor(x, y, dark)
-        px = px_for(area)
-        pixmap = QPixmap.fromImage(image)
+        mask = sight_mask(area, here)
+        self._shade_mask = mask
+        # Drawn at FEATHER pixels a tile from the tile-sized mask and scaled
+        # smoothly to the tiles: the edges between lit and dim are soft, not
+        # a staircase of tiles.
+        soft = mask.scaled(
+            area.width * FEATHER,
+            area.height * FEATHER,
+            Qt.IgnoreAspectRatio,
+            Qt.SmoothTransformation,
+        )
+        pixmap = QPixmap.fromImage(soft)
         if self._shade is None:
             self._shade = self.scene.addPixmap(pixmap)
             self._shade.setZValue(5)
-            self._shade.setTransformationMode(Qt.FastTransformation)
-            self._shade.setScale(px)
+            self._shade.setTransformationMode(Qt.SmoothTransformation)
+            self._shade.setScale(px_for(area) / FEATHER)
         else:
             self._shade.setPixmap(pixmap)
 
     def _tag_at(self, name: str, x: float, y: float) -> None:
         """The name centred over its figure at any zoom: the item ignores
         transforms, so it is centred in its own pixels, never in scene units
-        at the zoom of the moment (the names drifted after a zoom)."""
+        at the zoom of the moment (the names drifted after a zoom). Names
+        that would lie over one another are lifted apart by `_lift_tags`."""
         person, tag = self.people.get(name), self._tags.get(name)
         if person is None or tag is None:
             return
         px = person.px
         tag.setPos((x + 0.5) * px, (y + 1.0) * px - person.height)
         rect = tag.boundingRect()
+        tag.lift = 0.0
         tag.setTransform(QTransform.fromTranslate(-rect.width() / 2, -rect.height() - 4))
+
+    def _tag_box(self, tag: _Tag, lift: float | None = None) -> QRectF:
+        """Where the tag is on screen, in the view's pixels (it ignores the
+        zoom, so scene units say nothing about overlap), at its own lift
+        unless another is given."""
+        rect = tag.boundingRect()
+        lift = tag.lift if lift is None else lift
+        anchor = self.view.mapFromScene(tag.pos())
+        return QRectF(
+            anchor.x() - rect.width() / 2,
+            anchor.y() - rect.height() - 4 - lift,
+            rect.width(),
+            rect.height(),
+        )
+
+    def _lift_tags(self) -> None:
+        """Neighbours' names never lie over one another: a tag is lifted by
+        its height while it lies on one placed before it. The author's
+        character's name stays put, then the figures nearest the viewer."""
+        order = sorted(
+            (name for name in self._tags if self._tags[name].isVisible()),
+            key=lambda n: (
+                (not self.people[n].walker.held, -self.people[n].walker.y)
+                if n in self.people
+                else (True, 0)
+            ),
+        )
+        placed: list[QRectF] = []
+        for name in order:
+            tag = self._tags[name]
+            rect = tag.boundingRect()
+            lift = 0.0
+            box = self._tag_box(tag, lift)
+            while any(box.intersects(other) for other in placed):
+                lift += rect.height() + 2
+                box = self._tag_box(tag, lift)
+            tag.lift = lift
+            tag.setTransform(QTransform.fromTranslate(-rect.width() / 2, -rect.height() - 4 - lift))
+            placed.append(box)
 
     def _fit(self, area: Area) -> None:
         """Opened on an area: indoors the whole of it; outdoors close enough
@@ -583,16 +845,18 @@ class AreaView(QWidget):
         else:
             scale = port.width() / (min(area.width, 48) * px)
         self.view.resetTransform()
-        scale = max(0.15, min(scale, 6.0))
+        scale = max(ZOOM_MIN, min(scale, ZOOM_MAX))
         self.view.blockSignals(True)
         self.view.scale(scale, scale)
         self.view.blockSignals(False)
         held = self.held()
         if held is not None:
             self.view.centerOn((held.x + 0.5) * px, (held.y + 0.5) * px)
+        self._lift_tags()
 
     def _zoomed(self) -> None:
         self._fitted = False
+        self._lift_tags()
 
     def _resized(self) -> None:
         if self._fitted and self.area is not None:
@@ -695,38 +959,96 @@ class AreaView(QWidget):
 
     def walk(self, steps: list[tuple[int, int]]) -> None:
         """Show the author's character walking these tiles; `walk_finished`
-        once they are there."""
+        once they are there. Drawn `FRAME_MS` apart, the figure between one
+        tile and the next, `STEPS_PER_SECOND` tiles a second."""
         self._stop_walking()
         if len(steps) < 2:
             self.walk_finished.emit(list(steps))
             return
-        self._steps = list(steps[1:])
-        self._walked = [steps[0]]
+        self._steps = [tuple(s) for s in steps[1:]]
+        self._walked = [tuple(steps[0])]
+        self._progress = 0.0
+        self._begin_segment()
+        self._clock.start()
         self._timer.start()
 
     def walking(self) -> bool:
         return self._timer.isActive()
 
-    def _step(self) -> None:
+    def _tick(self) -> None:
+        self._advance(self._clock.restart() / 1000.0)
+
+    def _advance(self, seconds: float) -> None:
+        """The walk `seconds` on: the figure that much nearer the next tile,
+        on it (and the ones after) once a tile's time has passed."""
         held = self.held()
         if not self._steps or held is None:
             self._finish()
             return
-        x, y = self._steps.pop(0)
-        self._walked.append((x, y))
-        held.x, held.y = x, y
-        person = self.people.get(held.name)
-        if person is not None:
-            person.place_at(x, y)
-            self._tag_at(held.name, x, y)
-        self._follow(x, y)
-        self._sync_sight()
+        self._progress += seconds * STEPS_PER_SECOND
+        while self._progress >= 1.0 and self._steps:
+            self._progress -= 1.0
+            self._arrive()
+        if not self._steps:
+            self._finish()
+            return
+        nx, ny = self._steps[0]
+        t = min(self._progress, 1.0)
+        self._show_at(held, held.x + (nx - held.x) * t, held.y + (ny - held.y) * t)
+
+    def _step(self) -> None:
+        """The next tile at once (the tests walk with it)."""
+        held = self.held()
+        if not self._steps or held is None:
+            self._finish()
+            return
+        self._arrive()
+        self._progress = 0.0
         if not self._steps:
             self._finish()
 
+    def _arrive(self) -> None:
+        """The figure on the next tile of the walk."""
+        held = self.held()
+        x, y = self._steps.pop(0)
+        self._walked.append((x, y))
+        held.x, held.y = x, y
+        self._show_at(held, x, y)
+        self._sync_sight()
+        self._begin_segment()
+
+    def _begin_segment(self) -> None:
+        """Facing the way the next tile lies, and a step's bob (one pixel
+        up on every other tile)."""
+        held = self.held()
+        person = self.people.get(held.name) if held is not None else None
+        if person is None or not self._steps:
+            return
+        nx, _ny = self._steps[0]
+        if nx != held.x:
+            person.set_mirrored(nx < held.x)
+        person.set_bob(1.0 if len(self._walked) % 2 else 0.0)
+
+    def _show_at(self, held: Walker, x: float, y: float) -> None:
+        """The author's character's figure and name at this spot (between
+        tiles while walking), the view following."""
+        person = self.people.get(held.name)
+        if person is not None:
+            person.place_at(x, y)
+        self._tag_at(held.name, x, y)
+        self._lift_tags()
+        self._follow(x, y)
+
     def _finish(self) -> None:
         self._timer.stop()
+        held = self.held()
+        if held is not None:
+            person = self.people.get(held.name)
+            if person is not None:
+                person.set_bob(0.0)
+            self._show_at(held, held.x, held.y)  # on its tile, not between two
         walked, self._walked, self._steps = self._walked, [], []
+        self._progress = 0.0
         self.walk_finished.emit(walked)
 
     def _stop_walking(self) -> None:
@@ -734,17 +1056,24 @@ class AreaView(QWidget):
             self._finish()
 
     def finish_walk(self) -> None:
-        """A walk still animating is over now, where the figure is: its
-        steps so far go to the session before a job starts (a turn sent
-        mid-walk used to carry the walk's start, and the walk then wrote
-        session state under the worker; the review, Oct 16 2026)."""
+        """A walk still animating is over now, where the figure is (on the
+        tile it stands on or is leaving): its steps so far go to the session
+        before a job starts (a turn sent mid-walk used to carry the walk's
+        start, and the walk then wrote session state under the worker; the
+        review, Oct 16 2026)."""
         self._stop_walking()
 
     def drop_walk(self) -> None:
         """A walk still animating is forgotten: nothing is told."""
         if self._timer.isActive():
             self._timer.stop()
-            self._walked, self._steps = [], []
+            self._walked, self._steps, self._progress = [], [], 0.0
+            held = self.held()
+            if held is not None:
+                person = self.people.get(held.name)
+                if person is not None:
+                    person.set_bob(0.0)
+                self._show_at(held, held.x, held.y)
 
     # --- clicks and keys -------------------------------------------------------------
 
@@ -790,9 +1119,32 @@ class AreaView(QWidget):
             self.walk_requested.emit(tile[0], tile[1], False)
 
     def _hovered(self, point: QPointF) -> None:
+        """The tile under the pointer marked (gold where it can be walked
+        to, red where not), the coordinate shown, and a pointing hand over
+        a person or a thing that has a menu."""
         tile = self.tile_at(point)
         spot = self.point_of(*tile) if tile is not None else None
         self.coords.setText(f"⌖({round(spot[0])}, {round(spot[1])})" if spot else "")
+        area = self.area
+        if area is None or tile is None or self._hover is None:
+            self._left()
+            return
+        x, y = tile
+        px = px_for(area)
+        free = area.walkable(x, y, area.blocked())
+        colour = GOLD if free else RED
+        self._hover.setPen(QPen(QColor(colour.red(), colour.green(), colour.blue(), 200), 2))
+        self._hover.setRect(QRectF(x * px, y * px, px, px))
+        self._hover.show()
+        person = self.person_at(point)
+        over = (person is not None and not person.held) or area.placement_at(x, y) is not None
+        self.view.viewport().setCursor(Qt.PointingHandCursor if over else Qt.ArrowCursor)
+
+    def _left(self) -> None:
+        """The pointer is off the area: no tile marked, the plain cursor."""
+        if self._hover is not None:
+            self._hover.hide()
+        self.view.viewport().setCursor(Qt.ArrowCursor)
 
     def _context(self, point: QPointF, global_pos: QPoint) -> None:
         """A right-click: mark the spot in the turn, or walk there; on a

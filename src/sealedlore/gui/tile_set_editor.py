@@ -29,8 +29,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from sealedlore.engine.picture_shapes import SQUARE
+from sealedlore.engine.picture_shapes import FREE, SQUARE
 from sealedlore.engine.session_area import TileAsset
+from sealedlore.engine.tile_sets import TEXTURES
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.ref_images import PICTURE_FILTER
 
@@ -112,6 +113,9 @@ class TileSetEditor(QDialog):
         layout.addWidget(buttons)
         self._assets: dict[str, TileAsset] = {}
         self._unread: list[QListWidgetItem] = []
+        # The set's reader, taken once a fill: through the session it copied
+        # the map's art for every row.
+        self._read = None
         self._drawing = session.tile_asset_drawing
         self._icons = QTimer(self)
         self._icons.setInterval(0)
@@ -128,6 +132,7 @@ class TileSetEditor(QDialog):
         self.list.clear()
         self._unread = []
         self._assets = {a.role: a for a in self.session.tile_set_assets()}
+        _info, self._read = self.session.tile_set()
         group = None
         current = None
         for asset in self._assets.values():
@@ -172,7 +177,10 @@ class TileSetEditor(QDialog):
                 item.setIcon(QIcon(QPixmap.fromImage(_fit(image, ICON))))
 
     def _image(self, role: str) -> QImage | None:
-        data = self.session.tile_asset_bytes(role)
+        if role.startswith("walker/") or self._read is None:
+            data = self.session.tile_asset_bytes(role)
+        else:
+            data = self._read(role)
         if not data:
             return None
         image = QImage.fromData(data)
@@ -269,8 +277,11 @@ class TileSetEditor(QDialog):
         )
         if not path:
             return
+        # The ground and walls tile, so they are square; a sprite or a
+        # walker is whatever shape it is (every asset was cropped square).
+        shape = SQUARE if asset.role in TEXTURES else FREE
         try:
-            picture = cropped_picture(self, Path(path), SQUARE)
+            picture = cropped_picture(self, Path(path), shape)
         except (OSError, ValueError) as exc:
             QMessageBox.warning(self, "Couldn't use the picture", str(exc))
             return

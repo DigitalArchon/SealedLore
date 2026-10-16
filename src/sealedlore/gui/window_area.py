@@ -12,11 +12,13 @@ ruling: to be read, changed and sent).
 
 from __future__ import annotations
 
+import logging
 import threading
+import time
 import zlib
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
@@ -35,6 +37,10 @@ from sealedlore.models.character import Character
 PAINTED_KEPT = 6
 # Verbs done standing beside the person or thing.
 WALK_UP = ("talk", "attack", "use", "take", "eat", "destroy")
+# How long the window waits for the painting threads as it closes.
+PAINT_JOIN_SECONDS = 1.0
+
+log = logging.getLogger("sealedlore.gui")
 
 
 class _Painted(QObject):
@@ -81,6 +87,11 @@ class AreaWindow:
         self._painted.done.connect(self._area_painted)
         self._area_images: dict[object, QImage] = {}
         self._area_painting: set[object] = set()
+        # Keys whose painting failed: the plain map stands in for them until
+        # what they are painted from changes (they were painted again on
+        # every refresh, and failed again).
+        self._area_failed: set[object] = set()
+        self._paint_threads: list[threading.Thread] = []
         self._walker_images: dict[tuple[str, str], QImage | None] = {}
         self._area_pending: tuple[str, str, str] | None = None
         self._area_story: str | None = None
@@ -101,11 +112,15 @@ class AreaWindow:
         session = self.session
         if session is None or not session.map_first or session.in_private:
             if session is not None and session.in_private:
+                # A walk still going is forgotten first: finished, it would
+                # write map state during the scene.
+                self.area_view.drop_walk()
                 self.area_view.set_message("A private scene is open: the map is paused.")
             return
         if self._area_story != session.story.id:
             self._area_story = session.story.id
             self._area_images.clear()
+            self._area_failed.clear()
             self._walker_images.clear()
             self.area_view.drop_walk()  # the last story's walk is nobody's
         state = session.area_state()
@@ -123,14 +138,44 @@ class AreaWindow:
         ]
         key = self._area_key(area, session, art)
         image = self._area_images.get(key)
-        if image is None:
+        failed = key in self._area_failed
+        if image is None and not failed:
             self._paint(area, key)
         clock = session.map_clock()
         clock_text = f"Day {clock[0]}, {clock[1] // 60:02d}:{clock[1] % 60:02d}" if clock else ""
         self.area_view.set_locked(self._busy)
-        self.area_view.set_area(area, image, walkers, key=key, clock=clock_text)
+        self.area_view.set_area(
+            area,
+            image,
+            walkers,
+            key=key,
+            clock=clock_text,
+            minute=clock[1] if clock else None,
+            failed=failed,
+        )
         self.area_view.set_edge(session.edge_here())
         self._sync_marks()
+
+    def _close_area(self) -> None:
+        """The story is closing: nothing of its play view stays for the
+        next (a walk still going, the view, the painted areas and figures)."""
+        if not hasattr(self, "area_view"):
+            return
+        self.area_view.drop_walk()
+        self.area_view.set_message("No area here yet.")
+        self._area_images.clear()
+        self._area_failed.clear()
+        self._walker_images.clear()
+        self._area_pending = None
+        self._area_story = None
+
+    def _join_paint_threads(self, seconds: float = PAINT_JOIN_SECONDS) -> None:
+        """Before the window goes: wait for the painting threads, this long
+        at most, so none emits into a window being torn down."""
+        deadline = time.monotonic() + seconds
+        for thread in self._paint_threads:
+            thread.join(max(0.0, deadline - time.monotonic()))
+        self._paint_threads = [t for t in self._paint_threads if t.is_alive()]
 
     def _no_area_words(self, session) -> str:
         if not self.config.map_art:
@@ -161,7 +206,7 @@ class AreaWindow:
         )
 
     def _paint(self, area: Area, key: object) -> None:
-        if key in self._area_painting:
+        if key in self._area_painting or key in self._area_failed:
             return
         session = self.session
         info, read = session.tile_set()
@@ -174,14 +219,19 @@ class AreaWindow:
             try:
                 image = render_area(area, source, dress=dress)
             except Exception:  # noqa: BLE001 - a picture that fails is drawn plainly
+                log.exception("The area %r couldn't be painted; a plain map stands in", area.name)
                 image = QImage()
             signal.done.emit(key, image)
 
-        threading.Thread(target=paint, name="area-paint", daemon=True).start()
+        thread = threading.Thread(target=paint, name="area-paint", daemon=True)
+        self._paint_threads = [t for t in self._paint_threads if t.is_alive()] + [thread]
+        thread.start()
 
     def _area_painted(self, key: object, image: QImage) -> None:
         self._area_painting.discard(key)
         if image.isNull():
+            self._area_failed.add(key)
+            self.refresh_area()  # the plain map, said to be standing in
             return
         self._area_images[key] = image
         while len(self._area_images) > PAINTED_KEPT:
@@ -236,6 +286,18 @@ class AreaWindow:
         session = self.session
         if session is None or self._busy:
             return
+        if self.area_view.walking():
+            # A click mid-walk: the walk so far goes to the session first, so
+            # the route starts where the figure stands (it started from the
+            # walk's start, and `walked` refused it: the click was lost and
+            # the figure snapped back). A menu choice being walked up to is
+            # dropped: the click is the author's new mind.
+            self._area_pending = None
+            before = self.area_view.area.place_id if self.area_view.area is not None else None
+            self.area_view.finish_walk()
+            after = self.area_view.area.place_id if self.area_view.area is not None else None
+            if after != before:
+                return  # the walk ended on a door and went through
         steps = session.walk_route(x, y, beside=beside)
         if not steps:
             self.statusBar().showMessage("There's no way there from here.", 4000)
@@ -245,8 +307,10 @@ class AreaWindow:
 
     def _area_walked(self, steps: list) -> None:
         session = self.session
-        if session is None or self._busy:
-            return  # a job runs: the worker is the only writer of the session
+        if session is None or self._busy or session.in_private:
+            # A job runs: the worker is the only writer of the session. A
+            # private scene: the map is paused, and nothing of it is written.
+            return
         session.walked([tuple(s) for s in steps])
         door = session.door_here()
         pending, self._area_pending = self._area_pending, None
@@ -551,23 +615,22 @@ class AreaWindow:
         self.refresh_area()
         self.cast_panel.refresh_avatar()
 
-    def _draw_avatar(self, card: Character, *, new_portrait: bool = False) -> bool:
-        """Ask, with the model and price, then draw their avatar in the
-        background (the map and the card take it when it is in)."""
+    def _draw_avatar(self, card: Character) -> bool:
+        """The Cast page's button: ask, with the model and price, then draw
+        their avatar in the background (the map and the card take it when it
+        is in)."""
         session = self.session
         role = f"walker/{card.name}"
         model, price, problem = session.tile_asset_offer(role, "")
         if problem is not None:
-            if not new_portrait:
-                QMessageBox.information(self, "Draw the avatar", problem)
+            QMessageBox.information(self, "Draw the avatar", problem)
             return False
         cost = f"about ${price:.3f}" if price is not None else "at the model's listed price"
         source = "their portrait" if card.reference_images else "what their card says of them"
-        lead = f"{card.name} has a new portrait. " if new_portrait else ""
         answer = QMessageBox.question(
             self,
             "Draw the avatar?",
-            f"{lead}Draw {card.name}'s avatar for the map from {source}, by {model}, {cost}? "
+            f"Draw {card.name}'s avatar for the map from {source}, by {model}, {cost}? "
             "It counts against today's map pictures, and it walks for them on the map once "
             "it is in; the portrait stays as it is.",
         )
@@ -579,15 +642,53 @@ class AreaWindow:
 
     def _offer_avatars(self, card_ids: list[str]) -> None:
         """A new portrait landed on these cards (drawn, or chosen from a
-        file): offer an avatar drawn from it. Not when one is coming anyway:
-        a character with no avatar yet gets one under the standing approval
-        for map pictures."""
+        file): offer their avatars drawn from it, in one question, once the
+        handler that took the pictures is done (asked in the middle of it,
+        the question held up the rest of the pictures)."""
+        ids = list(card_ids)
+        QTimer.singleShot(0, self, lambda: self._ask_avatars(ids))
+
+    def _ask_avatars(self, card_ids: list[str]) -> None:
+        """One question for every card that got a new portrait, then one
+        run drawing them all (asked one by one, the second was refused:
+        "Another asset is being drawn now"). Not for a card whose avatar is
+        coming anyway: a character with no avatar yet gets one under the
+        standing approval for map pictures."""
+        session = self.session
+        if session is None or self._busy:
+            return
+        cards: list[Character] = []
         for card_id in card_ids:
             card = self._avatar_card(card_id)
-            if card is None or self._busy:
+            if card is None:
                 continue
-            session = self.session
             data, _source = session.walker_asset(card.name)
             if data is None and session.map_pictures_on:
                 continue
-            self._draw_avatar(card, new_portrait=True)
+            cards.append(card)
+        if not cards:
+            return
+        model, price, problem = session.tile_asset_offer(f"walker/{cards[0].name}", "")
+        if problem is not None:
+            return
+        cost = f"about ${price:.3f}" if price is not None else "at the model's listed price"
+        if len(cards) == 1:
+            name = cards[0].name
+            text = (
+                f"{name} has a new portrait. Draw their avatar for the map from their "
+                f"portrait, by {model}, {cost}? It counts against today's map pictures, and "
+                "it walks for them on the map once it is in; the portrait stays as it is."
+            )
+        else:
+            names = ", ".join(card.name for card in cards)
+            text = (
+                f"{len(cards)} cards have new portraits: {names}. Draw their avatars for the "
+                f"map from their portraits, by {model}, {cost} each? Each counts against "
+                "today's map pictures, and walks for them on the map once it is in; the "
+                "portraits stay as they are."
+            )
+        answer = QMessageBox.question(self, "Draw the avatars?", text)
+        if answer != QMessageBox.Yes:
+            return
+        session.redraw_tile_assets([(f"walker/{card.name}", "") for card in cards])
+        self.cast_panel.refresh_avatar()

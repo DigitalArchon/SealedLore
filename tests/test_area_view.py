@@ -59,12 +59,26 @@ def window(app, tmp_path: Path, story, cast):
 
 
 def walk_all(app, window) -> None:
+    """The walk being shown, to its end: a whole tile a step (the frames
+    between tiles are `_advance`'s)."""
     view = window.area_view
     for _ in range(500):
         if not view.walking():
             break
         view._step()
     pump(app)
+
+
+def stand(window, spots: dict[str, tuple[str, int, int]]) -> None:
+    """Everyone where the test wants them, as the session's live state."""
+    from sealedlore.models.area import LiveArea, Spot
+
+    session = window.session
+    state = session.area_state()
+    for name, (area, x, y) in spots.items():
+        state.spots[name] = Spot(area=area, x=x, y=y)
+    session.story.area_live = LiveArea(leaf_id=session.story.active_leaf_id, state=state)
+    window.refresh_area()
 
 
 def test_a_map_story_opens_on_the_area_to_walk_on(window):
@@ -308,10 +322,11 @@ def test_me_centres_either_view_on_the_author_s_character(app, window):
 
 
 def test_indoors_what_can_t_be_seen_is_shaded_and_someone_out_of_sight_is_hidden(app, window):
-    from PySide6.QtCore import QPointF
+    from PySide6.QtCore import QPointF, Qt
 
     from sealedlore.engine.area import sees
     from sealedlore.gui.area_render import px_for
+    from sealedlore.gui.area_view import SHADE_ALPHA, lit_rooms
     from sealedlore.models.area import LiveArea, Spot
 
     view = window.area_view
@@ -328,6 +343,17 @@ def test_indoors_what_can_t_be_seen_is_shaded_and_someone_out_of_sight_is_hidden
     assert not view.people["Maela Orr"].isVisible() and not view._tags["Maela Orr"].isVisible()
     px = px_for(view.area)
     assert view.person_at(QPointF(30.5 * px, 10.5 * px)) is None
+    # The shade is by room, never a hard checker of rays: Serrik's room is
+    # lit whole, and so is the room the open door at (20, 12), in his sight,
+    # leads into, though Maela in it is out of sight; the far wall, which
+    # no ray reaches, is dimmed.
+    mine, theirs = view.area.room_at(5, 10), view.area.room_at(30, 10)
+    assert mine is not None and theirs is not None and mine.index != theirs.index
+    assert lit_rooms(view.area, (5, 10)) == {mine.index, theirs.index}
+    mask = view._shade_mask
+    assert mask.pixelColor(5, 10).alpha() == 0 and mask.pixelColor(30, 10).alpha() == 0
+    assert mask.pixelColor(39, 10).alpha() == SHADE_ALPHA
+    assert view._shade.transformationMode() == Qt.SmoothTransformation
     state.spots["Maela Orr"] = Spot(area="house", x=7, y=10)
     session.story.area_live = LiveArea(leaf_id=session.story.active_leaf_id, state=state)
     window.refresh_area()
@@ -393,7 +419,7 @@ def test_walking_off_an_area_s_edge_offers_what_lies_that_way(app, window):
     assert window.composer.text() == "I set off for Hellsville."
 
 
-def test_the_tile_set_editor_lists_every_asset_and_finds_one(app, window):
+def test_the_tile_set_editor_lists_every_asset_and_finds_one(app, window, monkeypatch):
     from sealedlore.gui.tile_set_editor import ROLE, TileSetEditor
 
     dialog = TileSetEditor(window.session, window)
@@ -410,6 +436,34 @@ def test_the_tile_set_editor_lists_every_asset_and_finds_one(app, window):
         if not dialog.list.item(i).isHidden()
     ]
     assert shown == ["out-road"]
+    # The set's reader is taken once a fill, not once a row (each read
+    # through the session copied the map's art).
+    assert dialog._read is not None
+    # A picture of the author's own: the ground and walls are cropped square
+    # (they tile); a sprite or a walker keeps whatever shape it has.
+    from PySide6.QtWidgets import QFileDialog
+
+    from sealedlore.engine.picture_shapes import FREE, SQUARE
+    from sealedlore.gui import tile_set_editor
+
+    shapes: list[tuple[str, str]] = []
+
+    def crop(_parent, _path, shape):
+        shapes.append(shape)
+        return None  # the author cancels
+
+    monkeypatch.setattr(tile_set_editor, "cropped_picture", crop)
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *_a, **_k: ("/x/picture.png", ""))
+    dialog.search.setText("")
+    for role, shape in (("out-road", SQUARE), ("out-tree0", FREE), ("walker/Serrik Vaun", FREE)):
+        item = next(
+            dialog.list.item(i)
+            for i in range(dialog.list.count())
+            if dialog.list.item(i).data(ROLE) == role
+        )
+        dialog.list.setCurrentItem(item)
+        dialog._own()
+        assert shapes[-1] == shape, role
     dialog.deleteLater()
     pump(app)
 
@@ -474,6 +528,8 @@ def test_the_cast_page_shows_the_avatar_and_a_new_portrait_offers_a_new_one(
     session.pictures.add_images([drawn])
     asked.clear()
     window._take_card_pictures()
+    assert not asked  # asked once the handler that took the pictures is done
+    pump(app)
     assert asked and asked[-1].startswith("Serrik Vaun has a new portrait.")
     assert "their portrait" in asked[-1]
     session._asset_thread.join(5)
@@ -488,3 +544,357 @@ def test_the_cast_page_shows_the_avatar_and_a_new_portrait_offers_a_new_one(
     plain.select_character("char-serrik")
     assert plain.avatar.isHidden()
     assert serrik.reference_images and serrik.reference_images[0].file.startswith("images/refs/")
+
+
+def test_rooms_are_lit_by_the_doorways_in_sight_and_the_rest_dimmed(app):
+    """Three rooms in a row, the far door out of sight from the first: the
+    first two lit whole, the third dimmed, and the tiles in no room (the
+    doors, the walls) by a ray each."""
+    from sealedlore.engine.area import Area, find_rooms, openings
+    from sealedlore.gui.area_view import SHADE_ALPHA, lit_rooms, sight_mask
+
+    rows = [
+        "####################",
+        "#____#______#______#",
+        "#____+______#______#",
+        "#____#______#______#",
+        "#____#______#______#",
+        "#____#______#______#",
+        "#____#______#______#",
+        "#____#______#______#",
+        "#____#______+______#",
+        "#____#______#______#",
+        "####################",
+    ]
+    doorways = openings(rows)
+    rooms, room_of = find_rooms(rows, {}, doorways)
+    area = Area(
+        place_id="t",
+        name="Three rooms",
+        indoor=True,
+        look="floor",
+        rows=rows,
+        tile_m=1.0,
+        objects={},
+        labels={},
+        rooms=rooms,
+        room_of=room_of,
+        doorways=doorways,
+    )
+    first, second, third = (area.room_at(x, 5).index for x in (2, 8, 15))
+    assert len({first, second, third}) == 3
+    assert lit_rooms(area, (2, 2)) == {first, second}
+    assert lit_rooms(area, (8, 8)) == {first, second, third}  # both doors in sight
+    mask = sight_mask(area, (2, 2))
+    assert mask.pixelColor(2, 2).alpha() == 0 and mask.pixelColor(8, 8).alpha() == 0
+    assert mask.pixelColor(15, 5).alpha() == SHADE_ALPHA  # the third room, whole
+    assert all(mask.pixelColor(x, y).alpha() == SHADE_ALPHA for x in (14, 17) for y in (1, 9))
+    assert mask.pixelColor(5, 2).alpha() == 0  # the door in sight
+    assert mask.pixelColor(12, 8).alpha() == SHADE_ALPHA  # the door behind the wall
+    assert mask.pixelColor(19, 8).alpha() == SHADE_ALPHA  # a wall tile no ray reaches
+    assert mask.pixelColor(5, 8).alpha() == 0  # a wall tile of the first room, in sight
+
+
+def test_a_click_mid_walk_goes_on_from_where_the_figure_is(app, window):
+    """The route used to start from the walk's start while the figure was
+    mid-way, `walked` refused it, and the figure snapped back."""
+    session = window.session
+    view = window.area_view
+    before = session.area_state().spots["Serrik Vaun"]
+    steps = session.walk_route(before.x + 6, before.y)
+    assert len(steps) > 4
+    view.walk(steps)
+    view._step()
+    view._step()
+    shown = (view.held().x, view.held().y)
+    window._area_pending = ("use", "the well", "well")  # a walk-up the click gives up
+    back = tuple(steps[1])  # a tile back the way (the start is a door)
+    window._area_walk(*back, False)
+    assert view.walking()
+    assert view._walked[0] == shown  # the new route starts where the figure stood
+    me = session.area_state().spots["Serrik Vaun"]
+    assert (me.x, me.y) == shown  # and the walk so far was told
+    assert window._area_pending is None and window.composer.text() == ""
+    walk_all(app, window)
+    me = session.area_state().spots["Serrik Vaun"]
+    assert (me.x, me.y) == back
+
+
+def test_a_private_scene_forgets_a_walk_and_writes_nothing_of_the_map(app, window):
+    session = window.session
+    view = window.area_view
+    before = session.area_state().spots["Serrik Vaun"]
+    steps = session.walk_route(before.x + 6, before.y)
+    view.walk(steps)
+    view._step()
+    session.enter_private(keep="disk", provider=MockChatProvider([]), model="mock")
+    assert session.in_private
+    window.refresh_area()
+    assert not view.walking() and view.area is None
+    assert "private scene" in view.hint.text()
+    me = session.area_state().spots["Serrik Vaun"]
+    assert (me.x, me.y) == (before.x, before.y)
+    assert session.story.area_live is None
+    # A walk's end reaching the window in the scene writes nothing either.
+    window._area_walked([(before.x, before.y), steps[1]])
+    me = session.area_state().spots["Serrik Vaun"]
+    assert (me.x, me.y) == (before.x, before.y) and session.story.area_live is None
+
+
+def test_a_failed_painting_is_logged_once_and_the_plain_map_stands_in(
+    app, window, monkeypatch, caplog
+):
+    import logging
+
+    from PySide6.QtWidgets import QGraphicsSimpleTextItem
+
+    from sealedlore.gui import window_area
+
+    calls: list[int] = []
+
+    def boom(*_args, **_kwargs):
+        calls.append(1)
+        raise RuntimeError("no paint today")
+
+    view = window.area_view
+    window._join_paint_threads(5)  # the story's own first painting, done
+    pump(app)
+    monkeypatch.setattr(window_area, "render_area", boom)
+    # Something the area is painted from changes: a new key, painted anew.
+    window.session.story.defaults.map_density = "sparse"
+    assert not window._area_painting
+    with caplog.at_level(logging.ERROR, logger="sealedlore.gui"):
+        for _ in range(3):  # refreshed again and again, painted once
+            window.refresh_area()
+            window._join_paint_threads(5)
+            pump(app)
+    assert len(calls) == 1 and window._area_failed
+    assert "couldn't be painted" in caplog.text and "no paint today" in caplog.text
+    assert view.area is not None and view._background is None
+    notes = [i.text() for i in view.scene.items() if isinstance(i, QGraphicsSimpleTextItem)]
+    assert any("plain map stands in" in note for note in notes)
+    assert not any(t.is_alive() for t in window._paint_threads)
+    # What it is painted from changing paints again.
+    window._area_failed.clear()
+    window.refresh_area()
+    window._join_paint_threads(5)
+    assert len(calls) == 2
+
+
+def test_closing_the_story_leaves_nothing_of_its_play_view(app, window):
+    view = window.area_view
+    assert view.area is not None and window._area_story is not None
+    session = window.session
+    before = session.area_state().spots["Serrik Vaun"]
+    view.walk(session.walk_route(before.x + 6, before.y))
+    view._step()
+    window._close_story()
+    pump(app)
+    assert window.session is None
+    assert view.area is None and not view.walking() and view.people == {}
+    assert window._area_images == {} and window._walker_images == {}
+    assert window._area_story is None and window._area_pending is None
+
+
+def test_new_portraits_on_several_cards_are_one_question_and_one_run(app, window, monkeypatch):
+    """Asked one card at a time, halfway through the handler that took the
+    pictures, the second card was refused ("Another asset is being drawn
+    now")."""
+    from PySide6.QtWidgets import QMessageBox
+
+    from sealedlore.engine import session_area
+    from sealedlore.models.image import GeneratedImage
+    from tests.test_world_pictures import FakeImages, png
+
+    FakeImages.sent = []
+    monkeypatch.setattr(session_area, "ImageClient", FakeImages)
+    session = window.session
+    session.config.image_endpoint.base_url = "https://nano-gpt.com/api/v1"
+    session.config.image_endpoint.api_key = "k"
+    asked: list[str] = []
+
+    def question(_parent, _title, text, *_args, **_kwargs):
+        asked.append(text)
+        return QMessageBox.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", question)
+    counter = [0]
+
+    def portraits(*names: str) -> None:
+        records = []
+        for name in names:
+            card = next(c for c in session.cast if c.name == name)
+            counter[0] += 1
+            file = f"images/new-{counter[0]}.png"
+            session.pictures.write(file, png(8, 8))
+            records.append(
+                GeneratedImage(
+                    id=f"drawn-{counter[0]}",
+                    anchor_node_id=None,
+                    file=file,
+                    prompt=name,
+                    model="klein",
+                    size="1k",
+                    card_id=card.id,
+                    card_first=True,
+                )
+            )
+        session.pictures.add_images(records)
+        window._take_card_pictures()
+        pump(app)
+
+    portraits("Serrik Vaun", "Maela Orr")
+    assert len(asked) == 1
+    assert asked[0].startswith("2 cards have new portraits: Serrik Vaun, Maela Orr.")
+    assert "each" in asked[0]
+    session._asset_thread.join(10)
+    pump(app)
+    assert len(FakeImages.sent) == 2 and all(p.get("imageDataUrls") for p in FakeImages.sent)
+    assert session.walker_asset("Serrik Vaun")[1] == "changed for this story"
+    assert session.walker_asset("Maela Orr")[1] == "changed for this story"
+    # With map pictures on, a card with no avatar yet gets one under the
+    # standing approval: not asked for. The two that have one are.
+    monkeypatch.setattr(type(session), "map_pictures_on", property(lambda self: True))
+    asked.clear()
+    portraits("Serrik Vaun", "Maela Orr", "Captain Idris")
+    assert len(asked) == 1 and "Captain Idris" not in asked[0] and "Maela Orr" in asked[0]
+    session._asset_thread.join(10)
+    # Nothing is asked for cards whose portraits didn't change.
+    asked.clear()
+    window._take_card_pictures()
+    pump(app)
+    assert asked == []
+
+
+def test_the_scene_holds_the_names_over_the_top_row_and_the_ring_round_the_figure(app, window):
+    from PySide6.QtCore import QRectF
+
+    from sealedlore.gui.area_render import px_for
+    from sealedlore.gui.area_view import PAD_ABOVE, PAD_AROUND
+
+    view = window.area_view
+    area = view.area
+    px = px_for(area)
+    rect = view.scene.sceneRect()
+    assert rect.top() == -PAD_ABOVE * px and rect.left() == -PAD_AROUND * px
+    assert rect.right() == (area.width + PAD_AROUND) * px
+    assert rect.bottom() == (area.height + PAD_AROUND) * px
+    stand(window, {"Serrik Vaun": ("house", 5, 0), "Maela Orr": ("house", 7, 10)})
+    person, tag = view.people["Serrik Vaun"], view._tags["Serrik Vaun"]
+    assert rect.contains(person.sceneBoundingRect())
+    # The ring (and its pen) lies inside the figure's bounding rect: painted
+    # outside it, it smeared while walking.
+    centre, rx, ry, pen = person._ring()
+    ring = QRectF(centre.x() - rx - pen, centre.y() - ry - pen, 2 * (rx + pen), 2 * (ry + pen))
+    assert person.boundingRect().contains(ring)
+    # The name, in the view's pixels, lies above the head and inside the scene.
+    box = view._tag_box(tag)
+    scale = view.view.transform().m11()
+    head = view.view.mapFromScene(person.scenePos()).y() - person.height * scale
+    assert box.bottom() <= head + 1
+    assert box.top() >= view.view.mapFromScene(rect.topLeft()).y()
+
+
+def test_the_time_of_day_lies_over_the_area(app, window, monkeypatch):
+    from PySide6.QtGui import QColor
+
+    from sealedlore.gui.area_view import NIGHT, tint_colour
+
+    assert tint_colour(12 * 60) is None and tint_colour(8 * 60) is None
+    assert tint_colour(17 * 60) is None
+    midnight, dawn, dusk = tint_colour(0), tint_colour(6 * 60), tint_colour(19 * 60)
+    assert midnight.blue() > midnight.red()  # deep blue
+    assert dawn.red() > dawn.blue() and dusk.red() > dusk.blue()  # amber
+    assert abs((255 - midnight.red()) / (255 - NIGHT[0]) - 0.45) < 0.01  # 45% at midnight
+    assert tint_colour(7 * 60 + 30).blue() > dawn.blue()  # fading into the day
+    session = window.session
+    view = window.area_view
+    monkeypatch.setattr(type(session), "map_clock", lambda self: (2, 0))
+    window.refresh_area()
+    assert view.clock.text() == "Day 2, 00:00"
+    assert view._tint is not None and view._tint.isVisible()
+    assert view._tint.colour == midnight and view._tint.zValue() == 90
+    assert view._tint.rect().width() == view.area.width * view.people["Serrik Vaun"].px
+    monkeypatch.setattr(type(session), "map_clock", lambda self: (2, 12 * 60))
+    window.refresh_area()
+    assert not view._tint.isVisible()
+    monkeypatch.setattr(type(session), "map_clock", lambda self: None)
+    window.refresh_area()
+    assert not view._tint.isVisible() and isinstance(view._tint.colour, QColor)
+
+
+def test_walking_is_drawn_between_tiles_facing_the_way_it_goes(app, window):
+    from sealedlore.gui.area_render import px_for
+    from sealedlore.gui.area_view import STEPS_PER_SECOND
+
+    session = window.session
+    view = window.area_view
+    px = px_for(view.area)
+    before = session.area_state().spots["Serrik Vaun"]
+    steps = session.walk_route(before.x + 6, before.y)
+    finished: list[list] = []
+    view.walk_finished.connect(lambda walked: finished.append(list(walked)))
+    view.walk(steps)
+    person = view.people["Serrik Vaun"]
+    assert view.walking() and view._timer.interval() <= 20  # about 60 Hz
+    view._advance(0.5 / STEPS_PER_SECOND)
+    assert (view.held().x, view.held().y) == tuple(steps[0])  # on its tile until the next
+    (x0, y0), (x1, y1) = steps[0], steps[1]
+    assert abs(person.pos().x() - (x0 + (x1 - x0) * 0.5 + 0.5) * px) < 1e-6
+    assert abs(person.pos().y() - (y0 + (y1 - y0) * 0.5 + 1.0) * px) < 1e-6
+    assert person.mirrored == (x1 < x0)
+    assert view._tags["Serrik Vaun"].pos().x() == person.pos().x()
+    view._advance(0.6 / STEPS_PER_SECOND)  # past the tile
+    assert (view.held().x, view.held().y) == tuple(steps[1])
+    assert person.bob in (0.0, 1.0)
+    # Finished mid-way: on its tile, the tiles walked told once.
+    view.finish_walk()
+    assert not view.walking() and finished == [[tuple(steps[0]), tuple(steps[1])]]
+    assert person.pos().x() == (steps[1][0] + 0.5) * px and person.bob == 0.0
+    # Walking back faces the other way.
+    back = session.walk_route(before.x, before.y)
+    view.walk(back)
+    view._advance(0.2 / STEPS_PER_SECOND)
+    assert back[1][0] < back[0][0] and person.mirrored
+    view.drop_walk()
+    assert not view.walking() and len(finished) == 1
+
+
+def test_neighbours_names_are_lifted_apart_and_the_pointer_says_what_is_under_it(app, window):
+    from PySide6.QtCore import QPointF, Qt
+
+    from sealedlore.gui import text_size
+    from sealedlore.gui.area_render import px_for
+    from sealedlore.gui.area_view import GOLD, RED
+    from sealedlore.gui.map_art import FOG
+
+    view = window.area_view
+    px = px_for(view.area)
+    stand(window, {"Serrik Vaun": ("house", 5, 10), "Maela Orr": ("house", 6, 10)})
+    mine, theirs = view._tags["Serrik Vaun"], view._tags["Maela Orr"]
+    assert mine.lift == 0.0 and theirs.lift > 0  # the author's character's stays put
+    assert not view._tag_box(mine).intersects(view._tag_box(theirs))
+    view.view.zoom_by(1.25)
+    assert not view._tag_box(mine).intersects(view._tag_box(theirs))
+    # The tile under the pointer: gold where it can be walked to, red where
+    # not; a pointing hand over a person or a thing.
+    view._hovered(QPointF(5.5 * px, 11.5 * px))
+    assert view._hover.isVisible() and view._hover.rect().topLeft() == QPointF(5 * px, 11 * px)
+    assert view._hover.pen().color().rgb() == GOLD.rgb()
+    assert view.view.viewport().cursor().shape() == Qt.ArrowCursor
+    view._hovered(QPointF(6.5 * px, 10.5 * px))  # Maela
+    assert view.view.viewport().cursor().shape() == Qt.PointingHandCursor
+    wall = next(
+        (x, y)
+        for y in range(view.area.height)
+        for x in range(view.area.width)
+        if view.area.at(x, y) == "#"
+    )
+    view._hovered(QPointF((wall[0] + 0.5) * px, (wall[1] + 0.5) * px))
+    assert view._hover.pen().color().rgb() == RED.rgb()
+    view._left()
+    assert not view._hover.isVisible()
+    # The names follow View → Text size, and the view's ground is the
+    # region map's fog, not black.
+    assert mine.font().pointSizeF() == text_size.points(9.0)
+    assert view.view.backgroundBrush().color().name() == FOG

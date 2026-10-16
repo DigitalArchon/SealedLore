@@ -1071,6 +1071,7 @@ class MainWindow(
             self.session.close(wait_seconds=0)
             self.session.save()
         self.session = None
+        self._close_area()
         # Nothing of the story's map stays for the next: a memory chat's
         # card, postcard and decoded views (the review, Oct 15 2026).
         self.world_view.picture_reader = None
@@ -3923,6 +3924,7 @@ class MainWindow(
         if self.session is not None:
             self.session.close()
             self.session.save()
+        self._join_paint_threads()
         self._discard_provider()
         self._remember_layout()
         save_config(self.config, root=self.root)
