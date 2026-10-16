@@ -4147,10 +4147,14 @@ SPOTS THE AUTHOR MARKED ON THE MAP IN THEIR TURN:
 {marks}
 
 A place the author's turn or the passage puts at one of these spots (something
-made, found or built there): add "mark": "<the spot as written above>" to its
-entry in "places". Someone who goes to one: give their "where" as usual, and add
-"at": {"<person>": "<the spot as written above>"} to the object.""",
-    (("marks", "one line a spot: the spot and what is there"),),
+made, found or built there): add "mark" to its entry in "places", with the
+spot's coordinate copied exactly ("mark": "{example}"). Someone who goes to one:
+give their "where" as usual, and add "at": {"<person>": "{example}"} to the
+object, with that spot's coordinate.""",
+    (
+        ("marks", "one line a spot: the spot and what is there"),
+        ("example", "the first spot's coordinate, as an example"),
+    ),
 )
 
 _text(

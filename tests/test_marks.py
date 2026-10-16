@@ -99,3 +99,33 @@ def test_going_to_a_spot_in_another_area_travels_there(tmp_path, story, cast):
     assert state.walked > 0 and state.action.verb == "travel"
     # In the area already: walking is the way, and nothing is written.
     assert session.go_to_point(*tile_point(session.world(), session.area("farm"), 31, 50)) == ""
+
+
+def test_a_read_that_gives_a_spot_s_words_for_its_coordinate_still_puts_it_there(
+    tmp_path, story, cast
+):
+    # Live (Sonnet 4.6 telling, DeepSeek V4.1 Flash reading): "mark": "in the
+    # kitchen and eating area", the spot's words, not its coordinate.
+    session = make_session(tmp_path, story, cast)
+    token = session.mark_of_tile("farm", 30, 50)
+    point = marks_in(token)[0]
+    read = json.dumps(
+        {
+            "places": [
+                {
+                    "name": "The shrine",
+                    "inside": "The farm",
+                    "kind": "site",
+                    "mark": "in The farm",
+                    "quote": "A shrine stands",
+                }
+            ]
+        }
+    )
+    session.provider.responses = ["A shrine stands there.", read]
+    session.config.scene_reads = "manual"
+    list(session.send(turn(f"A shrine stands at {token}.")))
+    shrine = next(p for p in session.world().places.values() if p.name == "The shrine")
+    assert (shrine.x, shrine.y) == (point.x, point.y)
+    sent = session.provider.requests[-1].messages[-1].text
+    assert f'"mark": "{token}"' in sent  # the coordinate to copy, shown

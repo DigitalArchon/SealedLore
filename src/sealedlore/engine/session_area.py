@@ -1017,8 +1017,9 @@ class AreaRuntime:
         """The author's turn's marks, for the map read (`map_read.marks`)."""
         if author is None or author.meta.area is None or not author.meta.area.marks:
             return ""
-        lines = [f"- {m.token}: {m.words}" for m in author.meta.area.marks]
-        return self.texts.fill("map_read.marks", marks="\n".join(lines))
+        marks = author.meta.area.marks
+        lines = [f"- {m.token}: {m.words}" for m in marks]
+        return self.texts.fill("map_read.marks", marks="\n".join(lines), example=marks[0].token)
 
     def apply_marks(
         self, before: WorldMap, delta: WorldDelta, reply: dict[str, Any], author: Node | None
@@ -1033,7 +1034,11 @@ class AreaRuntime:
 
         def mark_of(value: Any) -> Mark | None:
             found = marks_in(str(value or ""))
-            return by_point.get((found[0].x, found[0].y)) if found else None
+            if found:
+                return by_point.get((found[0].x, found[0].y))
+            # Live, the read copied the spot's words ("in the kitchen and eating
+            # area") for its coordinate: with one spot marked, that is the one.
+            return marks[0] if len(marks) == 1 and str(value or "").strip() else None
 
         new = {key(p.name): p for p in delta.places if p.x is None and p.id not in before.places}
         art = self.map_art_copy()
