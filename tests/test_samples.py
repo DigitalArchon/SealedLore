@@ -231,11 +231,14 @@ def test_media_lists_only_the_views_the_map_shows(app, tmp_path: Path):
     window.open_setup = lambda *a, **k: False
     window._import_plot_file(SAMPLES / "The Ashen Reach.md")
     window.refresh_images()
-    names = [
-        window.images_panel.map_list.item(i).text().split("\n")[1]
+    items = [
+        window.images_panel.map_list.item(i).text().split("\n")
         for i in range(window.images_panel.map_list.count())
     ]
-    assert sorted(names) == ["Hollowmouth", "Shaft Nine"]
+    views = [parts[1] for parts in items if parts[0] == "Isometric view"]
+    assert sorted(views) == ["Hollowmouth", "Shaft Nine"]
+    # The sample's avatars are listed too (Oct 17 2026), one per character.
+    assert sum(parts[0] == "Avatar" for parts in items) >= 2
     window._chat_allows_close = lambda: True
     window.close()
 
