@@ -4113,6 +4113,47 @@ for _verb, _turn, _means in (
     )
 
 _text(
+    "map.turn.go",
+    MAP,
+    "Map-first: the turn Go here writes",
+    "Put in the composer when the author chooses Go here on the map: their character sets "
+    "off for that spot, the way's length on foot.",
+    "I make my way to {mark}, in {name}.",
+    (("name", "the place the spot is in"), ("mark", "the spot, as ⌖(east, north)")),
+)
+
+_text(
+    "map.marks",
+    MAP,
+    "Map-first: the spots the author marked",
+    "In the map section of the tail when the author's turn holds a spot marked on the map "
+    "(⌖(east, north), in metres): each spot, the place it is in and how far it is from the "
+    "author's character. Not measured.",
+    """\
+The author marked these spots on the map in their turn (⌖(east, north) is a point on the
+map in metres; the turn means exactly there):
+{marks}""",
+    (("marks", "one line a spot: the spot and what is there"),),
+)
+
+_text(
+    "map_read.marks",
+    MAP,
+    "Map-first: the read's marked spots",
+    "Added to the map read's request when the author's turn marks spots on the map: the "
+    "program puts a place or a person the read sets at one exactly there. Not measured.",
+    """\
+SPOTS THE AUTHOR MARKED ON THE MAP IN THEIR TURN:
+{marks}
+
+A place the author's turn or the passage puts at one of these spots (something
+made, found or built there): add "mark": "<the spot as written above>" to its
+entry in "places". Someone who goes to one: give their "where" as usual, and add
+"at": {"<person>": "<the spot as written above>"} to the object.""",
+    (("marks", "one line a spot: the spot and what is there"),),
+)
+
+_text(
     "map_read.spots",
     MAP,
     "Map-first: the read's named spots",

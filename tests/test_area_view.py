@@ -128,3 +128,64 @@ def test_an_area_is_drawn_from_its_tile_set_and_a_missing_sprite_is_still_seen(a
         cut.pixelColor(0, 0).alpha() == 255
         and cut_out(QImage(8, 8, QImage.Format_RGB32)) is not None
     )
+
+
+def test_a_spot_marked_on_either_view_goes_into_the_turn_with_a_pin(app, window):
+    from sealedlore.engine.marks import marks_in
+
+    window.composer.input.setPlainText("A lantern burns at")
+    cursor = window.composer.input.textCursor()
+    cursor.movePosition(cursor.MoveOperation.End)
+    window.composer.input.setTextCursor(cursor)
+    window._mark_tile(5, 5)
+    text = window.composer.text()
+    assert text.startswith("A lantern burns at ⌖(") and len(marks_in(text)) == 1
+    pump(app)
+    assert len(window.area_view._pins) == 1 and len(window.world_view._pins) == 1
+    # The point under the pointer is shown as a mark is written.
+    point = window.area_view.view.mapFromScene(window.area_view._pins[0].pos())
+    window.area_view._hovered(window.area_view.view.mapToScene(point))
+    assert window.area_view.coords.text() == marks_in(text)[0].token
+    window._mark_point(400.0, 8000.0)  # on the region map
+    assert len(marks_in(window.composer.text())) == 2
+    pump(app)
+    assert len(window.world_view._pins) == 2
+    window.composer.input.setPlainText("")
+    pump(app)
+    assert window.area_view._pins == [] and window.world_view._pins == []
+
+
+def test_go_here_walks_within_the_area_and_travels_to_another(app, window):
+    session = window.session
+    farm = session.area("farm")
+    from sealedlore.engine.area import tile_point
+
+    point = tile_point(session.world(), farm, 30, 50)
+    window._go_point(*point)
+    assert window.composer.text().startswith("I make my way to ⌖(")
+    me = session.area_state().spots["Serrik Vaun"]
+    assert me.area == "farm" and window.area_view.area.name == "The farm"
+    # Now in the farm: a spot in it is walked to.
+    near = tile_point(session.world(), farm, 33, 50)
+    window._go_point(*near)
+    walk_all(app, window)
+    me = session.area_state().spots["Serrik Vaun"]
+    assert abs(me.x - 33) + abs(me.y - 50) <= 1
+
+
+def test_me_centres_either_view_on_the_author_s_character(app, window):
+    view = window.area_view
+    view.view.scale(3, 3)
+    view.view.centerOn(0, 0)
+    view.centre_on_me()
+    held = view.held()
+    from sealedlore.gui.area_render import px_for
+
+    px = px_for(view.area)
+    middle = view.view.mapToScene(view.view.viewport().rect().center())
+    assert abs(middle.x() - (held.x + 0.5) * px) < px * 2
+    me = window.world_view.my_point()
+    assert me is not None
+    window.world_view.centre_on_me()
+    middle = window.world_view.view.mapToScene(window.world_view.view.viewport().rect().center())
+    assert abs(middle.x() - me[0]) < 50 and abs(-middle.y() - me[1]) < 50

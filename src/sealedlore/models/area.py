@@ -49,6 +49,20 @@ class MapAction(BaseModel):
     text: str = ""
 
 
+class Mark(BaseModel):
+    """A spot the author marked on the map in their turn (engine/marks.py):
+    the token as the turn writes it, the point in metres (east, north), the
+    place it lies in, the tile where that place has an area, and what is
+    there in words, as the storyteller is told it."""
+
+    token: str
+    x: float
+    y: float
+    place_id: str | None = None
+    spot: Spot | None = None
+    words: str = ""
+
+
 class AreaState(BaseModel):
     """Where everyone stands, and the map's clock, after a node."""
 
@@ -65,6 +79,8 @@ class AreaState(BaseModel):
     walked_words: str = ""
     # The menu choice this turn came from, if any (an author's turn only).
     action: MapAction | None = None
+    # The spots the turn marks on the map (an author's turn only).
+    marks: list[Mark] = Field(default_factory=list)
 
 
 class LiveArea(BaseModel):

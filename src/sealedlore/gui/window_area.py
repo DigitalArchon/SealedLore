@@ -19,7 +19,8 @@ from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QMessageBox
 
-from sealedlore.engine.area import Area
+from sealedlore.engine.area import Area, point_tile, tile_point
+from sealedlore.engine.marks import mark_token, marks_in
 from sealedlore.gui.area_render import TileSource, render_area, sprite_image
 from sealedlore.gui.area_view import AreaView, Walker
 from sealedlore.gui.map_tiles import person_sprite
@@ -60,6 +61,13 @@ class AreaWindow:
         self.area_view.looks_wanted.connect(self._area_looks)
         self.area_view.look_chosen.connect(self._area_look)
         self.area_view.own_look_requested.connect(self._area_own_look)
+        # Marks (⌖): a spot clicked on either view goes into the turn.
+        self.area_view.mark_requested.connect(self._mark_tile)
+        self.area_view.point_of = self._point_of_tile
+        self.world_view.mark_requested.connect(self._mark_point)
+        self.world_view.go_requested.connect(self._go_point)
+        self.world_view.me_point = self._me_point
+        self.composer.input.textChanged.connect(self._sync_marks)
         self._painted = _Painted()
         self._painted.done.connect(self._area_painted)
         self._area_images: dict[object, QImage] = {}
@@ -111,6 +119,7 @@ class AreaWindow:
         clock_text = f"Day {clock[0]}, {clock[1] // 60:02d}:{clock[1] % 60:02d}" if clock else ""
         self.area_view.set_locked(self._busy)
         self.area_view.set_area(area, image, walkers, key=key, clock=clock_text)
+        self._sync_marks()
 
     def _no_area_words(self, session) -> str:
         if not self.config.map_art:
@@ -195,6 +204,7 @@ class AreaWindow:
     def _sync_area_lock(self) -> None:
         if hasattr(self, "area_view"):
             self.area_view.set_locked(self._busy)
+            self.world_view.locked = self._busy
 
     # --- walking ----------------------------------------------------------------
 
@@ -268,6 +278,81 @@ class AreaWindow:
         cursor = self.composer.input.textCursor()
         cursor.movePosition(cursor.MoveOperation.End)
         self.composer.input.setTextCursor(cursor)
+
+    # --- marks (engine/marks.py) -----------------------------------------------------
+
+    def _point_of_tile(self, x: int, y: int) -> tuple[float, float] | None:
+        session = self.session
+        area = self.area_view.area
+        if session is None or area is None:
+            return None
+        return tile_point(session.world(), area, x, y)
+
+    def _me_point(self) -> tuple[float, float] | None:
+        session = self.session
+        if session is None or not session.map_first or session.in_private:
+            return None
+        return session.held_point()
+
+    def _mark_tile(self, x: int, y: int) -> None:
+        point = self._point_of_tile(x, y)
+        if point is not None:
+            self._insert_mark(mark_token(*point))
+
+    def _mark_point(self, x: float, y: float) -> None:
+        self._insert_mark(mark_token(x, y))
+
+    def _insert_mark(self, token: str) -> None:
+        """The mark at the composer's cursor, spaced from the words round it."""
+        editor = self.composer.input
+        cursor = editor.textCursor()
+        text = editor.toPlainText()
+        at = cursor.position()
+        before = text[at - 1] if at > 0 else ""
+        after = text[at] if at < len(text) else ""
+        piece = ("" if not before or before.isspace() else " ") + token
+        piece += "" if after and after.isspace() else " "
+        cursor.insertText(piece)
+        editor.setTextCursor(cursor)
+        self.composer.focus_input()
+
+    def _sync_marks(self) -> None:
+        """Pins on both views for the spots the turn being written marks."""
+        if not hasattr(self, "area_view"):
+            return
+        session = self.session
+        found = marks_in(self.composer.input.toPlainText()) if session is not None else []
+        points = [(m.x, m.y) for m in found]
+        self.world_view.set_marks(points)
+        area = self.area_view.area
+        tiles = []
+        if session is not None and area is not None and points:
+            world = session.world()
+            for x, y in points:
+                tile = point_tile(world, area, x, y)
+                if tile is not None:
+                    tiles.append(tile)
+        self.area_view.set_marks(tiles)
+
+    def _go_point(self, x: float, y: float) -> None:
+        """Go here, on the map: a spot in this area is walked to; one in
+        another is travelled to, the turn in the composer."""
+        session = self.session
+        if session is None or self._busy or not session.map_first:
+            return
+        area = self.area_view.area
+        spot = session.spot_of_point(x, y)
+        if area is not None and spot is not None and spot.area == area.place_id:
+            self.world_view.go_local()
+            free = area.walkable(spot.x, spot.y, area.blocked())
+            self._area_walk(spot.x, spot.y, not free)
+            return
+        text = session.go_to_point(x, y)
+        if text:
+            self._put_turn(text)
+        self.refresh_area()
+        if self._area_ready():
+            self.world_view.go_local()
 
     # --- travel -------------------------------------------------------------------
 

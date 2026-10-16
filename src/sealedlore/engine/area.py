@@ -38,6 +38,7 @@ from sealedlore.engine.world_art import (
     decked,
     fixed_in_plan,
     local_area,
+    plan_rect,
     plan_tile,
     rasterise,
     with_fixed,
@@ -915,7 +916,10 @@ def build_area(
             if f["kind"] != "building":
                 labels[f["name"][:60]] = ((f["x"] + f["w"] // 2) * k, (f["y"] + f["h"] // 2) * k)
         rows = dress(rows, look, f"{place.id}:{place.state}")
-        tile_m = OUTDOOR_TILE_M
+        # True to the map: the plan's tile over the scale (~1.5 m, up to
+        # 3 m where the scale is capped), so walking takes as long as the
+        # map is wide.
+        tile_m = plan_tile(place) / k
         exits = []
         by_name = {key(f["name"]): f for f in fixed if f["kind"] == "building"}
         grid = [list(r) for r in rows]
@@ -1600,3 +1604,43 @@ def fills_word(ch: str) -> str:
         if tile == ch:
             return word
     return ""
+
+
+# --- The map's metres and an area's tiles --------------------------------------
+# An area is its place's plan laid over the plan's rectangle on the map
+# (`plan_rect`), so a tile is a point in metres east and north, as marks
+# (engine/marks.py) and the map's places are.
+
+
+def tile_point(world: WorldMap, area: Area, x: float, y: float) -> tuple[float, float] | None:
+    """The point in metres (east, north) at the middle of tile (x, y)."""
+    place = world.places.get(area.place_id)
+    rect = plan_rect(world, place) if place is not None else None
+    if rect is None or not area.width or not area.height:
+        return None
+    west, north, width, height = rect
+    return west + (x + 0.5) * width / area.width, north - (y + 0.5) * height / area.height
+
+
+def point_tile(world: WorldMap, area: Area, mx: float, my: float) -> tuple[int, int] | None:
+    """The tile of the area at a point in metres; None outside it."""
+    place = world.places.get(area.place_id)
+    rect = plan_rect(world, place) if place is not None else None
+    if rect is None or not area.width or not area.height:
+        return None
+    west, north, width, height = rect
+    x = math.floor((mx - west) / width * area.width)
+    y = math.floor((north - my) / height * area.height)
+    if 0 <= x < area.width and 0 <= y < area.height:
+        return x, y
+    return None
+
+
+def metres_per_tile(world: WorldMap, area: Area) -> float:
+    """How wide a tile of the area is on the map (its plan's rectangle over
+    its tiles; outdoors that is the walking scale)."""
+    place = world.places.get(area.place_id)
+    rect = plan_rect(world, place) if place is not None else None
+    if rect is None or not area.width:
+        return area.tile_m
+    return rect[2] / area.width

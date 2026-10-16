@@ -126,8 +126,9 @@ def test_a_building_keeps_its_rules_every_room_reached_and_its_wall_whole():
 def test_outdoors_the_plan_is_walking_scale_and_its_road_never_runs_through_a_building():
     world, art = world_and_art()
     farm = build_area(world, art, "farm")
-    assert not farm.indoor and farm.tile_m == 1.5
     assert (farm.width, farm.height) == (40 * 3, 24 * 3)  # 10 m tiles scaled by 3
+    # A tile is as wide as the map says (walking takes as long as it is far).
+    assert not farm.indoor and farm.tile_m == pytest.approx(10 / 3)
     x0, y0, x1, y1 = farm.buildings["house"]
     inside = [farm.rows[y][x] for y in range(y0, y1 + 1) for x in range(x0, x1 + 1)]
     assert "=" not in inside

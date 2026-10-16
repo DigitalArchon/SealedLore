@@ -125,9 +125,10 @@ class WorldRuntime:
             self.texts,
             fixed={p.id for p in base.places} if base is not None else (),
         )
-        # Map-first: where everyone stands, exactly (engine/session_area.py).
-        positions = self.positions_context(path, held_id)
-        return f"{text}\n\n{positions}" if text and positions else text or positions
+        # Map-first: where everyone stands, exactly (engine/session_area.py),
+        # and the spots the author's turn marks.
+        parts = [text, self.positions_context(path, held_id), self.marks_context(path)]
+        return "\n\n".join(p for p in parts if p)
 
     def _prepare_world_read(self) -> _WorldRead | None:
         """The map read's request for the latest passage, logged; None when
@@ -171,7 +172,9 @@ class WorldRuntime:
                 author_turn=author_text,
                 passage=node.content,
                 texts=self.texts,
-                note="\n".join(n for n in (note, self.read_spots(path[:-1])) if n),
+                note="\n\n".join(
+                    n for n in (note, self.read_spots(path[:-1]), self.read_marks(author)) if n
+                ),
             ),
             params=self.side_params(model, max_tokens=WORLD_MAX_TOKENS),
         )
@@ -224,7 +227,20 @@ class WorldRuntime:
             self.map_reading = None
         people = self.map_people(self._path_to(node.id))
         delta, refused = resolve_reply(pending.before, reply, source=pending.source, people=people)
-        place_delta(pending.before, delta, self.map_held_name(node.meta.controlled_character_id))
+        path = self._path_to(node.id)
+        author = path[-2] if len(path) > 1 and path[-2].kind == "user" else None
+        # Map-first: what the author marked is put exactly there, and what
+        # has nothing else to go on goes beside where they stand.
+        self.apply_marks(pending.before, delta, reply, author)
+        near = None
+        if self.map_first:
+            near = self.held_point(self._snapshot_on(path[:-1]), pending.before)
+        place_delta(
+            pending.before,
+            delta,
+            self.map_held_name(node.meta.controlled_character_id),
+            near,
+        )
         if refused:
             self._log("world_refused", {"request_log_ref": log_ref, "refused": refused})
         node.meta.world = None if delta.empty() else delta

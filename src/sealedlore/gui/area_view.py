@@ -14,6 +14,7 @@ place, the way's length on foot. The view only shows and asks: the window
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer, Signal
@@ -62,6 +63,7 @@ WALK_KEYS = {
     Qt.Key_Plus: None,
     Qt.Key_Equal: None,
     Qt.Key_Minus: None,
+    Qt.Key_Home: None,
 }
 
 
@@ -78,6 +80,9 @@ class Walker:
 
 class _Graphics(QGraphicsView):
     clicked = Signal(QPointF, QPoint)
+    # A right-click: what can be done at a spot (mark it, walk there).
+    context = Signal(QPointF, QPoint)
+    hovered = Signal(QPointF)
     zoomed = Signal()
 
     def __init__(self) -> None:
@@ -116,6 +121,7 @@ class _Graphics(QGraphicsView):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802 - Qt's name
+        self.hovered.emit(self.mapToScene(event.position().toPoint()))
         if self._press is not None and event.buttons() & Qt.LeftButton:
             delta = event.position().toPoint() - self._press
             if self._dragging or delta.manhattanLength() > 8:
@@ -135,7 +141,8 @@ class _Graphics(QGraphicsView):
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt's name
         if self._press is not None and not self._dragging:
-            self.clicked.emit(
+            signal = self.context if event.button() == Qt.RightButton else self.clicked
+            signal.emit(
                 self.mapToScene(event.position().toPoint()), event.globalPosition().toPoint()
             )
         self._press = None
@@ -211,6 +218,32 @@ class _Tag(QGraphicsSimpleTextItem):
         super().paint(painter, option, widget)
 
 
+class _Pin(QGraphicsItem):
+    """A spot marked in the turn being written (⌖): the same size on screen
+    at any zoom."""
+
+    def __init__(self, label: str) -> None:
+        super().__init__()
+        self.label = label
+        self.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
+        self.setZValue(150)
+
+    def boundingRect(self) -> QRectF:  # noqa: N802 - Qt's name
+        return QRectF(-12, -30, 24 + 8 * len(self.label), 34)
+
+    def paint(self, painter: QPainter, _option, _widget=None) -> None:
+        painter.setPen(QPen(QColor(20, 16, 8), 2))
+        painter.setBrush(QColor(246, 207, 110))
+        painter.drawEllipse(QPointF(0, -18), 8, 8)
+        painter.drawLine(QPointF(0, -10), QPointF(0, 0))
+        painter.setPen(QColor(20, 16, 8))
+        font = QFont()
+        font.setPointSizeF(7.5)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.drawText(QRectF(-8, -26, 16, 16), Qt.AlignCenter, self.label)
+
+
 class AreaView(QWidget):
     # Walk to a tile (beside it, for a person or a thing).
     walk_requested = Signal(int, int, bool)
@@ -225,6 +258,8 @@ class AreaView(QWidget):
     looks_wanted = Signal()
     look_chosen = Signal(str)
     own_look_requested = Signal()
+    # Mark this tile in the turn being written (⌖).
+    mark_requested = Signal(int, int)
 
     def __init__(self) -> None:
         super().__init__()
@@ -267,23 +302,40 @@ class AreaView(QWidget):
         self.zoom_in.setObjectName("viewToggleButton")
         self.zoom_in.setText("+")
         self.zoom_in.setToolTip("Zoom in (+, or the mouse wheel)")
+        self.me_button = QToolButton()
+        self.me_button.setObjectName("viewToggleButton")
+        self.me_button.setText("◎ Me")
+        self.me_button.setToolTip("Centre the view on your character (Home)")
         self.hint = QLabel()
         self.hint.setObjectName("hintLabel")
         self.hint.setWordWrap(True)
+        # The map's coordinate under the pointer, as a mark is written.
+        self.coords = QLabel()
+        self.coords.setObjectName("hintLabel")
+        self.coords.setToolTip(
+            "Where the pointer is on the map, in metres east and north. Right-click a spot "
+            "to mark it in your turn."
+        )
         header = WrapRow()
         header.add_group([self.title])
         header.add_group([self.clock])
-        header.add_group([self.travel_button, self.look_button, self.zoom_out, self.zoom_in])
+        header.add_group(
+            [self.travel_button, self.look_button, self.me_button, self.zoom_out, self.zoom_in]
+        )
+        header.add_group([self.coords])
         self.view = _Graphics()
         self.scene = QGraphicsScene(self)
         self.view.setScene(self.scene)
         self.view.clicked.connect(self._clicked)
+        self.view.context.connect(self._context)
+        self.view.hovered.connect(self._hovered)
         self.view.zoomed.connect(self._zoomed)
         self.view.resized.connect(self._resized)
         # Fitted to the area until the author zooms (then it is theirs).
         self._fitted = True
         self.zoom_out.clicked.connect(lambda: self.view.zoom_by(1 / ZOOM_STEP))
         self.zoom_in.clicked.connect(lambda: self.view.zoom_by(ZOOM_STEP))
+        self.me_button.clicked.connect(self.centre_on_me)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
@@ -304,6 +356,12 @@ class AreaView(QWidget):
         self._timer.setInterval(int(1000 / STEPS_PER_SECOND))
         self._timer.timeout.connect(self._step)
         self._fitted_for: str | None = None
+        # The map's point (metres east, north) at a tile of the area shown,
+        # or None (the window sets it).
+        self.point_of: Callable[[int, int], tuple[float, float] | None] = lambda _x, _y: None
+        # Tiles marked in the turn being written, and their pins.
+        self._marks: list[tuple[int, int]] = []
+        self._pins: list[_Pin] = []
         self.set_message("No area here yet.")
 
     # --- what is shown -----------------------------------------------------------
@@ -315,6 +373,7 @@ class AreaView(QWidget):
         self._stop_walking()
         self.scene.clear()
         self.people, self._tags, self._background, self._hover = {}, {}, None, None
+        self._pins = []
         label = self.scene.addSimpleText(text)
         label.setBrush(QColor(200, 200, 210))
         self.title.setText("")
@@ -350,6 +409,7 @@ class AreaView(QWidget):
             same_place = self._fitted_for == area.place_id
             self.scene.clear()
             self.people, self._tags, self._hover = {}, {}, None
+            self._pins = []
             self._key = key
             if image is not None:
                 self._background = self.scene.addPixmap(QPixmap.fromImage(image))
@@ -376,6 +436,34 @@ class AreaView(QWidget):
             else:
                 self.view.centerOn(centre)
         self._place_people(area, walkers, px)
+        self._place_pins()
+
+    def set_marks(self, tiles: list[tuple[int, int]]) -> None:
+        """Pins on the tiles marked in the turn being written, numbered in
+        the order the turn has them."""
+        self._marks = list(tiles)
+        self._place_pins()
+
+    def _place_pins(self) -> None:
+        for pin in self._pins:
+            self.scene.removeItem(pin)
+        self._pins = []
+        if self.area is None:
+            return
+        px = px_for(self.area)
+        for number, (x, y) in enumerate(self._marks, start=1):
+            pin = _Pin(str(number))
+            pin.setPos((x + 0.5) * px, (y + 0.5) * px)
+            self.scene.addItem(pin)
+            self._pins.append(pin)
+
+    def centre_on_me(self) -> None:
+        """The view on the author's character."""
+        held = self.held()
+        if self.area is None or held is None:
+            return
+        px = px_for(self.area)
+        self.view.centerOn((held.x + 0.5) * px, (held.y + 0.5) * px)
 
     def _place_people(self, area: Area, walkers: list[Walker], px: int) -> None:
         names = {w.name for w in walkers}
@@ -458,7 +546,8 @@ class AreaView(QWidget):
             return "The story is being written: the map waits for it."
         return (
             "Click to walk there; click a person or a thing for what you can do. Walk into a "
-            "door to go through it. Travel… for another place. Drag or wheel to look around."
+            "door to go through it. Right-click a spot to mark it in your turn. Travel… for "
+            "another place. Drag or wheel to look around; ◎ Me (Home) finds you."
         )
 
     def set_locked(self, locked: bool) -> None:
@@ -575,7 +664,48 @@ class AreaView(QWidget):
         if tile is not None:
             self.walk_requested.emit(tile[0], tile[1], False)
 
-    def _person_menu(self, person: Walker, at: QPoint) -> None:
+    def _hovered(self, point: QPointF) -> None:
+        tile = self.tile_at(point)
+        spot = self.point_of(*tile) if tile is not None else None
+        self.coords.setText(f"⌖({round(spot[0])}, {round(spot[1])})" if spot else "")
+
+    def _context(self, point: QPointF, global_pos: QPoint) -> None:
+        """A right-click: mark the spot in the turn, or walk there; on a
+        person or a thing, what can be done with them too."""
+        tile = self.tile_at(point)
+        if self.area is None or tile is None:
+            return
+        person = self.person_at(point)
+        if person is not None and not person.held and not self.locked:
+            self._person_menu(person, global_pos, mark=(person.x, person.y))
+            return
+        thing = self.area.placement_at(*tile)
+        if thing is not None and not self.locked:
+            self._thing_menu(thing, global_pos, mark=tile)
+            return
+        menu = QMenu(self)
+        spot = self.point_of(*tile)
+        if spot is not None:
+            title = menu.addAction(f"⌖({round(spot[0])}, {round(spot[1])})")
+            title.setEnabled(False)
+        mark = menu.addAction("Mark this spot in your turn")
+        mark.setEnabled(spot is not None)
+        mark.triggered.connect(lambda: self.mark_requested.emit(*tile))
+        walk = menu.addAction("Walk here")
+        walk.setEnabled(not self.locked and self.area.walkable(*tile))
+        walk.triggered.connect(lambda: self.walk_requested.emit(tile[0], tile[1], False))
+        menu.exec(global_pos)
+        menu.deleteLater()
+
+    def _add_mark(self, menu: QMenu, tile: tuple[int, int] | None) -> None:
+        if tile is None:
+            return
+        menu.addSeparator()
+        mark = menu.addAction("Mark this spot in your turn")
+        mark.setEnabled(self.point_of(*tile) is not None)
+        mark.triggered.connect(lambda: self.mark_requested.emit(*tile))
+
+    def _person_menu(self, person: Walker, at: QPoint, mark=None) -> None:
         menu = QMenu(self)
         menu.setToolTipsVisible(True)
         title = menu.addAction(person.name)
@@ -588,10 +718,11 @@ class AreaView(QWidget):
         menu.addSeparator()
         walk = menu.addAction("Walk over")
         walk.triggered.connect(lambda: self.walk_requested.emit(person.x, person.y, True))
+        self._add_mark(menu, mark)
         menu.exec(at)
         menu.deleteLater()
 
-    def _thing_menu(self, thing: Placement, at: QPoint) -> None:
+    def _thing_menu(self, thing: Placement, at: QPoint, mark=None) -> None:
         menu = QMenu(self)
         title = menu.addAction(thing.name[0].upper() + thing.name[1:])
         title.setEnabled(False)
@@ -604,6 +735,7 @@ class AreaView(QWidget):
         walk = menu.addAction("Walk over")
         cx, cy = thing.centre
         walk.triggered.connect(lambda: self.walk_requested.emit(int(cx), int(cy), True))
+        self._add_mark(menu, mark)
         menu.exec(at)
         menu.deleteLater()
 
@@ -619,5 +751,8 @@ class AreaView(QWidget):
             return
         if event.key() == Qt.Key_Minus:
             self.view.zoom_by(1 / ZOOM_STEP)
+            return
+        if event.key() == Qt.Key_Home:
+            self.centre_on_me()
             return
         super().keyPressEvent(event)

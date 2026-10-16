@@ -230,3 +230,26 @@ def test_a_room_inside_a_vehicle_moves_with_it():
     world = grow(world, WorldDelta(places=[ship, bridge]))
     assert world.places[bridge.id].x is None
     assert position(world, bridge.id) == position(world, station.id)
+
+
+def test_a_place_in_a_wide_parent_is_put_by_the_author_s_character_not_off_its_far_side():
+    # The Silverwood, live (Oct 16 2026): a rift "above the flames" across
+    # the river from the village, inside a forest 16 km across. The link to
+    # its own forest was taken as a bearing, and it landed 6.6 km off,
+    # outside the forest.
+    village = place("Fernhollow", "settlement")
+    village.x, village.y, village.size = 0.0, 0.0, 800.0
+    forest = place("The Silverwood", "area")
+    forest.x, forest.y, forest.size = 2000.0, 8000.0, 16000.0
+    world = WorldMap(places={village.id: village, forest.id: forest}, where={"Elowen": village.id})
+    rift = place("The rift", "site", inside=forest.id)
+    rift.size = 300.0
+    world = grow(
+        world,
+        WorldDelta(places=[rift], links=[WorldLink(a=rift.id, b=forest.id, direction="above")]),
+        held="Elowen",
+    )
+    x, y = at(world, "The rift")
+    assert abs(x - 2000) <= 8000 and abs(y - 8000) <= 8000  # in the forest
+    assert math.hypot(x, y) <= 1000  # beside the village
+    assert math.hypot(x, y) >= (800 + 300) / 2  # and not on top of it

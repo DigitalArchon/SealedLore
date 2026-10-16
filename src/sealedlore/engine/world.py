@@ -648,12 +648,18 @@ def _prune(world: WorldMap) -> None:
     world.visited = {who: [p for p in ps if p in places] for who, ps in world.visited.items()}
 
 
-def place_delta(world: WorldMap, delta: WorldDelta, held: str | None) -> None:
+def place_delta(
+    world: WorldMap,
+    delta: WorldDelta,
+    held: str | None,
+    near_point: tuple[float, float] | None = None,
+) -> None:
     """Give the delta's new places their positions, for good, and note any
     stated distance the map's established places disagree with. `held`: the
-    author's character, beside whom a place with nothing else to go on sits."""
+    author's character, beside whom a place with nothing else to go on sits
+    (`near_point`: exactly where they stand, when the program knows)."""
     near = world.where.get(held or "")
-    place_new(world, delta.places, delta.links, near)
+    place_new(world, delta.places, delta.links, near, near_point)
     for note in geometry_conflicts(world, delta.links):
         if note not in delta.conflicts:
             delta.conflicts.append(note)

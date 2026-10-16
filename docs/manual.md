@@ -1005,6 +1005,19 @@ within reach, the doorways out.
 - **Travel…** sets off for another place on the map, with how long it takes
   on foot; the clock moves on by that much and the turn goes in the
   composer. The next passage begins on arrival.
+- **Marking a spot.** Right-click anywhere, on Local or on the map's Plan,
+  Region and World, and choose **Mark this spot in your turn**: its
+  coordinate goes into the composer at the cursor, as `⌖(412, -88)` (metres
+  east and north on the map; the readout beside the buttons shows the
+  coordinate under the pointer). Write what happens there: "A dark rift
+  opens at ⌖(412, -88)", "Elowen goes to ⌖(412, -88)". The storyteller is
+  told what is at each spot and how far it is from you, and whatever the
+  turn puts there, a new place or someone sent there, is put exactly there
+  on the map. A pin shows each spot the turn marks.
+- **Go here.** Right-click a spot on the map for **Go here**: a spot in the
+  area you are in is walked to, one elsewhere is travelled to, as Travel…
+  does.
+- **◎ Me** (or Home) centres the view on you, on Local and on the map.
 - **The clock** (Day 1, 08:00, beside the place's name) moves with walking
   and travel, and with the time the passages tell. In a story with a plot it
   is the plot's clock, so travel passes the plot's days. The storyteller is

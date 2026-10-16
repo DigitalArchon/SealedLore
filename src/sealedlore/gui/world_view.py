@@ -34,7 +34,7 @@ import math
 from collections.abc import Callable
 from html import escape
 
-from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -58,6 +58,7 @@ from PySide6.QtWidgets import (
     QGraphicsView,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QProgressBar,
     QScrollArea,
     QStackedWidget,
@@ -66,6 +67,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.marks import chain_words, place_at
 from sealedlore.engine.world_art import (
     containers,
     decked,
@@ -486,10 +488,14 @@ class _WorldGraphics(QGraphicsView):
     dragged = Signal()
     resized = Signal()
     scrolled = Signal()
+    # A right-click (scene point, screen point), and the pointer moving.
+    context = Signal(QPointF, QPoint)
+    hovered = Signal(QPointF)
 
     def __init__(self) -> None:
         super().__init__()
         self.setRenderHint(QPainter.Antialiasing, True)
+        self.setMouseTracking(True)
         self.setDragMode(QGraphicsView.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         # The middle stays where it is when the map's room changes (the
@@ -522,6 +528,14 @@ class _WorldGraphics(QGraphicsView):
         if event.button() == Qt.LeftButton:
             self.dragged.emit()  # the author moves the map: no more refitting
         super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802 - Qt's name
+        self.hovered.emit(self.mapToScene(event.position().toPoint()))
+        super().mouseMoveEvent(event)
+
+    def contextMenuEvent(self, event) -> None:  # noqa: N802 - Qt's name
+        self.context.emit(self.mapToScene(event.pos()), event.globalPos())
+        event.accept()
 
     def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802 - Qt's name
         item = self.itemAt(event.position().toPoint())
@@ -699,6 +713,32 @@ class _BadgeItem(QGraphicsItem):
         event.accept()
 
 
+class _MapPin(QGraphicsItem):
+    """A spot marked in the turn being written (⌖), at its point on the
+    map, the same size on screen at any zoom."""
+
+    def __init__(self, label: str) -> None:
+        super().__init__()
+        self.label = label
+        self.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
+        self.setZValue(9)
+
+    def boundingRect(self) -> QRectF:  # noqa: N802 - Qt's name
+        return QRectF(-12, -30, 24, 34)
+
+    def paint(self, painter: QPainter, _option, _widget=None) -> None:
+        painter.setPen(QPen(QColor(20, 16, 8), 2))
+        painter.setBrush(QColor(246, 207, 110))
+        painter.drawEllipse(QPointF(0, -18), 8, 8)
+        painter.drawLine(QPointF(0, -10), QPointF(0, 0))
+        painter.setPen(QColor(20, 16, 8))
+        font = QFont()
+        font.setPointSizeF(7.5)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.drawText(QRectF(-8, -26, 16, 16), Qt.AlignCenter, self.label)
+
+
 class WorldView(QWidget):
     back_requested = Signal()
     # The author asked for the isometric view of this area to be painted.
@@ -709,6 +749,10 @@ class WorldView(QWidget):
     choose_view_requested = Signal(str)
     # The author asked for this area's plan to be drawn again.
     redraw_requested = Signal(str)
+    # Mark a point (metres east, north) in the turn being written; set off
+    # for one.
+    mark_requested = Signal(float, float)
+    go_requested = Signal(float, float)
 
     def __init__(self) -> None:
         super().__init__()
@@ -725,6 +769,14 @@ class WorldView(QWidget):
             button.setCheckable(True)
         self.zoom_out = self._button("−", "Zoom out (-, or the mouse wheel)")
         self.zoom_in = self._button("+", "Zoom in (+, or the mouse wheel)")
+        self.me_button = self._button("◎ Me", "Centre the map on your character (Home)")
+        # The map's coordinate under the pointer, as a mark is written.
+        self.coords = QLabel()
+        self.coords.setObjectName("hintLabel")
+        self.coords.setToolTip(
+            "Where the pointer is on the map, in metres east and north. Right-click a spot "
+            "to mark it in your turn, or to go there."
+        )
         self.inside_button = self._button("See inside", "Take every roof off, to see inside")
         self.inside_button.setCheckable(True)
         self.iso_button = self._button("Isometric", ISO_TIP)
@@ -748,8 +800,9 @@ class WorldView(QWidget):
         header.add_group(
             [self.local_button, self.plan_button, self.region_button, self.world_button]
         )
-        header.add_group([self.zoom_out, self.zoom_in])
+        header.add_group([self.me_button, self.zoom_out, self.zoom_in])
         header.add_group([self.inside_button, self.iso_button, self.redraw_button])
+        header.add_group([self.coords])
         # How far the drawing has got (the author: the hint's small text said
         # neither that it was under way nor that it was done).
         self.progress_label = QLabel()
@@ -780,6 +833,9 @@ class WorldView(QWidget):
         self.view.dragged.connect(self._dragged)
         self.view.resized.connect(self._resized)
         self.view.scrolled.connect(self._scrolled)
+        self.view.context.connect(self._context)
+        self.view.hovered.connect(self._hovered)
+        self.me_button.clicked.connect(self.centre_on_me)
         self.zoom_out.clicked.connect(lambda: self.view.zoom_by(1 / ZOOM_STEP))
         self.zoom_in.clicked.connect(lambda: self.view.zoom_by(ZOOM_STEP))
         self.local_button.clicked.connect(lambda: self.go_local())
@@ -891,6 +947,14 @@ class WorldView(QWidget):
         self._fitting = False
         # The places out of the fog, whose plans may be drawn (`_build`).
         self._open: set[str] = set()
+        # Where the author's character stands, in metres (the window sets it;
+        # their place's spot otherwise), and whether the story is being
+        # written (nothing can be set off for then).
+        self.me_point: Callable[[], tuple[float, float] | None] = lambda: None
+        self.locked = False
+        # Points marked in the turn being written, and their pins.
+        self._marks: list[tuple[float, float]] = []
+        self._pins: list[_MapPin] = []
         self._build()
 
     @staticmethod
@@ -1056,6 +1120,7 @@ class WorldView(QWidget):
         self._isos = {}
         self._badges = {}
         self.people = []
+        self._pins = []
         # The card is written afresh: a redraw from a passage that changed the
         # place under it (burning, someone come) kept the old card, since
         # the place's id was the same (the review, Oct 15 2026).
@@ -1095,7 +1160,68 @@ class WorldView(QWidget):
             pad = max(bounds.width(), bounds.height(), 200.0) * 0.5
             self.scene.setSceneRect(bounds.adjusted(-pad, -pad, pad, pad))
         self._build_veil()
+        self._place_pins()
         self._update_detail()
+
+    # --- marks and finding the character --------------------------------------
+
+    def set_marks(self, points: list[tuple[float, float]]) -> None:
+        """Pins on the points marked in the turn being written."""
+        self._marks = list(points)
+        self._place_pins()
+
+    def _place_pins(self) -> None:
+        for pin in self._pins:
+            if pin.scene() is self.scene:
+                self.scene.removeItem(pin)
+        self._pins = []
+        for number, (x, y) in enumerate(self._marks, start=1):
+            pin = _MapPin(str(number))
+            pin.setPos(x, -y)
+            self.scene.addItem(pin)
+            self._pins.append(pin)
+
+    def my_point(self) -> tuple[float, float] | None:
+        point = self.me_point()
+        if point is not None:
+            return point
+        here = self.here()
+        return position(self.world, here) if here else None
+
+    def centre_on_me(self) -> None:
+        """The map's middle on the author's character, at the zoom it is at."""
+        point = self.my_point()
+        if point is None:
+            return
+        self._fitted = None
+        self.view.centerOn(QPointF(point[0], -point[1]))
+        self._update_detail()
+
+    def _hovered(self, point: QPointF) -> None:
+        self.coords.setText(f"⌖({round(point.x())}, {round(-point.y())})")
+
+    def _context(self, point: QPointF, global_pos: QPoint) -> None:
+        """A right-click on the map: mark the spot in the turn, or set off
+        for it (a known place there, out of the fog)."""
+        x, y = point.x(), -point.y()
+        place_id = place_at(self.world, self.art, x, y)
+        if place_id is not None and place_id not in self._open:
+            place_id = None
+        menu = QMenu(self)
+        title = menu.addAction(f"⌖({round(x)}, {round(y)})")
+        title.setEnabled(False)
+        if place_id is not None:
+            where = menu.addAction(chain_words(self.world, place_id))
+            where.setEnabled(False)
+        mark = menu.addAction("Mark this spot in your turn")
+        mark.triggered.connect(lambda: self.mark_requested.emit(x, y))
+        go = menu.addAction("Go here")
+        go.setEnabled(place_id is not None and not self.locked and self.here() is not None)
+        go.setToolTip("Set off for this spot: the way's length on foot moves the clock")
+        go.triggered.connect(lambda: self.go_requested.emit(x, y))
+        menu.setToolTipsVisible(True)
+        menu.exec(global_pos)
+        menu.deleteLater()
 
     def _build_veil(self) -> None:
         """The fog over known country the character isn't in now, and the
@@ -2014,9 +2140,9 @@ class WorldView(QWidget):
             if on:
                 widget.hide()
         self.inside_button.setVisible(not on and self.inside_button.isVisible())
-        # The play view has its own zoom.
-        self.zoom_out.setVisible(not on)
-        self.zoom_in.setVisible(not on)
+        # The play view has its own zoom, finding and coordinates.
+        for widget in (self.zoom_out, self.zoom_in, self.me_button, self.coords):
+            widget.setVisible(not on)
         if on:
             self.iso_button.hide()
             self.redraw_button.hide()
@@ -2127,6 +2253,8 @@ class WorldView(QWidget):
             self.view.zoom_by(ZOOM_STEP)
         elif event.key() == Qt.Key_Minus and not event.modifiers() & Qt.ControlModifier:
             self.view.zoom_by(1 / ZOOM_STEP)
+        elif event.key() == Qt.Key_Home:
+            self.centre_on_me()
         else:
             super().keyPressEvent(event)
 

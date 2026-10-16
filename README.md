@@ -84,7 +84,8 @@ A story can keep a map (Story → Setup → About), and then it is played on it:
 you walk where you like in each place, tile by tile, with no model call;
 click someone to talk to them, watch them unseen or attack, click a thing to
 use, take, eat or destroy it, and travel between places, the way's length
-moving the story's clock. The map is drawn in an AI-drawn tile set and is
+moving the story's clock. Right-click a spot to put its coordinate in your
+turn and say what happens there. The map is drawn in an AI-drawn tile set and is
 exact, so the storyteller is told exactly where everyone stands and what is
 within reach. Every building is furnished, as sparsely or as fully as you
 like, and every character gets a little sprite drawn from their portrait.

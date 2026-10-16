@@ -8,10 +8,16 @@ the old ones, and they are as fixed as the rest from then on.
 Positions are metres east (x) and north (y) of the first place. What the
 story said decides them, in this order:
 
-1. a link to a place already placed: its direction and distance, as the text
-   gave them ("five miles north", "two hours on foot", "around back");
-2. a place it is inside: somewhere within its parent;
-3. otherwise beside where the author's character is, or the last place.
+1. a point the author marked on the map (`at`: a mark in their turn);
+2. a link to a place already placed: its direction and distance, as the text
+   gave them ("five miles north", "two hours on foot", "around back"). A
+   link to the place's own container ("a rift above the forest") is not
+   one: being inside says where it is;
+3. a place it is inside: somewhere within its parent, as near the author's
+   character as there is room when they are in or at it (a forest 16 km
+   across catching fire "across the river" from the village burns by the
+   village, not 6 km off);
+4. otherwise beside where the author's character is, or the last place.
 
 A vehicle is the exception: it moves, so it has no spot of its own, nor
 has anything inside it. It is wherever the story last put it (`inside`: the
@@ -229,14 +235,68 @@ def _spot(
     return origin[0] + dx, origin[1] + dy
 
 
+def _ancestors(places: dict[str, WorldPlace], place: WorldPlace) -> set[str]:
+    out: set[str] = set()
+    current = places.get(place.inside or "")
+    while current is not None and current.id not in out:
+        out.add(current.id)
+        current = places.get(current.inside or "")
+    return out
+
+
+def _within(
+    parent: WorldPlace,
+    size: float,
+    others: Sequence[WorldPlace],
+    origin: tuple[float, float],
+    name: str,
+) -> tuple[float, float] | None:
+    """The free spot inside `parent` nearest `origin`, or None when there is
+    none. The parent is its square on the map, as its plan is drawn."""
+    half = size_of(parent) / 2 - size / 2
+    if half <= 0:
+        return None
+    px, py = parent.x, parent.y  # type: ignore[assignment]
+
+    def inside(x: float, y: float) -> bool:
+        return abs(x - px) <= half + 1e-6 and abs(y - py) <= half + 1e-6
+
+    sx = min(max(origin[0], px - half), px + half)
+    sy = min(max(origin[1], py - half), py + half)
+    if _clear(sx, sy, size, others):
+        return sx, sy
+    step = max(size / 2, 1.0)
+    start = _stable_angle(name)
+    for ring in range(1, 160):
+        reach = step * ring
+        if reach > 2.9 * half:
+            break
+        for i in range(24):
+            dx, dy = _offset(start + 15 * i, reach)
+            x, y = sx + dx, sy + dy
+            if inside(x, y) and _clear(x, y, size, others):
+                return x, y
+    return None
+
+
+def _near_enough(parent: WorldPlace, point: tuple[float, float]) -> bool:
+    """`point` (where the author's character is) in the parent, or at its
+    edge: within a quarter of its width outside it."""
+    reach = size_of(parent) / 2 * 1.25
+    return abs(point[0] - parent.x) <= reach and abs(point[1] - parent.y) <= reach  # type: ignore[operator]
+
+
 def place_one(
     places: dict[str, WorldPlace],
     links: Sequence[WorldLink],
     place: WorldPlace,
     near: str | None,
+    near_point: tuple[float, float] | None = None,
 ) -> None:
     """Give `place` its position and size, among `places` already placed.
-    `near`: the place the story is at, for a place with nothing else to go on."""
+    `near`: the place the story is at, for a place with nothing else to go
+    on; `near_point`: where the author's character stands, in metres, when
+    the program knows (map-first play), else that place's spot."""
     parent = places.get(place.inside or "")
     if parent is not None and parent.x is None:
         parent = None
@@ -249,12 +309,15 @@ def place_one(
         # Top level: kept apart from every placed place that has no parent.
         others = [p for p in places.values() if p.x is not None and p.inside not in places]
 
+    above = _ancestors(places, place)
     for link in links:
         if place.id not in (link.a, link.b):
             continue
         other = places.get(link.b if link.a == place.id else link.a)
         if other is None or other.x is None or other.id == place.id:
             continue
+        if other.id in above or place.id in _ancestors(places, other):
+            continue  # its container (or something in it): inside says where
         angle = bearing(link.direction)
         if angle is not None and link.b != place.id:
             angle = (angle + 180) % 360  # the link runs from this place to the other
@@ -267,6 +330,29 @@ def place_one(
         )
         return
 
+    if near_point is None:
+        anchor = places.get(near or "")
+        if anchor is not None and anchor.x is not None and anchor.y is not None:
+            near_point = (anchor.x, anchor.y)
+    if parent is not None and near_point is not None and _near_enough(parent, near_point):
+        # Where the story is: everything placed but what it is in, and what
+        # is as big as its parent (a range of hills it lies in by position).
+        crowd = [
+            p
+            for p in places.values()
+            if p.x is not None
+            and p.y is not None
+            and p.id != place.id
+            and p.id not in above
+            and size_of(p) < size_of(parent)
+            and abs(p.x - parent.x) <= (size_of(parent) + size_of(p)) / 2  # type: ignore[operator]
+            and abs(p.y - parent.y) <= (size_of(parent) + size_of(p)) / 2  # type: ignore[operator]
+            and not moves(places, p)
+        ]
+        spot = _within(parent, size, crowd, near_point, place.name)
+        if spot is not None:
+            place.x, place.y = spot
+            return
     if parent is not None:
         radius = size_of(parent) / 2 - size / 2
         if radius <= 0 or not others:
@@ -326,7 +412,11 @@ def place_one(
 
 
 def place_new(
-    world: WorldMap, places: Sequence[WorldPlace], links: Sequence[WorldLink], near: str | None
+    world: WorldMap,
+    places: Sequence[WorldPlace],
+    links: Sequence[WorldLink],
+    near: str | None,
+    near_point: tuple[float, float] | None = None,
 ) -> None:
     """Position every place in `places` that has none yet, on top of `world`.
     Parents before children, and in the order the story named them."""
@@ -347,10 +437,10 @@ def place_new(
             if parent is not None and parent.x is None and parent in waiting:
                 still.append(place)  # its parent first
                 continue
-            place_one(known, all_links, place, near)
+            place_one(known, all_links, place, near, near_point)
         if len(still) == len(waiting):
             for place in still:  # a parent that can't be placed first: place anyway
-                place_one(known, all_links, place, near)
+                place_one(known, all_links, place, near, near_point)
             break
         waiting = still
 
