@@ -12,8 +12,16 @@ is (`pixel_scaled`), never smoothed into a blur.
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import QDialog, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtGui import QIcon, QImage, QPixmap
+from PySide6.QtWidgets import (
+    QDialog,
+    QLabel,
+    QMenu,
+    QPushButton,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from sealedlore.gui.wrap_row import WrapRow
 
@@ -60,6 +68,10 @@ class AvatarView(QWidget):
     file, go back to the set's own."""
 
     draw_requested = Signal()
+    # Drawn from words the author gives (not the portrait).
+    draw_with_words_requested = Signal()
+    # One of the avatars kept for them (a map picture's id) walks for them.
+    choose_requested = Signal(str)
     add_requested = Signal()
     reset_requested = Signal()
 
@@ -84,6 +96,20 @@ class AvatarView(QWidget):
             "against today's map pictures."
         )
         self.draw_button.clicked.connect(self.draw_requested)
+        self.words_button = QPushButton("Draw with instructions…")
+        self.words_button.setToolTip(
+            "Say what the avatar should look like, in a few words, and it is drawn from them "
+            "(not the portrait); the model and price are shown first. Every avatar drawn is "
+            "kept: choose among them below, or in Media."
+        )
+        self.words_button.clicked.connect(self.draw_with_words_requested)
+        self.choose_button = QToolButton()
+        self.choose_button.setText("Choose a drawn avatar ▾")
+        self.choose_button.setToolTip("The avatars drawn or chosen for them so far: pick one")
+        self.choose_button.setPopupMode(QToolButton.InstantPopup)
+        self.choose_menu = QMenu(self.choose_button)
+        self.choose_button.setMenu(self.choose_menu)
+        self.choose_button.setVisible(False)
         self.add_button = QPushButton("Choose a file…")
         self.add_button.setToolTip(
             "A picture from your computer as the avatar: a small figure on a plain white or "
@@ -94,7 +120,13 @@ class AvatarView(QWidget):
         self.reset_button.setToolTip("One of the tile set's own figures walks for them again")
         self.reset_button.clicked.connect(self.reset_requested)
         buttons = WrapRow(spacing=6, group_spacing=6)
-        for button in (self.draw_button, self.add_button, self.reset_button):
+        for button in (
+            self.draw_button,
+            self.words_button,
+            self.choose_button,
+            self.add_button,
+            self.reset_button,
+        ):
             buttons.add_group([button])
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 4)
@@ -127,10 +159,28 @@ class AvatarView(QWidget):
         self.reset_button.setVisible(source == "changed for this story")
         self.set_drawing(self._drawing)
 
+    def set_choices(self, choices: list[tuple[str, QImage | None, str, bool]]) -> None:
+        """The avatars kept for them: (picture id, the figure, how it came to
+        be, whether it walks for them now); the menu offers each, the one in
+        use ticked. Hidden with none."""
+        self.choose_menu.clear()
+        for picture_id, image, how, in_use in choices:
+            action = self.choose_menu.addAction(how + (" (in use)" if in_use else ""))
+            if image is not None and not image.isNull():
+                action.setIcon(QIcon(QPixmap.fromImage(pixel_scaled(image, 48))))
+            action.setCheckable(True)
+            action.setChecked(in_use)
+            action.setData(picture_id)
+            action.triggered.connect(
+                lambda _c=False, pid=picture_id: self.choose_requested.emit(pid)
+            )
+        self.choose_button.setVisible(bool(choices))
+
     def set_drawing(self, drawing: bool) -> None:
-        """Whether this avatar is being drawn now (the button waits)."""
+        """Whether this avatar is being drawn now (the buttons wait)."""
         self._drawing = drawing
         self.draw_button.setEnabled(not drawing)
+        self.words_button.setEnabled(not drawing)
         self.source.setText(
             "Drawing the avatar…" if drawing else SOURCES.get(self._source, self._source)
         )

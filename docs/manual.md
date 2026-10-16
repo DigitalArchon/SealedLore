@@ -863,7 +863,12 @@ says where it came from. Click it to see it whole, pixel for pixel. **Draw
 the avatar…** (**Draw the avatar again…** once there is one) has the map's
 sprite model draw it from the portrait, or from what the card says of them
 when they have none; the model and price are shown first, and it counts
-against the day's map pictures. **Choose a file…** takes a figure of your
+against the day's map pictures. **Draw with instructions…** asks what the
+avatar should look like, in your own words, and draws it from them instead
+of the portrait. Every avatar drawn or chosen is kept: **Choose a drawn
+avatar ▾** lists them, the one walking for them ticked, and the Media tab
+lists them under Map as "Avatar", the one in use marked, with **Use as the
+avatar** on the others. **Choose a file…** takes a figure of your
 own (on a plain white or transparent ground), and **Back to the set's own**
 puts the tile set's figure back. When new portraits land on cards (drawn
 or chosen from a file) whose characters already have an avatar, you are
@@ -979,7 +984,14 @@ changes something (a barn blown up, a truck burnt out), it is drawn again as
 it now is, as an edit of how it looked, so it is still the same barn, and
 the local map shows it as it is now. A station or ship is drawn as its decks.
 While it draws, the map says how far it has got ("Drawing the map: 3 of 12"),
-and says when it is done. A branch shows the map as it stands on that branch.
+and says when it is done. A piece the model got wrong twice is given up on
+and named there ("The map is drawn, but not The dark rift"), with **Try
+again** beside it. A branch shows the map as it stands on that branch.
+
+A place the story adds inside the area you are in (a rift opened at a
+marked spot, a well, a shrine) is marked on the play view where it stands,
+with its name over it and its small picture once that is drawn; a building
+is drawn into the ground itself.
 
 With **Draw map pictures with an image model** ticked (Settings → Images, off
 until you tick it, and needing **Draw the map** on; Qwen Image unless you

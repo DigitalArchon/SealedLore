@@ -196,9 +196,9 @@ def clean_svg(text: str) -> str | None:
     none worth keeping. Anything else (scripts, links, images, text, styles,
     entities) never reaches the view, whatever the model wrote."""
     match = re.search(r"<svg\b.*?</svg>", text or "", re.S | re.I)
-    if match is None or len(match.group(0)) > MAX_SVG_CHARS:
+    source = match.group(0) if match is not None else _fragment_as_svg(text or "")
+    if source is None or len(source) > MAX_SVG_CHARS:
         return None
-    source = match.group(0)
     if re.search(r"<!(DOCTYPE|ENTITY)", source, re.I):
         return None
     try:
@@ -210,6 +210,18 @@ def clean_svg(text: str) -> str | None:
     if count == 0:
         return None
     return ElementTree.tostring(out, encoding="unicode")
+
+
+def _fragment_as_svg(text: str) -> str | None:
+    """A reply that drew shapes with no <svg> root (a "<g>…</g>" in a
+    ```svg fence: GLM 5.3 Flash answered a rift so twice, live, and the
+    plain shapes were thrown away), wrapped as the document the prompt
+    asked for; None when there are no shapes in it."""
+    fenced = re.search(r"```[a-zA-Z]*\s*(.*?)```", text, re.S)
+    body = (fenced.group(1) if fenced is not None else text).strip()
+    if not re.search(r"<(g|rect|circle|ellipse|polygon|polyline|path|line)\b", body, re.I):
+        return None
+    return f'<svg xmlns="{_SVG_NS}" viewBox="0 0 64 64">{body}</svg>'
 
 
 def cleaned_art(art: WorldArt) -> WorldArt:

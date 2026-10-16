@@ -1250,3 +1250,22 @@ def test_no_fog_and_no_legend_when_the_character_is_nowhere_on_the_map(app):
     assert view._veil is None and view.legend.isHidden()
     view.set_world(WorldMap(), WorldArt(), "Jane")
     assert view._veil is None and view.legend.isHidden()
+
+
+def test_the_map_says_what_it_gave_up_drawing_and_offers_to_try_again(app):
+    """Live (Oct 17 2026), a rift's sprite was refused twice and the map
+    said "✓ The map is drawn": now it names what it gave up on, with Try
+    again, and only while nothing is being drawn."""
+    view = WorldView()
+    view.art_on = True
+    view.set_progress(0, 0, "", ["The dark rift"])
+    assert view.progress_label.text() == "The map is drawn, but not The dark rift"
+    assert not view.retry_button.isHidden()
+    fired = []
+    view.retry_requested.connect(lambda: fired.append(True))
+    view.retry_button.click()
+    assert fired
+    view.set_progress(1, 3, "", ["The dark rift"])  # drawing again: no button meanwhile
+    assert view.retry_button.isHidden() and view.progress_label.text() == "Drawing the map: 1 of 3"
+    view.set_progress(0, 0)
+    assert view.progress_label.text() == "✓ The map is drawn" and view.retry_button.isHidden()

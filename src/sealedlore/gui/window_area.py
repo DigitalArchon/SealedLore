@@ -20,14 +20,16 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QImage
-from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
+from PySide6.QtWidgets import QDialog, QFileDialog, QInputDialog, QMessageBox
 
 from sealedlore.engine.area import Area, point_tile, tile_point
 from sealedlore.engine.marks import mark_token, marks_in
 from sealedlore.engine.picture_shapes import FREE
+from sealedlore.engine.world import key
 from sealedlore.gui.area_render import TileSource, render_area, sprite_image
-from sealedlore.gui.area_view import AreaView, Walker
+from sealedlore.gui.area_view import AreaView, PlaceMark, Walker
 from sealedlore.gui.crop_dialog import cropped_picture
+from sealedlore.gui.map_art import picture_sprite, pixel_art
 from sealedlore.gui.map_tiles import person_sprite
 from sealedlore.gui.ref_images import PICTURE_FILTER
 from sealedlore.gui.tile_set_editor import TileSetEditor
@@ -97,6 +99,7 @@ class AreaWindow:
         self._area_failed: set[object] = set()
         self._paint_threads: list[threading.Thread] = []
         self._walker_images: dict[tuple[str, str], QImage | None] = {}
+        self._place_images: dict[tuple[str, str], QImage | None] = {}
         self._area_pending: tuple[str, str, str] | None = None
         self._area_story: str | None = None
 
@@ -126,6 +129,7 @@ class AreaWindow:
             self._area_images.clear()
             self._area_failed.clear()
             self._walker_images.clear()
+            self._place_images.clear()
             self.area_view.drop_walk()  # the last story's walk is nobody's
         state = session.area_state()
         held = session.held_name()
@@ -140,6 +144,7 @@ class AreaWindow:
             for name, spot in state.spots.items()
             if spot.area == me.area
         ]
+        places = self._place_marks(area, session, art)
         key = self._area_key(area, session, art)
         image = self._area_images.get(key)
         failed = key in self._area_failed
@@ -156,6 +161,7 @@ class AreaWindow:
             clock=clock_text,
             minute=clock[1] if clock else None,
             failed=failed,
+            places=places,
         )
         self.area_view.set_edge(session.edge_here())
         self.area_view.set_offer(session.tile_set_offer(art))
@@ -172,6 +178,7 @@ class AreaWindow:
         self._area_images.clear()
         self._area_failed.clear()
         self._walker_images.clear()
+        self._place_images.clear()
         self._area_pending = None
         self._area_story = None
 
@@ -245,6 +252,42 @@ class AreaWindow:
         while len(self._area_images) > PAINTED_KEPT:
             self._area_images.pop(next(iter(self._area_images)))
         self.refresh_area()
+
+    def _place_marks(self, area: Area, session, art) -> list[PlaceMark]:
+        """The map's places in the area that the picture doesn't draw as
+        buildings (a rift, a well, a clearing): marked where they stand, with
+        their sprite when the map has one."""
+        world = session.world()
+        by_name = {key(p.name): p for p in world.places.values()}
+        boxed = {key(n) for n in area.names.values()} | {key(area.name)}
+        marks: list[PlaceMark] = []
+        for name, (x, y) in area.labels.items():
+            if key(name) in boxed:
+                continue
+            place = by_name.get(key(name))
+            image = self._place_image(place, art) if place is not None else None
+            marks.append(PlaceMark(name, x, y, image, place.what if place is not None else ""))
+        return marks
+
+    def _place_image(self, place, art) -> QImage | None:
+        """A place's sprite for the play view: its map picture cut out, else
+        the map's pixel-art sprite, else None (a marker stands for it)."""
+        session = self.session
+        picture = art.picture_shown("place", place.id, place.state)
+        sprite = art.sprite_shown(place.id, place.state) if picture is None else None
+        which = picture.id if picture is not None else sprite.id if sprite is not None else ""
+        if not which:
+            return None
+        cache_key = (place.id, which)
+        if cache_key in self._place_images:
+            return self._place_images[cache_key]
+        image: QImage | None = None
+        if picture is not None:
+            image = picture_sprite(picture.id, 96, lambda: session.pictures.read(picture.file))
+        elif sprite is not None:
+            image = pixel_art(sprite.svg)
+        self._place_images[cache_key] = image
+        return image
 
     def _walker_image(self, name: str, art) -> QImage | None:
         """A person's sprite: drawn from their portrait for this story, else
@@ -538,6 +581,7 @@ class AreaWindow:
         finally:
             dialog.deleteLater()
         self._walker_images.clear()
+        self._place_images.clear()
         self.refresh_area()
         if result == TileSetGallery.DESIGN:
             self._area_own_look()
@@ -595,6 +639,7 @@ class AreaWindow:
         finally:
             dialog.deleteLater()
         self._walker_images.clear()
+        self._place_images.clear()
         self.refresh_area()
         self.cast_panel.refresh_avatar()
 
@@ -604,6 +649,7 @@ class AreaWindow:
         """Called once the Cast page is made: each card's avatar on the map
         (gui/avatar_view.py) is answered here."""
         self.cast_panel.avatar_of = self._avatar_of
+        self.cast_panel.avatar_choices_of = self._avatar_choices
         self.cast_panel.avatar_requested.connect(self._on_avatar_request)
         self.cast_panel.portrait_added.connect(lambda card_id: self._offer_avatars([card_id]))
 
@@ -623,6 +669,23 @@ class AreaWindow:
             session.tile_asset_drawing == f"walker/{name}",
         )
 
+    def _avatar_choices(self, name: str) -> list[tuple[str, QImage | None, str, bool]]:
+        """Every avatar kept for a person, newest first: (picture id, the
+        figure, how it came to be, whether it walks for them now)."""
+        session = self.session
+        if session is None or not session.map_first:
+            return []
+        in_use = session.walker_file(name) or ""
+        out = []
+        for picture in session.walker_pictures(name):
+            image = sprite_image(session.pictures.read(picture.file))
+            how = f"drawn by {picture.model}" if picture.model else "your own picture"
+            when = picture.made_at[:10]
+            out.append(
+                (picture.id, image, f"{how}, {when}" if when else how, picture.file == in_use)
+            )
+        return out
+
     def _avatar_card(self, card_id: str) -> Character | None:
         session = self.session
         card = session.card(card_id) if session is not None and session.map_first else None
@@ -639,7 +702,13 @@ class AreaWindow:
         if what == "draw":
             self._draw_avatar(card)
             return
-        if what == "file":
+        if what == "words":
+            self._draw_avatar(card, ask_words=True)
+            return
+        if what.startswith("use:"):
+            if not session.use_walker_picture(card.name, what[4:]):
+                return
+        elif what == "file":
             path, _ = QFileDialog.getOpenFileName(
                 self, f"An avatar for {card.name}", str(Path.home()), PICTURE_FILTER
             )
@@ -658,21 +727,42 @@ class AreaWindow:
         else:
             return
         self._walker_images.clear()
+        self._place_images.clear()
         self.refresh_area()
         self.cast_panel.refresh_avatar()
 
-    def _draw_avatar(self, card: Character) -> bool:
+    def _draw_avatar(self, card: Character, *, ask_words: bool = False) -> bool:
         """The Cast page's button: ask, with the model and price, then draw
         their avatar in the background (the map and the card take it when it
-        is in)."""
+        is in). `ask_words`: the author says what it should look like first
+        (drawn from those words, not the portrait); every avatar drawn is
+        kept, and the author chooses among them."""
         session = self.session
         role = f"walker/{card.name}"
-        model, price, problem = session.tile_asset_offer(role, "")
+        words = ""
+        if ask_words:
+            words, ok = QInputDialog.getMultiLineText(
+                self,
+                "Draw the avatar with instructions",
+                f"What should {card.name}'s avatar look like? A few words of their looks, "
+                "clothes and bearing; it is drawn from these, in the tile set's style.",
+                "",
+            )
+            words = " ".join(words.split())
+            if not ok or not words:
+                return False
+        model, price, problem = session.tile_asset_offer(role, words)
         if problem is not None:
             QMessageBox.information(self, "Draw the avatar", problem)
             return False
         cost = f"about ${price:.3f}" if price is not None else "at the model's listed price"
-        source = "their portrait" if card.reference_images else "what their card says of them"
+        source = (
+            "your instructions"
+            if words
+            else "their portrait"
+            if card.reference_images
+            else "what their card says of them"
+        )
         answer = QMessageBox.question(
             self,
             "Draw the avatar?",
@@ -682,7 +772,7 @@ class AreaWindow:
         )
         if answer != QMessageBox.Yes:
             return False
-        started = session.redraw_tile_asset(role, "")
+        started = session.redraw_tile_asset(role, words)
         self.cast_panel.refresh_avatar()
         return started
 

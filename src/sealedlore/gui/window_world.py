@@ -48,6 +48,7 @@ class WorldWindow:
         self.world_view.own_isometric_requested.connect(self._own_isometric)
         self.world_view.choose_view_requested.connect(self._choose_isometric)
         self.world_view.redraw_requested.connect(self._redraw_plan)
+        self.world_view.retry_requested.connect(self._retry_map_art)
         self.world_button = QToolButton()
         self.world_button.setObjectName("viewToggleButton")
         self.world_button.setText("Map")
@@ -184,6 +185,16 @@ class WorldWindow:
     def _on_art_timer(self) -> None:
         self.refresh_world(keep_view=True)
 
+    def _retry_map_art(self) -> None:
+        """Try again on the Map page: what the map gave up drawing is asked
+        for once more."""
+        session = self.session
+        if session is None or self._busy:
+            return
+        session.retry_map_art()
+        self._sync_progress()
+        self._progress_timer.start()
+
     def _sync_progress(self) -> None:
         """The map's progress from the session; read again while it draws,
         until it is done (`map_art_progress`)."""
@@ -195,7 +206,8 @@ class WorldWindow:
         self.world_view.art_on = self.config.map_art
         reading = session.map_reading
         activity = f"Reading the passage for the map with {reading}…" if reading else ""
-        self.world_view.set_progress(done, total, activity)
+        failed = session.map_art_failed() if not total and not activity else []
+        self.world_view.set_progress(done, total, activity, failed)
         painting = session.isometric_painting
         if painting != self.world_view.isometric_painting:
             self.world_view.isometric_painting = painting

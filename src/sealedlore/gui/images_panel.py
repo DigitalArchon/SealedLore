@@ -262,16 +262,27 @@ class ImagesPanel(QWidget):
         counts["Story"] = self.list.count()
         self.map_list.clear()
         for picture in sorted(map_pictures or [], key=lambda p: p.made_at, reverse=True):
-            kind = "Isometric view" if picture.subject == "isometric" else "Postcard"
+            kind = {"isometric": "Isometric view", "postcard": "Postcard", "walker": "Avatar"}.get(
+                picture.subject, "Picture"
+            )
             on_map = picture.id in (shown_views or set())
-            item = QListWidgetItem(f"{kind}\n{picture.name}" + ("\n✓ on the map" if on_map else ""))
+            walker = picture.subject == "walker"
+            marked = (
+                "\n✓ walks on the map" if on_map and walker else "\n✓ on the map" if on_map else ""
+            )
+            item = QListWidgetItem(f"{kind}\n{picture.name}" + marked)
             item.setData(Qt.UserRole, picture.id)
             item.setData(Qt.UserRole + 1, picture.subject)
+            made = "drawn" if walker else "painted"
             item.setToolTip(
                 f"{kind} of {picture.name}"
-                + (f", painted by {picture.model}" if picture.model else ", your own picture")
+                + (f", {made} by {picture.model}" if picture.model else ", your own picture")
                 + (
-                    ", the one laid over the map now"
+                    ", the one walking for them now"
+                    if on_map and walker
+                    else "; right-click to have it walk for them"
+                    if walker
+                    else ", the one laid over the map now"
                     if on_map
                     else "; right-click to lay it over the map"
                     if picture.subject == "isometric"
@@ -344,9 +355,12 @@ class ImagesPanel(QWidget):
             return
         picture_id = item.data(Qt.UserRole)  # read now, as `_card_menu`
         isometric = item.data(Qt.UserRole + 1) == "isometric"
+        walker = item.data(Qt.UserRole + 1) == "walker"
         menu = QMenu(self)
         for key, text in MAP_ACTIONS:
-            if key == "use" and not isometric:
+            if key == "use" and walker:
+                text = "Use as the avatar"
+            elif key == "use" and not isometric:
                 continue  # a postcard is the place's one picture
             menu.addAction(text).triggered.connect(
                 lambda _checked=False, k=key: self.map_action_requested.emit(k, picture_id)

@@ -1102,3 +1102,22 @@ def test_at_moves_nobody_the_read_did_not_place(tmp_path, story, cast):
     assert world.where.get("Maela Orr") in (None, "house")  # not sent to the farm
     after = session.path()[-1].meta.area.spots["Maela Orr"]
     assert (after.area, after.x, after.y) == (before.area, before.x, before.y)
+
+
+def test_the_map_names_what_it_gave_up_drawing_and_can_be_asked_again(tmp_path, story, cast):
+    """A job refused MAX_FAILURES times is never asked for again (live, a
+    rift's sprite); the Map page names it and Try again clears the count."""
+    from sealedlore.engine.world_art import MAX_FAILURES
+
+    session = make_session(tmp_path, story, cast, [])
+    world = session.world()
+    farm = next(p for p in world.places.values() if p.name == "The farm")
+    art = session.world_art
+    art.failures[f"sprite:{farm.id}"] = MAX_FAILURES
+    art.failures[f"layout:{farm.id}"] = MAX_FAILURES
+    art.failures["terrain:window:0:0:800"] = MAX_FAILURES
+    art.failures["sprite:nobody"] = 1  # once: still to be tried
+    assert session.map_art_failed() == ["The farm", "the plan of The farm", "a stretch of land"]
+    session.retry_map_art()
+    assert session.world_art.failures == {"sprite:nobody": 1}
+    assert session.map_art_failed() == [] and not session.retry_map_art()

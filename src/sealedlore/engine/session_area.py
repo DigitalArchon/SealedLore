@@ -108,7 +108,7 @@ from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.area import AreaState, LiveArea, MapAction, Mark, Spot
 from sealedlore.models.config import on_nanogpt
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID, Node, Usage
-from sealedlore.models.world import OwnTileSet, WorldArt, WorldDelta, WorldMap
+from sealedlore.models.world import MapPicture, OwnTileSet, WorldArt, WorldDelta, WorldMap
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError
 from sealedlore.providers.images import ImageClient, build_image_payload, data_url, loggable_payload
 from sealedlore.storage import tile_sets as shipped
@@ -2357,6 +2357,10 @@ class AreaRuntime:
                 return
             with self._lock():  # never inside `_closing` (see `_furnish_one`)
                 art.tile_overrides[role] = file
+                if role.startswith("walker/"):
+                    # Kept with the others drawn for them: Media lists every
+                    # avatar and the author chooses among them (Oct 17 2026).
+                    art.pictures.append(_walker_picture(role[7:], file, prompt=prompt, model=model))
                 self._save_art(art)
         except Exception as exc:  # noqa: BLE001 - a thread dies silently otherwise
             self._log(
@@ -2383,7 +2387,35 @@ class AreaRuntime:
         art = self.world_art
         with self._lock():
             art.tile_overrides[role] = relative
+            if role.startswith("walker/"):
+                art.pictures.append(_walker_picture(role[7:], relative))
             self._save_art(art)
+
+    def walker_pictures(self, name: str) -> list[MapPicture]:
+        """Every avatar drawn or chosen for a person, newest first (the one
+        in use is `walker_file`)."""
+        art = self.map_art_copy()
+        found = [p for p in art.pictures if p.subject == "walker" and p.subject_id == name]
+        return sorted(found, key=lambda p: p.made_at, reverse=True)
+
+    def use_walker_picture(self, name: str, picture_id: str) -> bool:
+        """One of the avatars kept for a person walks for them (the Cast
+        page's choice, or Media's); False for a picture that isn't theirs."""
+        art = self.world_art
+        picture = next(
+            (
+                p
+                for p in art.pictures
+                if p.id == picture_id and p.subject == "walker" and p.subject_id == name
+            ),
+            None,
+        )
+        if picture is None:
+            return False
+        with self._lock():
+            art.tile_overrides[f"walker/{name}"] = picture.file
+            self._save_art(art)
+        return True
 
     def reset_tile_asset(self, role: str) -> None:
         """Back to the set's own picture for this asset."""
@@ -2391,6 +2423,20 @@ class AreaRuntime:
         with self._lock():
             art.tile_overrides[role] = ""
             self._save_art(art)
+
+
+def _walker_picture(name: str, file: str, *, prompt: str = "", model: str = "") -> MapPicture:
+    """The record of an avatar drawn or chosen for a person, kept with the
+    map's pictures (`subject` "walker"); `model` "" for the author's own."""
+    return MapPicture(
+        subject="walker",
+        subject_id=name,
+        name=name,
+        file=file,
+        prompt=prompt,
+        model=model,
+        made_at=utc_now_iso(),
+    )
 
 
 def _own_info(name: str, found: OwnTileSet) -> TileSetInfo:

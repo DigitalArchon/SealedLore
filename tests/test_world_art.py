@@ -905,3 +905,18 @@ def test_a_place_as_it_was_never_borrows_a_changed_state_s_drawing():
     intact = PlaceLayout(place_id="barn", state="", rows=["#"], spec={})
     art.layouts["barn"][""] = intact
     assert art.layout_shown("barn", "") is intact and art.layout_shown("barn", "ruined") is intact
+
+
+def test_a_reply_that_drew_shapes_with_no_svg_root_is_wrapped_and_kept():
+    """GLM 5.3 Flash answered a rift with a "<g>…</g>" in a ```svg fence,
+    twice (live, Oct 17 2026), and the plain shapes were thrown away as "no
+    usable SVG". A fragment of shapes is the document the prompt asked for."""
+    fenced = (
+        '```svg\n<g> <!-- snow -->\n <circle cx="14" cy="18" r="1.5" fill="#f2f2ee"/>\n</g>\n```'
+    )
+    svg = clean_svg(fenced)
+    assert svg is not None and "<circle" in svg and 'viewBox="0 0 64 64"' in svg
+    bare = '<polygon points="30,10 26,18 28,26" fill="#f2f2ee"/>'
+    assert clean_svg(bare) is not None
+    assert clean_svg("```svg\nI cannot draw that.\n```") is None  # no shapes: nothing
+    assert clean_svg("") is None

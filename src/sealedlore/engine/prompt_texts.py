@@ -1945,7 +1945,8 @@ Places
   sense of its scale, else null. For scale: a room 5, a cottage 10, a house
   15, a barn 25, a warehouse 40, a manor 60, a castle or a fort 150, a hamlet
   300, a village 600, a town 1500, a city 4000. A vast castle with towers is
-  200 or more; a hut is 5. A place already on the map keeps its size unless
+  200 or more; a hut is 5; a feature a person stands beside (a well, a rift, a
+  shrine, a standing stone) 3. A place already on the map keeps its size unless
   the author's Direction changes it.
 
 Links

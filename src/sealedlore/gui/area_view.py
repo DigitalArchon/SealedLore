@@ -49,6 +49,8 @@ STEPS_PER_SECOND = 9
 FRAME_MS = 16
 # A person's sprite, in tiles tall, indoors and out.
 PERSON_TILES = {True: 2.1, False: 2.6}
+# A place's sprite in the area is about this many tiles tall.
+PLACE_TILES = 2.0
 # The view's zoom: never closer than twice the art's own pixels (a sprite
 # resampled past that is a blur), never further than this.
 ZOOM_MIN = 0.15
@@ -119,6 +121,22 @@ class Walker:
     y: int
     image: QImage | None
     held: bool = False
+
+
+@dataclass
+class PlaceMark:
+    """A place the map has in the area that is neither a building drawn in
+    the picture nor a thing: a rift, a well, a clearing. Its sprite (the
+    map's, or a map picture cut out) at its tile, else a marker, with its
+    name over it (the author, Oct 17 2026: a rift made by Direction was on
+    the map and told to the storyteller, and nothing showed on the play
+    view)."""
+
+    name: str
+    x: int
+    y: int
+    image: QImage | None = None
+    what: str = ""
 
 
 def tint_colour(minute: int) -> QColor | None:
@@ -347,6 +365,54 @@ class _Person(QGraphicsItem):
             )
 
 
+class _PlaceItem(QGraphicsItem):
+    """A place marked in the area: its sprite about two tiles tall, else a
+    gold diamond on its tile."""
+
+    def __init__(self, mark: PlaceMark, px: int) -> None:
+        super().__init__()
+        self.mark = mark
+        self.px = px
+        self.height = int(px * PLACE_TILES)
+        self.pixmap: QPixmap | None = None
+        if mark.image is not None and not mark.image.isNull():
+            image = mark.image
+            if image.height() < self.height:
+                image = pixel_scaled(image, self.height)
+            self.pixmap = QPixmap.fromImage(image)
+            self.width = self.height * self.pixmap.width() / self.pixmap.height()
+        else:
+            self.width = px * 0.9
+            self.height = int(px * 0.9)
+        self.setZValue(9)
+        self.setAcceptHoverEvents(True)
+        self.setToolTip(f"{mark.name}: {mark.what}" if mark.what else mark.name)
+        self.setPos((mark.x + 0.5) * px, (mark.y + 1.0) * px)
+
+    def boundingRect(self) -> QRectF:  # noqa: N802 - Qt's name
+        return QRectF(-self.width / 2, -self.height, self.width, self.height)
+
+    def paint(self, painter: QPainter, _option, _widget=None) -> None:
+        rect = self.boundingRect()
+        if self.pixmap is not None:
+            painter.setRenderHint(QPainter.SmoothPixmapTransform, False)
+            painter.drawPixmap(rect, self.pixmap, QRectF(self.pixmap.rect()))
+            return
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setPen(QPen(QColor(20, 16, 8), 1.5))
+        painter.setBrush(GOLD)
+        c = rect.center()
+        half = rect.width() / 2
+        painter.drawPolygon(
+            [
+                QPointF(c.x(), c.y() - half),
+                QPointF(c.x() + half, c.y()),
+                QPointF(c.x(), c.y() + half),
+                QPointF(c.x() - half, c.y()),
+            ]
+        )
+
+
 class _Tint(QGraphicsRectItem):
     """The time of day over the area: its colour multiplied over the
     picture, so the art keeps its own colours, darkened. Under the names,
@@ -569,6 +635,7 @@ class AreaView(QWidget):
         self.area: Area | None = None
         self.walkers: list[Walker] = []
         self.people: dict[str, _Person] = {}
+        self.places: dict[str, _PlaceItem] = {}
         self._tags: dict[str, _Tag] = {}
         self._background: QGraphicsPixmapItem | None = None
         # With no picture yet: the word over the plain map.
@@ -632,9 +699,11 @@ class AreaView(QWidget):
         hint: str = "",
         minute: int | None = None,
         failed: bool = False,
+        places: list[PlaceMark] | None = None,
     ) -> None:
         """Show this area with these people (the window calls it whenever the
-        session's state changes, and again once the picture is drawn).
+        session's state changes, and again once the picture is drawn), and
+        with `places`, the map's places in it marked where they stand.
         `minute`: the map clock's minute of the day, for the light over the
         area (None: daylight). `failed`: the picture couldn't be painted, so
         the plain map stands in for good."""
@@ -658,6 +727,7 @@ class AreaView(QWidget):
             same_place = self._fitted_for == area.id
             self.scene.clear()
             self.people, self._tags, self._hover = {}, {}, None
+            self.places = {}
             self._note = None
             self._pins = []
             self._shade, self._shade_from, self._shade_mask = None, None, None
@@ -700,8 +770,44 @@ class AreaView(QWidget):
                 else f"Drawing {area.name}…"
             )
         self._sync_tint(minute)
+        self._place_places(places or [], px)
         self._place_people(area, walkers, px)
         self._place_pins()
+
+    def _place_places(self, marks: list[PlaceMark], px: int) -> None:
+        """The map's places in the area, each at its tile with its name (a
+        tag like a person's, lifted clear of neighbours' by `_lift_tags`)."""
+        wanted = {m.name: m for m in marks}
+        for name in list(self.places):
+            if name not in wanted:
+                self.scene.removeItem(self.places.pop(name))
+                tag = self._tags.pop(f"place:{name}", None)
+                if tag is not None:
+                    self.scene.removeItem(tag)
+        for name, mark in wanted.items():
+            item = self.places.get(name)
+            if item is not None and (item.mark.x, item.mark.y) == (mark.x, mark.y):
+                if item.mark.image is mark.image:
+                    continue
+                self.scene.removeItem(item)
+                tag = self._tags.pop(f"place:{name}", None)
+                if tag is not None:
+                    self.scene.removeItem(tag)
+            elif item is not None:
+                self.scene.removeItem(item)
+                tag = self._tags.pop(f"place:{name}", None)
+                if tag is not None:
+                    self.scene.removeItem(tag)
+            item = _PlaceItem(mark, px)
+            self.scene.addItem(item)
+            self.places[name] = item
+            tag = _Tag(name, False)
+            tag.setBrush(QColor(214, 226, 255))
+            tag.setPos((mark.x + 0.5) * px, (mark.y + 1.0) * px - item.height)
+            rect = tag.boundingRect()
+            tag.setTransform(QTransform.fromTranslate(-rect.width() / 2, -rect.height() - 4))
+            self.scene.addItem(tag)
+            self._tags[f"place:{name}"] = tag
 
     def _sync_tint(self, minute: int | None) -> None:
         """The light over the area for this minute of the map's day."""

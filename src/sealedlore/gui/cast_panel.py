@@ -211,6 +211,8 @@ class CastPanel(QWidget):
         # played on one: what walks for them, drawn again, chosen or put back.
         self.avatar = AvatarView()
         self.avatar.draw_requested.connect(lambda: self._avatar("draw"))
+        self.avatar.draw_with_words_requested.connect(lambda: self._avatar("words"))
+        self.avatar.choose_requested.connect(lambda pid: self._avatar(f"use:{pid}"))
         self.avatar.add_requested.connect(lambda: self._avatar("file"))
         self.avatar.reset_requested.connect(lambda: self._avatar("reset"))
         self.avatar.setVisible(False)
@@ -218,6 +220,8 @@ class CastPanel(QWidget):
         # (name) -> (the figure the map walks for them, where it came from,
         # whether it is being drawn now); the window's, when there is a map.
         self.avatar_of = None
+        # name -> [(picture id, image, how, in use)]: every avatar kept for them.
+        self.avatar_choices_of = None
         self.pictures.again_requested.connect(lambda ref: self._ask("again", ref))
         self.pictures.edit_requested.connect(lambda ref: self._ask("edit", ref))
         self.pictures.changed.connect(self._on_pictures_changed)
@@ -441,6 +445,8 @@ class CastPanel(QWidget):
         image, source, drawing = self.avatar_of(character.name)
         self.avatar.show_avatar(image, source, character.name)
         self.avatar.set_drawing(drawing)
+        choices = self.avatar_choices_of(character.name) if self.avatar_choices_of else []
+        self.avatar.set_choices(choices)
 
     def _remove_portrait(self) -> None:
         character = self._current

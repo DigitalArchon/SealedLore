@@ -31,7 +31,7 @@ Everything here is read from the session; the view never changes the story.
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from html import escape
 
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, Signal
@@ -60,6 +60,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMenu,
     QProgressBar,
+    QPushButton,
     QScrollArea,
     QStackedWidget,
     QToolButton,
@@ -807,6 +808,8 @@ class WorldView(QWidget):
     choose_view_requested = Signal(str)
     # The author asked for this area's plan to be drawn again.
     redraw_requested = Signal(str)
+    # Try again on what the map gave up drawing (`session.retry_map_art`).
+    retry_requested = Signal()
     # Mark a point (metres east, north) in the turn being written; set off
     # for one.
     mark_requested = Signal(float, float)
@@ -862,6 +865,12 @@ class WorldView(QWidget):
         progress_row.setContentsMargins(0, 0, 0, 0)
         progress_row.addWidget(self.progress_label)
         progress_row.addWidget(self.progress, 1)
+        self.retry_button = QPushButton("Try again")
+        self.retry_button.setObjectName("smallButton")
+        self.retry_button.setToolTip("Draw again what the map gave up on after two refusals")
+        self.retry_button.clicked.connect(self.retry_requested)
+        self.retry_button.hide()
+        progress_row.addWidget(self.retry_button)
         progress_row.addStretch(1)
         self.progress_label.hide()
         self.progress.hide()
@@ -2170,7 +2179,9 @@ class WorldView(QWidget):
         if self.world.places:
             self._sync_buttons()
 
-    def set_progress(self, done: int, total: int, activity: str = "") -> None:
+    def set_progress(
+        self, done: int, total: int, activity: str = "", failed: Sequence[str] = ()
+    ) -> None:
         """The drawing under way: `done` of `total` pieces (art and
         pictures); nothing under way when `total` is 0, said as drawn once a
         run has finished. `activity`: what is happening before any drawing
@@ -2186,8 +2197,15 @@ class WorldView(QWidget):
         elif activity:
             self.progress_label.setText(activity)
             self.progress.setRange(0, 0)  # busy: no count to show yet
+        elif failed:
+            # Live, a rift's sprite was refused twice and the map said it was
+            # drawn: say what it gave up on, with the way to ask again.
+            named = ", ".join(failed[:3]) + (" and more" if len(failed) > 3 else "")
+            self.progress_label.setText(f"The map is drawn, but not {named}")
+            self._drew = True
         else:
             self.progress_label.setText("✓ The map is drawn")
+        self.retry_button.setVisible(bool(failed) and not drawing and not activity and self.art_on)
         self.progress.setVisible(drawing or bool(activity))
         self.progress_label.setVisible(drawing or bool(activity) or (self._drew and self.art_on))
         self.redraw_button.setEnabled(not drawing)

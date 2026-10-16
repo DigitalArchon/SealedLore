@@ -1129,3 +1129,89 @@ def test_neighbours_names_are_lifted_apart_and_the_pointer_says_what_is_under_it
     # region map's fog, not black.
     assert mine.font().pointSizeF() == text_size.points(9.0)
     assert view.view.backgroundBrush().color().name() == FOG
+
+
+def test_a_place_the_map_has_in_the_area_is_marked_on_the_play_view(app, window):
+    """The author's Direction made a rift at a mark: it was on the map and
+    told to the storyteller, and the play view showed nothing (Oct 17 2026).
+    A place that isn't a building drawn in the picture is marked where it
+    stands, its sprite when there is one, its name over it."""
+    from sealedlore.gui.area_view import PlaceMark
+
+    view = window.area_view
+    area = view.area
+    assert area is not None
+    rift = PlaceMark("The dark rift", 3, 4)
+    view.set_area(area, None, view.walkers, key=view._key, places=[rift])
+    item = view.places["The dark rift"]
+    px = item.px
+    assert item.pos().x() == 3.5 * px and item.pos().y() == 5 * px
+    assert view._tags["place:The dark rift"].text() == "The dark rift"
+    assert item.pixmap is None  # no sprite yet: a marker stands for it
+    small = QImage(8, 12, QImage.Format_ARGB32)
+    small.fill(QColor("blue"))
+    view.set_area(
+        area, None, view.walkers, key=view._key, places=[PlaceMark("The dark rift", 3, 4, small)]
+    )
+    assert view.places["The dark rift"].pixmap is not None
+    view.set_area(area, None, view.walkers, key=view._key, places=[])
+    assert "The dark rift" not in view.places and "place:The dark rift" not in view._tags
+
+
+def test_an_avatar_drawn_from_instructions_is_kept_and_chosen_among_the_others(
+    app, window, monkeypatch
+):
+    """The author (Oct 17 2026): draw an avatar again with new instructions,
+    choose among those drawn, and see them all in Media with the one in
+    use marked."""
+    from PySide6.QtWidgets import QInputDialog, QMessageBox
+
+    from sealedlore.engine import session_area
+    from tests.test_world_pictures import FakeImages
+
+    FakeImages.sent = []
+    monkeypatch.setattr(session_area, "ImageClient", FakeImages)
+    session = window.session
+    session.config.image_endpoint.base_url = "https://nano-gpt.com/api/v1"
+    session.config.image_endpoint.api_key = "k"
+    panel = window.cast_panel
+    panel.select_character("char-serrik")
+    assert panel.avatar.choose_button.isHidden()  # none kept yet
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    monkeypatch.setattr(
+        QInputDialog, "getMultiLineText", lambda *a, **k: ("a hooded figure in a red scarf", True)
+    )
+    panel.avatar.words_button.click()
+    session._asset_thread.join(5)
+    pump(app)
+    window._art_drawn()
+    assert "hooded figure in a red scarf" in FakeImages.sent[-1]["prompt"]
+    first = session.walker_pictures("Serrik Vaun")
+    assert len(first) == 1 and first[0].file == session.walker_file("Serrik Vaun")
+    assert first[0].prompt and first[0].model
+    # A second, from the card: both kept, the newest walking for them.
+    panel.avatar.draw_button.click()
+    session._asset_thread.join(5)
+    pump(app)
+    window._art_drawn()
+    kept = session.walker_pictures("Serrik Vaun")
+    assert len(kept) == 2 and kept[0].file == session.walker_file("Serrik Vaun")
+    choices = [a.text() for a in panel.avatar.choose_menu.actions()]
+    assert len(choices) == 2 and choices[0].endswith("(in use)")
+    # Choosing the older one on the card.
+    older = kept[1]
+    panel.avatar.choose_menu.actions()[1].trigger()
+    pump(app)
+    assert session.walker_file("Serrik Vaun") == older.file
+    assert [a.isChecked() for a in panel.avatar.choose_menu.actions()] == [False, True]
+    # Media lists both avatars, the one walking for them marked, and chooses too.
+    window.refresh_images()
+    items = [
+        window.images_panel.map_list.item(i).text()
+        for i in range(window.images_panel.map_list.count())
+    ]
+    avatars = [t for t in items if t.startswith("Avatar\nSerrik Vaun")]
+    assert len(avatars) == 2 and sum("✓ walks on the map" in t for t in avatars) == 1
+    window._map_picture_action("use", kept[0].id)
+    assert session.walker_file("Serrik Vaun") == kept[0].file
+    assert not session.use_walker_picture("Serrik Vaun", "nobody's")

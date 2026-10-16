@@ -29,6 +29,7 @@ from datetime import UTC, datetime
 
 from sealedlore.engine.world_art import (
     LAYOUT_MAX_TOKENS,
+    MAX_FAILURES,
     SPRITE_MAX_TOKENS,
     ArtJob,
     adopt,
@@ -184,6 +185,46 @@ class WorldArtRuntime:
     def map_art_running(self) -> bool:
         thread = self._art_thread
         return thread is not None and thread.is_alive()
+
+    def map_art_failed(self) -> list[str]:
+        """What the map gave up drawing (a job refused MAX_FAILURES times:
+        `plan_art` never asks for it again), by name, for the Map page to say
+        (live, a rift's sprite was refused twice and nothing said so: "it
+        said it was generating an image, but no image appeared")."""
+        art = self.map_art_copy()
+        world = self.world()
+        out: list[str] = []
+        for key, count in art.failures.items():
+            if count < MAX_FAILURES:
+                continue
+            kind, _, rest = key.partition(":")
+            subject_id = rest.split(":")[0]
+            place = world.places.get(subject_id)
+            thing = world.things.get(subject_id)
+            name = place.name if place else thing.name if thing else ""
+            if kind == "layout":
+                out.append(f"the plan of {name}" if name else "a plan")
+            elif kind == "terrain":
+                out.append("a stretch of land")
+            elif kind == "furnish":
+                out.append(f"the furnishing of {name}" if name else "a furnishing")
+            else:
+                out.append(name or key)
+        return list(dict.fromkeys(out))
+
+    def retry_map_art(self) -> bool:
+        """Forget what the map gave up on and draw again (the author's
+        Try again on the Map page); False when nothing had failed or the
+        map can't be drawn now."""
+        art = self.world_art
+        with self._lock():
+            failed = [k for k, c in art.failures.items() if c >= MAX_FAILURES]
+            if not failed:
+                return False
+            for key in failed:
+                art.failures.pop(key, None)
+            self._save_art(art)
+        return self.start_map_art()
 
     def map_art_jobs(self, limit: int = 12) -> list[ArtJob]:
         """What the map at the leaf still needs drawn, nearest the story first."""

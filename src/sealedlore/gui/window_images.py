@@ -215,10 +215,16 @@ class ImagesWindow:
             return []
         held = session.map_held_name(session.story.held_character_id)
         sight = out_of_the_fog(session.world(), held)
+        # Avatars too (the author, Oct 17 2026: every avatar drawn, in Media,
+        # the one in use marked), of the cards the author may see.
+        names = {c.name for c in session.visible_cast()} | {
+            c.name for c in session.visible_supporting()
+        }
         return [
             picture
             for picture in session.map_art_copy().pictures
-            if picture.subject in ("isometric", "postcard") and picture.subject_id in sight
+            if (picture.subject in ("isometric", "postcard") and picture.subject_id in sight)
+            or (picture.subject == "walker" and picture.subject_id in names)
         ]
 
     def _shown_views(self) -> set[str]:
@@ -229,7 +235,14 @@ class ImagesWindow:
         world, art = session.world(), session.map_art_copy()
         areas = {p.subject_id for p in art.pictures if p.subject == "isometric"}
         shown = (shown_view(world, art, area_id) for area_id in areas)
-        return {picture.id for picture in shown if picture is not None}
+        views = {picture.id for picture in shown if picture is not None}
+        # The avatar walking for each person now.
+        walking = {
+            p.id
+            for p in art.pictures
+            if p.subject == "walker" and p.file == session.walker_file(p.subject_id, art)
+        }
+        return views | walking
 
     def _refresh_image_views(self) -> None:
         """The Media tab now; the transcript once no passage is streaming into it."""
@@ -870,6 +883,14 @@ class ImagesWindow:
             return
         if action == "save":
             save_picture_as(self, session.pictures.read(picture.file), file_name(picture.file))
+        elif action == "use" and picture.subject == "walker":
+            if session.use_walker_picture(picture.subject_id, picture.id):
+                self._walker_images.clear()
+                self.refresh_area()
+                self.cast_panel.refresh_avatar()
+                self.refresh_images()
+        elif action == "show" and picture.subject == "walker":
+            self.show_world(True)  # they walk on the play view
         elif action == "use" and picture.subject == "isometric":
             self.show_isometric_view(picture.subject_id, picture.id)
             self.show_world(True)
@@ -887,7 +908,8 @@ class ImagesWindow:
                 dialog.setAttribute(Qt.WA_DeleteOnClose)
                 dialog.exec()
         else:
-            self._show_whole(f"{picture.name}: a postcard", session.pictures.read(picture.file))
+            what = "an avatar" if picture.subject == "walker" else "a postcard"
+            self._show_whole(f"{picture.name}: {what}", session.pictures.read(picture.file))
 
     # --- closing -------------------------------------------------------------
 
