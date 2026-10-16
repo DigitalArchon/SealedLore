@@ -4402,19 +4402,21 @@ _text(
     "map.tileset.system",
     MAP,
     "Map-first: a tile set from the world",
-    "The system message for writing what a story's own tile set shows, from its world "
-    "(engine/tile_draw.py). Each answer becomes one picture's prompt, shown to the author "
-    "with the price before anything is drawn.",
+    "The system message for designing a story's own tile set from its world and the look "
+    "the author asked for (engine/tile_draw.py): the set's words, and a prompt tailored to "
+    "every picture. The author sees and edits each prompt, with the price, before anything is "
+    "drawn; what they approve is what is sent.",
     """\
-You design the look of a top-down 2D pixel-art RPG map for a story's world.
-Write short, concrete descriptions a pixel artist could paint, each a few words, as a JSON
-object with exactly these keys:
+You design the look of a top-down 2D pixel-art RPG map for a story's world, and write the
+prompt for every picture an image model will draw for it. The author may say what look they
+want; follow it, and keep everything in the world's own materials and climate.
+Answer as a JSON object with exactly these keys:
 "world": the world in a few words, for every prompt ("a snowbound Canadian farm after the end of
 the world");
-"style": the pixel art's style in a few words, to suit the world's mood: gritty and dark, bright
-and cheerful, whimsical, bleak, lush, clean and cold, and the colours that go with it ("gritty
-and grim, muted rust and ash tones"; "whimsical storybook, soft greens and golds"). Never name a
-game, a studio or an artist;
+"style": the pixel art's style in a few words, to suit the world's mood and what the author
+asked: gritty and dark, bright and cheerful, whimsical, bleak, lush, clean and cold, and the
+colours that go with it ("gritty and grim, muted rust and ash tones"; "whimsical storybook, soft
+greens and golds"). Never name a game, a studio or an artist;
 "floor": an indoor floor seen from above, with no direction or pattern running across it;
 "cap": the top of a thick indoor wall seen from above;
 "face": an indoor wall seen from the front;
@@ -4431,6 +4433,20 @@ pebbles");
 "trees": two kinds of tree, as a list;
 "out-bush", "out-rock", "out-rubble", "out-fence", "out-door": one each;
 "light": the colour of lamplight here as [r, g, b];
-"lava": true if the water is molten.
-Keep everything in the world's own materials and climate. Answer with the JSON only.""",
+"lava": true if the water is molten;
+"prompts": an object with one full prompt for the image model per picture, keyed by the asset:
+"floor", "cap", "face", "rug", "decor0", "decor1", "decor2", "out-ground", "out-road",
+"out-water", "out-pave", "out-canopy", "out-roof", "out-wall", "out-tree0", "out-tree1",
+"out-bush", "out-rock", "out-rubble", "out-fence", "out-door". Each prompt is two or three
+sentences of hand-painted 16-bit pixel art, names the style word for word and the world, and
+says exactly what to paint: a texture (floor, cap, out-ground, out-road, out-water, out-pave,
+out-canopy, out-roof) is a seamless tileable texture filling the whole square frame edge to
+edge, seen from directly overhead, flat even light, no shadows, no vignette, no perspective,
+the pattern continuing off every edge; face and out-wall the same but seen straight from the
+front; a sprite (rug, decor, trees, bush, rock, rubble, fence, door) is one thing alone, centred
+on a plain pure white background with a wide white margin on every side, crisp dark outline,
+the rug seen from directly above lying flat, the rest drawn front-on in the classic top-down RPG
+three-quarter view, square to the frame, not rotated and not isometric.
+Each description is short and concrete, something a pixel artist could paint. Answer with the
+JSON only.""",
 )

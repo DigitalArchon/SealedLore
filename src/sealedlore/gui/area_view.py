@@ -26,8 +26,10 @@ from PySide6.QtWidgets import (
     QGraphicsScene,
     QGraphicsSimpleTextItem,
     QGraphicsView,
+    QHBoxLayout,
     QLabel,
     QMenu,
+    QPushButton,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -423,11 +425,15 @@ class AreaView(QWidget):
     # Travel… is about to show: the window fills its menu (`set_travel`).
     travel_wanted = Signal()
     travel_chosen = Signal(str)
-    # Look ▾ is about to show (`set_looks`); a set chosen; a set asked for.
+    # Look ▾ is about to show (`set_looks`); a set chosen; a new set asked
+    # for (the designer); the gallery (Tile sets…, from the menu or the
+    # offer line); the set in use to edit; the offer line dismissed.
     looks_wanted = Signal()
     look_chosen = Signal(str)
     own_look_requested = Signal()
+    gallery_requested = Signal()
     edit_look_requested = Signal()
+    offer_dismissed = Signal()
     # Mark this tile in the turn being written (⌖).
     mark_requested = Signal(int, int)
     # At an outdoor area's edge: where on past it (`set_edge_choices`), and
@@ -495,6 +501,29 @@ class AreaView(QWidget):
         self.hint = QLabel()
         self.hint.setObjectName("hintLabel")
         self.hint.setWordWrap(True)
+        # One line when a story's map begins: which tile set it is drawn in,
+        # with the gallery a button away (`set_offer`), rather than a dialog
+        # in the way. Dismissed, or answered, it goes for good.
+        self.offer = QWidget()
+        self.offer_label = QLabel()
+        self.offer_label.setObjectName("hintLabel")
+        self.offer_label.setWordWrap(True)
+        self.offer_button = QPushButton("Tile sets…")
+        self.offer_button.setToolTip(
+            "Every tile set the map can be drawn in, and drawing a new one"
+        )
+        self.offer_button.clicked.connect(self.gallery_requested.emit)
+        self.offer_close = QToolButton()
+        self.offer_close.setText("×")
+        self.offer_close.setToolTip("Not now")
+        self.offer_close.clicked.connect(self.offer_dismissed.emit)
+        offer_row = QHBoxLayout(self.offer)
+        offer_row.setContentsMargins(0, 0, 0, 0)
+        offer_row.setSpacing(6)
+        offer_row.addWidget(self.offer_label, 1)
+        offer_row.addWidget(self.offer_button)
+        offer_row.addWidget(self.offer_close)
+        self.offer.hide()
         # The map's coordinate under the pointer, as a mark is written.
         self.coords = QLabel()
         self.coords.setObjectName("hintLabel")
@@ -535,6 +564,7 @@ class AreaView(QWidget):
         layout.setSpacing(6)
         layout.addLayout(header)
         layout.addWidget(self.hint)
+        layout.addWidget(self.offer)
         layout.addWidget(self.view, 1)
         self.area: Area | None = None
         self.walkers: list[Walker] = []
@@ -934,26 +964,36 @@ class AreaView(QWidget):
         return None
 
     def set_looks(self, choices: list[tuple[str, str]], current: str, chosen: str) -> None:
-        """Look ▾'s entries: (name, title) of each set, the one drawn in now
-        ticked, and whether the author chose it or the program did."""
+        """Look ▾'s entries: the gallery first (every set with its pictures,
+        drawing a new one, removing an own one), then (name, title) of each
+        set, the one drawn in now ticked, and whether the author chose it or
+        the program did."""
         self.look_menu.clear()
+        gallery = self.look_menu.addAction("Tile sets…")
+        gallery.setToolTip("Every tile set the map can be drawn in, and drawing a new one")
+        gallery.triggered.connect(self.gallery_requested.emit)
+        self.look_menu.addSeparator()
         auto = self.look_menu.addAction("Chosen for the setting")
         auto.setCheckable(True)
         auto.setChecked(not chosen)
         auto.triggered.connect(lambda: self.look_chosen.emit(""))
-        self.look_menu.addSeparator()
         for name, title in choices:
             action = self.look_menu.addAction(title)
             action.setCheckable(True)
             action.setChecked(name == current)
             action.triggered.connect(lambda _c=False, n=name: self.look_chosen.emit(n))
         self.look_menu.addSeparator()
-        own = self.look_menu.addAction("Draw a tile set for this story…")
+        own = self.look_menu.addAction("Draw a new tile set…")
         own.setEnabled(not self.locked)
         own.triggered.connect(self.own_look_requested.emit)
         edit = self.look_menu.addAction("Edit the tile set…")
         edit.setEnabled(not self.locked)
         edit.triggered.connect(self.edit_look_requested.emit)
+
+    def set_offer(self, text: str | None) -> None:
+        """The one-line offer of the tile sets over the map (None: none)."""
+        self.offer_label.setText(text or "")
+        self.offer.setVisible(bool(text))
 
     # --- walking -------------------------------------------------------------------
 

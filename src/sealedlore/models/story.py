@@ -186,6 +186,10 @@ class Story(BaseModel):
     # that have been put on their character or lore entry: each is taken
     # once, so one the author removes from the card stays removed.
     card_pictures_taken: list[str] = Field(default_factory=list)
+    # The tile sets were offered once the map began (gui/tile_set_gallery.py):
+    # a line on the play view saying which set the map is drawn in, with the
+    # gallery a button away, shown until the author answers or chooses a set.
+    tile_set_offered: bool = False
     # Private scenes played in this story, oldest first (models/private.py),
     # and how the private model is told to write.
     private_spans: list[PrivateSpan] = Field(default_factory=list)

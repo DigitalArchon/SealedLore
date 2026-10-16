@@ -470,6 +470,235 @@ def test_the_tile_set_editor_lists_every_asset_and_finds_one(app, window, monkey
     pump(app)
 
 
+def test_the_tile_set_gallery_lists_every_set_marks_the_one_in_use_and_uses_another(
+    app, window, monkeypatch
+):
+    """The author's ruling (Oct 16 2026): show the user the available tile
+    sets, and ask whether they want to generate new ones."""
+    from PySide6.QtWidgets import QMessageBox
+
+    from sealedlore.gui.tile_set_gallery import TileSetGallery
+    from sealedlore.models.world import OwnTileSet
+    from tests.test_world_pictures import png
+
+    session = window.session
+    session.pictures.write("images/map/tileset/floor-x.png", png(8, 8))
+    art = session.world_art
+    art.tile_sets["neon"] = OwnTileSet(
+        title="Neon alleys",
+        assets={"floor": "images/map/tileset/floor-x.png"},
+        words={"style": "neon noir, wet concrete"},
+    )
+    dialog = TileSetGallery(session, window)
+    titles = [c.card.title for c in dialog.cards]
+    assert "Snowbound farm" in titles and "Neon alleys" in titles
+    in_use = [c for c in dialog.cards if c.card.in_use]
+    assert len(in_use) == 1 and not in_use[0].use_button.isEnabled()
+    assert in_use[0].card.title in dialog.heading.text()
+    # The thumbnails, read a few at a time: a shipped set's from its folder,
+    # an own set's from the story's pictures; a shipped set can't be removed.
+    for _ in range(40):
+        dialog._read_thumbs()
+    assert not dialog._pending
+    farm = next(c for c in dialog.cards if c.card.name == "doomsville")
+    neon = next(c for c in dialog.cards if c.card.name == "own:neon")
+    assert not farm.thumbs[0][1].pixmap().isNull() and not neon.thumbs[0][1].pixmap().isNull()
+    assert neon.thumbs[1][1].pixmap().isNull()  # the own set has no ground: a dot
+    assert farm.remove_button is None and neon.remove_button is not None
+    assert "neon noir" in neon.style.text() and neon.keywords.text() == "Drawn for this story"
+    assert "farm" in farm.keywords.text() and "bleak" in farm.style.text()
+    neon.use_button.click()
+    assert session.map_art_copy().tile_set == "own:neon"
+    neon = next(c for c in dialog.cards if c.card.name == "own:neon")
+    assert neon.card.in_use and "Neon alleys" in dialog.heading.text()
+    # Removed: gone from the story with its pictures, and the program chooses again.
+    monkeypatch.setattr(QMessageBox, "question", lambda *_a, **_k: QMessageBox.Yes)
+    neon.remove_button.click()
+    assert "neon" not in session.map_art_copy().tile_sets
+    assert session.pictures.read("images/map/tileset/floor-x.png") is None
+    assert not any(c.card.own for c in dialog.cards)
+    assert session.map_art_copy().tile_set == ""
+    dialog.design_button.click()
+    assert dialog.result() == TileSetGallery.DESIGN
+    dialog.deleteLater()
+    pump(app)
+
+
+NEON_DESIGN = {
+    "world": "rain-slick cyberpunk alleys",
+    "style": "gritty neon noir, wet concrete and pink light",
+    "floor": "cracked concrete",
+    "cap": "a steel wall top",
+    "face": "a graffitied concrete wall",
+    "rug": "a soaked cardboard mat",
+    "decor": ["a vending machine"],
+    "out-ground": "wet asphalt",
+    "out-road": "a rain-slick street",
+    "out-wall": "a concrete facade with neon tubes",
+    "out-door": "a steel door under a buzzing lamp",
+    "light": [255, 100, 200],
+    "prompts": {
+        "floor": "Pixel art, gritty neon noir, wet concrete and pink light: cracked concrete, "
+        "a seamless tileable texture seen from above."
+    },
+}
+
+
+def test_the_designer_shows_the_words_and_every_prompt_with_the_price_before_drawing(
+    app, window, monkeypatch
+):
+    """The author describes the set, the designer writes it, and nothing is
+    drawn until every prompt and the price have been seen: what they
+    approve is what is sent."""
+    import json
+
+    from PySide6.QtWidgets import QDialog, QMessageBox
+
+    from sealedlore.engine import session_area
+    from sealedlore.gui import window_area
+    from sealedlore.gui.tile_set_gallery import TileSetDesigner
+    from tests.test_world_pictures import FakeImages
+
+    session = window.session
+    session.config.image_endpoint.base_url = "https://nano-gpt.com/api/v1"
+    session.config.image_endpoint.api_key = "k"
+    FakeImages.sent = []
+    monkeypatch.setattr(session_area, "ImageClient", FakeImages)
+    session.provider.responses = [json.dumps(NEON_DESIGN)]
+    dialog = TileSetDesigner(session, window)
+    # Prefilled with the world's first sentence and the style in use; the
+    # designer field offers the recommended models and says the fallback.
+    assert "Calder Keep" in dialog.description.toPlainText()
+    assert session.tile_style() in dialog.description.toPlainText()
+    assert dialog.designer.placeholderText() == session.tileset_designer
+    assert dialog.designer.recommended_button is not None
+    assert session.config.map_tile_model in dialog.drawn_by.text()
+    assert not dialog.draw_button.isEnabled() and dialog.scroll.isHidden()
+    dialog.name.setText("Neon alleys")
+    dialog.designer.setText("z-ai/glm-5.3-flash")
+    dialog.write_button.click()
+    assert not dialog.busy.isHidden() and "designing" in dialog.status.text()
+    session._design_thread.join(5)
+    dialog._check()
+    assert dialog.busy.isHidden() and not dialog.scroll.isHidden()
+    assert dialog.draw_button.isEnabled() and session.map_art_copy().tile_sets == {}
+    rows = dialog._rows
+    assert rows["floor"].prompt.toPlainText() == NEON_DESIGN["prompts"]["floor"]
+    assert "a steel wall top" in rows["cap"].prompt.toPlainText()  # the template, as sent
+    assert (
+        "out-water" not in rows
+        and "Water" in dialog.rows.itemAt(dialog.rows.count() - 2).widget().text()
+    )
+    assert dialog.world_edit.text() == NEON_DESIGN["world"]
+    assert dialog.style_edit.text() == NEON_DESIGN["style"]
+    count, _price = session.tile_set_price(dialog.design())
+    assert count == len(rows)
+    assert f"{count} pictures by {session.config.map_tile_model}" in dialog.price.text()
+    # Changed words re-render a template prompt; a designed prompt, or one
+    # the author rewrote, is left as it is.
+    rows["cap"].words.setText("a brass wall top")
+    assert "a brass wall top" in rows["cap"].prompt.toPlainText()
+    rows["floor"].words.setText("wet cracked concrete")
+    assert rows["floor"].prompt.toPlainText() == NEON_DESIGN["prompts"]["floor"]
+    rows["out-door"].prompt.setPlainText("My own door prompt.")
+    rows["out-door"].words.setText("a brass door")
+    assert rows["out-door"].prompt.toPlainText() == "My own door prompt."
+    # A row with no words is left out of the set and the price.
+    rows["rug"].words.setText("")
+    assert f"{count - 1} pictures" in dialog.price.text()
+    asked: list[str] = []
+
+    def question(_parent, _title, text, *_a, **_k):
+        asked.append(text)
+        return QMessageBox.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", question)
+    dialog.draw_button.click()
+    assert asked and f"{count - 1} pictures" in asked[-1] and "Neon alleys" in asked[-1]
+    assert dialog.result() == QDialog.Accepted
+    session._own_set_thread.join(10)
+    sent = [p["prompt"] for p in FakeImages.sent]
+    assert len(sent) == count - 1
+    assert NEON_DESIGN["prompts"]["floor"] in sent and "My own door prompt." in sent
+    assert all("a brass wall top" in p for p in sent if "wall top" in p)
+    art = session.map_art_copy()
+    assert art.tile_set == "own:neon-alleys"
+    own = art.tile_sets["neon-alleys"]
+    assert own.words["cap"] == "a brass wall top" and "rug" not in own.assets
+    assert own.words["prompt:out-door"] == "My own door prompt."
+    assert dialog.designer_model() == "z-ai/glm-5.3-flash"
+    dialog.deleteLater()
+    pump(app)
+    # Through Look ▾: the designer chosen in the dialog is kept, as the
+    # picture dialogs keep their prompt writer.
+    window.config.tileset_model = None
+
+    class Designer:
+        def __init__(self, *_a, **_k):
+            pass
+
+        def exec(self):
+            return QDialog.Rejected
+
+        def designer_model(self):
+            return "z-ai/glm-5.3-flash"
+
+        def deleteLater(self):  # noqa: N802 - Qt naming
+            pass
+
+    monkeypatch.setattr(window_area, "TileSetDesigner", Designer)
+    window._area_own_look()
+    assert window.config.tileset_model == "z-ai/glm-5.3-flash"
+
+
+def test_the_tile_sets_are_offered_once_when_a_map_story_first_opens(app, window, monkeypatch):
+    """A line over the play view, not a dialog in the way: which set the
+    map is drawn in, with the gallery a button away; answered or dismissed,
+    it is kept with the story and never shown again."""
+    from PySide6.QtWidgets import QDialog
+
+    from sealedlore.gui import window_area
+
+    session = window.session
+    view = window.area_view
+    assert not view.offer.isHidden()
+    text = view.offer_label.text()
+    titles = dict(session.tile_set_choices())
+    title = titles[session.tile_set_name()]
+    assert text == f"The map is drawn in {title}: choose another or draw one for this world."
+    view.offer_close.click()
+    assert session.story.tile_set_offered and view.offer.isHidden()
+    window.refresh_area()
+    assert view.offer.isHidden()
+    # Kept with the story: opened again, it isn't asked.
+    window.open_story(session.story.id)
+    pump(app)
+    assert window.session.story.tile_set_offered and window.area_view.offer.isHidden()
+    # The button opens the gallery, which answers it too.
+    window.session.story.tile_set_offered = False
+    window.refresh_area()
+    assert not window.area_view.offer.isHidden()
+
+    class Gallery:
+        def __init__(self, *_a, **_k):
+            pass
+
+        def exec(self):
+            return QDialog.Rejected
+
+        def deleteLater(self):  # noqa: N802 - Qt naming
+            pass
+
+    monkeypatch.setattr(window_area, "TileSetGallery", Gallery)
+    window.area_view.offer_button.click()
+    assert window.session.story.tile_set_offered and window.area_view.offer.isHidden()
+    # A story whose set was chosen is never asked.
+    window.session.story.tile_set_offered = False
+    window.session.set_tile_set("doomsville")
+    window.refresh_area()
+    assert window.area_view.offer.isHidden()
+
+
 def test_the_cast_page_shows_the_avatar_and_a_new_portrait_offers_a_new_one(
     app, window, monkeypatch
 ):

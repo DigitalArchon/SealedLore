@@ -16,7 +16,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from sealedlore.models.world import WorldArt
+from sealedlore.models.world import WorldArt, own_set_key
 from sealedlore.storage.atomic import atomic_write_json, read_json
 from sealedlore.storage.image_meta import MetadataError, strip_metadata
 from sealedlore.storage.images import IMAGES_DIR, WORLD_ART_FILE, is_safe_relative, read_story_file
@@ -59,10 +59,9 @@ def carried_art(
         files[picture.file] = data
         kept.append(picture)
     carried.pictures = kept
-    # The story's own tile set and the author's changes to single assets,
-    # each only with its file.
-    for field in ("tile_assets", "tile_overrides"):
-        roles: dict[str, str] = getattr(carried, field)
+    # The story's own tile sets and the author's changes to single assets,
+    # each asset only with its file; a set left with none is left out.
+    for roles in (*(own.assets for own in carried.tile_sets.values()), carried.tile_overrides):
         for role, file in list(roles.items()):
             if not file:
                 continue
@@ -71,7 +70,22 @@ def carried_art(
                 roles.pop(role)
             else:
                 files[file] = data
+    carried.tile_sets = {key: own for key, own in carried.tile_sets.items() if own.assets}
     return carried, files
+
+
+def art_with_files(art: WorldArt, has_file: Callable[[str], bool]) -> WorldArt:
+    """`art` for a story being made from a scenario or a sidecar: each map
+    picture, own tile set asset and changed asset only with its file (a kept
+    record of nothing would stop it being drawn again), and the counts afresh."""
+    art = art.model_copy(deep=True)
+    art.pictures = [p for p in art.pictures if has_file(p.file)]
+    for own in art.tile_sets.values():
+        own.assets = {role: file for role, file in own.assets.items() if has_file(file)}
+    art.tile_sets = {key: own for key, own in art.tile_sets.items() if own.assets}
+    art.tile_overrides = {r: f for r, f in art.tile_overrides.items() if not f or has_file(f)}
+    art.pictures_by_day, art.failures = {}, {}
+    return art
 
 
 def carried_story_art(story_id: str, root: Path | None = None) -> tuple[WorldArt, dict[str, bytes]]:
@@ -152,11 +166,12 @@ def load_sidecar(plot_path: Path) -> tuple[WorldArt | None, dict[str, bytes]]:
         picture.file = relative
         kept.append(picture)
     art.pictures = kept
-    # A story's own set and the author's changes name files the new story
-    # won't have: dropped (a kept record stopped the figure being drawn).
-    art.tile_assets = {}
+    # A story's own sets and the author's changes name files the new story
+    # won't have: dropped (a kept record stopped the figure being drawn). A
+    # sample's set is shipped beside it (storage/tile_sets.py).
+    art.tile_sets = {}
     art.tile_overrides = {role: file for role, file in art.tile_overrides.items() if file == ""}
-    if art.tile_set == "own":
+    if own_set_key(art.tile_set) is not None:
         art.tile_set = ""
     return art, files
 

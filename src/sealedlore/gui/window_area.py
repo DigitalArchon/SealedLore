@@ -20,7 +20,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QImage
-from PySide6.QtWidgets import QFileDialog, QMessageBox
+from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
 
 from sealedlore.engine.area import Area, point_tile, tile_point
 from sealedlore.engine.marks import mark_token, marks_in
@@ -31,7 +31,9 @@ from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.map_tiles import person_sprite
 from sealedlore.gui.ref_images import PICTURE_FILTER
 from sealedlore.gui.tile_set_editor import TileSetEditor
+from sealedlore.gui.tile_set_gallery import TileSetDesigner, TileSetGallery
 from sealedlore.models.character import Character
+from sealedlore.storage.repository import save_config
 
 # Areas kept painted, most recent first.
 PAINTED_KEPT = 6
@@ -73,7 +75,9 @@ class AreaWindow:
         self.area_view.looks_wanted.connect(self._area_looks)
         self.area_view.look_chosen.connect(self._area_look)
         self.area_view.own_look_requested.connect(self._area_own_look)
+        self.area_view.gallery_requested.connect(self._area_gallery)
         self.area_view.edit_look_requested.connect(self._area_edit_look)
+        self.area_view.offer_dismissed.connect(self._area_offer_dismissed)
         # Marks (⌖): a spot clicked on either view goes into the turn.
         self.area_view.mark_requested.connect(self._mark_tile)
         self.area_view.point_of = self._point_of_tile
@@ -154,6 +158,7 @@ class AreaWindow:
             failed=failed,
         )
         self.area_view.set_edge(session.edge_here())
+        self.area_view.set_offer(session.tile_set_offer(art))
         self._sync_marks()
 
     def _close_area(self) -> None:
@@ -162,6 +167,7 @@ class AreaWindow:
         if not hasattr(self, "area_view"):
             return
         self.area_view.drop_walk()
+        self.area_view.set_offer(None)
         self.area_view.set_message("No area here yet.")
         self._area_images.clear()
         self._area_failed.clear()
@@ -194,13 +200,15 @@ class AreaWindow:
         items = tuple(sorted(p.id for p in art.pictures if p.subject == "item"))
         rows = zlib.crc32("".join(area.rows).encode())
         things = tuple((p.name, p.x, p.y, p.w, p.h) for p in area.placements)
+        name = session.tile_set_name(art)
+        own = art.own_set_for(name)
         return (
             area.id,
             rows,
             things,
-            session.tile_set_name(art),
+            name,
             items,
-            tuple(sorted(art.tile_assets.items())),
+            tuple(sorted(own[1].assets.items())) if own is not None else (),
             tuple(sorted(art.tile_overrides.items())),
             session.story.defaults.map_density,
         )
@@ -516,29 +524,62 @@ class AreaWindow:
         session.set_tile_set(name)
         self.refresh_area()
 
-    def _area_own_look(self) -> None:
-        """Draw a tile set for this story: asked first, with the price."""
+    def _area_gallery(self) -> None:
+        """Every tile set with its pictures (gui/tile_set_gallery.py): use
+        one, remove an own one, or go on to the designer or the editor."""
         session = self.session
-        if session is None:
+        if session is None or self._busy:
             return
-        count, price, problem = session.own_tile_set_offer()
+        session.tile_sets_offered()  # the offer, answered
+        self.area_view.set_offer(None)
+        dialog = TileSetGallery(session, self)
+        try:
+            result = dialog.exec()
+        finally:
+            dialog.deleteLater()
+        self._walker_images.clear()
+        self.refresh_area()
+        if result == TileSetGallery.DESIGN:
+            self._area_own_look()
+        elif result == TileSetGallery.EDIT:
+            self._area_edit_look()
+
+    def _area_offer_dismissed(self) -> None:
+        session = self.session
+        if session is None or self._busy:
+            return
+        session.tile_sets_offered()
+        self.area_view.set_offer(None)
+
+    def _area_own_look(self) -> None:
+        """Draw a new tile set for this story (gui/tile_set_gallery.py): the
+        author describes it, the designer writes the words and every prompt,
+        and nothing is drawn until they have approved them with the price."""
+        session = self.session
+        if session is None or self._busy:
+            return
+        problem = session.own_tile_set_offer()[2]
         if problem is not None:
-            QMessageBox.information(self, "Draw a tile set", problem)
+            QMessageBox.information(self, "Draw a new tile set", problem)
             return
-        cost = f"about ${price:.2f}" if price is not None else "at the model's listed price"
-        answer = QMessageBox.question(
-            self,
-            "Draw a tile set for this story?",
-            f"The map art model ({session.map_art_model}) writes what each picture should "
-            f"show from the story's world, then {count} pictures are drawn by "
-            f"{self.config.map_tile_model}, {cost}: floors, walls, ground, roads, water, "
-            "roofs, trees and the like. The map is drawn in the new set once all of it is in; "
-            "the set it has now stays until then. Things and people already drawn keep their "
-            "sprites.",
-        )
-        if answer != QMessageBox.Yes:
-            return
-        if session.start_own_tile_set():
+        dialog = TileSetDesigner(session, self, browse=self._browse_models)
+        try:
+            accepted = dialog.exec() == QDialog.Accepted
+            designer = dialog.designer_model()
+        finally:
+            dialog.deleteLater()
+        # The designer picked in the dialog sticks (as the picture dialogs'
+        # prompt writer does); never from a chat kept in memory only, which
+        # teaches the settings nothing.
+        if not session.memory_only and designer != (self.config.tileset_model or ""):
+            self.config.tileset_model = designer or None
+            save_config(self.config, root=self.root)
+        # The designer's call, paid whether or not the set is drawn.
+        for usage in session.unreported_usage:
+            self.status_strip.add_cost(usage)
+        session.unreported_usage.clear()
+        self._refresh_story_cost()
+        if accepted:
             self._sync_progress()
             self.statusBar().showMessage("Drawing this story's tile set in the background…", 6000)
 

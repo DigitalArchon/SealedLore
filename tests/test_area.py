@@ -24,13 +24,26 @@ from sealedlore.engine.area import (
 from sealedlore.engine.furnish import furnish_messages, parse_furnishing
 from sealedlore.engine.prompt import TurnRequest
 from sealedlore.engine.session import StorySession
-from sealedlore.engine.tile_draw import item_jobs, parse_tile_words, tile_jobs, walker_jobs
-from sealedlore.engine.tile_sets import TileSetInfo, choose_set, item_slugs
+from sealedlore.engine.tile_draw import (
+    item_jobs,
+    parse_tile_words,
+    tile_jobs,
+    tile_set_price,
+    walker_jobs,
+)
+from sealedlore.engine.tile_sets import TileSetInfo, choose_set, item_slugs, own_key
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.engine.world_art import rasterise
 from sealedlore.models.area import FurnishItem, FurnishPlan, FurnishRoom, Spot
 from sealedlore.models.config import Config, ProviderConfig
-from sealedlore.models.world import PlaceLayout, WorldArt, WorldDelta, WorldMap, WorldPlace
+from sealedlore.models.world import (
+    OwnTileSet,
+    PlaceLayout,
+    WorldArt,
+    WorldDelta,
+    WorldMap,
+    WorldPlace,
+)
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage.repository import StoryBundle, save_story_bundle
 from sealedlore.storage.world_art import save_world_art
@@ -286,9 +299,15 @@ def test_a_tile_set_is_chosen_by_what_the_setting_says():
     assert choose_set("", "An elven forest at the edge of the world.", [], shipped) == "elf"
     assert choose_set("", "Deep Nine, a station.", ["space"], shipped) == "station"
     assert choose_set("farm", "An elven forest.", [], shipped) == "farm"  # the author's choice
-    assert choose_set("own", "", [], shipped) == "own"
+    # One of the story's own, while it is there; gone, the setting decides.
+    assert choose_set("own:neon", "", [], shipped, own=["neon"]) == "own:neon"
+    assert choose_set("own", "", [], shipped, own=["own"]) == "own"  # the old single set
+    assert choose_set("own:gone", "An elven forest.", [], shipped, own=["neon"]) == "elf"
     assert choose_set("", "Nothing in particular.", [], shipped) == "elf"  # the first, by name
     assert item_slugs("A wooden chest") == ["a-wooden-chest", "wooden-chest"]
+    assert own_key("Rain-slick alleys", []) == "rain-slick-alleys"
+    assert own_key("Rain-slick alleys", ["rain-slick-alleys"]) == "rain-slick-alleys-2"
+    assert own_key("", ["own"]) == "own-2"
 
 
 def test_sprites_are_drawn_for_what_has_none_and_people_from_their_portraits():
@@ -337,6 +356,40 @@ def test_a_story_s_own_tile_set_is_drawn_from_words_written_for_its_world():
     assert all("a drowned city" in prompt for _role, prompt, _size in jobs)
     with pytest.raises(ValueError):
         parse_tile_words(json.dumps({"world": "x"}))
+    # The designer's own prompt for a picture is kept with the words and
+    # sent for that picture, the template for the rest; one that forgets the
+    # style gets it, so the set reads as one; a prompt for nothing drawn, or
+    # for no role, is dropped.
+    designed = {
+        **words,
+        "style": "bleak and cold, muted greys",
+        "prompts": {
+            "floor": "Pixel art, bleak and cold, muted greys: wet planks of a drowned city.",
+            "out-door": "A warped door  of a drowned city, on white.",
+            "out-canopy": "reeds",
+            "rug": "",
+            "nothing": "x",
+        },
+    }
+    parsed = parse_tile_words(json.dumps({**designed, "out-canopy": ""}))
+    assert parsed["prompt:floor"] == designed["prompts"]["floor"]
+    assert parsed["prompt:out-door"] == (
+        "A warped door of a drowned city, on white. Style: bleak and cold, muted greys."
+    )
+    assert "prompt:rug" not in parsed and "prompt:nothing" not in parsed
+    assert "prompt:out-canopy" not in parsed  # nothing to draw it for
+    sent = {role: prompt for role, prompt, _size in tile_jobs(parsed)}
+    assert sent["floor"] == parsed["prompt:floor"]
+    assert sent["out-door"] == parsed["prompt:out-door"]
+    assert "wet planks" not in sent["cap"] and "slate, in a drowned city" in sent["cap"]
+    # The whole set's price is each picture at its size, never a guess.
+    prices = {"1024x1024": 0.01, "768x768": 0.005}
+    jobs = tile_jobs(parsed)
+    textures = sum(1 for _r, _p, size in jobs if size == "1024x1024")
+    assert tile_set_price(jobs, prices.get) == pytest.approx(
+        textures * 0.01 + (len(jobs) - textures) * 0.005
+    )
+    assert tile_set_price(jobs, lambda _size: None) is None
 
 
 # --- the session ---------------------------------------------------------------------
@@ -630,18 +683,168 @@ def test_one_asset_of_the_tile_set_is_changed_drawn_again_or_put_back(
     assert session.walker_file("Serrik Vaun").startswith("images/map/tileset/")
 
 
-def test_a_story_s_own_tile_set_and_its_changes_go_into_a_new_playthrough():
-    from sealedlore.storage.world_art import carried_art
+def test_a_story_s_own_tile_sets_and_its_changes_go_into_a_new_playthrough(tmp_path):
+    from sealedlore.storage.world_art import art_with_files, carried_art, load_sidecar
 
     art = WorldArt(
-        tile_assets={"floor": "images/map/tileset/floor-1.png", "cap": "images/map/gone.png"},
+        tile_set="own:neon",
+        tile_sets={
+            "neon": OwnTileSet(
+                title="Neon",
+                assets={"floor": "images/map/tileset/floor-1.png", "cap": "images/map/gone.png"},
+                words={"world": "a city", "style": "neon"},
+            ),
+            "lost": OwnTileSet(title="Lost", assets={"floor": "images/map/lost.png"}),
+        },
         tile_overrides={"out-road": "images/map/tileset/road-1.png", "rug": ""},
     )
     files = {"images/map/tileset/floor-1.png": b"F", "images/map/tileset/road-1.png": b"R"}
     carried, out = carried_art(art, files.get)
-    assert carried.tile_assets == {"floor": "images/map/tileset/floor-1.png"}  # only with a file
+    # Each asset only with its file; a set left with none is left out.
+    assert carried.tile_sets["neon"].assets == {"floor": "images/map/tileset/floor-1.png"}
+    assert carried.tile_sets["neon"].words == {"world": "a city", "style": "neon"}
+    assert "lost" not in carried.tile_sets and carried.tile_set == "own:neon"
     assert carried.tile_overrides == {"out-road": "images/map/tileset/road-1.png", "rug": ""}
     assert out == files
+    # A scenario brings the same, by the files it carries.
+    kept = art_with_files(art, files.__contains__)
+    assert list(kept.tile_sets) == ["neon"] and kept.tile_overrides == carried.tile_overrides
+    # A sample's sidecar never names files the new story won't have.
+    plot = tmp_path / "Sample.md"
+    plot.write_text("# x", encoding="utf-8")
+    (tmp_path / "Sample.world_art.json").write_text(art.model_dump_json(), encoding="utf-8")
+    shipped, _files = load_sidecar(plot)
+    assert shipped is not None and shipped.tile_sets == {} and shipped.tile_set == ""
+    assert shipped.tile_overrides == {"rug": ""}
+
+
+def test_a_story_may_keep_several_own_tile_sets_and_the_one_it_had_is_read():
+    """The one own set a story could keep before (`tile_assets`, `tile_words`,
+    `tile_set == "own"`) opens as the first of several."""
+    old = {
+        "tile_set": "own",
+        "tile_assets": {"floor": "images/map/tileset/floor-1.png"},
+        "tile_words": {"world": "a drowned city", "style": "bleak"},
+    }
+    art = WorldArt.model_validate(old)
+    assert art.tile_set == "own:own" and list(art.tile_sets) == ["own"]
+    assert art.tile_sets["own"].assets == old["tile_assets"]
+    assert art.tile_sets["own"].words == old["tile_words"]
+    assert art.tile_sets["own"].title == "This story's own"
+    assert art.own_set_for("own:own") == ("own", art.tile_sets["own"])
+    assert art.own_set_for("own") == ("own", art.tile_sets["own"])  # the old value still reads
+    assert art.own_set_for("doomsville") is None and art.own_set_for("own:gone") is None
+    dumped = art.model_dump()
+    assert "tile_assets" not in dumped and "tile_words" not in dumped
+    assert WorldArt.model_validate(dumped) == art
+    # Nothing drawn before: no set, the choice left alone.
+    empty = WorldArt.model_validate({"tile_set": "doomsville", "tile_assets": {}, "tile_words": {}})
+    assert empty.tile_sets == {} and empty.tile_set == "doomsville"
+    # Several, each with its own words, swapped between by name.
+    art.tile_sets["neon"] = OwnTileSet(
+        title="Neon alleys", assets={"floor": "images/map/tileset/f-2.png"}, words={"style": "neon"}
+    )
+    art.tile_set = "own:neon"
+    assert art.own_set_for(art.tile_set)[1].words == {"style": "neon"}
+
+
+def test_a_set_is_designed_from_a_description_shown_with_its_price_and_drawn_as_approved(
+    tmp_path, story, cast, monkeypatch
+):
+    """The author's ruling (Oct 16 2026): show the sets there are, offer to
+    draw new ones, have the author describe what they want and a designer
+    model manage the pictures. Nothing is drawn until the author has seen
+    every prompt and the price; what they approve is what is sent."""
+    from sealedlore.engine import session_area
+    from sealedlore.storage.repository import read_api_log
+    from tests.test_world_pictures import FakeImages
+
+    design = {
+        "world": "rain-slick cyberpunk alleys",
+        "style": "gritty neon noir, wet concrete and pink light",
+        "floor": "cracked concrete",
+        "cap": "a steel wall top",
+        "face": "a graffitied concrete wall",
+        "rug": "a soaked cardboard mat",
+        "decor": ["a vending machine", "a neon sign"],
+        "out-ground": "wet asphalt",
+        "out-road": "a rain-slick street",
+        "out-wall": "a concrete facade with neon tubes",
+        "trees": ["a dead sapling in a planter"],
+        "out-door": "a steel door under a buzzing lamp",
+        "light": [255, 100, 200],
+        "prompts": {
+            "floor": "Pixel art, gritty neon noir, wet concrete and pink light: cracked concrete."
+        },
+    }
+    FakeImages.sent = []
+    monkeypatch.setattr(session_area, "ImageClient", FakeImages)
+    session = make_session(tmp_path, story, cast, responses=[json.dumps(design)])
+    session.config.providers[0].api_key = "k"
+    # The designer: the author's choice, else Opus 5.5 on NanoGPT.
+    assert session.tileset_designer == "anthropic/claude-opus-5.5"
+    session.config.tileset_model = "z-ai/glm-5.3-flash"
+    assert session.tileset_designer == "z-ai/glm-5.3-flash"
+    assert session.own_tile_set_offer()[2] is None
+    assert session.start_tile_set_design(
+        "gritty rain-slick cyberpunk alleys, neon and wet concrete"
+    )
+    session._design_thread.join(5)
+    state, words, error = session.tile_set_design
+    assert state == "done" and error is None and words is not None
+    assert words["prompt:floor"] == design["prompts"]["floor"]
+    assert "prompt:cap" not in words  # the template's, shown as it will be sent
+    assert session.map_art_copy().tile_sets == {}  # nothing drawn yet
+    sent = next(e for e in read_api_log(story.id, tmp_path) if e["kind"] == "map_tileset_request")
+    assert sent["payload"]["model"] == "z-ai/glm-5.3-flash"
+    assert "cyberpunk alleys, neon" in json.dumps(sent["payload"])
+    count, price = session.tile_set_price(words)
+    assert count == len(tile_jobs(words)) and price is None  # no listing: no guess
+    # The author edits a prompt and names the set, then it is drawn as approved.
+    words["prompt:floor"] = (
+        "Cracked concrete, wet. Style: gritty neon noir, wet concrete and pink light."
+    )
+    assert session.start_own_tile_set(words, "Neon alleys")
+    session._own_set_thread.join(10)
+    art = session.map_art_copy()
+    assert art.tile_set == "own:neon-alleys" and list(art.tile_sets) == ["neon-alleys"]
+    own = art.tile_sets["neon-alleys"]
+    assert own.title == "Neon alleys" and own.made_at
+    assert set(own.assets) == {role for role, _p, _s in tile_jobs(words)}
+    assert all(f.startswith("images/map/tileset/") for f in own.assets.values())
+    assert own.words["prompt:floor"] == words["prompt:floor"]
+    assert FakeImages.sent[0]["prompt"] == words["prompt:floor"]  # exactly as approved
+    assert len(FakeImages.sent) == count
+    kinds = [e["kind"] for e in read_api_log(story.id, tmp_path)]
+    assert "map_tileset_response" in kinds and kinds.count("map_picture_response") == count
+    # In use, listed, its words the prompts' style; drawn for this story.
+    assert session.tile_set_name() == "own:neon-alleys"
+    assert ("own:neon-alleys", "Neon alleys") in session.tile_set_choices()
+    assert session.tile_style() == "gritty neon noir, wet concrete and pink light"
+    assets = {a.role: a for a in session.tile_set_assets()}
+    assert assets["floor"].source == "drawn for this story"
+    assert assets["floor"].words == "cracked concrete"
+    assert session.tile_asset_bytes("floor") == session.pictures.read(own.assets["floor"])
+    cards = {c.name: c for c in session.tile_set_cards()}
+    assert cards["own:neon-alleys"].own and cards["own:neon-alleys"].in_use
+    assert cards["doomsville"].title == "Snowbound farm" and not cards["doomsville"].in_use
+    assert cards["own:neon-alleys"].read("floor") == session.pictures.read(own.assets["floor"])
+    # A second set beside it, swapped to and from; removing one deletes its pictures.
+    assert session.start_own_tile_set(words, "Neon alleys")
+    session._own_set_thread.join(10)
+    art = session.map_art_copy()
+    assert set(art.tile_sets) == {"neon-alleys", "neon-alleys-2"}
+    assert art.tile_set == "own:neon-alleys-2"
+    session.set_tile_set("own:neon-alleys")
+    assert session.tile_set_name() == "own:neon-alleys"
+    floor = art.tile_sets["neon-alleys"].assets["floor"]
+    assert session.remove_own_tile_set("own:neon-alleys")
+    assert session.pictures.read(floor) is None
+    assert list(session.map_art_copy().tile_sets) == ["neon-alleys-2"]
+    assert session.map_art_copy().tile_set == ""  # the program chooses again
+    shipped = {name for name, _title in session.tile_set_choices() if not name.startswith("own:")}
+    assert session.tile_set_name() in shipped
+    assert not session.remove_own_tile_set("doomsville")
 
 
 def test_someone_the_scene_has_here_and_the_map_never_placed_stands_with_the_author(

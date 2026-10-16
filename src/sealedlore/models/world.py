@@ -10,9 +10,9 @@ the program's; the model names places and people, code resolves the names.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from sealedlore.ids import new_id
 from sealedlore.models.area import FurnishPlan
@@ -217,6 +217,43 @@ class TerrainPatch(BaseModel):
     made_at: str = ""
 
 
+class OwnTileSet(BaseModel):
+    """A tile set drawn for one story (engine/tile_draw.py; the author
+    describes it, a model designs it, an image model draws it): each asset's
+    role ("floor", "out-road", "decor0") to its file under images/map/, and
+    the words it was designed from, by role, with the prompt each picture was
+    drawn from under "prompt:<role>". A story may keep several (the author,
+    Oct 16 2026) and swap between them; `WorldArt.tile_set` names the one in
+    use as "own:<key>"."""
+
+    title: str = ""
+    assets: dict[str, str] = Field(default_factory=dict)
+    words: dict[str, str] = Field(default_factory=dict)
+    made_at: str = ""
+
+
+# The one own set a story could keep before several (`tile_assets`,
+# `tile_words`, `tile_set == "own"`) is read into `tile_sets` under this key.
+FIRST_OWN_SET = "own"
+OWN_SET_PREFIX = "own:"
+
+
+def own_set_key(tile_set: str) -> str | None:
+    """The key of the story's own set a `WorldArt.tile_set` value names
+    ("own:rain-slick-alleys" → "rain-slick-alleys"; the old "own" → the
+    first), or None for a shipped set or no choice."""
+    if tile_set == FIRST_OWN_SET:
+        return FIRST_OWN_SET
+    if tile_set.startswith(OWN_SET_PREFIX) and len(tile_set) > len(OWN_SET_PREFIX):
+        return tile_set[len(OWN_SET_PREFIX) :]
+    return None
+
+
+def own_set_name(key: str) -> str:
+    """The `WorldArt.tile_set` value that chooses the own set under `key`."""
+    return OWN_SET_PREFIX + key
+
+
 class WorldArt(BaseModel):
     sprites: list[WorldSprite] = Field(default_factory=list)
     # By place id, then by state ("" before any change). Art is not branch
@@ -242,18 +279,48 @@ class WorldArt(BaseModel):
     # and then by state, as a plan's are.
     furnishings: dict[str, dict[str, FurnishPlan]] = Field(default_factory=dict)
     # The tile set the map is drawn in (engine/tile_sets.py): a shipped set's
-    # name, "own" for the one drawn for this story, or "" for the program to
-    # choose from the setting.
+    # name, "own:<key>" for one drawn for this story (`tile_sets`), or "" for
+    # the program to choose from the setting.
     tile_set: str = ""
-    # The story's own tile set: each asset's role ("floor", "out-road",
-    # "decor0") to its file under images/map/, and the words it was drawn from.
-    tile_assets: dict[str, str] = Field(default_factory=dict)
-    tile_words: dict[str, str] = Field(default_factory=dict)
+    # The tile sets drawn for this story, by key (engine/tile_sets.py
+    # `own_key`: from the title, "rain-slick-alleys").
+    tile_sets: dict[str, OwnTileSet] = Field(default_factory=dict)
     # The author's changes to single assets, over whichever set is in use
     # (Look ▾ → Edit the tile set…): a role ("floor", "items/a-stone-well",
     # "walker/Jane Doe") to the file drawn or chosen for it; "" goes back to
     # the set's own, past anything drawn for the story.
     tile_overrides: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _one_own_set_becomes_the_first(cls, data: Any) -> Any:
+        """A world_art.json from before several own sets (`tile_assets`,
+        `tile_words`, `tile_set == "own"`): read into `tile_sets` under
+        `FIRST_OWN_SET`, so a saved story opens on the set it had."""
+        if not isinstance(data, dict) or not ("tile_assets" in data or "tile_words" in data):
+            return data
+        data = dict(data)
+        assets = data.pop("tile_assets", None) or {}
+        words = data.pop("tile_words", None) or {}
+        sets = data.get("tile_sets")
+        sets = dict(sets) if isinstance(sets, dict) else {}
+        if assets and FIRST_OWN_SET not in sets:
+            sets[FIRST_OWN_SET] = {
+                "title": "This story's own",
+                "assets": dict(assets),
+                "words": dict(words),
+            }
+        data["tile_sets"] = sets
+        if data.get("tile_set") == FIRST_OWN_SET:
+            data["tile_set"] = f"own:{FIRST_OWN_SET}"
+        return data
+
+    def own_set_for(self, tile_set: str) -> tuple[str, OwnTileSet] | None:
+        """(key, the set) when `tile_set` names one of this story's own sets
+        that has assets ("own:<key>"; the old "own" is the first), else None."""
+        key = own_set_key(tile_set)
+        found = self.tile_sets.get(key) if key else None
+        return (key, found) if key and found is not None and found.assets else None
 
     def furnishing_for(self, place_id: str, state: str) -> FurnishPlan | None:
         """A place's furnishing in `state`; else, when the state has no plan

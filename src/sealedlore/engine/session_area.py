@@ -24,7 +24,7 @@ from __future__ import annotations
 import math
 import re
 import threading
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -67,6 +67,7 @@ from sealedlore.engine.marks import (
 )
 from sealedlore.engine.session_world_art import _today
 from sealedlore.engine.tile_draw import (
+    DESIGNER_MODEL,
     RUN_LIMIT,
     SPRITE_SIZE,
     TEXTURE_SIZE,
@@ -74,6 +75,7 @@ from sealedlore.engine.tile_draw import (
     parse_tile_words,
     style_words,
     tile_jobs,
+    tile_set_price,
     tileset_messages,
     walker_jobs,
     world_words,
@@ -85,6 +87,9 @@ from sealedlore.engine.tile_sets import (
     TileSetInfo,
     choose_set,
     item_slugs,
+    own_key,
+    own_set_key,
+    own_set_name,
     slug,
 )
 from sealedlore.engine.validators import locate_quote
@@ -101,8 +106,9 @@ from sealedlore.engine.world_layout import (
 from sealedlore.engine.world_pictures import MAP_PICTURES_DIR, PictureJob, looks_of
 from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.area import AreaState, LiveArea, MapAction, Mark, Spot
+from sealedlore.models.config import on_nanogpt
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID, Node, Usage
-from sealedlore.models.world import WorldArt, WorldDelta, WorldMap
+from sealedlore.models.world import OwnTileSet, WorldArt, WorldDelta, WorldMap
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError
 from sealedlore.providers.images import ImageClient, build_image_payload, data_url, loggable_payload
 from sealedlore.storage import tile_sets as shipped
@@ -143,6 +149,35 @@ class TileAsset:
     source: str
     # What it shows, in words: what a redraw is drawn from.
     words: str
+
+
+@dataclass
+class TileSetCard:
+    """One tile set as the gallery shows it (gui/tile_set_gallery.py)."""
+
+    # What `set_tile_set` takes: a shipped set's name, or "own:<key>".
+    name: str
+    title: str
+    in_use: bool
+    # Drawn for this story (may be removed), or shipped with SealedLore.
+    own: bool
+    style: str
+    keywords: list[str]
+    # Its assets by role, for the thumbnails.
+    read: Any
+
+
+# The roles a gallery card shows thumbnails of: textures, then sprites.
+CARD_ROLES = (
+    "floor",
+    "out-ground",
+    "out-road",
+    "out-roof",
+    "rug",
+    "decor0",
+    "out-tree0",
+    "out-door",
+)
 
 
 ASSET_LABELS = {
@@ -188,6 +223,12 @@ class AreaRuntime:
     _own_set_client: ImageClient | None = None
     _own_set_total = 0
     _own_set_done = 0
+    # The designer's call for a new own set (`start_tile_set_design`): its
+    # thread, and its words (with a prompt per picture) or why it failed.
+    _design_thread: threading.Thread | None = None
+    _design_text: ChatProvider | None = None
+    _design_words: dict[str, str] | None = None
+    _design_error: str | None = None
 
     # --- what is played on ---------------------------------------------------
 
@@ -200,18 +241,17 @@ class AreaRuntime:
         return [c.name for c in self.map_people()]
 
     def tile_set_name(self, art: WorldArt | None = None) -> str:
-        """The tile set the map is drawn in (`engine.tile_sets.choose_set`)."""
+        """The tile set the map is drawn in (`engine.tile_sets.choose_set`):
+        a shipped set's name or "own:<key>"."""
         art = art or self.map_art_copy()
         sets = {name: info for name, (info, _folder) in shipped.shipped_sets().items()}
-        if art.tile_set == "own" and art.tile_assets:
-            return "own"
         looks = [
             str((layout.spec or {}).get("ground") or "")
             for states in art.layouts.values()
             for layout in states.values()
         ]
-        chosen = art.tile_set if art.tile_set != "own" else ""
-        return choose_set(chosen, self.map_setting(), looks, sets)
+        own = [key for key, found in art.tile_sets.items() if found.assets]
+        return choose_set(art.tile_set, self.map_setting(), looks, sets, own)
 
     def tile_set(self, art: WorldArt | None = None) -> tuple[TileSetInfo, Any]:
         """(the set's manifest, a reader of its assets by role): the story's
@@ -221,23 +261,14 @@ class AreaRuntime:
         name = self.tile_set_name(art)
         sets = shipped.shipped_sets()
         info, folder = sets.get(name, (None, None))
-        if name == "own":
-            words = dict(art.tile_words)
-            try:
-                light = tuple(int(c) for c in words.get("light", "").split(","))
-            except ValueError:
-                light = ()
-            info = TileSetInfo(
-                name="own",
-                title="This story's own",
-                words=words,
-                lava=words.get("lava") == "yes",
-                **({"light": light} if len(light) == 3 else {}),
-            )
+        own: dict[str, str] = {}
+        found = art.own_set_for(name)
+        if found is not None:
+            info = _own_info(name, found[1])
+            own = dict(found[1].assets)
         if info is None:
             info = TileSetInfo(name="")
         items = {p.subject_id: p.file for p in art.pictures if p.subject == "item"}
-        own = dict(art.tile_assets)
         changed = dict(art.tile_overrides)
         reader = self.pictures.read
 
@@ -313,10 +344,10 @@ class AreaRuntime:
 
     def _set_words(self, art: WorldArt, info: TileSetInfo) -> dict[str, str]:
         """The words every prompt names the world and style by: the set in
-        use's; a story's own words only while its own set is the one in use
+        use's (a shipped manifest's, or the own set's, which `tile_set` put
+        on its info); an own set's words only while it is the one in use
         (they leaked into a shipped set's prompts; the second review)."""
-        own = art.tile_words if info.name == "own" else {}
-        return {**info.words, **own}
+        return dict(info.words)
 
     def area(
         self, area_id: str | None, world: WorldMap | None = None, art: WorldArt | None = None
@@ -1772,13 +1803,53 @@ class AreaRuntime:
 
     # --- the tile set (engine/tile_sets.py, engine/tile_draw.py) -----------------
 
-    def tile_set_choices(self) -> list[tuple[str, str]]:
+    def tile_set_choices(self, art: WorldArt | None = None) -> list[tuple[str, str]]:
         """(name, title) of every set the map may be drawn in: the shipped
-        ones, and this story's own once it has one."""
+        ones, and each of this story's own ("own:<key>")."""
         out = [(name, info.title or name) for name, (info, _f) in shipped.shipped_sets().items()]
+        art = art or self.map_art_copy()
+        for set_key, found in art.tile_sets.items():
+            if found.assets:
+                out.append((own_set_name(set_key), found.title or "This story's own"))
+        return out
+
+    def tile_set_cards(self) -> list[TileSetCard]:
+        """Every set as the gallery shows it: the shipped sets, then this
+        story's own, each with a reader of its assets by role."""
         art = self.map_art_copy()
-        if art.tile_assets:
-            out.append(("own", "This story's own"))
+        in_use = self.tile_set_name(art)
+        out: list[TileSetCard] = []
+        for name, (info, folder) in shipped.shipped_sets().items():
+            out.append(
+                TileSetCard(
+                    name=name,
+                    title=info.title or name,
+                    in_use=name == in_use,
+                    own=False,
+                    style=style_words(info.words),
+                    keywords=list(info.keywords),
+                    read=lambda role, folder=folder: shipped.read_asset(folder, role),
+                )
+            )
+        reader = self.pictures.read
+        for set_key, found in art.tile_sets.items():
+            if not found.assets:
+                continue
+            name = own_set_name(set_key)
+            assets = dict(found.assets)
+            out.append(
+                TileSetCard(
+                    name=name,
+                    title=found.title or "This story's own",
+                    in_use=name == in_use,
+                    own=True,
+                    style=style_words(found.words),
+                    keywords=[],
+                    read=lambda role, assets=assets: (
+                        reader(assets[role]) if role in assets else None
+                    ),
+                )
+            )
         return out
 
     def set_tile_set(self, name: str) -> None:
@@ -1788,8 +1859,69 @@ class AreaRuntime:
             art.tile_set = name
             self._save_art(art)
 
+    def remove_own_tile_set(self, name: str) -> bool:
+        """One of the story's own sets taken out, its pictures deleted from
+        the story (never a shipped set); the map falls back to the program's
+        choice if it was drawn in it."""
+        key = own_set_key(name)
+        if key is None:
+            return False
+        art = self.world_art
+        with self._lock():
+            found = art.tile_sets.pop(key, None)
+            if found is None:
+                return False
+            if own_set_key(art.tile_set) == key:
+                art.tile_set = ""
+            self._save_art(art)
+        for file in found.assets.values():
+            if file:
+                self.pictures.remove(file)
+        return True
+
+    # --- the offer when a story's map begins ---------------------------------------
+
+    def tile_set_offer(self, art: WorldArt | None = None) -> str | None:
+        """The line the play view shows once, when the map begins and no set
+        has been chosen: which set the map is drawn in and that the gallery
+        has others; None once answered, or once a set is chosen."""
+        if self.story.tile_set_offered or self.story.chat:
+            return None
+        art = art or self.map_art_copy()
+        if art.tile_set:
+            return None
+        titles = dict(self.tile_set_choices(art))
+        name = self.tile_set_name(art)
+        title = titles.get(name, name)
+        if not title:
+            return None
+        return f"The map is drawn in {title}: choose another or draw one for this world."
+
+    def tile_sets_offered(self) -> None:
+        """The offer was answered (the gallery opened, or the line dismissed):
+        not shown again for this story."""
+        if not self.story.tile_set_offered:
+            self.story.tile_set_offered = True
+            self.save()
+
+    # --- a new own set: designed, approved, drawn ----------------------------------
+
+    @property
+    def tileset_designer(self) -> str:
+        """The model that designs a set: the author's (`Config.tileset_model`),
+        else Claude Opus 5.5 on NanoGPT (the author's ruling), else the map
+        art model."""
+        chosen = (self.config.tileset_model or "").strip()
+        if chosen:
+            return chosen
+        provider = self.config.active_provider()
+        if provider is not None and on_nanogpt(provider.base_url):
+            return DESIGNER_MODEL
+        return self.map_art_model
+
     def own_tile_set_offer(self) -> tuple[int, float | None, str | None]:
-        """(pictures, listed price for them, why it can't be drawn now)."""
+        """(pictures a whole set is, the listed price for them, why a set
+        can't be designed or drawn now)."""
         count = len(TEXTURES) + 1 + 3 + len(OUTDOOR_SPRITES)
         model = self._listed_image_model(self.config.map_tile_model)
         texture = model.price(TEXTURE_SIZE) if model is not None else None
@@ -1806,37 +1938,72 @@ class AreaRuntime:
             return count, total, "Pictures have no endpoint or key (Settings → Images)."
         thread = getattr(self, "_own_set_thread", None)
         if thread is not None and thread.is_alive():
-            return count, total, "This story's tile set is being drawn now."
+            return count, total, "A tile set is being drawn for this story now."
+        thread = getattr(self, "_design_thread", None)
+        if thread is not None and thread.is_alive():
+            return count, total, "A tile set is being designed now."
         return count, total, None
 
-    def start_own_tile_set(self) -> bool:
-        """Draw a tile set for this story (the author asked, having seen the
-        price): the map art model writes what each picture shows from the
-        world, then each is drawn, and the map is drawn in it once the set is
-        whole."""
+    def tile_set_price(self, words: Mapping[str, str]) -> tuple[int, float | None]:
+        """(the pictures a design is, their price together at the tile
+        model's listed prices, or None when it lists none)."""
+        jobs = tile_jobs(words, self.texts)
+        info = self._listed_image_model(self.config.map_tile_model)
+        price = tile_set_price(jobs, info.price if info is not None else lambda _s: None)
+        return len(jobs), price
+
+    def start_tile_set_design(self, description: str, model: str = "") -> bool:
+        """The designer writes a set's words and a prompt for every picture
+        from the world and the author's description, on a thread (nothing is
+        drawn: the author sees and approves them first, `tile_set_design`)."""
         if self.own_tile_set_offer()[2] is not None or self._map_closed:
             return False
-        media = self.config.images()
         detached = getattr(self.provider, "detached", None)
         text = detached() if callable(detached) else self.provider
-        client = ImageClient(media.base_url, media.api_key, api=media.api)
-        self._own_set_client = client
-        self._art_stop = False
+        self._design_text = text
+        self._design_words, self._design_error = None, None
+        designer = " ".join(model.split()) or self.tileset_designer
         thread = threading.Thread(
-            target=self._own_set_run, args=(text, client), name="map-tileset", daemon=True
+            target=self._design_run,
+            args=(text, designer, " ".join(description.split())),
+            name="map-tileset-design",
+            daemon=True,
         )
-        self._own_set_thread = thread
-        self._own_set_done, self._own_set_total = 0, 1
+        self._design_thread = thread
         thread.start()
         return True
 
-    def _own_set_run(self, text: ChatProvider, client: ImageClient) -> None:
+    def cancel_tile_set_design(self) -> None:
+        """The designer's call cut short (the author closed the designer
+        while it wrote): its reply, if any, is dropped."""
+        text = self._design_text
+        cancel = getattr(text, "cancel", None)
+        if callable(cancel):
+            try:
+                cancel()
+            except Exception:  # noqa: BLE001 - stopping must never fail
+                pass
+        self._design_words = None
+
+    @property
+    def tile_set_design(self) -> tuple[str, dict[str, str] | None, str | None]:
+        """("writing", "done", "failed" or "", the words with a prompt per
+        picture once written, why it failed)."""
+        thread = self._design_thread
+        if thread is not None and thread.is_alive():
+            return "writing", None, None
+        if self._design_words is not None:
+            return "done", dict(self._design_words), None
+        if self._design_error is not None:
+            return "failed", None, self._design_error
+        return "", None, None
+
+    def _design_run(self, text: ChatProvider, model: str, description: str) -> None:
         try:
-            model = self.map_art_model
             request = ChatRequest(
                 model=model,
-                extra_body=self.route_for("map_art"),
-                messages=tileset_messages(self.map_setting(), self.texts),
+                extra_body=self.route_for("map_art", model),
+                messages=tileset_messages(self.map_setting(), self.texts, description=description),
                 params=self.side_params(model, max_tokens=FURNISH_MAX_TOKENS),
             )
             log_ref = self._log(
@@ -1849,15 +2016,49 @@ class AreaRuntime:
                     {"request_log_ref": log_ref, "text": reply, "usage": completed.raw_usage},
                 )
                 self.unreported_usage.append(self.priced(completed.usage, model))
-                words = parse_tile_words(reply)
+                self._design_words = parse_tile_words(reply)
             except (ProviderError, ValueError) as exc:
                 self._log(
                     "map_tileset_error", {"request_log_ref": log_ref, "error": str(exc)[:300]}
                 )
-                return
+                self._design_error = str(exc)[:300]
+        except Exception as exc:  # noqa: BLE001 - a thread dies silently otherwise
+            self._log("map_tileset_error", {"error": f"{type(exc).__name__}: {exc}"[:300]})
+            self._design_error = f"{type(exc).__name__}: {exc}"[:300]
+        finally:
+            _close_quietly(text)
+            self._design_text = None
+
+    def start_own_tile_set(self, words: Mapping[str, str], title: str) -> bool:
+        """Draw a tile set for this story from a design the author approved
+        (the words, and the prompt of every picture, with the price shown):
+        each is drawn exactly as approved, into a new named set, and the map
+        is drawn in it once the set is whole."""
+        if self.own_tile_set_offer()[2] is not None or self._map_closed:
+            return False
+        design = {k: " ".join(v.split()) for k, v in words.items()}
+        if not tile_jobs(design, self.texts):
+            return False
+        media = self.config.images()
+        client = ImageClient(media.base_url, media.api_key, api=media.api)
+        self._own_set_client = client
+        self._art_stop = False
+        thread = threading.Thread(
+            target=self._own_set_run,
+            args=(design, " ".join(title.split()), client),
+            name="map-tileset",
+            daemon=True,
+        )
+        self._own_set_thread = thread
+        self._own_set_done, self._own_set_total = 0, 1
+        thread.start()
+        return True
+
+    def _own_set_run(self, words: dict[str, str], title: str, client: ImageClient) -> None:
+        try:
             jobs = tile_jobs(words, self.texts)
-            self._own_set_total = len(jobs) + 1
-            self._own_set_done = 1
+            self._own_set_total = len(jobs)
+            self._own_set_done = 0
             assets: dict[str, str] = {}
             model = self.config.map_tile_model
             info = self._listed_image_model(model)
@@ -1868,15 +2069,23 @@ class AreaRuntime:
                 if file is not None:
                     assets[role] = file
                 self._own_set_done += 1
-            if not all(role in assets for role in TEXTURES):
-                return  # not whole: the set the map has stays
+            missing = [role for role in TEXTURES if words.get(role) and role not in assets]
+            if missing:
+                # Not whole: the set the map has stays, and the log says why.
+                self._log("map_tileset_error", {"error": "not drawn: " + ", ".join(missing)})
+                return
             art = self.world_art
             if self._art_stop or self._closed:
                 return
             with self._lock():  # never inside `_closing` (see `_furnish_one`)
-                art.tile_assets = assets
-                art.tile_words = words
-                art.tile_set = "own"
+                key = own_key(title or words.get("world", ""), art.tile_sets)
+                art.tile_sets[key] = OwnTileSet(
+                    title=title or "This story's own",
+                    assets=assets,
+                    words=words,
+                    made_at=utc_now_iso(),
+                )
+                art.tile_set = own_set_name(key)
                 self._save_art(art)
             callback = self.on_map_art
             if callback is not None:
@@ -1885,7 +2094,6 @@ class AreaRuntime:
             self._log("map_tileset_error", {"error": f"{type(exc).__name__}: {exc}"[:300]})
         finally:
             client.close()
-            _close_quietly(text)
 
     def _draw_tile(
         self,
@@ -1953,7 +2161,9 @@ class AreaRuntime:
         name = self.tile_set_name(art)
         found = shipped.shipped_sets().get(name)
         folder = found[1] if found else None
-        words = {**info.words, **(art.tile_words if name == "own" else {})}
+        words = dict(info.words)
+        own = art.own_set_for(name)
+        own_assets = own[1].assets if own is not None else {}
         story_items = {p.subject_id for p in art.pictures if p.subject == "item"}
         out: list[TileAsset] = []
 
@@ -1961,7 +2171,7 @@ class AreaRuntime:
             changed = art.tile_overrides.get(role)
             if changed:
                 return "changed for this story"
-            if changed is None and (drawn or (name == "own" and role in art.tile_assets)):
+            if changed is None and (drawn or role in own_assets):
                 return "drawn for this story"
             return "the set's"
 
@@ -2181,6 +2391,23 @@ class AreaRuntime:
         with self._lock():
             art.tile_overrides[role] = ""
             self._save_art(art)
+
+
+def _own_info(name: str, found: OwnTileSet) -> TileSetInfo:
+    """A story's own set as a manifest, from its words: its title, the light
+    it gave, whether its water is molten."""
+    words = dict(found.words)
+    try:
+        light = tuple(int(c) for c in words.get("light", "").split(","))
+    except ValueError:
+        light = ()
+    return TileSetInfo(
+        name=name,
+        title=found.title or "This story's own",
+        words=words,
+        lava=words.get("lava") == "yes",
+        **({"light": light} if len(light) == 3 else {}),
+    )
 
 
 def _asset_key(role: str) -> str:

@@ -22,6 +22,7 @@ from sealedlore.storage.atomic import atomic_write_json
 from sealedlore.storage.image_meta import MetadataError, strip_metadata, stripped_or_same
 from sealedlore.storage.images import RECORD_FILES, is_safe_relative
 from sealedlore.storage.repository import StoryBundle
+from sealedlore.storage.world_art import art_with_files
 
 SCENARIO_SUFFIX = ".sealedlore-scenario.json"
 
@@ -182,16 +183,10 @@ def bundle_from_scenario(
         pending_files=_decoded_files(scenario.reference_files),
     )
     if scenario.world_art is not None:
-        # A map picture comes only with its file (storage.world_art.carried_art
-        # puts it beside the reference pictures); the counts start afresh.
-        art = scenario.world_art.model_copy(deep=True)
-        art.pictures = [p for p in art.pictures if p.file in bundle.pending_files]
-        art.tile_assets = {r: f for r, f in art.tile_assets.items() if f in bundle.pending_files}
-        art.tile_overrides = {
-            r: f for r, f in art.tile_overrides.items() if not f or f in bundle.pending_files
-        }
-        art.pictures_by_day, art.failures = {}, {}
-        bundle.world_art = art
+        # A map picture, an own tile set's asset or a changed asset comes only
+        # with its file (storage.world_art.carried_art puts them beside the
+        # reference pictures); the counts start afresh.
+        bundle.world_art = art_with_files(scenario.world_art, bundle.pending_files.__contains__)
     if scenario.background_image in bundle.pending_files:
         # Only with its file, as a map picture: a missing one is no background.
         story.background_image = scenario.background_image

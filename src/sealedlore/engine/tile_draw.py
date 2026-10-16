@@ -9,8 +9,11 @@ pure. Under the same standing approval and daily limit as map pictures:
 - each character gets a walking sprite, from their portrait when they have
   one (an edit of it, the portrait alone: nine of nine kept their looks),
   else from how their card describes them;
-- a story's own tile set, when the author asks for one, from words a model
-  writes from the world (`map.tileset.system`).
+- a story's own tile set, when the author asks for one: they describe the
+  look they want, a designer model (`DESIGNER_MODEL`, Claude Opus 5.5 by the
+  author's ruling, Oct 16 2026) writes the set's words and a prompt tailored
+  to every picture (`map.tileset.system`), the author sees and edits them
+  with the price, and each is drawn exactly as approved.
 """
 
 from __future__ import annotations
@@ -20,9 +23,10 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from sealedlore.engine.area import Area
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
-from sealedlore.engine.tile_sets import OUTDOOR_SPRITES, TEXTURES, item_slugs
+from sealedlore.engine.tile_sets import OUTDOOR_SPRITES, SPRITES, TEXTURES, item_slugs
 from sealedlore.engine.world_pictures import PictureJob
 from sealedlore.messages import ContentPart, PromptMessage
+from sealedlore.models.config import RecommendedModel
 
 # The roles a story's own tile set must have words for; the rest are drawn
 # when the world has them.
@@ -32,6 +36,34 @@ SPRITE_SIZE = "768x768"
 TEXTURE_SIZE = "1024x1024"
 # A run draws at most this many pictures, nearest the story first.
 RUN_LIMIT = 12
+# The designer's prompt for a role is kept in the set's words under this
+# prefix ("prompt:floor"), so the set carries what each picture was drawn from.
+PROMPT_KEY = "prompt:"
+# How long a prompt may be, and the words of one asset.
+WORDS_LIMIT = 200
+PROMPT_LIMIT = 1500
+
+# The model that designs a story's own tile set when none is chosen
+# (`Config.tileset_model`), on NanoGPT: the author's ruling (Oct 16 2026,
+# "use Opus 5.5 to manage the calls required to create them"). On another
+# endpoint the map art model designs it.
+DESIGNER_MODEL = "anthropic/claude-opus-5.5"
+DESIGNER_MODELS: tuple[RecommendedModel, ...] = (
+    RecommendedModel(
+        id=DESIGNER_MODEL,
+        label="Claude Opus 5.5",
+        tag="default",
+        note="The author's choice to design a set: it writes the set's words and a prompt "
+        "tailored to every picture from your description and the world. One call a set, "
+        "a few cents.",
+    ),
+    RecommendedModel(
+        id="z-ai/glm-5.3-flash",
+        label="GLM 5.3 Flash",
+        note="The map art model, included in a NanoGPT subscription: it wrote a set's words "
+        "before there was a designer. Not judged against Opus for this.",
+    ),
+)
 
 
 # The style every pixel-art prompt names when the set's words have none.
@@ -126,22 +158,42 @@ def walker_jobs(
     return out
 
 
-def tileset_messages(setting: str, texts: PromptTexts = DEFAULT_TEXTS) -> list[PromptMessage]:
+def tileset_messages(
+    setting: str, texts: PromptTexts = DEFAULT_TEXTS, *, description: str = ""
+) -> list[PromptMessage]:
+    """The designer's request: the world, and what the author asked the set
+    to look like when they said ("gritty rain-slick cyberpunk alleys")."""
+    asked = " ".join(description.split())
+    text = setting
+    if asked:
+        text = f"The world: {setting}\n\nThe look the author wants for the set: {asked}"
     return [
         PromptMessage(role="system", parts=(ContentPart(text=texts["map.tileset.system"]),)),
-        PromptMessage(role="user", parts=(ContentPart(text=setting),)),
+        PromptMessage(role="user", parts=(ContentPart(text=text),)),
     ]
 
 
+def with_style(prompt: str, style: str) -> str:
+    """A prompt naming the set's style, as every pixel-art prompt must (the
+    set reads as one): the designer's as written when it names it, else with
+    the style added at the end."""
+    prompt = " ".join(prompt.split())
+    if not prompt or not style or style.lower() in prompt.lower():
+        return prompt
+    return f"{prompt.rstrip('.')}. Style: {style}."
+
+
 def parse_tile_words(text: str) -> dict[str, str]:
-    """A tile set's words from the model's reply, by role, every role there
-    ("decor" and "trees" become decor0-2 and out-tree0-1). ValueError when
-    one is missing."""
+    """A tile set's words from the designer's reply, by role, every role
+    there ("decor" and "trees" become decor0-2 and out-tree0-1), and under
+    "prompt:<role>" the prompt it tailored to each picture when it gave one
+    (`"prompts"`), each naming the style (`with_style`). ValueError when a
+    core role is missing."""
     data = extract_json(text, dict, "tile set")
     words: dict[str, str] = {}
 
-    def said(value: object) -> str:
-        return " ".join(str(value or "").split())[:200]
+    def said(value: object, limit: int = WORDS_LIMIT) -> str:
+        return " ".join(str(value or "").split())[:limit]
 
     words["world"] = said(data.get("world"))
     words["style"] = said(data.get("style"))
@@ -163,13 +215,27 @@ def parse_tile_words(text: str) -> dict[str, str]:
     if isinstance(light, list) and len(light) == 3 and all(isinstance(c, int) for c in light):
         words["light"] = ",".join(str(max(0, min(255, c))) for c in light)
     words["lava"] = "yes" if data.get("lava") is True else ""
+    prompts = data.get("prompts")
+    if isinstance(prompts, dict):
+        style = style_words(words)
+        for role in (*TEXTURES, *SPRITES):
+            prompt = said(prompts.get(role), PROMPT_LIMIT)
+            if prompt and words.get(role):
+                words[f"{PROMPT_KEY}{role}"] = with_style(prompt, style)
     return words
+
+
+def set_prompt(words: Mapping[str, str], role: str) -> str | None:
+    """The prompt designed for a role's picture, or None for the template."""
+    return words.get(f"{PROMPT_KEY}{role}") or None
 
 
 def tile_jobs(
     words: Mapping[str, str], texts: PromptTexts = DEFAULT_TEXTS
 ) -> list[tuple[str, str, str]]:
-    """(role, prompt, size) for each picture of a story's own tile set."""
+    """(role, prompt, size) for each picture of a story's own tile set: the
+    prompt designed for it (`set_prompt`, sent exactly as the author approved
+    it) when there is one, else the role's template filled in."""
     world = words.get("world", "")
     style = style_words(words)
     out: list[tuple[str, str, str]] = []
@@ -179,20 +245,40 @@ def tile_jobs(
         view = (
             "straight from the front" if role in ("face", "out-wall") else "from directly overhead"
         )
-        prompt = texts.fill(
+        prompt = set_prompt(words, role) or texts.fill(
             "map.tile.texture", what=words[role], world=world, view=view, style=style
         )
         out.append((role, prompt, TEXTURE_SIZE))
     if words.get("rug"):
-        prompt = texts.fill("map.tile.rug", what=words["rug"], world=world, style=style)
+        prompt = set_prompt(words, "rug") or texts.fill(
+            "map.tile.rug", what=words["rug"], world=world, style=style
+        )
         out.append(("rug", prompt, SPRITE_SIZE))
     for i in range(3):
         role = f"decor{i}"
         if words.get(role):
-            prompt = texts.fill("map.tile.sprite", what=words[role], world=world, style=style)
+            prompt = set_prompt(words, role) or texts.fill(
+                "map.tile.sprite", what=words[role], world=world, style=style
+            )
             out.append((role, prompt, SPRITE_SIZE))
     for role in OUTDOOR_SPRITES:
         if words.get(role):
-            prompt = texts.fill("map.tile.nature", what=words[role], world=world, style=style)
+            prompt = set_prompt(words, role) or texts.fill(
+                "map.tile.nature", what=words[role], world=world, style=style
+            )
             out.append((role, prompt, SPRITE_SIZE))
     return out
+
+
+def tile_set_price(
+    jobs: Sequence[tuple[str, str, str]], price: Callable[[str], float | None]
+) -> float | None:
+    """What a set's pictures cost together at the model's listed prices,
+    each at its size; None when any size has no listed price (never a guess)."""
+    total = 0.0
+    for _role, _prompt, size in jobs:
+        each = price(size)
+        if each is None:
+            return None
+        total += each
+    return total

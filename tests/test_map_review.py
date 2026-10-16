@@ -26,6 +26,7 @@ from sealedlore.engine.world_art import plan_tile, rasterise
 from sealedlore.engine.world_layout import MAX_DISTANCE, bearing, metres, place_new
 from sealedlore.models.area import LiveArea, Spot
 from sealedlore.models.world import (
+    OwnTileSet,
     PlaceLayout,
     TerrainPatch,
     WorldArt,
@@ -347,8 +348,10 @@ def test_back_to_the_set_s_own_loses_nothing_the_story_drew(tmp_path, story, cas
     own = png(8, 8)
     session.pictures.write("images/map/tileset/floor-own.png", own)
     art = session.world_art
-    art.tile_set, art.tile_assets = "own", {"floor": "images/map/tileset/floor-own.png"}
-    art.tile_words = {"world": "x", "style": "neon"}
+    art.tile_set = "own:own"
+    art.tile_sets["own"] = OwnTileSet(
+        assets={"floor": "images/map/tileset/floor-own.png"}, words={"world": "x", "style": "neon"}
+    )
     session.use_own_tile_asset("floor", png(16, 16))
     assert session.tile_asset_bytes("floor") != own
     session.reset_tile_asset("floor")

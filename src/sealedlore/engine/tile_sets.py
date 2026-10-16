@@ -5,7 +5,8 @@ makes it and nothing is drawn that isn't there.
 
 A set is a folder of assets and a manifest (`TileSetInfo`): shipped beside
 the samples (storage/tile_sets.py reads them), or drawn for one story and
-kept in its pictures (`WorldArt.tile_assets`). Roles are the files' names:
+kept in its pictures (`WorldArt.tile_sets`, several a story, each chosen as
+"own:<key>"). Roles are the files' names:
 textures (floor, cap, face, out-ground, out-road, out-water, out-pave,
 out-canopy, out-roof, out-wall), sprites (rug, decor0-2, out-tree0-1,
 out-bush, out-rock, out-rubble, out-fence, out-door), each kind of thing
@@ -24,6 +25,10 @@ import zlib
 from collections.abc import Iterable, Mapping
 
 from pydantic import BaseModel, Field
+
+from sealedlore.models.world import OWN_SET_PREFIX, own_set_key, own_set_name
+
+__all__ = ["OWN_SET_PREFIX", "own_set_key", "own_set_name"]
 
 # Indoor textures and sprites, then outdoor ones.
 INDOOR_TEXTURES = ("floor", "cap", "face")
@@ -109,17 +114,35 @@ def item_slugs(name: str) -> list[str]:
     return list(dict.fromkeys(s for s in (whole, bare) if s))
 
 
+def own_key(title: str, taken: Iterable[str]) -> str:
+    """The key a new own set is kept under: its title as a slug ("Rain-slick
+    alleys" is "rain-slick-alleys"), numbered when a set has it already."""
+    base = slug(title) or "own"
+    taken = set(taken)
+    key, count = base, 1
+    while key in taken:
+        count += 1
+        key = f"{base}-{count}"
+    return key
+
+
 def choose_set(
     chosen: str,
     setting: str,
     looks: Iterable[str],
     shipped: Mapping[str, TileSetInfo],
+    own: Iterable[str] = (),
 ) -> str:
     """The set a story's map is drawn in: the author's choice if it is still
-    there ("own" stands), else the shipped set whose keywords the setting
-    names most, a space station for a map whose ground is space, and the
-    first shipped set otherwise. "" when nothing is shipped."""
-    if chosen == "own" or chosen in shipped:
+    there (a shipped set, or one of the story's `own` sets by key), else the
+    shipped set whose keywords the setting names most, a space station for a
+    map whose ground is space, and the first shipped set otherwise. "" when
+    nothing is shipped."""
+    key = own_set_key(chosen)
+    if key is not None:
+        if key in set(own):
+            return chosen
+    elif chosen in shipped:
         return chosen
     if not shipped:
         return ""

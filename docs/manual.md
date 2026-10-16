@@ -1116,24 +1116,45 @@ map art model the first time the story is in or beside it.
 **Look** chooses the tile set the map is drawn in: one of those that come
 with SealedLore (a snowbound farm, an elven forest, a steampunk city, an
 industrial wasteland, Hell, a space station), chosen for the setting unless
-you choose, or **Draw a tile set for this story…**, which has the map art
-model write what each picture should show from your world and an image model
-draw them (about 30 pictures, the price shown first). Things and people the
-set doesn't have are drawn as the story needs them, with **Draw map pictures
-with an image model** on (Settings → Images; FLUX.3 Klein, about a cent
-each): each kind of thing once, and each character from their portrait.
-Until then a thing is a plain crate and a character a small figure. The
-samples come with all of theirs. **Edit the tile set…** (under Look) lists
-every picture the map is drawn with: the ground, walls and decoration,
-every thing and every character's sprite, with the words each was drawn
-from. Change the words and **Draw it again…** (the model and price are
-shown first), **Use a picture of your own…**, or go **Back to the set's
-own**; a change is for this story only. Everything drawn for a map is pixel
-art in a style that suits the world rather than any one game's look: each
-shipped set names its own (bleak and quiet for the snowbound farm, whimsical
-storybook for the elven forest), and a set drawn for your story has the map
-art model choose one from your world (gritty and dark, bright and cheerful,
-whimsical…), which you can see and change with the set's other words.
+you choose, or one drawn for your story. The first time a story's map
+opens, a line over it says which set it is drawn in, with **Tile sets…** a
+button away; the same is under Look. The gallery shows every set as a card,
+with a strip of its textures and sprites, its style in words and what it
+suits, the one in use marked: **Use this set** switches, **Remove…** takes a
+set drawn for this story out again (its pictures deleted; the ones that
+come with SealedLore stay), and **Draw a new set…** opens the designer. There
+you name the set and describe the look you want, in your own words
+(prefilled with your world and the style now in use: "gritty rain-slick
+cyberpunk alleys, neon and wet concrete", "bright and cheerful storybook
+meadow"); **Designed by** is the model that designs it, Claude Opus 5.5
+unless you choose another (Recommended ▾ beside the field), and your choice
+is kept. **Write the design** has it write the set's words and a prompt
+tailored to every picture from your description and the world; you see and
+may change each of them, with the number of pictures, the image model that
+draws them and the price of the whole set at the model's listed prices, and
+nothing is drawn until you press
+**Draw the set…** and confirm. Each picture is then sent exactly as its
+prompt stands, in the background, and the map is drawn in the new set once
+all of it is in; the set it had stays until then. A story may keep several
+sets of its own and swap between them under Look, and they travel with
+Restart, Duplicate settings and scenario files.
+
+Things and people the set doesn't have are drawn as the story needs them,
+with **Draw map pictures with an image model** on (Settings → Images;
+FLUX.3 Klein, about a cent each): each kind of thing once, and each
+character from their portrait. Until then a thing is a plain crate and a
+character a small figure. The samples come with all of theirs. **Edit the
+tile set…** (under Look, and in the gallery) lists every picture the map is
+drawn with: the ground, walls and decoration, every thing and every
+character's sprite, with the words each was drawn from. Change the words
+and **Draw it again…** (the model and price are shown first), **Use a
+picture of your own…**, or go **Back to the set's own**; a change is for
+this story only. Everything drawn for a map is pixel art in a style that
+suits the world rather than any one game's look: each shipped set names its
+own (bleak and quiet for the snowbound farm, whimsical storybook for the
+elven forest), and a set drawn for your story takes the style from your
+description (gritty and dark, bright and cheerful, whimsical…), which you
+can see and change with the set's other words before it is drawn.
 
 It is one map, read at three levels by zooming; **Local**, **Region** and
 **World** jump to each. **Local** is the area you are in (the farm, not just
