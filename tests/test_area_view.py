@@ -120,14 +120,24 @@ def test_walking_waits_while_the_story_is_being_written(app, window):
 
 
 def test_an_area_is_drawn_from_its_tile_set_and_a_missing_sprite_is_still_seen(app):
+    from PySide6.QtCore import QBuffer, QIODevice
+
+    from sealedlore.engine.area import Area, Doorway, find_rooms
+    from sealedlore.gui.area_render import INDOOR_PX, OUTDOOR_PX, _room_masks, px_for
+
     world, art = world_and_art()
     farm = build_area(world, art, "farm")
     house = build_area(world, art, "house")
     plain = TileSource(TileSetInfo(name="plain"), lambda role: None)
+    # Outdoors 24 px a tile (16 was soft at a 1080p screen's fit); indoors
+    # the picture is a wall's face taller, so the south wall has a face too.
+    assert (OUTDOOR_PX, INDOOR_PX) == (24, 40)
     for area in (farm, house):
         image = render_area(area, plain)
         assert not image.isNull()
-        assert image.width() == area.width * (40 if area.indoor else 16)
+        assert image.width() == area.width * px_for(area)
+        extra = round(INDOOR_PX * 0.7) if area.indoor else 0
+        assert image.height() == area.height * px_for(area) + extra
     # A sprite drawn on white comes out cut out of it.
     picture = QImage(64, 64, QImage.Format_RGB32)
     picture.fill(QColor("white"))
@@ -140,6 +150,88 @@ def test_an_area_is_drawn_from_its_tile_set_and_a_missing_sprite_is_still_seen(a
         cut.pixelColor(0, 0).alpha() == 255
         and cut_out(QImage(8, 8, QImage.Format_RGB32)) is not None
     )
+    # A texture drawn again or chosen for a shipped set (the reader's
+    # `from_story`) is made to wrap like a story's own set's; a shipped one
+    # is pre-made and kept as read. Half black, half white: wrapped, its
+    # edge blends with the other half.
+    texture = QImage(32, 32, QImage.Format_RGB32)
+    texture.fill(QColor("black"))
+    for x in range(16, 32):
+        for y in range(32):
+            texture.setPixelColor(x, y, QColor("white"))
+    buffer = QBuffer()
+    buffer.open(QIODevice.WriteOnly)
+    texture.save(buffer, "PNG")
+    data = bytes(buffer.data())
+
+    def shipped(role: str) -> bytes | None:
+        return data if role == "floor" else None
+
+    def chosen(role: str) -> bytes | None:
+        return data if role == "floor" else None
+
+    chosen.from_story = lambda role: role == "floor"  # type: ignore[attr-defined]
+    as_shipped = TileSource(TileSetInfo(name="doomsville"), shipped).image("floor")
+    as_chosen = TileSource(TileSetInfo(name="doomsville"), chosen).image("floor")
+    assert as_shipped.pixelColor(4, 16).red() == 0  # as read: still black near the edge
+    assert 40 < as_chosen.pixelColor(4, 16).red() < 220  # blended with the white half
+    # Fire, rubble and water indoors are drawn as such (the author's rule: a
+    # barn blown up is drawn blown up; the play view showed its floor as
+    # new), and a lamp's light stays in its room.
+    rows = ["#" * 30]
+    for y in range(1, 15):
+        row = ["#"] + ["_"] * 28 + ["#"]
+        if y == 7:
+            row = ["#"] * 30
+            row[5] = row[6] = "_"
+        for x in range(1, 29):
+            if y != 7 and 3 <= x <= 6 and 3 <= y <= 5:
+                row[x] = "*"
+            if y != 7 and 9 <= x <= 13 and 2 <= y <= 5:
+                row[x] = ":"
+            if y != 7 and 18 <= x <= 25 and 9 <= y <= 12:
+                row[x] = "~"
+        rows.append("".join(row))
+    rows.append("#" * 30)
+    doorways = [Doorway(5, 7, 6, 7, "h")]
+    rooms, room_of = find_rooms(rows, {}, doorways)
+    assert len(rooms) == 2
+    burnt = Area(
+        place_id="burnt",
+        name="The barn",
+        indoor=True,
+        look="floor",
+        rows=rows,
+        tile_m=1.0,
+        objects={},
+        labels={},
+        rooms=rooms,
+        room_of=room_of,
+        doorways=doorways,
+    )
+    image = render_area(burnt, plain, dress=False)
+    px = INDOOR_PX
+
+    def pixel(x: float, y: float) -> QColor:
+        return image.pixelColor(int(x * px), int(y * px))
+
+    floor = pixel(16.5, 4.5)
+    water = pixel(21.5, 10.5)
+    assert water.blue() > water.red() and water.blue() > floor.blue() + 30
+    rubble = pixel(11.5, 3.5)
+    assert abs(rubble.red() - floor.red()) + abs(rubble.blue() - floor.blue()) > 12
+    flames = [
+        image.pixelColor(x, y)
+        for x in range(3 * px, 7 * px)
+        for y in range(3 * px, 6 * px)
+        if image.pixelColor(x, y).red() > 200 and image.pixelColor(x, y).blue() < 100
+    ]
+    assert len(flames) > 40  # orange flames stand on the scorched tiles
+    mask_at = _room_masks(burnt, px, image.height(), image.width())
+    upstairs = mask_at(3.5 * px, 3.5 * px)  # a light in the top room
+    assert upstairs[int(4.5 * px), int(3 * px)] > 0.9  # its own room is lit
+    assert upstairs[int(11.5 * px), int(3 * px)] < 0.05  # not the room below the wall
+    assert mask_at(14.5 * px, 11.5 * px) is not upstairs  # the lower room has its own
 
 
 def test_a_spot_marked_on_either_view_goes_into_the_turn_with_a_pin(app, window):

@@ -29,8 +29,15 @@ from sealedlore.engine.area import Area, Placement
 from sealedlore.engine.tile_sets import LIGHT_WORDS, TEXTURES, TileSetInfo, item_slugs
 
 # Pixels a tile, indoors and out: the view scales the picture to the zoom.
+# Outdoors 24: at 16 the default fit on a 1080p screen scaled the art up 1.2x
+# and a wheel step in was mush (the farm takes 3.5 s and 20 MB on its thread
+# instead of 1.6 s and 9 MB, measured Oct 16 2026). Everything drawn is sized
+# from `px`, never in pixels of its own.
 INDOOR_PX = 40
-OUTDOOR_PX = 16
+OUTDOOR_PX = 24
+# Scorched ground under fire, and rubble's grey-brown, as tints over the floor.
+SCORCH = (28, 16, 10)
+RUBBLE_TINT = (96, 84, 72)
 
 # Flat colours for a texture a set lacks.
 FALLBACK = {
@@ -150,19 +157,26 @@ class TileSource:
 
     def image(self, role: str) -> QImage | None:
         """An asset ready to draw: a texture made to wrap if it wasn't (a
-        story's own set is kept as drawn), a sprite cut out if it has no
-        transparency of its own."""
+        story's own set is kept as drawn, and so is a texture drawn again or
+        chosen for a shipped set: the reader's `from_story` says which), a
+        sprite cut out if it has no transparency of its own."""
         if role not in self._images:
             data = self.read(role)
             if is_texture(role):
                 image = QImage.fromData(data) if data else QImage()
-                if not image.isNull() and self.info.name == "own":
+                if not image.isNull() and (self.info.name == "own" or self.from_story(role)):
                     image = tileable(image)
                 found = None if image.isNull() else image
             else:
                 found = sprite_image(data)
             self._images[role] = found
         return self._images[role]
+
+    def from_story(self, role: str) -> bool:
+        """Whether an asset was drawn or chosen for the story rather than
+        shipped pre-made (the session's reader says; a plain reader doesn't)."""
+        asks = getattr(self.read, "from_story", None)
+        return bool(asks(role)) if callable(asks) else False
 
     def item(self, name: str) -> QImage | None:
         for found in item_slugs(name):
@@ -275,7 +289,11 @@ def _scaled(image: QImage | None, height: int) -> QImage | None:
     return image.scaledToHeight(max(1, height), Qt.SmoothTransformation)
 
 
-def _light(lights, h: int, w: int):
+def _light(lights, h: int, w: int, mask_at: Callable[[float, float], object] | None = None):
+    """The glow of every light summed: a radial falloff each, kept within
+    its room by `mask_at` (a pixel mask for a light's spot, None for no
+    limit, False for a light nowhere: nothing). Summed with no occlusion, a
+    lamp lit the room next door through the wall."""
     np = _np()
     glow = np.zeros((h, w), np.float32)
     for lx, ly, rad in lights:
@@ -283,10 +301,56 @@ def _light(lights, h: int, w: int):
         x0, x1 = int(max(0, lx - rad)), int(min(w, lx + rad))
         if y1 <= y0 or x1 <= x0:
             continue
+        mask = mask_at(lx, ly) if mask_at is not None else None
+        if mask is False:
+            continue
         yy, xx = np.mgrid[y0:y1, x0:x1]
         dd = ((xx - lx) ** 2 + (yy - ly) ** 2) / rad**2
-        glow[y0:y1, x0:x1] += np.clip(1 - dd, 0, 1) ** 2
+        part = np.clip(1 - dd, 0, 1) ** 2
+        if mask is not None:
+            part = part * mask[y0:y1, x0:x1]
+        glow[y0:y1, x0:x1] += part
     return np.clip(glow, 0, 1.4)
+
+
+def _room_masks(area: Area, px: int, height: int, width: int):
+    """`mask_at` for `_light` indoors: a light's room (the tile under it, or
+    the one south or north of it: a wall-mounted light's glow is centred on
+    the wall), dilated by one tile so the doorways and the walls catch its
+    light, as a soft pixel mask; None with no rooms to keep to."""
+    np = _np()
+    if not area.rooms or not area.room_of:
+        return None
+    rooms = np.array(area.room_of)
+    cache: dict[int, object] = {}
+
+    def mask_at(lx: float, ly: float):
+        tx, ty = int(lx // px), int(ly // px)
+        room = area.room_at(tx, ty) or area.room_at(tx, ty + 1) or area.room_at(tx, ty - 1)
+        if room is None:
+            return False
+        if room.index not in cache:
+            cells = rooms == room.index
+            grown = cells.copy()
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    shifted = np.roll(np.roll(cells, dy, 0), dx, 1)
+                    if dy == -1:
+                        shifted[-1, :] = False
+                    elif dy == 1:
+                        shifted[0, :] = False
+                    if dx == -1:
+                        shifted[:, -1] = False
+                    elif dx == 1:
+                        shifted[:, 0] = False
+                    grown |= shifted
+            mask = np.zeros((height, width), np.float32)
+            tiles = np.repeat(np.repeat(grown.astype(np.float32), px, 0), px, 1)
+            mask[: tiles.shape[0], : tiles.shape[1]] = tiles[:height, :width]
+            cache[room.index] = _blur(mask, max(1, px // 5), 1)
+        return cache[room.index]
+
+    return mask_at
 
 
 def _vignette(img, strength: float, start: float):
@@ -329,35 +393,45 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
     rows = area.rows
     h, w = area.height, area.width
     px = INDOOR_PX
+    face_h = px * 0.7
     W, H = w * px, h * px
+    # The picture is a wall's face taller than the grid, so the south outer
+    # wall gets a face over the void too (it ended flat at the edge).
+    HX = H + int(round(face_h))
     grid = np.array([list(r) for r in rows])
     wall = np.isin(grid, list("#W"))
     space = grid == " "
+    water = grid == "~"
+    deck = info.deck or area.look == "space"
 
     def at(x: int, y: int) -> str:
         return rows[y][x] if 0 <= x < w and 0 <= y < h else " "
 
-    # 1. the ground: stars where a deck's void is, else dark; then the floor
-    if info.deck or area.look == "space":
-        base = _stars(W, H, _seed(area.place_id))
+    # 1. the ground: stars where a deck's void is, else dark; then the floor,
+    # and water where the plan has it (a flooded cellar, a pool)
+    if deck:
+        base = _stars(W, HX, _seed(area.place_id))
     else:
-        base = QImage(W, H, QImage.Format_RGB32)
+        base = QImage(W, HX, QImage.Format_RGB32)
         base.fill(QColor(20, 18, 16))
     p = QPainter(base)
     p.setRenderHint(QPainter.SmoothPixmapTransform, True)
     floor = _texture_brush(source, "floor", px * 4.8)
+    pool = _texture_brush(source, "out-water", px * 8)
     for y in range(h):
         for x in range(w):
             if not space[y, x]:
-                p.fillRect(x * px, y * px, px, px, floor)
+                p.fillRect(x * px, y * px, px, px, pool if water[y, x] else floor)
     p.end()
     img = _arr(base)
     # 2. large soft variation, so the texture doesn't read as a repeat
-    var = _noise(H, W, 220.0, 7)
-    inside = np.repeat(np.repeat(~space, px, 0), px, 1)
+    var = _noise(HX, W, 220.0, 7)
+    inside = np.zeros((HX, W), bool)
+    inside[:H] = np.repeat(np.repeat(~space, px, 0), px, 1)
     img[inside] *= (0.92 + 0.12 * var[inside])[..., None]
     # 3. occlusion: the floor darkens near walls; a shadow cast south-east
-    wm = np.repeat(np.repeat(wall.astype(np.float32), px, 0), px, 1)
+    wm = np.zeros((HX, W), np.float32)
+    wm[:H] = np.repeat(np.repeat(wall.astype(np.float32), px, 0), px, 1)
     ao = _blur(wm, max(2, px // 3), 2)
     sh = np.zeros_like(wm)
     off = max(2, px // 3)
@@ -369,16 +443,44 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
     p = QPainter(out)
     p.setRenderHint(QPainter.SmoothPixmapTransform, True)
     p.setRenderHint(QPainter.Antialiasing, True)
-    # 4. dressing: a rug in some rooms, decorations along walls, clear of
+    lights: list[tuple[float, float, float]] = []
+    late: list[tuple[QImage, int, int]] = []
+    # 4. what the story did to the place: scorched ground with embers under
+    # fire, rubble's grey-brown with the set's rubble scattered on it (the
+    # author's rule: a barn blown up is drawn blown up; the play view used
+    # to show its floor as new)
+    rubble = source.image("out-rubble")
+    flames: list[tuple[QImage, int, int]] = []
+    hot = np.random.default_rng(_seed(area.place_id) + 3)
+    for y in range(h):
+        for x in range(w):
+            c = at(x, y)
+            if c == "*":
+                _burning(p, x, y, px, hot, flames)
+                lights.append(((x + 0.5) * px, (y + 0.5) * px, px * 4.5))
+            elif c == ":":
+                p.fillRect(x * px, y * px, px, px, QColor(*RUBBLE_TINT, 150))
+                for _ in range(int(hot.integers(1, 3))):
+                    sprite = _scaled(rubble, int(px * hot.uniform(0.55, 0.9)))
+                    if sprite is None:
+                        break
+                    late.append(
+                        (
+                            sprite,
+                            int((x + hot.uniform(0.1, 0.9)) * px - sprite.width() / 2),
+                            int((y + hot.uniform(0.5, 1.0)) * px - sprite.height()),
+                        )
+                    )
+            elif c == "~" and info.lava:
+                lights.append(((x + 0.5) * px, (y + 0.5) * px, px * 3.0))
+    # 5. dressing: a rug in some rooms, decorations along walls, clear of
     # doorways and furniture
     near_door = np.zeros((h, w), bool)
     for d in area.doorways:
         near_door[max(0, d.y0 - 2) : d.y1 + 3, max(0, d.x0 - 2) : d.x1 + 3] = True
-    taken = np.zeros((h, w), bool)
+    taken = np.isin(grid, list("*:~"))
     for f in area.placements:
         taken[max(0, f.y - 1) : f.y + f.h + 1, max(0, f.x - 1) : f.x + f.w + 1] = True
-    lights: list[tuple[float, float, float]] = []
-    late: list[tuple[QImage, int, int]] = []
     decor = [source.image(f"decor{i}") for i in range(3)]
     decor_lit = list(info.decor_lights) + [False] * 3
     for room in area.rooms if dress else []:
@@ -430,58 +532,72 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
             )
             if decor_lit[which]:
                 lights.append(((x + 0.5) * px, (y + 0.4) * px, px * 3.0))
-    # 5. walls, back to front: the cap on the tile, the face below where
-    # floor lies south
+    # 6. walls, back to front: the cap on the tile, the face below wherever
+    # no wall stands south (floor or the void: the south outer wall has a
+    # face too), darker than the cap, the cap's north edge lit, so a wall
+    # reads as a wall and not a flat band
     cap = _texture_brush(source, "cap", px * 2)
-    face_h = px * 0.7
     face = _texture_brush(source, "face", face_h * 1.6)
     edge = QColor(14, 12, 12)
-    deck = info.deck or area.look == "space"
+    glass_colour = QColor(20, 30, 60) if deck else QColor(170, 205, 235)
+    sill_colour = QColor(40, 60, 100) if deck else QColor(222, 232, 242)
     for y in range(h):
         for x in range(w):
             c = at(x, y)
             if c not in "#W":
                 continue
             X, Y = x * px, y * px
-            p.fillRect(QRectF(X, Y - face_h * 0.35, px, px), cap)
+            top = Y - face_h * 0.35
+            p.fillRect(QRectF(X, top, px, px), cap)
             if at(x, y - 1) not in "#W":
+                p.fillRect(QRectF(X, top, px, 3), QColor(255, 255, 255, 120))
+            faced = at(x, y + 1) not in "#W"
+            if faced:
+                p.fillRect(QRectF(X, top + px, px, face_h), face)
+                p.fillRect(QRectF(X, top + px, px, face_h), QColor(0, 0, 0, 64))
+                p.fillRect(QRectF(X, top + px, px, max(1, px * 0.04)), QColor(0, 0, 0, 120))
                 p.fillRect(
-                    QRectF(X, Y - face_h * 0.35, px, max(1, px * 0.06)), QColor(255, 255, 255, 60)
-                )
-            if at(x, y + 1) not in "#W ":
-                p.fillRect(QRectF(X, Y + px - face_h * 0.35, px, face_h), face)
-                p.fillRect(
-                    QRectF(X, Y + px - face_h * 0.35, px, max(1, px * 0.04)), QColor(0, 0, 0, 120)
-                )
-                p.fillRect(
-                    QRectF(
-                        X,
-                        Y + px - face_h * 0.35 + face_h - max(1, px * 0.05),
-                        px,
-                        max(1, px * 0.05),
-                    ),
-                    edge,
+                    QRectF(X, top + px + face_h - max(1, px * 0.05), px, max(1, px * 0.05)), edge
                 )
             for dx, dy, rect in (
-                (-1, 0, (X, Y - face_h * 0.35, max(1, px * 0.05), px)),
-                (1, 0, (X + px - max(1, px * 0.05), Y - face_h * 0.35, max(1, px * 0.05), px)),
-                (0, -1, (X, Y - face_h * 0.35, px, max(1, px * 0.05))),
+                (-1, 0, (X, top, max(1, px * 0.05), px)),
+                (1, 0, (X + px - max(1, px * 0.05), top, max(1, px * 0.05), px)),
+                (0, -1, (X, top, px, max(1, px * 0.05))),
             ):
                 if at(x + dx, y + dy) not in "#W":
                     p.fillRect(QRectF(*rect), edge)
-            if c == "W":
-                if at(x, y + 1) not in "#W ":
-                    glass = QRectF(X + px * 0.2, Y + px - face_h * 0.2, px * 0.6, face_h * 0.5)
-                else:
-                    glass = QRectF(X + px * 0.25, Y + px * 0.1, px * 0.5, px * 0.5)
-                p.fillRect(glass, QColor(20, 30, 60) if deck else QColor(170, 205, 235))
+            if c != "W":
+                continue
+            if faced and at(x, y + 1) != " ":
+                # A window in a wall facing us: glass on the face, its light
+                # on the floor south of it.
+                glass = QRectF(X + px * 0.2, top + px + face_h * 0.15, px * 0.6, face_h * 0.5)
+                p.fillRect(glass, glass_colour)
                 p.fillRect(
                     QRectF(glass.x(), glass.y(), glass.width(), max(1, glass.height() * 0.15)),
                     QColor(255, 255, 255, 140),
                 )
                 if not deck:
                     lights.append((X + px / 2, Y + px * 1.4, px * 4.0))
-    # 6. doorways: the floor runs through between dark jambs
+                continue
+            # A window in a side wall: a pale sill strip along the room's
+            # edge of the cap (a square on the cap read as a hatch), its
+            # light into that room.
+            sides = [
+                (X, -px * 0.6, at(x - 1, y) not in "#W "),
+                (X + px - px * 0.16, px * 1.6, at(x + 1, y) not in "#W "),
+            ]
+            for sx, light_x, open_ in sides:
+                if not open_:
+                    continue
+                strip = QRectF(sx, top + px * 0.18, px * 0.16, px * 0.64)
+                p.fillRect(strip, sill_colour)
+                p.fillRect(
+                    QRectF(sx, strip.y(), px * 0.16, max(1, px * 0.06)), QColor(255, 255, 255, 160)
+                )
+                if not deck:
+                    lights.append((X + light_x, Y + px * 0.5, px * 4.0))
+    # 7. doorways: the floor runs through between dark jambs
     jamb = QColor(210, 170, 40) if deck else QColor(30, 22, 18)
     j = max(2, px * 0.14)
     for d in area.doorways:
@@ -493,18 +609,21 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
                 p.fillRect(QRectF(d.x0 * px, Y - face_h * 0.35, px, j), jamb)
     for sprite, X, Y in late:
         p.drawImage(X, Y, sprite)
-    # 7. furniture and things, each over its footprint, its foot on its
-    # last row, back to front
+    # 8. furniture and things, each over its footprint, its foot on its
+    # last row, back to front; the flames over everything
     for f in sorted(area.placements, key=lambda f: f.y + f.h):
         _draw_placement(p, source, f, px, lights, indoor=True)
+    for sprite, X, Y in flames:
+        p.drawImage(X, Y, sprite)
     # ceiling lamps in the larger rooms
     for room in area.rooms:
         if room.cells >= 40:
             lights.append(((room.cx + 0.5) * px, (room.cy + 0.5) * px, px * 6.0))
     p.end()
-    # 8. light: a glow from each source, the world's grade, a vignette
+    # 9. light: a glow from each source, kept to its room, the world's
+    # grade, a vignette
     img = _arr(out)
-    glow = _light(lights, H, W)
+    glow = _light(lights, HX, W, _room_masks(area, px, HX, W))
     lc = np.array(info.light, np.float32) / 255
     img = img * (0.78 + 0.32 * glow[..., None] * lc) + glow[..., None] * lc * 18
     img *= np.array(info.grade, np.float32)
@@ -516,6 +635,40 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
             mean = img[inside].mean(0)
             img = (img - mean) * 1.25 + mean * (135 / lum)
     return _qimg(_vignette(img, 0.18, 0.3))
+
+
+def _burning(
+    p: QPainter, x: int, y: int, px: int, rng, flames: list, *, scorch: bool = True
+) -> None:
+    """A tile on fire: the ground scorched (unless the terrain already is)
+    with embers in it, and two or three tongues of flame
+    (gui/map_tiles.flame_sprite) standing on it, drawn over whatever stands
+    there once everything else is in."""
+    from sealedlore.gui.map_tiles import FLAME, flame_sprite
+
+    if scorch:
+        p.fillRect(x * px, y * px, px, px, QColor(*SCORCH, 190))
+    for _ in range(4):
+        p.fillRect(
+            QRectF(
+                (x + rng.uniform(0.05, 0.85)) * px,
+                (y + rng.uniform(0.05, 0.85)) * px,
+                max(2.0, px * 0.08),
+                max(2.0, px * 0.08),
+            ),
+            QColor(FLAME[2] if rng.random() < 0.4 else FLAME[1]),
+        )
+    for _ in range(int(rng.integers(2, 4))):
+        sprite = flame_sprite(int(rng.integers(3))).scaledToHeight(
+            int(px * rng.uniform(0.9, 1.3)), Qt.SmoothTransformation
+        )
+        flames.append(
+            (
+                sprite,
+                int((x + rng.uniform(0.15, 0.85)) * px - sprite.width() / 2),
+                int((y + rng.uniform(0.6, 1.0)) * px - sprite.height()),
+            )
+        )
 
 
 def _draw_placement(
@@ -589,15 +742,17 @@ def _render_outdoor(area: Area, source: TileSource) -> QImage:
     def at(x: int, y: int) -> str:
         return rows[y][x] if 0 <= x < w and 0 <= y < h else ""
 
-    # 1. terrain: ground, then pavement, rock, forest floor, water, road
-    img = _texture_layer(source, "out-ground", W, H, 256)
+    # 1. terrain: ground, then pavement, rock, forest floor, water, road.
+    # Texture scales are in tiles (a texture every 16 tiles of ground), so
+    # the picture is the same whatever `px` is.
+    img = _texture_layer(source, "out-ground", W, H, px * 16)
     trees_mask = g == "T"
     layers = [
-        ("out-pave", np.isin(g, list("_+")) & ~roofed, 0.2, 192, False),
-        ("out-canopy", np.isin(g, ["^"]), 0.45, 256, False),
-        ("out-canopy", trees_mask if not info.lava else np.zeros_like(roofed), 0.4, 256, True),
-        ("out-water", g == "~", 0.3, 256, False),
-        ("out-road", g == "=", 0.15, 288, False),
+        ("out-pave", np.isin(g, list("_+")) & ~roofed, 0.2, px * 12, False),
+        ("out-canopy", np.isin(g, ["^"]), 0.45, px * 16, False),
+        ("out-canopy", trees_mask if not info.lava else np.zeros_like(roofed), 0.4, px * 16, True),
+        ("out-water", g == "~", 0.3, px * 16, False),
+        ("out-road", g == "=", 0.15, px * 18, False),
     ]
     water_px = None
     for i, (role, mask, rough, scale, shade) in enumerate(layers):
@@ -617,7 +772,11 @@ def _render_outdoor(area: Area, source: TileSource) -> QImage:
         if not info.lava:
             foam = np.clip((water_px - _blur(water_px, 2, 2)) * -4, 0, 1) * water_px
             img += foam[..., None] * 60
-    img *= (0.9 + 0.16 * _noise(H, W, 300.0, 7))[..., None]
+    burning = g == "*"
+    if burning.any():  # the ground scorched under fire, soft-edged like the rest
+        scorch = _soft(burning, 37, px, 0.3)[..., None]
+        img = img * (1 - 0.8 * scorch) + np.array(SCORCH, np.float32) * 0.8 * scorch
+    img *= (0.9 + 0.16 * _noise(H, W, px * 19, 7))[..., None]
     # 2. shadows of buildings, walls and trees, cast south-east
     solid = (np.isin(g, list("#W+")) | roofed).astype(np.float32)
     occl = _upsample(np.maximum(solid, trees_mask.astype(np.float32) * 0.7), px)
@@ -654,10 +813,14 @@ def _render_outdoor(area: Area, source: TileSource) -> QImage:
             elif c in "#W+" and not roofed[y, x]:
                 stand.append(((y + 1) * px, "wall", (x, y)))
             elif c == "*":
-                lights.append(((x + 0.5) * px, (y + 0.5) * px, px * 5))
+                stand.append(((y + 1) * px, "fire", (x, y)))
+                # Closer in than a lamp's: a burning building's twenty tiles
+                # summed bleached the snow five tiles round it to white.
+                lights.append(((x + 0.5) * px, (y + 0.5) * px, px * 3.5))
     for b in boxes:
         stand.append(((b[3] + 1) * px, "building", b))
     stand.sort(key=lambda s: s[0])
+    flames: list[tuple[QImage, int, int]] = []
     trees = [t for t in (source.image("out-tree0"), source.image("out-tree1")) if t is not None]
     nature = {
         "bush": source.image("out-bush"),
@@ -676,8 +839,8 @@ def _render_outdoor(area: Area, source: TileSource) -> QImage:
         return cache[k]
 
     cap = _texture_brush(source, "cap", px * 2)
-    wallb = _texture_brush(source, "out-wall", 96)
-    roofb = _texture_brush(source, "out-roof", 192)
+    wallb = _texture_brush(source, "out-wall", px * 6)
+    roofb = _texture_brush(source, "out-roof", px * 12)
     fence = source.image("out-fence")
     door = source.image("out-door")
     edge = QColor(14, 12, 12)
@@ -719,6 +882,11 @@ def _render_outdoor(area: Area, source: TileSource) -> QImage:
                 p.drawImage(int((x + 0.5) * px - post.width() / 2), int(foot - post.height()), post)
         elif kind == "obj":
             _draw_placement(p, source, data, px, lights, indoor=False)  # type: ignore[arg-type]
+        elif kind == "fire":
+            # The ground is scorched already (the terrain); embers and the
+            # flames stand on it, drawn over everything once the rest is in.
+            x, y = data  # type: ignore[misc]
+            _burning(p, x, y, px, rng, flames, scorch=False)
         elif kind == "wall":
             x, y = data  # type: ignore[misc]
             X, Y = x * px, y * px
@@ -779,8 +947,12 @@ def _render_outdoor(area: Area, source: TileSource) -> QImage:
             for x in range(x0, x1 + 1):
                 if at(x, y0) == "+":
                     p.fillRect(QRectF(x * px, Y0 - px * 0.6, px, px * 0.3), QColor(60, 50, 40, 160))
+    for sprite, X, Y in flames:
+        p.drawImage(X, Y, sprite)
     p.end()
-    # 4. light: lava, fire, lamps and windows; a grade and a vignette
+    # 4. light: lava, fire, lamps and windows; a grade. No vignette outdoors:
+    # it made an area's edge look like the end of the world, and Leave ▾
+    # carries on past it (indoors it stays).
     img = _arr(out)
     glow = _light(lights, H, W)
     if info.lava and (g == "~").any():
@@ -791,4 +963,4 @@ def _render_outdoor(area: Area, source: TileSource) -> QImage:
     lum = float(img.mean())
     if lum < 85:  # a dark world lifted, as indoors
         img = img * (85 / max(lum, 1.0)) ** 0.75
-    return _qimg(_vignette(img, 0.16, 0.35))
+    return _qimg(img)
