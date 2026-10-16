@@ -862,9 +862,7 @@ def test_take_back_keeps_the_turn_s_walking_and_a_moved_leaf_drops_a_walk(tmp_pa
     assert stamped.walked == walked and "to Hellsville" in stamped.walked_words
 
 
-def test_a_walk_after_the_passage_is_dropped_by_a_retake_and_gone_for_good(
-    tmp_path, story, cast
-):
+def test_a_walk_after_the_passage_is_dropped_by_a_retake_and_gone_for_good(tmp_path, story, cast):
     session = make_session(tmp_path, story, cast, ["A.", "{}", "B.", "{}"])
     session.config.scene_reads = "manual"
     list(session.send(turn("I look.")))
