@@ -487,28 +487,30 @@ class RefImageStrip(QWidget):
         self.set_refs(self._refs)
         self.changed.emit()
 
-    def add_portrait(self) -> None:
-        """Choose a file to be the owner's portrait: it goes first."""
+    def add_portrait(self) -> bool:
+        """Choose a file to be the owner's portrait: it goes first. Whether
+        one was added."""
         store = self._pictures()
         if self._refs is None or store is None:
-            return
+            return False
         from sealedlore.gui.crop_dialog import cropped_picture
 
         path, _ = QFileDialog.getOpenFileName(
             self, "Choose a portrait", str(Path.home()), PICTURE_FILTER
         )
         if not path:
-            return
+            return False
         try:
             picture = cropped_picture(self, Path(path), self._crop)
             if picture is None:
-                return
+                return False
             self._refs.insert(0, store_reference(*picture, store, "portrait"))
         except (OSError, ValueError) as exc:
             QMessageBox.warning(self, "Couldn't add", str(exc))
-            return
+            return False
         self.set_refs(self._refs)
         self.changed.emit()
+        return True
 
     def _remove(self) -> None:
         ref = self._ref(self.list.currentItem())

@@ -387,6 +387,7 @@ class MainWindow(
         self.cast_panel.scan_requested.connect(self.scan_for_characters)
         self.cast_panel.infer_requested.connect(self.infer_competence)
         self.cast_panel.picture_requested.connect(self._on_card_picture)
+        self._wire_avatars()
         self.scene_panel = ScenePanel()
         self.scene_panel.changed.connect(self._on_scene_changed)
         self.scene_panel.update_requested.connect(self.update_scene_from_story)

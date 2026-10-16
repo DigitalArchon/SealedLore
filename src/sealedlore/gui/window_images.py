@@ -470,6 +470,7 @@ class ImagesWindow:
             self.lore_panel.refresh_pictures()
             self.refresh_images()
             self.statusBar().showMessage(f"Picture ready: {', '.join(names)}.", 8000)
+            self._offer_avatars(list(self.session.portraits_taken))
         try:
             changed = self.session.take_background_pictures()
         except (OSError, ValueError) as exc:

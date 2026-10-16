@@ -14,17 +14,22 @@ from __future__ import annotations
 
 import threading
 import zlib
+from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QImage
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from sealedlore.engine.area import Area, point_tile, tile_point
 from sealedlore.engine.marks import mark_token, marks_in
+from sealedlore.engine.picture_shapes import FREE
 from sealedlore.gui.area_render import TileSource, render_area, sprite_image
 from sealedlore.gui.area_view import AreaView, Walker
+from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.map_tiles import person_sprite
+from sealedlore.gui.ref_images import PICTURE_FILTER
 from sealedlore.gui.tile_set_editor import TileSetEditor
+from sealedlore.models.character import Character
 
 # Areas kept painted, most recent first.
 PAINTED_KEPT = 6
@@ -481,3 +486,108 @@ class AreaWindow:
             dialog.deleteLater()
         self._walker_images.clear()
         self.refresh_area()
+        self.cast_panel.refresh_avatar()
+
+    # --- a card's avatar on the map ------------------------------------------------
+
+    def _wire_avatars(self) -> None:
+        """Called once the Cast page is made: each card's avatar on the map
+        (gui/avatar_view.py) is answered here."""
+        self.cast_panel.avatar_of = self._avatar_of
+        self.cast_panel.avatar_requested.connect(self._on_avatar_request)
+        self.cast_panel.portrait_added.connect(lambda card_id: self._offer_avatars([card_id]))
+
+    def _avatar_of(self, name: str) -> tuple[QImage | None, str, bool]:
+        """(the figure the map walks for them, where it came from, whether
+        it is being drawn now), for the Cast page."""
+        session = self.session
+        if session is None or not session.map_first:
+            return None, "", False
+        art = session.map_art_copy()
+        data, source = session.walker_asset(name)
+        if data is None and session.generic_people():
+            source = "the set's"
+        return (
+            self._walker_image(name, art),
+            source,
+            session.tile_asset_drawing == f"walker/{name}",
+        )
+
+    def _avatar_card(self, card_id: str) -> Character | None:
+        session = self.session
+        card = session.card(card_id) if session is not None and session.map_first else None
+        return card if isinstance(card, Character) and not session.in_private else None
+
+    def _on_avatar_request(self, card_id: str, what: str) -> None:
+        """The Cast page's avatar: drawn (from the portrait, else the card),
+        a file of the author's own, or the tile set's own figure again."""
+        card = self._avatar_card(card_id)
+        if card is None or self._busy:
+            return
+        session = self.session
+        role = f"walker/{card.name}"
+        if what == "draw":
+            self._draw_avatar(card)
+            return
+        if what == "file":
+            path, _ = QFileDialog.getOpenFileName(
+                self, f"An avatar for {card.name}", str(Path.home()), PICTURE_FILTER
+            )
+            if not path:
+                return
+            try:
+                picture = cropped_picture(self, Path(path), FREE)
+            except (OSError, ValueError) as exc:
+                self._warn_plain("Couldn't use the picture", str(exc))
+                return
+            if picture is None:
+                return
+            session.use_own_tile_asset(role, picture[0])
+        elif what == "reset":
+            session.reset_tile_asset(role)
+        else:
+            return
+        self._walker_images.clear()
+        self.refresh_area()
+        self.cast_panel.refresh_avatar()
+
+    def _draw_avatar(self, card: Character, *, new_portrait: bool = False) -> bool:
+        """Ask, with the model and price, then draw their avatar in the
+        background (the map and the card take it when it is in)."""
+        session = self.session
+        role = f"walker/{card.name}"
+        model, price, problem = session.tile_asset_offer(role, "")
+        if problem is not None:
+            if not new_portrait:
+                QMessageBox.information(self, "Draw the avatar", problem)
+            return False
+        cost = f"about ${price:.3f}" if price is not None else "at the model's listed price"
+        source = "their portrait" if card.reference_images else "what their card says of them"
+        lead = f"{card.name} has a new portrait. " if new_portrait else ""
+        answer = QMessageBox.question(
+            self,
+            "Draw the avatar?",
+            f"{lead}Draw {card.name}'s avatar for the map from {source}, by {model}, {cost}? "
+            "It counts against today's map pictures, and it walks for them on the map once "
+            "it is in; the portrait stays as it is.",
+        )
+        if answer != QMessageBox.Yes:
+            return False
+        started = session.redraw_tile_asset(role, "")
+        self.cast_panel.refresh_avatar()
+        return started
+
+    def _offer_avatars(self, card_ids: list[str]) -> None:
+        """A new portrait landed on these cards (drawn, or chosen from a
+        file): offer an avatar drawn from it. Not when one is coming anyway:
+        a character with no avatar yet gets one under the standing approval
+        for map pictures."""
+        for card_id in card_ids:
+            card = self._avatar_card(card_id)
+            if card is None or self._busy:
+                continue
+            session = self.session
+            data, _source = session.walker_asset(card.name)
+            if data is None and session.map_pictures_on:
+                continue
+            self._draw_avatar(card, new_portrait=True)

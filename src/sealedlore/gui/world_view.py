@@ -789,9 +789,7 @@ class WorldView(QWidget):
         self.redraw_button.clicked.connect(self._redraw_requested)
         header = WrapRow()
         header.add_group([self.title])
-        header.add_group(
-            [self.local_button, self.region_button, self.world_button]
-        )
+        header.add_group([self.local_button, self.region_button, self.world_button])
         header.add_group([self.me_button, self.zoom_out, self.zoom_in])
         header.add_group([self.inside_button, self.iso_button, self.redraw_button])
         header.add_group([self.coords])

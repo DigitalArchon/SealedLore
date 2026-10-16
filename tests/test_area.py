@@ -661,3 +661,111 @@ def test_several_of_one_thing_within_reach_are_named_once():
     text = render_positions(house, world, {"Jane": Spot(area="house", x=5, y=11)}, "Jane")
     reach = next(line for line in text.splitlines() if line.startswith("Within reach"))
     assert reach.count("wooden stool") == 1 and "2 more near" in reach
+
+
+# --- the pixel art's style, and a card's avatar ---------------------------------------
+
+
+def test_every_pixel_art_prompt_takes_the_set_s_style_and_none_names_a_game():
+    """The author (Oct 16 2026): the world should feel like the player's own,
+    not one game's look; the style suits the world (gritty, bright, whimsical…)."""
+    from sealedlore.engine.prompt_texts import TEXTS
+    from sealedlore.engine.tile_draw import DEFAULT_STYLE, style_words
+    from sealedlore.storage.tile_sets import shipped_sets
+
+    games = ("Stardew", "Graveyard Keeper", "Balrum", "Dwarf Fortress", "Zelda", "Minecraft")
+    for key, text in TEXTS.items():
+        if key.startswith("map"):
+            assert not any(game in text.default for game in games), key
+    assert style_words({"style": " gritty  and dark "}) == "gritty and dark"
+    assert style_words({}) == DEFAULT_STYLE
+    words = {
+        "world": "a drowned city",
+        "style": "bleak and cold, muted greys",
+        "floor": "wet planks",
+        "cap": "slate",
+        "face": "slate wall",
+        "rug": "a reed mat",
+        "decor": ["a lamp", "a net", "a jar"],
+        "out-ground": "mud",
+        "out-road": "planks",
+        "out-water": "green water",
+        "out-pave": "stone",
+        "out-canopy": "reeds",
+        "out-roof": "thatch",
+        "out-wall": "brick",
+        "trees": ["a willow"],
+        "out-bush": "reeds",
+        "out-rock": "a rock",
+        "out-rubble": "bricks",
+        "out-fence": "a rail",
+        "out-door": "a door",
+    }
+    parsed = parse_tile_words(json.dumps(words))
+    assert parsed["style"] == "bleak and cold, muted greys"
+    jobs = tile_jobs(parsed)
+    assert all("bleak and cold, muted greys" in prompt for _role, prompt, _size in jobs)
+    people = [("Jane", "images/refs/jane.jpg", "tall"), ("Ben", None, "a farmer")]
+    walkers = walker_jobs(people, lambda name: False, "a farm", style="whimsical storybook")
+    assert all("whimsical storybook" in w.prompt for w in walkers)
+    # Every shipped set says what suits its world.
+    sets = shipped_sets()
+    assert sets and all(info.words.get("style") for info, _folder in sets.values())
+
+
+def test_a_card_s_avatar_is_drawn_from_the_portrait_in_the_set_s_style_and_a_choice_holds(
+    tmp_path, story, cast, monkeypatch
+):
+    from sealedlore.engine import session_area
+    from sealedlore.models.image import GeneratedImage, ImageRef
+    from tests.test_world_pictures import FakeImages, png
+
+    FakeImages.sent = []
+    monkeypatch.setattr(session_area, "ImageClient", FakeImages)
+    session = make_session(tmp_path, story, cast)
+    session.config.providers[0].api_key = "k"
+    info, _read = session.tile_set()
+    assert session.tile_style() == info.words["style"]
+    # No avatar yet: a stand-in walks for them.
+    assert session.walker_asset("Serrik Vaun") == (None, "")
+    # With a portrait, "Draw the avatar" with no words of the author's own is
+    # the portrait's edit (the card's words), in the set's style.
+    serrik = next(c for c in session.cast if c.name == "Serrik Vaun")
+    session.pictures.write("images/refs/serrik.png", png(8, 8))
+    serrik.reference_images.insert(
+        0, ImageRef(id="p1", file="images/refs/serrik.png", caption="portrait")
+    )
+    prompt, _size, model, reference = session._asset_job("walker/Serrik Vaun", "")
+    assert reference is not None and "image 1" in prompt and info.words["style"] in prompt
+    assert model == session.config.map_sprite_model
+    assert session.redraw_tile_asset("walker/Serrik Vaun", "")
+    session._asset_thread.join(5)
+    data, source = session.walker_asset("Serrik Vaun")
+    assert data and source == "changed for this story"
+    # The author's choice stands: the standing approval never draws another
+    # over it, nor over "the set's own" ("").
+    session.config.map_art = True
+    session.config.map_pictures = True
+    _furnish, jobs = session.tile_art_jobs()
+    assert not any(j.subject == "walker" and j.name == "Serrik Vaun" for j in jobs)
+    session.reset_tile_asset("walker/Serrik Vaun")
+    assert session.walker_asset("Serrik Vaun") == (None, "")
+    _furnish, jobs = session.tile_art_jobs()
+    assert not any(j.subject == "walker" and j.name == "Serrik Vaun" for j in jobs)
+    # A portrait drawn for the card and taken onto it is named, for the
+    # window to offer an avatar from it.
+    session.pictures.write("images/new.png", png(8, 8))
+    drawn = GeneratedImage(
+        id="drawn-1",
+        anchor_node_id=None,
+        file="images/new.png",
+        prompt="Serrik",
+        model="klein",
+        size="1k",
+        card_id=serrik.id,
+        card_first=True,
+    )
+    session.pictures.add_images([drawn])
+    assert session.take_card_pictures() == ["Serrik Vaun"]
+    assert session.portraits_taken == [serrik.id]
+    assert session.take_card_pictures() == [] and session.portraits_taken == []

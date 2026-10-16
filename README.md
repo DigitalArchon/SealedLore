@@ -88,7 +88,8 @@ moving the story's clock. Right-click a spot to put its coordinate in your
 turn and say what happens there. The map is drawn in an AI-drawn tile set and is
 exact, so the storyteller is told exactly where everyone stands and what is
 within reach. Every building is furnished, as sparsely or as fully as you
-like, and every character gets a little sprite drawn from their portrait.
+like, and every character gets a little pixel-art avatar drawn from their
+portrait, in a style chosen to suit the world rather than any one game's.
 The samples with a map come ready to play.
 
 ### General

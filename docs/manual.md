@@ -810,6 +810,20 @@ Pictures → Pictures for the cards). Click the portrait to see it whole. Each
 name in the list has its portrait beside it, small. A lore entry's first
 picture is shown the same way on the Lore page.
 
+In a story played on its map, **On the map** under the portrait shows the
+character's avatar, the little pixel-art figure that walks for them, and
+says where it came from. Click it to see it whole, pixel for pixel. **Draw
+the avatar…** (**Draw the avatar again…** once there is one) has the map's
+sprite model draw it from the portrait, or from what the card says of them
+when they have none; the model and price are shown first, and it counts
+against the day's map pictures. **Choose a file…** takes a figure of your
+own (on a plain white or transparent ground), and **Back to the set's own**
+puts the tile set's figure back. When a new portrait lands on a card (drawn
+or chosen from a file) and the character already has an avatar, you are
+offered a new one drawn from it; a character with none yet gets theirs
+drawn in the background as usual. The same changes can be made under Look →
+**Edit the tile set…** on the map.
+
 Two checkboxes on a cast sheet decide who writes that character:
 
 - **Available to play** on (the default) — you can play them, and the model
@@ -1059,7 +1073,12 @@ every picture the map is drawn with: the ground, walls and decoration,
 every thing and every character's sprite, with the words each was drawn
 from. Change the words and **Draw it again…** (the model and price are
 shown first), **Use a picture of your own…**, or go **Back to the set's
-own**; a change is for this story only.
+own**; a change is for this story only. Everything drawn for a map is pixel
+art in a style that suits the world rather than any one game's look: each
+shipped set names its own (bleak and quiet for the snowbound farm, whimsical
+storybook for the elven forest), and a set drawn for your story has the map
+art model choose one from your world (gritty and dark, bright and cheerful,
+whimsical…), which you can see and change with the set's other words.
 
 It is one map, read at three levels by zooming; **Local**, **Region** and
 **World** jump to each. **Local** is the area you are in (the farm, not just

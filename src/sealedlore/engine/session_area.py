@@ -68,6 +68,7 @@ from sealedlore.engine.tile_draw import (
     TEXTURE_SIZE,
     item_jobs,
     parse_tile_words,
+    style_words,
     tile_jobs,
     tileset_messages,
     walker_jobs,
@@ -266,6 +267,25 @@ class AreaRuntime:
             return changed or None  # "": the set's generic people
         found = art.picture_for("walker", name)
         return found.file if found is not None else None
+
+    def walker_asset(self, name: str) -> tuple[bytes | None, str]:
+        """A person's avatar on the map as the Cast page shows it: its file,
+        or None when a stand-in walks for them, and where it came from (as
+        `TileAsset.source`; "" for none)."""
+        art = self.map_art_copy()
+        file = self.walker_file(name, art)
+        data = self.pictures.read(file) if file else None
+        if data is None:
+            return None, ""
+        changed = art.tile_overrides.get(f"walker/{name}")
+        return data, "changed for this story" if changed else "drawn for this story"
+
+    def tile_style(self, art: WorldArt | None = None) -> str:
+        """The pixel art's style in a few words, for every picture drawn for
+        the map: the tile set's own (`tile_draw.style_words`)."""
+        art = art or self.map_art_copy()
+        info, _read = self.tile_set(art)
+        return style_words({**info.words, **art.tile_words})
 
     def area(
         self, area_id: str | None, world: WorldMap | None = None, art: WorldArt | None = None
@@ -1328,23 +1348,24 @@ class AreaRuntime:
             return art.failures.get(job_key, 0) >= 2
 
         words = world_words({**info.words, **art.tile_words}, self.map_setting())
-        jobs = item_jobs(areas, has_sprite, words, self.texts, failed=failed)
+        style = style_words({**info.words, **art.tile_words})
+        jobs = item_jobs(areas, has_sprite, words, self.texts, style=style, failed=failed)
         here = {name for name, spot in self.area_state().spots.items()}
         people = []
         for card in (*self.visible_cast(), *self.visible_supporting()):
             portrait = card.reference_images[0].file if card.reference_images else None
             people.append((card.name, portrait, looks_of(card.summary, card.full_description)))
         people.sort(key=lambda p: p[0] not in here)
-        jobs = (
-            walker_jobs(
-                people,
-                lambda name: art.picture_for("walker", name) is not None,
-                words,
-                self.texts,
-                failed=failed,
+
+        def has_walker(name: str) -> bool:
+            # Drawn for the story, or the author's own choice for them (a
+            # redraw, their own picture, or the set's figure: "").
+            return (
+                art.picture_for("walker", name) is not None
+                or art.tile_overrides.get(f"walker/{name}") is not None
             )
-            + jobs
-        )
+
+        jobs = walker_jobs(people, has_walker, words, self.texts, style=style, failed=failed) + jobs
         return furnish, jobs[: min(RUN_LIMIT, room)]
 
     def _start_tile_art(self) -> bool:
@@ -1720,6 +1741,7 @@ class AreaRuntime:
         art = self.map_art_copy()
         info, _read = self.tile_set(art)
         world = world_words({**info.words, **art.tile_words}, self.map_setting())
+        style = style_words({**info.words, **art.tile_words})
         what = " ".join(words.split()) or role.split("/")[-1].replace("-", " ")
         if role in TEXTURES:
             view = (
@@ -1727,12 +1749,14 @@ class AreaRuntime:
                 if role in ("face", "out-wall")
                 else "from directly overhead"
             )
-            prompt = self.texts.fill("map.tile.texture", what=what, world=world, view=view)
+            prompt = self.texts.fill(
+                "map.tile.texture", what=what, world=world, view=view, style=style
+            )
             return prompt, TEXTURE_SIZE, self.config.map_tile_model, None
         if role == "rug":
-            prompt = self.texts.fill("map.tile.rug", what=what, world=world)
+            prompt = self.texts.fill("map.tile.rug", what=what, world=world, style=style)
         elif role in OUTDOOR_SPRITES:
-            prompt = self.texts.fill("map.tile.nature", what=what, world=world)
+            prompt = self.texts.fill("map.tile.nature", what=what, world=world, style=style)
         elif role.startswith("walker/"):
             name = role[7:]
             card = next(
@@ -1741,6 +1765,8 @@ class AreaRuntime:
             )
             portrait = card.reference_images[0].file if card and card.reference_images else None
             looks = looks_of(card.summary, card.full_description) if card else ""
+            # No words of the author's own: the card's, and so the portrait.
+            what = " ".join(words.split()) or looks
             data = self.pictures.read(portrait) if portrait and what == looks else None
             if data is not None:
                 try:
@@ -1748,11 +1774,12 @@ class AreaRuntime:
                 except MetadataError:
                     data = None  # never sent unstripped: drawn from the words
             if data is not None:
-                prompt = self.texts["map.tile.portrait"]
+                prompt = self.texts.fill("map.tile.portrait", style=style)
                 return prompt, SPRITE_SIZE, self.config.map_sprite_model, data
-            prompt = self.texts.fill("map.tile.person", what=f"{name}, {what}", world=world)
+            who = f"{name}, {what}" if what else name
+            prompt = self.texts.fill("map.tile.person", what=who, world=world, style=style)
         else:
-            prompt = self.texts.fill("map.tile.sprite", what=what, world=world)
+            prompt = self.texts.fill("map.tile.sprite", what=what, world=world, style=style)
         return prompt, SPRITE_SIZE, self.config.map_tile_model, None
 
     def tile_asset_offer(self, role: str, words: str) -> tuple[str, float | None, str | None]:

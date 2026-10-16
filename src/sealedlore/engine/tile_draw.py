@@ -31,6 +31,12 @@ TEXTURE_SIZE = "1024x1024"
 RUN_LIMIT = 12
 
 
+# The style every pixel-art prompt names when the set's words have none.
+# Never a game's name (the author, Oct 16 2026: the world should feel like
+# the player's own); a set's own words say what suits its world.
+DEFAULT_STYLE = "in a style that suits the world's mood"
+
+
 def world_words(own: Mapping[str, str], setting: str) -> str:
     """The world in a few words, for every prompt: the story's own tile set's
     words, else the setting's first sentence."""
@@ -42,12 +48,20 @@ def world_words(own: Mapping[str, str], setting: str) -> str:
     return first.rstrip(". ") or "the story's world"
 
 
+def style_words(own: Mapping[str, str]) -> str:
+    """The pixel art's style in a few words, for every prompt: the tile set's
+    own ("gritty and grim, muted rust and ash tones"; a shipped set's manifest
+    or the words written for a story's own), else `DEFAULT_STYLE`."""
+    return " ".join(str(own.get("style") or "").split()) or DEFAULT_STYLE
+
+
 def item_jobs(
     areas: Iterable[Area],
     has_sprite: Callable[[str], bool],
     world: str,
     texts: PromptTexts = DEFAULT_TEXTS,
     *,
+    style: str = DEFAULT_STYLE,
     failed: Callable[[str], bool] = lambda _k: False,
 ) -> list[PictureJob]:
     """A sprite for each kind of thing in these areas that has none."""
@@ -69,7 +83,7 @@ def item_jobs(
                     subject="item",
                     subject_id=slugs[0],
                     name=placement.name,
-                    prompt=texts.fill("map.tile.sprite", what=what, world=world),
+                    prompt=texts.fill("map.tile.sprite", what=what, world=world, style=style),
                 )
             )
     return out
@@ -81,6 +95,7 @@ def walker_jobs(
     world: str,
     texts: PromptTexts = DEFAULT_TEXTS,
     *,
+    style: str = DEFAULT_STYLE,
     failed: Callable[[str], bool] = lambda _k: False,
 ) -> list[PictureJob]:
     """A walking sprite for each person (name, portrait file or None, how
@@ -91,10 +106,10 @@ def walker_jobs(
         if has_walker(name) or failed(key):
             continue
         if portrait:
-            prompt = texts["map.tile.portrait"]
+            prompt = texts.fill("map.tile.portrait", style=style)
         else:
             what = f"{name}, {looks}" if looks else name
-            prompt = texts.fill("map.tile.person", what=what, world=world)
+            prompt = texts.fill("map.tile.person", what=what, world=world, style=style)
         out.append(
             PictureJob(
                 key=key,
@@ -126,6 +141,7 @@ def parse_tile_words(text: str) -> dict[str, str]:
         return " ".join(str(value or "").split())[:200]
 
     words["world"] = said(data.get("world"))
+    words["style"] = said(data.get("style"))
     for role in ("floor", "cap", "face", "rug", *[r for r in TEXTURES if r.startswith("out-")]):
         words[role] = said(data.get(role))
     for i, item in enumerate((data.get("decor") or [])[:3]):
@@ -150,28 +166,25 @@ def tile_jobs(
 ) -> list[tuple[str, str, str]]:
     """(role, prompt, size) for each picture of a story's own tile set."""
     world = words.get("world", "")
+    style = style_words(words)
     out: list[tuple[str, str, str]] = []
     for role in TEXTURES:
         view = (
             "straight from the front" if role in ("face", "out-wall") else "from directly overhead"
         )
-        out.append(
-            (
-                role,
-                texts.fill("map.tile.texture", what=words[role], world=world, view=view),
-                TEXTURE_SIZE,
-            )
+        prompt = texts.fill(
+            "map.tile.texture", what=words[role], world=world, view=view, style=style
         )
-    out.append(("rug", texts.fill("map.tile.rug", what=words["rug"], world=world), SPRITE_SIZE))
+        out.append((role, prompt, TEXTURE_SIZE))
+    prompt = texts.fill("map.tile.rug", what=words["rug"], world=world, style=style)
+    out.append(("rug", prompt, SPRITE_SIZE))
     for i in range(3):
         role = f"decor{i}"
         if words.get(role):
-            out.append(
-                (role, texts.fill("map.tile.sprite", what=words[role], world=world), SPRITE_SIZE)
-            )
+            prompt = texts.fill("map.tile.sprite", what=words[role], world=world, style=style)
+            out.append((role, prompt, SPRITE_SIZE))
     for role in OUTDOOR_SPRITES:
         if words.get(role):
-            out.append(
-                (role, texts.fill("map.tile.nature", what=words[role], world=world), SPRITE_SIZE)
-            )
+            prompt = texts.fill("map.tile.nature", what=words[role], world=world, style=style)
+            out.append((role, prompt, SPRITE_SIZE))
     return out

@@ -1996,11 +1996,10 @@ _text(
     "The system prompt for drawing a place or thing on the map as a small SVG. The program "
     "keeps only plain shapes and turns them into pixel art in the story's palette.",
     """\
-You draw small game sprites for a 2D story map in a simple retro style, somewhere between Dwarf \
-Fortress and Stardew Valley. Every sprite is seen from a three-quarter top-down view, like a \
-16-bit role-playing game. Use bold, simple shapes that still read when shown at 32x32 pixels. \
-Centre the object and let it fill most of the canvas. The background is transparent. No text, \
-no letters, no shadows on the ground.
+You draw small game sprites for a 2D story map in a simple retro 16-bit style. Every sprite is \
+seen from a three-quarter top-down view, like a 16-bit role-playing game. Use bold, simple shapes \
+that still read when shown at 32x32 pixels. Centre the object and let it fill most of the \
+canvas. The background is transparent. No text, no letters, no shadows on the ground.
 
 Reply with one SVG in a ```svg block and nothing else. Rules:
 - <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
@@ -2041,8 +2040,8 @@ _text(
     "The system prompt for laying out a place the story has reached, as shapes the program "
     "draws as tiles. Drawn once, the first time the story is there.",
     """\
-You lay out places for a 2D story map in the style of Dwarf Fortress, seen from directly above, \
-north at the top, on a grid {width} tiles wide (x 0-{last_x}, west to east) and {height} tall \
+You lay out places for a 2D top-down tile-map story game, seen from directly above, north at \
+the top, on a grid {width} tiles wide (x 0-{last_x}, west to east) and {height} tall \
 (y 0-{last_y}, north to south). One tile is about {tile}. You describe the place as shapes and \
 the program draws the tiles.
 
@@ -2161,8 +2160,8 @@ _text(
     "The system prompt for drawing the land around a place the story has reached, the first "
     "time it gets there: the map grows by these, and they are fixed once drawn.",
     """\
-You draw the land around a place for a 2D story map in the style of Dwarf Fortress, seen from \
-directly above, north at the top, on a grid {width} tiles wide (x 0-{last_x}, west to east) and \
+You draw the land around a place for a 2D top-down tile-map story game, seen from directly \
+above, north at the top, on a grid {width} tiles wide (x 0-{last_x}, west to east) and \
 {height} tall (y 0-{last_y}, north to south). One tile is about {tile}. You describe the land \
 as shapes and the program draws the tiles. The places on the map are drawn over it by the \
 program; you draw the country they sit in.
@@ -2245,9 +2244,10 @@ _text(
     "Map pictures: the style",
     "Ends every map picture's prompt: the look, and the plain background the program "
     "cuts the picture out of.",
-    "16-bit pixel art game sprite, seen from a three-quarter top-down view like Stardew "
-    "Valley, crisp pixels, limited palette, clean dark outlines, centred, on a plain flat "
+    "16-bit pixel art game sprite, {style}, seen from a three-quarter top-down view, "
+    "crisp pixels, limited palette, clean dark outlines, centred, on a plain flat "
     "white background with nothing else on it, no text, no UI, no border, no ground shadow.",
+    (("style", "the pixel art's style in a few words, to suit the world (the tile set's)"),),
 )
 
 _text(
@@ -2309,14 +2309,15 @@ _text(
     "Map pictures: a place's postcard",
     "Asks for a picture of a whole place the story has been, shown on its card.",
     "{place}, {view}: {what} {inside}The story's setting: {setting}. Detailed 16-bit "
-    "pixel art, three-quarter top-down view in the style of Stardew Valley, full-bleed "
-    "scene, atmospheric light, no text.",
+    "pixel art, {style}, three-quarter top-down view, full-bleed scene, atmospheric "
+    "light, no text.",
     (
         ("place", "The place's name"),
         ("view", '"seen from outside", or for a room "seen inside"'),
         ("what", "What the story said of it"),
         ("inside", "What is in it, as a sentence, or nothing"),
         ("setting", "The story's setting, briefly"),
+        ("style", "the pixel art's style in a few words, to suit the world (the tile set's)"),
     ),
 )
 
@@ -2352,8 +2353,8 @@ _text(
     "view: what the render is, any change first, the area in one line, and the ground's look.",
     "This picture is a plain isometric render of a game map: the ground as tiles, each "
     "building a simple block with a roof, walls, fences, paths and water as flat shapes, "
-    "small marks for the things standing about. Repaint it as 16-bit pixel art in the style "
-    "of Stardew Valley from exactly this viewpoint. Keep every building, wall, path, fence, "
+    "small marks for the things standing about. Repaint it as 16-bit pixel art, {style}, "
+    "from exactly this viewpoint. Keep every building, wall, path, fence, "
     "water and open ground where the render has it, the same footprint, size and shape, and "
     "the same number of buildings. Add nothing the render does not show.{now} What is on it: "
     "{places} The ground: {look}. Full-bleed scene, atmospheric light. No writing of any "
@@ -2362,6 +2363,7 @@ _text(
         ("now", "Each place the story changed, as map.picture.isometric.now says it, or nothing"),
         ("places", "The area in one line: the first sentence of its description, or its name"),
         ("look", "The plan's ground in words (snow-covered country in winter, a station's decks)"),
+        ("style", "the pixel art's style in a few words, to suit the world (the tile set's)"),
     ),
 )
 
@@ -4212,7 +4214,11 @@ _text(
     ),
 )
 
-_PIXEL = "Hand-painted 16-bit pixel art in the style of Stardew Valley"
+# The style is the tile set's own words ("gritty and grim, muted rust and ash
+# tones"), written for the world: never a named game (the author, Oct 16 2026:
+# the world should feel like the player's own, not one game's look).
+_PIXEL = "Hand-painted 16-bit pixel art, {style}"
+_STYLE = ("style", "the pixel art's style in a few words, to suit the world (the tile set's)")
 
 _text(
     "map.tile.texture",
@@ -4227,6 +4233,7 @@ _text(
         ("what", "what the texture is"),
         ("world", "the world, in a few words"),
         ("view", "from directly overhead, or straight from the front"),
+        _STYLE,
     ),
 )
 
@@ -4242,7 +4249,7 @@ _text(
     "square to the frame and facing the viewer, not rotated and not isometric. Centred "
     "alone on a plain pure white background with a wide white margin on every side, crisp "
     "dark outline, soft light from the upper left.",
-    (("what", "the thing"), ("world", "the world, in a few words")),
+    (("what", "the thing"), ("world", "the world, in a few words"), _STYLE),
 )
 
 _text(
@@ -4253,7 +4260,7 @@ _text(
     f"{_PIXEL} game sprite: {{what}}, as found in {{world}}, seen from directly above, "
     "lying flat, square to the frame, centred alone on a plain pure white background with "
     "a wide white margin on every side.",
-    (("what", "the rug"), ("world", "the world, in a few words")),
+    (("what", "the rug"), ("world", "the world, in a few words"), _STYLE),
 )
 
 _text(
@@ -4265,7 +4272,7 @@ _text(
     "RPG three-quarter view, standing upright, square to the frame, not rotated and not "
     "isometric. Centred alone on a plain pure white background with a wide white margin on "
     "every side, crisp dark outline, soft light from the upper left.",
-    (("what", "the sprite"), ("world", "the world, in a few words")),
+    (("what", "the sprite"), ("world", "the world, in a few words"), _STYLE),
 )
 
 _text(
@@ -4276,11 +4283,12 @@ _text(
     "sent (measured: nine of nine kept hair, skin, build, clothes and colours; with the "
     "set's sprites as style references one came back a chair).",
     "Create a small full-body game character sprite of the person in image 1, in "
-    "hand-painted 16-bit pixel art in the style of Stardew Valley: standing, facing the "
+    "hand-painted 16-bit pixel art, {style}: standing, facing the "
     "viewer, the whole figure from head to feet with chibi proportions and a large head, "
     "keeping their hair colour and style, skin tone, build, and the clothes and colours "
     "they wear in image 1. Centred alone on a plain pure white background with a wide white "
     "margin on every side, crisp dark outline.",
+    (_STYLE,),
 )
 
 _text(
@@ -4293,7 +4301,7 @@ _text(
     "the whole figure from head to feet with chibi proportions and a large head. Centred "
     "alone on a plain pure white background with a wide white margin on every side, crisp "
     "dark outline.",
-    (("what", "who they are and how they look"), ("world", "the world, in a few words")),
+    (("what", "who they are and how they look"), ("world", "the world, in a few words"), _STYLE),
 )
 
 _text(
@@ -4304,11 +4312,15 @@ _text(
     "(engine/tile_draw.py). Each answer becomes one picture's prompt, shown to the author "
     "with the price before anything is drawn.",
     """\
-You design the look of a top-down 2D RPG map in the style of Stardew Valley for a story's world.
+You design the look of a top-down 2D pixel-art RPG map for a story's world.
 Write short, concrete descriptions a pixel artist could paint, each a few words, as a JSON
 object with exactly these keys:
 "world": the world in a few words, for every prompt ("a snowbound Canadian farm after the end of
 the world");
+"style": the pixel art's style in a few words, to suit the world's mood: gritty and dark, bright
+and cheerful, whimsical, bleak, lush, clean and cold, and the colours that go with it ("gritty
+and grim, muted rust and ash tones"; "whimsical storybook, soft greens and golds"). Never name a
+game, a studio or an artist;
 "floor": an indoor floor seen from above, with no direction or pattern running across it;
 "cap": the top of a thick indoor wall seen from above;
 "face": an indoor wall seen from the front;

@@ -320,3 +320,79 @@ def test_the_tile_set_editor_lists_every_asset_and_finds_one(app, window):
     assert shown == ["out-road"]
     dialog.deleteLater()
     pump(app)
+
+
+def test_the_cast_page_shows_the_avatar_and_a_new_portrait_offers_a_new_one(
+    app, window, monkeypatch
+):
+    """The author (Oct 16 2026): see the avatar full size, change it and draw
+    it again as with the portrait; a new portrait offers a new avatar."""
+    from PySide6.QtWidgets import QMessageBox
+
+    from sealedlore.engine import session_area
+    from sealedlore.gui.avatar_view import pixel_scaled
+    from sealedlore.gui.cast_panel import CastPanel
+    from sealedlore.models.image import GeneratedImage
+    from tests.test_world_pictures import FakeImages, png
+
+    FakeImages.sent = []
+    monkeypatch.setattr(session_area, "ImageClient", FakeImages)
+    session = window.session
+    session.config.image_endpoint.base_url = "https://nano-gpt.com/api/v1"
+    session.config.image_endpoint.api_key = "k"
+    panel = window.cast_panel
+    panel.select_character("char-serrik")
+    assert not panel.avatar.isHidden() and panel.avatar.draw_button.text() == "Draw the avatar…"
+    assert panel.avatar.picture.pixmap() is not None  # the stand-in figure shows
+    assert panel.avatar.reset_button.isHidden()
+    # Pixel art is scaled by whole pixels, never blurred.
+    small = QImage(16, 24, QImage.Format_ARGB32)
+    small.fill(QColor("red"))
+    assert pixel_scaled(small, 112).size().toTuple() == (64, 96)
+    # Draw it: asked first (the model and price), drawn in the background,
+    # then on the card and the map.
+    asked: list[str] = []
+
+    def question(_parent, _title, text, *_args, **_kwargs):
+        asked.append(text)
+        return QMessageBox.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", question)
+    panel.avatar.draw_button.click()
+    assert asked and "Serrik Vaun's avatar" in asked[-1] and "what their card says" in asked[-1]
+    session._asset_thread.join(5)
+    pump(app)
+    window._art_drawn()
+    assert panel.avatar.draw_button.text() == "Draw the avatar again…"
+    assert not panel.avatar.reset_button.isHidden()
+    assert session.walker_asset("Serrik Vaun")[1] == "changed for this story"
+    # A new portrait on the card: offered an avatar drawn from it.
+    serrik = next(c for c in session.cast if c.name == "Serrik Vaun")
+    session.pictures.write("images/new.png", png(8, 8))
+    drawn = GeneratedImage(
+        id="drawn-1",
+        anchor_node_id=None,
+        file="images/new.png",
+        prompt="Serrik",
+        model="klein",
+        size="1k",
+        card_id=serrik.id,
+        card_first=True,
+    )
+    session.pictures.add_images([drawn])
+    asked.clear()
+    window._take_card_pictures()
+    assert asked and asked[-1].startswith("Serrik Vaun has a new portrait.")
+    assert "their portrait" in asked[-1]
+    session._asset_thread.join(5)
+    sent = FakeImages.sent[-1]
+    assert sent.get("imageDataUrls")  # the portrait went with it
+    assert "image 1" in sent["prompt"] and session.tile_style() in sent["prompt"]
+    # Back to the set's own, and a story with no map shows no avatar block.
+    panel.avatar.reset_button.click()
+    assert panel.avatar.reset_button.isHidden()
+    plain = CastPanel(lambda: session.pictures)
+    plain.set_cast(session.cast)
+    plain.select_character("char-serrik")
+    assert plain.avatar.isHidden()
+    assert serrik.reference_images and serrik.reference_images[0].file.startswith("images/refs/")

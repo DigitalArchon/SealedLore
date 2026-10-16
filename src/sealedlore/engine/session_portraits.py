@@ -44,6 +44,10 @@ PORTRAIT_CAPTION = "portrait"
 
 
 class PortraitRuntime:
+    # The characters whose portrait the last `take_card_pictures` put first
+    # (by id): the window offers a new map avatar from it.
+    portraits_taken: list[str] = []
+
     def picture_cards(self) -> tuple[list[Character], list[LoreEntry]]:
         """Every card that may have a picture now: the characters and the
         enabled lore entries the models may see."""
@@ -228,6 +232,7 @@ class PortraitRuntime:
         onto its card; the names of the cards that changed. Each is taken
         once (`Story.card_pictures_taken`): one the author later removes
         stays removed. A card gone since is skipped."""
+        self.portraits_taken = []
         if self.story.chat:
             return []
         taken = set(self.story.card_pictures_taken)
@@ -254,6 +259,8 @@ class PortraitRuntime:
                 )
                 if image.card_first:
                     card.reference_images.insert(0, ref)
+                    if isinstance(card, Character):
+                        self.portraits_taken.append(card.id)
                 else:
                     card.reference_images.append(ref)
                 names.append(card.name if isinstance(card, Character) else card.title)

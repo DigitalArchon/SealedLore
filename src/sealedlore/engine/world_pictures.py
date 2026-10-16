@@ -136,12 +136,15 @@ def plan_pictures(
     edits: bool,
     texts: PromptTexts = DEFAULT_TEXTS,
     limit: int = 6,
+    style: str = "in a style that suits the world's mood",
 ) -> list[PictureJob]:
     """What the map still needs from the image model, in the order it is
     wanted. `edits`: the model takes a picture to work from (a change is
     then drawn from the last picture; otherwise drawn afresh). Nothing drawn,
-    and nothing that failed too often, is asked again."""
-    style = texts["map.picture.style"]
+    and nothing that failed too often, is asked again. `style`: the pixel
+    art's style in a few words (the tile set's, `tile_draw.style_words`)."""
+    look = style
+    style = texts.fill("map.picture.style", style=look)
     here = world.where.get(held or "")
     jobs: list[tuple[tuple, PictureJob]] = []
 
@@ -247,6 +250,7 @@ def plan_pictures(
                 what=what + (f" ({state})" if state else ""),
                 inside=f"In it: {', '.join(inside)}. " if inside else "",
                 setting=setting,
+                style=look,
             )
             reference, from_picture = None, None
         here_now = place_id == here or place_id == _container(world, here, place_id)
@@ -411,6 +415,7 @@ def isometric_job(
     area_id: str,
     *,
     look: str = "",
+    style: str = "in a style that suits the world's mood",
     texts: PromptTexts = DEFAULT_TEXTS,
 ) -> PictureJob:
     """The isometric view of an area as a picture job: the program's own
@@ -430,6 +435,7 @@ def isometric_job(
         now=now,
         places=one_line(area),
         look=LOOK_WORDS.get(look, "as the map shows it"),
+        style=style,
     )
     state = isometric_state(world, area_id)
     plan = area_plan(world, art, area_id)

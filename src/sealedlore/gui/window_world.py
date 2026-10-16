@@ -137,6 +137,7 @@ class WorldWindow:
         After a story opens or closes, a job finishes, or Setup is saved."""
         session = self.session
         on = session is not None and session.map_on
+        self.cast_panel.set_map_first(on and session.map_first)
         if on != self.map_layout:
             self._set_map_layout(on)
         # Usable while the model writes: the map only reads the story.
@@ -171,6 +172,7 @@ class WorldWindow:
 
     def _art_drawn(self) -> None:
         self._sync_progress()
+        self.cast_panel.refresh_avatar()  # an avatar drawn again lands here too
         if self.world_shown():
             self._art_timer.start(ART_REDRAW_MS)
 

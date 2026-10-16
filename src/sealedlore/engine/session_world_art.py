@@ -254,6 +254,7 @@ class WorldArtRuntime:
             edits=info is not None and info.accepts_images,
             texts=self.texts,
             limit=min(limit, room),
+            style=self.tile_style(art),
         )
 
     def _picture_model(self) -> ImageModelInfo | None:
@@ -328,7 +329,9 @@ class WorldArtRuntime:
         look = plan_ground(world, art, area, ground)
         if look == "metal" and "space" in (ground, land_under(world, art, area)):
             look = "space"  # a deck in space, not plating on the ground
-        job = isometric_job(world, art, area_id, look=look, texts=self.texts)
+        job = isometric_job(
+            world, art, area_id, look=look, style=self.tile_style(art), texts=self.texts
+        )
         client = ImageClient(media.base_url, media.api_key, api=media.api)
         self._isometric_area = area_id
         self._isometric_client = client  # for `stop_map_art` to cancel
