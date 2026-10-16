@@ -395,7 +395,7 @@ def test_a_sibling_is_built_once_and_cancelled_with_its_provider():
 
 
 def test_a_rate_limit_is_waited_out_before_anything_streams(monkeypatch):
-    import sealedlore.providers.openai_compat as compat
+    import sealedlore.providers.streaming as streaming
 
     waits: list[float] = []
     calls = []
@@ -410,7 +410,7 @@ def test_a_rate_limit_is_waited_out_before_anything_streams(monkeypatch):
     monkeypatch.setattr(provider._wake, "wait", lambda seconds: waits.append(seconds) or False)
     text, _ = provider.complete(request_for())
     assert text == "Hi" and len(calls) == 3 and waits == [2.0, 2.0]
-    assert compat.RETRY_ATTEMPTS >= 2
+    assert streaming.RETRY_ATTEMPTS >= 2
 
 
 def test_a_rate_limit_that_persists_still_fails(monkeypatch):

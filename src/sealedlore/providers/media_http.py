@@ -26,7 +26,7 @@ import httpx
 
 from sealedlore.providers.base import ProviderError, StreamCancelled
 from sealedlore.providers.http import make_client
-from sealedlore.providers.openai_compat import (
+from sealedlore.providers.streaming import (
     RETRY_ATTEMPTS,
     RETRY_MAX_SECONDS,
     _retry_delay,
