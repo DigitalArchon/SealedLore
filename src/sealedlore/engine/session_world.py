@@ -341,13 +341,16 @@ class WorldRuntime:
         turn = self._turn_node(path, turn_node_id)
         if not self.fixed_stays(turn):
             return ""
-        named = [
-            name
+        scored = [
+            (named_in(name, text), name)
             for name in self.fixed_here(path, held_id, turn_node_id=turn_node_id)
-            if named_in(name, text)
-        ][:MAX_FIXED_NAMED]
-        if not named:
+        ]
+        best = max((score for score, _name in scored), default=0)
+        if not best:
             return ""
+        # The ones the turn names best: "the heavy wooden shelf unit" over
+        # every other shelf in the house (live).
+        named = [name for score, name in scored if score == best][:MAX_FIXED_NAMED]
         things = ", ".join(f"the {name}" for name in named)
         return self.texts.fill("turn.remember.fixed", things=things)
 

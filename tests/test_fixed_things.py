@@ -124,3 +124,20 @@ def test_fiat_and_direction_are_told_nothing_stays_put(tmp_path, story, cast):
     list(session.send(direction))
     tail = _tail(session)
     assert "fixed in place" not in tail and "unmoved" not in tail
+
+
+def test_remember_names_the_thing_the_turn_names_best(tmp_path, story, cast):
+    """Live: "the heavy wooden shelf unit" brought every shelf in the house
+    onto REMEMBER with it."""
+    shelves = [
+        {"kind": "object", "name": "a heavy wooden shelf unit", "x": 10, "y": 3},
+        {"kind": "object", "name": "a pantry shelf", "x": 12, "y": 3},
+    ]
+    session = make_session(tmp_path, story, cast, ["Quiet.", "{}"], house_objects=shelves)
+    session.config.scene_reads = "manual"
+    list(session.send(turn("I look around.")))  # nobody stands anywhere before a passage
+    said = session.fixed_reminder(
+        session.path(), "char-serrik", text="I shove the heavy shelf unit at the window."
+    )
+    assert "shelf unit" in said and "pantry" not in said
+    assert session.fixed_reminder(session.path(), "char-serrik", text="I sit down.") == ""

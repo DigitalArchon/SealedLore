@@ -239,9 +239,9 @@ _NOT_NAMING = frozenset(
 )
 
 
-def named_in(name: str, text: str) -> bool:
-    """Whether `text` names the thing called `name` by a word of its name
-    that says what it is ("I shove the bench" names "rough wooden bench")."""
+def named_in(name: str, text: str) -> int:
+    """How many words of the thing's name that say what it is `text` names
+    ("I shove the bench" names "rough wooden bench" once); 0 for none."""
     words = {w for w in re.findall(r"[a-z]+", name.lower()) if w not in _NOT_NAMING and len(w) > 2}
     said = text.lower()
-    return any(re.search(rf"\b{re.escape(w)}(?:e?s)?\b", said) for w in words)
+    return sum(1 for w in words if re.search(rf"\b{re.escape(w)}(?:e?s)?\b", said))
