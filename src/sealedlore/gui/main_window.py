@@ -487,6 +487,7 @@ class MainWindow(
         bar.addPermanentWidget(self.status_strip.cache_label)
         bar.addPermanentWidget(self.status_strip.cost_label)
         bar.addPermanentWidget(self.status_strip.pictures_label)
+        bar.addPermanentWidget(self.status_strip.route_label)
 
     def _build_actions(self) -> None:
         file_menu = self.menuBar().addMenu("&File")

@@ -220,3 +220,18 @@ def test_the_status_bar_says_when_a_route_isnt_followed(app):
     assert "plot: z-ai/glm-5.3 · parasail · FP8+: ⚠ NOT followed" in tip
     assert "subscription routing" in tip
     strip.deleteLater()
+
+
+def test_every_status_strip_widget_lives_in_the_status_bar(app, tmp_path):
+    """The route label was made but never added to the bar, so its show()
+    opened a tiny window of its own saying "routes" after every message
+    (the author, Oct 17 2026). No strip widget may be a window."""
+    from sealedlore.gui.main_window import MainWindow
+
+    window = MainWindow(root=tmp_path, use_mock=True)
+    bar = window.statusBar()
+    for widget in window.status_strip.widgets():
+        assert widget.parent() is not None and widget.window() is window, widget.objectName()
+    window.status_strip.set_routes([])
+    assert bar is not None
+    window.close()
