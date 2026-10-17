@@ -1310,11 +1310,21 @@ def test_a_take_survives_take_back_and_a_retake_as_the_spots_do(tmp_path, story,
     list(session.regenerate())
     assert "Serrik Vaun carries: brass lantern." in _told(session)
     assert session.carried_things() == [(lantern.id, "brass lantern")]
-    # Take back: the record stands with the turn's walking, live again.
+    # Take back: the turn's own record goes with it (the lantern is on the
+    # floor again), and comes back when the turn is sent again with the
+    # menu's words; a turn rewritten without them takes nothing.
     user = session.path()[-2]
     session.restore_area(user)
     session.delete_from(user.id)
-    assert session.story.area_live.state.things[lantern.id].state == "taken"
-    assert session.carried_things() == [(lantern.id, "brass lantern")]
+    assert lantern.id not in session.story.area_live.state.things
+    assert session.carried_things() == []
+    assert session.story.area_live.state.action is not None  # the choice still pending
+    list(session.send(turn("I look at the lantern and leave it.")))
+    assert session.carried_things() == []
+    user = session.path()[-2]
+    session.restore_area(user)
+    session.delete_from(user.id)
+    text = session.map_action("take", lantern.name, lantern.id)
     list(session.send(turn(text)))
     assert session.path()[-2].meta.area.things[lantern.id].by == "Serrik Vaun"
+    assert session.carried_things() == [(lantern.id, "brass lantern")]

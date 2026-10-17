@@ -526,6 +526,12 @@ class AreaRuntime:
             # (a place with no plan yet has no spot to stand on) kept.
             state.action = state.action.model_copy(update={"seconds": 0})
         state.marks = []
+        # What the turn itself did to a thing (Take, Destroy, Eat, Drop,
+        # Give) goes with it: the records before the turn stand, and the
+        # turn's own come back when it is sent again with the menu's words,
+        # not when it is rewritten without them.
+        before = self._snapshot_on(self._path_to(node.parent_id)) if node.parent_id else None
+        state.things = dict(before.things) if before is not None else {}
         self.story.area_live = LiveArea(
             leaf_id=node.parent_id,
             held=self.map_held_name(node.meta.controlled_character_id),
