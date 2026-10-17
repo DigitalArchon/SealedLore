@@ -90,6 +90,21 @@ TILES: dict[str, str] = {
     "&": "stairs or a ladder or a lift",
     " ": "nothing: space, or the dark of rock",
 }
+# Words a reply uses for the void round a hull. The enclosed prompt itself
+# says 'Space ("dark") only outside the hull', and live (Oct 17 2026) GLM 5.3
+# Flash answered a station's plan with "ground": "dark": the void was drawn
+# as walkable plating and the seven decks it listed were never drawn
+# (`has_levels` took only "floor" or "space").
+SPACE_WORDS = frozenset({"space", "dark", "void", "vacuum", "stars", "starfield", "outer space"})
+
+
+def ground_of(spec: dict[str, Any] | None) -> str:
+    """A plan's ground word as the program reads it: lower case, and any
+    word for the void round a hull read as "space"."""
+    word = " ".join(str((spec or {}).get("ground") or "").lower().split())
+    return "space" if word in SPACE_WORDS else word
+
+
 GROUND: dict[str, str] = {
     "snow": ".",
     "grass": ".",
@@ -318,7 +333,7 @@ def rasterise(
 ) -> tuple[list[str], dict[str, str], dict[str, list[int]]]:
     """(tile rows, numbered objects, named buildings by [x, y]): the shapes
     drawn in order, later over earlier. Anything off the grid is clipped."""
-    grid = [[GROUND.get(str(spec.get("ground")), ".")] * width for _ in range(height)]
+    grid = [[GROUND.get(ground_of(spec), ".")] * width for _ in range(height)]
 
     def put(x: int, y: int, ch: str) -> None:
         if 0 <= x < width and 0 <= y < height:
@@ -661,8 +676,7 @@ def is_deck(world: WorldMap, art: WorldArt, place_id: str | None) -> bool:
     # Its own ground, or the land it stands on: the enclosed prompt asks for
     # the hull as "floor" with space outside, so the deck's own word is
     # seldom "space" (the second review).
-    ground = str((layout.spec or {}).get("ground") or "")
-    return ground == "space" or land_under(world, art, place) == "space"
+    return ground_of(layout.spec) == "space" or land_under(world, art, place) == "space"
 
 
 def _chain(world: WorldMap, place_id: str | None) -> list[WorldPlace]:
@@ -1048,7 +1062,7 @@ def level_messages(
     answer, and it is asked for this level on the same grid, with its stairs
     in the plan's stairs tiles. Not measured."""
     stairs = stairs_words(sorted(stairs_tiles(layout.rows)))
-    deck = str((layout.spec or {}).get("ground") or "") == "space" or place.kind == "vehicle"
+    deck = ground_of(layout.spec) == "space" or place.kind == "vehicle"
     return [
         *layout_messages(world, place, setting, texts, fixed),
         _message("assistant", json.dumps(layout.spec)),
@@ -1577,8 +1591,10 @@ def has_levels(place: WorldPlace, layout: PlaceLayout) -> bool:
     one on floor or in space): the grounds of a site have no upper floor."""
     if not levels_called_for(place) or not listed_levels(layout.spec):
         return False
-    ground = str((layout.spec or {}).get("ground") or "")
-    return place.kind in ("building", "room", "vehicle") or ground in ("floor", "space")
+    return place.kind in ("building", "room", "vehicle") or ground_of(layout.spec) in (
+        "floor",
+        "space",
+    )
 
 
 def level_key(place_id: str, state: str, index: int) -> str:
@@ -1695,7 +1711,7 @@ def finish(
         y=y,
         side=side,
         rows=rows,
-        ground=str(spec.get("ground") or ""),
+        ground=ground_of(spec),
         model=model,
         made_at=made_at,
     )

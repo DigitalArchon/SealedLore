@@ -50,6 +50,7 @@ from sealedlore.engine.world_art import (
     TILES,
     decked,
     fixed_in_plan,
+    ground_of,
     has_inside,
     holding_place,
     is_deck,  # noqa: F401  (moved to world_art; still imported from here by tests)
@@ -926,7 +927,7 @@ def build_area(
     if layout is None:
         return None
     spec = layout.spec if isinstance(layout.spec, dict) else {}
-    look = str(spec.get("ground") or "")
+    look = ground_of(spec)
     if look != "space" and land_under(world, art, place) == "space":
         look = "space"  # a deck: its own word is "floor", the void around it space
     indoor = place.kind in ("building", "room", "vehicle") or look == "space"
@@ -1085,7 +1086,7 @@ def build_level(
     if not rows:
         return None
     spec = layout.spec if isinstance(layout.spec, dict) else {}
-    look = str(spec.get("ground") or "")
+    look = ground_of(spec)
     if look != "space" and land_under(world, art, place) == "space":
         look = "space"
     repairs: list[str] = list(links.repairs)

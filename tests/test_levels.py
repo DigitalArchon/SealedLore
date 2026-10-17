@@ -183,6 +183,31 @@ def test_levels_listed_on_a_stairs_feature_are_read_as_the_plan_s():
     assert listed_levels({**spec, "levels": [{"index": 1, "name": "Loft"}]}) == [(1, "Loft")]
 
 
+def test_a_station_whose_reply_calls_the_void_dark_is_a_deck_with_its_decks():
+    # GLM 5.3 Flash's live reply for a ring station (Oct 17 2026): "ground":
+    # "dark", as the enclosed prompt's own words suggest, and seven decks.
+    # The void was drawn as plating and no deck was ever drawn.
+    station = WorldPlace(
+        id="st", name="Halcyon Reach", kind="site", what="a ring station of six decks"
+    )
+    spec = {
+        "ground": "Dark",
+        "features": [
+            {"kind": "area", "fill": "floor", "shape": "ellipse", "x": 2, "y": 1, "w": 36, "h": 22}
+        ],
+        "levels": [{"index": 1, "name": "Promenade"}, {"index": -1, "name": "Habitat"}],
+    }
+    rows, _objects, _labels = rasterise(spec, 40, 24)
+    assert rows[0][0] == " " and rows[12][20] == "_"
+    layout = PlaceLayout(place_id="st", spec=spec, rows=rows)
+    assert has_levels(station, layout)
+    world = WorldMap(places={"st": station.model_copy(update={"x": 0.0, "y": 0.0, "size": 300.0})})
+    art = WorldArt(layouts={"st": {"": layout}})
+    area = build_area(world, art, "st")
+    assert area is not None and area.look == "space" and area.indoor
+    assert area.rows[0][0] == " "
+
+
 def test_plan_art_plans_a_job_per_level_only_when_the_plan_lists_them():
     world, art = world_and_art(upper=False)
     world.visited = {"Serrik Vaun": ["house"]}

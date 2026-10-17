@@ -117,7 +117,13 @@ from sealedlore.engine.world import (
     key,
     unknown_for,
 )
-from sealedlore.engine.world_art import is_window, parse_window, patch_at, patch_under
+from sealedlore.engine.world_art import (
+    ground_of,
+    is_window,
+    parse_window,
+    patch_at,
+    patch_under,
+)
 from sealedlore.engine.world_layout import (
     CHILD_SHARE,
     KIND_SIZE,
@@ -347,9 +353,7 @@ class AreaRuntime:
         art = art or self.map_art_copy()
         sets = {name: info for name, (info, _folder) in shipped.shipped_sets().items()}
         looks = [
-            str((layout.spec or {}).get("ground") or "")
-            for states in art.layouts.values()
-            for layout in states.values()
+            ground_of(layout.spec) for states in art.layouts.values() for layout in states.values()
         ]
         own = [key for key, found in art.tile_sets.items() if found.assets]
         return choose_set(art.tile_set, self._setting_words(), looks, sets, own)
