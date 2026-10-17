@@ -187,6 +187,12 @@ def test_a_station_in_space_is_asked_for_a_brief_and_its_rooms_get_no_plans():
     assert [j.key for j in layouts] == ["layout:st"]  # the bar is one of its rooms
     job = layouts[0]
     assert job.extra["deck"] and ("The Rusty Comet", "a bar") in job.extra["named"]
+    assert job.extra["ring"]  # "a ring-shaped trading station"
+    # A station whose words name no ring is a block whatever the brief says.
+    world.places["st"].what = "an independent trading station in orbit round a gas giant"
+    plain = next(j for j in plan_art(world, art, here="st", setting="s") if j.kind == "layout")
+    assert plain.extra["ring"] is False
+    assert finish(plain, json.dumps(BRIEF), model="m", made_at="1").spec["shape"] == "block"
     assert "rooms" in job.messages[0].text and "The Rusty Comet" in job.messages[-1].text
     # A sailing ship is no station: no sign of space, its plan drawn as shapes.
     sloop = WorldPlace(
@@ -216,7 +222,7 @@ def test_the_brief_becomes_a_plan_with_its_decks_and_areas_with_named_rooms():
     uses = {r.name: r.use for r in area.rooms}
     assert uses["The Promenade"] == "promenade" and uses["The Rusty Comet"] == "dining"
     assert "corridor" in uses.values()
-    # The ring's courtyards stay space: the drawn-plan filler leaves them be.
+    # The ring's open middle stays space: the drawn-plan filler leaves it be.
     assert sum(row.count(" ") for row in area.rows) > sum(
         row.count(" ") for row in layout.rows[:1] + layout.rows[-1:]
     )
@@ -228,6 +234,19 @@ def test_the_brief_becomes_a_plan_with_its_decks_and_areas_with_named_rooms():
     redraw = [j for j in plan_art(world, art, here="st", setting="s") if j.key.endswith("redraw")]
     assert redraw and redraw[0].extra.get("deck")
     assert deck_layout is not None
+
+
+def test_a_deck_s_corridor_never_takes_a_room_s_use_from_its_label():
+    # Live (Oct 17 2026): an L-shaped stretch of a ring's corridor held the
+    # customs post's label in its box and was drawn as security, in red.
+    from sealedlore.engine.area import Room, name_rooms
+
+    customs = Room(0, "", 24, (15, 30, 20, 33), 17.5, 31.5)
+    stretch = Room(1, "", 28, (12, 30, 20, 36), 14.0, 34.0)
+    records = [{"name": "Customs and Security Post", "use": "security", "box": [15, 30, 20, 33]}]
+    name_rooms([customs, stretch], {"Customs and Security Post": (17, 31)}, records)
+    assert (customs.name, customs.use) == ("Customs and Security Post", "security")
+    assert stretch.use == "corridor"
 
 
 def test_a_deck_is_drawn_in_its_rooms_colours_and_a_house_as_before():
@@ -356,28 +375,56 @@ def test_an_outpost_dug_into_an_asteroid_is_set_in_rock():
     assert deck_hull(world, world.places["st"]) == ""  # the brief says
 
 
-def test_a_ring_station_keeps_its_courtyards_open_to_space():
-    plan = generate(parse_brief(json.dumps(BRIEF)), "halcyon")
-    main = plan.decks[0]
-    marks = _marks(main)
-    h, w = len(main.rows), len(main.rows[0])
-    outside: set[tuple[int, int]] = set()
-    todo = [(0, 0)]
-    while todo:  # open space reached from the frame's corner
-        x, y = todo.pop()
-        if (x, y) in outside or not (0 <= x < w and 0 <= y < h):
+def _enclosed(deck) -> list[set[tuple[int, int]]]:
+    """The patches of open space inside a deck: no hull, nothing built, and
+    not reached from the frame's edge."""
+    marks = _marks(deck)
+    h, w = len(deck.rows), len(deck.rows[0])
+    space = {
+        (x, y) for y in range(h) for x in range(w) if deck.rows[y][x] == " " and (x, y) not in marks
+    }
+    patches: list[set[tuple[int, int]]] = []
+    seen: set[tuple[int, int]] = set()
+    for start in sorted(space):
+        if start in seen:
             continue
-        if main.rows[y][x] != " " or (x, y) in marks:
-            continue
-        outside.add((x, y))
-        todo += [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
-    enclosed = [
-        (x, y)
-        for y in range(h)
-        for x in range(w)
-        if main.rows[y][x] == " " and (x, y) not in marks and (x, y) not in outside
-    ]
-    assert len(enclosed) >= 12  # a courtyard of open space inside the ring
+        patch, todo, edge = set(), [start], False
+        seen.add(start)
+        while todo:
+            x, y = todo.pop()
+            patch.add((x, y))
+            edge = edge or x in (0, w - 1) or y in (0, h - 1)
+            for t in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if t in space and t not in seen:
+                    seen.add(t)
+                    todo.append(t)
+        if not edge:
+            patches.append(patch)
+    return patches
+
+
+def test_a_ring_keeps_one_open_middle_and_a_block_is_rooms_all_through():
+    # The author (Oct 17 2026): courtyards of stars between a ring's spokes
+    # read as rooms of space. A ring is rooms round one hole, its lifts on
+    # the ring; any other station has no space inside at all.
+    ring = generate(parse_brief(json.dumps(BRIEF)), "halcyon")
+    holes = _enclosed(ring.decks[0])
+    assert len(holes) == 1 and len(holes[0]) >= 100
+    middle_y = sum(y for _, y in holes[0]) / len(holes[0])
+    assert all(ly > middle_y for _lx, ly in ring.lifts)  # the lobby stands on the ring
+    block = generate(parse_brief(json.dumps({**BRIEF, "shape": "block"})), "halcyon")
+    service = [r for d in block.decks.values() for r in d.rooms if r.filler]
+    assert service and {r.use for r in service} == {"storage"}
+    others = {r.name.lower() for d in block.decks.values() for r in d.rooms if not r.filler}
+    names = [r.name.lower() for r in service]
+    assert len(names) == len(set(names)) and not others & set(names)  # each name once
+    for deck in block.decks.values():
+        assert not _enclosed(deck), deck.name
+        reached = _reachable(deck.rows, block.lifts[0])
+        for room in deck.rooms:
+            assert (room.box[0], room.box[1]) in reached, (deck.name, room.name)
+            assert deck.rows[room.door[1]][room.door[0]] == "+"
+    assert parse_brief('{"decks": [{"index": 0, "rooms": [{"name": "Bar"}]}]}').shape == "block"
 
 
 def test_set_pieces_stand_in_their_rooms_and_the_furniture_keeps_clear_of_them():

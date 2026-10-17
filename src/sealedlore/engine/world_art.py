@@ -1294,7 +1294,12 @@ def deck_layout(job: ArtJob, text: str, *, model: str, made_at: str) -> PlaceLay
     rooms or they won't fit."""
     named = tuple(tuple(n) for n in job.extra.get("named") or ())
     brief = deck_plan.parse_brief(text, named=named)  # type: ignore[arg-type]
-    plan = deck_plan.generate(brief, job.subject_id, hull=str(job.extra.get("hull") or ""))
+    plan = deck_plan.generate(
+        brief,
+        job.subject_id,
+        hull=str(job.extra.get("hull") or ""),
+        ring=bool(job.extra.get("ring", True)),
+    )
     main = plan.decks[0]
     others = [d for i, d in sorted(plan.decks.items()) if i != 0]
     spec = {
@@ -1542,6 +1547,7 @@ def plan_art(
                         "deck": True,
                         "named": deck_named(world, place),
                         "hull": deck_hull(world, place),
+                        "ring": deck_plan.ring_said(place.name, place.what),
                     },
                 )
             )
@@ -1587,6 +1593,7 @@ def plan_art(
                             "deck": True,
                             "named": deck_named(world, place),
                             "hull": deck_hull(world, place),
+                            "ring": deck_plan.ring_said(place.name, place.what),
                         },
                     )
                 )

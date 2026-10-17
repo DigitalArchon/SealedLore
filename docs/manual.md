@@ -1074,10 +1074,12 @@ above the transcript, goes to it.
 A station or a ship in space is laid out by SealedLore itself: the map art
 model only says what it holds (its shape, its decks, and each deck's rooms),
 and every deck is laid out round one lift lobby, the lifts in the same place
-on every deck, with corridors, airlocks and viewports. Its hull is drawn round
-it: a station's rounded body with its courtyards open to space, a ship's hull
-narrowing to its bridge at the bow with its engines at the stern, an outpost
-dug into an asteroid set in rock. Each room is drawn for what it is, and the
+on every deck, with corridors, airlocks and viewports. A station is rooms all
+through, any gap between them filled with storerooms and machinery rooms,
+unless it is a ring: then its rooms and corridors stand round one open middle.
+Its hull is drawn round it: a station's rounded body, a ship's hull narrowing
+to its bridge at the bow with its engines at the stern, an outpost dug into an
+asteroid set in rock. Each room is drawn for what it is, and the
 rooms that make a station what it is have their set pieces: a reactor in
 engineering, consoles and a command chair facing a bridge's viewport, a
 shuttle in a hangar, a mine's shaft, a garden's beds.

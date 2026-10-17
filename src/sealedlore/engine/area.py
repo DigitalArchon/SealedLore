@@ -701,11 +701,18 @@ def name_rooms(
             room.name = str(found.get("name") or room.name)[:60]
             room.use = str(found.get("use") or "")
             continue
+        if by_box:
+            # The records name every room of a deck the program laid out:
+            # the rest is corridor. (A ring's corridor runs in L-shaped
+            # stretches; read by the one label in its box, one took the
+            # customs post's use and was drawn red.)
+            room.use = "corridor"
+            continue
         x0, y0, x1, y1 = room.box
         inside = [n for n, (lx, ly) in labels.items() if x0 <= lx <= x1 and y0 <= ly <= y1]
         if len(inside) == 1:
             room.use = use_of(inside[0])
-        if room.name in ("central hall", "hall") or (by_box and not room.use):
+        if room.name in ("central hall", "hall"):
             room.use = room.use or "corridor"
 
 
