@@ -89,6 +89,8 @@ class AreaWindow:
         self.composer.input.textChanged.connect(self._sync_marks)
         self.area_view.edge_wanted.connect(self._area_edge)
         self.area_view.edge_chosen.connect(self._area_edge_go)
+        self.area_view.carry_wanted.connect(self._area_carry_menu)
+        self.area_view.carry_chosen.connect(self._area_carry)
         self._painted = _Painted()
         self._painted.done.connect(self._area_painted)
         self._area_images: dict[object, QImage] = {}
@@ -164,8 +166,10 @@ class AreaWindow:
             places=places,
         )
         self.area_view.set_edge(session.edge_here())
+        self.area_view.set_carrying(session.carried_things(), session.people_in_reach())
         self.area_view.set_offer(session.tile_set_offer(art))
         self._sync_marks()
+        self.cast_panel.refresh_carrying()
 
     def _close_area(self) -> None:
         """The story is closing: nothing of its play view stays for the
@@ -206,7 +210,7 @@ class AreaWindow:
     def _area_key(self, area: Area, session, art) -> object:
         items = tuple(sorted(p.id for p in art.pictures if p.subject == "item"))
         rows = zlib.crc32("".join(area.rows).encode())
-        things = tuple((p.name, p.x, p.y, p.w, p.h) for p in area.placements)
+        things = tuple((p.name, p.x, p.y, p.w, p.h, p.broken) for p in area.placements)
         name = session.tile_set_name(art)
         own = art.own_set_for(name)
         return (
@@ -549,6 +553,30 @@ class AreaWindow:
             self._put_turn(text)
         self.refresh_area()
 
+    # --- what is carried -------------------------------------------------------------
+
+    def _area_carry_menu(self) -> None:
+        session = self.session
+        if session is None:
+            self.area_view.set_carrying([], [])
+            return
+        self.area_view.set_carrying(session.carried_things(), session.people_in_reach())
+
+    def _area_carry(self, verb: str, name: str, thing_id: str, to: str) -> None:
+        """Drop or Give from Carrying ▾: the turn in the composer; the record
+        changes when it is sent (`stamp_turn`)."""
+        session = self.session
+        if session is None or self._busy:
+            return
+        self._put_turn(session.map_action(verb, name, thing_id, to=to))
+
+    def _carrying_of(self, name: str) -> list[str]:
+        """What the map records `name` as carrying, for the Cast page."""
+        session = self.session
+        if session is None or not session.map_first or session.in_private:
+            return []
+        return [thing for _id, thing in session.carried_things(name)]
+
     # --- the tile set --------------------------------------------------------------
 
     def _area_looks(self) -> None:
@@ -650,6 +678,7 @@ class AreaWindow:
         (gui/avatar_view.py) is answered here."""
         self.cast_panel.avatar_of = self._avatar_of
         self.cast_panel.avatar_choices_of = self._avatar_choices
+        self.cast_panel.carrying_of = self._carrying_of
         self.cast_panel.avatar_requested.connect(self._on_avatar_request)
         self.cast_panel.portrait_added.connect(lambda card_id: self._offer_avatars([card_id]))
 

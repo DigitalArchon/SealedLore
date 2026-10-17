@@ -19,11 +19,23 @@ from pydantic import BaseModel, Field
 
 ThingVerb = Literal["use", "take", "destroy", "eat"]
 PersonVerb = Literal["talk", "look", "attack"]
-MapVerb = Literal["use", "take", "destroy", "eat", "talk", "look", "attack", "travel"]
+MapVerb = Literal[
+    "use", "take", "destroy", "eat", "talk", "look", "attack", "travel", "drop", "give"
+]
 Density = Literal["sparse", "normal", "full"]
+# What the menu's choice did to a thing (engine/session_area.py `stamp_turn`,
+# the author's ruling: "If something is taken, it should be recorded as with
+# the character who took it. Something broken should visibly be broken."):
+# taken = carried by `by`; broken = still there, broken; gone = eaten or
+# consumed; dropped = put down again at `spot`.
+ThingState = Literal["taken", "broken", "gone", "dropped"]
 
 THING_VERBS: tuple[str, ...] = ("use", "take", "destroy", "eat")
 PERSON_VERBS: tuple[str, ...] = ("talk", "look", "attack")
+# The verbs that change a thing's record when the turn is sent (Use leaves
+# it alone), and the two done to a carried thing (the Carrying ▾ menu).
+RECORD_VERBS: tuple[str, ...] = ("take", "destroy", "eat", "drop", "give")
+CARRY_VERBS: tuple[str, ...] = ("drop", "give")
 
 
 class Spot(BaseModel):
@@ -52,6 +64,23 @@ class MapAction(BaseModel):
     # (`stamp_turn`), never before: a turn rewritten travels nowhere.
     spot: Spot | None = None
     seconds: int = 0
+    # Give: who the thing is handed to (as the map names them).
+    to: str = ""
+
+
+class ThingRecord(BaseModel):
+    """What became of a thing the area had on its floor, by the menu choice
+    the author sent (code decides, no model call): kept on each turn's
+    snapshot under the thing's placement id, so the area shows it (gone from
+    the floor, broken, lying where it was dropped) and the storyteller is
+    told who carries what."""
+
+    state: ThingState
+    name: str
+    # Taken: who carries it (as the map names them).
+    by: str = ""
+    # Dropped: the tile it lies on.
+    spot: Spot | None = None
 
 
 class Mark(BaseModel):
@@ -86,6 +115,9 @@ class AreaState(BaseModel):
     action: MapAction | None = None
     # The spots the turn marks on the map (an author's turn only).
     marks: list[Mark] = Field(default_factory=list)
+    # What became of the things the menu's choices were done to, by
+    # placement id: carried like the spots, settled with them.
+    things: dict[str, ThingRecord] = Field(default_factory=dict)
 
 
 class LiveArea(BaseModel):

@@ -35,6 +35,7 @@ from sealedlore.engine.area import (
     anchor_of,
     anchor_tile,
     anchors_near,
+    apply_things,
     area_of,
     bare,
     build_area,
@@ -93,7 +94,7 @@ from sealedlore.engine.tile_sets import (
     slug,
 )
 from sealedlore.engine.validators import locate_quote
-from sealedlore.engine.world import _NOTHING_SAID, applied, key
+from sealedlore.engine.world import _NOTHING_SAID, _find_thing, applied, key
 from sealedlore.engine.world_art import is_window, parse_window, patch_at, patch_under
 from sealedlore.engine.world_layout import (
     CHILD_SHARE,
@@ -105,7 +106,16 @@ from sealedlore.engine.world_layout import (
 )
 from sealedlore.engine.world_pictures import MAP_PICTURES_DIR, PictureJob, looks_of
 from sealedlore.ids import new_id, utc_now_iso
-from sealedlore.models.area import AreaState, LiveArea, MapAction, Mark, Spot
+from sealedlore.models.area import (
+    CARRY_VERBS,
+    RECORD_VERBS,
+    AreaState,
+    LiveArea,
+    MapAction,
+    Mark,
+    Spot,
+    ThingRecord,
+)
 from sealedlore.models.config import on_nanogpt
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID, Node, Usage
 from sealedlore.models.world import MapPicture, OwnTileSet, WorldArt, WorldDelta, WorldMap
@@ -119,6 +129,8 @@ from sealedlore.storage.images import MEDIA_TYPES
 DOOR_SECONDS = 3
 # A way between areas winds: the straight line times this.
 WINDING = 1.25
+# Give to…: how far a thing can be handed over (beside them, or this far).
+GIVE_REACH_M = 4.0
 # Someone placed with the author's character stands this close to them.
 BESIDE = 3
 # How far from a building's door someone "at" it may stand before they are
@@ -350,11 +362,34 @@ class AreaRuntime:
         return dict(info.words)
 
     def area(
-        self, area_id: str | None, world: WorldMap | None = None, art: WorldArt | None = None
+        self,
+        area_id: str | None,
+        world: WorldMap | None = None,
+        art: WorldArt | None = None,
+        *,
+        things: Mapping[str, ThingRecord] | None = None,
     ) -> Area | None:
         """The area of `area_id`, a place's plan or a window of open
         country (engine/area.py `build_window`), built from the map at the
-        leaf (kept while nothing it is built from changes)."""
+        leaf (kept while nothing it is built from changes), with what became
+        of its things laid over it (`apply_things`: `things`, the records of
+        the state in hand, else those live or at the leaf)."""
+        built = self._built_area(area_id, world, art)
+        if built is None:
+            return None
+        records = things if things is not None else self._things_now()
+        return apply_things(built, records) if records else built
+
+    def _things_now(self) -> Mapping[str, ThingRecord]:
+        """The records live, else at the leaf (never through `settle`, which
+        asks for areas itself)."""
+        live = self._live()
+        state = live if live is not None else self._snapshot_on(self.path())
+        return state.things if state is not None else {}
+
+    def _built_area(
+        self, area_id: str | None, world: WorldMap | None = None, art: WorldArt | None = None
+    ) -> Area | None:
         if area_id is None:
             return None
         world = world if world is not None else self.world()
@@ -549,13 +584,13 @@ class AreaRuntime:
                 name == held
                 and walked
                 and spot is not None
-                and self.area(spot.area, world, art) is not None
+                and self.area(spot.area, world, art, things=state.things) is not None
             ):
                 spots[name] = spot
                 continue
             if target is None:
                 continue
-            area = self.area(target, world, art)
+            area = self.area(target, world, art, things=state.things)
             if area is None:
                 continue
             if (
@@ -586,7 +621,7 @@ class AreaRuntime:
         # Nobody stands in fire or a wall a redrawn plan put under them
         # (kept there, every walk was refused; the second review).
         for name, spot in list(spots.items()):
-            area = self.area(spot.area, world, art)
+            area = self.area(spot.area, world, art, things=state.things)
             if area is None or area.walkable(spot.x, spot.y):
                 continue
             taken = {(s.x, s.y) for n, s in spots.items() if n != name and s.area == spot.area}
@@ -899,17 +934,114 @@ class AreaRuntime:
         self._set_live(state)
         return text
 
-    def map_action(self, verb: str, target: str, target_id: str = "") -> str:
+    def map_action(self, verb: str, target: str, target_id: str = "", *, to: str = "") -> str:
         """The turn a menu choice writes (`map.turn.<verb>`), kept with the
         live state so the storyteller is told what it means when it is sent
-        as written (or added to)."""
+        as written (or added to). `to`: who a Give hands the thing to."""
         state = self.area_state()
-        if verb in ("use", "take", "destroy", "eat"):
+        if verb in ("use", "take", "destroy", "eat", *CARRY_VERBS):
             target = bare(target)  # "the stove", not "the a stove"
-        text = self.texts.fill(f"map.turn.{verb}", name=target)
-        state.action = MapAction(verb=verb, target=target, target_id=target_id, text=text)  # type: ignore[arg-type]
+        if verb == "give":
+            text = self.texts.fill("map.turn.give", name=target, who=to)
+        else:
+            text = self.texts.fill(f"map.turn.{verb}", name=target)
+        state.action = MapAction(
+            verb=verb,  # type: ignore[arg-type]
+            target=target,
+            target_id=target_id,
+            text=text,
+            to=to,
+        )
         self._set_live(state)
         return text
+
+    # --- what became of the things ------------------------------------------------
+
+    def carried_things(self, who: str | None = None) -> list[tuple[str, str]]:
+        """What `who` (the author's character by default) carries: (the
+        thing's placement id, its name), in the order taken."""
+        who = who if who is not None else self.held_name()
+        if not self.map_first or who is None:
+            return []
+        state = self.area_state()
+        return [
+            (pid, bare(r.name))
+            for pid, r in state.things.items()
+            if r.state == "taken" and r.by == who
+        ]
+
+    def people_in_reach(self) -> list[str]:
+        """Who the author's character could hand something to: in their
+        area, beside them or within `GIVE_REACH_M`."""
+        state = self.area_state()
+        held = self.held_name()
+        me = state.spots.get(held or "")
+        area = self.area(me.area if me else None, things=state.things)
+        if me is None or area is None:
+            return []
+        out = []
+        for name, spot in state.spots.items():
+            if name == held or spot.area != me.area:
+                continue
+            dx, dy = abs(spot.x - me.x), abs(spot.y - me.y)
+            if max(dx, dy) <= 1 or math.hypot(dx, dy) * area.tile_m <= GIVE_REACH_M:
+                out.append(name)
+        return out
+
+    def _record_action(self, state: AreaState, user_node: Node, world: WorldMap) -> None:
+        """The turn's Take, Destroy, Eat, Drop or Give, done (the author's
+        ruling: in code, no model call; the menu choice the author sends is
+        the fact): the record on the turn's snapshot, and the map's own
+        thing, when it has one by that name, carried, broken or gone on the
+        turn's delta (never by changing the folded map). Not on a failed
+        roll: the attempt is the storyteller's to tell, and nothing changes
+        hands."""
+        action = state.action
+        held = self.held_name()
+        if action is None or action.verb not in RECORD_VERBS or held is None:
+            return
+        roll = user_node.meta.roll
+        if roll is not None and roll.band in ("failure", "critical_failure"):
+            return
+        if not action.target_id:
+            return
+        name = action.target
+        record: ThingRecord | None = None
+        if action.verb == "take":
+            record = ThingRecord(state="taken", name=name, by=held)
+        elif action.verb == "give" and action.to:
+            record = ThingRecord(state="taken", name=name, by=action.to)
+        elif action.verb == "destroy":
+            record = ThingRecord(state="broken", name=name)
+        elif action.verb == "eat":
+            record = ThingRecord(state="gone", name=name)
+        elif action.verb == "drop":
+            me = state.spots.get(held)
+            area = self.area(me.area, world, things=state.things) if me is not None else None
+            if me is None or area is None:
+                return
+            taken = {(s.x, s.y) for n, s in state.spots.items() if s.area == me.area}
+            x, y = stand_near(area, (me.x, me.y), taken)
+            record = ThingRecord(state="dropped", name=name, spot=Spot(area=me.area, x=x, y=y))
+        if record is None:
+            return
+        state.things[action.target_id] = record
+        thing = _find_thing(world, name)
+        if thing is None:
+            return  # the area's record is enough for a thing the map never listed
+        copy = thing.model_copy(deep=True)
+        if record.state == "taken":
+            copy.carried_by, copy.at = record.by, None
+        elif record.state == "broken":
+            copy.state = "broken"
+        elif record.state == "gone":
+            copy.carried_by, copy.at, copy.state = None, None, "gone"
+        elif record.state == "dropped":
+            copy.carried_by = None
+            copy.at = self.place_of_spot(record.spot, world) or world.where.get(held)
+        delta = user_node.meta.world or WorldDelta()
+        delta.things = [t for t in delta.things if t.id != copy.id] + [copy]
+        user_node.meta.world = delta
 
     def people_here(self) -> list[tuple[str, Spot]]:
         state = self.area_state()
@@ -960,12 +1092,16 @@ class AreaRuntime:
                 state.seconds += (skip[0] - now) * 60
         # The spots the turn marks, resolved on the map it was written on.
         state.marks = self.resolve_marks(user_node.content, world, self.map_art_copy(), state)
+        # What the turn does to a thing (Take, Destroy, Eat, Drop, Give).
+        self._record_action(state, user_node, world)
         spot = state.spots.get(held or "")
         to = to or self.place_of_spot(spot, world)
         if held is not None and to is not None and world.where.get(held) != to:
             area = area_of(world, self.map_art_copy(), world.where.get(held))
             if area != to or to not in world.places:
-                user_node.meta.world = WorldDelta(where={held: to})
+                delta = user_node.meta.world or WorldDelta()
+                delta.where[held] = to
+                user_node.meta.world = delta
         self.story.area_live = None
 
     @staticmethod
@@ -1029,13 +1165,13 @@ class AreaRuntime:
             current = state.spots.get(person)
             if spot is None or current is None or current.area != spot.area:
                 continue  # not where the map has them: settled at their place
-            marked = self.area(spot.area, world, art)
+            marked = self.area(spot.area, world, art, things=state.things)
             taken = {
                 (s.x, s.y) for n, s in state.spots.items() if n != person and s.area == spot.area
             }
             x, y = stand_near(marked, (spot.x, spot.y), taken)  # type: ignore[arg-type]
             state.spots[person] = Spot(area=spot.area, x=x, y=y)
-        area = self.area(me.area, world, art) if me is not None else None
+        area = self.area(me.area, world, art, things=state.things) if me is not None else None
         if area is not None:
             for name, spot_name in at.items():
                 person = self._map_person(str(name))
@@ -1121,11 +1257,14 @@ class AreaRuntime:
         world = self._world_on([*nodes, turn] if turn is not None else nodes)
         art = self.map_art_copy()
         me = state.spots.get(held)
-        area = self.area(me.area if me else None, world, art)
+        area = self.area(me.area if me else None, world, art, things=state.things)
         action_line = ""
         action = state.action
         if turn is not None and action is not None and action.text in turn.content:
-            action_line = self.texts.fill(f"map.action.{action.verb}", name=action.target)
+            if action.verb == "give":
+                action_line = self.texts.fill("map.action.give", name=action.target, who=action.to)
+            else:
+                action_line = self.texts.fill(f"map.action.{action.verb}", name=action.target)
         if me is None or area is None:
             # Nowhere to stand yet (a place whose plan isn't drawn): the
             # journey and the choice still stand, or the storyteller wrote
@@ -1151,6 +1290,8 @@ class AreaRuntime:
             held,
             walked=state.walked_words if turn is not None and state.walked >= 30 else "",
             action_line=action_line,
+            things=state.things,
+            texts=self.texts,
         )
         if not text:
             return ""

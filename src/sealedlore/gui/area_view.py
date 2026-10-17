@@ -506,6 +506,10 @@ class AreaView(QWidget):
     # the choice (the side, "area" or a place id).
     edge_wanted = Signal(str)
     edge_chosen = Signal(str, str)
+    # Carrying ▾ is about to show (`set_carrying`); a choice: the verb
+    # ("drop" or "give"), the thing's name, its id, who it is given to.
+    carry_wanted = Signal()
+    carry_chosen = Signal(str, str, str, str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -529,6 +533,20 @@ class AreaView(QWidget):
         self.travel_menu = QMenu(self)
         self.travel_menu.aboutToShow.connect(self.travel_wanted.emit)
         self.travel_button.setMenu(self.travel_menu)
+        # What the author's character carries (the records the program keeps
+        # of things taken on the map): put down, or handed to someone in reach.
+        self.carry_button = QToolButton()
+        self.carry_button.setObjectName("viewToggleButton")
+        self.carry_button.setText("Carrying ▾")
+        self.carry_button.setToolTip(
+            "What your character carries, as the map records it: drop a thing where you "
+            "stand, or give it to someone beside you. The turn goes in the composer."
+        )
+        self.carry_button.setPopupMode(QToolButton.InstantPopup)
+        self.carry_menu = QMenu(self)
+        self.carry_menu.aboutToShow.connect(self.carry_wanted.emit)
+        self.carry_button.setMenu(self.carry_menu)
+        self.carry_button.hide()
         self.look_button = QToolButton()
         self.look_button.setObjectName("viewToggleButton")
         self.look_button.setText("Look")
@@ -604,6 +622,7 @@ class AreaView(QWidget):
             [
                 self.edge_button,
                 self.travel_button,
+                self.carry_button,
                 self.look_button,
                 self.me_button,
                 self.zoom_out,
@@ -1036,6 +1055,31 @@ class AreaView(QWidget):
             action = self.travel_menu.addAction(f"{name} — {how_long}")
             action.setEnabled(not self.locked)
             action.triggered.connect(lambda _c=False, pid=place_id: self.travel_chosen.emit(pid))
+
+    def set_carrying(self, things: list[tuple[str, str]], people: list[str]) -> None:
+        """Carrying ▾'s entries: each thing carried ((id, name)) with Drop and
+        Give to each of `people` under it. The button shows while anything
+        is carried."""
+        self.carry_menu.clear()
+        self.carry_button.setVisible(bool(things))
+        for thing_id, name in things:
+            sub = self.carry_menu.addMenu(name[0].upper() + name[1:])
+            drop = sub.addAction("Drop")
+            drop.setEnabled(not self.locked)
+            drop.triggered.connect(
+                lambda _c=False, n=name, i=thing_id: self.carry_chosen.emit("drop", n, i, "")
+            )
+            for person in people:
+                give = sub.addAction(f"Give to {person}")
+                give.setEnabled(not self.locked)
+                give.triggered.connect(
+                    lambda _c=False, n=name, i=thing_id, who=person: self.carry_chosen.emit(
+                        "give", n, i, who
+                    )
+                )
+            if not people:
+                nobody = sub.addAction("Nobody within reach to give it to")
+                nobody.setEnabled(False)
 
     def set_edge(self, side: str | None) -> None:
         """The author's character stands on this side's edge (None: not on one)."""

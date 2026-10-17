@@ -1215,3 +1215,133 @@ def test_an_avatar_drawn_from_instructions_is_kept_and_chosen_among_the_others(
     window._map_picture_action("use", kept[0].id)
     assert session.walker_file("Serrik Vaun") == kept[0].file
     assert not session.use_walker_picture("Serrik Vaun", "nobody's")
+
+
+# --- what became of the things, on the play view ---------------------------------
+
+
+def _send(app, window, text: str, responses) -> None:
+    window._provider = MockChatProvider(list(responses))
+    window._refresh_composer()
+    window.composer.input.setPlainText(text)
+    window.send_turn()
+    deadline = time.monotonic() + 20
+    while window._busy:
+        assert time.monotonic() < deadline, "the turn never finished"
+        app.processEvents()
+        time.sleep(0.005)
+    pump(app)
+
+
+def _house_with_a_lantern(window) -> None:
+    """The house's plan with a lantern in it, as if drawn so from the start."""
+    from sealedlore.engine.world_art import rasterise
+    from sealedlore.models.world import PlaceLayout
+    from tests.test_area import HOUSE_SPEC, LANTERN
+
+    spec = {**HOUSE_SPEC, "features": [*HOUSE_SPEC["features"], LANTERN]}
+    rows, objects, labels = rasterise(spec, 40, 24)
+    window.session.world_art.layouts["house"] = {
+        "": PlaceLayout(
+            place_id="house", spec=spec, rows=rows, objects=objects, labels=labels, made_at="2"
+        )
+    }
+    window.refresh_area()
+
+
+def test_a_thing_taken_leaves_the_floor_and_is_carried_dropped_or_given(app, window):
+    """The author's ruling: a taken thing is recorded with its taker, in
+    code. On the view: gone from the floor, under Carrying ▾, and on the
+    Cast page; Drop and Give write their turns."""
+    session = window.session
+    _house_with_a_lantern(window)
+    stand(window, {"Serrik Vaun": ("house", 26, 5), "Maela Orr": ("house", 26, 7)})
+    view = window.area_view
+    lantern = next(p for p in view.area.placements if "lantern" in p.name)
+    assert view.carry_button.isHidden()
+    window._area_action("take", lantern.name, lantern.id)
+    walk_all(app, window)
+    assert window.composer.text() == "I take the brass lantern."
+    _send(app, window, window.composer.text(), ["He pockets it.", "{}"])
+    assert not any("lantern" in p.name for p in view.area.placements)
+    assert view.area.walkable(28, 5)
+    assert not view.carry_button.isHidden()
+    view.carry_menu.aboutToShow.emit()
+    [entry] = [a for a in view.carry_menu.actions() if a.menu() is not None]
+    assert entry.text() == "Brass lantern"
+    labels = [a.text() for a in entry.menu().actions()]
+    assert labels == ["Drop", "Give to Maela Orr"]
+    # The Cast page says so under the avatar.
+    panel = window.cast_panel
+    panel.select_character("char-serrik")
+    assert not panel.carrying.isHidden() and panel.carrying.text() == "Carrying: brass lantern"
+    panel.select_character("char-maela")
+    assert panel.carrying.isHidden()
+    # Give to Maela: her turn's record, and her card's line.
+    entry.menu().actions()[1].trigger()
+    assert window.composer.text() == "I give the brass lantern to Maela Orr."
+    _send(app, window, window.composer.text(), ["She takes it.", "{}"])
+    assert view.carry_button.isHidden()
+    panel.select_character("char-maela")
+    assert panel.carrying.text() == "Carrying: brass lantern"
+    assert session.carried_things("Maela Orr") == [(lantern.id, "brass lantern")]
+
+
+def test_a_thing_dropped_lies_at_the_feet_again(app, window):
+    session = window.session
+    _house_with_a_lantern(window)
+    stand(window, {"Serrik Vaun": ("house", 26, 5), "Maela Orr": ("house", 26, 7)})
+    view = window.area_view
+    lantern = next(p for p in view.area.placements if "lantern" in p.name)
+    session.map_action("take", lantern.name, lantern.id)
+    _send(app, window, "I take the brass lantern.", ["Taken.", "{}"])
+    view.carry_menu.aboutToShow.emit()
+    [entry] = [a for a in view.carry_menu.actions() if a.menu() is not None]
+    entry.menu().actions()[0].trigger()  # Drop
+    assert window.composer.text() == "I put the brass lantern down."
+    _send(app, window, window.composer.text(), ["Down it goes.", "{}"])
+    me = session.area_state().spots["Serrik Vaun"]
+    dropped = next(p for p in view.area.placements if "lantern" in p.name)
+    assert abs(dropped.x - me.x) <= 1 and abs(dropped.y - me.y) <= 1
+    assert view.carry_button.isHidden()
+    assert view.area.placement_at(dropped.x, dropped.y) is dropped  # clickable again
+
+
+def test_a_broken_thing_is_drawn_broken(app):
+    """Something broken is visibly broken (the author's ruling): the
+    placement drawn darker, cracked, with rubble at its foot."""
+    from sealedlore.engine.area import apply_things
+    from sealedlore.gui.area_render import px_for
+    from sealedlore.models.area import ThingRecord
+
+    world, art = world_and_art()
+    house = build_area(world, art, "house")
+    stove = next(p for p in house.placements if "stove" in p.name)
+    broken = apply_things(house, {stove.id: ThingRecord(state="broken", name=stove.name)})
+    assert broken is not house and next(p for p in broken.placements if "stove" in p.name).broken
+    assert house.placements[0].broken is False  # the built area is left as built
+    plain = TileSource(TileSetInfo(name="plain"), lambda role: None)
+    whole = render_area(house, plain, dress=False)
+    after = render_area(broken, plain, dress=False)
+    px = px_for(house)
+    box = [
+        (x, y)
+        for x in range(stove.x * px, (stove.x + stove.w) * px)
+        for y in range(stove.y * px, (stove.y + stove.h) * px)
+    ]
+    differ = sum(1 for x, y in box if whole.pixelColor(x, y) != after.pixelColor(x, y))
+    assert differ > len(box) * 0.3  # most of its tile, not a pixel or two
+    whole_lum = sum(whole.pixelColor(x, y).lightness() for x, y in box) / len(box)
+    after_lum = sum(after.pixelColor(x, y).lightness() for x, y in box) / len(box)
+    assert after_lum < whole_lum  # darker
+    # Elsewhere the picture is the same.
+    assert whole.pixelColor(5 * px, 10 * px) == after.pixelColor(5 * px, 10 * px)
+    # With a sprite: the broken copy is darker and loses its top.
+    from sealedlore.gui.area_render import broken_sprite
+
+    sprite = QImage(20, 30, QImage.Format_ARGB32)
+    sprite.fill(QColor(200, 160, 120))
+    piece = broken_sprite(sprite)
+    assert piece.pixelColor(18, 2).alpha() == 0  # the top corner gone
+    assert piece.pixelColor(10, 25).lightness() < sprite.pixelColor(10, 25).lightness()
+    assert piece.pixelColor(10, 25).alpha() == 255

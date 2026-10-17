@@ -1079,6 +1079,19 @@ within reach, the doorways out.
   they are doing) or **Attack**.
 - **Things.** Click a thing for what can be done with it: **Use**, and
   **Take**, **Eat** or **Destroy** where they fit. You walk up to it first.
+  What the choice does is recorded by the program when the turn is sent,
+  not left to the storyteller: **Take** puts the thing with your character
+  (off the floor, and the storyteller is told who carries what), **Destroy**
+  leaves it standing visibly broken (darker, cracked, rubble at its foot;
+  it can't be destroyed again), **Eat** consumes it. A thing the map's own
+  list knows follows suit (carried by you, broken, gone). A turn you rewrite
+  so the menu's words are gone changes nothing, and neither does a failed
+  dice roll: the attempt is the storyteller's to tell. **Use** changes
+  nothing either.
+- **Carrying ▾** lists what your character carries, each with **Drop** (it
+  lies at your feet again, to be picked up by anyone) and **Give to** each
+  person within reach (it is theirs then, and their card says so). The
+  Cast page shows "Carrying: …" under a character's avatar.
 - A choice puts its turn in the composer ("I walk over to Jane."), for you
   to send as it is or add to; the storyteller is told what the choice means
   as long as the menu's words are still in the turn.

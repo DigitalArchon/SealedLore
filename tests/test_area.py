@@ -6,6 +6,7 @@ and the turn's walking carried into the story and the plot's clock."""
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -43,6 +44,7 @@ from sealedlore.models.world import (
     WorldDelta,
     WorldMap,
     WorldPlace,
+    WorldThing,
 )
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage.repository import StoryBundle, save_story_bundle
@@ -78,7 +80,9 @@ HOUSE_SPEC = {
 }
 
 
-def world_and_art() -> tuple[WorldMap, WorldArt]:
+def world_and_art(house_objects: Sequence[dict] = ()) -> tuple[WorldMap, WorldArt]:
+    """The farm and its house; `house_objects` are more objects for the
+    house's plan ({"kind": "object", "name": ..., "x": ..., "y": ...})."""
     farm = WorldPlace(id="farm", name="The farm", kind="site", x=0.0, y=0.0, size=400.0)
     house = WorldPlace(
         id="house", name="The house", kind="building", inside="farm", x=20.0, y=30.0, size=40.0
@@ -92,11 +96,12 @@ def world_and_art() -> tuple[WorldMap, WorldArt]:
     art.layouts["farm"] = {
         "": PlaceLayout(place_id="farm", spec=FARM_SPEC, rows=rows, objects=objects, made_at="1")
     }
-    rows, objects, labels = rasterise(HOUSE_SPEC, 40, 24)
+    house_spec = {**HOUSE_SPEC, "features": [*HOUSE_SPEC["features"], *house_objects]}
+    rows, objects, labels = rasterise(house_spec, 40, 24)
     art.layouts["house"] = {
         "": PlaceLayout(
             place_id="house",
-            spec=HOUSE_SPEC,
+            spec=house_spec,
             rows=rows,
             objects=objects,
             labels=labels,
@@ -395,10 +400,21 @@ def test_a_story_s_own_tile_set_is_drawn_from_words_written_for_its_world():
 # --- the session ---------------------------------------------------------------------
 
 
-def make_session(tmp_path: Path, story, cast, responses=(), *, plot=None) -> StorySession:
-    world, art = world_and_art()
+def make_session(
+    tmp_path: Path,
+    story,
+    cast,
+    responses=(),
+    *,
+    plot=None,
+    house_objects: Sequence[dict] = (),
+    things: Sequence[WorldThing] = (),
+) -> StorySession:
+    world, art = world_and_art(house_objects)
     story.defaults.world_map = True
-    story.world_base = WorldDelta(places=list(world.places.values()), seen=list(world.seen))
+    story.world_base = WorldDelta(
+        places=list(world.places.values()), seen=list(world.seen), things=list(things)
+    )
     story.world_start = "house"
     story.held_character_id = "char-serrik"
     story.plot = plot
@@ -1121,3 +1137,184 @@ def test_the_map_names_what_it_gave_up_drawing_and_can_be_asked_again(tmp_path, 
     session.retry_map_art()
     assert session.world_art.failures == {"sprite:nobody": 1}
     assert session.map_art_failed() == [] and not session.retry_map_art()
+
+
+# --- what became of the things (the author's ruling: in code) --------------------
+
+LANTERN = {"kind": "object", "name": "a brass lantern", "x": 28, "y": 5}
+BREAD = {"kind": "object", "name": "a loaf of bread", "x": 30, "y": 5}
+
+
+def things_session(tmp_path, story, cast, responses=()):
+    """The house with a lantern and a loaf beside the stove, the lantern on
+    the map's own list too, Serrik standing among them, Maela beside him."""
+    from sealedlore.models.area import LiveArea
+
+    session = make_session(
+        tmp_path,
+        story,
+        cast,
+        responses,
+        house_objects=[LANTERN, BREAD],
+        things=[WorldThing(id="lantern", name="a brass lantern", at="house")],
+    )
+    state = session.area_state()
+    state.spots["Serrik Vaun"] = Spot(area="house", x=26, y=5)
+    state.spots["Maela Orr"] = Spot(area="house", x=26, y=7)
+    session.story.area_live = LiveArea(leaf_id=session.story.active_leaf_id, state=state)
+    return session
+
+
+def _thing(session, part: str):
+    return next(p for p in session.area("house").placements if part in p.name)
+
+
+def _told(session) -> str:
+    """The tail of the latest request to the storyteller (the map read's
+    requests come after it)."""
+    heading = "Where everyone stands"
+    return next(
+        r.messages[-1].text
+        for r in reversed(session.provider.requests)
+        if heading in r.messages[-1].text
+    )
+
+
+def test_a_thing_taken_is_off_the_floor_with_its_taker_and_the_map_knows(tmp_path, story, cast):
+    session = things_session(tmp_path, story, cast, ["He pockets it.", "{}", "Nothing.", "{}"])
+    lantern = _thing(session, "lantern")
+    text = session.map_action("take", lantern.name, lantern.id)
+    assert text == "I take the brass lantern."
+    list(session.send(turn(text)))
+    user = session.path()[-2]
+    record = user.meta.area.things[lantern.id]
+    assert record.state == "taken" and record.by == "Serrik Vaun"
+    # The floor: the lantern gone, its tile plain floor to walk on.
+    house = session.area("house")
+    assert not any("lantern" in p.name for p in house.placements)
+    assert house.walkable(28, 5)
+    assert session.carried_things() == [(lantern.id, "brass lantern")]
+    # The storyteller: told who carries it, and the map's own thing is his.
+    sent = _told(session)
+    assert "Serrik Vaun carries: brass lantern." in sent
+    assert "- a brass lantern: carried by Serrik Vaun" in sent
+    assert "the brass lantern (at hand" not in sent
+    world = session.world()
+    assert world.things["lantern"].carried_by == "Serrik Vaun"
+    assert world.things["lantern"].at is None
+    # The passage's own snapshot carries the record on.
+    assert session.path()[-1].meta.area.things[lantern.id].state == "taken"
+    # Still carried on the next turn, which does nothing to it.
+    list(session.send(turn("I look around.")))
+    assert "Serrik Vaun carries: brass lantern." in _told(session)
+
+
+def test_a_thing_destroyed_stays_broken_and_one_eaten_is_gone(tmp_path, story, cast):
+    replies = ["Crash.", "{}", "Crumbs.", "{}", "Quiet.", "{}"]
+    session = things_session(tmp_path, story, cast, replies)
+    stove = _thing(session, "stove")
+    list(session.send(turn(session.map_action("destroy", stove.name, stove.id))))
+    house = session.area("house")
+    broken = next(p for p in house.placements if "stove" in p.name)
+    assert broken.broken and "destroy" not in broken.verbs and "use" in broken.verbs
+    assert not house.walkable(stove.x, stove.y)  # still standing there
+    assert "the cast-iron stove (broken) (" in _told(session)
+    bread = _thing(session, "bread")
+    list(session.send(turn(session.map_action("eat", bread.name, bread.id))))
+    house = session.area("house")
+    assert not any("bread" in p.name for p in house.placements) and house.walkable(30, 5)
+    assert session.carried_things() == []
+    # A broken thing can't be destroyed again: the record stands as it is.
+    assert session.area("house").placement_at(stove.x, stove.y).broken
+    list(session.send(turn("I sit down.")))
+    sent = _told(session)
+    assert "(broken)" in sent and "bread" not in sent
+
+
+def test_a_rewritten_turn_and_a_failed_roll_change_nothing(tmp_path, story, cast):
+    from dataclasses import replace
+
+    from sealedlore.models.node import Roll
+
+    session = things_session(tmp_path, story, cast, ["One.", "{}", "Two.", "{}", "Three.", "{}"])
+    lantern = _thing(session, "lantern")
+    session.map_action("take", lantern.name, lantern.id)
+    list(session.send(turn("I leave it where it is.")))  # the menu's words are gone
+    assert session.path()[-2].meta.area.things == {}
+    assert any("lantern" in p.name for p in session.area("house").placements)
+    # A failed roll: the attempt is the storyteller's to tell; nothing changes hands.
+    text = session.map_action("take", lantern.name, lantern.id)
+    failed = replace(
+        turn(text),
+        agency_mode="dice",
+        roll=Roll(die=100, value=99, band="failure", target=50),
+    )
+    list(session.send(failed))
+    assert session.path()[-2].meta.area.things == {}
+    assert session.carried_things() == []
+    sent = _told(session)
+    assert "The author chose Take on the map" in sent and "carries:" not in sent
+    # A success at a cost is still a success.
+    text = session.map_action("take", lantern.name, lantern.id)
+    costly = replace(
+        turn(text),
+        agency_mode="dice",
+        roll=Roll(die=100, value=45, band="success_at_a_cost", target=50),
+    )
+    list(session.send(costly))
+    assert session.carried_things() == [(lantern.id, "brass lantern")]
+
+
+def test_a_carried_thing_is_dropped_at_the_feet_or_given_to_someone_in_reach(tmp_path, story, cast):
+    replies = ["A.", "{}", "B.", "{}", "C.", "{}", "D.", "{}"]
+    session = things_session(tmp_path, story, cast, replies)
+    lantern = _thing(session, "lantern")
+    list(session.send(turn(session.map_action("take", lantern.name, lantern.id))))
+    assert session.people_in_reach() == ["Maela Orr"]
+    text = session.map_action("drop", "brass lantern", lantern.id)
+    assert text == "I put the brass lantern down."
+    list(session.send(turn(text)))
+    record = session.path()[-2].meta.area.things[lantern.id]
+    me = session.area_state().spots["Serrik Vaun"]
+    assert record.state == "dropped" and record.spot is not None
+    assert record.spot.area == "house"
+    assert abs(record.spot.x - me.x) + abs(record.spot.y - me.y) <= 2
+    house = session.area("house")
+    dropped = next(p for p in house.placements if "lantern" in p.name)
+    assert (dropped.x, dropped.y) == (record.spot.x, record.spot.y) and "take" in dropped.verbs
+    assert session.carried_things() == []
+    assert "The author chose Drop on the map" in _told(session)
+    assert session.world().things["lantern"].at == "house"
+    # Taken again, then given to Maela: hers now, told so.
+    list(session.send(turn(session.map_action("take", dropped.name, dropped.id))))
+    text = session.map_action("give", "brass lantern", lantern.id, to="Maela Orr")
+    assert text == "I give the brass lantern to Maela Orr."
+    list(session.send(turn(text)))
+    assert session.carried_things() == [] and session.carried_things("Maela Orr") == [
+        (lantern.id, "brass lantern")
+    ]
+    sent = _told(session)
+    assert "hands the brass lantern to Maela Orr" in sent
+    assert "Maela Orr carries: brass lantern." in sent
+    assert session.world().things["lantern"].carried_by == "Maela Orr"
+    assert not any("lantern" in p.name for p in session.area("house").placements)
+
+
+def test_a_take_survives_take_back_and_a_retake_as_the_spots_do(tmp_path, story, cast):
+    session = things_session(tmp_path, story, cast, ["One.", "{}", "Two.", "{}", "Three.", "{}"])
+    session.config.scene_reads = "manual"
+    lantern = _thing(session, "lantern")
+    text = session.map_action("take", lantern.name, lantern.id)
+    list(session.send(turn(text)))
+    # Another take of the passage: the turn's own record, told again.
+    list(session.regenerate())
+    assert "Serrik Vaun carries: brass lantern." in _told(session)
+    assert session.carried_things() == [(lantern.id, "brass lantern")]
+    # Take back: the record stands with the turn's walking, live again.
+    user = session.path()[-2]
+    session.restore_area(user)
+    session.delete_from(user.id)
+    assert session.story.area_live.state.things[lantern.id].state == "taken"
+    assert session.carried_things() == [(lantern.id, "brass lantern")]
+    list(session.send(turn(text)))
+    assert session.path()[-2].meta.area.things[lantern.id].by == "Serrik Vaun"

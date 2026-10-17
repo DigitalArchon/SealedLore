@@ -216,6 +216,17 @@ class CastPanel(QWidget):
         self.avatar.add_requested.connect(lambda: self._avatar("file"))
         self.avatar.reset_requested.connect(lambda: self._avatar("reset"))
         self.avatar.setVisible(False)
+        # What the map records them as carrying (things taken on it), under
+        # the avatar; read-only, the window's to answer.
+        self.carrying = QLabel()
+        self.carrying.setObjectName("hintLabel")
+        self.carrying.setWordWrap(True)
+        self.carrying.setToolTip(
+            "What they carry, as the map records it: things taken, given or dropped on the "
+            "map when the turn was sent"
+        )
+        self.carrying.hide()
+        self.carrying_of = None
         self._map_first = False
         # (name) -> (the figure the map walks for them, where it came from,
         # whether it is being drawn now); the window's, when there is a map.
@@ -256,6 +267,7 @@ class CastPanel(QWidget):
         column.setSpacing(6)
         column.addWidget(self.portrait)
         column.addWidget(self.avatar)
+        column.addWidget(self.carrying)
         column.addWidget(QLabel("Other pictures"))
         column.addWidget(self.pictures)
         column.addStretch(1)
@@ -440,6 +452,7 @@ class CastPanel(QWidget):
         character = self._current
         shown = self._map_first and character is not None and self.avatar_of is not None
         self.avatar.setVisible(shown)
+        self.refresh_carrying()
         if not shown:
             return
         image, source, drawing = self.avatar_of(character.name)
@@ -447,6 +460,18 @@ class CastPanel(QWidget):
         self.avatar.set_drawing(drawing)
         choices = self.avatar_choices_of(character.name) if self.avatar_choices_of else []
         self.avatar.set_choices(choices)
+
+    def refresh_carrying(self) -> None:
+        """The current card's "Carrying: …" line, as the map records it
+        (shown only when they carry something)."""
+        character = self._current
+        things = (
+            self.carrying_of(character.name)
+            if self._map_first and character is not None and self.carrying_of is not None
+            else []
+        )
+        self.carrying.setText("Carrying: " + ", ".join(things) if things else "")
+        self.carrying.setVisible(bool(things))
 
     def _remove_portrait(self) -> None:
         character = self._current

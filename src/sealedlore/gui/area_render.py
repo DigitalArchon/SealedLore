@@ -23,7 +23,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QTransform
+from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPolygonF, QTransform
 
 from sealedlore.engine.area import Area, Placement
 from sealedlore.engine.tile_sets import LIGHT_WORDS, TEXTURES, TileSetInfo, item_slugs
@@ -687,8 +687,12 @@ def _draw_placement(
         # Not drawn yet: a plain crate of the thing's footprint, so it is
         # seen to be there (its sprite comes in the background).
         p.setPen(QColor(30, 24, 20))
-        p.setBrush(QColor(150, 120, 80))
-        p.drawRoundedRect(QRectF(f.x * px + 3, f.y * px + 3, f.w * px - 6, f.h * px - 6), 4, 4)
+        p.setBrush(QColor(90, 70, 50) if f.broken else QColor(150, 120, 80))
+        box = QRectF(f.x * px + 3, f.y * px + 3, f.w * px - 6, f.h * px - 6)
+        p.drawRoundedRect(box, 4, 4)
+        if f.broken:
+            _cracks(p, box, px)
+            _rubble_at(p, source, cx, foot, px)
         return
     if f.kind == "furniture" or indoor:
         height = int(px * (f.h + 1.0)) if f.kind == "furniture" else int(px * 2.2)
@@ -699,12 +703,87 @@ def _draw_placement(
         sprite = _scaled(sprite, int(px * 3.2))
     if sprite is None:
         return
+    if f.broken:
+        sprite = broken_sprite(sprite)
     p.setPen(Qt.NoPen)
     p.setBrush(QColor(0, 0, 0, 60))
     p.drawEllipse(QPointF(cx, foot - px * 0.1), sprite.width() * 0.42, px * 0.25)
-    p.drawImage(int(cx - sprite.width() / 2), int(foot - sprite.height()), sprite)
+    left, top = int(cx - sprite.width() / 2), int(foot - sprite.height())
+    p.drawImage(left, top, sprite)
+    if f.broken:
+        _cracks(p, QRectF(left, top, sprite.width(), sprite.height()), px)
+        _rubble_at(p, source, cx, foot, px)
+        return  # a broken lamp gives no light
     if any(word in f.name.lower() for word in LIGHT_WORDS):
         lights.append((cx, foot - sprite.height() * 0.5, px * (4.0 if indoor else 6.0)))
+
+
+def broken_sprite(sprite: QImage) -> QImage:
+    """The sprite as a broken thing: darkened and greyed within its own
+    outline (the author's ruling: something broken is visibly broken), and
+    its top third cut away at a slant, as if it had come apart."""
+    out = sprite.convertToFormat(QImage.Format_ARGB32)
+    w, h = out.width(), out.height()
+    q = QPainter(out)
+    q.setCompositionMode(QPainter.CompositionMode_SourceAtop)
+    q.fillRect(0, 0, w, h, QColor(24, 20, 18, 150))
+    q.setCompositionMode(QPainter.CompositionMode_Clear)
+    # A jagged piece gone from the top, so the silhouette reads as broken.
+    gone = QPolygonF(
+        [
+            QPointF(w * 0.15, 0),
+            QPointF(w, 0),
+            QPointF(w, h * 0.22),
+            QPointF(w * 0.7, h * 0.3),
+            QPointF(w * 0.55, h * 0.12),
+            QPointF(w * 0.4, h * 0.34),
+            QPointF(w * 0.15, 0),
+        ]
+    )
+    q.setPen(Qt.NoPen)
+    q.setBrush(QColor(0, 0, 0))
+    q.drawPolygon(gone)
+    q.end()
+    return out
+
+
+def _cracks(p: QPainter, box: QRectF, px: int) -> None:
+    """Two dark cracks across a broken thing."""
+    p.setPen(QPen(QColor(12, 10, 10, 230), max(1.0, px / 14)))
+    x0, y0, w, h = box.x(), box.y(), box.width(), box.height()
+    p.drawPolyline(
+        QPolygonF(
+            [
+                QPointF(x0 + w * 0.3, y0 + h * 0.35),
+                QPointF(x0 + w * 0.5, y0 + h * 0.55),
+                QPointF(x0 + w * 0.42, y0 + h * 0.7),
+                QPointF(x0 + w * 0.62, y0 + h * 0.95),
+            ]
+        )
+    )
+    p.drawPolyline(
+        QPolygonF(
+            [
+                QPointF(x0 + w * 0.5, y0 + h * 0.55),
+                QPointF(x0 + w * 0.72, y0 + h * 0.5),
+                QPointF(x0 + w * 0.85, y0 + h * 0.62),
+            ]
+        )
+    )
+
+
+def _rubble_at(p: QPainter, source: TileSource, cx: float, foot: float, px: int) -> None:
+    """The set's rubble at a broken thing's foot (a scatter of dark pieces
+    when the set has none)."""
+    rubble = _scaled(source.image("out-rubble"), int(px * 0.7))
+    if rubble is not None:
+        p.drawImage(int(cx - rubble.width() * 0.8), int(foot - rubble.height() * 0.8), rubble)
+        p.drawImage(int(cx + rubble.width() * 0.1), int(foot - rubble.height() * 0.6), rubble)
+        return
+    p.setPen(Qt.NoPen)
+    p.setBrush(QColor(*RUBBLE_TINT))
+    for dx, dy, r in ((-0.35, -0.12, 0.14), (0.1, -0.08, 0.1), (0.3, -0.16, 0.12)):
+        p.drawEllipse(QPointF(cx + dx * px, foot + dy * px), r * px, r * px * 0.7)
 
 
 def _soft(mask, seed: int, px: int, rough: float = 0.35):

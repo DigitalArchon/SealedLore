@@ -4186,6 +4186,69 @@ for _verb, _turn, _means in (
         (("name", "who or what it is done to"),),
     )
 
+# The things the menu's choices were done to are a record kept in code (the
+# author's ruling, Oct 2026: "If something is taken, it should be recorded as
+# with the character who took it. Something broken should visibly be broken.
+# These can be in map/game mechanics, done in code."): no model decides it,
+# and these lines tell the storyteller what the record says. Not measured.
+_text(
+    "map.carries",
+    MAP,
+    "Map-first: who carries what",
+    "One line under the positions for each person in the area who carries something "
+    "taken on the map (the author's character first): the record the program keeps, "
+    "whatever the passages said since.",
+    "{name} carries: {things}.",
+    (("name", "who"), ("things", "what they carry, by name")),
+)
+
+for _verb, _turn, _means in (
+    (
+        "drop",
+        "I put the {name} down.",
+        "The author chose Drop on the map: their character puts the {name} down where "
+        "they stand. It lies there now.",
+    ),
+):
+    _text(
+        f"map.turn.{_verb}",
+        MAP,
+        f"Map-first: the turn {_verb.capitalize()} writes",
+        f"Put in the composer when the author chooses {_verb.capitalize()} under Carrying "
+        "on the map, for them to send as it is or add to.",
+        _turn,
+        (("name", "the thing"),),
+    )
+    _text(
+        f"map.action.{_verb}",
+        MAP,
+        f"Map-first: what {_verb.capitalize()} means",
+        f"In the map section of the tail on a turn the author began with {_verb.capitalize()} "
+        "on the map and sent as the menu wrote it (or added to it).",
+        _means,
+        (("name", "the thing"),),
+    )
+
+_text(
+    "map.turn.give",
+    MAP,
+    "Map-first: the turn Give writes",
+    "Put in the composer when the author chooses Give to someone under Carrying on the map, "
+    "for them to send as it is or add to.",
+    "I give the {name} to {who}.",
+    (("name", "the thing"), ("who", "who it is given to")),
+)
+_text(
+    "map.action.give",
+    MAP,
+    "Map-first: what Give means",
+    "In the map section of the tail on a turn the author began with Give on the map and "
+    "sent as the menu wrote it (or added to it).",
+    "The author chose Give on the map: their character hands the {name} to {who}, who has "
+    "it now. How {who} takes it is theirs.",
+    (("name", "the thing"), ("who", "who it is given to")),
+)
+
 _text(
     "map.turn.go",
     MAP,

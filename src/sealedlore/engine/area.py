@@ -28,10 +28,11 @@ import re
 import zlib
 from collections import deque
 from collections.abc import Collection, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from sealedlore.engine.marks import footprint
+from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.tile_sets import LIGHT_WORDS
 from sealedlore.engine.world import key
 from sealedlore.engine.world_art import (
@@ -57,7 +58,7 @@ from sealedlore.engine.world_art import (
     with_fixed,
 )
 from sealedlore.engine.world_layout import position, size_of
-from sealedlore.models.area import FurnishPlan, Spot
+from sealedlore.models.area import FurnishPlan, Spot, ThingRecord
 from sealedlore.models.world import WorldArt, WorldMap, WorldPlace
 
 # A tile outdoors, at game scale (design §2: game scale, not true scale).
@@ -213,6 +214,9 @@ class Placement:
     verbs: tuple[str, ...]
     kind: str  # "furniture" or "object"
     room: int | None = None
+    # The author's character destroyed it (a record on the turn's snapshot,
+    # `apply_things`): still here, drawn broken, no longer to be destroyed.
+    broken: bool = False
 
     def tiles(self) -> list[tuple[int, int]]:
         return [(self.x + dx, self.y + dy) for dy in range(self.h) for dx in range(self.w)]
@@ -1421,6 +1425,73 @@ def _object_placements(area: Area) -> list[Placement]:
     return out
 
 
+# --- What became of the things (the turn's records) --------------------------
+
+# What can still be done with a broken thing: used (the storyteller is told
+# it is broken, and decides), taken if it was small enough; never destroyed
+# or eaten again.
+BROKEN_KEEPS = ("use", "take")
+
+
+def apply_things(area: Area, records: Mapping[str, ThingRecord]) -> Area:
+    """The area with the turn's records on it (models/area.py `ThingRecord`;
+    the author's ruling: a taken thing is with its taker, a broken one is
+    visibly broken, in code): a taken or eaten thing is off the floor and
+    its tile plain ground; a broken one stays, `broken`; a dropped one lies
+    on the tile it was put down on, in whichever area that is. A copy: the
+    built area is kept as built and the records applied over it, so the
+    cache needn't know them. The area itself when no record touches it."""
+    mine = {
+        pid: r
+        for pid, r in records.items()
+        if pid in {p.id for p in area.placements}
+        or (r.state == "dropped" and r.spot is not None and r.spot.area == area.id)
+    }
+    if not mine:
+        return area
+    rows = [list(r) for r in area.rows]
+    ground = "_" if area.indoor else "."
+    placements: list[Placement] = []
+    for p in area.placements:
+        record = mine.get(p.id)
+        if record is None:
+            placements.append(p)
+            continue
+        if record.state in ("taken", "gone") or (
+            record.state == "dropped" and record.spot is not None
+        ):
+            for x, y in p.tiles():  # the plan's digit stood for it: plain ground now
+                if 0 <= y < len(rows) and 0 <= x < len(rows[y]) and rows[y][x].isdigit():
+                    rows[y][x] = ground
+        elif record.state == "broken":
+            placements.append(
+                replace(p, broken=True, verbs=tuple(v for v in p.verbs if v in BROKEN_KEEPS))
+            )
+    for pid, record in mine.items():
+        if record.state != "dropped" or record.spot is None or record.spot.area != area.id:
+            continue
+        room = area.room_at(record.spot.x, record.spot.y)
+        placements.append(
+            Placement(
+                id=pid,
+                name=record.name,
+                x=record.spot.x,
+                y=record.spot.y,
+                w=1,
+                h=1,
+                verbs=item_verbs(record.name),
+                kind="object",
+                room=room.index if room else None,
+            )
+        )
+    return replace(area, rows=["".join(r) for r in rows], placements=placements)
+
+
+def carried_by(records: Mapping[str, ThingRecord], who: str) -> list[str]:
+    """The things `who` carries, by name, in the order they were taken."""
+    return [bare(r.name) for r in records.values() if r.state == "taken" and r.by == who]
+
+
 # --- Furnishing (tools/bakeoff/furnish.py) --------------------------------------
 
 
@@ -1869,12 +1940,16 @@ def render_positions(
     walked: str = "",
     action_line: str = "",
     limit: int = 8,
+    things: Mapping[str, ThingRecord] | None = None,
+    texts: PromptTexts = DEFAULT_TEXTS,
 ) -> str:
     """Where everyone stands, for the storyteller: exact, from the grid
     (design §5). The author's character's place in the area, who else is
-    here with distance and bearing, what is within reach, the doorways out,
-    and how far they walked since the last passage. Never the clock's day
-    (the author's ruling: the day is the plot's)."""
+    here with distance and bearing, what is within reach (a broken thing
+    said to be broken), what each of them carries (`things`, the turn's
+    records; the author's character first), the doorways out, and how far
+    they walked since the last passage. Never the clock's day (the author's
+    ruling: the day is the plot's)."""
     me = spots.get(held)
     if me is None or me.area != area.id:
         return ""
@@ -1913,8 +1988,9 @@ def render_positions(
     nearest: dict[str, tuple[float, int]] = {}
     for m, p in reach:
         if m <= 4.0:
-            first, count = nearest.get(_bare(p.name), (m, 0))
-            nearest[_bare(p.name)] = (first, count + 1)
+            label = _bare(p.name) + (" (broken)" if p.broken else "")
+            first, count = nearest.get(label, (m, 0))
+            nearest[label] = (first, count + 1)
     close = [
         f"the {name} ({'at hand' if m < 1.5 else metres_words(m)}"
         + (f"; {n - 1} more near)" if n > 1 else ")")
@@ -1922,6 +1998,14 @@ def render_positions(
     ][:limit]
     if close:
         lines.append("Within reach: " + "; ".join(close) + ".")
+    if things:
+        # Who carries what: the author's character always, the others when
+        # they are in this area.
+        present = [held] + [n for _m, n, _s in others]
+        for name in present:
+            carried = carried_by(things, name)
+            if carried:
+                lines.append(texts.fill("map.carries", name=name, things=", ".join(carried)))
     if area.indoor and my_room is not None:
         ways = []
         for d in area.doorways:
