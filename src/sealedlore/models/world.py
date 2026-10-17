@@ -231,9 +231,14 @@ class MapPicture(BaseModel):
     prompt: str = ""
     model: str = ""
     made_at: str = ""
-    # An isometric view: the plan it was painted from (that plan's
-    # `made_at`). A plan drawn again makes the view out of date.
+    # A painting of a place (subject "isometric", the name kept so every
+    # saved story and sample reads as before): the plan it was painted from
+    # (that plan's `made_at`). A plan drawn again makes the view out of date.
     plan: str = ""
+    # A painting's moment: the time of day, the weather and who was there
+    # when it was painted (the author, Oct 17 2026: "details including items
+    # and characters present from the map at the time it is taken").
+    scene: str = ""
 
 
 class TerrainPatch(BaseModel):

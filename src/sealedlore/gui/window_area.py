@@ -26,12 +26,15 @@ from sealedlore.engine.area import Area, point_tile, tile_point
 from sealedlore.engine.marks import mark_token, marks_in
 from sealedlore.engine.picture_shapes import FREE
 from sealedlore.engine.world import key
+from sealedlore.engine.world_pictures import views_of
 from sealedlore.gui.area_render import TileSource, render_area, sprite_image
 from sealedlore.gui.area_view import AreaView, PlaceMark, Walker
 from sealedlore.gui.crop_dialog import cropped_picture
+from sealedlore.gui.isometric_view import IsometricDialog, made_when
 from sealedlore.gui.map_art import picture_sprite, pixel_art
+from sealedlore.gui.map_render import area_scene_png
 from sealedlore.gui.map_tiles import person_sprite
-from sealedlore.gui.ref_images import PICTURE_FILTER
+from sealedlore.gui.ref_images import PICTURE_FILTER, image_of
 from sealedlore.gui.tile_set_editor import TileSetEditor
 from sealedlore.gui.tile_set_gallery import TileSetDesigner, TileSetGallery
 from sealedlore.models.character import Character
@@ -91,6 +94,10 @@ class AreaWindow:
         self.area_view.edge_chosen.connect(self._area_edge_go)
         self.area_view.carry_wanted.connect(self._area_carry_menu)
         self.area_view.carry_chosen.connect(self._area_carry)
+        # Paintings of the place stood in (gui/map_render.area_scene_png).
+        self.area_view.paintings_wanted.connect(self._area_paintings_menu)
+        self.area_view.paint_place_requested.connect(self._area_paint_place)
+        self.area_view.painting_chosen.connect(self._area_show_painting)
         self._painted = _Painted()
         self._painted.done.connect(self._area_painted)
         self._area_images: dict[object, QImage] = {}
@@ -577,6 +584,77 @@ class AreaWindow:
         if session is None or not session.map_first or session.in_private:
             return []
         return [thing for _id, thing in session.carried_things(name)]
+
+    # --- paintings of the place ------------------------------------------------------
+
+    def _area_paintings_menu(self) -> None:
+        """Paintings ▾ about to show: Paint this place… with its model and
+        price (or why it can't be painted now), then the paintings the place
+        stood in already has, newest first (`set_paintings`)."""
+        session = self.session
+        area = self.area_view.area
+        if session is None or area is None:
+            self.area_view.set_paintings("this place", ("", None, "No place to paint."), [])
+            return
+        model, price, problem = session.isometric_offer()
+        if area.window or area.place_id not in session.world().places:
+            problem = problem or "Open country has no plan to paint."
+        art = session.map_art_copy()
+        paintings = [
+            (
+                picture.id,
+                (f"Painted {made_when(picture.made_at)}" if picture.made_at else "A painting")
+                + (f" by {picture.model}" if picture.model else ", your own picture")
+                + (f" · {picture.scene}" if picture.scene else ""),
+            )
+            for picture in reversed(views_of(art, area.place_id))
+        ]
+        self.area_view.set_paintings(area.name, (model, price, problem), paintings)
+
+    def _area_paint_place(self) -> None:
+        """Paint this place…: the area as the play view shows it now (its
+        tiles, everyone and everything standing on it, `area_scene_png`)
+        goes to the model, drawn at the size the model paints on the
+        painting's own thread (the engine draws nothing). The press is the
+        approval; the price was in the menu."""
+        session = self.session
+        area = self.area_view.area
+        if session is None or area is None or area.window:
+            return
+        info, read = session.tile_set()
+        source = TileSource(info, read)
+        dress = session.story.defaults.map_density != "sparse"
+        walkers = list(self.area_view.walkers)
+        places = [item.mark for item in self.area_view.places.values()]
+
+        def render(size: tuple[int, int]) -> bytes:
+            return area_scene_png(area, source, walkers, places, size, dress=dress)
+
+        if session.start_isometric(area.place_id, render):
+            self.world_view.isometric_painting = session.isometric_painting
+            self.area_view.hint.setText(f"Painting {area.name}…")
+        else:
+            problem = session.isometric_offer()[2] or "The painting can't be started now."
+            self.statusBar().showMessage(problem, 6000)
+        self.world_view.isometric_offer = session.isometric_offer()
+        self.world_view.sync_isometric()
+        self._sync_progress()
+
+    def _area_show_painting(self, picture_id: str) -> None:
+        """One of the place's paintings, from Paintings ▾, seen whole."""
+        session = self.session
+        if session is None:
+            return
+        picture = next((p for p in session.map_art_copy().pictures if p.id == picture_id), None)
+        if picture is None:
+            return
+        image = image_of(session.pictures.read(picture.file))
+        if image.isNull():
+            self.statusBar().showMessage("That painting's file can't be read.", 6000)
+            return
+        dialog = IsometricDialog(picture.name, image, picture.model, self)
+        dialog.setAttribute(Qt.WA_DeleteOnClose)
+        dialog.exec()
 
     # --- the tile set --------------------------------------------------------------
 

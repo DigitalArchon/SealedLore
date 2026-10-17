@@ -1483,13 +1483,14 @@ class SettingsDialog(QDialog):
         self.map_picture_model.textChanged.connect(self._sync_map_picture_note)
         self.map_picture_limit.valueChanged.connect(self._sync_map_picture_note)
         self._sync_map_picture_note()
-        # The isometric view (Map → Isometric): painted only when asked.
+        # Paintings of a place (Paintings on the map, Paint this place… on
+        # the play view): painted only when asked.
         self.map_isometric_model = ModelField(
             self.config.map_isometric_model,
             self._browse_image_models if self.image_catalog is not None else None,
             recommended=RECOMMENDED_IMAGE_MODELS["map_isometric_model"],
         )
-        form.addRow("Isometric view model", self.map_isometric_model)
+        form.addRow("Painting model", self.map_isometric_model)
         self.map_isometric_note = QLabel()
         self.map_isometric_note.setObjectName("hintLabel")
         self.map_isometric_note.setWordWrap(True)
@@ -1501,7 +1502,7 @@ class SettingsDialog(QDialog):
         model = self.map_isometric_model.text().strip()
         info = next((m for m in self._image_models if m.id == model), None)
         each = info.price(isometric_size(info)) if info else None
-        price = f"${each:.2f} a view listed" if each is not None else "price not listed"
+        price = f"${each:.2f} a painting listed" if each is not None else "price not listed"
         takes = (
             " It can't be given the map to paint from: choose one that takes pictures."
             if info is not None and not info.accepts_images
@@ -1509,9 +1510,9 @@ class SettingsDialog(QDialog):
         )
         known = recommended_model("map_isometric_model", model)
         self.map_isometric_note.setText(
-            "Map → Isometric paints the local map in isometric from the map itself, only when "
-            "you ask, counted with the map pictures above (needs no tick). "
-            f"{model or 'No model'}: {price}.{takes}"
+            "Paint this place… on the play view (and Paintings on the map) paints a place as "
+            "it stands, from the map and everyone on it, only when you ask, counted with the "
+            f"map pictures above (needs no tick). {model or 'No model'}: {price}.{takes}"
             + (f" {known.note}" if known is not None else "")
         )
 

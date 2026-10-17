@@ -276,7 +276,7 @@ def test_the_isometric_view_is_painted_only_when_asked_from_the_plan(session, tm
     payload = FakeImages.sent[-1]
     assert payload["model"] == "qwen-image"
     assert payload["size"] == "1024x576"  # the plan's shape, near enough
-    assert "Repaint it as 16-bit pixel art" in payload["prompt"]
+    assert "Keep the layout exactly as the picture has it" in payload["prompt"]
     assert "data:image/png;base64" in json.dumps(payload)  # the plan's picture went with it
     log_file = tmp_path / "stories" / session.story.id / "api_log.jsonl"
     requests = [
@@ -321,9 +321,9 @@ def test_the_isometric_view_is_painted_from_the_program_s_render_with_one_line(s
     session._isometric_thread.join(10)
     assert sizes == [(1024, 576)]  # the render at the size painted: one shape in and out
     prompt = FakeImages.sent[-1]["prompt"]
-    assert prompt.startswith("This picture is a plain isometric render of a game map")
+    assert prompt.startswith("This picture is the game map of a place as it stands right now")
     farm = session.world().places["farm"]
-    assert f"What is on it: {one_line(farm)}" in prompt
+    assert f"The place: {one_line(farm)}" in prompt
     assert one_line(farm) == "The farm."  # the fixture's farm has no description
     assert "The barn" not in prompt  # no paragraph of the places' words
     assert session.provider.requests == []  # and no prompt writer call
@@ -427,8 +427,8 @@ def test_the_isometric_view_names_a_change_first_and_goes_out_of_date_with_it():
     world.places["barn"] = world.places["barn"].model_copy(update={"state": "burning"})
     job = isometric_job(world, WorldArt(), "farm", look="snow")
     assert isometric_state(world, "farm") != before and job.state == "The barn: burning"
-    assert "As the story has it now, The barn is burning: draw it so" in job.prompt
-    assert job.prompt.index("burning: draw it so") < job.prompt.index("What is on it")
+    assert "As the story has it now, The barn is burning: paint it so" in job.prompt
+    assert job.prompt.index("burning: paint it so") < job.prompt.index("The place:")
     assert "Hellsville" not in job.prompt  # only what the plan has
 
 
@@ -554,3 +554,69 @@ def test_leaving_the_story_stops_its_isometric_view_and_writes_nothing(
     assert not session._isometric_thread.is_alive()
     assert not folder.exists() and called == []
     assert not session.start_isometric("farm", lambda size: png(16, 12))  # left for good
+
+
+def test_a_painting_s_prompt_names_the_hour_the_weather_the_people_and_the_things():
+    """Paintings of a place (the author, Oct 17 2026): consistent with the
+    map, and a beautiful rendition of the scene as it is now, the people and
+    things present included. The people go in by their looks, never a name
+    (no writing on the picture), and "isometric" is nowhere in it: the model
+    is asked for a three-quarter view matching the picture's angle."""
+    from sealedlore.engine.world_pictures import isometric_job
+
+    job = isometric_job(
+        farm(),
+        WorldArt(),
+        "farm",
+        look="snow",
+        style="gritty and cold",
+        when="It is dusk. The weather: snowing hard.",
+        people=["A survivor in a heavy coat.", "A tall man with a scar", ""],
+        things=["the stone well", "a rifle leaning by the door", "the stone well"],
+    )
+    prompt = job.prompt
+    assert "It is dusk. The weather: snowing hard." in prompt
+    assert "A survivor in a heavy coat; A tall man with a scar" in prompt
+    assert "the stone well, a rifle leaning by the door" in prompt  # each once
+    assert "gritty and cold" in prompt and "snow-covered country" in prompt
+    assert "Keep the layout exactly as the picture has it" in prompt
+    assert "three-quarter view from above, matching the picture's angle" in prompt
+    assert "No writing of any kind" in prompt
+    assert "Jane" not in prompt and "isometric" not in prompt.lower()
+    assert job.scene == "It is dusk. The weather: snowing hard. 2 there."
+    # Nobody there and nothing at hand: the sentences are left out, not emptied.
+    bare = isometric_job(farm(), WorldArt(), "farm", look="snow").prompt
+    assert "The people in it" not in bare and "The things standing about" not in bare
+    assert "It is " not in bare
+
+
+def test_the_default_painting_model_and_an_older_config_s_both_paint(session):
+    """FLUX.3 Klein's edit model (the sprites') is the default painting
+    model; a config still naming FLUX.2 klein 9B (the default before Oct 17
+    2026) keeps painting with it."""
+    from sealedlore.models.config import Config
+
+    listed = lambda model: {  # noqa: E731 - a one-line stand-in for the listing
+        "id": model,
+        "supported_parameters": {"resolutions": ["1024x768", "1024x576"], "max_input_images": 3},
+    }
+    session.config.map_pictures = False
+    default = Config().map_isometric_model
+    assert default == "blackforestlabs/flux-3/klein/edit-image" == Config().map_sprite_model
+    session.config.image_models = [listed(default), listed("flux-2-klein-9b")]
+    session.config.map_isometric_model = default
+    assert session.isometric_offer()[0] == default and session.isometric_offer()[2] is None
+    session.config.map_isometric_model = "flux-2-klein-9b"
+    model, _price, problem = session.isometric_offer()
+    assert (model, problem) == ("flux-2-klein-9b", None)
+    assert session.start_isometric("farm", lambda size: png(16, 12))
+    session._isometric_thread.join(10)
+    assert FakeImages.sent[-1]["model"] == "flux-2-klein-9b"
+    painted = session.map_art_copy().picture_for("isometric", "farm")
+    assert painted is not None and painted.model == "flux-2-klein-9b"
+    # The session's own scene for the farm: the hour (the story's clock
+    # begins at midnight), nobody's name, Jane's looks from her card.
+    when, people, _things = session.painting_scene("farm")
+    assert when == "It is the small hours."
+    assert people == ["A survivor in a heavy coat."] and "Jane" not in painted.prompt
+    assert "heavy coat" in painted.prompt and painted.scene == "It is the small hours. 1 there."

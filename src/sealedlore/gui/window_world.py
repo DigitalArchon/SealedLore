@@ -219,7 +219,7 @@ class WorldWindow:
             self._progress_timer.stop()
 
     def _paint_isometric(self, area_id: str) -> None:
-        """Paint the isometric view the author asked for: the program's
+        """Paint the place as the author asked on the 2D map: the program's
         isometric render of the plan is drawn for the model from the map as
         it stands now, at the size the model paints, on the painting's own
         thread (`iso_png` uses QImage alone)."""
@@ -234,8 +234,8 @@ class WorldWindow:
         self._sync_progress()
 
     def _own_isometric(self, area_id: str) -> None:
-        """A picture of the author's own as the isometric view: chosen,
-        cropped (first to the isometric view's shape), stripped and kept."""
+        """A picture of the author's own as the painting: chosen,
+        cropped (first to the painting's shape), stripped and kept."""
         session = self.session
         if session is None:
             return
@@ -245,7 +245,7 @@ class WorldWindow:
             )
             return
         path, _ = QFileDialog.getOpenFileName(
-            self, "An isometric view of your own", str(Path.home()), PICTURE_FILTER
+            self, "A painting of your own", str(Path.home()), PICTURE_FILTER
         )
         if not path:
             return
@@ -331,7 +331,7 @@ class WorldWindow:
             f"Draw the plan of {name} again? The map art model draws a new one in the "
             "background, and it replaces the plan you see now once it is drawn (if it can't "
             "be drawn, this one stays). The places in it keep their names, the buildings you "
-            "have been inside keep their own plans, and its isometric view goes out of date.",
+            "have been inside keep their own plans, and its paintings go out of date.",
         )
         if answer != QMessageBox.Yes:
             return

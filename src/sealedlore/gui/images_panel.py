@@ -12,7 +12,7 @@ not twice; taken off the card, it is the story's again. The background drawn
 here shows as the background (`Story.background_drawn_as`), not twice
 either. Cards the plot hasn't brought in are left out unless spoilers are
 shown. Every picture can be drawn again or edited from its menu, as on the
-Cast and Lore pages. The map's are its isometric views and postcards.
+Cast and Lore pages. The map's are its paintings and postcards.
 """
 
 from __future__ import annotations
@@ -193,7 +193,7 @@ class ImagesPanel(QWidget):
         standing for the picture it was drawn as; `added`: the pictures
         added from disk to no card. `map_pictures`: the map's views and
         postcards (those of places the author may see); `shown_views`: the
-        isometric views laid over the map now, said so (an area may have
+        paintings laid over the map now, said so (an area may have
         several, and any can be shown from here)."""
         cast, lore = cast or [], lore or []
         on_cards = {ref.drawn_as for card in (*cast, *lore) for ref in card.reference_images}
@@ -262,7 +262,7 @@ class ImagesPanel(QWidget):
         counts["Story"] = self.list.count()
         self.map_list.clear()
         for picture in sorted(map_pictures or [], key=lambda p: p.made_at, reverse=True):
-            kind = {"isometric": "Isometric view", "postcard": "Postcard", "walker": "Avatar"}.get(
+            kind = {"isometric": "Painting", "postcard": "Postcard", "walker": "Avatar"}.get(
                 picture.subject, "Picture"
             )
             on_map = picture.id in (shown_views or set())
@@ -446,8 +446,8 @@ BACKGROUND_ACTIONS = (
 MAP_ACTIONS = (
     ("open", "See it whole"),
     ("show", "Show on the map"),
-    # An isometric view's alone: chosen as the one laid over its area.
-    ("use", "Show this view on the map"),
+    # A painting's alone: chosen as the one laid over its area.
+    ("use", "Show this painting on the map"),
     ("save", "Save picture as…"),
 )
 ADDED_ACTIONS = (

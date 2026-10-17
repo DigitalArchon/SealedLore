@@ -122,15 +122,21 @@ RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
             note="Made all three, the subtlest scar and the most finished suit, about $0.027.",
         ),
     ),
+    # Paintings of a place (Paintings on the map, Paint this place… on the
+    # play view): given the program's own picture of the area as it is now
+    # and asked for a faithful, finished rendering of it (the author, Oct 17
+    # 2026: FLUX.3 Klein the default, Seedream and Nano Banana the enhanced
+    # choices). The layout scores are from the isometric render's blind
+    # judging (SealedLoreDocs design/map.md, Oct 15 2026); the play view's
+    # picture is not yet measured.
     "map_isometric_model": (
-        # Given the program's isometric render of the plan (gui/map_iso.py),
-        # blind-judged on layout 1-5 (SealedLoreDocs design/map.md, Oct 15 2026).
         RecommendedModel(
-            id="flux-2-klein-9b",
+            id="blackforestlabs/flux-3/klein/edit-image",
             tag="default",
-            label="FLUX.2 klein 9B",
-            note="Keeps the layout (3.1 of 5 from the render) and paints it handsomely, at "
-            "about $0.016 a view; fences the whole area now and then and letters its signs.",
+            label="FLUX.3 Klein",
+            note="The sprites' model, given the picture of the place to paint from, at about a "
+            "cent a painting; FLUX.2 klein kept the layout at 3.1 of 5 from the program's "
+            "render.",
         ),
         RecommendedModel(
             id="qwen-image",
@@ -141,9 +147,16 @@ RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
         RecommendedModel(
             id="bytedance/seedream-v5.0-pro/edit",
             label="Seedream 5.0 Pro",
-            tag="premium",
-            note="The most faithful (3.5, the building count exact) and the best looking, at "
-            "about $0.09 a view; ahead of Nano Banana Pro at two thirds of its price.",
+            tag="enhanced",
+            note="The most faithful of those tried (3.5, the building count exact) and among "
+            "the best looking, at about $0.09 a painting.",
+        ),
+        RecommendedModel(
+            id="nano-banana-pro-edit",
+            label="Nano Banana Pro",
+            tag="enhanced",
+            note="Kept the layout and showed the story's changes (the barn on fire) with the "
+            "first prompt, at about $0.14 a painting, the dearest of those tried.",
         ),
     ),
 }
@@ -753,13 +766,15 @@ class Config(BaseModel):
     map_pictures: bool = False
     map_picture_model: str = "qwen-image"
     map_picture_daily_limit: int = 40
-    # The isometric view of the local map (Map → Isometric), painted from the
-    # program's own isometric render of the plan when the author asks, never
-    # on its own. FLUX.2 klein 9B keeps the render's layout and looks best of
-    # the cheap models at $0.016 a view; Qwen Image is the free alternative,
-    # Seedream 5.0 Pro the premium one (the author's call, Oct 15 2026;
-    # RECOMMENDED_IMAGE_MODELS, SealedLoreDocs design/map.md).
-    map_isometric_model: str = "flux-2-klein-9b"
+    # Paintings of a place (Paintings on the map, Paint this place… on the
+    # play view), painted from the program's own picture of the area as it
+    # is now when the author asks, never on its own. FLUX.3 Klein's edit
+    # model, as for the sprites (the author's call, Oct 17 2026); Qwen Image
+    # the free alternative, Seedream 5.0 Pro and Nano Banana Pro the enhanced
+    # ones (RECOMMENDED_IMAGE_MODELS, SealedLoreDocs design/map.md). A story
+    # whose config still names "flux-2-klein-9b" keeps painting with it. The
+    # field keeps its old name so saved configs read as before.
+    map_isometric_model: str = "blackforestlabs/flux-3/klein/edit-image"
     # Map-first play's sprites (engine/tile_draw.py), under the same standing
     # approval and daily limit as map pictures: things by text to image, a
     # character from their portrait by an edit of it, and a story's own tile

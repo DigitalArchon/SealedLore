@@ -23,10 +23,12 @@ throughout, since the image endpoint is not.
 from __future__ import annotations
 
 import json
+import math
 import threading
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+from sealedlore.engine.area import now_words
 from sealedlore.engine.world_art import (
     LAYOUT_MAX_TOKENS,
     MAX_FAILURES,
@@ -55,7 +57,7 @@ from sealedlore.engine.world_pictures import (
 )
 from sealedlore.ids import new_id, utc_now_iso
 from sealedlore.models.node import Usage
-from sealedlore.models.world import MapPicture, WorldArt
+from sealedlore.models.world import MapPicture, WorldArt, WorldMap
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError
 from sealedlore.providers.images import (
     ImageClient,
@@ -373,8 +375,17 @@ class WorldArtRuntime:
         look = plan_ground(world, art, area, ground)
         if look == "metal" and "space" in (ground, land_under(world, art, area)):
             look = "space"  # a deck in space, not plating on the ground
+        when, people, things = self.painting_scene(area_id, world, art)
         job = isometric_job(
-            world, art, area_id, look=look, style=self.tile_style(art), texts=self.texts
+            world,
+            art,
+            area_id,
+            look=look,
+            style=self.tile_style(art),
+            texts=self.texts,
+            when=when,
+            people=people,
+            things=things,
         )
         client = ImageClient(media.base_url, media.api_key, api=media.api)
         self._isometric_area = area_id
@@ -415,6 +426,50 @@ class WorldArtRuntime:
             callback = self.on_map_art
             if callback is not None:
                 callback()  # the map learns it is done, painted or not
+
+    def painting_scene(
+        self, area_id: str, world: WorldMap | None = None, art: WorldArt | None = None
+    ) -> tuple[str, list[str], list[str]]:
+        """What a painting of `area_id` shows besides the map (the author,
+        Oct 17 2026: the characters and items present at the time it is
+        taken): the time of day and the weather (`area.now_words`, never
+        the day), the people there by what their cards say they look like
+        (never their names: no writing on the picture), and the things
+        standing about by name, those nearest the author's character
+        first. Everyone standing in the area on the play view; in a story
+        played off the grid, everyone the map places there."""
+        world = world if world is not None else self.world()
+        art = art if art is not None else self.map_art_copy()
+        clock = self.map_clock()
+        when = now_words(clock[1] if clock else None, world.weather)
+        cards = {c.name: c for c in self.map_people()}
+        names: list[str] = []
+        things: list[str] = []
+        area = self.area(area_id, world, art) if self.map_first else None
+        if area is not None:
+            state = self.area_state()
+            held = self.held_name()
+            me = state.spots.get(held or "")
+            here = (me.x, me.y) if me is not None and me.area == area.id else None
+            names = [name for name, spot in state.spots.items() if spot.area == area.id]
+            placements = sorted(
+                area.placements,
+                key=lambda p: (
+                    math.hypot(p.centre[0] - here[0], p.centre[1] - here[1]) if here else 0.0
+                ),
+            )
+            things = [p.name for p in placements]
+        else:
+            inside = {area_id} | {p.id for p in world.places.values() if p.inside == area_id}
+            names = [who for who, at in world.where.items() if at in inside]
+            things = [t.name for t in world.things.values() if t.at in inside]
+        looks: list[str] = []
+        for name in names:
+            card = cards.get(name)
+            words = looks_of(card.summary, card.full_description) if card is not None else ""
+            if words:
+                looks.append(words)
+        return when, looks, things
 
     def use_own_isometric(self, area_id: str, data: bytes, suffix: str) -> bool:
         """The author's own picture (already prepared: stripped, cropped) as
@@ -618,6 +673,7 @@ class WorldArtRuntime:
             model=model,
             made_at=utc_now_iso(),
             plan=job.plan,
+            scene=job.scene,
         )
         with self._lock():
             art.pictures.append(picture)

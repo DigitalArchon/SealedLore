@@ -95,7 +95,7 @@ def picture_shapes(
         ),
         PictureShape(BACKGROUND, back_label, *back),
         PictureShape(
-            ISOMETRIC, f"Isometric view ({_said(*isometric)}, the shape of a map area)", *isometric
+            ISOMETRIC, f"Painting ({_said(*isometric)}, the shape of a map area)", *isometric
         ),
         PictureShape(SQUARE, "Square (1:1)", 1, 1),
     ]

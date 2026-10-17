@@ -206,7 +206,7 @@ class ImagesWindow:
         return {ref.drawn_as for card in cards for ref in card.reference_images if ref.drawn_as}
 
     def _map_pictures(self) -> list:
-        """The map's isometric views and postcards of places out of the fog
+        """The map's paintings and postcards of places out of the fog
         as the story stands, as the map shows them (a place the plot still
         hides is not on it; one the story hasn't reached is under the fog:
         a sample's views of places not yet reached were listed and saved)."""
@@ -228,7 +228,7 @@ class ImagesWindow:
         ]
 
     def _shown_views(self) -> set[str]:
-        """The isometric views laid over the map now, one per area."""
+        """The paintings laid over the map now, one per area."""
         session = self.session
         if session is None or not session.map_on:
             return set()
@@ -614,14 +614,14 @@ class ImagesWindow:
                     suffix = Path(ref.file).suffix
                     cards.append((ref.file, f"{kind}-{slug or 'card'}-{number}{suffix}"))
         # The background, unless it is a copy of a picture saved above; and
-        # the map's views and postcards (map-isometric-the-farm.jpg).
+        # the map's paintings and postcards (map-painting-the-farm.jpg).
         background = session.story.background_image
         if background and not any(i.id == session.story.background_drawn_as for i in images):
             cards.append((background, f"background{Path(background).suffix}"))
         for number, ref in enumerate(session.story.reference_images, start=1):
             cards.append((ref.file, f"added-{number}{Path(ref.file).suffix}"))
         for picture in self._map_pictures():
-            kind = "isometric" if picture.subject == "isometric" else "postcard"
+            kind = "painting" if picture.subject == "isometric" else "postcard"
             suffix = Path(picture.file).suffix
             cards.append((picture.file, f"map-{kind}-{_slug(picture.name) or 'place'}{suffix}"))
         if not images and not videos and not cards:
@@ -872,7 +872,7 @@ class ImagesWindow:
             self._show_whole(ref.caption or "Added picture", data)
 
     def _map_picture_action(self, action: str, picture_id: str) -> None:
-        """An isometric view or a postcard in the Media tab: see it whole,
+        """A painting or a postcard in the Media tab: see it whole,
         show it on the map (a view laid over its area, or chosen as the one
         over it: "use"), or save it."""
         session = self.session

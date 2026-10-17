@@ -388,7 +388,7 @@ def test_the_media_tab_puts_the_background_first_and_the_map_s_pictures_apart(ap
     ids = [panel.list.item(i).data(Qt.UserRole) for i in range(panel.list.count())]
     assert ids == ["background", "s"]  # first, and standing for the picture drawn as it
     assert panel.story_heading.text() == "STORY · 2" and panel.map_heading.text() == "MAP · 2"
-    assert panel.map_list.item(0).text() == "Isometric view\nThe farm"
+    assert panel.map_list.item(0).text() == "Painting\nThe farm"
     panel.list.itemActivated.emit(panel.list.item(0))
     assert asked == ["open"]
     assert {"draw", "edit", "save", "clear"} <= {key for key, _ in BACKGROUND_ACTIONS}

@@ -1375,3 +1375,130 @@ def test_weather_the_story_set_lies_over_an_outdoor_area_and_clear_weather_nothi
     session.story.world_base.weather = "clear and cold"
     window.refresh_area()
     assert view.weather_shown() is None and not view._weather_timer.isActive()
+
+
+def test_a_painting_s_reference_is_the_area_as_shown_with_the_people_and_things_on_it(app):
+    """A painting is painted from the play view's own picture (the author,
+    Oct 17 2026: consistent with the actual map, with the characters and
+    items present): the tiles, each walker's sprite at their tile and the
+    places' marks, fitted whole into the model's own shape."""
+    from PySide6.QtGui import QColor, QImage
+
+    from sealedlore.gui.area_render import px_for
+    from sealedlore.gui.area_view import PERSON_TILES, PlaceMark, Walker
+    from sealedlore.gui.image_codec import image_from_data
+    from sealedlore.gui.map_render import area_scene_image, area_scene_png
+
+    world, art = world_and_art()
+    farm = build_area(world, art, "farm")
+    plain = TileSource(TileSetInfo(name="plain"), lambda role: None)
+    px = px_for(farm)
+    sprite = QImage(8, 16, QImage.Format_ARGB32)
+    sprite.fill(QColor(255, 0, 255))
+    mark = QImage(8, 8, QImage.Format_ARGB32)
+    mark.fill(QColor(0, 255, 255))
+    walkers = [Walker("Jane", 10, 10, sprite, held=True), Walker("Ben", 20, 5, None)]
+    places = [PlaceMark("The rift", 30, 12, mark)]
+    # At the picture's own size, the sprite's colour stands on Jane's tile.
+    whole = area_scene_image(farm, plain, walkers, places, (farm.width * px, farm.height * px))
+    assert whole.size().width() == farm.width * px
+    feet = whole.pixelColor(int(10.5 * px), int(11 * px) - 2)
+    assert (feet.red(), feet.green(), feet.blue()) == (255, 0, 255)
+    head = whole.pixelColor(int(10.5 * px), int(11 * px - px * PERSON_TILES[False]) + 2)
+    assert (head.red(), head.green(), head.blue()) == (255, 0, 255)
+    plain_figure = whole.pixelColor(int(20.5 * px), int(6 * px) - 2)
+    assert (plain_figure.red(), plain_figure.green(), plain_figure.blue()) == (90, 110, 170)
+    rift = whole.pixelColor(int(30.5 * px), int(13 * px) - 2)
+    assert (rift.red(), rift.green(), rift.blue()) == (0, 255, 255)
+    # Fitted into the model's shape: the whole area, centred, margins in the
+    # ground's own colour rather than bars; PNG through the codec.
+    fitted = image_from_data(area_scene_png(farm, plain, walkers, places, (1024, 576)))
+    assert (fitted.width(), fitted.height()) == (1024, 576)
+    scale = min(1024 / whole.width(), 576 / whole.height())
+    left = (1024 - round(whole.width() * scale)) // 2
+    top = (576 - round(whole.height() * scale)) // 2
+    at = fitted.pixelColor(int(left + 10.5 * px * scale), int(top + (11 * px - 2) * scale))
+    assert at.red() > 200 and at.blue() > 200 and at.green() < 80
+    margin = fitted.pixelColor(2, 2) if left > 4 else fitted.pixelColor(2, 2)
+    assert margin.alpha() == 255 and (margin.red(), margin.green(), margin.blue()) != (0, 0, 0)
+
+
+def test_paint_this_place_paints_the_area_stood_in_and_media_lists_the_painting(
+    app, window, monkeypatch
+):
+    """Paintings ▾ on the play view (the author, Oct 17 2026): Paint this
+    place… with the model and its price, the painting made through the map
+    pictures' own path (counted, logged, kept, chosen for the map), the
+    storyteller's clock and the people in the prompt, the menu then listing
+    it, and Media calling it a Painting."""
+    import json
+
+    from sealedlore.engine import session_world_art
+    from sealedlore.gui import window_area
+    from tests.test_world_pictures import FakeImages
+
+    session, view = window.session, window.area_view
+    session.config.image_endpoint.base_url = "https://nano-gpt.com/api/v1"
+    session.config.image_endpoint.api_key = "k"
+    session.config.image_models = [
+        {
+            "id": session.config.map_isometric_model,
+            "supported_parameters": {
+                "resolutions": ["1024x768", "1024x576"],
+                "max_input_images": 3,
+            },
+        }
+    ]
+    FakeImages.sent = []
+    monkeypatch.setattr(session_world_art, "ImageClient", FakeImages)
+    monkeypatch.setattr(session_world_art, "list_image_models", lambda *a, **k: [])
+    assert session.config.map_pictures is False  # the press is the approval
+    stand(window, {"Serrik Vaun": ("house", 5, 10), "Maela Orr": ("house", 6, 10)})
+    assert view.area.place_id == "house"
+    window._area_paintings_menu()
+    actions = [a for a in view.paintings_menu.actions() if not a.isSeparator()]
+    klein = "blackforestlabs/flux-3/klein/edit-image"
+    assert actions[0].text().startswith(f"Paint this place… ({klein}")
+    assert actions[0].isEnabled() and actions[1].text() == "No painting of The house yet"
+    actions[0].trigger()
+    assert session.isometric_painting == "house" and "Painting The house" in view.hint.text()
+    session._isometric_thread.join(10)
+    pump(app)
+    painted = session.map_art_copy().picture_for("isometric", "house")
+    assert painted is not None and painted.model == session.config.map_isometric_model
+    payload = FakeImages.sent[-1]
+    assert payload["size"] == "1024x576"
+    assert "data:image/png;base64" in json.dumps(payload)  # the area's picture went with it
+    prompt = payload["prompt"]
+    assert "It is the small hours." in prompt  # the clock's hour, never the day
+    assert "A veteran duellist with a debt he cannot repay" in prompt  # Serrik, by his looks
+    assert "A locksmith who talks too much" in prompt  # Maela too
+    assert "Serrik" not in prompt and "Maela" not in prompt and "Day" not in prompt
+    assert "cast-iron stove" in prompt  # a thing at hand, by name
+    assert painted.scene == "It is the small hours. 2 there."
+    assert session.map_pictures_left_today() == session.config.map_picture_daily_limit - 1
+    # The menu now lists it; choosing it opens the painting whole.
+    opened: list[str] = []
+    monkeypatch.setattr(
+        window_area.IsometricDialog, "exec", lambda self: opened.append(self.windowTitle()) or 1
+    )
+    window._area_paintings_menu()
+    actions = [a for a in view.paintings_menu.actions() if not a.isSeparator()]
+    assert actions[0].text().startswith("Paint this place…")
+    assert len(actions) == 2 and actions[1].text().startswith("Painted ")
+    assert session.config.map_isometric_model in actions[1].text()
+    assert "2 there" in actions[1].text()
+    actions[1].trigger()
+    assert opened == ["The house: a painting"]
+    # Media calls it a Painting, the one on the map.
+    window.refresh_images()
+    items = [
+        window.images_panel.map_list.item(i).text()
+        for i in range(window.images_panel.map_list.count())
+    ]
+    assert "Painting\nThe house\n✓ on the map" in items
+    # Open country has no plan to paint: the entry says so, disabled.
+    view.area.rect = (0.0, 0.0, 1600.0, 1600.0)  # a window of the land, for the menu's check
+    window._area_paintings_menu()
+    actions = [a for a in view.paintings_menu.actions() if not a.isSeparator()]
+    assert not actions[0].isEnabled() and "Open country" in actions[0].toolTip()

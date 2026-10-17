@@ -7,10 +7,15 @@ QImage alone: it runs on the map pictures' thread, not the GUI's.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QRect, Qt
-from PySide6.QtGui import QImage, QPainter
+from collections.abc import Sequence
 
+from PySide6.QtCore import QRect, QRectF, Qt
+from PySide6.QtGui import QColor, QImage, QPainter
+
+from sealedlore.engine.area import Area
 from sealedlore.engine.world_art import changed_buildings, decked, plan_ground
+from sealedlore.gui.area_render import TileSource, px_for, render_area
+from sealedlore.gui.area_view import PERSON_TILES, PlaceMark, Walker
 from sealedlore.gui.image_codec import encoded
 from sealedlore.gui.map_tiles import TILE, building_boxes, render_tiles
 from sealedlore.models.world import PlaceLayout, WorldArt, WorldMap, WorldPlace
@@ -93,3 +98,95 @@ def plan_png(world: WorldMap, art: WorldArt, area_id: str) -> bytes | None:
     if image is None:
         return None
     return encoded(image, "PNG")
+
+
+# --- A painting's reference: the area as the play view shows it -------------------
+
+# A figure with no sprite is drawn as the play view draws one.
+_FIGURE = QColor(90, 110, 170)
+# A place's mark (a rift, a well) stands this many tiles tall on the picture.
+_PLACE_TILES = 1.6
+
+
+def area_scene_image(
+    area: Area,
+    source: TileSource,
+    walkers: Sequence[Walker],
+    places: Sequence[PlaceMark],
+    size: tuple[int, int],
+    *,
+    dress: bool = True,
+) -> QImage:
+    """The area as the play view shows it, for a painting's model to paint
+    from (the author, Oct 17 2026: consistent with the actual map, with
+    the characters and items present at the time it is taken): the tile
+    picture (`render_area`), the places' marks and everyone's sprite at
+    their tile, as `AreaView` stands them, fitted whole into `size` (the
+    model's own shape, one shape in and out) on the ground's own colour.
+    QImage alone, so it runs on the painting's thread."""
+    picture = render_area(area, source, dress=dress)
+    px = px_for(area)
+    painter = QPainter(picture)
+    painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+    for mark in places:
+        _stand(painter, mark.image, (mark.x + 0.5) * px, (mark.y + 1.0) * px, px * _PLACE_TILES)
+    # Back to front, as the view stacks them (z by row).
+    for walker in sorted(walkers, key=lambda w: w.y):
+        height = px * PERSON_TILES[area.indoor]
+        _stand(painter, walker.image, (walker.x + 0.5) * px, (walker.y + 1.0) * px, height)
+    painter.end()
+    return fitted(picture, size)
+
+
+def _stand(painter: QPainter, image: QImage | None, x: float, bottom: float, height: float) -> None:
+    """A sprite (or a plain figure) `height` tall, its feet at (`x`, `bottom`)."""
+    if image is not None and not image.isNull() and image.height():
+        width = height * image.width() / image.height()
+        painter.drawImage(QRectF(x - width / 2, bottom - height, width, height), image)
+        return
+    width = height * 0.6
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(_FIGURE)
+    painter.drawRoundedRect(QRectF(x - width / 2, bottom - height, width, height), 6, 6)
+
+
+def fitted(picture: QImage, size: tuple[int, int]) -> QImage:
+    """`picture` scaled to fit whole inside `size`, centred, the margins in
+    the mean colour of the picture's edge (so the model sees ground on,
+    not bars)."""
+    width, height = max(1, size[0]), max(1, size[1])
+    scaled = picture.scaled(width, height, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    out = QImage(width, height, QImage.Format_ARGB32_Premultiplied)
+    out.fill(_edge_colour(picture))
+    painter = QPainter(out)
+    painter.drawImage((width - scaled.width()) // 2, (height - scaled.height()) // 2, scaled)
+    painter.end()
+    return out
+
+
+def _edge_colour(picture: QImage) -> QColor:
+    """The mean colour of a picture's outermost rows and columns."""
+    w, h = picture.width(), picture.height()
+    if w == 0 or h == 0:
+        return QColor(24, 26, 32)
+    samples = [picture.pixelColor(x, y) for x in range(0, w, max(1, w // 32)) for y in (0, h - 1)]
+    samples += [picture.pixelColor(x, y) for y in range(0, h, max(1, h // 32)) for x in (0, w - 1)]
+    n = max(1, len(samples))
+    return QColor(
+        sum(c.red() for c in samples) // n,
+        sum(c.green() for c in samples) // n,
+        sum(c.blue() for c in samples) // n,
+    )
+
+
+def area_scene_png(
+    area: Area,
+    source: TileSource,
+    walkers: Sequence[Walker],
+    places: Sequence[PlaceMark],
+    size: tuple[int, int],
+    *,
+    dress: bool = True,
+) -> bytes:
+    """`area_scene_image` as PNG bytes, for the image model."""
+    return encoded(area_scene_image(area, source, walkers, places, size, dress=dress), "PNG")

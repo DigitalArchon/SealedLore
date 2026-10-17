@@ -337,13 +337,13 @@ def test_each_area_s_isometric_view_lies_over_it_on_the_map(app):
     # Before Isometric is pressed: the farm is marked, the works isn't.
     assert set(view._isos) == {"farm"} and view._badges["farm"].isVisible()
     assert not view._isos["farm"].isVisible()
-    assert view._badges["farm"].text == "◆ Isometric view"
+    assert view._badges["farm"].text == "◆ Painting"
     # On: the view lies over the farm's plan, exactly where it is.
     view.iso_button.setChecked(True)
     farm_view = view._isos["farm"]
     assert farm_view.isVisible() and not view._badges["farm"].isVisible()
     assert farm_view.sceneBoundingRect() == view._plans["farm"].rect()
-    assert not view.iso_bar.isHidden() and "its isometric view" in view.iso_bar.offer.text()
+    assert not view.iso_bar.isHidden() and "its painting" in view.iso_bar.offer.text()
     assert "the story's truth" in view.hint.text()  # what the view is, in the hint line
     assert "Paint it again (qwen-image, $0.02)" in view.iso_bar.paint_button.text()
     # Its 50x30 painting covers the plan's 5:3 rectangle whole: nothing cut.
@@ -351,7 +351,7 @@ def test_each_area_s_isometric_view_lies_over_it_on_the_map(app):
     # Over to the works: the bar is the works', which has none yet.
     view.go_to("works")
     assert view.area_in_view().id == "works"
-    assert "The works has no isometric view yet" in view.iso_bar.offer.text()
+    assert "The works has no painting yet" in view.iso_bar.offer.text()
     assert view.iso_bar.paint_button.text() == "Paint it (qwen-image, $0.02)"
     assert view.iso_bar.whole_button.isHidden()
     asked: list[str] = []
@@ -420,7 +420,7 @@ def test_each_area_s_isometric_view_lies_over_it_on_the_map(app):
 
     assert "click the ◆" in farm_item.toolTip()
     hover(mark.center())
-    assert farm_item.toolTip() == "This area has an isometric view: click to lay it over the map"
+    assert farm_item.toolTip() == "This area has a painting: click to lay it over the map"
     hover(QPointF(0, 0))
     assert "click the ◆" in farm_item.toolTip()
     # A click elsewhere on the place is left to the map (a drag starts);
@@ -457,12 +457,12 @@ def test_an_area_with_several_views_offers_a_choice(app):
     view.set_world(world, art, "Jane", keep_view=False)
     view.iso_button.setChecked(True)
     assert view.iso_bar.choose_button.isHidden()  # one view: nothing to choose
-    assert view.iso_bar.offer.text() == "The farm: its isometric view."
+    assert view.iso_bar.offer.text() == "The farm: its painting."
     again = painted.model_copy(update={"id": "again", "file": "images/map/again.png"})
     art.pictures.append(again)
     view.set_world(world, art, "Jane")
     assert shown_view(world, art, "farm") is again  # the latest, until one is chosen
-    assert view.iso_bar.offer.text() == "The farm: its isometric view (one of 2)."
+    assert view.iso_bar.offer.text() == "The farm: its painting (one of 2)."
     assert not view.iso_bar.choose_button.isHidden()
     asked: list[str] = []
     view.choose_view_requested.connect(asked.append)
@@ -1018,7 +1018,7 @@ def test_the_chooser_and_media_put_another_of_an_area_s_views_on_the_map(window,
     view.go_to("town")
     view.iso_button.setChecked(True)
     assert shown_view(world, art, "town") is newer
-    assert view.iso_bar.offer.text() == "Hellsville: its isometric view (one of 2)."
+    assert view.iso_bar.offer.text() == "Hellsville: its painting (one of 2)."
     assert not view.iso_bar.choose_button.isHidden()
 
     class FakeChooser:
@@ -1080,7 +1080,7 @@ def test_the_chooser_lists_an_area_s_views_and_answers_with_the_one_picked(app):
     assert choices[1].label() == "Painted by qwen-image\nof the map as it is now\n✓ On the map now"
     dialog = ChooseViewDialog("Hellsville", choices)
     assert dialog.list.count() == 2 and dialog.list.currentRow() == 1  # the one shown, first
-    assert dialog.windowTitle() == "Hellsville: choose the view to show"
+    assert dialog.windowTitle() == "Hellsville: choose the painting to show"
     dialog.list.setCurrentRow(0)
     dialog.accept()
     assert dialog.chosen == "b" and dialog.result() == QDialog.Accepted

@@ -1,10 +1,10 @@
-"""The isometric views on the map (Map → Isometric): each local area's own
+"""The paintings on the map (Paintings on the map): each local area's own
 painting, laid over the area it shows on the 2D map (gui/world_view.py),
 and what can be done for the area in view.
 
 The author (Oct 15 2026): the 2D map is the source of truth; an isometric
 view matches it closely, not exactly, and says so. Each area has its own
-view, the map marks the areas that have one before Isometric is pressed,
+view, the map marks the areas that have one before Paintings is pressed,
 and a view lies over the map where its area is, so it is plain what it
 shows and where that is. A view is never painted on its own: the author
 presses Paint it (with its price), and again once the map there has
@@ -41,14 +41,15 @@ from sealedlore.gui.wrap_row import WrapRow
 
 ZOOM_STEP = 1.25
 TRUTH_NOTE = (
-    "Painted from the map by {model}. The 2D map is the story's truth: this view matches it "
+    "Painted from the map by {model}. The 2D map is the story's truth: this painting matches it "
     "closely, not exactly."
 )
 OWN_NOTE = (
-    "A picture of your own. The 2D map is the story's truth: the storyteller never sees this view."
+    "A picture of your own. The 2D map is the story's truth: the storyteller never sees "
+    "this painting."
 )
 NO_VIEW_NOTE = (
-    "A view is painted from this area's map by an image model when you press Paint it, or is "
+    "A painting is made from this area's map by an image model when you press Paint it, or is "
     "a picture of your own; it lies over the map where the area is."
 )
 # How much of the map shows through the views, at most: some of the view
@@ -107,7 +108,7 @@ class IsometricDialog(QDialog):
 
     def __init__(self, place: str, image: QImage, painted_by: str, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"{place}: the isometric view")
+        self.setWindowTitle(f"{place}: a painting")
         self.picture = _PictureView()
         note = QLabel(view_note(painted_by))
         note.setObjectName("hintLabel")
@@ -171,7 +172,7 @@ class ChooseViewDialog(QDialog):
 
     def __init__(self, place: str, choices: list[ViewChoice], parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle(f"{place}: choose the view to show")
+        self.setWindowTitle(f"{place}: choose the painting to show")
         self.chosen: str | None = None
         # A list, the thumbnail beside its words: laid out as icons, the
         # third line of a label was cut to "…".
@@ -191,13 +192,13 @@ class ChooseViewDialog(QDialog):
             self.list.setCurrentRow(0)
         self.list.itemActivated.connect(lambda _item: self.accept())
         note = QLabel(
-            "Every view painted or brought in is kept; the one chosen lies over the map "
+            "Every painting made or brought in is kept; the one chosen lies over the map "
             "for the map as it is there now, and Media lists them all."
         )
         note.setObjectName("hintLabel")
         note.setWordWrap(True)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.button(QDialogButtonBox.Ok).setText("Show this view")
+        buttons.button(QDialogButtonBox.Ok).setText("Show this painting")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout = QVBoxLayout(self)
@@ -213,7 +214,7 @@ class ChooseViewDialog(QDialog):
 
 
 class IsometricBar(QWidget):
-    """Over the map while the isometric views are shown, one row where it
+    """Over the map while the paintings are shown, one row where it
     fits: what the area in view has (its view, an out-of-date one, or none),
     the offer to paint it or bring a picture in, a choice among its views
     when it has several, its view whole, and how much of the map shows
@@ -239,17 +240,17 @@ class IsometricBar(QWidget):
         self.paint_button.clicked.connect(self.paint_requested.emit)
         self.own_button = QPushButton("Use a picture of your own…")
         self.own_button.setToolTip(
-            "Bring in a picture from disk as this area's isometric view, cropped to its shape"
+            "Bring in a picture from disk as this area's painting, cropped to its shape"
         )
         self.own_button.clicked.connect(self.own_requested.emit)
-        self.choose_button = QPushButton("Choose a view…")
+        self.choose_button = QPushButton("Choose a painting…")
         self.choose_button.setToolTip(
-            "This area has several views: choose the one to lay over the map (Media lists "
+            "This area has several paintings: choose the one to lay over the map (Media lists "
             "them too, and can show one from there)"
         )
         self.choose_button.clicked.connect(self.choose_requested.emit)
         self.whole_button = QPushButton("See it whole")
-        self.whole_button.setToolTip("This area's view on its own, to zoom into")
+        self.whole_button.setToolTip("This area's painting on its own, to zoom into")
         self.whole_button.clicked.connect(self.whole_requested.emit)
         self.opacity = QSlider(Qt.Horizontal)
         self.opacity.setRange(MIN_OPACITY, 100)
@@ -293,11 +294,11 @@ class IsometricBar(QWidget):
         if painting:
             said = f"Painting the view of {place}…"
         elif not has_view:
-            said = f"{place} has no isometric view yet."
+            said = f"{place} has no painting yet."
         elif not current:
             said = f"{place}: the map has changed since this view was painted{several}."
         else:
-            said = f"{place}: its isometric view{several}."
+            said = f"{place}: its painting{several}."
         self.offer.setText(said)
         self.choose_button.setVisible(views > 1)
         self.choose_button.setEnabled(not painting)

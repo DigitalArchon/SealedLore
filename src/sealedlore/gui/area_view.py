@@ -604,6 +604,11 @@ class AreaView(QWidget):
     # ("drop" or "give"), the thing's name, its id, who it is given to.
     carry_wanted = Signal()
     carry_chosen = Signal(str, str, str, str)
+    # Paintings ▾ is about to show (the window fills it, `set_paintings`);
+    # Paint this place… chosen; one of the area's paintings chosen (its id).
+    paintings_wanted = Signal()
+    paint_place_requested = Signal()
+    painting_chosen = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -676,6 +681,21 @@ class AreaView(QWidget):
         self.me_button.setObjectName("viewToggleButton")
         self.me_button.setText("◎ Me")
         self.me_button.setToolTip("Centre the view on your character (Home)")
+        # Paintings of the place the author stands in (the author, Oct 17
+        # 2026: fancy renderings of the main places, kept): Paint this place…
+        # with its model and price, then the paintings there are, newest first.
+        self.paintings_button = QToolButton()
+        self.paintings_button.setObjectName("viewToggleButton")
+        self.paintings_button.setText("Paintings ▾")
+        self.paintings_button.setToolTip(
+            "A painting of this place as it is now, by an image model, from the map and "
+            "everyone on it (you choose when, and see the price first); and the paintings "
+            "it already has"
+        )
+        self.paintings_button.setPopupMode(QToolButton.InstantPopup)
+        self.paintings_menu = QMenu(self)
+        self.paintings_menu.aboutToShow.connect(self.paintings_wanted.emit)
+        self.paintings_button.setMenu(self.paintings_menu)
         self.hint = QLabel()
         self.hint.setObjectName("hintLabel")
         self.hint.setWordWrap(True)
@@ -717,6 +737,7 @@ class AreaView(QWidget):
                 self.edge_button,
                 self.travel_button,
                 self.carry_button,
+                self.paintings_button,
                 self.look_button,
                 self.me_button,
                 self.zoom_out,
@@ -1231,6 +1252,41 @@ class AreaView(QWidget):
             if not people:
                 nobody = sub.addAction("Nobody within reach to give it to")
                 nobody.setEnabled(False)
+
+    def set_paintings(
+        self,
+        place: str,
+        offer: tuple[str, float | None, str | None],
+        paintings: list[tuple[str, str]],
+    ) -> None:
+        """Paintings ▾'s entries for the place the author stands in: Paint
+        this place… with its `offer` (model, price, or the problem that
+        stops it, as `session.isometric_offer` gives them), then each of the
+        area's `paintings` (id, label), newest first; "none yet" when it has
+        none."""
+        self.paintings_menu.clear()
+        model, price, problem = offer
+        cost = f", ${price:.2f}" if price else ""
+        paint = self.paintings_menu.addAction(
+            f"Paint this place… ({model}{cost})" if model else "Paint this place…"
+        )
+        paint.setEnabled(problem is None and not self.locked)
+        paint.setToolTip(
+            problem
+            or f"An image model paints {place} as it is now, from the map and everyone on it; "
+            "the price is listed by the endpoint. Counted with the day's map pictures."
+        )
+        paint.triggered.connect(lambda _c=False: self.paint_place_requested.emit())
+        self.paintings_menu.addSeparator()
+        if not paintings:
+            none = self.paintings_menu.addAction(f"No painting of {place} yet")
+            none.setEnabled(False)
+            return
+        for picture_id, label in paintings:
+            action = self.paintings_menu.addAction(label)
+            action.triggered.connect(
+                lambda _c=False, pid=picture_id: self.painting_chosen.emit(pid)
+            )
 
     def set_edge(self, side: str | None) -> None:
         """The author's character stands on this side's edge (None: not on one)."""

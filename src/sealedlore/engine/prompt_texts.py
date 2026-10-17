@@ -2439,33 +2439,61 @@ _text(
 _text(
     "map.picture.isometric",
     MAP,
-    "Map pictures: the isometric view",
-    "Sent with the program's isometric render of the local map when the author asks for its "
-    "view: what the render is, any change first, the area in one line, and the ground's look.",
-    "This picture is a plain isometric render of a game map: the ground as tiles, each "
-    "building a simple block with a roof, walls, fences, paths and water as flat shapes, "
-    "small marks for the things standing about. Repaint it as 16-bit pixel art, {style}, "
-    "from exactly this viewpoint. Keep every building, wall, path, fence, "
-    "water and open ground where the render has it, the same footprint, size and shape, and "
-    "the same number of buildings. Add nothing the render does not show.{now} What is on it: "
-    "{places} The ground: {look}. Full-bleed scene, atmospheric light. No writing of any "
-    "kind: no labels, names, captions, arrows or signs, and no border.",
+    "Paintings: a place as it is now",
+    "Sent with the program's own picture of the area as it stands (the play view's tiles, "
+    "with the people and things where they are) when the author asks for a painting of the "
+    "place: keep the layout, paint it beautifully, the hour, the weather, the people and the "
+    "things at hand. The author's ruling (Oct 17 2026): consistent with the map, and a "
+    "beautiful rendition of what the scene should look like. Not yet measured.",
+    "This picture is the game map of a place as it stands right now: the ground and the "
+    "buildings as tiles seen from above at a slight angle, with the people and the things "
+    "standing where they are. Paint the same scene as a beautiful, detailed, atmospheric "
+    "picture, {style}, as a three-quarter view from above, matching the picture's angle. Keep "
+    "the layout exactly as the picture has it: every building, wall, fence, road, path and "
+    "stretch of water in the same place, the same size and shape, the same number of "
+    "buildings, and nothing added that is not there.{now} The place: {places} The ground: "
+    "{look}.{when}{people}{things} Light and sky to suit the hour and the weather. "
+    "Full-bleed. No writing of any kind: no labels, names, captions, arrows or signs, and "
+    "no border.",
     (
         ("now", "Each place the story changed, as map.picture.isometric.now says it, or nothing"),
         ("places", "The area in one line: the first sentence of its description, or its name"),
-        ("look", "The plan's ground in words (snow-covered country in winter, a station's decks)"),
-        ("style", "the pixel art's style in a few words, to suit the world (the tile set's)"),
+        ("look", "The ground in words (snow-covered country in winter, a station's decks)"),
+        ("style", "the art's style in a few words, to suit the world (the tile set's)"),
+        ("when", "The time of day and the weather, as a sentence with a space before, or nothing"),
+        ("people", "map.picture.isometric.people, or nothing when nobody is there"),
+        ("things", "map.picture.isometric.things, or nothing when nothing is at hand"),
     ),
 )
 
 _text(
     "map.picture.isometric.now",
     MAP,
-    "Map pictures: the isometric view, a change",
-    "One place the story changed, said first in the isometric view's prompt, in what its "
-    "redrawn plan shows (fire, ruins, walls down) with the story's words after.",
-    " As the story has it now, {place} is {state}: draw it so, not as it was.",
+    "Paintings: a change",
+    "One place the story changed, said first in a painting's prompt, in what its redrawn "
+    "plan shows (fire, ruins, walls down) with the story's words after.",
+    " As the story has it now, {place} is {state}: paint it so, not as it was.",
     (("place", "The place"), ("state", "How it looks now, then the story's words")),
+)
+
+_text(
+    "map.picture.isometric.people",
+    MAP,
+    "Paintings: the people there",
+    "The people in the place when a painting is asked for, each by what their card says they "
+    "look like, never by name (no writing): small figures where the picture stands them.",
+    " The people in it, each where the picture stands them, small in the scene: {people}.",
+    (("people", "each person's looks, from their card, separated by semicolons"),),
+)
+
+_text(
+    "map.picture.isometric.things",
+    MAP,
+    "Paintings: the things at hand",
+    "The things standing in the place when a painting is asked for, by name, where the "
+    "picture marks them.",
+    " The things standing about, where the picture marks them: {things}.",
+    (("things", "the things' names, comma-separated"),),
 )
 
 # The local map in the storyteller's tail (engine/world.py,

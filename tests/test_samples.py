@@ -205,7 +205,7 @@ def test_a_sample_s_map_shows_each_area_s_own_view_over_it(app, tmp_path: Path):
     view.iso_button.setChecked(True)
     assert view._isos[works.id].isVisible()
     assert view._isos[works.id].sceneBoundingRect() == view._plans[works.id].rect()
-    assert view.iso_bar.offer.text() == "The Ashcombe Works: its isometric view."
+    assert view.iso_bar.offer.text() == "The Ashcombe Works: its painting."
     window._chat_allows_close = lambda: True
     window.close()
 
@@ -235,7 +235,7 @@ def test_media_lists_only_the_views_the_map_shows(app, tmp_path: Path):
         window.images_panel.map_list.item(i).text().split("\n")
         for i in range(window.images_panel.map_list.count())
     ]
-    views = [parts[1] for parts in items if parts[0] == "Isometric view"]
+    views = [parts[1] for parts in items if parts[0] == "Painting"]
     assert sorted(views) == ["Hollowmouth", "Shaft Nine"]
     # The sample's avatars are listed too (Oct 17 2026), one per character.
     assert sum(parts[0] == "Avatar" for parts in items) >= 2

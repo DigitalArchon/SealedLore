@@ -132,11 +132,20 @@ def test_recommended_models_are_offered_beside_the_field_with_their_notes(app):
     from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS, recommended_model
 
     choices = RECOMMENDED_IMAGE_MODELS["map_isometric_model"]
-    assert choices[0].id == Config().map_isometric_model == "flux-2-klein-9b"
-    assert recommended_model("map_isometric_model", "bytedance/seedream-v5.0-pro/edit") is not None
+    # Paintings of a place (the author, Oct 17 2026): FLUX.3 Klein's edit
+    # model, as for the sprites, with Seedream and Nano Banana enhanced.
+    assert choices[0].id == Config().map_isometric_model == Config().map_sprite_model
+    assert choices[0].id == "blackforestlabs/flux-3/klein/edit-image"
+    assert [c.id for c in choices if c.tag == "enhanced"] == [
+        "bytedance/seedream-v5.0-pro/edit",
+        "nano-banana-pro-edit",
+    ]
+    assert "$0.09" in recommended_model("map_isometric_model", choices[2].id).note
+    assert "$0.14" in recommended_model("map_isometric_model", choices[3].id).note
+    assert recommended_model("map_isometric_model", "qwen-image") is not None
     field = ModelField("", recommended=choices)
     actions = [a for a in field.recommended_button.menu().actions() if not a.isSeparator()]
-    assert actions[0].text() == "FLUX.2 klein 9B (default)"
+    assert actions[0].text() == "FLUX.3 Klein (default)"
     assert not actions[1].isEnabled() and "layout" in actions[1].text()  # the note
     premium = next(a for a in actions if a.text().startswith("Seedream 5.0 Pro"))
     premium.trigger()

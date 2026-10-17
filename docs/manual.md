@@ -1008,38 +1008,45 @@ Everything drawn for the map stays with the story: a restart, Duplicate
 settings and a scenario file keep the art and the pictures. Story pictures
 (Image…) still show you every request first.
 
-Each area on the map (a farm, a town, a works) can have an
-**isometric view**: the area painted in isometric by an image model (Settings
-→ Images → **Isometric view model**: FLUX.2 klein 9B unless you choose
-another, about a cent and a half a view; **Recommended** beside it offers Qwen
-Image, free within a NanoGPT subscription's allowance, and Seedream 5.0 Pro,
-the most faithful, at about six times the price). An area that has one is marked **◆ Isometric view**
-wherever its view isn't drawn: at its corner on the local map, and under its
-name on the region, so you can see which areas have one without going into
-them; click the mark to see that area's view. **Isometric** lays every
-area's view over the map, exactly where the area is, so you see what it
-shows and where that is among everything around it; **Fade** lets the map
-show through, and **See it whole** (or a double-click on a view) opens it on
+Each area on the map (a farm, a town, a works) can have **paintings**: the
+place as it stands, painted by an image model (Settings → Images →
+**Painting model**: FLUX.3 Klein unless you choose another, about a cent a
+painting; **Recommended** beside it offers Qwen Image, free within a NanoGPT
+subscription's allowance, and two enhanced choices, Seedream 5.0 Pro at about
+$0.09 and Nano Banana Pro at about $0.14). On the play view, **Paintings ▾**
+is for the place you stand in: **Paint this place…** shows the model and its
+price first (it counts with the day's map pictures) and paints the area as
+the play view shows it at that moment, everyone and everything where they
+stand, in the hour's light and the weather; under it the menu lists the
+place's paintings, newest first, each opening on its own to zoom into. The
+model is given the program's own picture of the area (the tiles, with the
+people and things on them) and asked to keep every building, wall, road and
+stretch of water where it is while painting a finished, atmospheric scene,
+and is told the time of day, the weather, who is there (by their looks,
+never their names, so nothing is written on it) and the things at hand. On
+the 2D map, an area that has a painting is marked **◆ Painting** wherever
+its painting isn't drawn: at its corner on the local map, and under its name
+on the region, so you can see which areas have one without going into them;
+click the mark to see that area's. **Paintings** lays every area's latest
+painting over the map, exactly where the area is, so you see what it shows
+and where that is among everything around it; **Fade** lets the map show
+through, and **See it whole** (or a double-click on a painting) opens it on
 its own to zoom into. The bar over the map is for the area in the middle of
 the view, wherever you have moved the map: **Paint it** paints that area
-from its map, giving the model and its price first (it counts with the day's
-map pictures), and **Paint it again** paints another take. The model is
-given the program's own isometric render of the area's plan, every building
-a plain block, and asked to repaint it keeping everything where it is, with
-one line about the place and its ground; given the top-down plan or a
-paragraph of description, models rearranged the buildings. The samples come
-with a view of every area. The 2D map is the story's truth: a painting matches it
-closely, not exactly. Once the story changes something there (the barn
-burns), the view says it is out of date and offers to paint it again. **Use
-a picture of your own…** takes a picture from disk as the area's view
-instead, cropped first to the area's shape. Every view painted or brought in
-is kept: the newest lies over the map, and once an area has several the bar
-says so and **Choose a view…** lets you swap between them (the choice is for
-the map as it is there now; a view painted after a change is chosen for that
-change). The views and the postcards are in Media too, under **Map**, the
-one on the map marked; right-click another there for **Show this view on
-the map**. While you play on an area, its own view isn't shown over it; zoom the
-Region in on another area to see that one's.
+from its map, giving the model and its price first, and **Paint it again**
+paints another take. The samples come with a painting of every area. The 2D
+map is the story's truth: a painting matches it closely, not exactly. Once
+the story changes something there (the barn burns), the painting says it is
+out of date and offers to paint it again. **Use a picture of your own…**
+takes a picture from disk as the area's painting instead, cropped first to
+the area's shape. Every painting made or brought in is kept: the newest lies
+over the map, and once an area has several the bar says so and **Choose a
+painting…** lets you swap between them (the choice is for the map as it is
+there now; a painting made after a change is chosen for that change). The
+paintings and the postcards are in Media too, under **Map**, the one on the
+map marked; right-click another there for **Show this painting on the
+map**. While you play on an area, its own painting isn't shown over it; zoom
+the Region in on another area to see that one's.
 
 A story that keeps a map makes it part of the window: the Inspector, beside
 the story, takes half the window with **Map** as its first page. **Map**,
@@ -1447,7 +1454,7 @@ them, since they cost money. The Media tab shows every picture and video in
 the story in one place: **Cast** (every picture on every character's card),
 **Lore** (the same for lore entries), **Story** (the background first, then
 the story's own pictures and videos, newest first) and **Map** (the map's
-isometric views and postcards). A picture drawn for a card shows under its
+paintings and postcards, and the avatars). A picture drawn for a card shows under its
 card; right-click one to see it whole, go to its card, save it, **Draw
 again…** or **Edit…**, as on its card. Right-click the background to see it
 whole, save it, **Draw a new background…** (the picture dialog, with a
@@ -1469,14 +1476,14 @@ key is used only when the address is the chat endpoint's own host.
 
 Every picture you bring in from disk opens **Crop the picture** first: a
 card's picture or portrait, **Add a picture from disk…** in the picture and
-video dialogs, the background, a picture in the plot file editor, or an
-isometric view of your own. Drag the frame to move it, a corner to resize it,
+video dialogs, the background, a picture in the plot file editor, or a
+painting of your own. Drag the frame to move it, a corner to resize it,
 or across the picture to draw a new one. **Shape** leaves it free, to take
 any part you like, or holds it to the exact shape the app uses:
 
 - a portrait, or a place or lore picture, as your portrait model draws them;
 - the background, as the story area is in the window now;
-- an isometric view, in the shape of a map area (5:3), which it covers;
+- a painting, in the shape of a map area (5:3), which it covers;
 - a square, or the picture's own shape.
 
 Each place opens it on the shape it calls for. **Use the whole picture**

@@ -61,8 +61,10 @@ class PictureJob:
     # The picture to draw it from (a change), by its file; None for a first.
     reference: str | None = None
     from_picture: str | None = None
-    # An isometric view: the plan it is painted from (its `made_at`).
+    # A painting of a place: the plan it is painted from (its `made_at`),
+    # and its moment (the time of day, the weather, who was there).
     plan: str = ""
+    scene: str = ""
 
 
 def looks_of(summary: str | None, description: str | None) -> str:
@@ -409,6 +411,11 @@ def one_line(place: WorldPlace) -> str:
     return (first or place.name) + "."
 
 
+# How many people's looks and things' names a painting's prompt carries.
+PAINTING_PEOPLE = 6
+PAINTING_THINGS = 8
+
+
 def isometric_job(
     world: WorldMap,
     art: WorldArt,
@@ -417,28 +424,52 @@ def isometric_job(
     look: str = "",
     style: str = "in a style that suits the world's mood",
     texts: PromptTexts = DEFAULT_TEXTS,
+    when: str = "",
+    people: Sequence[str] = (),
+    things: Sequence[str] = (),
 ) -> PictureJob:
-    """The isometric view of an area as a picture job: the program's own
-    isometric render of its plan goes with the prompt (gui/map_iso.py, made
-    on the painting's thread), the prompt says what the render is and asks
-    for it repainted, any change first in words a painter can draw, the area
-    in one line (`one_line`) and the ground's look (`world_art.plan_ground`).
-    No prompt writer: measured, its paragraph cost layout."""
+    """A painting of an area as a picture job (the author, Oct 17 2026: keep
+    to the map, and a beautiful rendition of the scene as it is now). The
+    program's own picture of the area goes with the prompt (the play view's
+    tiles with the people and things on it, gui/map_render.py, made on the
+    painting's thread); the prompt asks for it painted keeping the layout,
+    any change first in words a painter can draw, the area in one line
+    (`one_line`), the ground's look (`world_art.plan_ground`), `when` (the
+    time of day and the weather, `area.now_words`), the `people` there by
+    their looks (never a name: no writing) and the `things` at hand by
+    name. No prompt writer: measured, its paragraph cost layout."""
     area = world.places[area_id]
     now = ""
     for place in _changed(world, area_id):
         seen = seen_change(art, place)
         change = f"{seen} (the story: {place.state})" if seen else place.state
         now += texts.fill("map.picture.isometric.now", place=place.name, state=change)
+    looks = [" ".join(p.split()).rstrip(".") for p in people if p and p.strip()]
+    names = list(dict.fromkeys(" ".join(t.split()) for t in things if t and t.strip()))
+    when = " ".join(when.split())
     prompt = texts.fill(
         "map.picture.isometric",
         now=now,
         places=one_line(area),
         look=LOOK_WORDS.get(look, "as the map shows it"),
         style=style,
+        when=f" {when}" if when else "",
+        people=(
+            texts.fill("map.picture.isometric.people", people="; ".join(looks[:PAINTING_PEOPLE]))
+            if looks
+            else ""
+        ),
+        things=(
+            texts.fill("map.picture.isometric.things", things=", ".join(names[:PAINTING_THINGS]))
+            if names
+            else ""
+        ),
     )
     state = isometric_state(world, area_id)
     plan = area_plan(world, art, area_id)
+    scene = " ".join(
+        part for part in (when, f"{len(looks)} there." if looks else "") if part
+    ).strip()
     return PictureJob(
         key=f"isometric:{area_id}:{state}" if state else f"isometric:{area_id}",
         subject="isometric",
@@ -447,4 +478,5 @@ def isometric_job(
         prompt=prompt,
         state=state,
         plan=plan.made_at if plan is not None else "",
+        scene=scene,
     )
