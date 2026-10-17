@@ -111,6 +111,11 @@ class WorldDelta(BaseModel):
     # unnamed characters shown as Unknown 1, 2, 3 until they are named).
     unknowns: dict[str, str] = Field(default_factory=dict)
     named: dict[str, str] = Field(default_factory=dict)
+    # Whether each person the passage placed at a building or room is
+    # outside it (at its door, on its porch, in its yard: True) or in it
+    # (False); folded onto `WorldMap.outside`. Live (Oct 17 2026), a knock on
+    # the farmhouse door stood John in its kitchen.
+    outside: dict[str, bool] = Field(default_factory=dict)
 
     def empty(self) -> bool:
         return not (
@@ -126,6 +131,7 @@ class WorldDelta(BaseModel):
             or self.weather is not None
             or self.unknowns
             or self.named
+            or self.outside
         )
 
 
@@ -153,6 +159,9 @@ class WorldMap(BaseModel):
     # and the highest number given so far, so a label is never given twice.
     unknowns: dict[str, str] = Field(default_factory=dict)
     unknowns_made: int = 0
+    # Who is at their place but outside it (a building's door, porch, yard):
+    # stood at its door on the ground round it, not inside.
+    outside: list[str] = Field(default_factory=list)
 
 
 # --- The map's art (engine/world_art.py), kept in world_art.json -------------

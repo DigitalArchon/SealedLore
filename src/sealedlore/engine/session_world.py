@@ -223,6 +223,7 @@ class WorldRuntime:
                     )
                     if n
                 ),
+                last=self.texts["map_read.outside"] if self.map_first else "",
             ),
             params=self.side_params(model, max_tokens=WORLD_MAX_TOKENS),
         )

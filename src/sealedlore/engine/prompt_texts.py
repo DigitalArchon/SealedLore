@@ -4427,6 +4427,29 @@ passage puts at one of those spots; give their "where" too, with its quote.""",
     (("spots", "the spots, comma-separated"),),
 )
 
+# A building's door, porch or yard is "at the building" (the measured rule
+# in `map_read.system`), and the play view stood whoever was there inside it:
+# live (Oct 17 2026) John knocking on the farmhouse door stood in its
+# kitchen, and the next passage was told so. Two blind Claude judges on 64
+# logged reads that put someone at a building: 10 were outside it. Replayed
+# on DeepSeek V4.1 Flash twice: told nothing, 0 of 10 marked; this line
+# among the others before the passage, 4 and 2 of 10; last, after the
+# passage, 5 and 6 of 10, with 1 and 2 of 46 inside called outside. Last,
+# in the user message only, so the read is otherwise sent as measured.
+# SealedLoreDocs design/map.md, "Outside a building".
+_text(
+    "map_read.outside",
+    MAP,
+    "Map-first: the read, outside a building",
+    "Last in the map read's request in a story played on the map: whoever is at a building "
+    "or room but outside it is marked so, and the play view stands them at its door rather "
+    "than inside.",
+    "Before you answer: for each person you place at a building or a room, check whether "
+    "the passage leaves them inside it or outside it. Someone at its door from outside, on "
+    "its porch or steps, in its yard, walking up to it or just come out of it is outside: "
+    'place them at it all the same, with "outside": true beside the quote.',
+)
+
 _text(
     "map_read.minutes",
     MAP,

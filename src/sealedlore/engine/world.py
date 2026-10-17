@@ -128,7 +128,8 @@ def render_map(world: WorldMap) -> str:
     lines.append("")
     lines.append("WHO IS WHERE")
     for who, place_id in world.where.items():
-        lines.append(f"- {who}: {place_name(world, place_id)}")
+        outside = " (outside it)" if who in world.outside else ""
+        lines.append(f"- {who}: {place_name(world, place_id)}{outside}")
     if not world.where:
         lines.append("(nobody placed yet)")
     lines.append("")
@@ -153,16 +154,18 @@ def build_world_read_messages(
     passage: str,
     texts: PromptTexts = DEFAULT_TEXTS,
     note: str = "",
+    last: str = "",
 ) -> list[PromptMessage]:
     """`note`: a line after the author's character, for a simple chat (who
-    "I" and "you" are, `map_read.chat`); nothing for a story."""
+    "I" and "you" are, `map_read.chat`); nothing for a story. `last`: after
+    the passage, where the read reads it last (`map_read.outside`)."""
     user = (
         f"THE MAP BEFORE THE PASSAGE\n\n{render_map(world)}\n\n"
         f"PEOPLE: {', '.join(people) or '(none named yet)'}\n"
         f"The author's character: {held or 'not set'}\n"
         + (f"{note}\n" if note else "")
         + f"\n{author_label.upper()}:\n{author_turn}\n\n"
-        f"THE LATEST PASSAGE:\n{passage}"
+        f"THE LATEST PASSAGE:\n{passage}" + (f"\n\n{last}" if last else "")
     )
     return [
         PromptMessage(role="system", parts=(ContentPart(text=texts["map_read.system"]),)),
@@ -290,7 +293,10 @@ def render_map_context(
     lines = [SECTION_MAP_HEADING, texts["map.context"], ""]
     who = held or "The author's character"  # a Question before anyone is held
     verb = "are" if who.lower() == "you" else "is"  # a chat's user, unnamed
-    lines.append(f"{who} {verb} at: " + here.name + "".join(f", in {o.name}" for o in chain[1:]))
+    outside = "just outside " if held is not None and held in world.outside else ""
+    lines.append(
+        f"{who} {verb} at: {outside}" + here.name + "".join(f", in {o.name}" for o in chain[1:])
+    )
     if here.what or here.state:
         said = " ".join(here.what.split())
         if here.state:
@@ -726,13 +732,16 @@ def resolve_reply(
             # the next read knows them.
             label = next_unknown(world, delta)
             delta.unknowns[label] = who[0].lower() + who[1:] if _ARTICLE.match(who) else who
+        outside = entry.get("outside") is True
         if label is not None:
             delta.where[label] = place
+            delta.outside[label] = outside
             continue
         canonical = person_name(
             who, people, [*named_people, *(n for n in delta.where if not is_unknown(n))]
         )
         delta.where[canonical] = place
+        delta.outside[canonical] = outside
     for entry in _entries(reply, "named"):
         label = unknown_for(_text(entry.get("who")), world, delta)
         name = _text(entry.get("name"))
@@ -755,6 +764,8 @@ def resolve_reply(
         delta.unknowns.pop(label, None)
         if label in delta.where:
             delta.where.setdefault(canonical, delta.where.pop(label))
+        if label in delta.outside:
+            delta.outside.setdefault(canonical, delta.outside.pop(label))
     for entry in _entries(reply, "things"):
         name = _text(entry.get("name"))
         if not name or quoted(entry) is None:
@@ -1124,6 +1135,8 @@ def applied(
         out.unknowns.pop(label, None)
         if label in out.where:
             out.where.setdefault(name, out.where.pop(label))
+        if label in out.outside:
+            out.outside = [name if n == label else n for n in out.outside]
         been = out.visited.pop(label, [])
         mine = out.visited.setdefault(name, [])
         mine.extend(p for p in been if p not in mine)
@@ -1132,6 +1145,13 @@ def applied(
         seen = out.visited.setdefault(who, [])
         if place_id not in seen:
             seen.append(place_id)
+    # Placed anew without the word (an older delta has none), someone is in
+    # their place.
+    for who in [*delta.where, *delta.outside]:
+        if delta.outside.get(who) and who not in out.outside:
+            out.outside.append(who)
+        elif who in out.outside and not delta.outside.get(who):
+            out.outside.remove(who)
     for thing in delta.things:
         out.things[thing.id] = thing.model_copy(deep=True)
     out.conflicts.extend(delta.conflicts)

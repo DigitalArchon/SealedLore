@@ -685,6 +685,13 @@ class AreaRuntime:
             if point is None and name != held and place_id == where.get(held or ""):
                 point = self._spot_point(mine, world, art)
             target = area_of(world, art, place_id, point)
+            if name in world.outside and target == place_id:
+                # At a building but outside it (its door, porch, yard): on the
+                # ground round it, at its door (`_stand` finds its front).
+                parent = world.places[place_id].inside if place_id in world.places else None
+                around = area_of(world, art, parent, point) if parent else None
+                if around is not None and around != place_id:
+                    target = around
             # Stood on the land only until their place had a plan: there now.
             arrived = (
                 spot is not None
@@ -1265,6 +1272,12 @@ class AreaRuntime:
         self._record_action(state, user_node, world)
         spot = state.spots.get(held or "")
         to = to or self.place_of_spot(spot, world)
+        if held is not None and held in world.outside and to == world.where.get(held):
+            # Walked in from its door: in it now.
+            if spot is not None and place_of_area(spot.area) == to:
+                delta = user_node.meta.world or WorldDelta()
+                delta.outside[held] = False
+                user_node.meta.world = delta
         if held is not None and to is not None and world.where.get(held) != to:
             area = area_of(world, self.map_art_copy(), world.where.get(held))
             if area != to or to not in world.places:

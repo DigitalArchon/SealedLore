@@ -1087,7 +1087,9 @@ drawn tile by tile in a tile set: the farm and its buildings, the inside of
 the farmhouse with its rooms and furniture, everyone where the story put
 them, you ringed in gold. The map is exact, and the storyteller is told it
 exactly: where you stand, who is how far from you and which way, what is
-within reach, the doorways out.
+within reach, the doorways out. Someone a passage leaves at a building's
+door, on its porch or in its yard stands outside it, at its door, until the
+story or a walk takes them in.
 
 - **Walking.** Click anywhere to walk there (the arrow keys or WASD take a
   step); the tile under the pointer shows gold where you can stand and red
