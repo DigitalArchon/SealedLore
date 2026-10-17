@@ -99,7 +99,7 @@ from sealedlore.engine.tile_sets import (
     slug,
 )
 from sealedlore.engine.validators import locate_quote
-from sealedlore.engine.world import _NOTHING_SAID, _find_thing, applied, key
+from sealedlore.engine.world import _NOTHING_SAID, _find_thing, applied, key, unknown_for
 from sealedlore.engine.world_art import is_window, parse_window, patch_at, patch_under
 from sealedlore.engine.world_layout import (
     CHILD_SHARE,
@@ -1269,14 +1269,14 @@ class AreaRuntime:
         # Only someone the read also placed (with a quote): `at` alone moved
         # people the passage left where they were (the second review).
         placed = {
-            self._map_person(str(entry.get("who") or ""))
+            self._map_person(str(entry.get("who") or ""), world)
             for entry in (reply.get("where") or [])
             if isinstance(entry, dict)
         }
         for name, spot_name in list(at.items()):
             found = marks_in(str(spot_name or ""))
             mark = by_point.get((found[0].x, found[0].y)) if found else None
-            person = self._map_person(str(name))
+            person = self._map_person(str(name), world)
             if mark is None or person is None or person not in placed:
                 continue
             at.pop(name)
@@ -1293,7 +1293,7 @@ class AreaRuntime:
         area = self.area(me.area, world, art, things=state.things) if me is not None else None
         if area is not None:
             for name, spot_name in at.items():
-                person = self._map_person(str(name))
+                person = self._map_person(str(name), world)
                 tile = anchor_tile(area, str(spot_name))
                 if person is None or tile is None or person not in placed:
                     continue
@@ -1322,13 +1322,15 @@ class AreaRuntime:
                 state.seconds += int(min(minutes, MAX_READ_MINUTES)) * 60
         node.meta.area = state
 
-    def _map_person(self, name: str) -> str | None:
+    def _map_person(self, name: str, world: WorldMap | None = None) -> str | None:
+        """Who `name` is on the map: someone in the story, else (with the
+        map) someone not named yet, by their label or description."""
         from sealedlore.engine.scene_state import same_person
 
         for person in self.map_people():
             if same_person(name, person):
                 return person.name
-        return None
+        return unknown_for(name, world) if world is not None and name else None
 
     def read_spots(self, path: Sequence[Node], held: str | None = None) -> str:
         """The spots near the author's character (`held`: the passage's, else

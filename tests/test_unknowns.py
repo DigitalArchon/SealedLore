@@ -103,3 +103,17 @@ def test_unknown_people_stand_on_the_map_and_reach_the_storyteller_by_their_desc
 
 def _fold(world, delta: WorldDelta):
     return applied(world, delta)
+
+
+def test_a_read_may_stand_an_unknown_at_a_spot_by_their_description(tmp_path, story, cast):
+    """Live, the read placed the girl and stood her "at the doorway" by her
+    description: the spot was dropped, since no one in the story was called so."""
+    read = json.dumps(
+        {"where": [where("the teenage girl")], "at": {"the teenage girl": "the cast-iron stove"}}
+    )
+    session = make_session(tmp_path, story, cast, [SOURCE, read])
+    session.config.scene_reads = "manual"
+    list(session.send(turn("I call up the stairs.")))
+    girl = session.path()[-1].meta.area.spots["Unknown 1"]
+    stove = next(p for p in session.area("house").placements if "stove" in p.name)
+    assert abs(girl.x - stove.x) + abs(girl.y - stove.y) <= 2
