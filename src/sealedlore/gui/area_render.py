@@ -474,6 +474,8 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
                     )
             elif c == "~" and info.lava:
                 lights.append(((x + 0.5) * px, (y + 0.5) * px, px * 3.0))
+            elif c == "&":
+                _stairs(p, x, y, px, deck=deck)
     # 5. dressing: a rug in some rooms, decorations along walls, clear of
     # doorways and furniture
     near_door = np.zeros((h, w), bool)
@@ -636,6 +638,38 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
             mean = img[inside].mean(0)
             img = (img - mean) * 1.25 + mean * (135 / lum)
     return _qimg(_vignette(img, 0.18, 0.3))
+
+
+def _stairs(p: QPainter, x: int, y: int, px: int, *, deck: bool = False) -> None:
+    """A stairs tile (engine/levels.py: the door between a plan's levels),
+    drawn on the floor's texture: a flight of four treads running up the
+    tile, each a lit edge over a shaded riser, in a dark well; on a deck a
+    grey steel ladder of rungs instead."""
+    X, Y = x * px, y * px
+    inset = max(1.0, px * 0.08)
+    well = QRectF(X + inset, Y + inset, px - 2 * inset, px - 2 * inset)
+    p.fillRect(well, QColor(10, 9, 9, 150))
+    treads = 4
+    step = well.height() / treads
+    for i in range(treads):
+        top = well.y() + i * step
+        shade = 70 + i * 28  # the lower treads nearer the eye, lighter
+        tread = (
+            QColor(shade + 20, shade + 10, shade - 10)
+            if not deck
+            else QColor(shade, shade + 5, shade + 15)
+        )
+        p.fillRect(QRectF(well.x(), top, well.width(), step), tread)
+        p.fillRect(
+            QRectF(well.x(), top, well.width(), max(1.0, step * 0.25)), QColor(255, 255, 255, 90)
+        )
+        p.fillRect(
+            QRectF(well.x(), top + step - max(1.0, step * 0.2), well.width(), max(1.0, step * 0.2)),
+            QColor(0, 0, 0, 110),
+        )
+    rail = max(1.0, px * 0.06)
+    p.fillRect(QRectF(well.x(), well.y(), rail, well.height()), QColor(0, 0, 0, 140))
+    p.fillRect(QRectF(well.right() - rail, well.y(), rail, well.height()), QColor(0, 0, 0, 140))
 
 
 def _burning(
@@ -871,6 +905,12 @@ def _render_outdoor(area: Area, source: TileSource) -> QImage:
     p.setRenderHint(QPainter.Antialiasing, True)
     lights: list[tuple[float, float, float]] = []
     rng = np.random.default_rng(_seed(area.id))
+    # Stairs on the ground (a cellar's hatch, steps down into a dungeon):
+    # on the terrain, under whatever stands.
+    for y in range(h):
+        for x in range(w):
+            if rows[y][x] == "&":
+                _stairs(p, x, y, px)
     # 3. everything that stands, back to front by its foot
     stand: list[tuple[float, str, object]] = []
     placed = {(f.x, f.y): f for f in area.placements}

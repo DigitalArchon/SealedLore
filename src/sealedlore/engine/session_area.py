@@ -39,6 +39,7 @@ from sealedlore.engine.area import (
     area_of,
     bare,
     build_area,
+    build_level,
     build_window,
     clamped_tile,
     exit_side,
@@ -48,6 +49,7 @@ from sealedlore.engine.area import (
     path,
     point_tile,
     render_positions,
+    stairs_landing,
     stand_near,
     tile_point,
     walk_metres,
@@ -57,6 +59,7 @@ from sealedlore.engine.area import (
 )
 from sealedlore.engine.chronicle_read import stated_skip
 from sealedlore.engine.furnish import FURNISH_MAX_TOKENS, furnish_messages, parse_furnishing
+from sealedlore.engine.levels import level_name, parse_level, place_of_area
 from sealedlore.engine.marks import (
     chain_words,
     compass,
@@ -396,13 +399,17 @@ class AreaRuntime:
         art = art if art is not None else self.map_art_copy()
         if is_window(area_id):
             return self._window(area_id, world, art)
-        place = world.places.get(area_id)
+        parsed = parse_level(area_id)
+        level = parsed[1] if parsed is not None else 0
+        place = world.places.get(parsed[0] if parsed is not None else area_id)
         if place is None:
             return None
         layout = art.layout_shown(place.id, place.state)
         if layout is None:
             return None
-        plan = art.furnishing_for(place.id, place.state)
+        if level and layout.level(level) is None:
+            return None
+        plan = art.furnishing_for(area_id, place.state)
         children = tuple(
             sorted(
                 (c.id, c.name, c.x, c.y, c.size, c.kind)
@@ -422,6 +429,9 @@ class AreaRuntime:
             place.state,
             layout.made_at,
             len(layout.rows),
+            # A level arriving puts stairs on the plan (engine/levels.py).
+            tuple((lv.index, lv.made_at) for lv in layout.levels),
+            level,
             plan.made_at if plan is not None else "",
             self.story.defaults.map_density,
             children,
@@ -432,10 +442,12 @@ class AreaRuntime:
             self._area_cache = {}
         found = self._area_cache.get(cache_key)
         if found is None:
-            found = build_area(
+            build = build_area if not level else build_level
+            args = (place.id,) if not level else (place.id, level)
+            found = build(
                 world,
                 art,
-                place.id,
+                *args,
                 density=self.story.defaults.map_density,
                 people=self.area_people(),
             )
@@ -606,6 +618,14 @@ class AreaRuntime:
             ):
                 spots[name] = spot
                 continue
+            if (
+                spot is not None
+                and spot.area != target
+                and place_of_area(spot.area) == target
+                and self.area(spot.area, world, art) is not None
+            ):
+                spots[name] = spot  # on another level of the place: still in it
+                continue
             near_me = (
                 name != held
                 and mine is not None
@@ -697,6 +717,12 @@ class AreaRuntime:
 
     @staticmethod
     def _way_in(area: Area) -> tuple[int, int]:
+        if area.level:
+            # A level is come into by its stairs (engine/levels.py): a step
+            # off the stairs nearest the plan's own level.
+            stairs = sorted(area.stairs_entrances(), key=lambda e: e.side != "down")
+            if stairs:
+                return stairs_landing(area, (stairs[0].x, stairs[0].y))
         if area.indoor:
             inside = inside_door(area)
             if inside is not None:
@@ -742,6 +768,9 @@ class AreaRuntime:
             return None
         if spot.area in world.places:
             return spot.area
+        parsed = parse_level(spot.area)
+        if parsed is not None and parsed[0] in world.places:
+            return parsed[0]
         if is_window(spot.area):
             area = self.area(spot.area, world)
             if area is not None and area.place_id in world.places:
@@ -810,15 +839,29 @@ class AreaRuntime:
         world = self.world()
         entrance = area.entrance_at(me.x, me.y)
         if entrance is not None:
-            return entrance.place_id, world.places[entrance.place_id].name
+            return entrance.place_id, self.area_title(entrance.place_id, world)
         if area.indoor and (me.x, me.y) in area.exits and area.parent is not None:
             parent = world.places.get(area.parent)
             return area.parent, parent.name if parent else "outside"
         return None
 
+    def area_title(self, area_id: str, world: WorldMap | None = None) -> str:
+        """An area's name for a message: a place's, a level's with its
+        level ("The farmhouse, upper floor"), open country's."""
+        world = world if world is not None else self.world()
+        parsed = parse_level(area_id)
+        place = world.places.get(parsed[0] if parsed is not None else area_id)
+        if place is None:
+            return "open country" if is_window(area_id) else area_id
+        if parsed is None:
+            return place.name
+        layout = self.map_art_copy().layout_shown(place.id, place.state)
+        return f"{place.name}, {level_name(layout, parsed[1]).lower()}"
+
     def go_through(self) -> AreaState | None:
         """Through the door the author's character stands in: into the
-        building, or out of it to stand outside its door."""
+        building, or out of it to stand outside its door; up or down the
+        stairs they stand on, to a step off the stairs on the other level."""
         door = self.door_here()
         if door is None:
             return None
@@ -831,6 +874,18 @@ class AreaRuntime:
         if here is None or there is None:
             return None
         taken = {(s.x, s.y) for n, s in state.spots.items() if n != held and s.area == there.id}
+        stairs = here.entrance_at(me.x, me.y)
+        if stairs is not None and stairs.stairs:
+            x, y = stairs_landing(there, (me.x, me.y), taken)
+            state.spots[held] = Spot(area=there.id, x=x, y=y)
+            self._add_time(
+                state,
+                DOOR_SECONDS,
+                self.area_title(here.id, world),
+                self.area_title(there.id, world),
+            )
+            self._set_live(state)
+            return state
         if not here.indoor:
             entrance = here.entrance_at(me.x, me.y)
             spot = inside_door(there, entrance.side if entrance else None) or self._way_in(there)
@@ -865,6 +920,7 @@ class AreaRuntime:
         here = me.area if me is not None else world.where.get(self.held_name() or "")
         if here is None:
             return []
+        here = place_of_area(here) or here  # a level of a building is the building
         # From where they stand, not from the area's middle: the way's length
         # is what the clock moves by and the storyteller is told.
         start = self.held_point(state, world, art) or position(world, here)
@@ -1298,11 +1354,53 @@ class AreaRuntime:
             action_line=action_line,
             things=state.things,
             texts=self.texts,
+            elsewhere=self._on_other_levels(area, state.spots, held, world, art),
+            level_names=self._level_names(area, world, art),
         )
         if not text:
             return ""
         heading = self.texts["map.positions"]
         return text.replace(text.split("\n", 1)[0], heading, 1)
+
+    def _level_names(self, area: Area, world: WorldMap, art: WorldArt) -> dict[str, str]:
+        """Each level the area's stairs lead to, named for the storyteller
+        ("the upper floor", "the ground floor"), by its area id."""
+        place = world.places.get(area.place_id)
+        if place is None:
+            return {}
+        layout = art.layout_shown(place.id, place.state)
+        deck = area.look == "space"
+        out = {}
+        for e in area.stairs_entrances():
+            parsed = parse_level(e.place_id)
+            index = parsed[1] if parsed is not None else 0
+            out[e.place_id] = f"the {level_name(layout, index, deck=deck).lower()}"
+        return out
+
+    def _on_other_levels(
+        self, area: Area, spots: Mapping[str, Spot], held: str, world: WorldMap, art: WorldArt
+    ) -> list[str]:
+        """'Also in The farmhouse, on another level: Jane (upper floor)': the
+        people on the other levels of the place the author's character is
+        in, so the storyteller knows who is in the building though not in
+        the room."""
+        if area.window or (not area.level and not area.stairs_entrances()):
+            return []
+        place = world.places.get(area.place_id)
+        if place is None:
+            return []
+        layout = art.layout_shown(place.id, place.state)
+        deck = area.look == "space"
+        found = []
+        for name, spot in spots.items():
+            if name == held or spot.area == area.id or place_of_area(spot.area) != area.place_id:
+                continue
+            parsed = parse_level(spot.area)
+            index = parsed[1] if parsed is not None else 0
+            found.append(f"{name} ({level_name(layout, index, deck=deck).lower()})")
+        if not found:
+            return []
+        return [f"Also in {place.name}, on another level: " + ", ".join(found[:8]) + "."]
 
     def _turn_node(self, nodes: Sequence[Node], turn_node_id: str | None) -> Node | None:
         """The author's turn being sent after `nodes`: the one named, else
@@ -1755,8 +1853,9 @@ class AreaRuntime:
             for a in areas
             if a.indoor
             and a.rooms
-            and art.furnishing_for(a.place_id, world.places[a.place_id].state) is None
-            and art.failures.get(f"furnish:{a.place_id}", 0) < 2
+            and a.place_id in world.places
+            and art.furnishing_for(a.id, world.places[a.place_id].state) is None
+            and art.failures.get(f"furnish:{a.id}", 0) < 2
         ]
         if not self.map_pictures_on:
             return furnish, []
@@ -1851,7 +1950,7 @@ class AreaRuntime:
                 if self._art_stop:
                     return
                 if text is not None:
-                    self._tile_job(f"furnish:{area.place_id}", self._furnish_one, area, text)
+                    self._tile_job(f"furnish:{area.id}", self._furnish_one, area, text)
                 self._tile_done += 1
             if client is None:
                 return
@@ -1901,16 +2000,24 @@ class AreaRuntime:
         if place is None:
             return
         model = self.map_art_model
-        job_key = f"furnish:{area.place_id}"
+        # A level of the plan is furnished on its own, under its area id
+        # (engine/levels.py), told which level it is.
+        job_key = f"furnish:{area.id}"
         request = ChatRequest(
             model=model,
             extra_body=self.route_for("map_art"),
-            messages=furnish_messages(area, place, self.map_setting(), self.texts),
+            messages=furnish_messages(
+                area, place, self.map_setting(), self.texts, level=area.level_name
+            ),
             params=self.side_params(model, max_tokens=FURNISH_MAX_TOKENS),
         )
         log_ref = self._log(
             "map_furnish_request",
-            {"place_id": place.id, "payload": self.provider.build_payload(request)},
+            {
+                "place_id": place.id,
+                "area_id": area.id,
+                "payload": self.provider.build_payload(request),
+            },
         )
         art = self.world_art
         try:
@@ -1923,7 +2030,7 @@ class AreaRuntime:
             plan = parse_furnishing(
                 reply,
                 area,
-                place_id=place.id,
+                place_id=area.id,
                 state=place.state,
                 model=model,
                 made_at=utc_now_iso(),
@@ -1942,7 +2049,7 @@ class AreaRuntime:
         if self._art_stop or self._closed:
             return
         with self._lock():
-            art.furnishings.setdefault(place.id, {})[place.state] = plan
+            art.furnishings.setdefault(area.id, {})[place.state] = plan
             self._save_art(art)
         callback = self.on_map_art
         if callback is not None:

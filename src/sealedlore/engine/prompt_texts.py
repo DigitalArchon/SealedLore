@@ -2173,6 +2173,52 @@ else):
     (("places", "Each place with its kind, tile box and what the story said of it, a line each"),),
 )
 
+# Not measured (the author, Oct 2026: decks for a station, floors for a
+# building, a dungeon's levels). Added to a layout request only when the
+# place's words call for levels (engine/levels.py `levels_called_for`), so
+# the measured request stands for every other place. The plan is the ground
+# floor or main deck; the others are drawn by a job each (map.layout.level),
+# and the program links them by their stairs tiles.
+_text(
+    "map.layout.levels",
+    MAP,
+    "Map art: a place with floors or decks",
+    "Added to a layout request when the place's words name floors, a cellar, decks or the "
+    "like: the plan is its ground floor or main deck, the stairs are marked, and the other "
+    "levels are listed for the program to ask for one by one.",
+    """\
+This place may have more than one level. Lay out its ground floor (or main deck) here, and \
+mark where the stairs, ladder or lift to the other levels stand with {"kind": "stairs", "x": 0, \
+"y": 0, "w": 1, "h": 2} (one or two tiles, on floor, clear of doorways). If the place has other \
+levels, add to the object "levels": [{"index": 1, "name": "Upper floor"}, {"index": -1, "name": \
+"Cellar"}, ...]: this plan is level 0, positive counts up, negative down, each with a short \
+name. Only the levels the place really has; a place of one level lists none.""",
+)
+
+# Not measured. The plan's own request and its shapes stand before this,
+# so the level is asked as the same conversation continued.
+_text(
+    "map.layout.level",
+    MAP,
+    "Map art: one further level of a place",
+    "Asks for one of a place's other floors or decks after its plan is drawn: the same grid, "
+    "the same outline, the stairs in the plan's stairs tiles, drawn by a job of its own.",
+    """\
+Now lay out {level} of the same {place} (level {index}; the plan you drew is level 0, the \
+{main}), on the same grid, seen from directly above. Keep the same outline: its outer walls \
+where the plan's are, nothing outside them. Put stairs, a ladder or a lift in the same tiles as \
+the plan's ({stairs}), with {"kind": "stairs", ...}, and any stairs on to a further level in \
+different tiles. Rooms as walls with doors between them, what stands in each as objects. Reply \
+in the same format, with no "levels" field.""",
+    (
+        ("place", "The place"),
+        ("level", "The level's name"),
+        ("index", "The level's index: positive above the plan, negative below"),
+        ("main", "What the plan itself is: the ground floor, or the main deck"),
+        ("stairs", "The plan's stairs tiles, as x and y"),
+    ),
+)
+
 # Not measured: the layout prompt's shapes, at the scale of the country
 # around a place, with the places the map already has kept where they are.
 _text(

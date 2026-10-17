@@ -156,6 +156,26 @@ class WorldSprite(BaseModel):
     made_at: str = ""
 
 
+class LevelLayout(BaseModel):
+    """One further level of a place's plan (engine/levels.py; the author,
+    Oct 2026: decks for a station, floors for a building, a dungeon's
+    levels): drawn on the plan's own grid, with its stairs in the plan's
+    stairs tiles. `index` counts from the plan itself (0: the ground floor or
+    main deck), up for floors above, down for cellars and lower levels."""
+
+    index: int
+    name: str = ""
+    # The place and state whose plan it belongs to: what `adopt` files it by.
+    place_id: str = ""
+    state: str = ""
+    spec: dict = Field(default_factory=dict)
+    rows: list[str]
+    objects: dict[str, str] = Field(default_factory=dict)
+    labels: dict[str, list[int]] = Field(default_factory=dict)
+    model: str = ""
+    made_at: str = ""
+
+
 class PlaceLayout(BaseModel):
     """A place's ground plan, as tiles (engine/world_art.py's legend), drawn
     the first time the story is there, and again, as an edit, for each state
@@ -170,6 +190,14 @@ class PlaceLayout(BaseModel):
     labels: dict[str, list[int]] = Field(default_factory=dict)
     model: str = ""
     made_at: str = ""
+    # The plan's other floors or decks, when its words called for them
+    # (`spec["levels"]` lists them; each is drawn by a job of its own and
+    # filed here as it comes back). A plan from before this has none.
+    levels: list[LevelLayout] = Field(default_factory=list)
+
+    def level(self, index: int) -> LevelLayout | None:
+        """The drawn level at `index` (never 0: that is the plan itself)."""
+        return next((lv for lv in self.levels if lv.index == index), None)
 
 
 class MapPicture(BaseModel):

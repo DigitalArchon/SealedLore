@@ -24,11 +24,22 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from sealedlore.engine.jsonreply import extract_json
+from sealedlore.engine.levels import (
+    STAIRS,
+    level_name,
+    levels_called_for,
+    listed_levels,
+    stairs_spot,
+    stairs_tiles,
+    stairs_words,
+    with_stairs,
+)
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.world import key
 from sealedlore.engine.world_layout import moves, position, size_of
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.world import (
+    LevelLayout,
     PlaceLayout,
     TerrainPatch,
     WorldArt,
@@ -76,6 +87,7 @@ TILES: dict[str, str] = {
     ":": "rubble",
     "*": "fire",
     "s": "sand",
+    "&": "stairs or a ladder or a lift",
     " ": "nothing: space, or the dark of rock",
 }
 GROUND: dict[str, str] = {
@@ -98,6 +110,7 @@ FILLS: dict[str, str] = {
     "floor": "_",
     "ground": ".",
     "dark": " ",
+    "stairs": "&",
 }
 
 LAYOUT_WIDTH, LAYOUT_HEIGHT = 40, 24
@@ -364,6 +377,12 @@ def rasterise(
             for px, py in _line(f.get("points")):
                 if (px, py) not in gaps:
                     put(px, py, ch)
+        elif kind == "stairs":
+            # Stairs, a ladder or a lift (engine/levels.py): a tile or a
+            # few of them, the door between a plan's levels.
+            for yy in range(y, y + min(h, 4)):
+                for xx in range(x, x + min(w, 4)):
+                    put(xx, yy, STAIRS)
         elif kind == "object" and len(objects) < MAX_OBJECTS:
             if 0 <= x < width and 0 <= y < height:
                 number = str(len(objects) + 1)
@@ -777,7 +796,7 @@ def patch_at(art: WorldArt, west: float, north: float, side: float) -> TerrainPa
 DECK_GAP = 2
 # Where someone may stand in a plan: not space, a wall, a window, water,
 # trees, rock, a fence or fire.
-WALKABLE = frozenset("._=+,:s")
+WALKABLE = frozenset("._=+,:s&")
 # The tile a deck's blank is filled with (TILES["_"]).
 FLOOR = "_"
 
@@ -983,6 +1002,10 @@ def layout_messages(
     ways = _ways(world, place)
     if ways:
         parts.append("Ways out: " + "; ".join(ways))
+    if levels_called_for(place):
+        # Only when the place's words call for floors or decks: the measured
+        # request stands as it was for every other place (engine/levels.py).
+        parts.append(texts["map.layout.levels"])
     return [
         _message("system", _grid_fill(texts, "map.layout", width, height, _tile_words(tile))),
         _message(
@@ -1007,6 +1030,39 @@ def layout_change_messages(
         *layout_messages(world, place, setting, texts, fixed),
         _message("assistant", json.dumps(before.spec)),
         _message("user", texts.fill("map.layout.change", place=place.name, change=place.state)),
+    ]
+
+
+def level_messages(
+    world: WorldMap,
+    place: WorldPlace,
+    layout: PlaceLayout,
+    index: int,
+    name: str,
+    setting: str,
+    texts: PromptTexts,
+    fixed: Sequence[dict[str, Any]] = (),
+) -> list[PromptMessage]:
+    """One further level of a place (engine/levels.py), asked as the plan's
+    own conversation continued: the plan's shapes stand as the model's last
+    answer, and it is asked for this level on the same grid, with its stairs
+    in the plan's stairs tiles. Not measured."""
+    stairs = stairs_words(sorted(stairs_tiles(layout.rows)))
+    deck = str((layout.spec or {}).get("ground") or "") == "space" or place.kind == "vehicle"
+    return [
+        *layout_messages(world, place, setting, texts, fixed),
+        _message("assistant", json.dumps(layout.spec)),
+        _message(
+            "user",
+            texts.fill(
+                "map.layout.level",
+                place=place.name,
+                level=name,
+                index=str(index),
+                main=level_name(layout, 0, deck=deck),
+                stairs=stairs or "none drawn: put the stairs where they would be",
+            ),
+        ),
     ]
 
 
@@ -1317,11 +1373,19 @@ def plan_art(
                 # First, whatever is nearer the story: the area in view may
                 # be anywhere, and twelve nearer pieces kept it out of the run.
                 order=-1,
-                extra={"fixed": fixed, "grid": plan_grid(place)},
+                extra={
+                    "fixed": fixed,
+                    "grid": plan_grid(place),
+                    "levels_asked": levels_called_for(place),
+                },
             )
         )
     for pid, place in wanted.items():
-        if art.layout_for(pid, place.state) is not None:
+        drawn_plan = art.layout_for(pid, place.state)
+        if drawn_plan is not None:
+            # Its other floors or decks, one job each, once the plan's words
+            # called for them and its reply listed them (engine/levels.py).
+            jobs += _level_jobs(world, place, drawn_plan, setting, texts, failed)
             continue
         key = f"layout:{pid}:{place.state}" if place.state else f"layout:{pid}"
         if failed(key):
@@ -1342,7 +1406,11 @@ def plan_art(
                 name=place.name,
                 state=place.state,
                 order=1,
-                extra={"fixed": fixed, "grid": plan_grid(place)},
+                extra={
+                    "fixed": fixed,
+                    "grid": plan_grid(place),
+                    "levels_asked": levels_called_for(place),
+                },
             )
         )
     subjects: list[tuple[str, str, str, str, Literal["place", "thing"]]] = [
@@ -1503,9 +1571,57 @@ def _window_jobs(
     return jobs
 
 
+def has_levels(place: WorldPlace, layout: PlaceLayout) -> bool:
+    """Whether a plan's listed levels count: the place's words called for
+    them, and the plan is an inside (a building's, a room's, a vehicle's, or
+    one on floor or in space): the grounds of a site have no upper floor."""
+    if not levels_called_for(place) or not listed_levels(layout.spec):
+        return False
+    ground = str((layout.spec or {}).get("ground") or "")
+    return place.kind in ("building", "room", "vehicle") or ground in ("floor", "space")
+
+
+def level_key(place_id: str, state: str, index: int) -> str:
+    return (f"layout:{place_id}:{state}" if state else f"layout:{place_id}") + f":level:{index}"
+
+
+def _level_jobs(
+    world: WorldMap,
+    place: WorldPlace,
+    layout: PlaceLayout,
+    setting: str,
+    texts: PromptTexts,
+    failed,
+) -> list[ArtJob]:
+    """A job for each level the plan lists and hasn't got yet, each on its
+    own so a failure costs one level."""
+    if not has_levels(place, layout):
+        return []
+    jobs: list[ArtJob] = []
+    for index, name in listed_levels(layout.spec):
+        if layout.level(index) is not None:
+            continue
+        key = level_key(place.id, place.state, index)
+        if failed(key):
+            continue
+        jobs.append(
+            ArtJob(
+                key,
+                "layout",
+                level_messages(world, place, layout, index, name, setting, texts),
+                place.id,
+                name=f"{place.name}, {name}",
+                state=place.state,
+                order=1,
+                extra={"grid": plan_grid(place), "level": index, "level_name": name},
+            )
+        )
+    return jobs
+
+
 def finish(
     job: ArtJob, text: str, *, model: str, made_at: str
-) -> WorldSprite | PlaceLayout | TerrainPatch:
+) -> WorldSprite | PlaceLayout | TerrainPatch | LevelLayout:
     """What a reply draws, checked; ValueError when it draws nothing usable."""
     if job.kind == "sprite":
         svg = clean_svg(text)
@@ -1522,6 +1638,22 @@ def finish(
             made_at=made_at,
         )
     spec = parse_shapes(text)
+    if job.kind == "layout" and job.extra.get("level") is not None:
+        columns, grid_rows = job.extra.get("grid") or (LAYOUT_WIDTH, LAYOUT_HEIGHT)
+        spec = {k: v for k, v in spec.items() if k != "levels"}  # a level lists none
+        rows, objects, labels = rasterise(spec, columns, grid_rows)
+        return LevelLayout(
+            index=int(job.extra["level"]),
+            name=str(job.extra.get("level_name") or ""),
+            place_id=job.subject_id,
+            state=job.state,
+            spec=spec,
+            rows=rows,
+            objects=objects,
+            labels=labels,
+            model=model,
+            made_at=made_at,
+        )
     if job.kind == "layout":
         fixed = job.extra.get("fixed") or []
         columns, grid_rows = job.extra.get("grid") or (LAYOUT_WIDTH, LAYOUT_HEIGHT)
@@ -1529,6 +1661,15 @@ def finish(
         for f in fixed:  # what the map has here that isn't a building: named where it is
             if f["kind"] != "building":
                 labels[f["name"][:60]] = [f["x"] + f["w"] // 2, f["y"] + f["h"] // 2]
+        if job.extra.get("levels_asked") and listed_levels(spec) and not stairs_tiles(rows):
+            # The rule: a plan with levels has stairs, so each level's
+            # request can name their tile. The program puts one where it
+            # blocks no doorway, and the shapes record it.
+            spot = stairs_spot(rows)
+            if spot is not None:
+                rows = with_stairs(rows, spot)
+                added = {"kind": "stairs", "x": spot[0], "y": spot[1], "w": 1, "h": 1}
+                spec = {**spec, "features": [*spec["features"], {**added, "added_by": "program"}]}
         return PlaceLayout(
             place_id=job.subject_id,
             state=job.state,
@@ -1561,7 +1702,10 @@ def finish(
 
 
 def adopt(
-    art: WorldArt, drawn: WorldSprite | PlaceLayout | TerrainPatch, *, redraw: bool = False
+    art: WorldArt,
+    drawn: WorldSprite | PlaceLayout | TerrainPatch | LevelLayout,
+    *,
+    redraw: bool = False,
 ) -> None:
     """Keep a finished drawing. A place's layout or land is never replaced:
     land that would lie on land already drawn is dropped. A plan drawn again
@@ -1573,6 +1717,13 @@ def adopt(
         return
     if isinstance(drawn, WorldSprite):
         art.sprites.append(drawn)
+    elif isinstance(drawn, LevelLayout):
+        # Filed on the plan it was drawn for; a plan redrawn meanwhile lists
+        # its levels afresh, so a level of the old one is dropped.
+        plan = (art.layouts.get(drawn.place_id) or {}).get(drawn.state)
+        if plan is not None:
+            kept = [lv for lv in plan.levels if lv.index != drawn.index]
+            plan.levels = sorted([*kept, drawn], key=lambda lv: lv.index)
     elif isinstance(drawn, PlaceLayout):
         art.layouts.setdefault(drawn.place_id, {}).setdefault(drawn.state, drawn)
     elif not any(_covers(p, drawn.x, drawn.y, drawn.side) for p in art.terrain):
@@ -1580,12 +1731,14 @@ def adopt(
 
 
 def describe(drawn: Sequence[object]) -> str:
-    counts = {"sprite": 0, "layout": 0, "land": 0}
+    counts = {"sprite": 0, "layout": 0, "land": 0, "level": 0}
     for item in drawn:
         if isinstance(item, WorldSprite):
             counts["sprite"] += 1
         elif isinstance(item, PlaceLayout):
             counts["layout"] += 1
+        elif isinstance(item, LevelLayout):
+            counts["level"] += 1
         elif isinstance(item, TerrainPatch):
             counts["land"] += 1
     return json.dumps(counts)

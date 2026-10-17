@@ -1100,6 +1100,17 @@ within reach, the doorways out.
   moves on by that much and you stand there. A turn you rewrite before
   sending travels nowhere. The next passage begins on arrival. A place
   whose plan isn't drawn yet lands you on the open country at its door.
+- **Floors and decks.** A place whose words call for more than one level
+  (a two-storey house, a cellar, a station's decks, a dungeon's levels, a
+  keep) is drawn level by level: its plan is the ground floor or main deck,
+  and each other level comes as a plan of its own, after it, with its
+  stairs in the same tiles. Stairs (a ladder or a lift counts) are the doors
+  between levels: walk onto them to go up or down, as you walk into a door,
+  and you land a step off the stairs on the other level. The title above
+  the area says where you are ("The farmhouse · Upper floor"); the
+  storyteller is told the level you stand on, the stairs from there, and
+  who is on another level of the place. Each level is furnished on its own.
+  The Region and World maps show the plan's own level.
 - **Edges.** Walk off the edge of an outdoor area (the arrow keys past the
   last tile, or **Leave north ▾** when you stand on it) to walk on into the
   area beyond, where one adjoins and nothing bars the way (water, trees or

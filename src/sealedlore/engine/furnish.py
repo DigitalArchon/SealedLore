@@ -54,12 +54,20 @@ def room_lines(area: Area) -> str:
 
 
 def furnish_messages(
-    area: Area, place: WorldPlace, setting: str, texts: PromptTexts = DEFAULT_TEXTS
+    area: Area,
+    place: WorldPlace,
+    setting: str,
+    texts: PromptTexts = DEFAULT_TEXTS,
+    *,
+    level: str = "",
 ) -> list[PromptMessage]:
+    """`level`: the name of the plan's level being furnished ("Upper
+    floor"; engine/levels.py), told with the building's name; "" for the
+    plan itself."""
     user = texts.fill(
         "map.furnish.user",
         setting=setting or "(not said)",
-        name=place.name,
+        name=f"{place.name}, {level.lower()}" if level else place.name,
         what=(" ".join(place.what.split()) or "(not said)")
         + (f" As the story has it now: {place.state}." if place.state else ""),
         rooms=room_lines(area),

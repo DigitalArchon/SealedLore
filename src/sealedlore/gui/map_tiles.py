@@ -294,6 +294,7 @@ EMBER = (176, 52, 22, 225)
 OPEN, BRUSH, TREES, ROCK, WATER, ROAD = ".", ",", "T", "^", "~", "="
 WALL, DOOR, FLOOR, WINDOW, FENCE, RUBBLE, SAND, VOID = "#", "+", "_", "W", "%", ":", "s", " "
 FIRE = "*"  # something burning: scorched ground with flames standing on it
+STAIRS = "&"  # stairs, a ladder or a lift between a plan's levels: floor, on the 2D map
 BUILT = frozenset({WALL, DOOR, WINDOW})
 
 
@@ -719,7 +720,7 @@ def render_tiles(
                 under = OPEN
             if ch == ROCK and look_name == "rock":
                 under = OPEN
-            if under in (WALL, DOOR, WINDOW):
+            if under in (WALL, DOOR, WINDOW, STAIRS):
                 under = FLOOR
             if under == WATER:
                 p.drawImage(x * TILE, y * TILE, ground_tile(look_name, OPEN, v))

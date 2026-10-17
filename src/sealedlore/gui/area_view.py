@@ -738,7 +738,7 @@ class AreaView(QWidget):
             or (image is not None and self._background is None)
         )
         self.area, self.walkers = area, walkers
-        self.title.setText(area.name)
+        self.title.setText(area.title)  # "The farmhouse · Upper floor" on a level
         self.clock.setText(clock)
         self.hint.setText(hint or self._hint())
         if rebuild:

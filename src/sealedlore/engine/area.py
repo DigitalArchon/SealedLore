@@ -31,6 +31,13 @@ from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from sealedlore.engine.levels import (
+    LevelLinks,
+    level_area_id,
+    level_name,
+    linked_levels,
+    parse_level,
+)
 from sealedlore.engine.marks import footprint
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.tile_sets import LIGHT_WORDS
@@ -74,7 +81,7 @@ WALK_M_PER_S = 1.4
 # 9 / 49 / 86 pieces).
 DENSITY = {"sparse": 0.5, "normal": 1.0, "full": 1.7}
 # Where someone may stand, and what a piece of furniture may stand on.
-WALKABLE = frozenset("._=+,:s")
+WALKABLE = frozenset("._=+,:s&")
 FLOOR_TILES = frozenset("_+")
 WALLS = frozenset("#W")
 # Things a person can't walk through when they're in the plan as a digit.
@@ -263,12 +270,19 @@ class Doorway:
 
 @dataclass(frozen=True)
 class Entrance:
-    """A building's door in an outdoor area that leads into its own area."""
+    """A building's door in an outdoor area that leads into its own area;
+    or, indoors, a stairs tile that leads to another level of the same plan
+    (engine/levels.py): `place_id` is then that level's area id and `side`
+    "up" or "down"."""
 
     x: int
     y: int
     place_id: str
     side: str  # the building's wall the door is in: north, south, east, west
+
+    @property
+    def stairs(self) -> bool:
+        return self.side in ("up", "down")
 
 
 @dataclass
@@ -306,14 +320,27 @@ class Area:
     rect: tuple[float, float, float, float] | None = None
     patch_id: str = ""
     within: str = ""
+    # One of a plan's further levels (engine/levels.py `build_level`): its
+    # index (0 is the plan itself) and name ("Upper floor", "Deck 2").
+    level: int = 0
+    level_name: str = ""
 
     @property
     def id(self) -> str:
-        """What a `Spot.area` names: the place's id, or a window's own id."""
+        """What a `Spot.area` names: the place's id, a level's id, or a
+        window's own id."""
         if self.rect is None:
-            return self.place_id
+            return level_area_id(self.place_id, self.level)
         west, north, width, _height = self.rect
         return window_id(west, north, width)
+
+    @property
+    def title(self) -> str:
+        """The area as the play view names it: "The farmhouse · Upper floor"."""
+        return f"{self.name} · {self.level_name}" if self.level_name else self.name
+
+    def stairs_entrances(self) -> list[Entrance]:
+        return [e for e in self.entrances if e.stairs]
 
     @property
     def window(self) -> bool:
@@ -729,7 +756,7 @@ def _outside_cells(rows: list[str]) -> set[tuple[int, int]]:
 
     def outdoors(x: int, y: int) -> bool:
         ch = rows[y][x]
-        return ch not in "#W+_" and not ch.isdigit()
+        return ch not in "#W+_&" and not ch.isdigit()
 
     todo = [
         (x, y)
@@ -956,8 +983,14 @@ def build_area(
     entrances: list[Entrance] = []
     buildings: dict[str, tuple[int, int, int, int]] = {}
     people_keys = {key(n) for n in people}
+    links: LevelLinks | None = None
     if indoor:
-        rows = list(layout.rows)
+        # The plan's own level, with the stairs the rules put in between it
+        # and its other levels (engine/levels.py); a plan with none is as drawn.
+        links = linked_levels(layout) if layout.levels else None
+        rows = list(links.rows[0]) if links is not None else list(layout.rows)
+        if links is not None:
+            repairs += links.repairs
         if look == "space" or place.kind not in ("building", "room"):
             rows = list(decked(rows))
         objects = dict(layout.objects)
@@ -1028,6 +1061,8 @@ def build_area(
             rows = [r.replace(digit, "_" if indoor else ".") for r in rows]
     doorways = openings(rows)
     rooms, room_of = find_rooms(rows, objects, doorways) if indoor else ([], [])
+    if links is not None:
+        entrances += _stairs_entrances(links, 0, place.id)
     area = Area(
         place_id=place.id,
         name=place.name,
@@ -1057,6 +1092,110 @@ def build_area(
                     room.purpose = " ".join(purpose.split())[:60]
             area.placements += furnish(area, plan, density)
     return area
+
+
+# --- A plan's other levels (engine/levels.py) -------------------------------------
+
+
+def _stairs_entrances(links: LevelLinks, index: int, place_id: str) -> list[Entrance]:
+    """Each stairs tile of level `index` that leads somewhere, as an
+    entrance to that level's area."""
+    return [
+        Entrance(x, y, level_area_id(place_id, to), "up" if to > index else "down")
+        for (x, y), to in sorted(links.links.get(index, {}).items())
+    ]
+
+
+def build_level(
+    world: WorldMap,
+    art: WorldArt,
+    place_id: str,
+    index: int,
+    *,
+    density: str = "normal",
+    people: Collection[str] = (),
+) -> Area | None:
+    """The area of one further level of a place's plan (an upper floor, a
+    cellar, another deck), built as a building's inside is: on the plan's
+    grid, its stairs the doors to the levels they reach (`Entrance` with
+    side "up" or "down"), no door out of it but those. None without the
+    plan or the level drawn. Furnished under its own area id
+    (`WorldArt.furnishings["<place>#<n>"]`)."""
+    place = world.places.get(place_id)
+    if place is None or not index:
+        return None
+    layout = art.layout_shown(place.id, place.state)
+    if layout is None or layout.level(index) is None:
+        return None
+    drawn = layout.level(index)
+    links = linked_levels(layout)
+    rows = list(links.rows.get(index) or [])
+    if not rows:
+        return None
+    spec = layout.spec if isinstance(layout.spec, dict) else {}
+    look = str(spec.get("ground") or "")
+    if look != "space" and land_under(world, art, place) == "space":
+        look = "space"
+    repairs: list[str] = list(links.repairs)
+    if look == "space" or place.kind not in ("building", "room"):
+        rows = list(decked(rows))
+    as_drawn = bool(place.state) and layout.state == place.state
+    if place.kind in ("building", "room") and not as_drawn:
+        rows = _whole_outer_wall(rows, repairs)
+    stairs = [t for t in links.links.get(index, {})]
+    rows = _open_sealed(rows, stairs, repairs)
+    objects = dict(drawn.objects)  # type: ignore[union-attr]
+    labels = {k: (int(v[0]), int(v[1])) for k, v in drawn.labels.items() if len(v) >= 2}  # type: ignore[union-attr]
+    people_keys = {key(n) for n in people}
+    for digit, name in list(objects.items()):
+        if key(name) in people_keys:
+            objects.pop(digit)
+            rows = [r.replace(digit, "_") for r in rows]
+    doorways = openings(rows)
+    rooms, room_of = find_rooms(rows, objects, doorways)
+    deck = look == "space"
+    area = Area(
+        place_id=place.id,
+        name=place.name,
+        indoor=True,
+        look=look or "floor",
+        rows=rows,
+        tile_m=plan_tile(place),
+        objects=objects,
+        labels=labels,
+        rooms=rooms,
+        room_of=room_of,
+        doorways=doorways,
+        entrances=_stairs_entrances(links, index, place.id),
+        exits=[],
+        # The way out of a level is down (or up) to the plan's own level.
+        parent=place.id,
+        repairs=repairs,
+        level=index,
+        level_name=level_name(layout, index, deck=deck),
+    )
+    area.placements = _object_placements(area)
+    if rooms:
+        plan = art.furnishing_for(area.id, place.state)
+        if plan is not None:
+            for room in rooms:
+                purpose = next((r.purpose for r in plan.rooms if r.room == room.index), "")
+                if purpose:
+                    room.purpose = " ".join(purpose.split())[:60]
+            area.placements += furnish(area, plan, density)
+    return area
+
+
+def stairs_landing(area: Area, tile: tuple[int, int], taken: Collection[tuple[int, int]] = ()):
+    """Where someone arriving by the stairs at `tile` stands: a step off
+    them, never on a stairs tile (they would be in the doorway again)."""
+    off = set(taken) | {(e.x, e.y) for e in area.stairs_entrances()} | {tile}
+    return stand_near(area, tile, off)
+
+
+def level_of_area(area_id: str | None) -> tuple[str, int] | None:
+    """(place id, level) when an area id names a level of a plan."""
+    return parse_level(area_id)
 
 
 def _fix_buildings(
@@ -1557,10 +1696,18 @@ def furnish(area: Area, plan: FurnishPlan, density: str = "normal") -> list[Plac
                         keep.add((x + dx, y + dy))
     import random
 
-    rng = random.Random(zlib.crc32(f"{area.place_id}:{density}".encode()))
+    rng = random.Random(zlib.crc32(f"{area.id}:{density}".encode()))
     factor = DENSITY.get(density, 1.0)
     out: list[Placement] = []
     starts = door_tiles + [t for t in area.exits]
+    # The step off a level's stairs stays clear too, and counts as a way in
+    # (engine/levels.py): a room with no doorway but its stairs had nothing
+    # to keep the floor reachable from.
+    for e in area.stairs_entrances():
+        for y in range(e.y - 1, e.y + 2):
+            for x in range(e.x - 1, e.x + 2):
+                keep.add((x, y))
+        starts += [(e.x + dx, e.y + dy) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))]
 
     def wall(x: int, y: int) -> bool:
         return 0 <= x < w and 0 <= y < h and rows[y][x] in WALLS
@@ -1609,7 +1756,7 @@ def furnish(area: Area, plan: FurnishPlan, density: str = "normal") -> list[Plac
                         taken = trial
                         out.append(
                             Placement(
-                                id=f"{area.place_id}:{room.index}:{item.name}:{n}",
+                                id=f"{area.id}:{room.index}:{item.name}:{n}",
                                 name=item.name,
                                 x=x,
                                 y=y,
@@ -1918,7 +2065,7 @@ def where_words(area: Area, x: int, y: int) -> str:
             if spot is not None and math.hypot(spot[1][0] - x, spot[1][1] - y) <= 6:
                 parts.append(f"near {spot[0]}")
     if entrance is not None:
-        parts.append("at its door")
+        parts.append("on the stairs" if entrance.stairs else "at its door")
     return ", ".join(parts)
 
 
@@ -1942,14 +2089,18 @@ def render_positions(
     limit: int = 8,
     things: Mapping[str, ThingRecord] | None = None,
     texts: PromptTexts = DEFAULT_TEXTS,
+    elsewhere: Sequence[str] = (),
+    level_names: Mapping[str, str] | None = None,
 ) -> str:
     """Where everyone stands, for the storyteller: exact, from the grid
-    (design §5). The author's character's place in the area, who else is
-    here with distance and bearing, what is within reach (a broken thing
-    said to be broken), what each of them carries (`things`, the turn's
-    records; the author's character first), the doorways out, and how far
-    they walked since the last passage. Never the clock's day (the author's
-    ruling: the day is the plot's)."""
+    (design §5). The author's character's place in the area (and its level,
+    on a plan with floors or decks), who else is here with distance and
+    bearing, what is within reach (a broken thing said to be broken), what
+    each of them carries (`things`, the turn's records; the author's
+    character first), the doorways out, the stairs to other levels, who is
+    on another level of the place (`elsewhere`, lines the caller found), and
+    how far they walked since the last passage. Never the clock's day (the
+    author's ruling: the day is the plot's)."""
     me = spots.get(held)
     if me is None or me.area != area.id:
         return ""
@@ -1958,6 +2109,8 @@ def render_positions(
     words = where_words(area, *here)
     # A window of open country: "in open country, in the Great Erg".
     place = f"in {area.name}" + (f", in {area.within}" if area.within else "")
+    if area.level_name:
+        place += f", {area.level_name.lower()}"
     lines.append(f"- {held}: {place}" + (f", {words}" if words else "") + ".")
     my_room = area.room_at(*here)
     others = []
@@ -2019,11 +2172,34 @@ def render_positions(
                     ways.append(f"{bearing(here, d.middle)}, to {room_words(area, other[0])}")
         if ways:
             lines.append("Doorways from here: " + "; ".join(dict.fromkeys(ways)) + ".")
+    stairs = stairs_lines(area, here, level_names)
+    if stairs:
+        lines.append("Stairs from here: " + "; ".join(stairs) + ".")
+    for line in elsewhere:
+        lines.append(line)
     if walked:
         lines.append(f"Since the last passage: {walked}.")
     if action_line:
         lines.append(action_line)
     return "\n".join(lines)
+
+
+def stairs_lines(
+    area: Area, here: tuple[int, int], level_names: Mapping[str, str] | None = None
+) -> list[str]:
+    """'up to the upper floor, 8 m north', for each stairs in the area, the
+    nearest first (`level_names`: each level area's name, by id; a level
+    not named is "the level above/below")."""
+    found = []
+    names = level_names or {}
+    for e in sorted(
+        area.stairs_entrances(), key=lambda e: math.hypot(e.x - here[0], e.y - here[1])
+    ):
+        name = names.get(e.place_id) or ("the level above" if e.side == "up" else "the level below")
+        metres = math.hypot(e.x - here[0], e.y - here[1]) * area.tile_m
+        how = "at hand" if metres < 1.5 else f"{metres_words(metres)} {bearing(here, (e.x, e.y))}"
+        found.append(f"{e.side} to {name}, {how}")
+    return list(dict.fromkeys(found))[:4]
 
 
 def _beside(d: Doorway) -> list[tuple[int, int]]:
