@@ -836,8 +836,13 @@ class SummaryCardWidget(QFrame):
         layout.addWidget(self.body)
 
 
+FULL_STORY_LABEL = "Full story"
+STORYTELLER_VIEW_LABEL = "What the storyteller sees"
+CHAT_VIEW_LABEL = "What the model sees"
+
+
 class ViewToggle(QWidget):
-    """As written | As sent to the storyteller, above the transcript.
+    """Full story | What the storyteller sees, above the transcript.
 
     The story as written keeps every passage, archived ones included. The
     storyteller never sees archived prose again, only its chapter summary,
@@ -850,13 +855,18 @@ class ViewToggle(QWidget):
         super().__init__()
         self.setObjectName("viewToggle")
         self.written = QToolButton()
-        self.written.setText("As written")
-        self.written.setToolTip("Every passage, including those now summarised for the storyteller")
+        # Plain words (Oct 18 2026): "As written" and "As sent to the
+        # storyteller" were the program's own terms.
+        self.written.setText(FULL_STORY_LABEL)
+        self.written.setToolTip(
+            "The whole story, every message, including those the storyteller now gets "
+            "as a chapter summary"
+        )
         self.sent = QToolButton()
-        self.sent.setText("As sent to the storyteller")
+        self.sent.setText(STORYTELLER_VIEW_LABEL)
         self.sent.setToolTip(
-            "Chapter summaries where prose has been archived, then the passages sent word "
-            "for word (Ctrl+Shift+V)"
+            "What the storyteller is sent: chapter summaries where older messages have "
+            "been summarised, then the messages it gets word for word (Ctrl+Shift+V)"
         )
         for button in (self.written, self.sent):
             button.setObjectName("viewToggleButton")
@@ -876,7 +886,7 @@ class ViewToggle(QWidget):
 
     def set_chat(self, chat: bool) -> None:
         """A simple chat has a model, not a storyteller."""
-        self.sent.setText("As sent to the model" if chat else "As sent to the storyteller")
+        self.sent.setText(CHAT_VIEW_LABEL if chat else STORYTELLER_VIEW_LABEL)
 
 
 @dataclass(frozen=True)
@@ -1203,7 +1213,10 @@ class TranscriptView(QScrollArea):
         marked_ids: frozenset[str] = frozenset(),
         pictures_for: PicturesFor | None = None,
         branch_starts: Mapping[str, str] | None = None,
+        empty_actions: Sequence[tuple[str, Callable[[], None]]] = (),
     ) -> None:
+        """`empty_actions`: buttons under `empty_text` when there are no
+        messages (Start the story…)."""
         cast_by_id = {character.id: character for character in cast}
         self.clear()
 
@@ -1238,7 +1251,7 @@ class TranscriptView(QScrollArea):
         self._show_units(units)
         self._texts = [(node.id, node.content) for node in nodes]
         if not nodes and self._layout.count() == 1:
-            self.show_placeholder(empty_text)
+            self.show_placeholder(empty_text, empty_actions)
         self.scroll_to_end()
 
     def show_storyteller_view(

@@ -645,7 +645,7 @@ def test_a_story_that_keeps_a_map_opens_on_it_with_the_room_it_needs(window):
 
 def test_map_and_the_inspector_s_other_pages_and_branches(window):
     window.world_button.click()  # off: the page beside it
-    assert not window.world_shown() and window.right_tabs.currentWidget() is window.scene_panel
+    assert not window.world_shown() and window.right_tabs.currentWidget() is window.people_page
     window.world_button.click()
     assert window.world_shown()
     # Branches take the story's place; the map stays beside it.

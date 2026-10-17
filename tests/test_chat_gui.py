@@ -337,8 +337,9 @@ def test_a_tee_chat_offers_no_private_part(app, window, monkeypatch):
     app.processEvents()
     assert not window.composer.private_toggle.isVisible()
     assert window.composer.input.property("private") == "true"  # private throughout
-    # A story opened afterwards has its Private button back.
+    # A story opened afterwards has its Private button back, under More.
     window.composer.set_chat_mode(False)
+    window.composer.set_more(True)
     app.processEvents()
     assert window.composer.private_toggle.isVisible() and window.composer.held.isVisible()
 
@@ -355,9 +356,9 @@ def test_the_picture_dialog_lets_a_chat_add_a_picture_from_disk(app, window, mon
 
 
 def test_the_view_toggle_speaks_of_the_model_in_a_chat(app, window, monkeypatch):
-    assert window.view_toggle.sent.text() == "As sent to the storyteller"
+    assert window.view_toggle.sent.text() == "What the storyteller sees"
     make_chat(window, monkeypatch)
-    assert window.view_toggle.sent.text() == "As sent to the model"
+    assert window.view_toggle.sent.text() == "What the model sees"
 
 
 def test_an_encrypted_chat_is_sent_only_through_the_sealing_client(app, window, monkeypatch):

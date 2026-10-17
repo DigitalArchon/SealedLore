@@ -7,7 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QApplication, QLabel, QWidget
 
@@ -112,18 +112,24 @@ def test_at_1080p_the_stories_list_is_wide_enough_to_read(app, window: MainWindo
     settle(app)
     assert window.stories_dock.width() >= 200
     assert window.inspector_dock.width() >= INSPECTOR_WIDTHS[0]
-    # The composer keeps its two rows: who is in play on one line.
+    # The composer's first row is what nearly every turn touches, on one
+    # line; More opens the rest on a second.
     composer = window.composer
-    assert _same_line(composer.held, composer.scope)
-    assert _same_line(composer.length, composer.ooc_toggle)
-    assert not _same_line(composer.held, composer.length)
+    assert _same_line(composer.held, composer.length)
+    assert _same_line(composer.held, composer.more_button)
+    composer.set_more(True)
+    settle(app)
+    assert _same_line(composer.scope, composer.ooc_toggle)
+    assert not _same_line(composer.held, composer.scope)
 
 
 def _same_line(a: QWidget, b: QWidget) -> bool:
     """A line centres its controls, and a button may be a pixel or two
     shorter than a combo (on CI's fonts, 22px beside 24): on one line, their
     heights overlap."""
-    first, second = a.geometry(), b.geometry()
+    window = a.window()
+    first = QRect(a.mapTo(window, QPoint(0, 0)), a.size())
+    second = QRect(b.mapTo(window, QPoint(0, 0)), b.size())
     return first.top() <= second.bottom() and second.top() <= first.bottom()
 
 

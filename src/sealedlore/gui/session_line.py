@@ -30,6 +30,10 @@ ROLE_NAMES = {
 }
 
 
+NO_MODEL = "No model chosen: File → Settings… → Models"
+NO_ENDPOINT = "No endpoint set up: File → Settings…"
+
+
 def _privacy(model: str, tee_state: str) -> str:
     if is_private_mode(model):
         return "🔐 end-to-end encrypted" + (f" ({tee_state})" if tee_state else "")
@@ -68,11 +72,21 @@ def describe_session(session, *, tee_state: str = "") -> tuple[str, str]:
         tips.append("A story, saved on disk.")
 
     privacy = _privacy(model, tee_state)
-    parts.append(shown + (f" · {privacy}" if privacy else ""))
-    label, note = privacy_label(model)
-    seen = f" {label}: {note}" if label else " The endpoint and the model's host see every message."
-    tips.append(f"Model: {shown} on {host}.{seen}")
-    parts.append(f"via {host}")
+    if not session.model:
+        # Said as what to do (Oct 18 2026): "(no model) · via no endpoint
+        # set" named what was missing and not where it is set.
+        parts.append(NO_MODEL)
+        tips.append("Nothing can be written until a story model is chosen.")
+    else:
+        parts.append(shown + (f" · {privacy}" if privacy else ""))
+        label, note = privacy_label(model)
+        seen = (
+            f" {label}: {note}"
+            if label
+            else " The endpoint and the model's host see every message."
+        )
+        tips.append(f"Model: {shown} on {host}.{seen}")
+    parts.append(f"via {host}" if base_url else NO_ENDPOINT)
 
     if routable(base_url, model):
         route = session.route_text("story")

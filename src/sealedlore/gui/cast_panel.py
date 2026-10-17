@@ -435,6 +435,16 @@ class CastPanel(QWidget):
         if character is not None:
             self.avatar_requested.emit(character.id, what)
 
+    def add_portrait_to(self, character_id: str) -> bool:
+        """Choose a file to be this character's portrait (the People page's
+        Choose a picture…): their card selected, then as Choose a file…."""
+        self.select_character(character_id)
+        if self._current is None or self._current.id != character_id:
+            return False
+        before = len(self._current.reference_images)
+        self._add_portrait()
+        return len(self._current.reference_images) > before
+
     def _add_portrait(self) -> None:
         character = self._current
         if self.pictures.add_portrait() and character is not None:
@@ -643,6 +653,10 @@ class CastPanel(QWidget):
         if self._current is not None:
             self._show_portrait()
             self.changed.emit()
+
+    def add_character(self) -> None:
+        """Add, from elsewhere (the People page's Add a character…)."""
+        self._add_character()
 
     def _add_character(self) -> None:
         character = Character(name="New character")

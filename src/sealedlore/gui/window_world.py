@@ -97,11 +97,15 @@ class WorldWindow:
             self.right_tabs.setCurrentWidget(self.world_view)
             self.world_view.view.setFocus()
         elif self.right_tabs.currentWidget() is self.world_view:
-            self.right_tabs.setCurrentWidget(self.scene_panel)
+            # A chat has no People page: its chapters.
+            chat = self.session is not None and self.session.story.chat
+            self.right_tabs.setCurrentWidget(self.summaries_panel if chat else self.people_page)
         self._sync_world_button()
 
     def _on_page_changed(self, _index: int) -> None:
         self._sync_world_button()
+        if self.right_tabs.currentWidget() is self.people_page and self._people_dirty:
+            self._build_people()
         if self.right_tabs.currentWidget() is self.images_panel:
             # The cards' pictures change on their own pages: read afresh.
             self.refresh_images()

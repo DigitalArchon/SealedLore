@@ -108,11 +108,20 @@ WORLD_ACTIVITY_TIPS: dict[WorldActivity, str] = {
 }
 
 SCOPE_LABELS: list[tuple[str, NpcScope]] = [
-    ("All present NPCs", "all"),
+    # "All present NPCs" was a roleplayer's word for it.
+    ("Everyone else here", "all"),
     ("Only these…", "selected"),
     ("Model's choice", "model_choice"),
 ]
 
+
+MORE_LABEL = "More ▸"
+FEWER_LABEL = "Fewer ▾"
+MORE_TIP = (
+    "More ways to shape a turn: who the model may voice, how outcomes are decided "
+    "(and dice), a private scene, and an out-of-character note. Stays as you leave it."
+)
+MORE_HELD_TIP = "Kept open while a private scene, a roll or an OOC note is in use."
 
 PRIVATE_TIP = (
     "Private scene: play the next part on your private model. Nothing from it reaches "
@@ -167,6 +176,8 @@ class Composer(QWidget):
     # The author pressed Private scene: True to begin one, False to end it.
     private_requested = Signal(bool)
     held_character_changed = Signal(str)
+    # More opened or closed by the author, to be kept (`Config.composer_more`).
+    more_toggled = Signal(bool)
 
     def __init__(self) -> None:
         super().__init__()
@@ -265,34 +276,57 @@ class Composer(QWidget):
         self._fit_popup(self.private_keep)
 
         # Two rows, because one ran out of width: adding Length pushed the
-        # window's minimum past 1,570px. The first row is who is in play; the
-        # second is how this one turn is shaped: length, outcome mode, and the
-        # dice controls when this turn will be rolled. Each wraps when the
-        # window is narrower than it (a larger text size), a caption staying
-        # with its control, and groups stand further apart than a caption from
-        # its control: at one gap for both, "Myla Veran ▾  SPEAKING AS" read
-        # as one group.
+        # window's minimum past 1,570px. Each wraps when the window is
+        # narrower than it (a larger text size), a caption staying with its
+        # control, and groups stand further apart than a caption from its
+        # control: at one gap for both, "Myla Veran ▾  SPEAKING AS" read as
+        # one group.
+        #
+        # The first row is what nearly every turn touches: who you play, who
+        # speaks and how long the passage is. The second is the rest, under
+        # More (Oct 18 2026, the author: eight controls before the first turn
+        # "looks confusing for a new user"). It stays as the author leaves
+        # it (`Config.composer_more`), and opens by itself while something on
+        # it is in use that a turn depends on: a private scene, a roll, an
+        # OOC note. Anything else chosen there is named beside More.
         who = WrapRow(spacing=6, group_spacing=12)
         captions = [self._caption(text) for text in ("Playing", "Speaking as", "Model voices")]
         who.add_group([captions[0], self.held])
         who.add_group([captions[1], self.speaker])
-        who.add_group([captions[2], self.scope, self.scope_button])
+        self.length_caption = self._caption("Length")
+        who.add_group([self.length_caption, self.length])
+        self.more_hint = QLabel()
+        self.more_hint.setObjectName("hintLabel")
+        self.more_button = QToolButton()
+        self.more_button.setObjectName("moreButton")
+        self.more_button.setCheckable(True)
+        self.more_button.setText(MORE_LABEL)
+        self.more_button.setToolTip(MORE_TIP)
+        self.more_button.toggled.connect(self._on_more_toggled)
+        who.add_group([self.more_hint, self.more_button], right=True)
         # What a simple chat has none of (set_chat_mode): who is in play.
         self._who_widgets = [*captions, self.held, self.speaker, self.scope]
+        self._more = False
 
         shape = WrapRow(spacing=6, group_spacing=12)
-        self.length_caption = self._caption("Length")
-        shape.add_group([self.length_caption, self.length])
+        shape.add_group([captions[2], self.scope, self.scope_button])
         self.agency_caption = self._caption("Outcome")
         shape.add_group([self.agency_caption, self.agency])
         shape.add_group([self.roll_caption, self.skill, self.difficulty])
         shape.add_group([self.private_toggle, self.private_keep, self.ooc_toggle], right=True)
+        # The second row whole, put away under More. Its row in a box layout
+        # of its own, as the rows in `controls_host` are: a WrapRow that is a
+        # widget's own layout missed its members' heights changing.
+        self.more_row = QWidget()
+        more_layout = QVBoxLayout(self.more_row)
+        more_layout.setContentsMargins(0, 0, 0, 0)
+        more_layout.addLayout(shape)
 
         controls = QVBoxLayout()
         controls.setContentsMargins(0, 0, 0, 0)
         controls.setSpacing(8)
         controls.addLayout(who)
-        controls.addLayout(shape)
+        controls.addWidget(self.more_row)
 
         self.ooc = TurnEditor()
         self.ooc.setObjectName("oocInput")
@@ -316,7 +350,7 @@ class Composer(QWidget):
         self.stop_button.clicked.connect(self.stop_requested)
         self.regenerate_button = QPushButton("Regenerate")
         self.regenerate_button.clicked.connect(self.regenerate_requested)
-        self.image_button = QPushButton("Image…")
+        self.image_button = QPushButton("Picture…")
         self.image_button.setToolTip(
             "Generate a picture of what is happening now (Ctrl+Shift+I). You see and approve "
             "the prompt first; it is drawn in the background while you play on."
@@ -352,7 +386,9 @@ class Composer(QWidget):
         self.speaker.currentIndexChanged.connect(self._sync_dice)
         self.agency.currentIndexChanged.connect(self._sync_dice)
         self.skill.currentIndexChanged.connect(self._remember_skill)
+        self.scope.currentIndexChanged.connect(self._sync_more)
         self.set_default_agency("contested")
+        self._sync_more()
 
     @staticmethod
     def _compact(combo: QComboBox, characters: int) -> None:
@@ -572,6 +608,59 @@ class Composer(QWidget):
         rolling = self.will_roll() and not self.is_question() and not self._chat
         for widget in (self.roll_caption, self.skill, self.difficulty):
             widget.setVisible(rolling)
+        self._sync_more()
+
+    # --- More ------------------------------------------------------------------
+
+    def set_more(self, on: bool) -> None:
+        """The second row open or put away, as the author last left it."""
+        self._more = on
+        self._sync_more()
+
+    def more_open(self) -> bool:
+        return self.more_row.isVisibleTo(self)
+
+    def _on_more_toggled(self, checked: bool) -> None:
+        self._more = checked
+        self._sync_more()
+        self.more_toggled.emit(checked)
+
+    def _held_open(self) -> bool:
+        """Whether the second row holds something this turn depends on, so
+        it can't be put away: a private scene's End, a roll's skill and
+        difficulty, an OOC note being written. A chat's row is its Private
+        button, all of a story's controls it has."""
+        if self._chat:
+            return True
+        return (
+            self.private_toggle.isChecked()
+            or self.ooc_toggle.isChecked()
+            or (self.will_roll() and not self.is_question())
+        )
+
+    def _sync_more(self) -> None:
+        if not hasattr(self, "more_row"):
+            return  # still being built
+        held = self._held_open()
+        shown = self._more or held
+        self.more_row.setVisible(shown)
+        self.more_button.blockSignals(True)
+        self.more_button.setChecked(shown)
+        self.more_button.blockSignals(False)
+        self.more_button.setText(FEWER_LABEL if shown else MORE_LABEL)
+        self.more_button.setEnabled(not held)
+        self.more_button.setToolTip(MORE_HELD_TIP if held else MORE_TIP)
+        self.more_button.setVisible(not self._chat)
+        # Chosen there and put away: named, so nothing is in force unseen.
+        chosen = []
+        if not shown and not self._chat:
+            mode = self.agency_override()
+            if mode is not None and not self.is_question():
+                chosen.append(f"Outcome: {AGENCY_LABELS[mode]}")
+            if self.npc_scope() != "all":
+                chosen.append(f"Model voices: {SCOPE_LABELS[self.scope.currentIndex()][0]}")
+        self.more_hint.setText(" · ".join(chosen))
+        self.more_hint.setVisible(bool(chosen))
 
     def agency_override(self) -> AgencyMode | None:
         return self.agency.currentData()
@@ -636,6 +725,7 @@ class Composer(QWidget):
             self._sync_scope_button()
         self._sync_question_mode()
         self._sync_private_tips()
+        self._sync_more()
 
     def set_private_offered(self, offered: bool) -> None:
         """Whether a part can be held in private: not in a chat on a TEE
@@ -677,6 +767,7 @@ class Composer(QWidget):
             self.ooc.setFocus()
         else:
             self.ooc.clear()
+        self._sync_more()
 
     # --- current turn -----------------------------------------------------
 
@@ -826,6 +917,7 @@ class Composer(QWidget):
         self.private_keep.setEnabled(not active)
         self.private_toggle.setText("End private" if active else "Private")
         self._sync_private_tips()
+        self._sync_more()
         # A tinted input says, while you type, where this turn is going.
         for widget in (self.input, self.ooc):
             widget.setProperty("private", "true" if active else "false")

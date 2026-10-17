@@ -216,21 +216,31 @@ class ElidingLabel(QLabel):
         super().setToolTip(tip)
 
 
+def _short(tokens: int) -> str:
+    """2,283 as "2.3k", 60,000 as "60k": a readout, the exact count in its tooltip."""
+    if tokens < 1000:
+        return f"{tokens}"
+    thousands = tokens / 1000
+    return f"{thousands:.1f}k" if thousands < 10 else f"{thousands:.0f}k"
+
+
 class StatusStrip(QWidget):
     """Owns the three status-bar readouts so the window can update them in one call."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.budget_label = ElidingLabel("no prompt assembled")
+        # Plain words first (Oct 18 2026, the author: the bar was technical
+        # to a new player); the numbers stay in each readout's tooltip.
+        self.budget_label = ElidingLabel("")
         self.budget_label.setObjectName("statusLabel")
         self.bar = BudgetBar()
         self.lore_label = ElidingLabel("")
         self.lore_label.setObjectName("statusLabel")
         self.archive_label = ElidingLabel("")
         self.archive_label.setObjectName("statusLabel")
-        self.cache_label = ElidingLabel("cache —")
+        self.cache_label = ElidingLabel("")
         self.cache_label.setObjectName("statusLabel")
-        self.cost_label = ElidingLabel("cost —")
+        self.cost_label = ElidingLabel("")
         self.cost_label.setObjectName("statusLabel")
         # Pictures being drawn in the background (gui/image_jobs.py).
         self.pictures_label = ElidingLabel("")
@@ -300,7 +310,7 @@ class StatusStrip(QWidget):
     def set_lore(self, report: RetrievalReport | None) -> None:
         """§7's small indicator: how lore was found, and whether it fell back."""
         if report is not None and report.mode == "whole":
-            self.lore_label.setText(f"lore all {len(report.standing)}")
+            self.lore_label.setText(f"Lore: all {len(report.standing)} sent")
             self.lore_label.setToolTip(
                 f"The whole lorebook ({len(report.standing)} entries) is sent every turn, cached"
             )
@@ -312,7 +322,7 @@ class StatusStrip(QWidget):
 
         count = len(report.injected)
         if report.fallback_reason:
-            self.lore_label.setText(f"lore {count} ⚠")
+            self.lore_label.setText(f"Lore: {count} sent ⚠")
             self.lore_label.setToolTip(
                 f"Keyword matching only — embeddings unavailable ({report.fallback_reason})"
             )
@@ -324,7 +334,7 @@ class StatusStrip(QWidget):
         }.get(report.selector, "semantic" if report.used_embeddings else "keyword")
         if report.selector_note:
             how += f" (similarity this turn: {report.selector_note})"
-        self.lore_label.setText(f"lore {count}")
+        self.lore_label.setText(f"Lore: {count} sent")
         self.lore_label.setToolTip(f"{count} entries injected (~{report.tokens:,} tokens), {how}")
 
     def set_archive(self, chapters: int) -> None:
@@ -333,7 +343,7 @@ class StatusStrip(QWidget):
             self.archive_label.setText("")
             self.archive_label.setToolTip("")
             return
-        self.archive_label.setText(f"{chapters} archived")
+        self.archive_label.setText(f"{chapters} chapter{'s' if chapters != 1 else ''} summarised")
         self.archive_label.setToolTip(
             f"{chapters} chapter summaries stand in for the oldest turns on this branch"
         )
@@ -341,15 +351,22 @@ class StatusStrip(QWidget):
     def set_budget(self, report: BudgetReport | None, *, approximate: bool = True) -> None:
         self.bar.set_report(report)
         if report is None:
-            self.budget_label.setText("no prompt assembled")
+            self.budget_label.setText("")
+            self.budget_label.setToolTip("")
             return
         tilde = "~" if approximate else ""
-        text = f"{tilde}{report.total:,} / {report.budget:,} ({report.utilization:.0%})"
+        of = f"({_short(report.total)} of {_short(report.budget)})"
+        text = f"Context {report.utilization:.0%} used {of}"
         if report.over_budget:
-            text += "  over budget"
+            text = f"Context over budget {of}"
         elif report.warning:
             text += "  ⚠"
         self.budget_label.setText(text)
+        self.budget_label.setToolTip(
+            f"{tilde}{report.total:,} of {report.budget:,} tokens: what the storyteller is "
+            "sent next turn, against the budget set in File → Settings… → Context. Older "
+            "messages are summarised into chapters before it fills."
+        )
 
     def add_cost(self, usage: Usage) -> None:
         """Fold spend into the session total without touching the cache readout.
@@ -374,15 +391,20 @@ class StatusStrip(QWidget):
         self._show_cost()
 
     def _show_cost(self) -> None:
+        if not self._cost_reported and not self._story_calls:
+            # Nothing has been sent yet: nothing to say.
+            self.cost_label.setText("")
+            self.cost_label.setToolTip("")
+            return
         about = "~" if self._session_estimated else ""
-        session = f"{about}${self._session_cost:.4f}" if self._cost_reported else "unknown"
-        text = f"session {session}"
+        session = f"{about}${self._session_cost:.4f}" if self._cost_reported else "not known yet"
+        text = f"This session {session}"
         tip = "Spend since this story was opened."
         if not self._cost_reported:
             tip += " Unknown: no call has reported a cost or had a listed price yet."
         if self._story_cost is not None and self._story_unpriced >= self._story_calls:
             # Nothing priced at all: a total would read "≥ $0.0000".
-            text += "  ·  story unknown"
+            text += "  ·  Story not known"
             tip += (
                 f" Story: none of its {self._story_calls} call(s) reported a cost or had a "
                 "listed price (Story → Usage and cost…)."
@@ -391,7 +413,7 @@ class StatusStrip(QWidget):
             # No cost at all for some calls makes the total a lower bound;
             # costs worked out from listed prices make it an estimate.
             prefix = "≥ " if self._story_unpriced else ("~" if self._story_estimated else "")
-            text += f"  ·  story {prefix}${self._story_cost:.4f}"
+            text += f"  ·  Story {prefix}${self._story_cost:.4f}"
             tip += " Story: every call in its API log (Story → Usage and cost…)."
             if self._story_estimated:
                 tip += (
@@ -407,12 +429,18 @@ class StatusStrip(QWidget):
         self.add_cost(usage)
         if usage.cache_read_tokens or usage.cache_creation_tokens:
             self.cache_label.setText(
-                f"cache {usage.cache_read_tokens:,} read / {usage.cache_creation_tokens:,} written"
+                f"Cache: {_short(usage.cache_read_tokens)} reused, "
+                f"{_short(usage.cache_creation_tokens)} new"
             )
         elif usage.prompt_tokens:
-            self.cache_label.setText("cache miss")
+            self.cache_label.setText("Cache: none reused")
         else:
-            self.cache_label.setText("cache —")
+            self.cache_label.setText("")
+        self.cache_label.setToolTip(
+            f"Last turn: {usage.cache_read_tokens:,} tokens of the prompt reused from the "
+            f"endpoint's cache (cheaper and quicker), {usage.cache_creation_tokens:,} written "
+            "to it for the next turn."
+        )
 
     def reset_session_cost(self) -> None:
         self._session_cost = 0.0
@@ -421,8 +449,8 @@ class StatusStrip(QWidget):
         self._story_unpriced = 0
         self._story_estimated = 0
         self._session_estimated = False
-        self.cost_label.setText("cost —")
-        self.cache_label.setText("cache —")
+        self.cost_label.setText("")
+        self.cache_label.setText("")
         self.set_lore(None)
         self.set_archive(0)
         self.set_budget(None)

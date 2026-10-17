@@ -81,6 +81,8 @@ from sealedlore.gui.model_trouble import (
     TroubleContext,
     TroubleRole,
 )
+from sealedlore.gui.new_story_guide import NewStoryGuide
+from sealedlore.gui.people_page import PeoplePage, people_view
 from sealedlore.gui.plot_editor import PlotEditorWindow
 from sealedlore.gui.plot_panel import ClockDialog, PlotPanel
 from sealedlore.gui.prompt_editor import PromptEditorDialog
@@ -319,6 +321,8 @@ class MainWindow(
         self.composer.stop_requested.connect(self.stop_generation)
         self.composer.regenerate_requested.connect(self.regenerate)
         self.composer.held_character_changed.connect(self._on_held_changed)
+        self.composer.set_more(self.config.composer_more)
+        self.composer.more_toggled.connect(self._keep_composer_more)
 
         centre_layout = QVBoxLayout()
         # Clear of the docks' edges: at 0 the session line, the captions and
@@ -347,11 +351,10 @@ class MainWindow(
         self.top_row.add_group([self.stories_button, self.view_toggle])
         self.top_row.add_group([self.find_button, self.world_button])
         self.top_row.add_group([self.branch_bar], right=True, whole=True)
-        # In a widget of its own, so the start page can put it away whole.
-        self.top_bar = QWidget()
-        self.top_bar.setLayout(self.top_row)
-        self.top_row.setContentsMargins(0, 0, 0, 0)
-        centre_layout.addWidget(self.top_bar)
+        # A layout of the centre's own, not in a widget: wrapped in one, it
+        # missed the branch bar's height changing and drew its buttons
+        # clipped. The start page puts its widgets away (`_show_start`).
+        centre_layout.addLayout(self.top_row)
         centre_layout.addWidget(self.find_bar)
         # The branch map shares the transcript's place (Branches, on the branch
         # bar), as the story's map does (Map, beside Find: window_world.py).
@@ -428,6 +431,11 @@ class MainWindow(
         self.summaries_panel.chapter_chosen.connect(self._scroll_to_node)
         self.summaries_panel.edit_committed.connect(self._save_summary)
         self.inspector = ContextInspector()
+        # Who is in the story, by their faces: the page a story without a map
+        # opens on (gui/people_page.py).
+        self.people_page = PeoplePage(self._story_pictures)
+        self._people_dirty = True
+        self._wire_people()
         # The pages a job locks read-only rather than greys out.
         self._busy_locks = [
             BusyLock(page)
@@ -451,6 +459,7 @@ class MainWindow(
         self.right_tabs = TabRows()
         self.right_tabs.addTab(self.world_view, "Map")
         self.right_tabs.setTabVisible(0, False)
+        self.right_tabs.addTab(self.people_page, "People")
         self.right_tabs.addTab(self.scene_panel, "Scene")
         self.right_tabs.addTab(self.cast_panel, "Cast")
         self.right_tabs.addTab(self.plot_panel, "Plot")
@@ -459,6 +468,11 @@ class MainWindow(
         self.right_tabs.addTab(self.summaries_panel, "Story so far")
         self.right_tabs.addTab(self.images_panel, "Media")
         self.right_tabs.addTab(self.inspector, "Prompt")
+        # For checking the model's work, not for play: shown from View →
+        # Prompt page (Oct 18 2026; nine pages were too many to read past).
+        self.right_tabs.setTabVisible(
+            self.right_tabs.indexOf(self.inspector), self.config.prompt_page
+        )
         self.right_tabs.set_empty(self._no_story_page())
         right = QDockWidget("Inspector", self)
         right.setObjectName("inspectorDock")
@@ -581,9 +595,13 @@ class MainWindow(
         self.restart_action = QAction("&Restart as new playthrough…", self)
         self.restart_action.triggered.connect(lambda: self.restart_story(review=True))
         story_menu.addAction(self.restart_action)
+        # Pictures before the rarer things: they are what play reaches for.
+        self._image_actions(story_menu)
+        self._video_menu_actions(story_menu)
 
         story_menu.addSeparator()
-        self.review_action = QAction("Re&view settings…", self)
+        # "Review settings…" didn't say who reviews or what for.
+        self.review_action = QAction("Re&view settings with the model…", self)
         self.review_action.setStatusTip(
             "Say what isn't working; the model proposes changes to the settings"
         )
@@ -603,7 +621,8 @@ class MainWindow(
         story_menu.addAction(self.undo_review_action)
 
         story_menu.addSeparator()
-        self.import_plot_action = QAction("Import &plot…", self)
+        # "Import plot…" beside File → Import… read as the same thing.
+        self.import_plot_action = QAction("Add a &plot from a file…", self)
         self.import_plot_action.setStatusTip(
             "Give this story the facts and events from a plot file (.md)"
         )
@@ -627,9 +646,6 @@ class MainWindow(
             lambda: self.export_markdown(chapter_only=True)
         )
         self.export_menu.addAction(self.chapter_markdown_action)
-        self._image_actions(story_menu)
-        self._video_menu_actions(story_menu)
-        story_menu.addSeparator()
         self.usage_action = QAction("&Usage and cost…", self)
         self.usage_action.triggered.connect(self.show_usage)
         story_menu.addAction(self.usage_action)
@@ -638,7 +654,7 @@ class MainWindow(
         # Hidden while a story keeps a map: the map has its room (window_world.py).
         view_menu.addAction(self.stories_list_action)
         view_menu.addSeparator()
-        self.storyteller_view_action = QAction("What the &storyteller is sent", self)
+        self.storyteller_view_action = QAction("What the &storyteller sees", self)
         self.storyteller_view_action.setCheckable(True)
         self.storyteller_view_action.setShortcut(QKeySequence("Ctrl+Shift+V"))
         self.storyteller_view_action.setStatusTip(
@@ -647,6 +663,14 @@ class MainWindow(
         )
         self.storyteller_view_action.toggled.connect(self.set_storyteller_view)
         view_menu.addAction(self.storyteller_view_action)
+        self.prompt_page_action = QAction("&Prompt page (advanced)", self)
+        self.prompt_page_action.setCheckable(True)
+        self.prompt_page_action.setChecked(self.config.prompt_page)
+        self.prompt_page_action.setStatusTip(
+            "A page beside the story with everything the storyteller was sent, to check or copy"
+        )
+        self.prompt_page_action.toggled.connect(self.show_prompt_page)
+        view_menu.addAction(self.prompt_page_action)
         self._find_actions(view_menu)
         # A view choice, so it lives here (it was a Settings tab of its own).
         self.dice_rolls_action = QAction("Show &dice rolls", self)
@@ -701,6 +725,118 @@ class MainWindow(
         stop_action.triggered.connect(self._on_escape)
         self.addAction(stop_action)
 
+    def _show_first_page(self) -> None:
+        """The page a story opens on: its map, if it keeps one; else who is
+        in it, by their faces (People); a chat, which has neither, its
+        chapters."""
+        session = self.session
+        if session is None:
+            return
+        if session.map_on:
+            self.right_tabs.setCurrentWidget(self.world_view)
+        elif session.story.chat:
+            self.right_tabs.setCurrentWidget(self.summaries_panel)
+        else:
+            self.right_tabs.setCurrentWidget(self.people_page)
+
+    # --- the People page -------------------------------------------------------
+
+    def _wire_people(self) -> None:
+        page = self.people_page
+        page.profile_requested.connect(self._open_profile)
+        page.draw_requested.connect(lambda card_id: self._on_card_picture(card_id, "", "new"))
+        page.file_requested.connect(self._choose_card_picture)
+        page.play_requested.connect(self._play_as)
+        page.draw_all_requested.connect(lambda: self.draw_card_pictures())
+        page.background_requested.connect(lambda: self.generate_image(background=True))
+        page.background_file_requested.connect(self.choose_background)
+        page.settings_requested.connect(lambda: self.open_settings("Images"))
+        page.scene_requested.connect(lambda: self.right_tabs.setCurrentWidget(self.scene_panel))
+        page.add_requested.connect(self._add_character)
+
+    def _add_character(self) -> None:
+        """A new card, on the Cast page, its name ready to type."""
+        if self.session is None or self._busy:
+            return
+        self.right_tabs.setCurrentWidget(self.cast_panel)
+        self.cast_panel.add_character()
+
+    def _refresh_people(self) -> None:
+        """The People page from the story as it stands: built now if it is
+        showing, else when it is next shown (the Cast page's every edit
+        comes through here)."""
+        self._people_dirty = True
+        if self.right_tabs.currentWidget() is self.people_page:
+            self._build_people()
+
+    def _build_people(self) -> None:
+        self._people_dirty = False
+        session = self.session
+        if session is None or session.story.chat:
+            self.people_page.set_view(people_view([], [], SceneState(), None))
+            return
+        hidden = set() if self.config.show_plot_spoilers else session.hidden_ids()
+        missing, _lore = session.without_pictures()
+        self.people_page.set_view(
+            people_view(
+                [c for c in session.cast if c.id not in hidden],
+                [c for c in session.supporting if c.id not in hidden],
+                session.story.scene,
+                session.story.held_character_id,
+                story_id=session.story.id,
+                begun=bool(session.nodes),
+                missing=[c.name for c in missing],
+                pictures_ready=session.config.images() is not None,
+                background=bool(session.story.background_image),
+            )
+        )
+
+    def _open_profile(self, card_id: str) -> None:
+        """A card on the People page: their profile, on the Cast page."""
+        self.right_tabs.setCurrentWidget(self.cast_panel)
+        self.cast_panel.select_character(card_id)
+
+    def _choose_card_picture(self, card_id: str) -> None:
+        """A picture from disk for a card with none (the People page), as the
+        Cast page's Choose a file… adds one."""
+        if self.session is None:
+            return
+        if self._busy:
+            self.statusBar().showMessage(
+                "A picture can be chosen once the story's current job is done.", 6000
+            )
+            return
+        self.cast_panel.select_character(card_id)
+        if self.cast_panel.add_portrait_to(card_id):
+            self.people_page.forget_pictures()
+            self._refresh_people()
+
+    def _play_as(self, card_id: str) -> None:
+        """Play as this character, as choosing them under Playing does."""
+        if self.session is None or self._busy or self.session.in_private:
+            return
+        index = self.composer.held.findData(card_id)
+        if index >= 0:
+            self.composer.held.setCurrentIndex(index)
+
+    def show_prompt_page(self, on: bool) -> None:
+        """View → Prompt page: the Inspector's Prompt page shown (and gone
+        to) or put away, kept for every story."""
+        self.config.prompt_page = bool(on)
+        index = self.right_tabs.indexOf(self.inspector)
+        self.right_tabs.setTabVisible(index, bool(on))
+        if on and self.session is not None:
+            self.inspector_dock.show()
+            self.right_tabs.setCurrentWidget(self.inspector)
+        elif not on and self.right_tabs.currentWidget() is self.inspector:
+            self._show_first_page()
+        if self.prompt_page_action.isChecked() != bool(on):
+            self.prompt_page_action.setChecked(bool(on))
+
+    def _keep_composer_more(self, on: bool) -> None:
+        """More, open or put away: kept for every story (saved on close)."""
+        self.config.composer_more = on
+
     def _on_escape(self) -> None:
         # Typing in the find bar, Esc closes it, even while a passage streams.
         if self.find_open() and self.find_bar.isAncestorOf(self.focusWidget()):
@@ -720,23 +856,34 @@ class MainWindow(
     # --- stories -----------------------------------------------------------
 
     def new_story(self) -> None:
+        """Write a story from scratch: the guide's four steps, then Start
+        (gui/new_story_guide.py); or Setup, with every option, if the author
+        skips to it."""
         if self._busy or not self._private_allows_close():
             return
-        title, accepted = QInputDialog.getText(self, "New story", "Title")
-        if not accepted or not title.strip():
-            return
-        story = Story(title=title.strip())
         provider_config = self.config.active_provider()
-        if provider_config is not None and provider_config.model:
-            story.defaults.main_model = provider_config.model
-        save_story_bundle(StoryBundle(story=story), root=self.root)
-        self.stories.refresh(selected_id=story.id)
-        self.open_story(story.id)
-        self.open_setup()
-        # A blank story has nobody to play yet, and nothing said what came next.
-        self.statusBar().showMessage(
-            "Next: add the cast on the Cast page, then Story → Start story…", 12000
+        model = (
+            provider_config.model if provider_config is not None and provider_config.model else None
         )
+        guide = NewStoryGuide(self, model=model)
+        accepted = guide.exec() == QDialog.Accepted
+        bundle, full_setup = guide.bundle(), guide.full_setup
+        guide.deleteLater()  # read; nothing else holds it
+        if not accepted or bundle is None:
+            return
+        if full_setup and not bundle.cast:
+            # A story with nobody to play yet: Setup, then the cast.
+            save_story_bundle(bundle, root=self.root)
+            self.stories.refresh(selected_id=bundle.story.id)
+            self.open_story(bundle.story.id)
+            self.open_setup()
+            self.statusBar().showMessage(
+                "Next: add the cast on the Cast page, then Story → Start story…", 12000
+            )
+            return
+        # Setup first when asked for, else straight to Start: who to play, and
+        # pictures for the cards, before the opening is written.
+        self._open_new_bundle(bundle, review=full_setup)
 
     def _open_new_bundle(self, bundle: StoryBundle, *, review: bool = False) -> None:
         """Save and open a story made from a file or a setup, and begin it.
@@ -1310,9 +1457,7 @@ class MainWindow(
         except (OSError, ValueError) as exc:
             self.statusBar().showMessage(f"Couldn't use the new background: {exc}", 12000)
         self.refresh_panels()
-        self.right_tabs.setCurrentWidget(
-            self.world_view if self.session.map_on else self.scene_panel
-        )
+        self._show_first_page()
         self.refresh_images()
         self._resume_videos()
         self._apply_background()
@@ -1488,7 +1633,10 @@ class MainWindow(
         above the transcript are put away: greyed, they only looked usable.
         None: a story is open, and they are back."""
         open_story = start is None
-        self.top_bar.setVisible(open_story)
+        # The map's button is the map's to show (`_sync_world`), the branch
+        # bar the branches' (`refresh_branch_bar`).
+        for widget in (self.stories_button, self.view_toggle, self.find_button):
+            widget.setVisible(open_story)
         if not open_story:
             self.close_find()
             self.composer.setVisible(False)
@@ -1502,14 +1650,31 @@ class MainWindow(
         self.transcript.set_chat(self.session.story.chat, tee=self.session.tee_chat)
         split = self.session.split()
         setup = self.session.story.setup
-        empty_text = (
-            "Write your first message below. Story → Setup… changes the system prompt."
-            if self.session.story.chat
-            else "Story → Start story… to begin from the opening, or type below."
-            if setup.opening_text.strip()
-            else "Nothing written yet. Type below to begin the story, or set up its world "
-            "and opening under Story → Setup…"
-        )
+        # A story not begun says what Start does and has the button for it
+        # (Oct 18 2026: a line naming a menu was easy to read past).
+        about = (setup.description or "").strip()
+        lead = f"{about}\n\n" if about else ""
+        empty_actions: list[tuple[str, Callable[[], None]]] = []
+        if self.session.story.chat:
+            empty_text = "Write your first message below. Story → Setup… changes the system prompt."
+        elif setup.opening_text.strip():
+            empty_text = (
+                f"{lead}This story hasn't begun. Start it to choose who you play; the "
+                "opening is then written for you. Or type below to begin it yourself."
+            )
+            empty_actions = [
+                ("Start the story…", self.start_story),
+                ("Look over the setup…", self.open_setup),
+            ]
+        else:
+            empty_text = (
+                f"{lead}Nothing written yet. Set up its world and opening, or type below "
+                "to begin the story."
+            )
+            empty_actions = [
+                ("Set up the world and opening…", self.open_setup),
+                ("Start the story…", self.start_story),
+            ]
         if self._storyteller_view:
             self._show_storyteller_view(nodes, split)
             return
@@ -1524,6 +1689,7 @@ class MainWindow(
             marked_ids=frozenset(self.session.review_marks),
             pictures_for=self._pictures_for,
             branch_starts=self.session.branch_start_names(),
+            empty_actions=empty_actions,
         )
 
     def _chapter_cards(self, nodes: list[Node], split) -> list[ChapterCard]:
@@ -1600,12 +1766,17 @@ class MainWindow(
     def refresh_branch_bar(self) -> None:
         if self.session is None:
             self.branch_bar.set_branches([])
+            self.branch_bar.hide()
             return
         listed = self.session.branch_list()
         pending = self.session.pending_branch
         self.branch_bar.set_branches(
             listed, self._branch_openings(), pending=pending[1] if pending else None
         )
+        # Only once there is more than one line to read (Oct 18 2026): "Branch:
+        # Main, the only one" and a diagram of one lane said nothing to a new
+        # player. ⋯ → New branch from here… makes the second.
+        self.branch_bar.setVisible(len(listed) > 1 or bool(pending))
 
     def _branch_openings(self) -> dict[str | None, str]:
         """How each branch begins: its first message's opening words."""
@@ -2708,7 +2879,8 @@ class MainWindow(
             return
         self.session.forget_review_undo()
         self.session.save()
-        # Presence and the selectors are keyed on the cast, so they follow it.
+        # Presence and the selectors are keyed on the cast, so they follow it
+        # (and the People page with the scene).
         self._refresh_scene_panel()
         self._refresh_composer()
         self._reassemble_inspector()
@@ -3486,6 +3658,7 @@ class MainWindow(
         # Held-back lore follows the leaf too: a mention is on one branch only.
         self.lore_panel.set_held_back(session.held_back_ids())
         self._refresh_plot_panel()
+        self._refresh_people()
 
     def _refresh_plot_panel(self) -> None:
         """The plot's clock and facts at the leaf; they follow it like the scene.
@@ -3788,7 +3961,8 @@ class MainWindow(
             "you switch. Remove them from Style → Other notes, or let a settings review do it."
         ]
 
-    def open_settings(self) -> None:
+    def open_settings(self, tab: str = "") -> None:
+        """`tab`: the page to open on, by its label ("Images")."""
         # Applying settings replaces the provider and saves the story, and the
         # worker is the only writer while it runs.
         if self._busy or self._settings_paused():
@@ -3805,6 +3979,10 @@ class MainWindow(
             fetch_models=not self.use_mock,
             root=self.root,
         )
+        if tab:
+            for index in range(dialog.tabs.count()):
+                if dialog.tabs.tabText(index) == tab:
+                    dialog.tabs.setCurrentIndex(index)
         if dialog.exec() == SettingsDialog.Accepted:
             save_config(self.config, root=self.root)
             if keychain.last_problem and self.config.key_storage == "keychain":

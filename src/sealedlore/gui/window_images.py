@@ -76,7 +76,8 @@ class ImagesWindow:
     def _image_actions(self, story_menu) -> None:
         """Called from `_build_actions`: the Story menu's picture entries."""
         story_menu.addSeparator()
-        self.image_action = QAction("&Generate image…", self)
+        # The window says "picture" everywhere else.
+        self.image_action = QAction("Draw a &picture…", self)
         self.image_action.setShortcut(QKeySequence("Ctrl+Shift+I"))
         self.image_action.setStatusTip(
             "A picture of what is happening; you approve the prompt before anything is sent"
@@ -481,6 +482,8 @@ class ImagesWindow:
             # The pictures only: the author may be typing on a card.
             self.cast_panel.refresh_pictures()
             self.lore_panel.refresh_pictures()
+            self.people_page.forget_pictures()
+            self._refresh_people()
             self.refresh_images()
             self.statusBar().showMessage(f"Picture ready: {', '.join(names)}.", 8000)
             self._offer_avatars(list(self.session.portraits_taken))
@@ -717,6 +720,8 @@ class ImagesWindow:
 
     def _apply_background(self) -> None:
         story = self.session.story if self.session is not None else None
+        # The People page offers a background until there is one.
+        self._refresh_people()
         if story is None or not story.background_image:
             self.transcript.set_background(None)
             return

@@ -126,8 +126,9 @@ def test_every_page_is_one_click_away_and_plot_shows_only_with_a_plot(app, windo
     plot = tabs.indexOf(window.plot_panel)
     assert not tabs.isTabVisible(plot), "the story has no plot"
     assert not tabs.isTabVisible(tabs.indexOf(window.world_view)), "nor a map"
+    assert not tabs.isTabVisible(tabs.indexOf(window.inspector)), "Prompt is under View"
     shown = [i for i in range(tabs.count()) if tabs.isTabVisible(i)]
-    assert len(shown) == tabs.count() - 2
+    assert len(shown) == tabs.count() - 3
     # No scrolling strip: every visible page has its own button on screen.
     settle(app)
     for index in shown:
@@ -533,7 +534,7 @@ def test_with_no_story_open_the_window_says_so_and_offers_a_start(app, tmp_path:
         assert window.centre_stack.currentWidget() is window.start_page
         cards = window.start_page.cards
         assert {"premise", "blank", "chat", "import", f"open:{story.id}"} <= set(cards)
-        assert not window.composer.isVisible() and not window.top_bar.isVisible()
+        assert not window.composer.isVisible() and _top_row_hidden(window)
         assert window.composer.input.placeholderText() == NO_STORY_PLACEHOLDER
         assert not window.story_menu.menuAction().isVisible()
         assert not window.close_story_action.isVisible()
@@ -546,7 +547,7 @@ def test_with_no_story_open_the_window_says_so_and_offers_a_start(app, tmp_path:
         assert window.session is not None and window.session.story.id == story.id
         assert not tabs.is_empty_shown()
         assert window.centre_stack.currentWidget() is window.transcript
-        assert window.composer.isVisible() and window.top_bar.isVisible()
+        assert window.composer.isVisible() and _top_row_shown(window)
         assert window.composer.input.placeholderText() != NO_STORY_PLACEHOLDER
         assert window.story_menu.menuAction().isVisible()
         assert window.close_story_action.isVisible()
@@ -654,7 +655,7 @@ def test_a_first_run_is_welcomed_with_how_to_set_up(app, tmp_path: Path):
         assert buttons == {"Open Settings…", "Import…"}
         # It opens at its heading, not followed to its last steps. (With the
         # composer put away it fits 768px high; it scrolls on a shorter one.)
-        assert not window.composer.isVisible() and not window.top_bar.isVisible()
+        assert not window.composer.isVisible() and _top_row_hidden(window)
         window.resize(1366, 500)
         settle(app)
         bar = window.transcript.verticalScrollBar()
@@ -802,20 +803,24 @@ def _roster(panel) -> dict[str, bool]:
     }
 
 
-def test_scene_is_first_and_lists_the_supporting_characters(app, window: MainWindow, monkeypatch):
+def test_people_come_first_and_the_scene_lists_the_supporting_characters(
+    app, window: MainWindow, monkeypatch
+):
     """Playtesting: the scene read is wrong too often to go unwatched. The long
     test story's cast is two people and the station's regulars are supporting cards,
-    so the roster showed two rows and the rest was a comma list."""
+    so the roster showed two rows and the rest was a comma list. Since Oct 18
+    2026 a story without a map opens on People, who is here by their faces
+    (the author: keep it visual), with the Scene page a click away."""
     from PySide6.QtWidgets import QCheckBox
 
     from sealedlore.models.character import Character
 
-    assert window.right_tabs.currentWidget() is window.scene_panel
+    assert window.right_tabs.currentWidget() is window.people_page
     first = next(i for i in range(window.right_tabs.count()) if window.right_tabs.isTabVisible(i))
-    assert window.right_tabs.tabText(first) == "Scene"  # Map comes first only with a map
-    window.right_tabs.setCurrentWidget(window.inspector)
+    assert window.right_tabs.tabText(first) == "People"  # Map comes first only with a map
+    window.right_tabs.setCurrentWidget(window.cast_panel)
     window.open_story(window.session.story.id)
-    assert window.right_tabs.currentWidget() is window.scene_panel, "a story opens on Scene"
+    assert window.right_tabs.currentWidget() is window.people_page, "a story opens on People"
 
     session = window.session
     hale = Character(id="sup-hale", name="Frank Hale")
@@ -877,6 +882,29 @@ def test_the_arrows_swap_a_take_in_place(app, window: MainWindow):
     settle(app)
     assert [n.id for n in session.path()] == ["u0", "a0", "u1", "a1"]
     assert session.story.active_leaf_id == "a1", "the story after it stays"
+
+
+def _top_row(window: MainWindow) -> list[bool]:
+    """Whether each of the row above the transcript shows: Stories, the
+    view toggle, Find, the map's button and the branch bar."""
+    return [
+        w.isVisible()
+        for w in (
+            window.stories_button,
+            window.view_toggle,
+            window.find_button,
+            window.world_button,
+            window.branch_bar,
+        )
+    ]
+
+
+def _top_row_shown(window: MainWindow) -> bool:
+    return all(_top_row(window)[:3])
+
+
+def _top_row_hidden(window: MainWindow) -> bool:
+    return not any(_top_row(window))
 
 
 def _wait_idle(app, window: MainWindow, timeout: float = 20.0) -> None:

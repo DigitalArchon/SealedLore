@@ -93,8 +93,8 @@ class PlotPanel(QWidget):
         self._started = False
 
         self.empty = QLabel(
-            "This story has no plot. Story → Import plot… gives it one from a plot file; "
-            "File → Plot file editor… writes one. The format guide and two sample plots "
+            "This story has no plot. Story → Add a plot from a file… gives it one from a "
+            "plot file; File → Plot file editor… writes one. The format guide and two sample plots "
             "are under Help → Plot format guide and samples."
         )
         self.empty.setObjectName("hintLabel")

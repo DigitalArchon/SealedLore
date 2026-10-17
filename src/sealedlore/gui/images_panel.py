@@ -117,13 +117,13 @@ class ImagesPanel(QWidget):
         self.story_heading = _heading()
         self.map_heading = _heading()
         self.hint = QLabel(
-            "No pictures or videos yet. Image… beside Send (or Story → Generate image…) "
+            "No pictures or videos yet. Picture… beside Send (or Story → Draw a picture…) "
             "pictures what is happening, and Story → Generate video… makes a few seconds of "
             "it; right-click one here for more."
         )
         self.hint.setObjectName("hintLabel")
         self.hint.setWordWrap(True)
-        self.generate_button = QPushButton("Image…")
+        self.generate_button = QPushButton("Picture…")
         self.generate_button.setToolTip("Generate a picture of what is happening")
         self.generate_button.clicked.connect(self.generate_requested)
         self.generate_video_button = QPushButton("Video…")

@@ -99,7 +99,7 @@ class ImageDialog(QDialog):
         if card is not None:
             title = f"{card.name} in the scene"
         else:
-            title = "Draw the background" if background else "Generate image"
+            title = "Draw the background" if background else "Draw a picture"
         self.setWindowTitle(title)
         self._browse = browse
         self.setMinimumWidth(720)

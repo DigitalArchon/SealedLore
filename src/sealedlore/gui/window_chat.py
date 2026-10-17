@@ -111,9 +111,16 @@ class ChatWindow:
         chat = self.in_chat
         self.composer.set_chat_mode(chat)
         self.view_toggle.set_chat(chat)
-        for page in (self.scene_panel, self.cast_panel, self.lore_panel, self.style_panel):
+        for page in (
+            self.people_page,
+            self.scene_panel,
+            self.cast_panel,
+            self.lore_panel,
+            self.style_panel,
+        ):
             self.right_tabs.setTabVisible(self.right_tabs.indexOf(page), not chat)
         if chat and self.right_tabs.currentWidget() in (
+            self.people_page,
             self.scene_panel,
             self.cast_panel,
             self.lore_panel,

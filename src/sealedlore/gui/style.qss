@@ -382,6 +382,116 @@ QDockWidget::title {
   border-top-right-radius: 7px;
 }
 
+/* --- the People page (gui/people_page.py) ----------------------------- */
+
+#peoplePage, #peopleColumn {
+  background: transparent;
+  border: none;
+}
+
+#peopleHeading {
+  color: @text_heading;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+#peopleSituation {
+  color: @text_soft;
+}
+
+#peopleSection {
+  color: @text_heading;
+  font-size: 14px;
+  font-weight: 600;
+  padding-top: 10px;
+}
+
+#personCard {
+  background: @panel;
+  border: 1px solid @border;
+  border-radius: 8px;
+}
+
+#personCard[you="true"] {
+  border: 1px solid @checked_border;
+}
+
+#personCard:hover {
+  background: @button_hover;
+  border-color: @hover_border_accent;
+}
+
+#personCard:focus {
+  border: 2px solid @accent;
+}
+
+#personPicture {
+  background: @window;
+  border-top-left-radius: 7px;
+  border-top-right-radius: 7px;
+}
+
+#personName {
+  color: @text_bright;
+  font-size: 15px;
+  font-weight: 600;
+  background: transparent;
+}
+
+#personYou {
+  color: @accent;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  background: transparent;
+}
+
+#personNote {
+  color: @text_accent;
+  font-size: 12px;
+  background: transparent;
+}
+
+#personLine {
+  color: @text_dim;
+  font-size: 12px;
+  background: transparent;
+}
+
+#personAction {
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+#peopleTip {
+  background: @panel;
+  border: 1px solid @hover_border_accent;
+  border-radius: 8px;
+}
+
+#peopleTipTitle {
+  color: @text_bright;
+  font-weight: 600;
+  background: transparent;
+}
+
+#peopleTipText {
+  color: @text_soft;
+  background: transparent;
+}
+
+/* A button that reads as a link: Not now, Correct the scene. */
+#linkButton {
+  background: transparent;
+  border: none;
+  color: @accent;
+  padding: 2px 0px;
+}
+
+#linkButton:hover {
+  text-decoration: underline;
+}
+
 /* --- composer ------------------------------------------------------- */
 
 #input {

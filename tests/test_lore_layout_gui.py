@@ -42,7 +42,7 @@ def test_the_panel_lists_every_entry_as_sent_every_turn(app):
 def test_the_status_bar_says_all_of_it(app):
     strip = StatusStrip()
     strip.set_lore(whole())
-    assert strip.lore_label.text() == "lore all 2"
+    assert strip.lore_label.text() == "Lore: all 2 sent"
 
 
 def test_settings_choose_how_a_large_lorebook_is_selected(app, story):

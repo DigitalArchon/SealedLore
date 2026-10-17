@@ -64,9 +64,9 @@ and lore if you like (kept in a folder beside the file).
 ### Auto-fix your story
 
 If the AI isn't responding the way you'd like, but you can't work out which
-setting needs changing, Story → Review settings… has an AI model (I
-recommend Opus 5.5) look over the story's settings, the model settings and
-the prompts the storyteller receives. Based on your complaint, it recommends
+setting needs changing, Story → Review settings with the model… has an AI
+model (I recommend Opus 5.5) look over the story's settings, the model
+settings and the prompts the storyteller receives. Based on your complaint, it recommends
 how to fix it, and you accept or reject each recommendation.
 
 ### Character and scene consistency
@@ -283,14 +283,17 @@ Windows offers weaker privacy on the machine itself (see
    airships and clockwork) and The Ninth Furnace (a hellscape of cultists
    and rivers of lava). Setup opens first; Save, then choose who you are
    playing and the opening is written. Or choose **Draft a story from an
-   idea** and describe a story in a sentence or two.
+   idea** and describe a story in a sentence or two, or **Write a story from
+   scratch**, which walks through it a step at a time.
 
 4. **Play.** Type what your character does or says and press Enter. The
-   storyteller answers; the Scene page on the right shows who is now in the
-   scene, and the Prompt page shows exactly what was sent. *Playing* is the
-   character you write, *Speaking as* is who a turn's text lands as (your
-   character, Narration, Direction to the storyteller, or a Question to the
-   model out of character).
+   storyteller answers. Beside the story, a story with a map shows the map,
+   and one without shows its **People**: who is here now, by their faces,
+   with a portrait drawn for anyone who has none in a click. *Playing* is
+   the character you write, *Speaking as* is who a turn's text lands as
+   (your character, Narration, Direction to the storyteller, or a Question
+   to the model out of character), and **More ▸** has the rest. View →
+   Prompt page (advanced) shows exactly what the storyteller was sent.
 
 To look around with no endpoint at all, start it with `--mock`
 (`sealedlore-gui --mock`, or the AppImage with `--mock`) and a scripted

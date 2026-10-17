@@ -19,6 +19,7 @@ part of the window, and what each feature does. The README's
 - [Drafting a story, and reviewing its settings](#drafting-a-story-and-reviewing-its-settings)
 - [Changing the prompts (advanced)](#changing-the-prompts-advanced)
 - [Perspective and supporting characters](#perspective-and-supporting-characters)
+- [The People page](#the-people-page)
 - [The scene, and who can walk into it](#the-scene-and-who-can-walk-into-it)
 - [Branches, takes and export](#branches-takes-and-export)
 - [Outcomes and dice](#outcomes-and-dice)
@@ -429,19 +430,23 @@ archiving, rebuilding summaries.
   including, for a story, every other call's model and route. It can't be
   changed there; it is only for reference.
 - **Above the transcript**: **Find**; **Map**, the map of the story, for a
-  story that keeps one (see "The map"); and on the right, **Branch** names the
-  branch you are reading: its menu switches to another, renames or deletes
-  it, and **Branches** shows every branch at once.
-- **Right dock**, "Inspector", its pages as two rows of buttons: **Scene**
-  (who is here and where the story is; a story opens on it, so you can check
-  it at a glance), **Cast** (sheets, skills, supporting characters), **Plot** (the clock, facts and events; shown only for a
-  story with a plot), **Lore**, **Style**, **Story so far** (the chapter
-  summaries: edit, rebuild, archive now; double-click one to go to it in the
-  story), **Media** (every picture and video the story has made, its
-  background and the map's views), and
-  **Prompt** (exactly what the storyteller was sent
-  last turn; **Copy prompt** copies it as readable text, **Copy request
-  JSON** as the exact request body).
+  story that keeps one (see "The map"); and on the right, once a story has
+  more than one branch, **Branch** names the branch you are reading: its menu
+  switches to another, renames or deletes it, and **Branches** shows every
+  branch at once.
+- **Right dock**, "Inspector", its pages as two rows of buttons: **Map**
+  (for a story that keeps one, and the page it opens on), **People** (who is
+  in the story, by their faces; the page a story without a map opens on: see
+  "The People page"), **Scene** (who is here and where the story is, to
+  correct), **Cast** (sheets, skills, supporting characters), **Plot** (the
+  clock, facts and events; shown only for a story with a plot), **Lore**,
+  **Style**, **Story so far** (the chapter summaries: edit, rebuild, archive
+  now; double-click one to go to it in the story) and **Media** (every
+  picture and video the story has made, its background and the map's
+  views). **View → Prompt page (advanced)** adds **Prompt**: exactly what the
+  storyteller was sent last turn, for checking the model's work; **Copy
+  prompt** copies it as readable text, **Copy request JSON** as the exact
+  request body.
 
   ![The Prompt page: each section of the prompt with its token count and cache breakpoints, and the request as sent](screenshots/prompt-tab.png)
 
@@ -454,10 +459,10 @@ archiving, rebuilding summaries.
   in the next part as you reach it; the rows at the top and bottom say how
   many messages lie beyond, with **Start of story** and **Latest** to jump to
   either end. Sending a turn always takes you back to the latest.
-- **Above the transcript**: *As written* shows every message; *As sent to
-  the storyteller* shows the chapter summaries standing in for archived
+- **Above the transcript**: *Full story* shows every message; *What the
+  storyteller sees* shows the chapter summaries standing in for archived
   prose and marks anything left out for budget (View → What the storyteller
-  is sent, Ctrl+Shift+V).
+  sees, Ctrl+Shift+V).
 - **Each message** has Edit and a ⋯ menu: Regenerate this passage, Take back
   this turn (your turns), Reroll the dice, Use as evidence in a review,
   Illustrate this passage…, New branch from here…, and Delete from here….
@@ -471,10 +476,19 @@ archiving, rebuilding summaries.
   story (passages, turns and the boxes you write them in) and for the
   monospace Prompt tab; Restore Defaults goes back to the app's own. Both are
   kept for next time.
-- **The composer row**: *Playing* is the character you write (the storyteller
+- **The composer**: *Playing* is the character you write (the storyteller
   never writes them); *Speaking as* is who your text lands as (that
-  character, Narration, Direction, or a Question to the model); *Model
-  voices* is who the storyteller may voice this turn.
+  character, Narration, Direction, or a Question to the model); *Length* is
+  how long the passages are. **More ▸** opens the rest: *Model voices* (who
+  the storyteller may voice this turn), *Outcome* (and the dice), **Private**
+  (a private scene) and **OOC** (an out-of-character note). It stays open or
+  closed as you leave it, opens by itself while a private scene, a roll or an
+  OOC note is in use, and names an outcome or voices you chose beside it
+  while closed.
+- **The status bar** says how full the storyteller's context is ("Context 4%
+  used"), how much of the last prompt the endpoint's cache reused, and what
+  the session and the whole story have cost; hover over any of them for the
+  exact numbers.
 - **Shortcuts**: Enter sends, Shift+Enter is a new line, Ctrl+Enter sends
   from anywhere, Esc stops, Ctrl+N new, Ctrl+O import, Ctrl+S save,
   Ctrl+, settings, Ctrl+Shift+I picture, Ctrl+Shift+V the transcript view,
@@ -670,6 +684,16 @@ that trying other hosts would mean playing outside private mode.
 
 ## Setting up a story
 
+**Write a story from scratch** (on the start page, or File → New…) walks
+through what a story needs to begin, a step at a time: its title and world
+(and whether it keeps a map), who you play and anyone else to start with,
+where it begins and what happens first, and the person, tense and length it
+is told in. **Create the story** then goes straight to Start, which asks who
+you play and offers portraits for the characters before the opening is
+written. Everything else keeps its default and is in Setup and on the Cast
+page; **Skip to the full setup…** makes the story with what you have filled in
+and opens Setup instead.
+
 **Story → Setup…** holds what a story is built on:
 - **World**: the setting and its rules, sent with every turn and cached;
 - **Style**: length, perspective, person, tense and the rest, the same form as
@@ -755,8 +779,8 @@ it (Story → Start story… when it's ready). Anything
 the draft got wrong that couldn't be used (a made-up skill tier, a scene naming
 someone not in the cast) is listed rather than guessed at.
 
-**Story → Review settings…** Say what isn't working, for example "too much
-action, not enough dialogue". The model reviews the story's settings (world,
+**Story → Review settings with the model…** Say what isn't working, for
+example "too much action, not enough dialogue". The model reviews the story's settings (world,
 style, cast and supporting characters, lore, outcome mode, world activity,
 the models and the budget, with your generation settings) and the instructions the
 storyteller actually receives. You choose how many exchanges
@@ -905,6 +929,31 @@ Two checkboxes on a cast sheet decide who writes that character:
 - **Never voiced by the storyteller** — yours on every turn, not only while you
   play them. The model is told never to write them.
 
+## The People page
+
+A story without a map opens on **People**, beside the story: who is in it,
+by their faces. **Here now** has whoever the story has in the scene, large,
+the character you play first (marked **You**); **Not here** and **Also in the
+story** have the rest of the cast and the supporting characters, smaller,
+with where they are when the story has said. Each card is a portrait, a name
+and the first line of their summary. Click a card for the whole profile, on
+the Cast page; right-click it to draw a portrait, choose a picture of your
+own, or play as that character. A card with no portrait has **Draw a
+portrait…** and **Choose a picture…** on it.
+
+Until the story has them, a panel at the top offers **Draw portraits…** for
+everyone who has none (you see and can change every prompt first, as in
+Story → Draw pictures for the cards…) and a background behind the story
+(**Draw a background…**, or **Choose a background…** from your computer).
+Pictures need an image model: without one, **Set up pictures…** opens
+Settings → Images. **Not now** puts the panel away until you next open the
+story. Characters the plot hasn't brought in yet stay off the page, as they
+do on the Cast page.
+
+Who is here is the scene's (below), so the faces show at a glance who the
+storyteller thinks is in the room; **Correct the scene…** goes to the Scene
+page to put it right.
+
 ## The scene, and who can walk into it
 
 The **Scene** tab holds where the story is — location, time, what's going on —
@@ -929,9 +978,10 @@ wins, and the next read starts from your version. The roster covers everyone
 with a name, not just your cast: your cast first (the one you are playing is
 marked "you"), then the supporting characters, each ticked when they are
 here, then **Also here** for the story's own people who have no card. The
-read gets things wrong at times, which is why the Scene tab is the first
-page and the one a story opens on: a glance after each passage shows who the
-storyteller thinks is in the room, and a tick fixes it.
+read gets things wrong at times, which is why the People page beside the
+story shows who is here by their faces: a glance after each passage shows
+who the storyteller thinks is in the room, and a tick on the Scene page fixes
+it.
 
 The same read catches the shortcuts. If a passage has someone simply already
 there, listening in from outside, or acting on something they couldn't know,
@@ -1035,7 +1085,7 @@ place. Each place you have been gets a postcard too, a picture of the whole
 place, shown on its card under the local map: click it to see it whole.
 Everything drawn for the map stays with the story: a restart, Duplicate
 settings and a scenario file keep the art and the pictures. Story pictures
-(Image…) still show you every request first.
+(Picture…) still show you every request first.
 
 Each area on the map (a farm, a town, a works) can have **paintings**: the
 place as it stands, painted by an image model (Settings → Images →
@@ -1522,7 +1572,7 @@ marks it "held back" or "mentioned".
 
 ## Pictures
 
-**Story → Generate image…** (Ctrl+Shift+I), the **Image…** button beside the
+**Story → Draw a picture…** (Ctrl+Shift+I), the **Picture…** button beside the
 composer, or **Illustrate this passage…** in a passage's ⋯ menu asks the
 story's model to write an image prompt from where the story is, choosing
 among the reference pictures on cast sheets and lore entries. **Add…** under
@@ -1854,7 +1904,7 @@ story is (Settings → Context), with a plain summariser.
 
 ## The context budget and archiving
 
-![As sent to the storyteller: a chapter summary standing in for archived prose, then the recent passages word for word](screenshots/as-sent-view.png)
+![What the storyteller sees: a chapter summary standing in for archived prose, then the recent passages word for word](screenshots/as-sent-view.png)
 
 The **Context budget** (File → Settings → Context, with a story open) is how
 many tokens the storyteller's whole prompt may use each turn: the rules,
