@@ -4,11 +4,15 @@ Models asked for "JSON and nothing else" still wrap it in code fences or put
 a sentence in front of it. Take the outermost object or array and parse that;
 anything else is a plain-words ValueError the caller can show as a notice.
 
-Two repairs, both from live replies (GLM 5.3). A reply that corrects itself
-("Wait — the scene moved. Corrected:" and a second object) means its last
-object. And dialogue copied into a "quote" arrives with its quotation marks
-unescaped; a mark inside a string that isn't followed by what can come after
-a string's end is taken as part of it.
+Three repairs, all from live replies (GLM 5.3). Dialogue copied into a
+"quote" arrives with its quotation marks unescaped; a mark inside a string
+that isn't followed by what can come after a string's end is taken as part
+of it. A comma before a closing brace or bracket is dropped. And a reply
+that corrects itself ("Wait — the scene moved. Corrected:" and a second
+object) means its last object. That one is tried last: looking for whole
+objects in a reply that failed to parse finds the ones nested in it, and a
+scene read ending '"scene_closed": {...},\n}' was taken for its
+scene_closed alone, the move and the departure lost without a word.
 """
 
 from __future__ import annotations
@@ -36,15 +40,48 @@ def extract_json(text: str, kind: type[dict] | type[list], what: str) -> Any:
     try:
         data = json.loads(span)
     except json.JSONDecodeError as exc:
-        data = _last_whole(cleaned, opener, kind)
+        data = _repaired(span)
         if data is None:
-            try:
-                data = json.loads(_escape_inner_quotes(span))
-            except json.JSONDecodeError:
-                raise ValueError(f"the {what} wasn't valid JSON ({exc.msg})") from exc
+            data = _last_whole(cleaned, opener, kind)
+        if data is None:
+            raise ValueError(f"the {what} wasn't valid JSON ({exc.msg})") from exc
     if not isinstance(data, kind):
         raise ValueError(f"the reply held no {what}")
     return data
+
+
+def _repaired(span: str) -> Any:
+    """The span parsed after the repairs that keep it one value, or None."""
+    for fixed in (
+        _without_trailing_commas(span),
+        _escape_inner_quotes(span),
+        _without_trailing_commas(_escape_inner_quotes(span)),
+    ):
+        try:
+            return json.loads(fixed)
+        except json.JSONDecodeError:
+            continue
+    return None
+
+
+def _without_trailing_commas(text: str) -> str:
+    """Commas before a closing brace or bracket dropped, outside strings."""
+    out: list[str] = []
+    in_string = escaped = False
+    for index, char in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char == "," and text[index + 1 :].lstrip()[:1] in ("}", "]"):
+            continue
+        out.append(char)
+    return "".join(out)
 
 
 def _last_whole(text: str, opener: str, kind: type) -> Any:
