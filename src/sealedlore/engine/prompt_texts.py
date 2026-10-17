@@ -4291,12 +4291,14 @@ _text(
 # Sonnet 4.6 (five map samples, four takes, two blind Claude judges agreeing
 # on 265 of 268): told nothing, the prose moved the thing 52 of 52 times
 # (shove it, ask a companion to, drag the anvil); this line alone ("fails or
-# stops short") 40 of 52; with REMEMBER and "stays exactly where it stands"
-# 22 of 52 (15 more only budged), the reason natural in 29-31 of 32, and
-# things that can be taken (13-15 of 16) and Fiat (15 of 16) moved as before.
-# Readers preferred the shove that worked (25-7 over both judges; a null
-# control on Fiat came out 21-10, so the judges are noisy). SealedLoreDocs
-# design/map.md, "Fixed things".
+# stops short") 40 of 52; with REMEMBER naming it ("stay exactly where they
+# stand") 22 of 52; with REMEMBER saying an attempt fails, 2 of 52 (14 more
+# only budged), the reason natural in 31-32 of 34, preferred 10-6 to the
+# version without it on the shove. Things that can be taken (13-15 of 16)
+# and Fiat turns (15 of 16) moved as before. Told nothing, readers preferred
+# the shove that worked (25-7 over both judges; a null control on Fiat came
+# out 21-10, so the judges are noisy). SealedLoreDocs design/map.md, "Fixed
+# things".
 _text(
     "map.fixed",
     MAP,
@@ -4316,7 +4318,8 @@ _text(
     "On the REMEMBER line when the author's turn names something in reach or here that "
     "can't be moved this turn (marked fixed in place on the map), on a turn that may not "
     "move it.",
-    "Whoever tries this turn, these stay exactly where they stand, unmoved: {things}.",
+    "Whoever tries this turn, these stay exactly where they stand, unmoved: {things}. If "
+    "anyone tries to move one, the attempt fails: it does not shift.",
     (("things", "the things, by name"),),
 )
 
