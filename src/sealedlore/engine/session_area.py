@@ -246,6 +246,11 @@ ASSET_LABELS = {
 }
 
 
+# How far along an outdoor area's edge a journey looks for the road it
+# comes in by, in tiles.
+ARRIVAL_ROAD_REACH = 16
+
+
 class AreaRuntime:
     _area_cache: dict | None = None
     _asset_thread: threading.Thread | None = None
@@ -1090,7 +1095,12 @@ class AreaRuntime:
         target = area_of(world, art, place_id)
         spot = None
         if target is not None:
-            spot = self._stand(world, art, target, place_id, held or "", dict(state.spots), None)
+            landing = self._arrival(world, art, target, held or "")
+            spot = (
+                Spot(area=target, x=landing[0], y=landing[1])
+                if landing is not None
+                else self._stand(world, art, target, place_id, held or "", dict(state.spots), None)
+            )
         text = self.texts.fill("map.turn.travel", name=place.name)
         # Nothing moves until the turn is sent (`stamp_turn`): a turn
         # rewritten travels nowhere. A place not drawn yet: the turn's delta
@@ -1105,6 +1115,40 @@ class AreaRuntime:
         )
         self._set_live(state)
         return text
+
+    def _arrival(
+        self, world: WorldMap, art: WorldArt, area_id: str, held: str
+    ) -> tuple[int, int] | None:
+        """Where a journey to an outdoor area lands: at its edge toward where
+        the traveller set out from, on the road or through the gate there
+        when one comes in near it. Live (Oct 17 2026), a walk up the north
+        road was told it ended "in Hellsville, outside The diner", and the
+        storyteller wrote the barricade at the south gate. None for a
+        building's inside, or a journey from within the area."""
+        area = self.area(area_id, world, art)
+        me = self.held_point()
+        if area is None or area.indoor or me is None or point_tile(world, area, *me) is not None:
+            return None
+        edge = clamped_tile(world, area, *me)
+        if edge is None:
+            return None
+        blocked = area.blocked()
+        roads = [
+            (math.hypot(x - edge[0], y - edge[1]), x, y)
+            for y in range(
+                max(0, edge[1] - ARRIVAL_ROAD_REACH),
+                min(area.height, edge[1] + ARRIVAL_ROAD_REACH + 1),
+            )
+            for x in range(
+                max(0, edge[0] - ARRIVAL_ROAD_REACH),
+                min(area.width, edge[0] + ARRIVAL_ROAD_REACH + 1),
+            )
+            if area.rows[y][x] in "=+" and area.walkable(x, y, blocked)
+        ]
+        if roads:
+            _d, x, y = min(roads)
+            return x, y
+        return stand_near(area, edge, set(), seed=held)
 
     def map_action(self, verb: str, target: str, target_id: str = "", *, to: str = "") -> str:
         """The turn a menu choice writes (`map.turn.<verb>`), kept with the

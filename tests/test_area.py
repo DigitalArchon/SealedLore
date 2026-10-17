@@ -1584,3 +1584,28 @@ def test_a_road_through_a_town_wall_is_a_gate_and_a_building_s_wall_stays_shut()
     assert "+" in out[5][28:33] and out[5].count("+") <= 4  # a gate where it crosses
     assert out[5][:25] == "#" * 25  # the road along the wall leaves it whole
     assert out[8][10:16] == "######"  # never through a building
+
+
+def test_a_journey_lands_at_the_edge_it_comes_in_by(tmp_path, story, cast):
+    """Live (Oct 17 2026): the walk up the north road to Hellsville was told
+    it ended "in Hellsville, outside The diner", the middle of town; the
+    storyteller wrote the barricade at the south gate."""
+    session = make_session(tmp_path, story, cast)
+    town = {
+        "ground": "dirt",
+        "features": [
+            {"kind": "road", "points": [[22, 0], [22, 23]], "width": 2},
+            {"kind": "object", "name": "a lantern", "x": 20, "y": 12},
+        ],
+    }
+    rows, objects, labels = rasterise(town, 40, 24)
+    session.map_art_copy()  # loaded from disk on first use
+    session._art.layouts["town"] = {
+        "": PlaceLayout(place_id="town", spec=town, rows=rows, objects=objects, made_at="1")
+    }
+    session.travel("town")
+    spot = session.area_state().action.spot
+    area = session.area(spot.area)
+    assert spot.area == "town" and not area.indoor
+    assert spot.y >= area.height - 3  # the south edge: the farm is south of the town
+    assert area.rows[spot.y][spot.x] == "="  # on the road it comes in by
