@@ -400,6 +400,42 @@ def _said(value: Any) -> str | None:
 _ONLY_AUTHOR = "only the author's Direction or Narration"
 
 
+# Words that say a person is a woman or a man, and the pronouns for each:
+# a naming in a sentence that speaks of the other is someone else's.
+_FEMALE = frozenset(
+    "woman women girl lady she her hers herself mother wife sister daughter widow matron "
+    "aunt grandmother nun queen princess duchess mistress madam".split()
+)
+_MALE = frozenset(
+    "man men boy he him his himself father husband brother son lad gentleman uncle "
+    "grandfather monk king prince duke master sir".split()
+)
+
+
+def _sex_of(text: str) -> set[str]:
+    words = set(re.findall(r"[a-z]+", text.lower()))
+    return ({"f"} if words & _FEMALE else set()) | ({"m"} if words & _MALE else set())
+
+
+def _sentences_to(source: str, end: int) -> str:
+    """The sentence the quote ends in, and the one before it."""
+    head = source[:end]
+    stops = [m.end() for m in re.finditer(r"[.!?…]['\"”’]?\s", head)]
+    start = stops[-2] if len(stops) >= 2 else 0
+    rest = source[end:]
+    stop = re.search(r"[.!?…]['\"”’]?(\s|$)", rest)
+    return source[start : end + (stop.end() if stop else len(rest))]
+
+
+def _other_sex(described: str, around: str) -> bool:
+    """Whether the passage around a naming speaks only of the other sex than
+    the unknown's description. Live (Oct 17 2026): the watchwoman at the
+    gate, "a lean woman in her forties", was named Marcus Webb from
+    '"Marcus Webb," he said'."""
+    theirs, here = _sex_of(described), _sex_of(around)
+    return len(theirs) == 1 and len(here) == 1 and theirs != here
+
+
 def _parents_first(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """The reply's places, each after the place it is inside when that is in
     the same reply. Live (Oct 17 2026), a new world's opening listed the
@@ -698,8 +734,14 @@ def resolve_reply(
                 f"named {_text(entry.get('who')) or '(nobody)'}: no such unknown or name"
             )
             continue
-        if quoted(entry) is None:
+        quote = _text(entry.get("quote"))
+        span = locate_quote(source, quote) if quote else None
+        if span is None:
             refused.append(f"named {label} {name}: no quote found")
+            continue
+        said = {**world.unknowns, **delta.unknowns}.get(label, "")
+        if _other_sex(said, _sentences_to(source, span[1])):
+            refused.append(f"named {label} {name}: the passage names someone else")
             continue
         canonical = person_name(name, people, named_people)
         delta.named[label] = canonical

@@ -173,3 +173,25 @@ def test_a_doorway_is_a_spot_the_read_may_stand_someone_at(tmp_path, story, cast
     assert anchor_tile(area, "the doorway", here) is not None
     assert anchor_tile(area, "the doorway") is None  # with nothing to be near
     assert nearest[1] in [t for _n, t in doors]
+
+
+def test_a_naming_that_speaks_of_someone_of_the_other_sex_is_refused():
+    """Live (Oct 17 2026): Unknown 3, the watchwoman ("a lean woman in her
+    forties"), was named Marcus Webb from '"Marcus Webb," he said'."""
+    world, _art = world_and_art()
+    source = (
+        "A lean woman in her forties watched from the gate. "
+        'A man came out of the diner. "Marcus Webb," he said, and put out his hand.'
+    )
+    world.unknowns = {"Unknown 3": "a lean woman in her forties"}
+    world.where["Unknown 3"] = "town"
+    webb = Character(id="w", name="Marcus Webb")
+    reply = {"named": [{"who": "Unknown 3", "name": "Marcus Webb", "quote": "Marcus Webb"}]}
+    delta, refused = resolve_reply(world, reply, source=source, people=[webb])
+    assert delta.named == {} and refused
+    # Her own naming stands.
+    source = 'The woman lowered the shotgun. "Ruth," she said.'
+    world.unknowns = {"Unknown 1": "an older woman with a shotgun"}
+    reply = {"named": [{"who": "Unknown 1", "name": "Ruth", "quote": "Ruth"}]}
+    delta, refused = resolve_reply(world, reply, source=source, people=[])
+    assert delta.named == {"Unknown 1": "Ruth"} and refused == []
