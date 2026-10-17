@@ -40,6 +40,7 @@ from sealedlore.engine.levels import (
 )
 from sealedlore.engine.marks import footprint
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
+from sealedlore.engine.takeable import item_verbs
 from sealedlore.engine.tile_sets import LIGHT_WORDS, roof_material
 from sealedlore.engine.world import key
 from sealedlore.engine.world_art import (
@@ -84,123 +85,6 @@ DENSITY = {"sparse": 0.5, "normal": 1.0, "full": 1.7}
 WALKABLE = frozenset("._=+,:s&")
 FLOOR_TILES = frozenset("_+")
 WALLS = frozenset("#W")
-# Things a person can't walk through when they're in the plan as a digit.
-SMALL = (
-    "chair",
-    "stool",
-    "lamp",
-    "lantern",
-    "candle",
-    "bucket",
-    "basket",
-    "bottle",
-    "book",
-    "mug",
-    "cup",
-    "plate",
-    "box",
-    "crate",
-    "sack",
-    "bag",
-    "pot",
-    "jar",
-    "tool",
-    "rifle",
-    "gun",
-    "knife",
-    "sword",
-    "bow",
-    "axe",
-    "key",
-    "map",
-    "ledger",
-    "bread",
-    "apple",
-    "rope",
-    "bell",
-    "skull",
-    "bones",
-    "kettle",
-    "radio",
-)
-BIG = (
-    "chest",
-    "crate",
-    "trunk",
-    "cupboard",
-    "table",
-    "bed",
-    "bunk",
-    "stove",
-    "counter",
-    "shelf",
-    "shelves",
-    "cabinet",
-    "wardrobe",
-    "altar",
-    "throne",
-    "hearth",
-    "workbench",
-    "bench",
-    "desk",
-    "piano",
-    "truck",
-    "cart",
-    "car",
-    "tractor",
-    "engine",
-    "boiler",
-    "furnace",
-    "vat",
-    "tower",
-    "well",
-    "statue",
-    "fountain",
-    "tree",
-    "oak",
-    "haystack",
-    "barricade",
-    "console",
-    "locker",
-    "sofa",
-    "couch",
-    "cupboard",
-    "pantry",
-    "dresser",
-    "stairs",
-    "staircase",
-    "lift",
-    "loader",
-    "stall",
-)
-FOOD = (
-    "bread",
-    "apple",
-    "stew",
-    "soup",
-    "meat",
-    "cheese",
-    "fruit",
-    "pie",
-    "cake",
-    "food",
-    "meal",
-    "berries",
-    "fish",
-    "ham",
-    "biscuit",
-    "ration",
-    "canned goods",
-    "vegetables",
-    "potato",
-    "egg",
-    "honey",
-    "jerky",
-    "ale",
-    "wine",
-    "cider",
-    "water bucket",
-)
 
 
 # --- What an area is -------------------------------------------------------
@@ -994,30 +878,6 @@ def _door_side(box: tuple[int, int, int, int], x: int, y: int) -> str:
     if y == y0:
         return "north"
     return "west" if x == x0 else "east"
-
-
-def _object_verbs(name: str) -> tuple[str, ...]:
-    lowered = name.lower()
-    verbs = ["use"]
-    small = any(re.search(rf"\b{w}", lowered) for w in SMALL)
-    big = any(re.search(rf"\b{w}", lowered) for w in BIG)
-    if any(word in lowered for word in FOOD):
-        verbs = ["eat", "take", "use"] if not big else ["eat", "use"]
-    elif small and not big:
-        verbs.append("take")
-    verbs.append("destroy")
-    return tuple(dict.fromkeys(verbs))
-
-
-def item_verbs(name: str, planned: Sequence[str] = ()) -> tuple[str, ...]:
-    """What can be done with a thing: what its plan says, else what its name
-    suggests (food is eaten, small things taken, anything used or
-    destroyed), in the menu's order."""
-    order = ("use", "take", "eat", "destroy")
-    chosen = set(planned) | set(_object_verbs(name)) if planned else set(_object_verbs(name))
-    if planned and any(word in name.lower() for word in BIG):
-        chosen.discard("take")
-    return tuple(v for v in order if v in chosen)
 
 
 def build_area(

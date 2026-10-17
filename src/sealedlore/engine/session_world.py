@@ -276,6 +276,9 @@ class WorldRuntime:
             people=people,
             author_says=says,
             marked=self._marked_places(reply, author),  # refused, and logged, in character
+            # A thing that can't be taken moves on the author's word alone
+            # (the author, Oct 17 2026): Direction, Narration or Fiat.
+            moves_fixed=says or (author is not None and self._under_fiat(author)),
         )
         held_name = self.map_held_name(node.meta.controlled_character_id)
         # Map-first: what the author marked is put exactly there, and what
@@ -311,6 +314,12 @@ class WorldRuntime:
     def _author_says(author: Node) -> bool:
         """The author's turn states what is so: Direction or Narration."""
         return author.speaker_id in (DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID)
+
+    def _under_fiat(self, author: Node) -> bool:
+        """The author's turn was sent under Fiat: what they write happens.
+        A turn from before the outcome was kept on it has the story's."""
+        mode = author.meta.agency_mode or self.story.defaults.agency_mode
+        return mode == "fiat"
 
     def _marked_places(
         self, reply: dict[str, Any], author: Node | None

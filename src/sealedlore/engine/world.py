@@ -25,6 +25,7 @@ from typing import Any
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.scene_state import same_person
+from sealedlore.engine.takeable import fixed_thing
 from sealedlore.engine.validators import locate_quote
 from sealedlore.engine.world_layout import (
     bearing,
@@ -407,6 +408,7 @@ def resolve_reply(
     people: Sequence[Character],
     author_says: bool = False,
     marked: Mapping[str, tuple[float, float]] | None = None,
+    moves_fixed: bool | None = None,
 ) -> tuple[WorldDelta, list[str]]:
     """What the reply changes, as a delta on `world`, and what was refused
     and why (for the log and the panel). `source` is the author's turn and
@@ -422,12 +424,21 @@ def resolve_reply(
     with `key`, resolved by the session from the turn's marks), or by a link
     with a direction and a distance from a place that has its spot. On any
     other turn those are refused, said in `refused`, and the map stands:
-    places are placed once (engine/world_layout.py)."""
+    places are placed once (engine/world_layout.py).
+
+    `moves_fixed`: the turn may move a thing that can't be taken
+    (engine/takeable.py: the town's stores, a statue, a well): the author's
+    Direction or Narration, or a turn under Fiat (the author, Oct 17 2026).
+    On any other turn such a thing stays where it is and only its state may
+    change: live, the read moved "The town's stores" from Hellsville into
+    the farmhouse on a passage that only named them. None: as `author_says`."""
     # `added` is always a list from here: a delta that changes known places
     # and makes none must still skip their copies on a fold without them.
     delta = WorldDelta(added=[])
     refused: list[str] = []
     marked = marked or {}
+    if moves_fixed is None:
+        moves_fixed = author_says
 
     def quoted(entry: dict[str, Any]) -> str | None:
         quote = _text(entry.get("quote"))
@@ -685,7 +696,22 @@ def resolve_reply(
             thing.carried_by = None
         if thing.at in delta.removed:  # as the fold leaves it: where the place was
             thing.at = world.places[thing.at].inside
+        held = (
+            existing is not None
+            and not moves_fixed
+            and existing.carried_by is None
+            and (thing.at, thing.carried_by) != (existing.at, existing.carried_by)
+            and fixed_thing(existing.name)
+        )
+        if held:
+            refused.append(
+                f"thing {existing.name}: can't be taken, so it moves only on the author's "
+                "Direction or Narration, or a turn under Fiat"
+            )
+            thing.at, thing.carried_by = existing.at, existing.carried_by
         thing.state = _text(entry.get("state")) or thing.state
+        if held and thing == existing:
+            continue  # its move refused, and nothing else about it changed
         delta.things = [t for t in delta.things if t.id != thing.id] + [thing]
     weather = _weather_entry(reply)
     if weather is not None:
