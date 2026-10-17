@@ -676,7 +676,9 @@ class AreaWindow:
             return
         art = session.map_art_copy()
         self.area_view.set_looks(
-            session.tile_set_choices(), session.tile_set_name(art), art.tile_set
+            session.tile_set_choices(),
+            session.tile_set_name(art),
+            "" if art.tile_set_auto else art.tile_set,
         )
 
     def _area_look(self, name: str) -> None:

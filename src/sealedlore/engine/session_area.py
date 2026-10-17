@@ -77,6 +77,7 @@ from sealedlore.engine.tile_draw import (
     RUN_LIMIT,
     SPRITE_SIZE,
     TEXTURE_SIZE,
+    ground_jobs,
     item_jobs,
     parse_tile_words,
     roof_jobs,
@@ -1278,6 +1279,7 @@ class AreaRuntime:
         map's `where`), so the read, the fog and the art follow."""
         if not self.map_first or self.in_private:
             return
+        self.pin_tile_set()
         live = self._live()
         # Every turn carries where everyone stands: walked since the last
         # turn, or as they were.
@@ -2161,8 +2163,21 @@ class AreaRuntime:
             style=style,
             failed=failed,
         )
+        # Ground the set has none of (sand under a snow set), and a deck's
+        # floor in a set with no deck: drawn in the set's style, which is
+        # kept for the whole story.
+        grounds = ground_jobs(
+            areas,
+            info,
+            lambda role: read(role) is not None,
+            words,
+            self.texts,
+            style=style,
+            failed=failed,
+        )
         jobs = (
             walker_jobs(people, has_walker, words, self.texts, style=style, failed=failed)
+            + grounds
             + roofs
             + jobs
         )
@@ -2390,11 +2405,40 @@ class AreaRuntime:
         return out
 
     def set_tile_set(self, name: str) -> None:
-        """The author's choice of tile set ("" lets the program choose)."""
+        """The author's choice of tile set ("" lets the program choose: the
+        set the setting names, kept from now on as any choice is)."""
         art = self.world_art
         with self._lock():
-            art.tile_set = name
+            art.tile_set, art.tile_set_auto = name, False
+            if not name:
+                self._pin_tile_set(art)
             self._save_art(art)
+
+    def pin_tile_set(self) -> None:
+        """The tile set is chosen once the story has begun and kept for it
+        (the author, Oct 17 2026: "tilesets shouldn't swap mid game. A
+        tileset should be chosen at the start and used in that game, and new
+        items generated when needed if a different type of area is
+        encountered"): the program's choice is written to the art, so a plan
+        that comes in later can't change it. Live, a lighthouse story was
+        never given a set and chose one afresh on every draw. The author's
+        own choice is never touched."""
+        if not self.map_first or self.in_private or not self.path():
+            return
+        art = self.world_art
+        with self._lock():
+            if art.tile_set or not self._pin_tile_set(art):
+                return
+            self._save_art(art)
+
+    def _pin_tile_set(self, art: WorldArt) -> bool:
+        """The program's choice written to `art` (under the lock); False
+        when nothing is shipped to choose from."""
+        name = self.tile_set_name(art)
+        if not name:
+            return False
+        art.tile_set, art.tile_set_auto = name, True
+        return True
 
     def remove_own_tile_set(self, name: str) -> bool:
         """One of the story's own sets taken out, its pictures deleted from
@@ -2409,7 +2453,8 @@ class AreaRuntime:
             if found is None:
                 return False
             if own_set_key(art.tile_set) == key:
-                art.tile_set = ""
+                art.tile_set, art.tile_set_auto = "", False
+                self._pin_tile_set(art)
             self._save_art(art)
         for file in found.assets.values():
             if file:
@@ -2425,7 +2470,7 @@ class AreaRuntime:
         if self.story.tile_set_offered or self.story.chat:
             return None
         art = art or self.map_art_copy()
-        if art.tile_set:
+        if art.tile_set and not art.tile_set_auto:
             return None
         titles = dict(self.tile_set_choices(art))
         name = self.tile_set_name(art)
@@ -2622,7 +2667,7 @@ class AreaRuntime:
                     words=words,
                     made_at=utc_now_iso(),
                 )
-                art.tile_set = own_set_name(key)
+                art.tile_set, art.tile_set_auto = own_set_name(key), False
                 self._save_art(art)
             callback = self.on_map_art
             if callback is not None:

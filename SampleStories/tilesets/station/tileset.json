@@ -13,6 +13,7 @@
  ],
  "lava": false,
  "deck": true,
+ "grounds": ["space", "metal"],
  "decor_lights": [
   false,
   false,

@@ -13,6 +13,7 @@
  ],
  "lava": false,
  "deck": false,
+ "grounds": ["snow"],
  "decor_lights": [
   false,
   false,

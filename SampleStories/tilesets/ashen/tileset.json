@@ -13,6 +13,7 @@
  ],
  "lava": false,
  "deck": false,
+ "grounds": ["dirt", "rock"],
  "decor_lights": [
   false,
   false,

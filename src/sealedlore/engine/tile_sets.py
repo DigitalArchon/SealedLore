@@ -90,6 +90,11 @@ class TileSetInfo(BaseModel):
     decor_lights: list[bool] = Field(default_factory=list)
     # What the set fits, for choosing one for a story's setting.
     keywords: list[str] = Field(default_factory=list)
+    # The ground looks its outdoor ground stands for ("snow"; `GROUND_WORDS`):
+    # an area whose plan has another gets a ground of its own drawn in the
+    # set's style (`ground_role`). Empty: read from the ground's words
+    # (`set_grounds`), as a story's own set has none listed.
+    grounds: list[str] = Field(default_factory=list)
     # The words each asset was drawn from, by role (for redrawing one).
     words: dict[str, str] = Field(default_factory=dict)
 
@@ -221,6 +226,80 @@ def roof_material(words: str) -> str:
 def roof_role(material: str) -> str:
     """The texture role of a roof of `material` ("out-roof-stone")."""
     return f"out-roof-{material}" if material else "out-roof"
+
+
+# The ground looks a plan or a stretch of land is drawn in (`map.layout`,
+# `map.terrain`), each as a texture's words. A story keeps the tile set it
+# began with (the author, Oct 17 2026: "tilesets shouldn't swap mid game";
+# new pictures are drawn when a different type of area is met): ground the
+# set has none of is drawn for the story in the set's style.
+GROUND_WORDS: dict[str, str] = {
+    "snow": "deep snow with soft drifts",
+    "grass": "short grass with a few small wildflowers",
+    "dirt": "bare packed earth with scattered pebbles",
+    "sand": "dry sand with faint ripples",
+    "rock": "bare grey rock and loose stones",
+    "cobble": "old uneven cobblestones",
+    "hell": "cracked black volcanic ground with thin glowing cracks",
+}
+# What a ground's words say it is, for a set that lists no `grounds` (a
+# story's own): the first look any of its words names.
+_GROUND_TERMS: dict[str, tuple[str, ...]] = {
+    "snow": ("snow", "snowy", "ice", "frost", "frozen"),
+    "grass": ("grass", "grassy", "meadow", "lawn", "turf", "moss", "clover"),
+    "sand": ("sand", "sandy", "dune", "dunes", "beach"),
+    "cobble": ("cobble", "cobbles", "cobblestone", "cobblestones", "flagstones", "paving"),
+    "hell": ("lava", "volcanic", "ember", "embers", "brimstone"),
+    "rock": ("rock", "rocky", "stone", "stony", "gravel", "scree", "basalt", "granite"),
+    "dirt": ("dirt", "earth", "mud", "muddy", "soil", "ash", "dust", "dusty", "clay"),
+}
+# The colour a ground the set has no picture of yet is tinted towards: the
+# set's own ground in that colour stands in until it is drawn.
+GROUND_TINTS: dict[str, tuple[int, int, int]] = {
+    "snow": (232, 236, 242),
+    "grass": (104, 142, 74),
+    "dirt": (126, 100, 74),
+    "sand": (214, 192, 142),
+    "rock": (132, 130, 126),
+    "cobble": (120, 116, 110),
+    "hell": (70, 46, 40),
+}
+# A deck's floor, for a set that has no deck of its own (a farm story's
+# starship): drawn on the fly as the grounds are.
+DECK_FLOOR_ROLE = "floor-deck"
+DECK_FLOOR_WORDS = "grey metal deck plating in square panels with rivets and thin seams"
+
+
+def ground_role(look: str) -> str:
+    """The texture role of the outdoor ground in `look` ("out-ground-sand")."""
+    return f"out-ground-{look}"
+
+
+def set_grounds(info: TileSetInfo) -> set[str]:
+    """The ground looks the set's own outdoor ground stands for: its listed
+    `grounds`, else the first look its ground's words name; empty when they
+    name none (then it stands for every look, as before)."""
+    if info.grounds:
+        return set(info.grounds)
+    words = set(re.findall(r"[a-z]+", info.words.get("out-ground", "").lower()))
+    for look, terms in _GROUND_TERMS.items():
+        if words.intersection(terms):
+            return {look}
+    return set()
+
+
+def ground_wanted(info: TileSetInfo, look: str) -> bool:
+    """Whether an outdoor area in `look` wants a ground the set hasn't got:
+    a ground look the program knows that the set's own doesn't stand for."""
+    covered = set_grounds(info)
+    return bool(covered) and look in GROUND_WORDS and look not in covered
+
+
+def deck_floor_wanted(info: TileSetInfo, look: str) -> bool:
+    """Whether an indoor area in `look` is a deck (engine/area.py: a plan
+    standing in space) in a set with no deck. A plan's own "metal" is a
+    floor the set has (the Ashen Reach's steel plates)."""
+    return not info.deck and look == "space"
 
 
 def own_key(title: str, taken: Iterable[str]) -> str:

@@ -544,7 +544,8 @@ def test_the_tile_set_gallery_lists_every_set_marks_the_one_in_use_and_uses_anot
     assert "neon" not in session.map_art_copy().tile_sets
     assert session.pictures.read("images/map/tileset/floor-x.png") is None
     assert not any(c.card.own for c in dialog.cards)
-    assert session.map_art_copy().tile_set == ""
+    art = session.map_art_copy()  # chosen again by the program, and kept
+    assert art.tile_set_auto and not art.tile_set.startswith("own:")
     dialog.design_button.click()
     assert dialog.result() == TileSetGallery.DESIGN
     dialog.deleteLater()

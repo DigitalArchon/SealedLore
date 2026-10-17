@@ -24,9 +24,16 @@ from sealedlore.engine.area import Area
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.tile_sets import (
+    DECK_FLOOR_ROLE,
+    DECK_FLOOR_WORDS,
+    GROUND_WORDS,
     OUTDOOR_SPRITES,
     SPRITES,
     TEXTURES,
+    TileSetInfo,
+    deck_floor_wanted,
+    ground_role,
+    ground_wanted,
     item_slugs,
     roof_role,
 )
@@ -167,6 +174,55 @@ def roof_jobs(
                     ),
                 )
             )
+    return out
+
+
+def ground_jobs(
+    areas: Iterable[Area],
+    info: TileSetInfo,
+    has_texture: Callable[[str], bool],
+    world: str,
+    texts: PromptTexts = DEFAULT_TEXTS,
+    *,
+    style: str = DEFAULT_STYLE,
+    failed: Callable[[str], bool] = lambda _k: False,
+) -> list[PictureJob]:
+    """A ground for each look an outdoor area here is in that the story's
+    tile set has none of, and a deck's floor for a deck in a set with no
+    deck: drawn on the fly in the set's style (the author, Oct 17 2026: the
+    set is kept for the whole story, and new pictures are drawn when a
+    different type of area is met). Until one is in, the set's own ground
+    tinted towards the look stands in."""
+    out: list[PictureJob] = []
+    seen: set[str] = set()
+    for area in areas:
+        if area.indoor:
+            if not deck_floor_wanted(info, area.look):
+                continue
+            role, what = DECK_FLOOR_ROLE, DECK_FLOOR_WORDS
+        else:
+            if not ground_wanted(info, area.look):
+                continue
+            role, what = ground_role(area.look), GROUND_WORDS[area.look]
+        key = f"texture:{role}"
+        if role in seen or has_texture(role) or failed(key):
+            continue
+        seen.add(role)
+        out.append(
+            PictureJob(
+                key=key,
+                subject="texture",
+                subject_id=role,
+                name=f"{area.look} ground" if not area.indoor else "deck floor",
+                prompt=texts.fill(
+                    "map.tile.texture",
+                    what=what,
+                    world=world,
+                    view="from directly overhead",
+                    style=style,
+                ),
+            )
+        )
     return out
 
 

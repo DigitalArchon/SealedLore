@@ -1218,7 +1218,9 @@ map art model the first time the story is in or beside it.
 **Look** chooses the tile set the map is drawn in: one of those that come
 with SealedLore (a snowbound farm, an elven forest, a steampunk city, an
 industrial wasteland, Hell, a space station), chosen for the setting unless
-you choose, or one drawn for your story. The first time a story's map
+you choose, or one drawn for your story. The set is chosen once, when the
+story begins, and kept for the whole story: it changes only when you choose
+another. The first time a story's map
 opens, a line over it says which set it is drawn in, with **Tile sets…** a
 button away; the same is under Look. The gallery shows every set as a card,
 with a strip of its textures and sprites, its style in words and what it
@@ -1243,9 +1245,11 @@ Restart, Duplicate settings and scenario files.
 
 Things and people the set doesn't have are drawn as the story needs them,
 with **Draw map pictures** on (Settings → Images; FLUX.3 Klein, about a
-cent each): each kind of thing once, and each character from their
-portrait. Until then a thing is a plain crate and a
-character a small figure. The samples come with all of theirs. **Edit the
+cent each): each kind of thing once, each character from their portrait,
+and, in the set's own style, any ground it has none of (sand where the set
+is a snowbound farm, a station's metal deck) and any roof material. Until
+then a thing is a plain crate, a character a small figure, and new ground
+the set's own coloured to match. The samples come with all of theirs. **Edit the
 tile set…** (under Look, and in the gallery) lists every picture the map is
 drawn with: the ground, walls and decoration, every thing and every
 character's sprite, with the words each was drawn from. Change the words

@@ -13,6 +13,7 @@
  ],
  "lava": false,
  "deck": false,
+ "grounds": ["cobble"],
  "decor_lights": [
   true,
   false,

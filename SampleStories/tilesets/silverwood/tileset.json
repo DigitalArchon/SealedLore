@@ -13,6 +13,7 @@
  ],
  "lava": false,
  "deck": false,
+ "grounds": ["grass"],
  "decor_lights": [
   true,
   false,

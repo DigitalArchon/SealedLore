@@ -354,8 +354,13 @@ class WorldArt(BaseModel):
     furnishings: dict[str, dict[str, FurnishPlan]] = Field(default_factory=dict)
     # The tile set the map is drawn in (engine/tile_sets.py): a shipped set's
     # name, "own:<key>" for one drawn for this story (`tile_sets`), or "" for
-    # the program to choose from the setting.
+    # the program to choose from the setting. Chosen once, when the story
+    # begins, and kept (the author, Oct 17 2026: "tilesets shouldn't swap mid
+    # game"; engine/session_area.py `pin_tile_set`): a new kind of ground is
+    # drawn in the set's style instead. `tile_set_auto`: the program chose
+    # it, not the author (the offer to choose another still shows).
     tile_set: str = ""
+    tile_set_auto: bool = False
     # The tile sets drawn for this story, by key (engine/tile_sets.py
     # `own_key`: from the title, "rain-slick-alleys").
     tile_sets: dict[str, OwnTileSet] = Field(default_factory=dict)

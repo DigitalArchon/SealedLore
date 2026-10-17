@@ -708,6 +708,8 @@ class WorldArtRuntime:
     def _start_map_art(self) -> bool:
         if self._map_closed:
             return False
+        # Before anything is drawn in it: the set is kept from here on.
+        self.pin_tile_set()
         pictures = self._start_map_pictures()
         # Map-first play's furnishing and sprites (engine/session_area.py).
         pictures = self._start_tile_art() or pictures

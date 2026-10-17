@@ -860,9 +860,10 @@ def test_a_set_is_designed_from_a_description_shown_with_its_price_and_drawn_as_
     assert session.remove_own_tile_set("own:neon-alleys")
     assert session.pictures.read(floor) is None
     assert list(session.map_art_copy().tile_sets) == ["neon-alleys-2"]
-    assert session.map_art_copy().tile_set == ""  # the program chooses again
     shipped = {name for name, _title in session.tile_set_choices() if not name.startswith("own:")}
-    assert session.tile_set_name() in shipped
+    art = session.map_art_copy()  # the program chooses again, and keeps it
+    assert art.tile_set in shipped and art.tile_set_auto
+    assert session.tile_set_name() == art.tile_set
     assert not session.remove_own_tile_set("doomsville")
 
 

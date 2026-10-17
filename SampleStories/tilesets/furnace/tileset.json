@@ -13,6 +13,7 @@
  ],
  "lava": true,
  "deck": false,
+ "grounds": ["hell", "rock"],
  "decor_lights": [
   true,
   false,

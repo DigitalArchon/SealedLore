@@ -27,11 +27,16 @@ from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPolygonF, QTr
 
 from sealedlore.engine.area import Area, Placement
 from sealedlore.engine.tile_sets import (
+    DECK_FLOOR_ROLE,
+    GROUND_TINTS,
     LIGHT_WORDS,
     ROOF_TINTS,
     TEXTURES,
     TileSetInfo,
     closest_item,
+    deck_floor_wanted,
+    ground_role,
+    ground_wanted,
     item_slugs,
     roof_role,
 )
@@ -60,6 +65,7 @@ FALLBACK = {
     "out-canopy": (40, 80, 44),
     "out-roof": (120, 64, 52),
     "out-wall": (150, 130, 110),
+    DECK_FLOOR_ROLE: (104, 110, 118),
 }
 
 
@@ -135,7 +141,9 @@ def tileable(image: QImage) -> QImage:
 
 
 def is_texture(role: str) -> bool:
-    return role in TEXTURES or role.startswith("out-roof-")
+    return (
+        role in TEXTURES or role.startswith(("out-roof-", "out-ground-")) or role == DECK_FLOOR_ROLE
+    )
 
 
 def sprite_image(data: bytes | None) -> QImage | None:
@@ -219,6 +227,34 @@ class TileSource:
         tinted = QBrush(self._images[key])
         tinted.setTransform(brush.transform())
         return tinted
+
+    def ground(self, look: str, scale_px: float) -> QBrush:
+        """The outdoor ground in `look`: the set's own where it stands for
+        that look, else the ground drawn for the story in it, else the set's
+        own tinted towards it until that is drawn (a story keeps its set: new
+        ground is drawn in its style, engine/tile_draw.py `ground_jobs`)."""
+        if not ground_wanted(self.info, look):
+            return _texture_brush(self, "out-ground", scale_px)
+        if self.image(ground_role(look)) is not None:
+            return _texture_brush(self, ground_role(look), scale_px)
+        brush = _texture_brush(self, "out-ground", scale_px)
+        if brush.textureImage().isNull():
+            return QBrush(QColor(*GROUND_TINTS[look]))
+        key = f"tint:ground:{look}"
+        if key not in self._images:
+            self._images[key] = _recoloured(brush.textureImage(), GROUND_TINTS[look])
+        tinted = QBrush(self._images[key])
+        tinted.setTransform(brush.transform())
+        return tinted
+
+    def floor(self, look: str, scale_px: float) -> QBrush:
+        """An indoor floor: a deck's own in a set with no deck (drawn for the
+        story; a flat grey until then), else the set's floor."""
+        if deck_floor_wanted(self.info, look):
+            if self.image(DECK_FLOOR_ROLE) is not None:
+                return _texture_brush(self, DECK_FLOOR_ROLE, scale_px)
+            return QBrush(QColor(*FALLBACK[DECK_FLOOR_ROLE]))
+        return _texture_brush(self, "floor", scale_px)
 
 
 def _np():
@@ -320,6 +356,18 @@ def _tinted(image: QImage, colour: tuple[int, int, int]) -> QImage:
     p.fillRect(out.rect(), QColor(*lift))
     p.end()
     return out
+
+
+def _recoloured(image: QImage, colour: tuple[int, int, int]) -> QImage:
+    """`image`'s light and shade around `colour`: its grey scaled so its
+    average is the colour, so a snow texture standing in for sand keeps its
+    drifts and reads as sand (`_tinted` lifts a dark roof; on near-white
+    snow it left the ground white)."""
+    np = _np()
+    grey = _arr(image.convertToFormat(QImage.Format_RGB32)).mean(axis=2)
+    mean = float(grey.mean()) or 1.0
+    out = np.clip(grey[..., None] / mean * np.array(colour, np.float32), 0, 255)
+    return _qimg(out)
 
 
 def _texture_layer(source: TileSource, role: str, w: int, h: int, scale_px: float):
@@ -463,7 +511,7 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
         base.fill(QColor(20, 18, 16))
     p = QPainter(base)
     p.setRenderHint(QPainter.SmoothPixmapTransform, True)
-    floor = _texture_brush(source, "floor", px * 4.8)
+    floor = source.floor(area.look, px * 4.8)
     pool = _texture_brush(source, "out-water", px * 8)
     for y in range(h):
         for x in range(w):
@@ -905,7 +953,11 @@ def _render_outdoor(area: Area, source: TileSource) -> QImage:
     # 1. terrain: ground, then pavement, rock, forest floor, water, road.
     # Texture scales are in tiles (a texture every 16 tiles of ground), so
     # the picture is the same whatever `px` is.
-    img = _texture_layer(source, "out-ground", W, H, px * 16)
+    ground = QImage(W, H, QImage.Format_RGB32)
+    painter = QPainter(ground)
+    painter.fillRect(0, 0, W, H, source.ground(area.look, px * 16))
+    painter.end()
+    img = _arr(ground)
     trees_mask = g == "T"
     layers = [
         ("out-pave", np.isin(g, list("_+")) & ~roofed, 0.2, px * 12, False),
