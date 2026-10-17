@@ -341,14 +341,34 @@ def scaled(spec: dict[str, Any], k: int) -> dict[str, Any]:
     return spec
 
 
+# A wall run longer than this is a town's wall or a barricade, not a
+# building's (gui/map_tiles.py roofs a ring no wider than 16 tiles).
+TOWN_WALL_RUN = 16
+
+
+def _wall_run(grid: list[list[str]], x: int, y: int, dx: int, dy: int) -> int:
+    """How many wall tiles run through (x, y) along (dx, dy), both ways."""
+    h, w = len(grid), len(grid[0])
+    count = 1
+    for sign in (1, -1):
+        cx, cy = x + sign * dx, y + sign * dy
+        while 0 <= cx < w and 0 <= cy < h and grid[cy][cx] == "#":
+            count += 1
+            cx, cy = cx + sign * dx, cy + sign * dy
+    return count
+
+
 def _roads_on_open_ground(rows: list[str], roads: Sequence[dict[str, Any]]) -> list[str]:
     """Roads by distance from their line, on open ground only: a road never
     runs through a building (the rule), and a diagonal is a line, not the
-    rasteriser's staircase."""
+    rasteriser's staircase. Where a road crosses a town's wall it is a gate:
+    live (Oct 17 2026) Hellsville's wall closed the road at both its gates,
+    and nobody could walk into the town."""
     if not roads:
         return rows
     grid = [list(r) for r in rows]
     h, w = len(grid), len(grid[0]) if grid else 0
+    gates: set[tuple[int, int]] = set()
     for f in roads:
         pts = [p for p in f.get("points") or [] if isinstance(p, (list, tuple)) and len(p) >= 2]
         try:
@@ -372,6 +392,14 @@ def _roads_on_open_ground(rows: list[str], roads: Sequence[dict[str, Any]]) -> l
                     if math.hypot(x - (ax + t * dx), y - (ay + t * dy)) <= radius:
                         if grid[y][x] in ".,s":
                             grid[y][x] = "="
+                        elif grid[y][x] == "#" and (
+                            # Across the wall, never along it.
+                            (abs(dy) > abs(dx) and _wall_run(grid, x, y, 1, 0) > TOWN_WALL_RUN)
+                            or (abs(dx) > abs(dy) and _wall_run(grid, x, y, 0, 1) > TOWN_WALL_RUN)
+                        ):
+                            gates.add((x, y))
+    for x, y in gates:
+        grid[y][x] = "+"
     return ["".join(r) for r in grid]
 
 

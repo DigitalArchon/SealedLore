@@ -1567,3 +1567,20 @@ def test_a_character_the_plot_keeps_hidden_gets_no_avatar_drawn_yet(tmp_path, st
     assert "plot keeps them hidden" in session.tile_asset_offer("walker/Maela Orr", "")[2]
     assert session.tile_asset_offer("walker/Serrik Vaun", "")[2] is None
     assert not session.redraw_tile_assets([("walker/Maela Orr", "")])
+
+
+def test_a_road_through_a_town_wall_is_a_gate_and_a_building_s_wall_stays_shut():
+    """Live (Oct 17 2026): Hellsville's wall closed its road at both gates
+    (roads go on open ground only), and nobody could walk into the town."""
+    from sealedlore.engine.area import _roads_on_open_ground
+
+    rows = ["." * 40 for _ in range(12)]
+    rows[5] = "#" * 40  # a town wall, east to west
+    rows[8] = "." * 10 + "#" * 6 + "." * 24  # a building's wall, short
+    across = {"kind": "road", "points": [[30, 0], [30, 11]], "width": 2}
+    along = {"kind": "road", "points": [[0, 4], [39, 4]], "width": 2}
+    through_building = {"kind": "road", "points": [[12, 7], [12, 11]], "width": 1}
+    out = _roads_on_open_ground(rows, [across, along, through_building])
+    assert "+" in out[5][28:33] and out[5].count("+") <= 4  # a gate where it crosses
+    assert out[5][:25] == "#" * 25  # the road along the wall leaves it whole
+    assert out[8][10:16] == "######"  # never through a building
