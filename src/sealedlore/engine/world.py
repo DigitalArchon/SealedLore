@@ -400,6 +400,30 @@ def _said(value: Any) -> str | None:
 _ONLY_AUTHOR = "only the author's Direction or Narration"
 
 
+def _parents_first(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The reply's places, each after the place it is inside when that is in
+    the same reply. Live (Oct 17 2026), a new world's opening listed the
+    watch room and the lamp room before "The lighthouse" they were inside:
+    a parent not found yet was dropped, and every room stood on its own."""
+    named = {key(_text(e.get("name"))): i for i, e in enumerate(entries)}
+    done: set[int] = set()
+    out: list[dict[str, Any]] = []
+
+    def visit(i: int, seen: set[int]) -> None:
+        if i in done or i in seen:
+            return
+        seen.add(i)
+        parent = named.get(key(_text(entries[i].get("inside"))))
+        if parent is not None:
+            visit(parent, seen)
+        done.add(i)
+        out.append(entries[i])
+
+    for i in range(len(entries)):
+        visit(i, set())
+    return out
+
+
 def resolve_reply(
     world: WorldMap,
     reply: dict[str, Any],
@@ -452,10 +476,13 @@ def resolve_reply(
 
     # Places first, so links and people can name places added in this reply.
     # A "renamed" entry is a place entry with "was" beside its new name.
-    entries = _entries(reply, "places") + [
-        {"name": e.get("now"), "was": e.get("was"), "quote": e.get("quote")}
-        for e in _entries(reply, "renamed")
-    ]
+    entries = _parents_first(
+        _entries(reply, "places")
+        + [
+            {"name": e.get("now"), "was": e.get("was"), "quote": e.get("quote")}
+            for e in _entries(reply, "renamed")
+        ]
+    )
     for entry in entries:
         name = _text(entry.get("name"))
         if not name or quoted(entry) is None:

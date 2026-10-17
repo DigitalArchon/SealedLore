@@ -751,3 +751,33 @@ def test_the_weather_is_set_by_a_read_with_its_quote_and_the_author_s_own_words_
     )
     assert refused == [] and told.weather == "snow beginning"
     assert describe_delta(after, told) == "weather now snow beginning"
+
+
+def test_a_room_listed_before_the_building_it_is_in_is_still_inside_it():
+    """Live (Oct 17 2026): a new world's opening read listed the watch room
+    and the lamp room before "The lighthouse" they were inside, and every
+    room stood on its own, drawn as a whole building."""
+    world = WorldMap()
+    source = "The watch room clock ticked. The lamp room above hummed. The lighthouse stood."
+    reply = {
+        "places": [
+            {
+                "name": "The watch room",
+                "inside": "The lighthouse",
+                "kind": "room",
+                "quote": "The watch room clock ticked.",
+            },
+            {
+                "name": "The lamp room",
+                "inside": "The lighthouse",
+                "kind": "room",
+                "quote": "The lamp room above hummed.",
+            },
+            {"name": "The lighthouse", "kind": "building", "quote": "The lighthouse stood."},
+        ]
+    }
+    delta, refused = resolve_reply(world, reply, source=source, people=[])
+    by_name = {p.name: p for p in delta.places}
+    tower = by_name["The lighthouse"].id
+    assert by_name["The watch room"].inside == tower and by_name["The lamp room"].inside == tower
+    assert refused == []
