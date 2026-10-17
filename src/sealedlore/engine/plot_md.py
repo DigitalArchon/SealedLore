@@ -1291,6 +1291,15 @@ def _first_sentence(text: str) -> str:
     return sentence if len(sentence) <= 240 else sentence[:237].rstrip() + "…"
 
 
+def front_matter_of(text: str) -> dict[str, str]:
+    """A plot file's front matter (`title`, `description`, `background`…) as
+    plain values, read as the importer reads it, for a list of plot files that
+    needs nothing else of them (the start page's sample stories)."""
+    parser = _Parser(text, "")
+    values, _body = parser.front_matter(parser.text.split("\n"))
+    return {key: value for key, (_line, value) in values.items()}
+
+
 def parse_plot_markdown(text: str, *, fallback_title: str = "Untitled") -> ParsedPlotFile:
     """Read a plot file. `fallback_title` (usually the file's name) is used when
     the file sets none."""

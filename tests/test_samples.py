@@ -1,5 +1,5 @@
-"""The sample stories: File → New story from a sample and the start page's
-Try a sample… find them wherever SealedLore is installed (the AppImage keeps
+"""The sample stories: the start page and File → New… find them wherever
+SealedLore is installed (the AppImage keeps
 them at a mount point Import… could never find), and a sample added to
 SampleStories/ is offered with no other change."""
 
@@ -54,7 +54,7 @@ def test_the_shipped_samples_are_offered_and_import_cleanly():
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QPushButton  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 
@@ -85,36 +85,57 @@ def window(app, tmp_path: Path, samples: Path, monkeypatch):
     window.close()
 
 
-def _items(window: MainWindow) -> list[str]:
-    return [action.text() for action in window.samples_menu.actions()]
+def _samples_offered(chooser) -> dict[str, object]:
+    return {
+        key.split(":", 1)[1]: card
+        for key, card in chooser.cards.items()
+        if key.startswith("sample:")
+    }
 
 
-def test_the_menu_lists_the_samples_and_picks_up_a_new_one(window, samples: Path):
-    assert _items(window) == ["Doomsville"]
+def test_the_start_page_offers_each_sample_and_picks_up_a_new_one(window, samples: Path, app):
+    """With no story open the start page shows every sample with its title,
+    its line and its picture; one dropped into the folder appears."""
+    shutil.copytree(SAMPLES / "pictures", samples / "pictures")
+    window.reload_transcript()
+    assert window.centre_stack.currentWidget() is window.start_page
+    offered = _samples_offered(window.start_page)
+    assert list(offered) == ["Doomsville.md"]
+    card = offered["Doomsville.md"]
+    assert card.title.text() == "Doomsville"
+    assert card.text.text().startswith("Four years after the dead rose")
+    window.start_page._show_pictures()
+    assert card.picture is not None and not card.picture.pixmap().isNull()
     shutil.copy(samples / "Doomsville.md", samples / "Dust_Road.md")
-    window.samples_menu.aboutToShow.emit()
-    assert _items(window) == ["Doomsville", "Dust Road"]
-    window.samples_menu.actions()[1].trigger()
+    window.reload_transcript()
+    offered = _samples_offered(window.start_page)
+    assert set(offered) == {"Doomsville.md", "Dust_Road.md"}
+    offered["Dust_Road.md"].activated.emit()
     assert window.imported == [samples / "Dust_Road.md"]
 
 
-def test_the_menu_says_when_there_are_none(window, samples: Path):
+def test_with_no_samples_none_are_offered(window, samples: Path):
     (samples / "Doomsville.md").unlink()
-    window.samples_menu.aboutToShow.emit()
-    [only] = window.samples_menu.actions()
-    assert only.text() == "No sample stories found" and not only.isEnabled()
-
-
-def test_the_start_page_offers_a_sample(window, samples: Path):
     window.reload_transcript()
-    buttons = {
-        button.text(): button
-        for button in window.transcript.findChildren(QPushButton)
-        if button.objectName() == "placeholderButton"
-    }
-    assert "Try a sample…" in buttons
-    # With one sample it is imported at once; with more, the list opens.
-    buttons["Try a sample…"].click()
+    assert not _samples_offered(window.start_page)
+    assert {"premise", "blank", "chat", "import"} <= set(window.start_page.cards)
+
+
+def test_file_new_offers_the_samples_too(window, samples: Path, monkeypatch):
+    from sealedlore.gui import main_window as main_window_module
+
+    seen = []
+
+    def choose(dialog) -> int:
+        seen.append(set(dialog.chooser.cards))
+        _samples_offered(dialog.chooser)["Doomsville.md"].activated.emit()
+        return 1
+
+    monkeypatch.setattr(main_window_module.NewDialog, "exec", choose)
+    window.stories.new_story_requested.emit()  # New… under the Stories list
+    assert {"premise", "blank", "chat", "import", "sample:Doomsville.md"} <= seen[0]
+    # File → New… has no stories played last: the start page has them.
+    assert not any(key.startswith("open:") for key in seen[0])
     assert window.imported == [samples / "Doomsville.md"]
 
 

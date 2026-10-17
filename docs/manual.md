@@ -384,6 +384,14 @@ comes end-to-end encrypted offers the encrypted version in one click, and
 searching "tee" or "private" lists both. A TEE chat's model button lists only
 the models it may move to.
 
+**The start page.** With no story open, the window shows every way to begin,
+each with a line on what it does: the stories you played last, to pick up
+where you left off; **Draft a story from an idea**, **Write a story from
+scratch**, **Have a simple chat** and **Import a file**; and the sample
+stories, each with its picture. **File → New…** (Ctrl+N), and **New…** under
+the Stories list, show the same choices. A story saves itself as you go
+(Ctrl+S saves at once).
+
 **Managing stories.** Right-click a story in the Stories list:
 - **Open folder** shows the story's files in your file manager (also for a
   story that can't be read).
@@ -468,7 +476,7 @@ archiving, rebuilding summaries.
   character, Narration, Direction, or a Question to the model); *Model
   voices* is who the storyteller may voice this turn.
 - **Shortcuts**: Enter sends, Shift+Enter is a new line, Ctrl+Enter sends
-  from anywhere, Esc stops, Ctrl+N new story, Ctrl+O import, Ctrl+S save,
+  from anywhere, Esc stops, Ctrl+N new, Ctrl+O import, Ctrl+S save,
   Ctrl+, settings, Ctrl+Shift+I picture, Ctrl+Shift+V the transcript view,
   Ctrl+Q quit.
 
@@ -707,8 +715,8 @@ stand, and, with spoilers on, the events still to come.
 
 **File → Import…** takes a plot file too. The sample stories that come with
 SealedLore (every plot file in `SampleStories/` but the format guide) are
-listed under **New story from a sample** in the File menu, in the AppImage as
-well: File → New story from a sample → Doomsville is the same as importing
+on the start page and in **File → New…**, in the AppImage as well, each with
+its picture and its line: Doomsville there is the same as importing
 `Doomsville.md`, and **Doomsville with a map** is the same story with a map
 drawn up beforehand (a `# Map` section: see "The map"). The Ashen Reach,
 The Silverwood, Brasshaven and The Ninth Furnace show other kinds of world
@@ -729,7 +737,8 @@ go.
 
 ## Drafting a story, and reviewing its settings
 
-**File → New story from a premise…** Describe the story you want: the setting,
+**Draft a story from an idea** (on the start page, or File → New…).
+Describe the story you want: the setting,
 who you'll play, the tone, and choose the **Person** and **Tense** it is told
 in (or leave them to the premise), so the opening is written that way. The
 model drafts everything in one go:
@@ -1782,7 +1791,8 @@ keeps Sigstore's public trust root in `~/.cache/sigstore-python` and
 
 ## Simple chat
 
-**File → New simple chat…** is a plain conversation with a model in
+**Have a simple chat** (on the start page, or File → New…) is a plain
+conversation with a model in
 SealedLore's window: your system prompt and your messages, sent exactly as you
 write them, with none of the storytelling around them (no rules, cast, lore,
 scene, plot or side models). Branches, takes, Edit, Find, pictures and the

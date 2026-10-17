@@ -271,17 +271,19 @@ Windows offers weaker privacy on the machine itself (see
    beside its field can pick the fastest or cheapest host, or one host,
    billed pay-as-you-go (see the manual's Models section).
 
-3. **Start from a sample.** File → New story from a sample → Doomsville (a
-   survivor at a farmhouse, with a plot), or Doomsville with a map (the same
-   story with the map on and the country around Hellsville drawn up), or
-   one of four other worlds, each with a plot, a map drawn up and furnished
-   with a sprite for every thing and character, a background, and a picture of every character and place: The Ashen Reach (grimdark science fiction
-   on a dying mining world), The Silverwood (elves, forests, caves and a
-   city on a waterfall), Brasshaven (a steampunk city of airships and
-   clockwork) and The Ninth Furnace (a hellscape of cultists and rivers of
-   lava). **Try a sample…** on the start page lists them too. Setup opens first; Save, then choose who you are playing and the
-   opening is written. Or File → New story from a premise… and describe a
-   story in a sentence or two.
+3. **Start from a sample.** The start page shows the sample stories, each
+   with its picture and a line on what it is (File → New… shows them too):
+   Doomsville (a survivor at a farmhouse, with a plot), or Doomsville with a
+   map (the same story with the map on and the country around Hellsville
+   drawn up), or one of four other worlds, each with a plot, a map drawn up
+   and furnished with a sprite for every thing and character, a background,
+   and a picture of every character and place: The Ashen Reach (grimdark
+   science fiction on a dying mining world), The Silverwood (elves, forests,
+   caves and a city on a waterfall), Brasshaven (a steampunk city of
+   airships and clockwork) and The Ninth Furnace (a hellscape of cultists
+   and rivers of lava). Setup opens first; Save, then choose who you are
+   playing and the opening is written. Or choose **Draft a story from an
+   idea** and describe a story in a sentence or two.
 
 4. **Play.** Type what your character does or says and press Enter. The
    storyteller answers; the Scene page on the right shows who is now in the

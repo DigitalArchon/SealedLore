@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.gui import theme
+from sealedlore.gui.start_page import Recent, when_played
 from sealedlore.storage.atomic import read_json
 from sealedlore.storage.paths import is_safe_story_id, stories_dir
 
@@ -52,6 +53,8 @@ class StoryListPanel(QWidget):
 
     def __init__(self, root: Path | None = None) -> None:
         super().__init__()
+        # (id, label, updated) of every readable story, played last first.
+        self._played: list[tuple[str, str, str]] = []
         self.root = root
 
         layout = QVBoxLayout(self)
@@ -76,7 +79,7 @@ class StoryListPanel(QWidget):
         delete_key.activated.connect(self._delete_current)
         layout.addWidget(self.list, 1)
 
-        new_button = QPushButton("New story")
+        new_button = QPushButton("New…")
         new_button.clicked.connect(self.new_story_requested)
         layout.addWidget(new_button)
 
@@ -88,6 +91,7 @@ class StoryListPanel(QWidget):
         bundle here grew with the library and was paid on every turn.
         """
         self.list.clear()
+        self._played.clear()
         directory = stories_dir(self.root)
         if not directory.exists():
             return
@@ -116,7 +120,9 @@ class StoryListPanel(QWidget):
                 # word can't be looked into or deleted. Opening it says why.
                 reason = (str(exc).splitlines() or ["unreadable"])[0][:80]
                 rows.append(("", f"{entry.name}\n⚠ can't be read: {reason}", entry.name, str(exc)))
-        for _updated, label, story_id, error in sorted(rows, key=lambda row: row[0], reverse=True):
+        for updated, label, story_id, error in sorted(rows, key=lambda row: row[0], reverse=True):
+            if error is None:
+                self._played.append((story_id, label, updated))
             item = QListWidgetItem(label)
             item.setData(Qt.UserRole, story_id)
             item.setToolTip(label.split("\n", 1)[0])
@@ -126,6 +132,19 @@ class StoryListPanel(QWidget):
             self.list.addItem(item)
             if story_id == selected_id:
                 self.list.setCurrentItem(item)
+
+    def recent(self, count: int) -> list[Recent]:
+        """The `count` stories played last, readable ones only, for the start
+        page: title, and how many messages and when."""
+        out = []
+        for story_id, label, updated in self._played[:count]:
+            title, _, messages = label.partition("\n")
+            if messages.startswith("0 "):
+                messages = "Not begun yet"
+            played = when_played(updated)
+            detail = f"{messages} · played {played}" if played else messages
+            out.append(Recent(story_id, title, detail))
+        return out
 
     def _show_menu(self, position: QPoint) -> None:
         item = self.list.itemAt(position)

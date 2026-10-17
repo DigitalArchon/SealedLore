@@ -14,7 +14,7 @@ from pathlib import Path
 
 from PySide6 import __version__ as pyside_version
 from PySide6.QtCore import QFile, Qt, QThread, QTimer, QUrl, Signal
-from PySide6.QtGui import QAction, QCursor, QDesktopServices, QKeySequence
+from PySide6.QtGui import QAction, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -56,7 +56,7 @@ from sealedlore.engine.session import (
 )
 from sealedlore.engine.tokens import TokenEstimator
 from sealedlore.engine.usage import usage_fields, usage_report
-from sealedlore.gui import crop_dialog
+from sealedlore.gui import crop_dialog, start_page
 from sealedlore.gui.attest_check import attestation_tests
 from sealedlore.gui.bad_hosts import bad_hosts
 from sealedlore.gui.banners import OverBudgetBanner, StalenessBanner
@@ -93,6 +93,7 @@ from sealedlore.gui.settings_dialog import SettingsDialog
 from sealedlore.gui.setup_dialog import SetupDialog
 from sealedlore.gui.speed_test import speed_tests
 from sealedlore.gui.start_dialog import StartDialog
+from sealedlore.gui.start_page import NewDialog, StartChooser
 from sealedlore.gui.status import NoticeStatusBar, StatusStrip
 from sealedlore.gui.stories import StoryListPanel
 from sealedlore.gui.story_map import StoryMap
@@ -148,7 +149,7 @@ from sealedlore.storage.archive import (
     write_archive,
 )
 from sealedlore.storage.images import is_video_file, reference_files, without_videos
-from sealedlore.storage.paths import data_home, sample_stories, samples_dir, story_dir
+from sealedlore.storage.paths import data_home, samples_dir, story_dir
 from sealedlore.storage.repository import (
     StoryBundle,
     copy_story,
@@ -190,6 +191,9 @@ KEPT_WARNING_SHARE = 0.2
 REBUILD_POLL_MS = 700
 # The centre column's margin at each side, clear of the docks.
 CENTRE_MARGIN = 10
+# Help → User manual: the manual isn't bundled, so its copy in the public
+# repository.
+MANUAL_URL = "https://github.com/DigitalArchon/SealedLore/blob/master/docs/manual.md"
 
 
 class MainWindow(
@@ -343,7 +347,11 @@ class MainWindow(
         self.top_row.add_group([self.stories_button, self.view_toggle])
         self.top_row.add_group([self.find_button, self.world_button])
         self.top_row.add_group([self.branch_bar], right=True, whole=True)
-        centre_layout.addLayout(self.top_row)
+        # In a widget of its own, so the start page can put it away whole.
+        self.top_bar = QWidget()
+        self.top_bar.setLayout(self.top_row)
+        self.top_row.setContentsMargins(0, 0, 0, 0)
+        centre_layout.addWidget(self.top_bar)
         centre_layout.addWidget(self.find_bar)
         # The branch map shares the transcript's place (Branches, on the branch
         # bar), as the story's map does (Map, beside Find: window_world.py).
@@ -359,6 +367,10 @@ class MainWindow(
         self.centre_stack = PageStack()
         self.centre_stack.addWidget(self.transcript)
         self.centre_stack.addWidget(self.story_map)
+        # With no story open: every way to begin, each said (gui/start_page.py).
+        self.start_page = StartChooser()
+        self.start_page.chosen.connect(self._start_choice)
+        self.centre_stack.addWidget(self.start_page)
         centre_layout.addWidget(self.centre_stack, 1)
         centre_layout.addWidget(self.composer)
 
@@ -369,7 +381,7 @@ class MainWindow(
 
         self.stories = StoryListPanel(root=self.root)
         self.stories.story_activated.connect(self.open_story)
-        self.stories.new_story_requested.connect(self.new_story)
+        self.stories.new_story_requested.connect(self.new_from_chooser)
         self.stories.duplicate_settings_requested.connect(self.duplicate_story_settings)
         self.stories.duplicate_story_requested.connect(self.duplicate_entire_story)
         self.stories.delete_requested.connect(self.delete_story)
@@ -494,17 +506,18 @@ class MainWindow(
 
     def _build_actions(self) -> None:
         file_menu = self.menuBar().addMenu("&File")
-
-        new_action = QAction("&New story…", self)
+        # One New… for every way to begin, each said in a sentence (the
+        # author, Oct 18 2026: New story, from a premise, simple chat, from a
+        # sample and Import, five items side by side, said nothing of which
+        # was which). The start page shows the same choices.
+        new_action = QAction("&New…", self)
         new_action.setShortcut(QKeySequence.New)
-        new_action.triggered.connect(self.new_story)
+        new_action.setStatusTip(
+            "Start a story (from an idea, from scratch or a sample), a simple chat, "
+            "or import a file"
+        )
+        new_action.triggered.connect(self.new_from_chooser)
         file_menu.addAction(new_action)
-
-        from_premise = QAction("New story from a &premise…", self)
-        from_premise.setStatusTip("Describe a story; the model drafts its world, cast and lore")
-        from_premise.triggered.connect(self.new_story_from_premise)
-        file_menu.addAction(from_premise)
-        self._chat_actions(file_menu)
         # One import for every kind of file (see _import_path): there were two
         # that each took either file, and a tester reasonably concluded that
         # the one they hadn't used had lost their story.
@@ -515,32 +528,26 @@ class MainWindow(
         )
         import_action.triggered.connect(self.import_file)
         file_menu.addAction(import_action)
-        # The sample stories are inside the AppImage, at a mount point that
-        # changes every launch: Import… could never find them there. Listed
-        # afresh whenever the menu opens, so a sample added later just appears.
-        self.samples_menu = file_menu.addMenu("New story from a &sample")
-        self.samples_menu.menuAction().setStatusTip(
-            "Start a new story from one of the samples that come with SealedLore"
-        )
-        self.samples_menu.aboutToShow.connect(self._fill_samples_menu)
-        self._fill_samples_menu()
+        # Leaving a story used to take opening another or making a new one.
+        # Shown only while one is open (`_update_controls`).
+        self.close_story_action = QAction("&Close story", self)
+        self.close_story_action.setShortcut(QKeySequence.Close)
+        self.close_story_action.setStatusTip("Back to the start page")
+        self.close_story_action.triggered.connect(self.close_story)
+        file_menu.addAction(self.close_story_action)
+        file_menu.addSeparator()
         editor_action = QAction("Plot file &editor…", self)
         editor_action.setStatusTip(
             "Write a plot file — world, cast, places, facts and events — with the format kept right"
         )
         editor_action.triggered.connect(self.open_plot_editor)
         file_menu.addAction(editor_action)
-
-        save_action = QAction("&Save", self)
+        # A story saves itself as it goes; Ctrl+S still saves at once, but
+        # a Save in the menu said there was something to lose without it.
+        save_action = QAction("Save", self)
         save_action.setShortcut(QKeySequence.Save)
         save_action.triggered.connect(self.save_story)
-        file_menu.addAction(save_action)
-        # Leaving a story used to take opening another or making a new one.
-        self.close_story_action = QAction("&Close story", self)
-        self.close_story_action.setShortcut(QKeySequence.Close)
-        self.close_story_action.setStatusTip("Back to the start page")
-        self.close_story_action.triggered.connect(self.close_story)
-        file_menu.addAction(self.close_story_action)
+        self.addAction(save_action)
 
         file_menu.addSeparator()
         self.settings_action = QAction("Se&ttings…", self)
@@ -562,6 +569,9 @@ class MainWindow(
         file_menu.addAction(quit_action)
 
         story_menu = self.menuBar().addMenu("S&tory")
+        # Only while a story or chat is open (`_update_controls`): with none,
+        # it was a menu of greyed items.
+        self.story_menu = story_menu
         self.setup_action = QAction("Set&up…", self)
         self.setup_action.triggered.connect(self.open_setup)
         story_menu.addAction(self.setup_action)
@@ -652,6 +662,11 @@ class MainWindow(
         self._background_actions(view_menu)
 
         help_menu = self.menuBar().addMenu("&Help")
+        # The manual isn't in the AppImage: the public repository's copy.
+        manual_action = QAction("User &manual", self)
+        manual_action.setStatusTip("Open the user manual in your web browser")
+        manual_action.triggered.connect(lambda: QDesktopServices.openUrl(QUrl(MANUAL_URL)))
+        help_menu.addAction(manual_action)
         samples_action = QAction("&Plot format guide and samples", self)
         samples_action.setStatusTip(
             "Open the folder with the plot file format guide and the sample plots"
@@ -743,39 +758,40 @@ class MainWindow(
             return
         self.start_story()
 
-    def _fill_samples_menu(self) -> None:
-        """File → New story from a sample: one item per sample story."""
-        self.samples_menu.clear()
-        samples = sample_stories()
-        for name, path in samples:
-            action = self.samples_menu.addAction(name)
-            action.setStatusTip(f"A new story from {path.name}; Setup opens first")
-            action.triggered.connect(lambda _=False, p=path: self.import_sample(p))
-        if not samples:
-            none = self.samples_menu.addAction("No sample stories found")
-            none.setEnabled(False)
+    def new_from_chooser(self) -> None:
+        """File → New…: the start page's choices in a dialog."""
+        if self._busy:
+            return
+        dialog = NewDialog(self)
+        dialog.exec()
+        choice = dialog.choice
+        dialog.deleteLater()
+        if choice is not None:
+            self._start_choice(*choice)
+
+    def _start_choice(self, kind: str, value: object) -> None:
+        """A choice on the start page or in File → New…, by the methods the
+        File menu's own items called."""
+        if kind == start_page.OPEN:
+            self.open_story(str(value))
+        elif kind == start_page.PREMISE:
+            self.new_story_from_premise()
+        elif kind == start_page.BLANK:
+            self.new_story()
+        elif kind == start_page.CHAT:
+            self.new_chat()
+        elif kind == start_page.IMPORT:
+            self.import_file()
+        elif kind == start_page.SAMPLE:
+            self.import_sample(Path(str(value)))
 
     def import_sample(self, path: Path) -> None:
-        """A new story from a sample plot file, exactly as File → Import… would."""
+        """A new story from a sample plot file, exactly as File → Import… would.
+        The samples are inside the AppImage, at a mount point that changes
+        every launch: Import… could never find them there."""
         if self._busy or not self._private_allows_close():
             return
         self._import_plot_file(path)
-
-    def _choose_sample(self) -> None:
-        """The start page's Try a sample…: the only sample at once, else a list."""
-        samples = sample_stories()
-        if not samples:
-            self._warn_plain(
-                "No samples",
-                "No sample stories were found with this copy of SealedLore "
-                "(they are in SampleStories/ in the source).",
-            )
-            return
-        if len(samples) == 1:
-            self.import_sample(samples[0][1])
-            return
-        self._fill_samples_menu()
-        self.samples_menu.exec(QCursor.pos())
 
     def import_file(self) -> None:
         """A new story from a scenario, a story backup or a plot file."""
@@ -1449,26 +1465,37 @@ class MainWindow(
             missing = [] if self.use_mock else setup_missing(self.config)
             if missing:
                 # Nothing but a backup can be used before this is set up.
+                self._show_start(False)
                 self.transcript.show_placeholder(
                     welcome_html(missing, partly_set=len(missing) < 3),
                     [("Open Settings…", self.open_settings), ("Import…", self.import_file)],
                     rich=True,
                 )
                 return
-            hint = "No story open. Pick one in Stories on the left, or start one."
-            actions = [
-                ("New story…", self.new_story),
-                ("New story from a premise…", self.new_story_from_premise),
-                ("New simple chat…", self.new_chat),
-            ]
-            more = [("Import…", self.import_file), ("Try a sample…", self._choose_sample)]
-            self.transcript.show_placeholder(hint, actions, more_actions=more)
+            self.start_page.rebuild(self.stories.recent(start_page.RECENT_COUNT))
+            self._show_start(True)
             return
+        self._show_start(None)
         self._show_nodes(self.session.full_path())
         self.refresh_branch_bar()
         self._refresh_find()
         # The leaf moved (a branch, a take, an edit): the map is the path's.
         self.refresh_world(keep_view=True)
+
+    def _show_start(self, start: bool | None) -> None:
+        """With no story open (`start` True for the start page, False for the
+        first-run welcome in the transcript's place) the composer and the row
+        above the transcript are put away: greyed, they only looked usable.
+        None: a story is open, and they are back."""
+        open_story = start is None
+        self.top_bar.setVisible(open_story)
+        if not open_story:
+            self.close_find()
+            self.composer.setVisible(False)
+            self.centre_stack.setCurrentWidget(self.start_page if start else self.transcript)
+        elif self.centre_stack.currentWidget() is self.start_page:
+            self.centre_stack.setCurrentWidget(self.transcript)
+            self.composer.setVisible(True)
 
     def _show_nodes(self, nodes: list[Node]) -> None:
         assert self.session is not None
@@ -3836,6 +3863,8 @@ class MainWindow(
         )
         self.stories.setEnabled(not busy)
         self.close_story_action.setEnabled(has_story and not busy)
+        self.close_story_action.setVisible(has_story)
+        self.story_menu.menuAction().setVisible(has_story)
         self.status_strip.set_routes(self.session.route_checks() if has_story else [])
         self.settings_action.setEnabled(not busy)
         self.prompts_action.setEnabled(not busy)
@@ -3875,9 +3904,11 @@ class MainWindow(
             self.usage_action,
         ):
             action.setEnabled(has_story and not busy)
-        self.start_action.setEnabled(
-            has_story and not busy and not (self.session and self.session.nodes)
-        )
+        unstarted = has_story and not (self.session and self.session.nodes)
+        self.start_action.setEnabled(unstarted and not busy)
+        # Once the story has begun it can only restart: greyed for good, it
+        # was one more item to read past.
+        self.start_action.setVisible(unstarted)
         self._update_image_controls()
         self._update_video_controls()
         self._update_private_controls()

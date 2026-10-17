@@ -514,8 +514,6 @@ def test_the_wheel_scrolls_the_page_not_the_combo_under_it(app, window: MainWind
 
 
 def test_with_no_story_open_the_window_says_so_and_offers_a_start(app, tmp_path: Path, story, cast):
-    from PySide6.QtWidgets import QPushButton
-
     from sealedlore.gui.composer import NO_STORY_PLACEHOLDER
 
     needs_real_fonts()  # the dock's width follows the forms' text
@@ -529,22 +527,79 @@ def test_with_no_story_open_the_window_says_so_and_offers_a_start(app, tmp_path:
         # Greyed forms looked usable and answered nothing, scrollbars included.
         assert tabs.is_empty_shown()
         assert not tabs.isTabVisible(tabs.indexOf(window.plot_panel))
-        buttons = {b.text() for b in window.transcript.findChildren(QPushButton) if b.isVisible()}
-        assert {"New story…", "Import…"} <= buttons
+        # The start page in the transcript's place, every way to begin a card
+        # (gui/start_page.py), the story played last first; the composer and
+        # the row above the transcript put away, greyed they only looked usable.
+        assert window.centre_stack.currentWidget() is window.start_page
+        cards = window.start_page.cards
+        assert {"premise", "blank", "chat", "import", f"open:{story.id}"} <= set(cards)
+        assert not window.composer.isVisible() and not window.top_bar.isVisible()
         assert window.composer.input.placeholderText() == NO_STORY_PLACEHOLDER
+        assert not window.story_menu.menuAction().isVisible()
+        assert not window.close_story_action.isVisible()
         empty_width = tabs.width()
 
         # The list kept beside the story, so only the forms could move the dock.
         window.config.stories_list = True
-        window.open_story(story.id)
+        cards[f"open:{story.id}"].activated.emit()
         settle(app)
+        assert window.session is not None and window.session.story.id == story.id
         assert not tabs.is_empty_shown()
+        assert window.centre_stack.currentWidget() is window.transcript
+        assert window.composer.isVisible() and window.top_bar.isVisible()
         assert window.composer.input.placeholderText() != NO_STORY_PLACEHOLDER
+        assert window.story_menu.menuAction().isVisible()
+        assert window.close_story_action.isVisible()
         assert tabs.width() == empty_width, "opening a story doesn't move the dock"
 
         window._close_story()
         settle(app)
         assert tabs.is_empty_shown()
+        assert window.centre_stack.currentWidget() is window.start_page
+    finally:
+        window.close()
+
+
+def _shown(menu) -> list[str]:
+    return [
+        a.text().replace("&", "") for a in menu.actions() if a.isVisible() and not a.isSeparator()
+    ]
+
+
+def test_the_file_menu_has_one_new_and_only_what_applies(app, tmp_path: Path, story, cast):
+    """The author (Oct 18 2026): New story, from a premise, simple chat, from
+    a sample and Import side by side, and Close story with nothing open. One
+    New… shows every way to begin, said; Close story and the Story menu are
+    there only while a story is."""
+    from PySide6.QtGui import QKeySequence
+
+    save_story_bundle(StoryBundle(story=story, cast=cast, nodes=make_exchange(2)), root=tmp_path)
+    window = MainWindow(root=tmp_path, use_mock=True)
+    window.show()
+    settle(app)
+    try:
+        file_menu = window.menuBar().actions()[0].menu()
+        assert _shown(file_menu) == [
+            "New…",
+            "Import…",
+            "Plot file editor…",
+            "Settings…",
+            "Prompts (advanced)…",
+            "Quit",
+        ]
+        bar = [a.text().replace("&", "") for a in window.menuBar().actions() if a.isVisible()]
+        assert bar == ["File", "View", "Help"]
+        # A story saves itself as it goes; Ctrl+S still saves at once.
+        assert any(a.shortcut() == QKeySequence(QKeySequence.Save) for a in window.actions())
+
+        window.open_story(story.id)
+        settle(app)
+        assert "Close story" in _shown(file_menu)
+        bar = [a.text().replace("&", "") for a in window.menuBar().actions() if a.isVisible()]
+        assert bar == ["File", "Story", "View", "Help"]
+        # Begun, it can only restart: Start story… is put away.
+        assert "Start story…" not in _shown(window.story_menu)
+        assert "Restart as new playthrough…" in _shown(window.story_menu)
     finally:
         window.close()
 
@@ -597,8 +652,10 @@ def test_a_first_run_is_welcomed_with_how_to_set_up(app, tmp_path: Path):
         assert "doesn't discount what SealedLore itself uses" in text
         assert "Still missing" not in text  # nothing is set: the steps say it all
         assert buttons == {"Open Settings…", "Import…"}
-        # It opens at its heading, not followed to its last steps.
-        window.resize(1366, 768)
+        # It opens at its heading, not followed to its last steps. (With the
+        # composer put away it fits 768px high; it scrolls on a shorter one.)
+        assert not window.composer.isVisible() and not window.top_bar.isVisible()
+        window.resize(1366, 500)
         settle(app)
         bar = window.transcript.verticalScrollBar()
         assert bar.maximum() > 0 and bar.value() == 0
@@ -624,9 +681,8 @@ def test_a_local_server_needs_no_key_to_start(app, tmp_path: Path):
     local = ProviderConfig(name="local", base_url="http://localhost:8080/v1", model="m")
     window = _start_screen(app, tmp_path, local)
     try:
-        text, buttons = _start_screen_text(window)
-        assert "No story open" in text
-        assert "New story…" in buttons
+        assert window.centre_stack.currentWidget() is window.start_page
+        assert "blank" in window.start_page.cards
     finally:
         window.close()
 
@@ -657,9 +713,8 @@ def test_saving_settings_replaces_the_welcome(app, tmp_path: Path, monkeypatch):
         # The old welcome is deleted later: flush it before looking.
         app.sendPostedEvents(None, QEvent.DeferredDelete)
         settle(app)
-        text, buttons = _start_screen_text(window)
-        assert "Welcome" not in text and "No story open" in text
-        assert "New story…" in buttons
+        assert window.centre_stack.currentWidget() is window.start_page
+        assert "blank" in window.start_page.cards
     finally:
         window.close()
 

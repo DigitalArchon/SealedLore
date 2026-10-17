@@ -11,7 +11,6 @@ kept in memory only is never written anywhere and asks before it is closed.
 
 from __future__ import annotations
 
-from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QMessageBox
 
 from sealedlore.engine.prompt import TurnRequest
@@ -27,15 +26,6 @@ MEMORY_TITLE = "(in memory only)"
 
 
 class ChatWindow:
-    def _chat_actions(self, file_menu) -> None:
-        """Called from `_build_actions`: File → New simple chat…"""
-        self.new_chat_action = QAction("New simple &chat…", self)
-        self.new_chat_action.setStatusTip(
-            "A plain conversation with the model: your system prompt and your messages"
-        )
-        self.new_chat_action.triggered.connect(self.new_chat)
-        file_menu.addAction(self.new_chat_action)
-
     # --- state ---------------------------------------------------------------
 
     @property

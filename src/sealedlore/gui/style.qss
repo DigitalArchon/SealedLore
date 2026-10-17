@@ -323,6 +323,65 @@ QDockWidget::title {
   background: transparent;
 }
 
+/* The start page and File → New… (start_page.py): every way to begin, a card
+   each with its title and a sentence. */
+#startPage, #startColumn {
+  background: transparent;
+  border: none;
+}
+
+#startHeading {
+  color: @text_heading;
+  font-size: 22px;
+  font-weight: 600;
+  padding-bottom: 4px;
+}
+
+#startSection {
+  color: @text_heading;
+  font-size: 17px;
+  font-weight: 600;
+  padding-top: 8px;
+}
+
+#startSectionText {
+  color: @text_dim;
+  padding-bottom: 4px;
+}
+
+#startCard {
+  background: @panel;
+  border: 1px solid @border;
+  border-radius: 8px;
+}
+
+#startCard:hover {
+  background: @button_hover;
+  border-color: @hover_border_accent;
+}
+
+#startCard:focus {
+  border: 2px solid @accent;
+}
+
+#startCardTitle {
+  color: @text_bright;
+  font-size: 16px;
+  font-weight: 600;
+  background: transparent;
+}
+
+#startCardText {
+  color: @text_soft;
+  background: transparent;
+}
+
+#startPicture {
+  background: @window;
+  border-top-left-radius: 7px;
+  border-top-right-radius: 7px;
+}
+
 /* --- composer ------------------------------------------------------- */
 
 #input {
