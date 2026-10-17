@@ -1377,13 +1377,30 @@ class AreaRuntime:
 
     def _map_person(self, name: str, world: WorldMap | None = None) -> str | None:
         """Who `name` is on the map: someone in the story, else (with the
-        map) someone not named yet, by their label or description."""
+        map) someone not named yet, by their label or description, else
+        someone the map keeps by a name with no card."""
         from sealedlore.engine.scene_state import same_person
+        from sealedlore.models.character import Character
 
         for person in self.map_people():
             if same_person(name, person):
                 return person.name
-        return unknown_for(name, world) if world is not None and name else None
+        if world is None or not name:
+            return None
+        found = unknown_for(name, world)
+        if found is not None:
+            return found
+        # Named by a passage with no card ("Unknown 1" named Ruth, live): the
+        # map keeps them by that name, and without this the read could never
+        # stand them anywhere again.
+        return next(
+            (
+                known
+                for known in world.where
+                if known not in world.unknowns and same_person(name, Character(id="", name=known))
+            ),
+            None,
+        )
 
     def read_spots(self, path: Sequence[Node], held: str | None = None) -> str:
         """The spots near the author's character (`held`: the passage's, else

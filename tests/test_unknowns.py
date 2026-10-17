@@ -117,3 +117,39 @@ def test_a_read_may_stand_an_unknown_at_a_spot_by_their_description(tmp_path, st
     girl = session.path()[-1].meta.area.spots["Unknown 1"]
     stove = next(p for p in session.area("house").placements if "stove" in p.name)
     assert abs(girl.x - stove.x) + abs(girl.y - stove.y) <= 2
+
+
+def test_someone_named_with_no_card_is_still_stood_at_a_spot(tmp_path, story, cast):
+    """Live (Oct 17 2026): "Unknown 1" was named Ruth, who has no card, and
+    from then on the read's spots for her were dropped: she stayed in the
+    kitchen while the passages had her bring John a mug by the stove."""
+    first = json.dumps({"where": [where("the woman", "A woman")]})
+    named = json.dumps(
+        {"named": [{"who": "Unknown 1", "name": "Ruth", "quote": "her name is Ruth"}]}
+    )
+    moved = json.dumps(
+        {
+            "where": [{"who": "Ruth", "place": "The house", "quote": "Ruth brings the mug over"}],
+            "at": {"Ruth": "the cast-iron stove"},
+        }
+    )
+    session = make_session(
+        tmp_path,
+        story,
+        cast,
+        [
+            "A woman stands at the far wall.",
+            first,
+            "She says her name is Ruth.",
+            named,
+            "Ruth brings the mug over to the stove.",
+            moved,
+        ],
+    )
+    session.config.scene_reads = "manual"
+    for text in ("I wave.", "I ask her name.", "I sit by the stove."):
+        list(session.send(turn(text)))
+    assert "Ruth" in session.world().where
+    ruth = session.path()[-1].meta.area.spots["Ruth"]
+    stove = next(p for p in session.area("house").placements if "stove" in p.name)
+    assert abs(ruth.x - stove.x) + abs(ruth.y - stove.y) <= 2
