@@ -32,3 +32,35 @@ def test_a_comma_before_the_closing_brace_keeps_the_whole_object():
     assert extract_json('["a", "b",]', list, "list") == ["a", "b"]
     # A comma inside a string stays.
     assert extract_json('{"q": "yes, }",}', dict, "o") == {"q": "yes, }"}
+
+
+def test_a_bracket_the_reply_forgot_to_close_is_closed():
+    """Live (GLM 5.3 Flash furnishing a deck, Oct 17 2026): the reply ended
+    "]]}" for "]}]}" and the deck was refused whole. A reply that left off
+    only its last closer is closed too."""
+    from sealedlore.engine.jsonreply import extract_json
+
+    skipped = '{"rooms": [{"room": 0, "items": [{"name": "a canister", "w": 1}]]}'
+    data = extract_json(skipped, dict, "furnishing")
+    assert data == {"rooms": [{"room": 0, "items": [{"name": "a canister", "w": 1}]}]}
+    unclosed = '```json\n{"rooms": [{"room": 13, "items": []}, {"room": 14, "items": []}]\n```'
+    assert [r["room"] for r in extract_json(unclosed, dict, "furnishing")["rooms"]] == [13, 14]
+    # With a trailing comma as well.
+    assert extract_json('{"a": [1, 2,]', dict, "o") == {"a": [1, 2]}
+
+
+def test_a_reply_cut_short_is_not_closed_into_a_whole_one():
+    import pytest
+
+    from sealedlore.engine.jsonreply import extract_json
+
+    for cut in (
+        '{"rooms": [{"room": 0, "purpose": "a store',  # inside a string
+        '{"rooms": [{"room": 0, "items": [{"name": "a crate", "w": 1',  # not on a closer
+        '{"a": {"b": {"c": [1]',  # three still open
+    ):
+        with pytest.raises(ValueError):
+            extract_json(cut, dict, "furnishing")
+    # A reply that corrects itself still means its last object, not its first.
+    two = '{"location": "the barn"]}\n\nCorrected:\n\n{"location": "the yard"}'
+    assert extract_json(two, dict, "scene object") == {"location": "the yard"}
