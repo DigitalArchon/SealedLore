@@ -498,6 +498,14 @@ class ImagesWindow:
     def _on_image_jobs_changed(self) -> None:
         count = len(self.image_jobs.pending())
         self.status_strip.set_pictures(count)
+        session = self.session
+        if session is not None:
+            # A card's avatar waits for the portrait being drawn for it.
+            session.portraits_coming = frozenset(
+                job.request.card_id
+                for job in self.image_jobs.pending(session.story.id)
+                if job.request.card_id and job.request.card_first
+            )
 
     def _on_image_finished(
         self, _job_id: str, story_id: str, records: list, store: PictureStore

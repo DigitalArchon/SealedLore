@@ -262,6 +262,12 @@ class AreaRuntime:
     _tile_text: ChatProvider | None = None
     _tile_total = 0
     _tile_done = 0
+    # A run was asked for while one was drawing (`map_art_wanted_again`).
+    _tile_again = False
+    # The cards whose portrait is being drawn now (by id; the window keeps
+    # it): their avatar waits for it rather than being drawn from their
+    # words first and again once it lands (live, six avatars paid twice).
+    portraits_coming: frozenset[str] = frozenset()
     _own_set_thread: threading.Thread | None = None
     _own_set_client: ImageClient | None = None
     _own_set_total = 0
@@ -294,7 +300,19 @@ class AreaRuntime:
             for layout in states.values()
         ]
         own = [key for key, found in art.tile_sets.items() if found.assets]
-        return choose_set(art.tile_set, self.map_setting(), looks, sets, own)
+        return choose_set(art.tile_set, self._setting_words(), looks, sets, own)
+
+    def _setting_words(self) -> str:
+        """What a tile set is chosen by: the whole of the world's text and
+        where the story starts (a chat's system prompt), not the art's short
+        setting. Live, a snowbound fur-trading post's first lines named none
+        of the sets' words, and the burnt-out wasteland's set (first by name)
+        drew it; its world text named winter and cabins further on."""
+        if self.story.chat:
+            return self.story.chat_prompt or ""
+        start = self.story.setup.starting_scene
+        parts = [self.story.world_bible or "", start.location or "", start.situation or ""]
+        return "\n".join(p for p in parts if p)
 
     def tile_set(self, art: WorldArt | None = None) -> tuple[TileSetInfo, Any]:
         """(the set's manifest, a reader of its assets by role): the story's
@@ -666,10 +684,18 @@ class AreaRuntime:
             if point is None and name != held and place_id == where.get(held or ""):
                 point = self._spot_point(mine, world, art)
             target = area_of(world, art, place_id, point)
+            # Stood on the land only until their place had a plan: there now.
+            arrived = (
+                spot is not None
+                and spot.for_place == place_id
+                and target is not None
+                and target != spot.area
+            )
             if (
                 name == held
                 and walked
                 and spot is not None
+                and not arrived
                 and self.area(spot.area, world, art, things=state.things) is not None
             ):
                 spots[name] = spot
@@ -679,12 +705,19 @@ class AreaRuntime:
             area = self.area(target, world, art, things=state.things)
             if area is None:
                 continue
+            # On the land for a place that is no area of its own yet (no
+            # plan): they go into it once it has one (`Spot.for_place`).
+            waiting = place_id if area.window and place_id not in (area.place_id, area.id) else ""
             if (
                 spot is not None
                 and spot.area == target
                 and (name == held or self._still_at(area, world, spot, place_id))
             ):
-                spots[name] = spot
+                spots[name] = (
+                    spot
+                    if spot.for_place == waiting
+                    else spot.model_copy(update={"for_place": waiting})
+                )
                 continue
             if (
                 spot is not None
@@ -772,7 +805,8 @@ class AreaRuntime:
         if near is None:
             near = self._way_in(area)
         x, y = stand_near(area, near, taken, seed=name, reach=0 if area.window else 2)
-        return Spot(area=area_id, x=x, y=y)
+        waiting = area.window and place_id not in (area.place_id, area.id)
+        return Spot(area=area_id, x=x, y=y, for_place=place_id if waiting else "")
 
     def _spot_point(
         self, spot: Spot | None, world: WorldMap, art: WorldArt
@@ -1975,6 +2009,8 @@ class AreaRuntime:
         here = {name for name, spot in self.area_state().spots.items()}
         people = []
         for card in (*self.visible_cast(), *self.visible_supporting()):
+            if card.id in self.portraits_coming:
+                continue  # drawn from the portrait once it lands
             portrait = card.reference_images[0].file if card.reference_images else None
             people.append((card.name, portrait, looks_of(card.summary, card.full_description)))
         people.sort(key=lambda p: p[0] not in here)
@@ -2009,7 +2045,12 @@ class AreaRuntime:
             return False
         thread = self._tile_thread
         if thread is not None and thread.is_alive():
+            # Asked again while one runs (a portrait landed while the avatars
+            # were drawn from the words): the window starts the next run once
+            # this one is done (`map_art_wanted_again`).
+            self._tile_again = True
             return False
+        self._tile_again = False
         furnish, pictures = self.tile_art_jobs()
         # Asking first: only what the author approved is drawn, the rest waits.
         pictures = self._held_for_approval("tile", pictures)

@@ -227,7 +227,8 @@ class WorldWindow:
 
     def _sync_waiting_pictures(self, *, drawing: bool) -> None:
         """The Map page's line for the map pictures that wait for approval;
-        and pictures approved while a run was busy, drawn once it is free."""
+        and once the map is idle, a run asked for while another drew (a
+        portrait landing mid-run) or pictures approved meanwhile."""
         session = self.session
         waiting = session.map_pictures_waiting() if session is not None else []
         prices = [w.price for w in waiting]
@@ -240,7 +241,7 @@ class WorldWindow:
             and not drawing
             and not self._busy
             and not session.in_private
-            and session.map_pictures_approved_pending
+            and (session.map_pictures_approved_pending or session.map_art_wanted_again)
         ):
             session.start_map_art()
 

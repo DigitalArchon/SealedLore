@@ -403,3 +403,24 @@ def test_a_window_is_drawn_as_any_outdoor_plan_is():
     window = build_window(world, art, HERE)
     image = render_area(window, TileSource(TileSetInfo(name="plain"), lambda role: None))
     assert not image.isNull() and image.width() == window.width * OUTDOOR_PX
+
+
+def test_stood_on_the_land_until_their_place_had_a_plan_they_go_into_it_once_it_has(
+    tmp_path, story, cast
+):
+    """Live (a new world, Oct 17 2026): the opening was read before any plan
+    was drawn, so everyone stood on the land; when the plans came, the
+    others went into the cabin and the author's character stayed out in the
+    trading post's yard, while the story had her in the cabin."""
+    read = json.dumps({"where": [{"who": "Serrik", "place": "The wreck", "quote": "the wreck"}]})
+    session = open_session(tmp_path, story, cast, ["He is in the wreck.", read, "Wind.", "{}"])
+    layout = session.world_art.layouts.pop("wreck")
+    session._area_cache = None
+    list(session.send(turn("I shelter in the wreck.")))
+    me = session.path()[-1].meta.area.spots["Serrik Vaun"]
+    assert me.area.startswith("window:") and me.for_place == "wreck"
+    session.world_art.layouts["wreck"] = layout  # its plan is drawn
+    session._area_cache = None
+    assert session.area_state().spots["Serrik Vaun"].area == "wreck"
+    list(session.send(turn("I look around.")))
+    assert session.path()[-1].meta.area.spots["Serrik Vaun"].area == "wreck"

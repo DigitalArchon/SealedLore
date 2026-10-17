@@ -44,6 +44,13 @@ class Spot(BaseModel):
     area: str
     x: int
     y: int
+    # Stood on a window of open country for this place (by id) because it
+    # had no plan yet: once it has one, they stand in it. Live, a new
+    # world's opening was read before any plan was drawn; everyone stood on
+    # the land, and when the plans came the author's character stayed out
+    # in the trading post's yard while the story had her in the cabin. ""
+    # for a spot they walked to or were put on as it is.
+    for_place: str = ""
 
 
 class MapAction(BaseModel):

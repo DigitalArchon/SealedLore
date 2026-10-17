@@ -95,6 +95,7 @@ class WorldArtRuntime:
     _art_done = 0
     _picture_total = 0
     _picture_done = 0
+    _pictures_again = False
     _isometric_thread: threading.Thread | None = None
     _isometric_area: str | None = None
     _isometric_client: ImageClient | None = None
@@ -183,6 +184,14 @@ class WorldArtRuntime:
         if getattr(self, "tile_asset_drawing", None) is not None:
             total += 1
         return min(done, total), total
+
+    @property
+    def map_art_wanted_again(self) -> bool:
+        """A picture or tile run was asked for while one was drawing, and
+        nothing has run since: the window starts one once the map is idle
+        (live, portraits landed while the avatars were being drawn from the
+        cards' words, and nothing drew them again from the portraits)."""
+        return self._pictures_again or getattr(self, "_tile_again", False)
 
     @property
     def map_art_running(self) -> bool:
@@ -535,7 +544,9 @@ class WorldArtRuntime:
             return False
         thread = self._picture_thread
         if thread is not None and thread.is_alive():
+            self._pictures_again = True
             return False
+        self._pictures_again = False
         # Asking first: only what the author approved is drawn, the rest waits.
         jobs = self._held_for_approval("map", self.map_picture_jobs())
         media = self.config.images()

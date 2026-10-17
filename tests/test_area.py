@@ -1459,7 +1459,12 @@ def test_every_character_s_avatar_is_drawn_from_the_portrait_they_have_now(tmp_p
 
     job = walker_job("Serrik Vaun")
     assert job is not None and job.reference is None and job.from_picture == ""
-    drawn("Serrik Vaun", "")  # from their words: no portrait yet
+    # While a portrait is being drawn for them, their avatar waits for it
+    # rather than being drawn from their words and again once it lands.
+    session.portraits_coming = frozenset({"char-serrik"})
+    assert walker_job("Serrik Vaun") is None
+    session.portraits_coming = frozenset()
+    drawn("Serrik Vaun", "")  # from their words: no portrait came
     assert walker_job("Serrik Vaun") is None
     serrik = next(c for c in session.cast if c.name == "Serrik Vaun")
     serrik.reference_images.insert(0, ImageRef(id="p1", file="images/refs/p1.png"))
@@ -1512,3 +1517,36 @@ def test_avatars_asked_for_while_one_is_drawing_join_its_run(tmp_path, story, ca
     assert session.redraw_tile_assets([("walker/Maela Orr", "y")])
     session._asset_thread.join(10)
     assert len(FakeImages.sent) == 4
+
+
+def test_a_run_asked_for_while_one_draws_is_wanted_again_once_it_is_done(tmp_path, story, cast):
+    """Live, portraits landed while the avatars were being drawn from the
+    cards' words; the redraw was refused (a run was under way) and nothing
+    drew them again. The window starts the run once the map is idle."""
+    import threading
+
+    session = make_session(tmp_path, story, cast)
+    gate = threading.Event()
+    busy = threading.Thread(target=gate.wait, daemon=True)
+    busy.start()
+    session._tile_thread = busy
+    assert not session.map_art_wanted_again
+    assert not session.start_tile_art() and session.map_art_wanted_again
+    gate.set()
+    busy.join(5)
+    session.start_tile_art()  # nothing to draw (Draw the map is off): asked, and answered
+    assert not session.map_art_wanted_again
+
+
+def test_a_new_world_s_tile_set_is_chosen_by_all_its_words(tmp_path, story, cast):
+    """Live, a snowbound fur-trading post's first lines named none of the
+    sets' words and the wasteland's set, first by name, drew it."""
+    session = make_session(tmp_path, story, cast)
+    session.world_art.tile_set = ""
+    session.story.world_bible = (
+        "A thinly colonised northern territory, late in the season, where the trade in "
+        "pelts holds the river posts together. "
+        + "Licensed posts buy furs. " * 20
+        + "In winter the factor keeps to his cabin."
+    )
+    assert session.tile_set_name() == "doomsville"
