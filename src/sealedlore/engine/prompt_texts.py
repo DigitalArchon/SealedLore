@@ -4403,6 +4403,30 @@ _text(
 )
 
 _text(
+    "map_read.starts_at",
+    MAP,
+    "Map-first: the time the story opens at",
+    "Added to the map read of a story's first passage when it is played on the map with no "
+    "plot: the time of day the opening is set at, which starts the map's clock. It used to "
+    "start at midnight, and a derelict ship's opening was painted and told as the small "
+    "hours (the author, Oct 17 2026: a time that makes sense from the opening).",
+    ' This passage opens the story: add "starts_at": "<HH:MM, 24-hour>" for the time of day '
+    "it is set at, judged from what it shows (the light, the hour named, a meal, people at "
+    'work or asleep){hint}, with "starts_at_quote": "<the words that show it>", or null for '
+    "the quote when nothing in it says and the time is your best guess for such a scene.",
+    (("hint", "map_read.starts_at.hint when Setup gives a starting time, else nothing"),),
+)
+
+_text(
+    "map_read.starts_at.hint",
+    MAP,
+    "Map-first: Setup's starting time, for the opening's read",
+    "Follows map_read.starts_at when the story's Setup gives the starting scene a time of day.",
+    '; the story\'s setup says "{time}"',
+    (("time", "the starting scene's time of day, as Setup has it"),),
+)
+
+_text(
     "map_read.walked",
     MAP,
     "Map-first: the read told of the walk already counted",

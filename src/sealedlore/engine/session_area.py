@@ -141,6 +141,29 @@ BESIDE = 3
 # stood at it again.
 AT_A_PLACE = 8
 MAX_READ_MINUTES = 7 * 24 * 60
+# Where the clock starts when the opening's read gives no time it can use:
+# morning, not the midnight a count from nothing meant.
+DEFAULT_START_MINUTE = 9 * 60
+_CLOCK_TIME = re.compile(r"^\s*(\d{1,2})[:.h](\d{2})\s*$")
+
+
+def is_opening(before: Sequence[Node]) -> bool:
+    """Whether the passage after `before` is the story's first."""
+    return not any(n.kind == "assistant" for n in before)
+
+
+def opening_minute(value: Any) -> int:
+    """The minute of the day a read's "starts_at" names ("07:30", "19.00"),
+    else DEFAULT_START_MINUTE."""
+    found = _CLOCK_TIME.match(str(value or ""))
+    if found is None:
+        return DEFAULT_START_MINUTE
+    hour, minute = int(found.group(1)), int(found.group(2))
+    if hour > 23 or minute > 59:
+        return DEFAULT_START_MINUTE
+    return hour * 60 + minute
+
+
 # Past an outdoor area's edge: how far straight on another area may start
 # and still be walked into, the way a place must lie to be offered, and how
 # many are.
@@ -1249,6 +1272,10 @@ class AreaRuntime:
                 }
                 x, y = stand_near(area, tile, taken | {tile})
                 state.spots[person] = Spot(area=area.id, x=x, y=y)
+        if self.story.plot is None and is_opening(path[:-1]):
+            # The clock starts at the time of day the opening is set at (it
+            # started at midnight whatever the opening said).
+            state.seconds += opening_minute(reply.get("starts_at")) * 60
         if self.story.plot is None:
             minutes = reply.get("minutes")
             quote = str(reply.get("minutes_quote") or "")
@@ -1286,15 +1313,22 @@ class AreaRuntime:
         spots = anchors_near(area, me.x, me.y)
         return self.texts.fill("map_read.spots", spots=", ".join(spots)) if spots else ""
 
-    def read_minutes(self, author: Node | None) -> str:
+    def read_minutes(self, author: Node | None, *, opening: bool = False) -> str:
         """The story time the passage covers, asked of the map read where the
         map keeps the clock (no plot), with the walk already counted named
-        (`map_read.minutes`, `map_read.walked`); "" otherwise."""
+        (`map_read.minutes`, `map_read.walked`); "" otherwise. `opening`: the
+        story's first passage, which also says the time of day it starts at
+        (`map_read.starts_at`)."""
         if not self.map_first or self.story.plot is not None:
             return ""
         walked = self.walk_minutes(author) if author is not None else 0
         already = self.texts.fill("map_read.walked", minutes=str(walked)) if walked > 0 else ""
-        return self.texts.fill("map_read.minutes", walked=already)
+        asked = self.texts.fill("map_read.minutes", walked=already)
+        if opening:
+            given = (self.story.setup.starting_scene.time_of_day or "").strip()
+            hint = self.texts.fill("map_read.starts_at.hint", time=given) if given else ""
+            asked += self.texts.fill("map_read.starts_at", hint=hint)
+        return asked
 
     def positions_context(
         self, nodes: Sequence[Node], held_id: str | None, *, turn_node_id: str | None = None

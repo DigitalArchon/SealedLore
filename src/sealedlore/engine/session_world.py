@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from sealedlore.engine.marks import footprint, place_at
+from sealedlore.engine.session_area import is_opening
 from sealedlore.engine.session_plot import SessionNotice
 from sealedlore.engine.world import (
     build_world_read_messages,
@@ -195,7 +196,7 @@ class WorldRuntime:
                     for n in (
                         note,
                         self.read_spots(path[:-1], held),
-                        self.read_minutes(author),
+                        self.read_minutes(author, opening=is_opening(path[:-1])),
                         self.read_marks(author),
                         direction,
                     )

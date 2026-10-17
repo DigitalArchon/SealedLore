@@ -549,7 +549,10 @@ def test_the_read_may_stand_someone_at_a_spot_and_tell_the_time_that_passed(tmp_
     stove = next(p for p in session.area("house").placements if "stove" in p.name)
     maela = state.spots["Maela Orr"]
     assert abs(maela.x - stove.x) + abs(maela.y - stove.y) <= 2
-    assert state.seconds == 3600
+    # The hour told, on the morning the opening starts at when it names no time.
+    from sealedlore.engine.session_area import DEFAULT_START_MINUTE
+
+    assert state.seconds == DEFAULT_START_MINUTE * 60 + 3600
     spots = session.provider.requests[-1].messages[-1].text
     line = next(x for x in spots.splitlines() if x.startswith("SPOTS NEAR THE AUTHOR'S CHARACTER:"))
     assert "the cast-iron stove" in line
@@ -1380,3 +1383,36 @@ def test_the_storyteller_is_told_the_time_of_day_and_the_weather_the_story_set(
     # The clock begins at midnight on a story with no plot: the small hours.
     assert after[1] == "It is the small hours. The weather: snowing hard."
     assert "Day 1" not in sent and "day 1" not in sent
+
+
+def session_log(session) -> list[dict]:
+    from sealedlore.storage.repository import read_api_log
+
+    return read_api_log(session.story.id, session.root)
+
+
+def test_without_a_plot_the_clock_starts_at_the_time_the_opening_is_set_at(tmp_path, story, cast):
+    """It started at midnight whatever the opening said: a derelict ship's
+    opening was told and painted as the small hours (Oct 17 2026)."""
+    read = json.dumps({"starts_at": "19:30", "starts_at_quote": "The sun was setting."})
+    session = make_session(tmp_path, story, cast, ["The sun was setting.", read, "Later.", "{}"])
+    session.config.scene_reads = "manual"
+    list(session.send(turn("I look out.")))
+    assert session.map_clock() == (1, 19 * 60 + 30)
+    first = [e for e in session_log(session) if e["kind"] == "world_request"]
+    assert "starts_at" in json.dumps(first[0]["payload"])
+    list(session.send(turn("I wait.")))
+    second = [e for e in session_log(session) if e["kind"] == "world_request"]
+    assert "starts_at" not in json.dumps(second[-1]["payload"])  # the opening's alone
+    assert session.map_clock() == (1, 19 * 60 + 30)
+
+
+def test_an_opening_whose_read_gives_no_time_starts_the_clock_in_the_morning(tmp_path, story, cast):
+    from sealedlore.engine.session_area import DEFAULT_START_MINUTE, opening_minute
+
+    session = make_session(tmp_path, story, cast, ["Somewhere.", "{}"])
+    session.config.scene_reads = "manual"
+    list(session.send(turn("I look out.")))
+    assert session.map_clock() == (1, DEFAULT_START_MINUTE)
+    assert opening_minute("7.05") == 7 * 60 + 5
+    assert opening_minute("25:00") == opening_minute("dusk") == DEFAULT_START_MINUTE
