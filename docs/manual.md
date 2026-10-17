@@ -991,10 +991,15 @@ again** beside it. A branch shows the map as it stands on that branch.
 A place the story adds inside the area you are in (a rift opened at a
 marked spot, a well, a shrine) is marked on the play view where it stands,
 with its name over it and its small picture once that is drawn; a building
-is drawn into the ground itself.
+is drawn into the ground itself, roofed as its description says it is built
+(stone, slate, thatch, metal…). Someone the story brings in without a name
+stands on the map as **Unknown 1** (then 2, 3…) until a passage names them;
+the menus and the storyteller call them as the story described them ("the
+teenage girl"). A thing the tile set has no picture of borrows the set's
+nearest one of the same kind until its own is drawn.
 
 With **Draw map pictures with an image model** ticked (Settings → Images, off
-until you tick it, and needing **Draw the map** on; Qwen Image unless you
+until you tick it, and needing **Draw the map** on; FLUX.3 Klein unless you
 choose another), an image model draws
 the map's people, buildings and things instead: everyone's avatar from what
 their card says of them (you first, then whoever is with you), and each
@@ -1011,9 +1016,8 @@ settings and a scenario file keep the art and the pictures. Story pictures
 Each area on the map (a farm, a town, a works) can have **paintings**: the
 place as it stands, painted by an image model (Settings → Images →
 **Painting model**: FLUX.3 Klein unless you choose another, about a cent a
-painting; **Recommended** beside it offers Qwen Image, free within a NanoGPT
-subscription's allowance, and two enhanced choices, Seedream 5.0 Pro at about
-$0.09 and Nano Banana Pro at about $0.14). On the play view, **Paintings ▾**
+painting; **Recommended** beside it offers two enhanced choices, Seedream 5.0
+Pro at about $0.09 and Nano Banana Pro at about $0.14). On the play view, **Paintings ▾**
 is for the place you stand in: **Paint this place…** shows the model and its
 price first (it counts with the day's map pictures) and paints the area as
 the play view shows it at that moment, everyone and everything where they
