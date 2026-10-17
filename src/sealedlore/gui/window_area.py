@@ -806,18 +806,32 @@ class AreaWindow:
             )
         return out
 
-    def _avatar_card(self, card_id: str) -> Character | None:
+    def _avatar_card(self, card_id: str, *, drawn: bool = True) -> Character | None:
+        """A card whose avatar may change now; `drawn` (by an image model):
+        not one the plot keeps hidden, whose picture or name would be the
+        first a model heard of them."""
         session = self.session
         card = session.card(card_id) if session is not None and session.map_first else None
-        return card if isinstance(card, Character) and not session.in_private else None
+        if not isinstance(card, Character) or session.in_private:
+            return None
+        return None if drawn and card.id in session.hidden_ids() else card
 
     def _on_avatar_request(self, card_id: str, what: str) -> None:
         """The Cast page's avatar: drawn (from the portrait, else the card),
         a file of the author's own, or the tile set's own figure again."""
-        card = self._avatar_card(card_id)
+        drawn = what in ("draw", "words")
+        card = self._avatar_card(card_id, drawn=drawn)
+        session = self.session
+        if card is None and drawn and self._avatar_card(card_id, drawn=False) is not None:
+            QMessageBox.information(
+                self,
+                "Draw the avatar",
+                "Not until the story brings them in: the plot keeps them hidden, and their "
+                "picture would be the first a model heard of them.",
+            )
+            return
         if card is None or self._busy:
             return
-        session = self.session
         role = f"walker/{card.name}"
         if what == "draw":
             self._draw_avatar(card)

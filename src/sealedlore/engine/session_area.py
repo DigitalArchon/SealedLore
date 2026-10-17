@@ -2687,6 +2687,9 @@ class AreaRuntime:
         price = listed.price(size) if listed is not None else None
         if self.in_private or self.tee_chat:
             return model, price, "Not in a private scene or a private chat."
+        if role.startswith("walker/") and role[7:] in self._hidden_names():
+            # Their picture or name would be the first a model heard of them.
+            return model, price, "Not until the story brings them in (the plot keeps them hidden)."
         media = self.config.images()
         if media is None or not media.api_key:
             return model, price, "Pictures have no endpoint or key (Settings → Images)."
@@ -2696,6 +2699,11 @@ class AreaRuntime:
         if run is not None and run.is_alive() and _asset_key(role) in self._tile_keys:
             return model, price, "It is being drawn now, under the standing approval."
         return model, price, None
+
+    def _hidden_names(self) -> set[str]:
+        """The names of the cards the plot keeps hidden now."""
+        hidden = self.hidden_ids()
+        return {c.name for c in (*self.cast, *self.supporting) if c.id in hidden}
 
     def _queue_lock(self) -> threading.Lock:
         if self._asset_queue_lock is None:
@@ -2716,7 +2724,8 @@ class AreaRuntime:
         offer after the first was dropped ("Another asset is being drawn
         now"), so the author's own character got none. False when none of
         them can be drawn now."""
-        wanted = [(role, " ".join(words.split())) for role, words in wanted]
+        hidden = {f"walker/{name}" for name in self._hidden_names()}
+        wanted = [(role, " ".join(words.split())) for role, words in wanted if role not in hidden]
         if not wanted or self._map_closed:
             return False
         with self._queue_lock():

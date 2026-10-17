@@ -1556,3 +1556,14 @@ def test_a_new_world_s_tile_set_is_chosen_by_all_its_words(tmp_path, story, cast
         + "In winter the factor keeps to his cabin."
     )
     assert session.tile_set_name() == "doomsville"
+
+
+def test_a_character_the_plot_keeps_hidden_gets_no_avatar_drawn_yet(tmp_path, story, cast):
+    """Live (a playtest giving hidden cards portraits): Ben's avatar went to
+    the image model as his bare name, before the story had brought him in."""
+    session = make_session(tmp_path, story, cast)
+    session.config.providers[0].api_key = "k"
+    session.hidden_ids = lambda *_a, **_k: {"char-maela"}  # type: ignore[method-assign]
+    assert "plot keeps them hidden" in session.tile_asset_offer("walker/Maela Orr", "")[2]
+    assert session.tile_asset_offer("walker/Serrik Vaun", "")[2] is None
+    assert not session.redraw_tile_assets([("walker/Maela Orr", "")])
