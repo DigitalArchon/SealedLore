@@ -4409,10 +4409,13 @@ _text(
     "Added to every map read's request: someone the passage places but doesn't name may be "
     "placed by a description, shown on the map as Unknown 1, 2… until named (the author, "
     "Oct 17 2026: a girl came down the farmhouse stairs, was never named, and so was never "
-    "on the map, with nobody to talk to). Not measured.",
+    "on the map, with nobody to talk to). Not measured. It used to show the labels "
+    '("the map shows them as Unknown 1, Unknown 2…"), and live DeepSeek V4.1 Flash wrote '
+    '"Unknown 1" for a newcomer, which was refused: she was never placed.',
     'Someone the passage places but doesn\'t name may still go under "where": give a short '
     'description of them as "who" ("the teenage girl", "a man in a red coat"); the map '
-    "shows them as Unknown 1, Unknown 2… until a passage names them.{listed}",
+    "labels them itself until a passage names them, so never write a label for someone "
+    "new.{listed}",
     (("listed", "map_read.unknowns.listed when the map has people not named yet"),),
 )
 
