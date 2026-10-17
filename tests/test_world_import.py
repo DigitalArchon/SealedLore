@@ -198,7 +198,7 @@ def test_the_mapped_sample_imports_with_its_map():
     hidden = next(e for e in parsed.scenario.lore if e.title == "The Hidden Caves")
     assert caves.lore_id == hidden.id and hidden.plot_hidden
     start = next(p for p in base.places if p.id == parsed.scenario.world_start)
-    assert start.name == "The farmhouse"
+    assert start.name == "The farm"
     assert json.loads(base.model_dump_json())  # it serialises
 
 
@@ -276,11 +276,12 @@ def map_section(session, jane) -> str:
 def test_the_storyteller_is_told_the_map_the_file_drew(tmp_path: Path):
     session, jane = mapped_session(tmp_path)
     text = map_section(session, jane)
-    assert "Jane is at: The farmhouse, in The farm" in text  # the start, before any read
-    assert "The barn (building, 150 m south-east)" in text  # from where the file put them
-    assert "Hellsville (settlement, 8.0 km / 4.9 miles north)" in text
+    assert "Jane is at: The farm\n" in text  # the start, before any read
+    assert "The barn (building, 130 m east)" in text  # from where the file put them
+    assert "Hellsville (settlement, 8.0 km / 5 miles north)" in text
     assert "The Hidden Caves" not in text  # the plot is keeping them hidden
-    assert "- Pickup truck: The barn" not in text  # a thing is listed only where it is
+    assert "- Pickup truck: The barn" in text  # the barn is in the farm
+    assert "The town's stores" not in text  # a thing is listed only where it is
     assert "Hellsville: north, five miles" not in text  # no way the file doesn't draw
 
 

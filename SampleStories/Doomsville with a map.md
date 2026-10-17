@@ -108,7 +108,7 @@ of white paint gone to grey, one shutter hanging, snow drifted to the windowsill
 and a sagging fence around the yard. From the road it looks abandoned.
 
 # Map
-- start: The farmhouse
+- start: The farm
 
 ## The farm
 - kind: site
