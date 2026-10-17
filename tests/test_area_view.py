@@ -103,6 +103,33 @@ def test_a_map_story_opens_on_the_area_to_walk_on(window):
     assert window.world_view.level() == "region"
 
 
+def test_region_and_world_never_put_the_play_view_back_on_the_way_out(app, window):
+    """Live (Oct 17 2026): Region did nothing from the play view. Showing the
+    map resized it there and then, and the resize refitted the level still
+    set, local, which put the play view back (a later resize can hide that
+    here, so what the click does to the play view is recorded)."""
+    window.resize(1600, 900)
+    window.show()
+    app.processEvents()
+    view = window.world_view
+    view.go_local()
+    app.processEvents()
+    assert view.play_shown()
+    shown: list[bool] = []
+    real = view._show_play
+    view._show_play = lambda on: (shown.append(on), real(on))[1]
+    view.view.resize(320, 200)  # a size of its own while put away, as live
+    view.region_button.click()
+    assert True not in shown and not view.play_shown() and view.level() == "region"
+    view._show_play = real
+    view.local_button.click()
+    app.processEvents()
+    assert view.play_shown()
+    view.world_button.click()
+    app.processEvents()
+    assert not view.play_shown() and view.level() == "world"
+
+
 def test_walking_into_the_door_goes_outside_and_a_menu_choice_fills_the_composer(app, window):
     session = window.session
     house = session.area("house")

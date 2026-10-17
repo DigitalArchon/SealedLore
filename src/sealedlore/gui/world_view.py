@@ -2281,6 +2281,7 @@ class WorldView(QWidget):
             self._fitted = "local"
             self._show_play(True)
             return
+        self._fitted = "local"
         self._show_play(False)
         self._go_plan()
 
@@ -2321,9 +2322,12 @@ class WorldView(QWidget):
         self._show_at(local_rect.center(), scale)
 
     def go_region(self) -> None:
-        """The country round the character: where to go next."""
-        self._show_play(False)
+        """The country round the character: where to go next. The level is
+        set before the play view is put away: showing the map resizes it at
+        once, and `_resized` refitted the level still set, local, which put
+        the play view straight back (Region did nothing from it)."""
         self._fitted = "region"
+        self._show_play(False)
         scales = self._fit_scales()
         if scales is None:
             return
@@ -2332,8 +2336,8 @@ class WorldView(QWidget):
 
     def go_world(self) -> None:
         """The whole map, zoomed out past the region so only the big names show."""
-        self._show_play(False)
         self._fitted = "world"
+        self._show_play(False)
         scales = self._fit_scales()
         if scales is None:
             return
@@ -2342,8 +2346,8 @@ class WorldView(QWidget):
 
     def go_to(self, place_id: str) -> None:
         """A place in view: its plan when it has one, else close around it."""
-        self._show_play(False)
         self._fitted = None
+        self._show_play(False)
         plan = self._plans.get(place_id)
         if plan is not None:
             self._fit(plan.rect(), 0.04)
