@@ -841,6 +841,13 @@ class StorySession(
                     nodes, turn.controlled_character_id, turn_node_id=turn.turn_node_id
                 ),
             )
+        if turn.scene is None:
+            # A map story: the card with the map's word on who is where.
+            scene = self.map_scene(
+                nodes, turn.controlled_character_id, turn_node_id=turn.turn_node_id
+            )
+            if scene is not None:
+                turn = replace(turn, scene=scene)
         if not turn.fixed_reminder:
             turn = replace(
                 turn,
@@ -3571,6 +3578,7 @@ class StorySession(
             estimator=self.estimator,
             options=options or self.assembly_options(),
             the_map=self.map_context(history, self.story.held_character_id),
+            scene=self.map_scene(history, self.story.held_character_id),
         )
         self.last_prompt = prompt
         return prompt

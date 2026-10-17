@@ -4312,6 +4312,33 @@ _text(
     "still be used, damaged or changed where it stands.",
 )
 
+# The prompt was built for narrative stories before the map (the author,
+# Oct 17 2026), and a map story's tail had three location authorities (the
+# card's Location, the map's "is at", the positions) and two presence
+# records (the roster, the positions) with nothing saying which wins
+# (SealedLoreDocs design/map-prompt.md). In a story played on the map the
+# card the storyteller is sent now follows the map (engine/map_presence.py),
+# and this says the map wins. Its earshot clause answers the rules' "no
+# convenient earshot from the next room", which the computed earshot
+# contradicted. Measured with the card's reconciliation (one arm): the 53
+# turns of the three Oct 17 playtest stories retaken on Sonnet 4.6 and GLM
+# 5.3, two blind Claude judges: errors 10 -> 4 and 11 -> 2 (Sonnet), 15 ->
+# 12 and 5 -> 1 (GLM); the plot's young man named Evan 4/4 against 0/4 on
+# Sonnet ("Cole", "Dillon", "Callum"); preferred 16-13 and 14-9 on Sonnet,
+# 17-19 and 13-13 on GLM, most of the rest ties. SealedLoreDocs
+# design/map-prompt.md.
+_text(
+    "map.current",
+    MAP,
+    "Map-first: the map is current",
+    "Last in the map section of a story played on the map: for where people and things "
+    "are, the map wins over the scene card, the list of who is here and earlier passages.",
+    "This map is current. For where people and things are, it wins over the scene card, "
+    "the list of who is here and earlier passages, except for what the author's turn "
+    "changes. Sight and earshot are worked out from it: whoever is within earshot hears "
+    "what is said, even from the next room; whoever is out of earshot does not.",
+)
+
 _text(
     "turn.remember.fixed",
     TURN,

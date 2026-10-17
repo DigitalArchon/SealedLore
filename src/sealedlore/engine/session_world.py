@@ -21,10 +21,12 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
+from sealedlore.engine.chronicle import introduced, variant_named
 from sealedlore.engine.marks import footprint, place_at
 from sealedlore.engine.session_area import is_opening
 from sealedlore.engine.session_plot import SessionNotice
 from sealedlore.engine.takeable import FIXED_MARK, named_in
+from sealedlore.engine.validators import mentions
 from sealedlore.engine.world import (
     build_world_read_messages,
     describe_delta,
@@ -160,6 +162,9 @@ class WorldRuntime:
                 positions += "\n" + self.texts["map.fixed"]
             else:
                 text += "\n" + self.texts["map.fixed"]
+        if positions and self.texts["map.current"]:
+            # The map wins where the card, the roster or the history disagree.
+            positions += "\n" + self.texts["map.current"]
         parts = [text, positions, self.marks_context(path, turn_node_id=turn_node_id)]
         # Someone not named yet by their description, never "Unknown 1".
         return unknown_words("\n\n".join(p for p in parts if p), shown)
@@ -314,6 +319,8 @@ class WorldRuntime:
         place_delta(whole if whole is not None else pending.before, delta, held_name, near)
         # Someone sent to a marked spot, once every new place has its spot.
         self.apply_marks_at(pending.before, delta, reply, author)
+        # Someone the plot's event brought in, introduced without a name.
+        self._name_brought(delta, author, pending.before, node.content)
         node.meta.world = None if delta.empty() else delta
         if says:
             self._redraw_resized(pending.before, delta)
@@ -333,6 +340,43 @@ class WorldRuntime:
         # the background (session_world_art.py): the passage never waits.
         self.start_map_art()
         yield SessionNotice(f"Map: {describe_delta(pending.before, delta)}")
+
+    def _name_brought(
+        self, delta: WorldDelta, author: Node | None, before: WorldMap, passage: str
+    ) -> None:
+        """The one person the passage brought in unnamed, on a turn the plot
+        began an event bringing in one character the map hasn't placed: that
+        character. Live (Oct 17 2026), the director began the first bandit
+        meeting with Evan Stevens's card, the passage introduced "the young
+        man with the scoped rifle", the map kept him as an unknown and the
+        roster said Evan was elsewhere; asked his name, Sonnet made up "Kyle".
+        """
+        plot = self.story.plot
+        if author is None or plot is None or not delta.unknowns:
+            return
+        new = [label for label in delta.unknowns if label not in before.unknowns]
+        begun = [d for d in author.meta.direction if d.kind == "begin"]
+        if len(new) != 1 or not begun:
+            return
+        people = {c.id: c for c in [*self.cast, *self.supporting]}
+        brought: list[Character] = []
+        for direction in begun:
+            event = next((e for e in plot.events if e.id == direction.event_id), None)
+            if event is None:
+                continue
+            variant = variant_named(event, direction.variant)
+            brought += [people[i] for i in introduced(event, variant) if i in people]
+        placed = {*before.where, *delta.where}
+        unique = {c.id: c for c in brought}.values()
+        brought = [c for c in unique if c.name not in placed and not mentions(passage, c)]
+        if len(brought) != 1:
+            return
+        label, name = new[0], brought[0].name
+        delta.unknowns.pop(label)
+        if label in delta.where:
+            delta.where[name] = delta.where.pop(label)
+        if label in delta.outside:
+            delta.outside[name] = delta.outside.pop(label)
 
     # --- the author's Direction and the map -----------------------------------------
 

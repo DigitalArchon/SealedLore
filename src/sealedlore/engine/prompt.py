@@ -52,7 +52,7 @@ from sealedlore.messages import ContentPart, PromptMessage, Role
 from sealedlore.models.character import Character
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import AgencyMode, Difficulty, Node, NpcScope, ResponseStyle, Roll
-from sealedlore.models.scene import SceneLogEntry
+from sealedlore.models.scene import SceneLogEntry, SceneState
 from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
 
@@ -124,6 +124,10 @@ class TurnRequest:
     # The REMEMBER clause naming the things the author's turn names that
     # can't be moved this turn (`turn.remember.fixed`), or "".
     fixed_reminder: str = ""
+    # The scene card as the prompt shows it: in a story played on the map,
+    # the story's card with the map's word on who is where
+    # (engine/map_presence.py); None for the story's own.
+    scene: SceneState | None = None
 
 
 @dataclass(frozen=True)
@@ -304,7 +308,7 @@ def assemble_prompt(
         (
             SECTION_SCENE,
             render_scene_block(
-                story.scene,
+                turn.scene or story.scene,
                 cast_by_id,
                 turn.controlled_character_id,
                 story.style.perspective,
@@ -394,12 +398,14 @@ def assemble_question(
     options: AssemblyOptions | None = None,
     rendered: str | None = None,
     the_map: str = "",
+    scene: SceneState | None = None,
 ) -> AssembledPrompt:
     """Assemble an out-of-character question about the story (an aside).
 
     `rendered` replaces the author's question and its rules with a request
     of the program's own (the plot asking how a skipped-over event went),
-    on the same cached prefix. `the_map` is the local map, as a turn has it.
+    on the same cached prefix. `the_map` is the local map, and `scene` the
+    card as the map has it, as a turn has them.
 
     Everything ahead of the tail is exactly what a story turn sends, so the
     question rides on the same cached prefix. `history_nodes` is the whole
@@ -419,7 +425,7 @@ def assemble_question(
         (
             SECTION_SCENE,
             render_scene_block(
-                story.scene,
+                scene or story.scene,
                 cast_by_id,
                 story.held_character_id,
                 story.style.perspective,

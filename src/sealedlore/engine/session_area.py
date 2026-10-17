@@ -45,6 +45,7 @@ from sealedlore.engine.area import (
     clamped_tile,
     exit_side,
     front_of,
+    in_earshot,
     inside_door,
     lay_things,
     metres_per_tile,
@@ -53,6 +54,7 @@ from sealedlore.engine.area import (
     point_tile,
     render_positions,
     room_words,
+    sees,
     spot_in_words,
     stairs_landing,
     stand_near,
@@ -66,6 +68,7 @@ from sealedlore.engine.area import (
 from sealedlore.engine.chronicle_read import stated_skip
 from sealedlore.engine.furnish import FURNISH_MAX_TOKENS, furnish_messages, parse_furnishing
 from sealedlore.engine.levels import level_name, parse_level, place_of_area
+from sealedlore.engine.map_presence import reconcile_scene
 from sealedlore.engine.marks import (
     chain_words,
     compass,
@@ -137,6 +140,7 @@ from sealedlore.models.area import (
 )
 from sealedlore.models.config import on_nanogpt
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID, Node, Usage
+from sealedlore.models.scene import SceneState
 from sealedlore.models.world import MapPicture, OwnTileSet, WorldArt, WorldDelta, WorldMap
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError
 from sealedlore.providers.images import ImageClient, build_image_payload, data_url, loggable_payload
@@ -2043,6 +2047,62 @@ class AreaRuntime:
             return ""
         heading = self.texts["map.positions"]
         return text.replace(text.split("\n", 1)[0], heading, 1)
+
+    def map_scene(
+        self, nodes: Sequence[Node], held_id: str | None, *, turn_node_id: str | None = None
+    ) -> SceneState | None:
+        """The scene card as the storyteller is sent it in a story played on
+        the map (engine/map_presence.py): the story's card, with the map's
+        word on who is where, on the turn's map as the positions are: in the
+        scene is whoever the map has in sight or within earshot of the
+        author's character. None when the map doesn't place the author's
+        character (the card as it is)."""
+        if not self.map_first or self.in_private or self.story.chat:
+            return None
+        held = self.map_held_name(held_id) if held_id is not None else self.held_name()
+        if held is None:
+            return None
+        turn = self._turn_node(nodes, turn_node_id)
+        if turn is not None and turn.meta.area is not None:
+            state = turn.meta.area
+        else:
+            turn = None
+            live = self._live()
+            state = live if live is not None else self._snapshot_on(nodes)
+        me = state.spots.get(held) if state is not None else None
+        if state is None or me is None:
+            return None
+        world = self._world_on([*nodes, turn] if turn is not None else nodes)
+        area = self.area(me.area, world, self.map_art_copy(), things=state.things)
+        if area is None:
+            return None
+        mine = (me.x, me.y)
+        here: list[str] = []
+        away: dict[str, str] = {}
+        for name, spot in state.spots.items():
+            if name == held:
+                continue
+            theirs = (spot.x, spot.y)
+            near = sees(area, mine, theirs) or in_earshot(area, mine, theirs)
+            if spot.area == me.area and near:
+                here.append(name)  # in the scene: in sight or within earshot
+            elif name in world.unknowns:
+                continue  # someone not named yet, out of sight: nobody to list
+            elif spot.area == me.area:
+                room = area.room_at(*theirs)
+                at = room_words(area, room) if room is not None else area.name
+                away[name] = f"{at}, out of sight and earshot"
+            else:
+                place = world.places.get(world.where.get(name) or "")
+                away[name] = place.name if place is not None else self.area_title(spot.area, world)
+        return reconcile_scene(
+            self.story.scene,
+            here=here,
+            away=away,
+            cast=self.visible_cast(),
+            unknowns=world.unknowns,
+            held_id=held_id if held_id is not None else self.story.held_character_id,
+        )
 
     def fixed_here(
         self, nodes: Sequence[Node], held_id: str | None, *, turn_node_id: str | None = None
