@@ -869,35 +869,85 @@ _SEALED = re.compile(
 )
 
 
-def _stamp_state(grid: list[list[str]], box: tuple[int, int, int, int], rows: list[str]) -> None:
+# A state that leaves a building without its roof, whatever its plan's walls:
+# the model draws a burnt barn's outer walls whole and its fire inside.
+_ROOFLESS = re.compile(
+    r"\b(burn(?:s|t|ed|ing)?|on fire|ablaze|aflame|blaze|gutted|collaps(?:e|ed|ing)|"
+    r"caved?|fallen|destroy(?:ed)?|ruin(?:s|ed)?|razed|blown|explod(?:e|ed)|rubble|"
+    r"roofless|no roof)\b",
+    re.I,
+)
+# The share of a state plan's inside under fire or rubble that leaves no roof.
+ROOFLESS_SHARE = 0.1
+
+
+def _roofless(rows: list[str], state: str) -> bool:
+    """Whether a changed building is drawn open on the yard: its state says
+    it burnt or fell, or its plan shows enough fire and rubble inside."""
+    if _ROOFLESS.search(state or ""):
+        return True
+    inside = [t for row in rows[1:-1] for t in row[1:-1]]
+    ruined = sum(1 for t in inside if t in "*:")
+    return bool(inside) and ruined / len(inside) >= ROOFLESS_SHARE
+
+
+def _stamp_state(
+    grid: list[list[str]], box: tuple[int, int, int, int], rows: list[str], state: str = ""
+) -> None:
     """A changed building's box drawn from the plan of its state: the ring
     is wall where that plan's outer wall stands, rubble where it fell, a
-    door where it has one; the inside shows fire, rubble and water."""
+    door where it has one; the inside shows fire, rubble and water.
+
+    Each yard tile reads its whole share of the plan, not one point of it:
+    a burning barn's 40x24 plan sampled into a few tiles missed its fires
+    and kept its walls, and the barn stood roofed on the yard (live, Oct 17
+    2026). A building left without a roof (`_roofless`) keeps at most half
+    its ring standing, so it is drawn as a shell, never roofed."""
     x0, y0, x1, y1 = box
     w, h = x1 - x0 + 1, y1 - y0 + 1
     pw, ph = len(rows[0]) if rows else 0, len(rows)
     if w <= 0 or h <= 0 or pw == 0 or ph == 0:
         return
+    open_top = _roofless(rows, state)
+
+    def share(x: int, y: int) -> list[str]:
+        """The plan's tiles under yard tile (x, y), the ring's on the ring."""
+        ax = int((x - x0) * pw / w)
+        bx = max(ax + 1, int((x - x0 + 1) * pw / w))
+        ay = int((y - y0) * ph / h)
+        by = max(ay + 1, int((y - y0 + 1) * ph / h))
+        if x in (x0, x1):
+            ax, bx = (0, 1) if x == x0 else (pw - 1, pw)
+        if y in (y0, y1):
+            ay, by = (0, 1) if y == y0 else (ph - 1, ph)
+        return [rows[py][px] for py in range(ay, min(by, ph)) for px in range(ax, min(bx, pw))]
+
     for y in range(y0, y1 + 1):
         for x in range(x0, x1 + 1):
             if not (0 <= y < len(grid) and 0 <= x < len(grid[0])):
                 continue
-            px = min(pw - 1, int((x - x0 + 0.5) * pw / w))
-            py = min(ph - 1, int((y - y0 + 0.5) * ph / h))
-            if x in (x0, x1):
-                px = 0 if x == x0 else pw - 1
-            if y in (y0, y1):
-                py = 0 if y == y0 else ph - 1
-            tile = rows[py][px]
+            tiles = share(x, y)
             ring = x in (x0, x1) or y in (y0, y1)
-            if tile in WALLS:
-                grid[y][x] = "#"
-            elif tile == "+":
-                grid[y][x] = "+"
-            elif tile in "*:~":
-                grid[y][x] = tile
+            if ring:
+                # Gone in pairs all round: a broken shell, under the share
+                # of standing wall the renderer roofs (gui/map_tiles.py).
+                fallen = open_top and ((x + y) // 2) % 2 == 1
+                if "+" in tiles:
+                    grid[y][x] = "+"
+                elif any(t in WALLS for t in tiles) and not fallen:
+                    grid[y][x] = "#"
+                elif "*" in tiles:
+                    grid[y][x] = "*"
+                else:
+                    grid[y][x] = ":"
+            elif "*" in tiles:
+                grid[y][x] = "*"
+            elif "~" in tiles:
+                grid[y][x] = "~"
+            elif open_top or ":" in tiles:
+                grid[y][x] = ":"
             else:
-                grid[y][x] = ":" if ring else " "
+                grid[y][x] = " "
 
 
 def _door_for(grid: list[list[str]], box: tuple[int, int, int, int]) -> tuple[int, int] | None:
@@ -1231,7 +1281,7 @@ def _fix_buildings(
             # Blown up, burnt: its box as its own plan has it, rubble
             # where the walls fell (and so no roof), fire inside, instead
             # of a whole roofed building (the second review).
-            _stamp_state(grid, box, state_plan.rows)
+            _stamp_state(grid, box, state_plan.rows, child.state)
         doors = [
             (x, y)
             for y in range(max(y0, 0), min(y1, len(grid) - 1) + 1)

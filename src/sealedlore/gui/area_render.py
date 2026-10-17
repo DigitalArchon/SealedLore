@@ -890,6 +890,11 @@ def _render_outdoor(area: Area, source: TileSource) -> QImage:
     if burning.any():  # the ground scorched under fire, soft-edged like the rest
         scorch = _soft(burning, 37, px, 0.3)[..., None]
         img = img * (1 - 0.8 * scorch) + np.array(SCORCH, np.float32) * 0.8 * scorch
+    ruined = g == ":"
+    if ruined.any():  # rubble's grey-brown on the ground, as indoors: a burnt
+        # barn's floor was bare snow with planks strewn over it (Oct 17 2026)
+        ash = _soft(ruined, 41, px, 0.3)[..., None]
+        img = img * (1 - 0.6 * ash) + np.array(RUBBLE_TINT, np.float32) * 0.6 * ash
     img *= (0.9 + 0.16 * _noise(H, W, px * 19, 7))[..., None]
     # 2. shadows of buildings, walls and trees, cast south-east
     solid = (np.isin(g, list("#W+")) | roofed).astype(np.float32)
@@ -924,7 +929,7 @@ def _render_outdoor(area: Area, source: TileSource) -> QImage:
                 stand.append(((y + 1) * px, "bush", (x, y)))
             elif c == "^" and r < 0.18:
                 stand.append(((y + 1) * px, "rock", (x, y)))
-            elif c == ":" and r < 0.5:
+            elif c == ":" and r < 0.22:
                 stand.append(((y + 1) * px, "rubble", (x, y)))
             elif c == "%":
                 stand.append(((y + 1) * px, "fence", (x, y)))

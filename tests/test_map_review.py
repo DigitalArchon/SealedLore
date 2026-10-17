@@ -395,3 +395,29 @@ def test_stand_near_finds_a_tile_off_an_unwalkable_start():
     assert farm.walkable(x, y)
     assert marks_in("⌖(1, 2)")[0].x == 1.0
     assert Spot(area="farm", x=x, y=y).area == "farm"
+
+
+def test_a_burning_building_with_its_walls_whole_is_drawn_open_never_roofed():
+    """Live (Oct 17 2026): the barn's burning plan kept every outer wall and
+    had a few small fires; sampled a point a tile, the yard drew it whole
+    and roofed."""
+    from sealedlore.gui.map_tiles import building_boxes
+
+    world, art = world_and_art()
+    rows = [list(r) for r in art.layouts["house"][""].rows]
+    for y, x in ((3, 3), (3, 4), (14, 30), (15, 31)):
+        rows[y][x] = "*"  # two small fires, walls untouched
+    art.layouts["house"]["burning fiercely"] = PlaceLayout(
+        place_id="house", state="burning fiercely", rows=["".join(r) for r in rows], spec=HOUSE_SPEC
+    )
+    world.places["house"] = world.places["house"].model_copy(update={"state": "burning fiercely"})
+    farm = build_area(world, art, "farm")
+    x0, y0, x1, y1 = farm.buildings["house"]
+    inside = [farm.rows[y][x] for y in range(y0 + 1, y1) for x in range(x0 + 1, x1)]
+    assert "*" in inside and " " not in inside  # the fire shows; nothing left under a roof
+    roofed = [b for b in building_boxes(farm.rows) if b[0] <= x0 <= b[1] and b[2] <= y0 <= b[3]]
+    assert roofed == []
+    # Unchanged, the same building is still roofed.
+    world.places["house"] = world.places["house"].model_copy(update={"state": ""})
+    whole = build_area(world, art, "farm")
+    assert any(b[0] <= x0 <= b[1] and b[2] <= y0 <= b[3] for b in building_boxes(whole.rows))
