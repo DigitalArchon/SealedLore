@@ -330,7 +330,7 @@ def lights(area: Area, px: int, zones: list[list[str]]) -> list[tuple[float, flo
                 ((room.cx + 0.5) * px, (room.cy + 0.5) * px, px * max(3.0, rw * 0.7), colour)
             )
     for f in area.placements:
-        if f.piece in ("reactor", "shaft", "beds") and not f.broken:
+        if f.piece in ("reactor", "beds") and not f.broken:  # a shaft stays dark
             radius = px * (max(f.w, f.h) * (1.6 if f.piece == "reactor" else 1.0) + 1.5)
             out.append(((f.x + f.w / 2) * px, (f.y + f.h / 2) * px, radius, piece_light(f)))
     rows = area.rows
@@ -656,23 +656,34 @@ def piece(p: QPainter, f, px: int) -> None:
         p.setBrush(Qt.NoBrush)
         p.drawEllipse(c, r * 0.9, r * 0.9)
     elif f.piece == "shaft":
-        # A round pit going down, ringed in hazard yellow, a hoist frame over it.
-        p.setBrush(QColor(230, 186, 40))
+        # A round pit going down in a striped hazard ring, a hoist frame of
+        # two girders over it with its winch and cable.
+        ring = QPen(QColor(230, 186, 40), r * 0.16)
+        ring.setCapStyle(Qt.FlatCap)  # square caps fill the gaps: a solid ring
+        ring.setDashPattern([1.2, 1.0])
+        p.setBrush(QColor(24, 22, 20))
         p.drawEllipse(c, r * 0.98, r * 0.98)
-        p.setBrush(QColor(28, 24, 20))
-        p.drawEllipse(c, r * 0.84, r * 0.84)
-        pit = QRadialGradient(c, r * 0.8)
+        p.setBrush(Qt.NoBrush)
+        p.setPen(ring)
+        p.drawEllipse(c, r * 0.88, r * 0.88)
+        p.setPen(Qt.NoPen)
+        pit = QRadialGradient(c, r * 0.78)
         pit.setColorAt(0.0, QColor(0, 0, 0, 255))
-        pit.setColorAt(0.7, QColor(14, 10, 8, 255))
-        pit.setColorAt(1.0, QColor(60, 48, 38, 255))
+        pit.setColorAt(0.75, QColor(10, 8, 6, 255))
+        pit.setColorAt(1.0, QColor(70, 58, 46, 255))
         p.setBrush(QBrush(pit))
-        p.drawEllipse(c, r * 0.8, r * 0.8)
-        p.setPen(QPen(QColor(120, 110, 96), max(2.0, px * 0.14)))
-        p.drawLine(QPointF(box.x() + px * 0.1, c.y()), QPointF(box.right() - px * 0.1, c.y()))
-        p.drawLine(QPointF(c.x(), box.y() + px * 0.1), QPointF(c.x(), box.bottom() - px * 0.1))
+        p.drawEllipse(c, r * 0.78, r * 0.78)
+        girder = QColor(150, 140, 120) if not f.broken else QColor(70, 64, 56)
+        p.setBrush(girder)
+        for dy in (-0.42, 0.32):
+            p.drawRect(QRectF(box.x() + px * 0.05, c.y() + r * dy, box.width() - px * 0.1, r * 0.1))
+        p.setBrush(QColor(90, 84, 74))
+        p.drawRect(QRectF(c.x() - r * 0.22, c.y() - r * 0.42, r * 0.44, r * 0.84))
+        p.setPen(QPen(QColor(200, 200, 190), max(1.0, px * 0.03)))
+        p.drawLine(c, QPointF(c.x(), c.y() + r * 0.3))
         p.setPen(Qt.NoPen)
         p.setBrush(QColor(255, 200, 120) if not f.broken else QColor(60, 50, 40))
-        p.drawEllipse(c, px * 0.12, px * 0.12)
+        p.drawEllipse(QPointF(c.x(), c.y() - r * 0.2), px * 0.1, px * 0.1)
     elif f.piece == "beds":
         # A planter: a metal rim round dark soil, rows of leaves.
         p.setBrush(QColor(96, 104, 116))

@@ -1111,7 +1111,7 @@ def _pieces(room: DeckRoom) -> list[Piece]:
         return (bx, by, bx + w - 1, by + h - 1)
 
     if SHAFT_WORDS.search(room.name) and rw >= 5 and rh >= 4:
-        n = 3 if min(rw, rh) >= 7 else 2
+        n = 3 if min(rw, rh) >= 6 else 2
         return [Piece("the mine shaft", centred(n, n), "shaft")]
     if room.use == "engineering" and rw >= 5 and rh >= 4:
         n = 3 if min(rw, rh) >= 7 else 2

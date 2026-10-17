@@ -425,3 +425,22 @@ def test_set_pieces_stand_in_their_rooms_and_the_furniture_keeps_clear_of_them()
     )
     placed = furnish(area, plan_, "full")
     assert placed and not set(reactor.tiles()) & {t for f in placed for t in f.tiles()}
+
+
+def test_the_station_set_has_its_set_pieces_and_its_hull():
+    """The shipped station set has a sprite for every set piece the deck plan
+    places from sprites, and the hull's and an asteroid's textures."""
+    from sealedlore.engine.deck_plan import CHAIR, CONSOLE, HOLO, SHUTTLE
+    from sealedlore.engine.tile_sets import item_slugs
+    from sealedlore.storage.tile_sets import asset_names, read_asset, sets_folder
+
+    folder = sets_folder()
+    assert folder is not None
+    station = folder / "station"
+    items = {name.removeprefix("items/") for name in asset_names(station, "items")}
+    for name in (CONSOLE, CHAIR, SHUTTLE, HOLO):
+        assert set(item_slugs(name)) & items, name
+    assert read_asset(station, "hull") and read_asset(station, "rock")
+    # Nothing a station hasn't: the old set's monitor and wooden furniture.
+    words = json.loads((station / "tileset.json").read_text())["words"]
+    assert "glowing screen" not in words["decor0"] or "flat" in words["decor0"]

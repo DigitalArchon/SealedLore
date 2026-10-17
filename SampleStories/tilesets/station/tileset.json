@@ -13,7 +13,10 @@
  ],
  "lava": false,
  "deck": true,
- "grounds": ["space", "metal"],
+ "grounds": [
+  "space",
+  "metal"
+ ],
  "decor_lights": [
   false,
   false,
@@ -43,8 +46,10 @@
   "cap": "the top of a space station bulkhead: pale blue-grey riveted metal",
   "face": "a space station bulkhead wall of pale blue-grey metal panels with small lit indicator lights",
   "rug": "a plain square dark grey rubber floor mat with no markings",
-  "decor0": "a small computer console with a glowing screen",
-  "decor1": "a sealed grey supply locker",
-  "decor2": "a potted plant in a metal planter"
+  "decor0": "a slim wall-mounted computer terminal with a flat glowing touchscreen",
+  "decor1": "a tall grey supply locker with a small green status light",
+  "decor2": "a potted plant in a white metal planter",
+  "hull": "the outer hull of a space station seen from above: large light grey metal plates with fine panel seams, rivet lines and a few small hatches",
+  "rock": "the bare rock of an asteroid seen from above: grey-brown pitted stone with small craters, cracks and dust"
  }
 }
