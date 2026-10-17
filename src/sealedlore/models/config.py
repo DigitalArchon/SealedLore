@@ -139,12 +139,6 @@ RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
             "render.",
         ),
         RecommendedModel(
-            id="qwen-image",
-            label="Qwen Image",
-            note="Free within a NanoGPT subscription's daily allowance ($0.02 after): keeps the "
-            "layout as well (3.1 to 3.5) but paints it plainly.",
-        ),
-        RecommendedModel(
             id="bytedance/seedream-v5.0-pro/edit",
             label="Seedream 5.0 Pro",
             tag="enhanced",
@@ -764,7 +758,9 @@ class Config(BaseModel):
     # (the author, Oct 2026), off until turned on. Story pictures still ask
     # each time. The limit is per story and day; the subscription allows ~100.
     map_pictures: bool = False
-    map_picture_model: str = "qwen-image"
+    # FLUX.3 Klein from words, as the map's sprites (the author, Oct 17 2026:
+    # Klein, not Qwen; Qwen's paintings drew roofs as black-and-white noise).
+    map_picture_model: str = "blackforestlabs/flux-3/klein/text-to-image"
     map_picture_daily_limit: int = 40
     # Paintings of a place (Paintings on the map, Paint this place… on the
     # play view), painted from the program's own picture of the area as it

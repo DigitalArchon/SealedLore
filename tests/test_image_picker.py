@@ -140,9 +140,11 @@ def test_recommended_models_are_offered_beside_the_field_with_their_notes(app):
         "bytedance/seedream-v5.0-pro/edit",
         "nano-banana-pro-edit",
     ]
-    assert "$0.09" in recommended_model("map_isometric_model", choices[2].id).note
-    assert "$0.14" in recommended_model("map_isometric_model", choices[3].id).note
-    assert recommended_model("map_isometric_model", "qwen-image") is not None
+    assert "$0.09" in recommended_model("map_isometric_model", choices[1].id).note
+    assert "$0.14" in recommended_model("map_isometric_model", choices[2].id).note
+    # Not Qwen (the author, Oct 17 2026: its paintings drew roofs as noise).
+    assert recommended_model("map_isometric_model", "qwen-image") is None
+    assert "klein" in Config().map_picture_model
     field = ModelField("", recommended=choices)
     actions = [a for a in field.recommended_button.menu().actions() if not a.isSeparator()]
     assert actions[0].text() == "FLUX.3 Klein (default)"
