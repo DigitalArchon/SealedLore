@@ -870,12 +870,15 @@ avatar ▾** lists them, the one walking for them ticked, and the Media tab
 lists them under Map as "Avatar", the one in use marked, with **Use as the
 avatar** on the others. **Choose a file…** takes a figure of your
 own (on a plain white or transparent ground), and **Back to the set's own**
-puts the tile set's figure back. When new portraits land on cards (drawn
-or chosen from a file) whose characters already have an avatar, you are
-asked once whether to draw their avatars again from them, and they are
-drawn one after another; a character with none yet gets theirs drawn in
-the background as usual. The same changes can be made under Look →
-**Edit the tile set…** on the map.
+puts the tile set's figure back. Every character gets an avatar drawn from
+the portrait they have now: with map pictures on, one drawn from their card
+before a portrait came, or from an earlier portrait, is drawn again when a
+new portrait lands, as the rest of the map's pictures are (on its own, or
+among those waiting for you). An avatar you chose yourself stays until you
+say otherwise: when new portraits land on such cards (or map pictures are
+off), you are asked once whether to draw their avatars again from them, and
+they are drawn one after another, even if one is already being drawn. The
+same changes can be made under Look → **Edit the tile set…** on the map.
 
 Two checkboxes on a cast sheet decide who writes that character:
 
@@ -998,14 +1001,21 @@ the menus and the storyteller call them as the story described them ("the
 teenage girl"). A thing the tile set has no picture of borrows the set's
 nearest one of the same kind until its own is drawn.
 
-With **Draw map pictures with an image model** ticked (Settings → Images, off
-until you tick it, and needing **Draw the map** on; FLUX.3 Klein unless you
-choose another), an image model draws
-the map's people, buildings and things instead: everyone's avatar from what
-their card says of them (you first, then whoever is with you), and each
-building standing on the ground where the story put it. They are drawn in the
-background without asking each time, up to the limit set there for each story
-each day, and each one's prompt and cost are kept in the story's log. A place
+**Draw map pictures** (under Settings → Images) has an image model,
+FLUX.3 Klein unless you choose another, draw the map's people, buildings and
+things instead (it needs **Draw the map** on): everyone's avatar from their portrait
+or what their card says of them (you first, then whoever is with you), roofs
+of what each building is made of, the things in each room, and each building
+standing on the ground where the story put it. **Automatically** (the
+default) draws them in the background as the story reaches them, without
+asking. **Ask before drawing** draws nothing until you say: the Map page says
+how many pictures wait and what they cost, with **Review…** (every picture
+with its prompt and price: change any prompt, untick what you don't want, and
+**Draw** sends the ticked ones exactly as they stand), **Draw them** (all, as
+they are) and **Not now** (none; you aren't asked about those again while the
+story is open). **Off** draws none. Either way they stop at the limit set
+there for each story each day, and each one's prompt and cost are kept in
+the story's log. A place
 the story changes is drawn again from its last picture, so it stays the same
 place. Each place you have been gets a postcard too, a picture of the whole
 place, shown on its card under the local map: click it to see it whole.
@@ -1103,7 +1113,12 @@ within reach, the doorways out.
   list knows follows suit (carried by you, broken, gone). A turn you rewrite
   so the menu's words are gone changes nothing, and neither does a failed
   dice roll: the attempt is the storyteller's to tell. **Use** changes
-  nothing either.
+  nothing either. A thing that can't be taken (anything **Take** isn't
+  offered for: furniture, a statue, the town's stores) stays where it is
+  whatever a passage says, unless your Direction or Narration moves it, or
+  a turn sent under **Fiat**: the map read may still change its state.
+  Something driven or ridden (a truck, a cart, a horse) goes with whoever
+  takes it.
 - **Carrying ▾** lists what your character carries, each with **Drop** (it
   lies at your feet again, to be picked up by anyone) and **Give to** each
   person within reach (it is theirs then, and their card says so). The
@@ -1217,9 +1232,9 @@ sets of its own and swap between them under Look, and they travel with
 Restart, Duplicate settings and scenario files.
 
 Things and people the set doesn't have are drawn as the story needs them,
-with **Draw map pictures with an image model** on (Settings → Images;
-FLUX.3 Klein, about a cent each): each kind of thing once, and each
-character from their portrait. Until then a thing is a plain crate and a
+with **Draw map pictures** on (Settings → Images; FLUX.3 Klein, about a
+cent each): each kind of thing once, and each character from their
+portrait. Until then a thing is a plain crate and a
 character a small figure. The samples come with all of theirs. **Edit the
 tile set…** (under Look, and in the gallery) lists every picture the map is
 drawn with: the ground, walls and decoration, every thing and every
