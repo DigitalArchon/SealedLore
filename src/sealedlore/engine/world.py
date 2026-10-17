@@ -25,7 +25,7 @@ from typing import Any
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.scene_state import same_person
-from sealedlore.engine.takeable import fixed_thing
+from sealedlore.engine.takeable import FIXED_MARK, fixed_thing
 from sealedlore.engine.validators import locate_quote
 from sealedlore.engine.world_layout import (
     bearing,
@@ -272,13 +272,15 @@ def render_map_context(
     texts: PromptTexts = DEFAULT_TEXTS,
     *,
     fixed: Collection[str] = (),
+    mark_fixed: bool = False,
 ) -> str:
     """The local map for the storyteller's tail: where the author's character
     is (the start before any read), what is inside it, what else is around
     it at each level up, the ways between them, and the things here. `world`
     is `established`; `fixed` are the places a plot file put, whose distance
     and bearing are given, from the nearest of them the character is in.
-    Empty without a place."""
+    `mark_fixed`: a thing that can't be taken is marked so, on a turn that
+    may not move it. Empty without a place."""
     here_id = world.where.get(held or "") or world.start
     chain = _chain(world, here_id)
     if not chain:
@@ -336,7 +338,12 @@ def render_map_context(
                 if thing.carried_by
                 else place_name(world, thing.at)
             )
-            lines.append(f"- {thing.name}: {at}" + (f", {thing.state}" if thing.state else ""))
+            stays = mark_fixed and not thing.carried_by and fixed_thing(thing.name)
+            lines.append(
+                f"- {thing.name}: {at}"
+                + (f", {thing.state}" if thing.state else "")
+                + (f", {FIXED_MARK}" if stays else "")
+            )
     return "\n".join(lines)
 
 

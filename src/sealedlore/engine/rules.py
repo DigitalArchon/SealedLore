@@ -610,14 +610,17 @@ def render_reminder(
     person: NarrativePerson | None = None,
     tense: NarrativeTense | None = None,
     texts: PromptTexts = DEFAULT_TEXTS,
+    fixed: str = "",
 ) -> str:
-    """The last line before generation — recency is the point (§3.3)."""
+    """The last line before generation — recency is the point (§3.3).
+    `fixed`: the clause naming what the turn names that can't be moved."""
     narration = narration_reminder(
         person, tense, controlled_character.name if controlled_character else None, texts
     )
     slots = {
         "narration": f"{narration} " if narration else "",
-        "direction": f" {texts['turn.remember.direction']}" if direction_begins else "",
+        "direction": (f" {texts['turn.remember.direction']}" if direction_begins else "")
+        + (f" {fixed}" if fixed else ""),
         "length": f" {length.reminder}" if length is not None and length.reminder else "",
         "others": (
             " "

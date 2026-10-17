@@ -40,7 +40,7 @@ from sealedlore.engine.levels import (
 )
 from sealedlore.engine.marks import footprint
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
-from sealedlore.engine.takeable import item_verbs
+from sealedlore.engine.takeable import FIXED_MARK, fixed_thing, item_verbs
 from sealedlore.engine.tile_sets import LIGHT_WORDS, roof_material
 from sealedlore.engine.world import key
 from sealedlore.engine.world_art import (
@@ -2084,6 +2084,7 @@ def render_positions(
     elsewhere: Sequence[str] = (),
     level_names: Mapping[str, str] | None = None,
     now: str = "",
+    mark_fixed: bool = False,
 ) -> str:
     """Where everyone stands, for the storyteller: exact, from the grid
     (design §5). `now`: the time of day and the weather (`now_words`), right
@@ -2094,7 +2095,8 @@ def render_positions(
     character first), the doorways out, the stairs to other levels, who is
     on another level of the place (`elsewhere`, lines the caller found), and
     how far they walked since the last passage. Never the clock's day (the
-    author's ruling: the day is the plot's)."""
+    author's ruling: the day is the plot's). `mark_fixed`: what can't be
+    taken is marked so in reach, on a turn that may not move it."""
     me = spots.get(held)
     if me is None or me.area != area.id:
         return ""
@@ -2135,14 +2137,18 @@ def render_positions(
         key=lambda item: item[0],
     )
     nearest: dict[str, tuple[float, int]] = {}
+    fixed: set[str] = set()
     for m, p in reach:
         if m <= 4.0:
             label = _bare(p.name) + (" (broken)" if p.broken else "")
             first, count = nearest.get(label, (m, 0))
             nearest[label] = (first, count + 1)
+            if mark_fixed and fixed_thing(p.name):
+                fixed.add(label)
     close = [
         f"the {name} ({'at hand' if m < 1.5 else metres_words(m)}"
-        + (f"; {n - 1} more near)" if n > 1 else ")")
+        + (f"; {n - 1} more near" if n > 1 else "")
+        + (f"; {FIXED_MARK})" if name in fixed else ")")
         for name, (m, n) in nearest.items()
     ][:limit]
     if close:

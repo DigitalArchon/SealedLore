@@ -839,6 +839,16 @@ class StorySession(
                     nodes, turn.controlled_character_id, turn_node_id=turn.turn_node_id
                 ),
             )
+        if not turn.fixed_reminder:
+            turn = replace(
+                turn,
+                fixed_reminder=self.fixed_reminder(
+                    nodes,
+                    turn.controlled_character_id,
+                    turn_node_id=turn.turn_node_id,
+                    text=turn.user_text,
+                ),
+            )
         prompt = assemble_prompt(
             story=self.story,
             cast=self.visible_cast(),

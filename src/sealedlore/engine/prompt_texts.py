@@ -4281,6 +4281,45 @@ _text(
     (("name", "who"), ("things", "what they carry, by name")),
 )
 
+# What can't be taken stays where it is unless the author moves it (the
+# author's ruling, Oct 17 2026: only Direction, Narration or a turn under
+# Fiat move it; the map read refuses any other move, engine/world.py
+# `resolve_reply`). Told to the storyteller on every other turn, beside the
+# things in reach and here (`FIXED_MARK`), and named on REMEMBER when the
+# turn names one (`turn.remember.fixed`), or the prose moved what the map
+# kept: live, an anvil dragged across a yard on an ordinary turn. Measured on
+# Sonnet 4.6 (five map samples, four takes, two blind Claude judges agreeing
+# on 265 of 268): told nothing, the prose moved the thing 52 of 52 times
+# (shove it, ask a companion to, drag the anvil); this line alone ("fails or
+# stops short") 40 of 52; with REMEMBER and "stays exactly where it stands"
+# 22 of 52 (15 more only budged), the reason natural in 29-31 of 32, and
+# things that can be taken (13-15 of 16) and Fiat (15 of 16) moved as before.
+# Readers preferred the shove that worked (25-7 over both judges; a null
+# control on Fiat came out 21-10, so the judges are noisy). SealedLoreDocs
+# design/map.md, "Fixed things".
+_text(
+    "map.fixed",
+    MAP,
+    "Map-first: things that stay put",
+    "Under the positions when something in reach or here is marked fixed in place (it "
+    "can't be taken), on a turn that may not move it: anything but Direction, Narration or "
+    "a turn under Fiat.",
+    "Whatever is marked fixed in place stays exactly where it stands this turn: nobody "
+    "moves it, however hard they try (it is too heavy, fixed down or wedged fast). It can "
+    "still be used, damaged or changed where it stands.",
+)
+
+_text(
+    "turn.remember.fixed",
+    TURN,
+    "REMEMBER line: things that stay put",
+    "On the REMEMBER line when the author's turn names something in reach or here that "
+    "can't be moved this turn (marked fixed in place on the map), on a turn that may not "
+    "move it.",
+    "Whoever tries this turn, these stay exactly where they stand, unmoved: {things}.",
+    (("things", "the things, by name"),),
+)
+
 for _verb, _turn, _means in (
     (
         "drop",

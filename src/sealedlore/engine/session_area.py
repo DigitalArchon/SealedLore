@@ -71,6 +71,7 @@ from sealedlore.engine.marks import (
     place_at,
 )
 from sealedlore.engine.session_world_art import _today
+from sealedlore.engine.takeable import fixed_thing
 from sealedlore.engine.tile_draw import (
     DESIGNER_MODEL,
     RUN_LIMIT,
@@ -1436,7 +1437,12 @@ class AreaRuntime:
         return asked
 
     def positions_context(
-        self, nodes: Sequence[Node], held_id: str | None, *, turn_node_id: str | None = None
+        self,
+        nodes: Sequence[Node],
+        held_id: str | None,
+        *,
+        turn_node_id: str | None = None,
+        mark_fixed: bool = False,
     ) -> str:
         """Where everyone stands, for the storyteller's map section (design
         §5): from the turn being sent (its snapshot, found by `turn_node_id`:
@@ -1505,11 +1511,47 @@ class AreaRuntime:
             elsewhere=self._on_other_levels(area, state.spots, held, world, art),
             level_names=self._level_names(area, world, art),
             now=now,
+            mark_fixed=mark_fixed,
         )
         if not text:
             return ""
         heading = self.texts["map.positions"]
         return text.replace(text.split("\n", 1)[0], heading, 1)
+
+    def fixed_here(
+        self, nodes: Sequence[Node], held_id: str | None, *, turn_node_id: str | None = None
+    ) -> list[str]:
+        """What can't be taken (engine/takeable.py `fixed_thing`) in the
+        author's character's area on the turn's map, nearest first, and the
+        map's things at their place, by name (without its article). The whole
+        area, not only what is in reach: asked to drag the bench over, the
+        sergeant's companion did, from across the room (Oct 17 2026)."""
+        held = self.map_held_name(held_id) if held_id is not None else self.held_name()
+        if held is None:
+            return []
+        turn = self._turn_node(nodes, turn_node_id)
+        if turn is not None and turn.meta.area is not None:
+            state = turn.meta.area
+        else:
+            turn = None
+            state = self._live() or self._snapshot_on(nodes)
+        world = self._world_on([*nodes, turn] if turn is not None else nodes)
+        names: list[str] = []
+        me = state.spots.get(held) if state is not None else None
+        area = self.area(me.area, world, self.map_art_copy(), things=state.things) if me else None
+        if me is not None and area is not None:
+            nearest = sorted(
+                area.placements,
+                key=lambda p: math.hypot(p.centre[0] - me.x, p.centre[1] - me.y),
+            )
+            for p in nearest:
+                if fixed_thing(p.name):
+                    names.append(re.sub(r"^(the|a|an)\s+", "", p.name, flags=re.IGNORECASE))
+        here = world.where.get(held)
+        for thing in world.things.values():
+            if here and thing.at == here and not thing.carried_by and fixed_thing(thing.name):
+                names.append(re.sub(r"^(the|a|an)\s+", "", thing.name, flags=re.IGNORECASE))
+        return list(dict.fromkeys(names))
 
     def _level_names(self, area: Area, world: WorldMap, art: WorldArt) -> dict[str, str]:
         """Each level the area's stairs lead to, named for the storyteller

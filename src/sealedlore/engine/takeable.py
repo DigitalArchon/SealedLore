@@ -221,3 +221,27 @@ def fixed_thing(name: str) -> bool:
     be taken (the town's stores, a statue, a well) and isn't driven or
     ridden. Judged as the Take menu judges it, so the two never disagree."""
     return not can_be_taken(name) and not is_vehicle(name)
+
+
+# How the storyteller is shown a thing that can't be taken (or driven) on a
+# turn that may not move it: beside it in "Within reach" and "Things here",
+# with `map.fixed` once under the positions.
+FIXED_MARK = "fixed in place"
+
+# Words that say what a thing is made of or like, not what it is: an author
+# writing "the iron bar" isn't naming "a heavy iron anvil".
+_NOT_NAMING = frozenset(
+    "a an the of with and on in for to by at its his her their old small large big little "
+    "some few long short tall low high round square two three set pair heavy light wooden wood "
+    "iron steel stone brass copper metal rusted rusty rough worn battered broken new dark "
+    "black white red green blue grey gray brown oak pine timber end side top bottom front back "
+    "full empty open closed".split()
+)
+
+
+def named_in(name: str, text: str) -> bool:
+    """Whether `text` names the thing called `name` by a word of its name
+    that says what it is ("I shove the bench" names "rough wooden bench")."""
+    words = {w for w in re.findall(r"[a-z]+", name.lower()) if w not in _NOT_NAMING and len(w) > 2}
+    said = text.lower()
+    return any(re.search(rf"\b{re.escape(w)}(?:e?s)?\b", said) for w in words)

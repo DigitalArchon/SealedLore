@@ -1119,9 +1119,13 @@ within reach, the doorways out.
   nothing either. A thing that can't be taken (anything **Take** isn't
   offered for: furniture, a statue, the town's stores) stays where it is
   whatever a passage says, unless your Direction or Narration moves it, or
-  a turn sent under **Fiat**: the map read may still change its state.
-  Something driven or ridden (a truck, a cart, a horse) goes with whoever
-  takes it.
+  a turn sent under **Fiat**: the map read may still change its state. On
+  every other turn the storyteller is told so: such things near you are
+  marked "fixed in place", and one your turn names is named again at the
+  very end of what it is sent. It mostly writes them staying put (bolted
+  down, too heavy, wedged fast), though not always: an attempt you write
+  may still shift one in the prose. Something driven or ridden (a truck, a
+  cart, a horse) goes with whoever takes it.
 - **Carrying ▾** lists what your character carries, each with **Drop** (it
   lies at your feet again, to be picked up by anyone) and **Give to** each
   person within reach (it is theirs then, and their card says so). The

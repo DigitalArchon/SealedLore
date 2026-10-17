@@ -24,6 +24,7 @@ from typing import Any
 from sealedlore.engine.marks import footprint, place_at
 from sealedlore.engine.session_area import is_opening
 from sealedlore.engine.session_plot import SessionNotice
+from sealedlore.engine.takeable import FIXED_MARK, named_in
 from sealedlore.engine.world import (
     build_world_read_messages,
     describe_delta,
@@ -42,6 +43,9 @@ from sealedlore.models.character import Character
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID, Node
 from sealedlore.models.world import WorldDelta, WorldMap
 from sealedlore.providers.base import ChatRequest, ProviderError
+
+# At most this many fixed things named on REMEMBER, the nearest first.
+MAX_FIXED_NAMED = 3
 
 # Room for a model that reasons a little before its JSON (DeepSeek V4.1 Flash
 # answered in ~500 tokens on the longest test story).
@@ -135,21 +139,28 @@ class WorldRuntime:
         # is at" named the place they left (the second review).
         turn = self._turn_node(path, turn_node_id)
         shown = self._world_on([*path, turn]) if turn is not None else self._world_on(path)
+        stays = self.fixed_stays(turn)
         text = render_map_context(
             established(shown, base),
             self.map_held_name(held_id),
             self.texts,
             fixed={p.id for p in base.places} if base is not None else (),
+            mark_fixed=stays,
         )
         # Map-first: where everyone stands, exactly (engine/session_area.py),
         # and the spots the author's turn marks. `turn_node_id` is the turn
         # being sent (a retake's leaf is the previous take, so it can't be
         # found from the leaf).
-        parts = [
-            text,
-            self.positions_context(path, held_id, turn_node_id=turn_node_id),
-            self.marks_context(path, turn_node_id=turn_node_id),
-        ]
+        positions = self.positions_context(
+            path, held_id, turn_node_id=turn_node_id, mark_fixed=stays
+        )
+        if stays and (FIXED_MARK in text or FIXED_MARK in positions):
+            # Said once, under whichever list marked something.
+            if positions:
+                positions += "\n" + self.texts["map.fixed"]
+            else:
+                text += "\n" + self.texts["map.fixed"]
+        parts = [text, positions, self.marks_context(path, turn_node_id=turn_node_id)]
         # Someone not named yet by their description, never "Unknown 1".
         return unknown_words("\n\n".join(p for p in parts if p), shown)
 
@@ -314,6 +325,39 @@ class WorldRuntime:
     def _author_says(author: Node) -> bool:
         """The author's turn states what is so: Direction or Narration."""
         return author.speaker_id in (DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID)
+
+    def fixed_reminder(
+        self, path, held_id: str | None, *, turn_node_id: str | None = None, text: str = ""
+    ) -> str:
+        """The REMEMBER clause (`turn.remember.fixed`) for what the author's
+        turn names in their area, or here, that can't be moved this turn
+        (the nearest `MAX_FIXED_NAMED`: "bench" names every bench); "" on a
+        turn that may move it, or when it names none. Recency: told only in
+        the positions, Sonnet 4.6 still had the bench "grind a foot and stop"
+        (SealedLoreDocs design/map.md, "Fixed things")."""
+        if not self.map_on or self.in_private or not text.strip():
+            return ""
+        turn = self._turn_node(path, turn_node_id)
+        if not self.fixed_stays(turn):
+            return ""
+        named = [
+            name
+            for name in self.fixed_here(path, held_id, turn_node_id=turn_node_id)
+            if named_in(name, text)
+        ][:MAX_FIXED_NAMED]
+        if not named:
+            return ""
+        things = ", ".join(f"the {name}" for name in named)
+        return self.texts.fill("turn.remember.fixed", things=things)
+
+    def fixed_stays(self, turn: Node | None) -> bool:
+        """Whether the storyteller is told what can't be taken stays put: on
+        an in-character turn not under Fiat, and a Question (`turn` None);
+        never on Direction or Narration, or under Fiat, which may move it
+        (the map read moves it then too: `resolve_reply(moves_fixed=)`)."""
+        if turn is None:
+            return True
+        return not (self._author_says(turn) or self._under_fiat(turn))
 
     def _under_fiat(self, author: Node) -> bool:
         """The author's turn was sent under Fiat: what they write happens.

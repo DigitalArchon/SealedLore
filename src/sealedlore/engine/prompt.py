@@ -121,6 +121,9 @@ class TurnRequest:
     direction: str = ""
     # Whether the direction starts an event, which the REMEMBER line repeats.
     direction_begins: bool = False
+    # The REMEMBER clause naming the things the author's turn names that
+    # can't be moved this turn (`turn.remember.fixed`), or "".
+    fixed_reminder: str = ""
 
 
 @dataclass(frozen=True)
@@ -354,6 +357,7 @@ def assemble_prompt(
                 ],
                 private=story.scene.privacy == "private",
                 direction_begins=turn.direction_begins,
+                fixed=turn.fixed_reminder,
                 person=story.style.person,
                 tense=story.style.tense,
                 texts=texts,

@@ -78,3 +78,49 @@ def test_a_turn_under_fiat_moves_it_and_an_ordinary_one_doesn_t(tmp_path, story,
     list(session.send(replace(turn("I drag the stores inside."), agency_mode="fiat")))
     found = [t for t in session.world().things.values() if t.name == stores.name]
     assert [t.at for t in found] == ["house"]
+
+
+def _beside_stove(session):
+    stove = next(p for p in session.area("house").placements if "stove" in p.name)
+    session.walked(session.walk_route(int(stove.centre[0]), int(stove.centre[1]), beside=True))
+
+
+def _tail(session) -> str:
+    """The storyteller's last request's tail (the reads come after it)."""
+    told = [r for r in session.provider.requests if "REMEMBER:" in r.messages[-1].text]
+    return told[-1].messages[-1].text
+
+
+def test_the_storyteller_is_told_what_stays_put_on_a_turn_that_can_t_move_it(tmp_path, story, cast):
+    """Live (Oct 17 2026): the prose dragged an anvil across the yard on an
+    ordinary turn and the map kept it where it was. On such a turn what can't
+    be taken is marked in reach, said once, and named on REMEMBER when the
+    turn names it."""
+    session = make_session(tmp_path, story, cast, ["It doesn't budge.", "{}"] * 4)
+    session.config.scene_reads = "manual"
+    _beside_stove(session)
+    list(session.send(turn("I put my shoulder to the stove and shove it at the door.")))
+    tail = _tail(session)
+    assert "cast-iron stove (" in tail and "fixed in place)" in tail
+    assert tail.count(session.texts["map.fixed"]) == 1
+    remember = tail[tail.index("REMEMBER:") :]
+    assert "the cast-iron stove" in remember
+    # A turn that names nothing fixed: marked, but nothing on REMEMBER.
+    list(session.send(turn("I warm my hands.")))
+    tail = _tail(session)
+    assert "fixed in place" in tail and "unmoved" not in tail[tail.index("REMEMBER:") :]
+
+
+def test_fiat_and_direction_are_told_nothing_stays_put(tmp_path, story, cast):
+    from sealedlore.models.node import DIRECTOR_SPEAKER_ID
+
+    session = make_session(tmp_path, story, cast, ["It moves.", "{}"] * 3)
+    session.config.scene_reads = "manual"
+    _beside_stove(session)
+    list(session.send(replace(turn("I shove the stove at the door."), agency_mode="fiat")))
+    tail = _tail(session)
+    assert "fixed in place" not in tail and "unmoved" not in tail
+    direction = replace(turn("The stove now stands by the door."), speaker_id=DIRECTOR_SPEAKER_ID)
+    list(session.send(direction))
+    tail = _tail(session)
+    assert "fixed in place" not in tail and "unmoved" not in tail
