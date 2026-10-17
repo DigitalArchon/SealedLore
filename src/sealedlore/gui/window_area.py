@@ -25,6 +25,7 @@ from PySide6.QtWidgets import QDialog, QFileDialog, QInputDialog, QMessageBox
 from sealedlore.engine.area import Area, point_tile, tile_point
 from sealedlore.engine.marks import mark_token, marks_in
 from sealedlore.engine.picture_shapes import FREE
+from sealedlore.engine.tile_sets import head_noun
 from sealedlore.engine.world import key
 from sealedlore.engine.world_pictures import views_of
 from sealedlore.gui.area_render import TileSource, render_area, sprite_image
@@ -273,10 +274,18 @@ class AreaWindow:
         by_name = {key(p.name): p for p in world.places.values()}
         boxed = {key(n) for n in area.names.values()} | {key(area.name)}
         marks: list[PlaceMark] = []
+        own = key(area.name)
         for name, (x, y) in area.labels.items():
             if key(name) in boxed:
                 continue
             place = by_name.get(key(name))
+            if place is None and (
+                key(name).startswith(own) or head_noun(name) == head_noun(area.name)
+            ):
+                # The plan naming itself ("Old Two-Storey Farmhouse" in the
+                # farmhouse, "Kestrel's Due - hull" aboard her): no place of
+                # its own, and marked as one in the middle of a room.
+                continue
             image = self._place_image(place, art) if place is not None else None
             marks.append(PlaceMark(name, x, y, image, place.what if place is not None else ""))
         return marks

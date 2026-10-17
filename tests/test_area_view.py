@@ -1529,3 +1529,22 @@ def test_paint_this_place_paints_the_area_stood_in_and_media_lists_the_painting(
     window._area_paintings_menu()
     actions = [a for a in view.paintings_menu.actions() if not a.isSeparator()]
     assert not actions[0].isEnabled() and "Open country" in actions[0].toolTip()
+
+
+def test_the_map_s_heading_is_neutral_under_the_play_view_and_a_plan_never_labels_itself(window):
+    """Live (Oct 17 2026): the heading said "The farm" in Hellsville (it
+    followed the map put away), and the farmhouse's plan marked itself, "Old
+    Two-Storey Farmhouse", in the middle of a room."""
+    from dataclasses import replace
+
+    view = window.world_view
+    view.go_region()
+    view.go_local()
+    assert view.play_shown() and view.title.text() == "Map"
+    area = window.area_view.area
+    labelled = replace(
+        area, labels={**area.labels, "Old Two-Storey House": (3, 3), "A rift": (4, 4)}
+    )
+    marks = window._place_marks(labelled, window.session, window.session.map_art_copy())
+    names = [m.name for m in marks]
+    assert "Old Two-Storey House" not in names and "A rift" in names

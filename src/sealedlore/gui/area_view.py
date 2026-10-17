@@ -14,6 +14,7 @@ place, the way's length on foot. The view only shows and asks: the window
 
 from __future__ import annotations
 
+import math
 import random
 import re
 from collections.abc import Callable
@@ -175,6 +176,7 @@ WEATHER_WORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
 WEATHER_MS = 90
 # How many flakes or streaks, at most, over the whole area.
 WEATHER_PARTICLES = 320
+WEATHER_PARTICLES_MAX = 1600
 
 
 def weather_look(words: str) -> str | None:
@@ -473,14 +475,20 @@ class _Weather(QGraphicsRectItem):
     Over the tint (z 90), under the names (z 100). Outdoors only; never on
     a deck (the view decides)."""
 
-    def __init__(self, rect: QRectF) -> None:
+    def __init__(self, rect: QRectF, tile: float = 24.0) -> None:
         super().__init__(rect)
         self.setPen(QPen(Qt.NoPen))
         self.setZValue(92)
         self.kind: str | None = None
         self.phase = 0.0
+        # Sized from the tile, never the area: by the area's width a farm's
+        # snowflakes were discs several tiles across (Oct 17 2026). As many
+        # as the area is large, so a big one is not sparse.
+        self.tile = max(4.0, tile)
+        tiles = (rect.width() / self.tile) * (rect.height() / self.tile)
+        count = int(min(WEATHER_PARTICLES_MAX, max(WEATHER_PARTICLES, tiles / 6)))
         rng = random.Random(7)
-        self.seeds = [(rng.random(), rng.random(), rng.random()) for _ in range(WEATHER_PARTICLES)]
+        self.seeds = [(rng.random(), rng.random(), rng.random()) for _ in range(count)]
 
     def advance(self, step: float) -> None:
         self.phase = (self.phase + step) % 1.0
@@ -505,18 +513,21 @@ class _Weather(QGraphicsRectItem):
                 painter.drawEllipse(QPointF(x, y), w * (0.08 + sz * 0.1), h * (0.04 + sz * 0.05))
             painter.restore()
             return
-        unit = max(1.0, min(w, h) / 160)
+        unit = self.tile / 24
         if self.kind == "snow":
-            painter.setBrush(QColor(246, 248, 255, 215))
+            # Small flakes of a few sizes, the near ones larger, brighter and
+            # faster, each swaying a little as it falls.
             for sx, sy, sz in self.seeds:
-                speed = 0.35 + sz * 0.5
-                x = rect.left() + ((sx + 0.04 * sz * (1 + self.phase)) % 1.0) * w
+                speed = 0.18 + sz * 0.3
+                sway = math.sin((self.phase * 6 + sx * 20) * math.pi) * self.tile * 0.15
+                x = rect.left() + ((sx + 0.02 * sz * self.phase) % 1.0) * w + sway
                 y = rect.top() + ((sy + self.phase * speed) % 1.0) * h
-                r = unit * (0.5 + sz * 0.9)
+                r = unit * (0.8 + sz * sz * 1.6)
+                painter.setBrush(QColor(246, 248, 255, int(120 + sz * 110)))
                 painter.drawEllipse(QPointF(x, y), r, r)
         else:  # rain
-            painter.setPen(QPen(QColor(196, 214, 240, 150), max(1.0, unit * 0.35)))
-            drop = unit * 4
+            painter.setPen(QPen(QColor(196, 214, 240, 150), max(1.0, unit * 0.6)))
+            drop = unit * 9
             for sx, sy, sz in self.seeds:
                 speed = 1.4 + sz * 0.8
                 x = rect.left() + ((sx + self.phase * 0.25) % 1.0) * w
@@ -899,7 +910,7 @@ class AreaView(QWidget):
             self._tint = _Tint(bounds)
             self._tint.hide()
             self.scene.addItem(self._tint)
-            self._weather = _Weather(bounds)
+            self._weather = _Weather(bounds, px)
             self._weather.hide()
             self.scene.addItem(self._weather)
             self._hover = QGraphicsRectItem()

@@ -23,7 +23,13 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from sealedlore.engine.area import Area
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
-from sealedlore.engine.tile_sets import OUTDOOR_SPRITES, SPRITES, TEXTURES, item_slugs
+from sealedlore.engine.tile_sets import (
+    OUTDOOR_SPRITES,
+    SPRITES,
+    TEXTURES,
+    item_slugs,
+    roof_role,
+)
 from sealedlore.engine.world_pictures import PictureJob
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.config import RecommendedModel
@@ -119,6 +125,46 @@ def item_jobs(
                     subject_id=slugs[0],
                     name=placement.name,
                     prompt=texts.fill("map.tile.sprite", what=what, world=world, style=style),
+                )
+            )
+    return out
+
+
+def roof_jobs(
+    areas: Iterable[Area],
+    has_texture: Callable[[str], bool],
+    world: str,
+    texts: PromptTexts = DEFAULT_TEXTS,
+    *,
+    style: str = DEFAULT_STYLE,
+    failed: Callable[[str], bool] = lambda _k: False,
+) -> list[PictureJob]:
+    """A roof texture for each material a building in these areas is built
+    of that the set has no roof of (`Area.roofs`): drawn on the fly, so a
+    stone watchtower is roofed in stone, not the farmhouse's shingles. Until
+    it is in, the set's roof tinted towards the material stands in."""
+    out: list[PictureJob] = []
+    seen: set[str] = set()
+    for area in areas:
+        for material in area.roofs.values():
+            role = roof_role(material)
+            key = f"texture:{role}"
+            if not material or role in seen or has_texture(role) or failed(key):
+                continue
+            seen.add(role)
+            out.append(
+                PictureJob(
+                    key=key,
+                    subject="texture",
+                    subject_id=role,
+                    name=f"{material} roof",
+                    prompt=texts.fill(
+                        "map.tile.texture",
+                        what=f"a {material} roof, its {material} seen from directly above",
+                        world=world,
+                        view="from directly overhead",
+                        style=style,
+                    ),
                 )
             )
     return out

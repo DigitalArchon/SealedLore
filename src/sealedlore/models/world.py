@@ -232,8 +232,12 @@ class MapPicture(BaseModel):
     id: str = Field(default_factory=new_id)
     # "walker": a person's sprite for map-first play, drawn from their
     # portrait; "item": a sprite of a kind of thing, by its name's slug
-    # (engine/tile_sets.py `slug`), for a story whose tile set lacks it.
-    subject: Literal["person", "place", "thing", "postcard", "isometric", "walker", "item"]
+    # (engine/tile_sets.py `slug`), for a story whose tile set lacks it;
+    # "texture": a texture by its role ("out-roof-stone"), drawn on the fly
+    # for a material the set has none of.
+    subject: Literal[
+        "person", "place", "thing", "postcard", "isometric", "walker", "item", "texture"
+    ]
     # A place's or thing's id; a person's name; an item's slug.
     subject_id: str
     name: str

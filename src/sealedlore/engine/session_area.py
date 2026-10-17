@@ -78,6 +78,7 @@ from sealedlore.engine.tile_draw import (
     TEXTURE_SIZE,
     item_jobs,
     parse_tile_words,
+    roof_jobs,
     style_words,
     tile_jobs,
     tile_set_price,
@@ -308,6 +309,9 @@ class AreaRuntime:
         if info is None:
             info = TileSetInfo(name="")
         items = {p.subject_id: p.file for p in art.pictures if p.subject == "item"}
+        # Textures drawn for the story on the fly: a roof of a material the
+        # set has none of ("out-roof-stone", `roof_jobs`).
+        textures = {p.subject_id: p.file for p in art.pictures if p.subject == "texture"}
         changed = dict(art.tile_overrides)
         reader = self.pictures.read
 
@@ -329,6 +333,10 @@ class AreaRuntime:
                 data = reader(items[role[6:]])
                 if data:
                     return data
+            if role in textures:
+                data = reader(textures[role])
+                if data:
+                    return data
             if role in own:
                 data = reader(own[role])
                 if data:
@@ -342,9 +350,26 @@ class AreaRuntime:
                 return True
             if changed.get(role) == "" and folder is not None and shipped.read_asset(folder, role):
                 return False
-            return role in own or (role.startswith("items/") and role[6:] in items)
+            return (
+                role in own or role in textures or (role.startswith("items/") and role[6:] in items)
+            )
+
+        found_names: list[str] = []
+
+        def listed() -> list[str]:
+            """Every thing the set and the story have a picture of, by slug:
+            what a thing with none borrows from (`closest_item`)."""
+            if found_names:
+                return found_names
+            names = set(items)
+            names.update(r[6:] for r in own if r.startswith("items/"))
+            if folder is not None:
+                names.update(r[6:] for r in shipped.asset_names(folder, "items"))
+            found_names.extend(sorted(names))
+            return found_names
 
         read.from_story = from_story  # type: ignore[attr-defined]
+        read.items = listed  # type: ignore[attr-defined]
         return info, read
 
     def generic_people(self) -> list[str]:
@@ -1364,7 +1389,11 @@ class AreaRuntime:
         me = state.spots.get(held)
         area = self.area(me.area if me else None, world, art, things=state.things)
         # The time of day (never the day) and the weather the story stated.
-        clock = self.map_clock()
+        # Without a plot, nothing before the opening says the time: the
+        # opening's read starts the clock (it was "the small hours" for every
+        # opening, and a retake of it was told another time).
+        before = [n for n in nodes if turn is None or n.id != turn.id]
+        clock = None if self.story.plot is None and is_opening(before) else self.map_clock()
         now = now_words(clock[1] if clock else None, world.weather)
         action_line = ""
         action = state.action
@@ -1937,7 +1966,19 @@ class AreaRuntime:
                 or art.tile_overrides.get(f"walker/{name}") is not None
             )
 
-        jobs = walker_jobs(people, has_walker, words, self.texts, style=style, failed=failed) + jobs
+        roofs = roof_jobs(
+            areas,
+            lambda role: read(role) is not None,
+            words,
+            self.texts,
+            style=style,
+            failed=failed,
+        )
+        jobs = (
+            walker_jobs(people, has_walker, words, self.texts, style=style, failed=failed)
+            + roofs
+            + jobs
+        )
         drawing = self.tile_asset_drawing  # the author's own draw of the same figure
         if drawing is not None:
             jobs = [j for j in jobs if j.key != _asset_key(drawing)]
@@ -2013,7 +2054,7 @@ class AreaRuntime:
                     self._picture_one,
                     job,
                     client,
-                    SPRITE_SIZE,
+                    TEXTURE_SIZE if job.subject == "texture" else SPRITE_SIZE,
                     model=model,
                     info=self._listed_image_model(model),
                     extra={"enable_prompt_expansion": False},

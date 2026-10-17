@@ -1857,7 +1857,7 @@ class WorldView(QWidget):
         """On the local map, the innermost plan under the middle of the view
         (else the character's) has its card shown; otherwise none."""
         place: WorldPlace | None = None
-        if level == "local":
+        if level == "local" and not self.play_shown():
             centre = self.view.mapToScene(self.view.viewport().rect().center())
             inner = [
                 self._plans[pid] for pid in shown_plans if self._plans[pid].rect().contains(centre)
@@ -2253,6 +2253,12 @@ class WorldView(QWidget):
         if self.play is None:
             return
         self.stack.setCurrentWidget(self.play if on else self.view)
+        if on:
+            # The play view names the place it shows; this heading followed
+            # the map's card, which isn't kept while it is put away, and said
+            # "The farm" in Hellsville (Oct 17 2026).
+            self.title.setText("Map")
+            self._card_place = None
         for widget in (self.hint, self.card, self.legend, self.iso_bar):
             if on:
                 widget.hide()

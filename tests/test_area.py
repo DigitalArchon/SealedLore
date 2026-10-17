@@ -1373,16 +1373,24 @@ def test_the_positions_carry_the_time_of_day_and_the_weather_under_the_heading()
 def test_the_storyteller_is_told_the_time_of_day_and_the_weather_the_story_set(
     tmp_path, story, cast
 ):
-    session = make_session(tmp_path, story, cast, ["Snow fell on the yard."])
+    read = json.dumps({"starts_at": "06:10", "starts_at_quote": "Snow fell on the yard."})
+    session = make_session(tmp_path, story, cast, ["Snow fell on the yard.", read, "Later.", "{}"])
+    session.config.scene_reads = "manual"
     session.story.world_base.weather = "snowing hard"
     list(session.send(turn("I look up.")))
     sent = session.provider.requests[0].messages[-1].text
     heading = "Where everyone stands (the map is exact: keep to it):"
     assert heading in sent
     after = sent.split(heading, 1)[1].splitlines()
-    # The clock begins at midnight on a story with no plot: the small hours.
-    assert after[1] == "It is the small hours. The weather: snowing hard."
+    # Without a plot nothing says the time before the opening: its read
+    # starts the clock (it was "the small hours" for every opening).
+    assert after[1] == "The weather: snowing hard."
     assert "Day 1" not in sent and "day 1" not in sent
+    list(session.send(turn("I wait.")))
+    sent = session.provider.requests[-2].messages[-1].text
+    after = sent.split(heading, 1)[1].splitlines()
+    assert after[1].startswith("It is ") and "small hours" not in after[1]
+    assert after[1].endswith("The weather: snowing hard.")
 
 
 def session_log(session) -> list[dict]:

@@ -40,7 +40,7 @@ from sealedlore.engine.levels import (
 )
 from sealedlore.engine.marks import footprint
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
-from sealedlore.engine.tile_sets import LIGHT_WORDS
+from sealedlore.engine.tile_sets import LIGHT_WORDS, roof_material
 from sealedlore.engine.world import key
 from sealedlore.engine.world_art import (
     FILLS,
@@ -309,8 +309,11 @@ class Area:
     # Indoors: the doors out, and the area they lead to.
     exits: list[tuple[int, int]] = field(default_factory=list)
     parent: str | None = None
-    # The names of the buildings in `buildings`, by place id.
+    # The names of the buildings in `buildings`, by place id, and what each
+    # one's roof is made of by its own words ("stone"; "" for the set's own:
+    # `tile_sets.roof_material`).
     names: dict[str, str] = field(default_factory=dict)
+    roofs: dict[str, str] = field(default_factory=dict)
     # What the rules repaired, for the log and the tests.
     repairs: list[str] = field(default_factory=list)
     # A window of open country (`build_window`): its rectangle on the map
@@ -891,6 +894,16 @@ def _roofless(rows: list[str], state: str) -> bool:
     return bool(inside) and ruined / len(inside) >= ROOFLESS_SHARE
 
 
+def _roofs(world: WorldMap, buildings: Mapping[str, Any]) -> dict[str, str]:
+    """Each building's roof material from its own words, where they name one."""
+    out = {}
+    for pid in buildings:
+        place = world.places.get(pid)
+        if place is not None and (found := roof_material(f"{place.name} {place.what}")):
+            out[pid] = found
+    return out
+
+
 def _stamp_state(
     grid: list[list[str]], box: tuple[int, int, int, int], rows: list[str], state: str = ""
 ) -> None:
@@ -1128,6 +1141,7 @@ def build_area(
         entrances=entrances,
         buildings=buildings,
         names={pid: world.places[pid].name for pid in buildings if pid in world.places},
+        roofs=_roofs(world, buildings),
         exits=exits,
         parent=area_of(world, art, place.inside) if place.inside else None,
         repairs=repairs,
@@ -1495,6 +1509,7 @@ def build_window(
         entrances=entrances,
         buildings=buildings,
         names={pid: world.places[pid].name for pid in buildings if pid in world.places},
+        roofs=_roofs(world, buildings),
         exits=[],
         parent=None,
         repairs=repairs,

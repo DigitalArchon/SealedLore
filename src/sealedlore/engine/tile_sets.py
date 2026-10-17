@@ -114,6 +114,115 @@ def item_slugs(name: str) -> list[str]:
     return list(dict.fromkeys(s for s in (whole, bare) if s))
 
 
+# Words that say little of what a thing is, left out when matching names.
+_FILLER = frozenset(
+    "a an the of with and on in for to by at its his her their old small large big little "
+    "some few long short tall low high round square two three set pair".split()
+)
+# The words after which a name goes on to say what is with the thing, not
+# what it is ("a kitchen table with an oil lamp" is a table).
+_AFTER_HEAD = frozenset("with of on in by near under beside behind holding full".split())
+
+
+def _stem(word: str) -> str:
+    if word.endswith("ies") and len(word) > 4:
+        return word[:-3] + "y"
+    if word.endswith(("ches", "shes", "xes", "sses")):
+        return word[:-2]
+    if word.endswith("s") and not word.endswith("ss") and len(word) > 3:
+        return word[:-1]
+    return word
+
+
+def _words(name: str) -> list[str]:
+    return [_stem(w) for w in re.findall(r"[a-z]+", name.lower())]
+
+
+def _thing(name: str) -> str:
+    """A name without its asides: "command console (dark)" is a command
+    console, "medical bay - bed" a bed."""
+    name = re.sub(r"\([^)]*\)", " ", name)
+    return re.split(r"\s[-–—:]\s", name)[-1]
+
+
+def head_noun(name: str) -> str:
+    """What a thing is, from its name: the last word before the name goes on
+    to say what is with it ("a kitchen table with oil lamp": table)."""
+    words = _words(_thing(name))
+    for i, word in enumerate(words):
+        if word in _AFTER_HEAD and i > 0:
+            words = words[:i]
+            break
+    content = [w for w in words if w not in _FILLER]
+    return content[-1] if content else ""
+
+
+def closest_item(name: str, slugs: Iterable[str]) -> str | None:
+    """The set's thing that best stands in for one it has no picture of: the
+    same kind of thing (its words hold the name's head noun) first, then the
+    most words shared ("a control console bank" is the station's
+    "a-bank-of-control-consoles"). None when it shares no word with any.
+    A new world's furnisher names things freely, and nearly every one was a
+    plain box on the play view (Oct 17 2026)."""
+    head = head_noun(name)
+    if not head:
+        return None
+    mine = set(_words(_thing(name))) - _FILLER
+    best: tuple[int, int, int, str] | None = None
+    for found in slugs:
+        theirs = set(_words(found.replace("-", " "))) - _FILLER
+        shared = len(mine & theirs)
+        if not shared:
+            continue
+        # The same kind of thing first; else the most words in common ("a
+        # wall bunk bed" sleeps in the set's bunks).
+        score = (head in theirs, shared, -len(theirs), found)
+        if best is None or score[:3] > best[:3]:
+            best = score
+    return best[3] if best is not None else None
+
+
+# A building's roof by what it is made of, from its own words: the set's
+# roof otherwise covered a stone watchtower in the farmhouse's shingles.
+ROOF_MATERIALS: dict[str, tuple[str, ...]] = {
+    "stone": ("stone", "granite", "limestone", "flint", "fieldstone", "masonry"),
+    "slate": ("slate",),
+    "brick": ("brick", "terracotta", "tiled", "tile"),
+    "metal": ("metal", "tin", "iron", "steel", "corrugated", "copper", "brass", "sheet"),
+    "thatch": ("thatch", "thatched", "straw", "reed", "turf", "sod"),
+    "concrete": ("concrete", "cement", "prefab", "bunker"),
+    "canvas": ("canvas", "tent", "tarp", "tarpaulin", "hide", "felt", "yurt"),
+    "wood": ("wood", "wooden", "timber", "log", "plank", "shingle", "cabin"),
+}
+# The colour each roof is tinted towards when the set has no roof of its own
+# for that material.
+ROOF_TINTS: dict[str, tuple[int, int, int]] = {
+    "stone": (150, 148, 140),
+    "slate": (78, 86, 100),
+    "brick": (168, 82, 60),
+    "metal": (128, 138, 148),
+    "thatch": (196, 164, 92),
+    "concrete": (150, 150, 146),
+    "canvas": (190, 176, 140),
+    "wood": (124, 88, 58),
+}
+
+
+def roof_material(words: str) -> str:
+    """The material a building's words say it is built of (its name, then
+    what it is), "" when they say none: the set's own roof then."""
+    found = set(re.findall(r"[a-z]+", words.lower()))
+    for material, terms in ROOF_MATERIALS.items():
+        if found.intersection(terms):
+            return material
+    return ""
+
+
+def roof_role(material: str) -> str:
+    """The texture role of a roof of `material` ("out-roof-stone")."""
+    return f"out-roof-{material}" if material else "out-roof"
+
+
 def own_key(title: str, taken: Iterable[str]) -> str:
     """The key a new own set is kept under: its title as a slug ("Rain-slick
     alleys" is "rain-slick-alleys"), numbered when a set has it already."""

@@ -26,7 +26,15 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPolygonF, QTransform
 
 from sealedlore.engine.area import Area, Placement
-from sealedlore.engine.tile_sets import LIGHT_WORDS, TEXTURES, TileSetInfo, item_slugs
+from sealedlore.engine.tile_sets import (
+    LIGHT_WORDS,
+    ROOF_TINTS,
+    TEXTURES,
+    TileSetInfo,
+    closest_item,
+    item_slugs,
+    roof_role,
+)
 from sealedlore.gui.image_codec import image_from_data
 
 # Pixels a tile, indoors and out: the view scales the picture to the zoom.
@@ -127,7 +135,7 @@ def tileable(image: QImage) -> QImage:
 
 
 def is_texture(role: str) -> bool:
-    return role in TEXTURES
+    return role in TEXTURES or role.startswith("out-roof-")
 
 
 def sprite_image(data: bytes | None) -> QImage | None:
@@ -155,6 +163,7 @@ class TileSource:
     # None when there is none.
     read: Callable[[str], bytes | None]
     _images: dict[str, QImage | None] = field(default_factory=dict)
+    _stand_ins: dict[str, str | None] = field(default_factory=dict)
 
     def image(self, role: str) -> QImage | None:
         """An asset ready to draw: a texture made to wrap if it wasn't (a
@@ -180,11 +189,36 @@ class TileSource:
         return bool(asks(role)) if callable(asks) else False
 
     def item(self, name: str) -> QImage | None:
+        """The thing's own picture, else the set's nearest thing of the same
+        kind (`closest_item`; the reader lists what the set has), else None:
+        drawn as a plain box until its own picture comes in."""
         for found in item_slugs(name):
             image = self.image(f"items/{found}")
             if image is not None:
                 return image
+        listing = getattr(self.read, "items", None)
+        if callable(listing):
+            if name not in self._stand_ins:
+                self._stand_ins[name] = closest_item(name, listing())
+            found = self._stand_ins[name]
+            if found is not None:
+                return self.image(f"items/{found}")
         return None
+
+    def roof(self, material: str, scale_px: float) -> QBrush:
+        """A roof of `material`: the set's (or the story's) own texture of it,
+        else the set's roof tinted towards it; the set's roof for ""."""
+        if material and self.image(roof_role(material)) is not None:
+            return _texture_brush(self, roof_role(material), scale_px)
+        brush = _texture_brush(self, "out-roof", scale_px)
+        if not material or material not in ROOF_TINTS or brush.textureImage().isNull():
+            return brush
+        key = f"tint:{material}"
+        if key not in self._images:
+            self._images[key] = _tinted(brush.textureImage(), ROOF_TINTS[material])
+        tinted = QBrush(self._images[key])
+        tinted.setTransform(brush.transform())
+        return tinted
 
 
 def _np():
@@ -274,6 +308,18 @@ def _texture_brush(source: TileSource, role: str, scale_px: float) -> QBrush:
     brush = QBrush(image)
     brush.setTransform(QTransform.fromScale(scale_px / image.width(), scale_px / image.width()))
     return brush
+
+
+def _tinted(image: QImage, colour: tuple[int, int, int]) -> QImage:
+    """`image`'s light and shade in `colour`: its grey, multiplied."""
+    out = image.convertToFormat(QImage.Format_Grayscale8).convertToFormat(QImage.Format_RGB32)
+    p = QPainter(out)
+    p.setCompositionMode(QPainter.CompositionMode_Multiply)
+    # The grey runs dark; lifted so the colour reads as the material's.
+    lift = tuple(min(255, int(c * 1.6)) for c in colour)
+    p.fillRect(out.rect(), QColor(*lift))
+    p.end()
+    return out
 
 
 def _texture_layer(source: TileSource, role: str, w: int, h: int, scale_px: float):
@@ -966,6 +1012,15 @@ def _render_outdoor(area: Area, source: TileSource) -> QImage:
     cap = _texture_brush(source, "cap", px * 2)
     wallb = _texture_brush(source, "out-wall", px * 6)
     roofb = _texture_brush(source, "out-roof", px * 12)
+
+    def roof_brush(x0: int, y0: int, x1: int, y1: int) -> QBrush:
+        """The roof over this box: the material its building's words name
+        (`Area.roofs`), the set's roof otherwise."""
+        for pid, (bx0, by0, bx1, by1) in area.buildings.items():
+            if bx0 <= x1 and x0 <= bx1 and by0 <= y1 and y0 <= by1 and area.roofs.get(pid):
+                return source.roof(area.roofs[pid], px * 12)
+        return roofb
+
     fence = source.image("out-fence")
     door = source.image("out-door")
     edge = QColor(14, 12, 12)
@@ -1025,7 +1080,7 @@ def _render_outdoor(area: Area, source: TileSource) -> QImage:
             X0, Y0, X1, Y1 = x0 * px, y0 * px, (x1 + 1) * px, (y1 + 1) * px
             face_h = min(px * 1.6, (Y1 - Y0) * 0.35)
             roof = QRectF(X0 - 2, Y0 - px * 0.4, X1 - X0 + 4, Y1 - Y0 - face_h + px * 0.4)
-            p.fillRect(roof, roofb)
+            p.fillRect(roof, roof_brush(x0, y0, x1, y1))
             ridge = roof.y() + roof.height() * 0.45
             p.fillRect(
                 QRectF(roof.x(), ridge, roof.width(), roof.bottom() - ridge), QColor(0, 0, 0, 45)
