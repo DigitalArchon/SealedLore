@@ -1073,6 +1073,11 @@ within reach, the doorways out.
   use the wheel to look around; **−** and **+** zoom, up to twice the art's
   own pixels. The hour tints the area (blue at night, amber at dawn and
   dusk), and indoors the rooms you can see into are lit and the rest dimmed.
+  The storyteller is told the time of day in words ("It is dusk"), never
+  the day. Weather the story states, or that you state in a Direction ("It
+  begins to snow"), is kept with the map, told to the storyteller beside
+  the time of day, and shown over an outdoor area: snow, rain, fog or mist,
+  sand or dust. Clear weather shows nothing.
 - **People.** Click someone for **Talk** (you walk up to them, and they
   react as themselves: someone who knows you notices you and says hello,
   someone hostile may not), **Look** (you stay out of sight and watch what

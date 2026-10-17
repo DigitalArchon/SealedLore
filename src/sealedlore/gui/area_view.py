@@ -14,6 +14,8 @@ place, the way's length on foot. The view only shows and asks: the window
 
 from __future__ import annotations
 
+import random
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -155,6 +157,38 @@ def tint_colour(minute: int) -> QColor | None:
             if all(c >= 255 for c in rgb):
                 return None
             return QColor(*rgb)
+    return None
+
+
+# The weather the play view can draw, by the words the story used for it
+# (`weather_look`): snow drifting, rain in streaks, a pale haze for fog or
+# mist, a brown haze for sand, dust or ash. Clear weather draws nothing.
+WEATHER_WORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("snow", ("snow", "sleet", "blizzard", "flurr", "hail")),
+    # Before rain: a sandstorm or a dust storm is dust.
+    ("dust", ("sand", "dust", "ash")),
+    ("rain", ("rain", "drizzl", "downpour", "shower", "storm", "thunder", "pouring", "squall")),
+    ("fog", ("fog", "mist", "haze", "hazy", "murk", "smog", "smoke")),
+)
+# How often the weather is redrawn while it shows (about eleven frames a
+# second: a few hundred flakes or streaks, cheap to paint).
+WEATHER_MS = 90
+# How many flakes or streaks, at most, over the whole area.
+WEATHER_PARTICLES = 320
+
+
+def weather_look(words: str) -> str | None:
+    """What the play view draws for the weather in `words`: "snow", "rain",
+    "fog" or "dust" (`WEATHER_WORDS`, the first kind whose word is in them),
+    or None for clear weather or nothing said. Pure."""
+    text = " ".join(words.lower().split())
+    if not text:
+        return None
+    for kind, stems in WEATHER_WORDS:
+        # Each stem at a word's start: "flash" is not ash, "thunderstorm"
+        # is rain by "thunder", "sandstorm" dust by "sand".
+        if any(re.search(r"\b" + re.escape(stem), text) for stem in stems):
+            return kind
     return None
 
 
@@ -431,6 +465,66 @@ class _Tint(QGraphicsRectItem):
         painter.restore()
 
 
+class _Weather(QGraphicsRectItem):
+    """The weather over the area (`weather_look`): snow drifting down, rain
+    in slanted streaks, a pale haze for fog, a brown one for dust, each a
+    few hundred particles seeded once so the picture is the same every
+    build, moved on by `AreaView`'s weather timer while the view shows.
+    Over the tint (z 90), under the names (z 100). Outdoors only; never on
+    a deck (the view decides)."""
+
+    def __init__(self, rect: QRectF) -> None:
+        super().__init__(rect)
+        self.setPen(QPen(Qt.NoPen))
+        self.setZValue(92)
+        self.kind: str | None = None
+        self.phase = 0.0
+        rng = random.Random(7)
+        self.seeds = [(rng.random(), rng.random(), rng.random()) for _ in range(WEATHER_PARTICLES)]
+
+    def advance(self, step: float) -> None:
+        self.phase = (self.phase + step) % 1.0
+        self.update()
+
+    def paint(self, painter: QPainter, _option, _widget=None) -> None:
+        rect = self.rect()
+        if self.kind is None or rect.isEmpty():
+            return
+        w, h = rect.width(), rect.height()
+        painter.save()
+        painter.setPen(Qt.NoPen)
+        if self.kind in ("fog", "dust"):
+            haze = QColor(228, 230, 236, 96) if self.kind == "fog" else QColor(176, 142, 96, 92)
+            painter.fillRect(rect, haze)
+            # A few soft banks drifting across, so it reads as weather and
+            # not as a dimmer picture.
+            painter.setBrush(QColor(haze.red(), haze.green(), haze.blue(), 46))
+            for sx, sy, sz in self.seeds[:24]:
+                x = rect.left() + ((sx + self.phase * (0.3 + sz * 0.4)) % 1.0) * w
+                y = rect.top() + sy * h
+                painter.drawEllipse(QPointF(x, y), w * (0.08 + sz * 0.1), h * (0.04 + sz * 0.05))
+            painter.restore()
+            return
+        unit = max(1.0, min(w, h) / 160)
+        if self.kind == "snow":
+            painter.setBrush(QColor(246, 248, 255, 215))
+            for sx, sy, sz in self.seeds:
+                speed = 0.35 + sz * 0.5
+                x = rect.left() + ((sx + 0.04 * sz * (1 + self.phase)) % 1.0) * w
+                y = rect.top() + ((sy + self.phase * speed) % 1.0) * h
+                r = unit * (0.5 + sz * 0.9)
+                painter.drawEllipse(QPointF(x, y), r, r)
+        else:  # rain
+            painter.setPen(QPen(QColor(196, 214, 240, 150), max(1.0, unit * 0.35)))
+            drop = unit * 4
+            for sx, sy, sz in self.seeds:
+                speed = 1.4 + sz * 0.8
+                x = rect.left() + ((sx + self.phase * 0.25) % 1.0) * w
+                y = rect.top() + ((sy + self.phase * speed) % 1.0) * h
+                painter.drawLine(QPointF(x, y), QPointF(x - drop * 0.3, y + drop))
+        painter.restore()
+
+
 class _Tag(QGraphicsSimpleTextItem):
     """A name over a person, the same size on screen at any zoom."""
 
@@ -686,6 +780,13 @@ class AreaView(QWidget):
         # The time of day over the area.
         self._tint: _Tint | None = None
         self._minute: int | None = None
+        # The weather over the area, moved on by its own slow timer while
+        # the view shows (never the walking timer: that runs only mid-walk).
+        self._weather: _Weather | None = None
+        self._weather_words = ""
+        self._weather_timer = QTimer(self)
+        self._weather_timer.setInterval(WEATHER_MS)
+        self._weather_timer.timeout.connect(self._weather_tick)
         self.set_message("No area here yet.")
 
     # --- what is shown -----------------------------------------------------------
@@ -701,6 +802,8 @@ class AreaView(QWidget):
         self._pins = []
         self._shade, self._shade_from, self._shade_mask = None, None, None
         self._tint, self._minute = None, None
+        self._weather = None
+        self._weather_timer.stop()
         label = self.scene.addSimpleText(text)
         label.setBrush(QColor(200, 200, 210))
         self.title.setText("")
@@ -719,13 +822,16 @@ class AreaView(QWidget):
         minute: int | None = None,
         failed: bool = False,
         places: list[PlaceMark] | None = None,
+        weather: str = "",
     ) -> None:
         """Show this area with these people (the window calls it whenever the
         session's state changes, and again once the picture is drawn), and
         with `places`, the map's places in it marked where they stand.
         `minute`: the map clock's minute of the day, for the light over the
-        area (None: daylight). `failed`: the picture couldn't be painted, so
-        the plain map stands in for good."""
+        area (None: daylight). `weather`: the story's words for the weather
+        (`WorldMap.weather`), drawn over an outdoor area (`weather_look`).
+        `failed`: the picture couldn't be painted, so the plain map stands in
+        for good."""
         if self._timer.isActive():
             if self.area is not None and self.area.id == area.id:
                 return  # mid-walk: the walk's end refreshes it
@@ -751,6 +857,7 @@ class AreaView(QWidget):
             self._pins = []
             self._shade, self._shade_from, self._shade_mask = None, None, None
             self._tint = None
+            self._weather = None
             self._key = key
             bounds = QRectF(0, 0, area.width * px, area.height * px)
             if image is not None:
@@ -771,6 +878,9 @@ class AreaView(QWidget):
             self._tint = _Tint(bounds)
             self._tint.hide()
             self.scene.addItem(self._tint)
+            self._weather = _Weather(bounds)
+            self._weather.hide()
+            self.scene.addItem(self._weather)
             self._hover = QGraphicsRectItem()
             self._hover.setPen(QPen(QColor(GOLD.red(), GOLD.green(), GOLD.blue(), 200), 2))
             self._hover.setZValue(200)
@@ -789,6 +899,7 @@ class AreaView(QWidget):
                 else f"Drawing {area.name}…"
             )
         self._sync_tint(minute)
+        self._sync_weather(area, weather)
         self._place_places(places or [], px)
         self._place_people(area, walkers, px)
         self._place_pins()
@@ -840,6 +951,46 @@ class AreaView(QWidget):
         self._tint.colour = colour
         self._tint.show()
         self._tint.update()
+
+    def _sync_weather(self, area: Area, words: str) -> None:
+        """The weather over an outdoor area (`weather_look`); nothing
+        indoors, on a deck (its ground is space), or in clear weather. The
+        timer that moves it runs only while something shows."""
+        self._weather_words = words
+        if self._weather is None:
+            return
+        kind = weather_look(words) if not area.indoor and area.look != "space" else None
+        self._weather.kind = kind
+        if kind is None:
+            self._weather.hide()
+            self._weather_timer.stop()
+            return
+        self._weather.show()
+        self._weather.update()
+        if self.isVisible() and not self._weather_timer.isActive():
+            self._weather_timer.start()
+
+    def _weather_tick(self) -> None:
+        weather = self._weather
+        if weather is None or weather.kind is None or not weather.isVisible():
+            self._weather_timer.stop()
+            return
+        weather.advance(0.012 if weather.kind == "snow" else 0.03)
+
+    def weather_shown(self) -> str | None:
+        """The weather drawn over the area now ("snow", "rain", "fog",
+        "dust"), or None."""
+        weather = self._weather
+        return weather.kind if weather is not None and weather.isVisible() else None
+
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt's name
+        super().showEvent(event)
+        if self.weather_shown() is not None and not self._weather_timer.isActive():
+            self._weather_timer.start()
+
+    def hideEvent(self, event) -> None:  # noqa: N802 - Qt's name
+        super().hideEvent(event)
+        self._weather_timer.stop()  # nothing moves while the view isn't seen
 
     def set_marks(self, tiles: list[tuple[int, tuple[int, int]]]) -> None:
         """Pins on the tiles marked in the turn being written: (the mark's

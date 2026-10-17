@@ -2078,6 +2078,45 @@ def _bare(name: str) -> str:
     return re.sub(r"^(the|a|an)\s+", "", " ".join(name.split()), flags=re.IGNORECASE)
 
 
+# The time of day by the clock's minute, for the storyteller (never the day:
+# the author's ruling) and the paintings: each band's first hour and its words.
+TIME_OF_DAY: tuple[tuple[float, str], ...] = (
+    (0.0, "the small hours"),
+    (5.0, "early morning"),
+    (8.0, "mid-morning"),
+    (11.0, "midday"),
+    (13.0, "afternoon"),
+    (16.0, "late afternoon"),
+    (18.0, "dusk"),
+    (19.5, "evening"),
+    (22.0, "night"),
+)
+
+
+def time_of_day(minute: int) -> str:
+    """The time of day at this minute of the clock's day, in words: "early
+    morning", "midday", "dusk", "the small hours" (`TIME_OF_DAY`). Pure."""
+    hour = (minute % (24 * 60)) / 60
+    words = TIME_OF_DAY[0][1]
+    for start, band in TIME_OF_DAY:
+        if hour >= start:
+            words = band
+    return words
+
+
+def now_words(minute: int | None, weather: str = "") -> str:
+    """One line for the storyteller and the paintings: the time of day and
+    the weather the story last stated ("It is dusk. The weather: snowing
+    hard."), or "" with neither."""
+    parts = []
+    if minute is not None:
+        parts.append(f"It is {time_of_day(minute)}.")
+    weather = " ".join(weather.split()).rstrip(".")
+    if weather:
+        parts.append(f"The weather: {weather}.")
+    return " ".join(parts)
+
+
 def render_positions(
     area: Area,
     world: WorldMap,
@@ -2091,12 +2130,14 @@ def render_positions(
     texts: PromptTexts = DEFAULT_TEXTS,
     elsewhere: Sequence[str] = (),
     level_names: Mapping[str, str] | None = None,
+    now: str = "",
 ) -> str:
     """Where everyone stands, for the storyteller: exact, from the grid
-    (design §5). The author's character's place in the area (and its level,
-    on a plan with floors or decks), who else is here with distance and
-    bearing, what is within reach (a broken thing said to be broken), what
-    each of them carries (`things`, the turn's records; the author's
+    (design §5). `now`: the time of day and the weather (`now_words`), right
+    under the heading. The author's character's place in the area (and its
+    level, on a plan with floors or decks), who else is here with distance
+    and bearing, what is within reach (a broken thing said to be broken),
+    what each of them carries (`things`, the turn's records; the author's
     character first), the doorways out, the stairs to other levels, who is
     on another level of the place (`elsewhere`, lines the caller found), and
     how far they walked since the last passage. Never the clock's day (the
@@ -2106,6 +2147,8 @@ def render_positions(
         return ""
     here = (me.x, me.y)
     lines = ["Where everyone stands (the map is exact: keep to it):"]
+    if now:
+        lines.append(now)
     words = where_words(area, *here)
     # A window of open country: "in open country, in the Great Erg".
     place = f"in {area.name}" + (f", in {area.within}" if area.within else "")

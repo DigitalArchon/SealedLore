@@ -1328,3 +1328,55 @@ def test_a_take_survives_take_back_and_a_retake_as_the_spots_do(tmp_path, story,
     list(session.send(turn(text)))
     assert session.path()[-2].meta.area.things[lantern.id].by == "Serrik Vaun"
     assert session.carried_things() == [(lantern.id, "brass lantern")]
+
+
+def test_the_time_of_day_has_its_bands_and_never_the_day():
+    """The storyteller is told the time of day in words, never the day
+    (the author's rule): one phrase from the clock's minute."""
+    from sealedlore.engine.area import now_words, time_of_day
+
+    assert time_of_day(0) == "the small hours"
+    assert time_of_day(4 * 60 + 59) == "the small hours"
+    assert time_of_day(5 * 60) == "early morning"
+    assert time_of_day(8 * 60) == "mid-morning"
+    assert time_of_day(11 * 60) == "midday"
+    assert time_of_day(13 * 60) == "afternoon"
+    assert time_of_day(16 * 60) == "late afternoon"
+    assert time_of_day(18 * 60) == "dusk"
+    assert time_of_day(19 * 60 + 30) == "evening"
+    assert time_of_day(22 * 60) == "night"
+    assert time_of_day(23 * 60 + 59) == "night"
+    assert time_of_day(3 * 24 * 60 + 12 * 60) == "midday"  # the day is never counted
+    assert now_words(12 * 60, "snowing hard") == "It is midday. The weather: snowing hard."
+    assert now_words(18 * 60) == "It is dusk."
+    assert now_words(None, " rain. ") == "The weather: rain."
+    assert now_words(None, "") == ""
+
+
+def test_the_positions_carry_the_time_of_day_and_the_weather_under_the_heading():
+    world, art = world_and_art()
+    house = build_area(world, art, "house")
+    stove = next(p for p in house.placements if "stove" in p.name)
+    spots = {"Jane": Spot(area="house", x=stove.x, y=stove.y + 1)}
+    text = render_positions(
+        house, world, spots, "Jane", now="It is dusk. The weather: snowing hard."
+    )
+    lines = text.splitlines()
+    assert lines[0].startswith("Where everyone stands")
+    assert lines[1] == "It is dusk. The weather: snowing hard."
+    assert "Day" not in text and "day" not in text
+
+
+def test_the_storyteller_is_told_the_time_of_day_and_the_weather_the_story_set(
+    tmp_path, story, cast
+):
+    session = make_session(tmp_path, story, cast, ["Snow fell on the yard."])
+    session.story.world_base.weather = "snowing hard"
+    list(session.send(turn("I look up.")))
+    sent = session.provider.requests[0].messages[-1].text
+    heading = "Where everyone stands (the map is exact: keep to it):"
+    assert heading in sent
+    after = sent.split(heading, 1)[1].splitlines()
+    # The clock begins at midnight on a story with no plot: the small hours.
+    assert after[1] == "It is the small hours. The weather: snowing hard."
+    assert "Day 1" not in sent and "day 1" not in sent

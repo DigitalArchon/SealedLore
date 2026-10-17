@@ -1345,3 +1345,33 @@ def test_a_broken_thing_is_drawn_broken(app):
     assert piece.pixelColor(18, 2).alpha() == 0  # the top corner gone
     assert piece.pixelColor(10, 25).lightness() < sprite.pixelColor(10, 25).lightness()
     assert piece.pixelColor(10, 25).alpha() == 255
+
+
+def test_weather_the_story_set_lies_over_an_outdoor_area_and_clear_weather_nothing(app, window):
+    from sealedlore.gui.area_view import weather_look
+
+    assert weather_look("snowing hard") == "snow"
+    assert weather_look("Sleet and wind") == "snow"
+    assert weather_look("a cold drizzle") == "rain"
+    assert weather_look("a thunderstorm breaking") == "rain"
+    assert weather_look("thick fog on the river") == "fog"
+    assert weather_look("a sandstorm from the east") == "dust"
+    assert weather_look("ash falling from the sky") == "dust"
+    assert weather_look("clear and cold") is None and weather_look("") is None
+    session, view = window.session, window.area_view
+    # Indoors (the house the story opens in): nothing drawn whatever the weather.
+    session.story.world_base.weather = "snowing hard"
+    window.refresh_area()
+    assert view.area.indoor and view.weather_shown() is None
+    # Out in the yard: snow over the area, over the tint and under the names.
+    stand(window, {"Serrik Vaun": ("farm", 30, 0)})
+    assert not view.area.indoor and view.weather_shown() == "snow"
+    assert view._weather.zValue() == 92
+    assert view._weather.rect().width() == view._tint.rect().width()
+    assert view._weather_timer.isActive() == view.isVisible()
+    view._weather_tick()
+    assert view._weather.phase > 0
+    # Clear weather: the layer goes and its timer with it.
+    session.story.world_base.weather = "clear and cold"
+    window.refresh_area()
+    assert view.weather_shown() is None and not view._weather_timer.isActive()

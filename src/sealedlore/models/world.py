@@ -98,6 +98,12 @@ class WorldDelta(BaseModel):
     removed: list[str] = Field(default_factory=list)
     renamed: dict[str, str] = Field(default_factory=dict)
     moved: list[str] = Field(default_factory=list)
+    # The weather, in a few words, when this passage (or the author's
+    # Direction) changed it: "snowing hard", "clear and cold". None: as it
+    # was. Folded onto `WorldMap.weather`; the play view draws it and the
+    # storyteller is told it beside the time of day (the author, Oct 17
+    # 2026: night and weather on the map).
+    weather: str | None = None
 
     def empty(self) -> bool:
         return not (
@@ -110,6 +116,7 @@ class WorldDelta(BaseModel):
             or self.removed
             or self.renamed
             or self.moved
+            or self.weather is not None
         )
 
 
@@ -130,6 +137,9 @@ class WorldMap(BaseModel):
     # An imported map's starting place: where the author's character is
     # before any passage says otherwise.
     start: str | None = None
+    # The weather as the story last stated it ("snowing hard"), or "" when
+    # nothing has said: the latest `WorldDelta.weather` on the path.
+    weather: str = ""
 
 
 # --- The map's art (engine/world_art.py), kept in world_art.json -------------

@@ -46,6 +46,7 @@ from sealedlore.engine.area import (
     front_of,
     inside_door,
     metres_per_tile,
+    now_words,
     path,
     point_tile,
     render_positions,
@@ -1320,6 +1321,9 @@ class AreaRuntime:
         art = self.map_art_copy()
         me = state.spots.get(held)
         area = self.area(me.area if me else None, world, art, things=state.things)
+        # The time of day (never the day) and the weather the story stated.
+        clock = self.map_clock()
+        now = now_words(clock[1] if clock else None, world.weather)
         action_line = ""
         action = state.action
         if turn is not None and action is not None and action.text in turn.content:
@@ -1336,6 +1340,7 @@ class AreaRuntime:
             place = world.places.get(world.where.get(held) or "")
             lines = [
                 self.texts["map.positions"],
+                *([now] if now else []),
                 f"- {held}: at {place.name} (just arrived; nothing of it is drawn yet)."
                 if place is not None
                 else f"- {held}: on the way.",
@@ -1356,6 +1361,7 @@ class AreaRuntime:
             texts=self.texts,
             elsewhere=self._on_other_levels(area, state.spots, held, world, art),
             level_names=self._level_names(area, world, art),
+            now=now,
         )
         if not text:
             return ""

@@ -652,7 +652,29 @@ def resolve_reply(
             thing.at = world.places[thing.at].inside
         thing.state = _text(entry.get("state")) or thing.state
         delta.things = [t for t in delta.things if t.id != thing.id] + [thing]
+    weather = _weather_entry(reply)
+    if weather is not None:
+        words = _text(weather.get("now"))
+        if not words:
+            pass  # null, or nothing said: the weather is as it was
+        elif quoted(weather) is None:
+            refused.append(f"weather {words}: no quote found")
+        else:
+            delta.weather = words
     return delta, refused
+
+
+def _weather_entry(reply: dict[str, Any]) -> dict[str, Any] | None:
+    """The reply's weather as {"now", "quote"}: the object asked for, or a
+    string with "weather_quote" beside it (as the minutes are given), or
+    None when there is none. The author's Direction states it ("It begins
+    to snow") and the read's quote is found in the turn as in the passage."""
+    value = reply.get("weather")
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        return {"now": value, "quote": reply.get("weather_quote")}
+    return None
 
 
 def _link_mover(
@@ -815,6 +837,8 @@ def describe_delta(world: WorldMap, delta: WorldDelta) -> str:
     changed = [t.name for t in delta.things]
     if changed:
         parts.append("things: " + ", ".join(changed))
+    if delta.weather is not None and delta.weather != world.weather:
+        parts.append(f"weather now {delta.weather}")
     if delta.conflicts:
         parts.append(f"{len(delta.conflicts)} distance kept against the passage")
     return "; ".join(parts) if parts else "no change"
@@ -909,6 +933,8 @@ def applied(
     for thing in delta.things:
         out.things[thing.id] = thing.model_copy(deep=True)
     out.conflicts.extend(delta.conflicts)
+    if delta.weather is not None:
+        out.weather = delta.weather
     for pid in delta.removed:
         _remove(out, pid)
     seen = list(delta.seen)

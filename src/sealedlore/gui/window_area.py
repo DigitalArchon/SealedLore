@@ -164,6 +164,7 @@ class AreaWindow:
             minute=clock[1] if clock else None,
             failed=failed,
             places=places,
+            weather=session.world().weather,
         )
         self.area_view.set_edge(session.edge_here())
         self.area_view.set_carrying(session.carried_things(), session.people_in_reach())

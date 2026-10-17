@@ -710,3 +710,39 @@ def test_what_names_a_place_no_longer_on_the_map_is_pruned():
     assert after.things["axe"].at is None and after.places["shed"].inside is None
     assert ghost not in after.seen and ghost not in after.visited.get("Jane", [])
     assert render_map_context(after, "Jane") == ""  # unplaced, not crashed
+
+
+def test_the_weather_is_set_by_a_read_with_its_quote_and_the_author_s_own_words_count():
+    """The weather (the author, Oct 17 2026: night and weather on the map)
+    is asked of the read only when the passage states a change, held to its
+    quote like every field, folded onto the map, and named in the notice.
+    A Direction's own words are in the read's source, so they count."""
+    world = farm_and_town()
+    delta, refused = resolve(
+        world,
+        {"weather": {"now": "snowing hard", "quote": "a grey crease between white fields"}},
+    )
+    assert refused == [] and delta.weather == "snowing hard" and not delta.empty()
+    after = applied(world, delta)
+    assert after.weather == "snowing hard"
+    assert describe_delta(world, delta) == "weather now snowing hard"
+    # A later passage that says nothing of it leaves it as it was.
+    quiet, _ = resolve(after, {"weather": None})
+    assert quiet.weather is None and applied(after, quiet).weather == "snowing hard"
+    # Without a quote found, nothing changes and the refusal says why.
+    none, refused = resolve(world, {"weather": {"now": "rain"}})
+    assert none.weather is None and none.empty()
+    assert refused == ["weather rain: no quote found"]
+    bad, refused = resolve(world, {"weather": {"now": "rain", "quote": "a monsoon broke"}})
+    assert bad.weather is None and refused == ["weather rain: no quote found"]
+    # The author's Direction states it: the quote is found in the turn.
+    source = "It begins to snow.\n\nThe passage says nothing of the sky."
+    told, refused = resolve_reply(
+        world,
+        {"weather": "snow beginning", "weather_quote": "It begins to snow"},
+        source=source,
+        people=PEOPLE,
+        author_says=True,
+    )
+    assert refused == [] and told.weather == "snow beginning"
+    assert describe_delta(after, told) == "weather now snow beginning"

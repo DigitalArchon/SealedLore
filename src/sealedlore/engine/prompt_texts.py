@@ -1909,12 +1909,17 @@ object and nothing else:
   "links": [{"from": "...", "to": "...", "direction": "...",
              "distance": "...", "quote": "..."}],
   "where": [{"who": "...", "place": "...", "quote": "..."}],
-  "things": [{"name": "...", "at": "...", "state": "...", "quote": "..."}]
+  "things": [{"name": "...", "at": "...", "state": "...", "quote": "..."}],
+  "weather": null
 }
 
 Every entry needs "quote": one sentence from the author's turn or the passage
 that shows it, copied exactly. An entry without one that can be found is
 thrown away.
+
+"weather" is {"now": "a few words", "quote": "..."} only when the turn or the
+passage states that the weather has changed ("It begins to snow"); otherwise
+null.
 
 Places
 
