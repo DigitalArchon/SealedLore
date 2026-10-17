@@ -91,7 +91,7 @@ def test_an_entry_stands_only_on_a_quote_found_in_the_turn_or_passage():
     assert len(refused) == 2
 
 
-def test_one_person_one_name_and_a_description_is_nobody():
+def test_one_person_one_name_and_a_description_is_an_unknown():
     world = farm_and_town()
     delta, refused = resolve(
         world,
@@ -103,8 +103,12 @@ def test_one_person_one_name_and_a_description_is_nobody():
             ]
         },
     )
-    assert delta.where == {"Marcus Webb": world_place(world, "Hellsville")}
-    assert len(refused) == 2
+    # A woman placed but unnamed is Unknown 1 until named (the author, Oct 17
+    # 2026); the player's character is nobody the map can place.
+    hellsville = world_place(world, "Hellsville")
+    assert delta.where == {"Marcus Webb": hellsville, "Unknown 1": hellsville}
+    assert delta.unknowns == {"Unknown 1": "the woman"}
+    assert len(refused) == 1
 
 
 def world_place(world: WorldMap, name: str) -> str:
@@ -301,7 +305,8 @@ def test_someone_in_the_story_is_a_name_whatever_it_looks_like():
         source=SOURCE,
         people=[*PEOPLE, king],
     )
-    assert refused == ["where The woman: not a name"]
+    # A description is not a name: placed as an unknown, never as "The woman".
+    assert refused == [] and _delta.unknowns == {"Unknown 1": "the woman"}
 
 
 def test_things_change_hands_and_keep_one_entry():
@@ -347,7 +352,7 @@ def test_a_name_in_a_script_with_no_case_is_a_name():
         },
         source,
     )
-    assert "田中" in delta.where and refused == ["where the woman: not a name"]
+    assert "田中" in delta.where and refused == [] and "Unknown 1" in delta.where
 
 
 def test_the_map_here_names_the_author_s_character_or_says_so():

@@ -611,6 +611,7 @@ def resolve_reply(
             delta.places = [p for p in delta.places if p.id != mover.id] + [mover]
         delta.links = [k for k in delta.links if {k.a, k.b} != {a, b}]
         delta.links.append(WorldLink(a=a, b=b, direction=direction, distance=distance))
+    named_people = [n for n in world.where if not is_unknown(n)]
     for entry in _entries(reply, "where"):
         who = _text(entry.get("who"))
         # A name starts with a capital; a description ("the woman") doesn't.
@@ -618,7 +619,14 @@ def resolve_reply(
         # Someone in the story is a name whatever it looks like: "The Hollow
         # King" was refused as a description (the review, Oct 15 2026).
         known = any(same_person(who, c) for c in people) if who else False
-        if not who or (not known and (_NOT_A_NAME.match(who) or who[0].islower())):
+        label = None if known or not who else unknown_for(who, world, delta)
+        described = (
+            bool(who)
+            and not known
+            and label is None
+            and (_NOT_A_NAME.match(who) is not None or who[0].islower() or is_unknown(who))
+        )
+        if not who or (described and (is_unknown(who) or not _describes_one(who))):
             refused.append(f"where {who or '(nobody)'}: not a name")
             continue
         if quoted(entry) is None:
@@ -631,8 +639,35 @@ def resolve_reply(
         if place in delta.removed:
             refused.append(f"where {who} @ {_text(entry.get('place'))}: taken off the map")
             continue
-        canonical = person_name(who, people, [*world.where, *delta.where])
+        if described:
+            # Placed but not named: shown as Unknown 1, 2… until a passage
+            # names them (the author, Oct 17 2026), the description kept so
+            # the next read knows them.
+            label = next_unknown(world, delta)
+            delta.unknowns[label] = who[0].lower() + who[1:] if _ARTICLE.match(who) else who
+        if label is not None:
+            delta.where[label] = place
+            continue
+        canonical = person_name(
+            who, people, [*named_people, *(n for n in delta.where if not is_unknown(n))]
+        )
         delta.where[canonical] = place
+    for entry in _entries(reply, "named"):
+        label = unknown_for(_text(entry.get("who")), world, delta)
+        name = _text(entry.get("name"))
+        if label is None or not name or _NOT_A_NAME.match(name) or name[0].islower():
+            refused.append(
+                f"named {_text(entry.get('who')) or '(nobody)'}: no such unknown or name"
+            )
+            continue
+        if quoted(entry) is None:
+            refused.append(f"named {label} {name}: no quote found")
+            continue
+        canonical = person_name(name, people, named_people)
+        delta.named[label] = canonical
+        delta.unknowns.pop(label, None)
+        if label in delta.where:
+            delta.where.setdefault(canonical, delta.where.pop(label))
     for entry in _entries(reply, "things"):
         name = _text(entry.get("name"))
         if not name or quoted(entry) is None:
@@ -788,6 +823,59 @@ def place_name_any(world: WorldMap, delta: WorldDelta, place_id: str) -> str:
     return place_name(world, place_id)
 
 
+# Someone placed but not yet named (the author, Oct 17 2026): "Unknown 1".
+UNKNOWN = "Unknown"
+_UNKNOWN_LABEL = re.compile(r"^unknown\s*(\d+)$", re.IGNORECASE)
+# Descriptions that are no one person: never an unknown.
+_NOT_ONE = re.compile(
+    r"^(everyone|everybody|nobody|no one|people|the crowd|a crowd|the others|others|they|them|"
+    r"the player|player|the character|character|the author|someone|somebody)\b",
+    re.IGNORECASE,
+)
+_ARTICLE = re.compile(r"^(the|a|an)\s+", re.IGNORECASE)
+
+
+def is_unknown(name: str) -> bool:
+    return _UNKNOWN_LABEL.match(name.strip()) is not None
+
+
+def _describes_one(text: str) -> bool:
+    return _NOT_ONE.match(text.strip()) is None
+
+
+def _plain(text: str) -> str:
+    return _ARTICLE.sub("", " ".join(text.lower().split()))
+
+
+def unknown_for(who: str, world: WorldMap, delta: WorldDelta | None = None) -> str | None:
+    """The unknown `who` is: their label ("Unknown 2", any spacing or case)
+    or their description as the map has it ("the girl" for "a girl")."""
+    known = {**world.unknowns, **(delta.unknowns if delta is not None else {})}
+    found = _UNKNOWN_LABEL.match(who.strip())
+    if found is not None:
+        label = f"{UNKNOWN} {int(found.group(1))}"
+        return label if label in known else None
+    wanted = _plain(who)
+    return next((label for label, said in known.items() if _plain(said) == wanted), None)
+
+
+def next_unknown(world: WorldMap, delta: WorldDelta | None = None) -> str:
+    """The next label: one past every label the story has given, named or not."""
+    used = [world.unknowns_made, *(delta.unknowns if delta is not None else {})]
+    numbers = [u if isinstance(u, int) else int(u.split()[-1]) for u in used]
+    numbers += [int(label.split()[-1]) for label in world.unknowns]
+    return f"{UNKNOWN} {max(numbers, default=0) + 1}"
+
+
+def unknown_words(text: str, world: WorldMap) -> str:
+    """`text` with each unknown's label as their description, for the
+    storyteller and the turns a menu writes ("the teenage girl, not named
+    yet" rather than "Unknown 1")."""
+    for label in sorted(world.unknowns, key=len, reverse=True):
+        text = re.sub(rf"\b{re.escape(label)}\b", f"{world.unknowns[label]} (not named yet)", text)
+    return text
+
+
 def person_name(name: str, people: Sequence[Character], placed: Iterable[str]) -> str:
     """One person, one name: someone in the story it is a form of, else
     someone already on the map, else as written."""
@@ -925,6 +1013,18 @@ def applied(
     for link in delta.links:
         out.links = [k for k in out.links if {k.a, k.b} != {link.a, link.b}]
         out.links.append(link.model_copy())
+    for label, description in delta.unknowns.items():
+        out.unknowns[label] = description
+        out.unknowns_made = max(out.unknowns_made, int(label.split()[-1]))
+    for label, name in delta.named.items():
+        # Named: the label's place and travels are the name's from now on.
+        out.unknowns_made = max(out.unknowns_made, int(label.split()[-1]))
+        out.unknowns.pop(label, None)
+        if label in out.where:
+            out.where.setdefault(name, out.where.pop(label))
+        been = out.visited.pop(label, [])
+        mine = out.visited.setdefault(name, [])
+        mine.extend(p for p in been if p not in mine)
     for who, place_id in delta.where.items():
         out.where[who] = place_id
         seen = out.visited.setdefault(who, [])

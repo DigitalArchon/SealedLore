@@ -33,6 +33,7 @@ from sealedlore.engine.world import (
     place_delta,
     render_map_context,
     resolve_reply,
+    unknown_words,
     within_ids,
     world_at,
 )
@@ -92,6 +93,13 @@ class WorldRuntime:
             return [Character(id="", name=self.chat_name)]
         return [*self.visible_cast(path), *self.visible_supporting()]
 
+    def read_unknowns(self, world: WorldMap) -> str:
+        """The map read told that an unnamed person may be placed by a
+        description, and which people the map has not named yet."""
+        people = ", ".join(f"{label} ({said})" for label, said in world.unknowns.items())
+        listed = self.texts.fill("map_read.unknowns.listed", people=people) if people else ""
+        return self.texts.fill("map_read.unknowns", listed=listed)
+
     @property
     def map_model(self) -> str:
         """The model that reads the map: its own, else the scene model."""
@@ -142,7 +150,8 @@ class WorldRuntime:
             self.positions_context(path, held_id, turn_node_id=turn_node_id),
             self.marks_context(path, turn_node_id=turn_node_id),
         ]
-        return "\n\n".join(p for p in parts if p)
+        # Someone not named yet by their description, never "Unknown 1".
+        return unknown_words("\n\n".join(p for p in parts if p), shown)
 
     def _prepare_world_read(self) -> _WorldRead | None:
         """The map read's request for the latest passage, logged; None when
@@ -198,6 +207,7 @@ class WorldRuntime:
                         self.read_spots(path[:-1], held),
                         self.read_minutes(author, opening=is_opening(path[:-1])),
                         self.read_marks(author),
+                        self.read_unknowns(before),
                         direction,
                     )
                     if n

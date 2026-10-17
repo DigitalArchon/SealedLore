@@ -1025,6 +1025,10 @@ class AreaRuntime:
         live state so the storyteller is told what it means when it is sent
         as written (or added to). `to`: who a Give hands the thing to."""
         state = self.area_state()
+        # Someone not named yet goes into the turn as the passage described
+        # them ("I walk over to the teenage girl"), not by their label.
+        unknowns = self.world().unknowns
+        target, to = unknowns.get(target, target), unknowns.get(to, to)
         if verb in ("use", "take", "destroy", "eat", *CARRY_VERBS):
             target = bare(target)  # "the stove", not "the a stove"
         if verb == "give":
@@ -1229,6 +1233,10 @@ class AreaRuntime:
         # country has no word in the map's `where`, so a stale place there
         # must not pull them back).
         moved = held is not None and held in (node.meta.world.where if node.meta.world else {})
+        # Someone named by this passage stands where they stood unnamed.
+        for label, name in (node.meta.world.named if node.meta.world else {}).items():
+            if label in state.spots:
+                state.spots.setdefault(name, state.spots.pop(label))
         state = self.settle(state, world, art, walked=not moved)
         me = state.spots.get(held or "")
         at = reply.get("at") if isinstance(reply.get("at"), dict) else {}

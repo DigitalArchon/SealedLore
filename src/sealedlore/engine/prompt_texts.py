@@ -4403,6 +4403,32 @@ _text(
 )
 
 _text(
+    "map_read.unknowns",
+    MAP,
+    "Map read: people not named yet",
+    "Added to every map read's request: someone the passage places but doesn't name may be "
+    "placed by a description, shown on the map as Unknown 1, 2… until named (the author, "
+    "Oct 17 2026: a girl came down the farmhouse stairs, was never named, and so was never "
+    "on the map, with nobody to talk to). Not measured.",
+    'Someone the passage places but doesn\'t name may still go under "where": give a short '
+    'description of them as "who" ("the teenage girl", "a man in a red coat"); the map '
+    "shows them as Unknown 1, Unknown 2… until a passage names them.{listed}",
+    (("listed", "map_read.unknowns.listed when the map has people not named yet"),),
+)
+
+_text(
+    "map_read.unknowns.listed",
+    MAP,
+    "Map read: the people not named yet, listed",
+    "Follows map_read.unknowns when the map already has people not named yet: their labels "
+    "and descriptions, and the field that names one.",
+    ' People on the map not named yet (use the label as "who" for them): {people}. When the '
+    'passage tells one of them by name, add "named": [{"who": "<the label>", "name": "<their '
+    'name>", "quote": "<the words that name them>"}].',
+    (("people", "each label with its description: Unknown 1 (the teenage girl), …"),),
+)
+
+_text(
     "map_read.starts_at",
     MAP,
     "Map-first: the time the story opens at",

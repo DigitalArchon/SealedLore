@@ -104,6 +104,13 @@ class WorldDelta(BaseModel):
     # storyteller is told it beside the time of day (the author, Oct 17
     # 2026: night and weather on the map).
     weather: str | None = None
+    # Someone the passage placed but didn't name, by the label the map gives
+    # them ("Unknown 1") with the passage's description of them ("the
+    # teenage girl"); and the labels a passage named ({"Unknown 1": "Elena
+    # Ruiz"}): from then on they are that person (the author, Oct 17 2026:
+    # unnamed characters shown as Unknown 1, 2, 3 until they are named).
+    unknowns: dict[str, str] = Field(default_factory=dict)
+    named: dict[str, str] = Field(default_factory=dict)
 
     def empty(self) -> bool:
         return not (
@@ -117,6 +124,8 @@ class WorldDelta(BaseModel):
             or self.renamed
             or self.moved
             or self.weather is not None
+            or self.unknowns
+            or self.named
         )
 
 
@@ -140,6 +149,10 @@ class WorldMap(BaseModel):
     # The weather as the story last stated it ("snowing hard"), or "" when
     # nothing has said: the latest `WorldDelta.weather` on the path.
     weather: str = ""
+    # People placed but not yet named: label ("Unknown 1") to description,
+    # and the highest number given so far, so a label is never given twice.
+    unknowns: dict[str, str] = Field(default_factory=dict)
+    unknowns_made: int = 0
 
 
 # --- The map's art (engine/world_art.py), kept in world_art.json -------------
