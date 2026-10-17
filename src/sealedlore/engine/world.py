@@ -25,7 +25,7 @@ from typing import Any
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.scene_state import same_person
-from sealedlore.engine.takeable import FIXED_MARK, fixed_thing
+from sealedlore.engine.takeable import FIXED_MARK, can_be_taken, fixed_thing, is_vehicle, same_thing
 from sealedlore.engine.validators import locate_quote
 from sealedlore.engine.world_layout import (
     bearing,
@@ -82,8 +82,15 @@ def find_place(world: WorldMap, name: str | None, pending: Sequence[WorldPlace] 
 
 
 def _find_thing(world: WorldMap, name: str) -> WorldThing | None:
+    """The map's thing of this name; else the one thing whose name it
+    shortens or lengthens (`same_thing`: "heavy iron anvil" for the "heavy
+    iron anvil block on a timber stand"), when only one does."""
     wanted = key(name)
-    return next((t for t in world.things.values() if key(t.name) == wanted), None)
+    found = next((t for t in world.things.values() if key(t.name) == wanted), None)
+    if found is not None or not name:
+        return found
+    like = [t for t in world.things.values() if same_thing(name, t.name)]
+    return like[0] if len(like) == 1 else None
 
 
 # --- Rendering, for the read -------------------------------------------------
@@ -776,11 +783,23 @@ def resolve_reply(
         thing = existing.model_copy(deep=True) if existing is not None else WorldThing(name=name)
         if at.lower().startswith("carried by"):
             holder = at[len("carried by") :].strip()
-            thing.carried_by = person_name(holder, people, [*world.where, *delta.where])
-            thing.at = None
+            holder = person_name(holder, people, [*world.where, *delta.where])
+            if can_be_taken(thing.name) or is_vehicle(thing.name):
+                thing.carried_by = holder
+                thing.at = None
+            else:
+                # Too heavy to carry off (an anvil, a boulder): dragged along,
+                # it is where they are (the replay, Oct 17 2026: an anvil
+                # "carried by" its dragger was taken into her hands).
+                thing.at = delta.where.get(holder) or world.where.get(holder) or thing.at
+                thing.carried_by = None
         elif at:
-            thing.at = find_place(world, at, delta.places)
-            thing.carried_by = None
+            found = find_place(world, at, delta.places)
+            if found is not None or existing is None:
+                thing.at = found
+                thing.carried_by = None
+            # A place the map hasn't ("the anvil on its stump"): a known thing
+            # stays where it was (it was taken off the map, the replay).
         if thing.at in delta.removed:  # as the fold leaves it: where the place was
             thing.at = world.places[thing.at].inside
         held = (

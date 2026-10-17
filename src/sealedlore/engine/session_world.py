@@ -216,6 +216,7 @@ class WorldRuntime:
                     for n in (
                         note,
                         self.read_spots(path[:-1], held),
+                        self.read_things_here(path[:-1], held),
                         self.read_minutes(author, opening=is_opening(path[:-1])),
                         self.read_marks(author),
                         self.read_unknowns(before),
@@ -277,10 +278,19 @@ class WorldRuntime:
         path = self._path_to(node.id)
         author = path[-2] if len(path) > 1 and path[-2].kind == "user" else None
         people = self.map_people(path)
+        held_name = self.map_held_name(node.meta.controlled_character_id)
+        # Map-first: what the read says of the play view's own things (a
+        # plan's objects, the furniture) is kept on the area, not added to
+        # the map's list as something new.
+        whole_reply = reply
+        reply, placements = self.placement_entries(reply, path[:-1], pending.before, held_name)
         # The author's Direction or Narration may change what is on the map
         # already (remove, rename, resize, move, put inside); a known place
         # it puts at a spot the author marked goes exactly there.
         says = author is not None and self._author_says(author)
+        # A fixed thing moves on the author's word alone (the author, Oct 17
+        # 2026): Direction, Narration or Fiat.
+        moves_fixed = says or (author is not None and self._under_fiat(author))
         delta, refused = resolve_reply(
             pending.before,
             reply,
@@ -288,11 +298,8 @@ class WorldRuntime:
             people=people,
             author_says=says,
             marked=self._marked_places(reply, author),  # refused, and logged, in character
-            # A thing that can't be taken moves on the author's word alone
-            # (the author, Oct 17 2026): Direction, Narration or Fiat.
-            moves_fixed=says or (author is not None and self._under_fiat(author)),
+            moves_fixed=moves_fixed,
         )
-        held_name = self.map_held_name(node.meta.controlled_character_id)
         # Map-first: what the author marked is put exactly there, and what
         # has nothing else to go on goes beside where they stand (the turn's
         # character, not whoever is held now).
@@ -307,13 +314,20 @@ class WorldRuntime:
         place_delta(whole if whole is not None else pending.before, delta, held_name, near)
         # Someone sent to a marked spot, once every new place has its spot.
         self.apply_marks_at(pending.before, delta, reply, author)
-        if refused:
-            self._log("world_refused", {"request_log_ref": log_ref, "refused": refused})
         node.meta.world = None if delta.empty() else delta
         if says:
             self._redraw_resized(pending.before, delta)
-        # Map-first: everyone settled on the map the passage left.
-        self.area_after_read(node, reply, pending.source)
+        # Map-first: everyone settled on the map the passage left, and the
+        # things on the play view where the passage left them.
+        refused += self.area_after_read(
+            node,
+            whole_reply,
+            pending.source,
+            placements=placements,
+            moves_fixed=moves_fixed,
+        )
+        if refused:
+            self._log("world_refused", {"request_log_ref": log_ref, "refused": refused})
         self.save()
         # Whatever the map still needs drawn goes to the art model now, in
         # the background (session_world_art.py): the passage never waits.

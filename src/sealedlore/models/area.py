@@ -23,11 +23,13 @@ MapVerb = Literal[
     "use", "take", "destroy", "eat", "talk", "look", "attack", "travel", "drop", "give"
 ]
 Density = Literal["sparse", "normal", "full"]
-# What the menu's choice did to a thing (engine/session_area.py `stamp_turn`,
-# the author's ruling: "If something is taken, it should be recorded as with
-# the character who took it. Something broken should visibly be broken."):
-# taken = carried by `by`; broken = still there, broken; gone = eaten or
-# consumed; dropped = put down again at `spot`.
+# What became of a thing (engine/session_area.py: a menu choice the author
+# sent, or what the map read found the passage did; the author's rulings:
+# "If something is taken, it should be recorded as with the character who
+# took it. Something broken should visibly be broken.", and things the story
+# adds show on the play view): taken = carried by `by`; broken = broken,
+# where it stood or at `spot`; gone = eaten, used up or destroyed outright;
+# dropped = lies at `spot` (put down, moved there, or put there by the story).
 ThingState = Literal["taken", "broken", "gone", "dropped"]
 
 THING_VERBS: tuple[str, ...] = ("use", "take", "destroy", "eat")
@@ -76,18 +78,23 @@ class MapAction(BaseModel):
 
 
 class ThingRecord(BaseModel):
-    """What became of a thing the area had on its floor, by the menu choice
-    the author sent (code decides, no model call): kept on each turn's
-    snapshot under the thing's placement id, so the area shows it (gone from
-    the floor, broken, lying where it was dropped) and the storyteller is
-    told who carries what."""
+    """What became of a thing on the play view, kept on each snapshot under
+    its placement id (a plan's object, a piece of furniture, or one of the
+    map's things by its id): the area shows it (gone from the floor, broken,
+    lying where it was put) and the storyteller is told who carries what.
+    Written by the menu's choices (code decides, no model call) and by what
+    the map read found the passage did."""
 
     state: ThingState
     name: str
     # Taken: who carries it (as the map names them).
     by: str = ""
-    # Dropped: the tile it lies on.
+    # Dropped (and a broken thing that was moved): the tile it lies on, its
+    # top-left corner when it is bigger than a tile.
     spot: Spot | None = None
+    # Its footprint in tiles: a table moved is as big where it stands now.
+    w: int = 1
+    h: int = 1
 
 
 class Mark(BaseModel):

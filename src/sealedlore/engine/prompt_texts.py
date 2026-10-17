@@ -4431,6 +4431,39 @@ passage puts at one of those spots; give their "where" too, with its quote.""",
     (("spots", "the spots, comma-separated"),),
 )
 
+# The author, Oct 17 2026: things the story adds must show on the play view,
+# and the furniture the program lays is no different to any other thing, so
+# it can be moved. The read's system prompt keeps furniture off its list (as
+# measured); in a story played on the map it is told, in the user message
+# only, the things on the play view around the author's character and how to
+# say what the passage did to one, or where something new lies. Replayed on
+# DeepSeek V4.1 Flash over 322 passages two blind judges had labelled (the
+# fixed-things probes), two takes an arm: the map followed 66 and 62 of ~160
+# moves without it, 112 and 110 with it (the second take held out from the
+# code's tuning); moved something that hadn't moved 3-4 times in 100
+# without, 1-2 with; people placed no differently than between two takes of
+# one arm. SealedLoreDocs design/map.md, "Things on the play view".
+_text(
+    "map_read.things_here",
+    MAP,
+    "Map-first: the read, the things on the play view",
+    "Added to the map read's request in a story played on the map: the things on the play "
+    "view around the author's character, furniture included, so the read can say when the "
+    "passage moves, takes, breaks or uses one up, and where something new is put down.",
+    """THINGS ON THE PLAY VIEW AROUND THE AUTHOR'S CHARACTER, the nearest first:
+{things}
+
+In this story these are things too, furniture included. When the passage moves
+one of them (shoved, dragged, rolled, carried off), takes it, hands it over,
+breaks it or uses it up, list it under "things" by its name as written here,
+with its quote, and say what became of it: "spot" where it now stands (one of
+the spots near the author's character), or "at": "carried by <name>", or
+"state": "broken" or "gone". Something the passage brings in or puts down near
+the author's character is listed as usual, with "spot" when the passage says
+where. Leave out any of these the passage only names, or uses where it stands.""",
+    (("things", "the things, nearest first, separated by semicolons"),),
+)
+
 # A building's door, porch or yard is "at the building" (the measured rule
 # in `map_read.system`), and the play view stood whoever was there inside it:
 # live (Oct 17 2026) John knocking on the farmhouse door stood in its

@@ -25,12 +25,13 @@ import math
 import re
 import threading
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from sealedlore.engine.area import (
     WALK_M_PER_S,
     Area,
+    LaidThing,
     _front,
     anchor_of,
     anchor_tile,
@@ -45,13 +46,17 @@ from sealedlore.engine.area import (
     exit_side,
     front_of,
     inside_door,
+    lay_things,
     metres_per_tile,
     now_words,
     path,
     point_tile,
     render_positions,
+    room_words,
+    spot_in_words,
     stairs_landing,
     stand_near,
+    thing_tile,
     tile_point,
     walk_metres,
     walk_seconds,
@@ -71,7 +76,7 @@ from sealedlore.engine.marks import (
     place_at,
 )
 from sealedlore.engine.session_world_art import _today
-from sealedlore.engine.takeable import fixed_thing
+from sealedlore.engine.takeable import fixed_thing, same_thing, thing_class
 from sealedlore.engine.tile_draw import (
     DESIGNER_MODEL,
     RUN_LIMIT,
@@ -101,7 +106,14 @@ from sealedlore.engine.tile_sets import (
     slug,
 )
 from sealedlore.engine.validators import locate_quote
-from sealedlore.engine.world import _NOTHING_SAID, _find_thing, applied, key, unknown_for
+from sealedlore.engine.world import (
+    _NOTHING_SAID,
+    _find_thing,
+    applied,
+    find_place,
+    key,
+    unknown_for,
+)
 from sealedlore.engine.world_art import is_window, parse_window, patch_at, patch_under
 from sealedlore.engine.world_layout import (
     CHILD_SHARE,
@@ -250,6 +262,35 @@ ASSET_LABELS = {
 # How far along an outdoor area's edge a journey looks for the road it
 # comes in by, in tiles.
 ARRIVAL_ROAD_REACH = 16
+# What a thing's state says became of it (the map's own things, and what the
+# read found the passage did to one on the play view): used up or gone
+# (off the floor), or broken (still there, drawn broken).
+GONE = re.compile(
+    r"\b(?:gone|eaten|drunk|used up|consumed|burnt up|burned up|vanished|lost|"
+    r"taken away|removed)\b"
+)
+BROKEN = re.compile(
+    r"\b(?:broken|smashed|shattered|wrecked|destroyed|ruined|cracked|splintered|"
+    r"snapped|collapsed|burnt|burned)\b"
+)
+# What says a thing stayed where it was, in the read's state or its quote
+# ("bolted to the bench, did not move"): the read listed such things with a
+# spot or a place-word, and the code moved them (the replay, Oct 17 2026).
+STAYED = re.compile(
+    r"\b(?:did not|didn't|does not|doesn't|would not|wouldn't|won't|will not|could not|"
+    r"couldn't|can't|cannot)\s+(?:move|budge|shift|give|slide|stir|go)\b|"
+    r"\b(?:unmoved|immovable|unmovable|motionless)\b|\bnot (?:moved|an inch|a hair)\b|"
+    r"\b(?:bolted|riveted|nailed|fixed|screwed) (?:to|down|through|fast|into|onto)\b|"
+    r"\b(?:held|holding|holds|stays?|stayed|stuck|wedged) (?:fast|put)\b"
+)
+# A thing is moved on the map only when it went this far: an inch or a
+# scrape is not a move (the judges' "budged").
+MOVE_MIN_M = 1.5
+# The things laid on built areas, kept while what they are laid from is the
+# same (`_laid_things`).
+LAID_KEPT = 32
+# The play view's things the map read is told of, the nearest first.
+THINGS_TOLD = 30
 
 
 class AreaRuntime:
@@ -470,11 +511,57 @@ class AreaRuntime:
         leaf (kept while nothing it is built from changes), with what became
         of its things laid over it (`apply_things`: `things`, the records of
         the state in hand, else those live or at the leaf)."""
+        world = world if world is not None else self.world()
+        art = art if art is not None else self.map_art_copy()
         built = self._built_area(area_id, world, art)
         if built is None:
             return None
         records = things if things is not None else self._things_now()
-        return apply_things(built, records) if records else built
+        laid = lay_things(built, self._laid_things(built, world, art, records))
+        return apply_things(laid, records) if records else laid
+
+    def _laid_things(
+        self, area: Area, world: WorldMap, art: WorldArt, records: Mapping[str, ThingRecord]
+    ) -> list[LaidThing]:
+        """The map's things in this area that no record puts anywhere (what a
+        read or a plot file put at a place): each laid near where its place
+        is in the area (a building's door, a room's middle, a label), else
+        near the way in, on a tile of its own (the author, Oct 17 2026:
+        things the story adds must show on the play view; they were on the
+        map's list only, and never drawn). Kept while the same."""
+        found = []
+        for t in sorted(world.things.values(), key=lambda t: t.id):
+            if t.carried_by or not t.at or GONE.search(t.state.lower()):
+                continue
+            record = records.get(t.id)
+            if record is not None and (record.state in ("taken", "gone") or record.spot):
+                continue  # where its record says (`apply_things`)
+            found.append(t)
+        if not found:
+            return []
+        cache_key = (
+            area.id,
+            id(area),
+            tuple((t.id, t.name, t.at, t.state) for t in found),
+        )
+        cache = self.__dict__.setdefault("_laid_cache", {})
+        kept = cache.get(cache_key)
+        if kept is not None:
+            return kept
+        out: list[LaidThing] = []
+        taken: set[tuple[int, int]] = set()
+        for t in found:
+            if area_of(world, art, t.at) != area.id or _twin(area, t.name, world) is not None:
+                continue  # elsewhere, or drawn here already (a plan's object of its name)
+            near = anchor_of(area, world, t.at) or self._way_in(area)
+            x, y = thing_tile(area, near, taken)
+            taken.add((x, y))
+            broken = BROKEN.search(t.state.lower()) is not None
+            out.append(LaidThing(id=t.id, name=t.name, x=x, y=y, broken=broken))
+        if len(cache) > LAID_KEPT:
+            cache.clear()
+        cache[cache_key] = out
+        return out
 
     def _things_now(self) -> Mapping[str, ThingRecord]:
         """The records live, else at the leaf (never through `settle`, which
@@ -1363,13 +1450,25 @@ class AreaRuntime:
         chronicle.elapsed += minutes
         return minutes
 
-    def area_after_read(self, node: Node, reply: dict[str, Any], source: str) -> None:
+    def area_after_read(
+        self,
+        node: Node,
+        reply: dict[str, Any],
+        source: str,
+        *,
+        placements: Sequence[tuple[dict[str, Any], str]] = (),
+        moves_fixed: bool = False,
+    ) -> list[str]:
         """After the map read: everyone settled on the map the passage left,
         anyone it put at one of the spots near the author's character stood
-        there, and the clock moved on by the time the passage told (without
-        a plot; with one, the plot's clock read keeps time)."""
+        there, what the passage did to the things on the play view kept
+        (`_things_after_read`: `placements` are the read's entries for
+        things the play view has that the map's list hasn't, each with its
+        placement id), and the clock moved on by the time the passage told
+        (without a plot; with one, the plot's clock read keeps time). What
+        it refused, for the log."""
         if not self.map_first:
-            return
+            return []
         path = self._path_to(node.id)
         before = self._snapshot_on(path[:-1])
         state = before.model_copy(deep=True) if before is not None else AreaState()
@@ -1390,6 +1489,21 @@ class AreaRuntime:
                 state.spots.setdefault(name, state.spots.pop(label))
         state = self.settle(state, world, art, walked=not moved)
         me = state.spots.get(held or "")
+        # The things first, so someone the read stands "at the bench" stands
+        # where the bench is now.
+        refused = self._things_after_read(
+            state,
+            node,
+            reply,
+            source,
+            world=world,
+            before=self._world_on(path[:-1]),
+            art=art,
+            held=held,
+            placements=placements,
+            moves_fixed=moves_fixed,
+            marks=marks,
+        )
         at = reply.get("at") if isinstance(reply.get("at"), dict) else {}
         by_point = {(m.x, m.y): m for m in marks}
         # Only someone the read also placed (with a quote): `at` alone moved
@@ -1447,6 +1561,346 @@ class AreaRuntime:
             ):
                 state.seconds += int(min(minutes, MAX_READ_MINUTES)) * 60
         node.meta.area = state
+        return refused
+
+    # --- what the passage did to the things on the play view ----------------------
+
+    def _things_after_read(
+        self,
+        state: AreaState,
+        node: Node,
+        reply: dict[str, Any],
+        source: str,
+        *,
+        world: WorldMap,
+        before: WorldMap,
+        art: WorldArt,
+        held: str | None,
+        placements: Sequence[tuple[dict[str, Any], str]],
+        moves_fixed: bool,
+        marks: Sequence[Mark] = (),
+    ) -> list[str]:
+        """The records kept in step with what the passage did (the author,
+        Oct 17 2026: things the story adds must show on the play view, and
+        furniture the program laid is no different to any other thing): the
+        map's things it took, used up, broke, brought or moved, and the
+        play view's own things the read named (`placements`). A thing put
+        down where the author's character is lies at the spot the read gave,
+        else beside whoever carried it, else beside the character, else at
+        its place; one elsewhere is laid where its place is when that area
+        is built. A fixed thing (engine/takeable.py) moves only on the turn
+        that may move it (`moves_fixed`); what is refused is returned."""
+        refused: list[str] = []
+        me = state.spots.get(held or "")
+        here = self.area(me.area, world, art, things=state.things) if me is not None else None
+        entries = [e for e in reply.get("things") or [] if isinstance(e, dict)]
+
+        def said_spot(entry: dict[str, Any]) -> str:
+            """Where the read says a thing now stands: its "spot", else where
+            its "state" says it went (`spot_in_words`)."""
+            spot = str(entry.get("spot") or "").strip()
+            if spot and not spot.lower().startswith("carried by"):
+                return spot
+            if here is None or me is None:
+                return ""
+            return spot_in_words(here, str(entry.get("state") or ""), (me.x, me.y))
+
+        def entry_for(name: str) -> dict[str, Any]:
+            """The read's entry for the map's thing of this name: by its name,
+            else by a shortening of it (as `resolve_reply` found it)."""
+            wanted = key(bare(name))
+            for e in entries:
+                if key(bare(str(e.get("name") or ""))) == wanted:
+                    return e
+            return next((e for e in entries if same_thing(str(e.get("name") or ""), name)), {})
+
+        people = {(s.x, s.y) for n, s in state.spots.items() if me and s.area == me.area}
+        # A thing put at a spot the author's turn marked lies on its tile.
+        by_point = {(m.x, m.y): m for m in marks}
+        marked: dict[str, Spot] = {}
+        for e in entries:
+            for field in ("at", "spot"):
+                found = marks_in(str(e.get(field) or ""))
+                mark = by_point.get((found[0].x, found[0].y)) if found else None
+                if mark is not None and mark.spot is not None:
+                    marked[key(str(e.get("name") or ""))] = mark.spot
+                    break
+
+        def tile_in(
+            area: Area, near: tuple[int, int], pid: str, w: int = 1, h: int = 1, said=False
+        ):
+            """A tile for it in `area`; `said`: where the story or the author
+            put it (a doorway it blocks is a doorway), else clear of the ways."""
+            without = replace(area, placements=[p for p in area.placements if p.id != pid])
+            x, y = thing_tile(without, near, people, w=w, h=h, clear=not said)
+            return Spot(area=area.id, x=x, y=y)
+
+        delta = node.meta.world
+        built = self._built_area(me.area, world, art) if me is not None else None
+        for t in delta.things if delta is not None else []:
+            old = before.things.get(t.id)
+            # A thing the area draws already (a plan's object of its name,
+            # taken or not) is kept under that one's id, as the menu's choices
+            # keep it; the map's listing it for the first time moves nothing.
+            twin = _twin(built, t.name, world) if built is not None else None
+            pid = twin.id if twin is not None else t.id
+            record = state.things.get(pid)
+            words = t.state.lower()
+            if t.carried_by:
+                state.things[pid] = ThingRecord(state="taken", name=t.name, by=t.carried_by)
+                continue
+            if not t.at or GONE.search(words):
+                state.things[pid] = ThingRecord(state="gone", name=t.name)
+                continue
+            broken = BROKEN.search(words) is not None
+            kind = "broken" if broken else "dropped"
+            spot_name = said_spot(entry_for(t.name))
+            if old is None:
+                moved = twin is None
+            else:
+                moved = old.at != t.at or old.carried_by is not None
+            target = area_of(world, art, t.at)
+            at_mark = marked.get(key(str(entry_for(t.name).get("name") or "")))
+            if at_mark is not None and at_mark.area != target:
+                at_mark = None
+            if (spot_name or at_mark) and not moved and fixed_thing(t.name) and not moves_fixed:
+                refused.append(
+                    f"thing {t.name}: fixed in place, so it moves only on the author's "
+                    "Direction or Narration, or a turn under Fiat"
+                )
+                spot_name, at_mark = "", None
+            if at_mark is not None:
+                # On the marked tile, in whichever area it lies.
+                there = here if here is not None and here.id == at_mark.area else None
+                there = there or self.area(at_mark.area, world, art, things=state.things)
+                if there is not None:
+                    state.things[pid] = ThingRecord(
+                        state=kind,
+                        name=t.name,
+                        spot=tile_in(there, (at_mark.x, at_mark.y), pid, said=True),
+                    )
+                    continue
+            entry = entry_for(t.name)
+            # Too heavy to carry, "carried by" someone here: dragged beside them.
+            dragged = None
+            said_by = str(entry.get("at") or "")
+            if said_by.lower().startswith("carried by") and thing_class(t.name) in (
+                "movable",
+                "fixed",
+            ):
+                holder = self._map_person(said_by[len("carried by") :].strip(), world)
+                by = state.spots.get(holder or "")
+                if by is not None and here is not None and by.area == here.id:
+                    dragged = (by.x, by.y)
+                if dragged and fixed_thing(t.name) and not moves_fixed:
+                    refused.append(
+                        f"thing {t.name}: fixed in place, so it moves only on the author's "
+                        "Direction or Narration, or a turn under Fiat"
+                    )
+                    dragged = None
+            stayed = STAYED.search(f"{entry.get('state') or ''} {entry.get('quote') or ''}".lower())
+            shown = next((p for p in here.placements if p.id == pid), None) if here else None
+            if (
+                spot_name
+                and not moved
+                and (
+                    stayed is not None
+                    or (shown is not None and _names_room_of(here, spot_name, shown))
+                )
+            ):
+                spot_name = ""
+            if stayed is not None and not moved:
+                dragged = None
+            if here is not None and target == here.id and (spot_name or moved or dragged):
+                near = anchor_tile(here, spot_name, (me.x, me.y)) if spot_name else None
+                near = near or dragged
+                carrier = state.spots.get(old.carried_by) if old and old.carried_by else None
+                if near is None and carrier is not None and carrier.area == here.id:
+                    near = (carrier.x, carrier.y)
+                if near is None and t.at == world.where.get(held or ""):
+                    near = (me.x, me.y)
+                if near is None:
+                    near = anchor_of(here, world, t.at) or (me.x, me.y)
+                said = bool(spot_name) and anchor_tile(here, spot_name, (me.x, me.y)) is not None
+                spot = tile_in(here, near, pid, said=said)
+                if not moved and shown is not None and not _went_far(here, shown, spot):
+                    continue  # it stays where it lies
+                state.things[pid] = ThingRecord(state=kind, name=t.name, spot=spot)
+            elif moved:
+                state.things.pop(pid, None)  # laid at its place when its area is built
+            elif record is not None and record.spot is not None and broken:
+                state.things[pid] = record.model_copy(update={"state": "broken"})
+        refused += self._placements_after_read(
+            state, placements, source, world, art, here, me, moves_fixed, tile_in, said_spot
+        )
+        return refused
+
+    def _placements_after_read(
+        self,
+        state: AreaState,
+        placements: Sequence[tuple[dict[str, Any], str]],
+        source: str,
+        world: WorldMap,
+        art: WorldArt,
+        here: Area | None,
+        me: Spot | None,
+        moves_fixed: bool,
+        tile_in,
+        said_spot,
+    ) -> list[str]:
+        """The read's entries for the play view's own things (a plan's
+        objects, the furniture, by placement id): taken by someone (or, too
+        heavy to carry, moved beside them), moved to a spot or to another
+        place, broken or used up; each held to its quote, and a fixed thing
+        moved only on the turn that may move it."""
+        refused: list[str] = []
+        if here is None or me is None:
+            return refused
+        by_id = {p.id: p for p in here.placements}
+        for entry, pid in placements:
+            p = by_id.get(pid)
+            quote = str(entry.get("quote") or "")
+            if p is None or not quote or locate_quote(source, quote) is None:
+                refused.append(f"thing {entry.get('name')}: no quote found")
+                continue
+            kind = thing_class(p.name)
+            at = str(entry.get("at") or "").strip()
+            if str(entry.get("spot") or "").lower().startswith("carried by"):
+                at = str(entry.get("spot"))  # "spot": "carried by John", once
+            spot_name = said_spot(entry)
+            words = str(entry.get("state") or "").lower()
+            record: ThingRecord | None = None
+            moved_to: Spot | None = None
+            if at.lower().startswith("carried by"):
+                holder = self._map_person(at[len("carried by") :].strip(), world)
+                where = state.spots.get(holder or "")
+                if holder is not None and kind == "carried":
+                    record = ThingRecord(state="taken", name=p.name, by=holder)
+                elif where is not None and where.area == here.id:
+                    moved_to = tile_in(here, (where.x, where.y), pid, p.w, p.h)
+            elif spot_name or (at and anchor_tile(here, at, (me.x, me.y)) is not None):
+                near = anchor_tile(here, spot_name or at, (me.x, me.y))
+                if near is not None:
+                    moved_to = tile_in(here, near, pid, p.w, p.h, said=True)
+            elif at:
+                moved_to = self._placed_elsewhere(world, art, at, here, pid, p, tile_in)
+            if moved_to is not None and (
+                STAYED.search(f"{words} {quote}".lower()) is not None
+                or not _went_far(here, p, moved_to)
+                or _names_room_of(here, spot_name, p)
+            ):
+                moved_to = None  # it stayed (said so, or named where it stands)
+            if (record is not None or moved_to is not None) and kind == "fixed" and not moves_fixed:
+                refused.append(
+                    f"thing {p.name}: fixed in place, so it moves only on the author's "
+                    "Direction or Narration, or a turn under Fiat"
+                )
+                record, moved_to = None, None
+            current = state.things.get(pid)
+            if GONE.search(words):
+                record = ThingRecord(state="gone", name=p.name)
+            elif moved_to is not None:
+                broken = BROKEN.search(words) is not None or (
+                    current is not None and current.state == "broken"
+                )
+                record = ThingRecord(
+                    state="broken" if broken else "dropped",
+                    name=p.name,
+                    spot=moved_to,
+                    w=p.w,
+                    h=p.h,
+                )
+            elif record is None and BROKEN.search(words):
+                record = ThingRecord(
+                    state="broken",
+                    name=p.name,
+                    spot=current.spot if current is not None else None,
+                    w=p.w,
+                    h=p.h,
+                )
+            if record is not None:
+                state.things[pid] = record
+        return refused
+
+    def _placed_elsewhere(
+        self, world: WorldMap, art: WorldArt, at: str, here: Area, pid: str, p, tile_in
+    ) -> Spot | None:
+        """Where a thing of the play view goes when the read puts it at a
+        place in another area (one that has a plan): at that place there.
+        The place it is in already moves it nowhere."""
+        place_id = find_place(world, at, [])
+        if place_id is None:
+            return None
+        target = area_of(world, art, place_id)
+        if target == here.id:
+            return None  # within the area a move is to a spot ("spot"), not a place
+        area = self.area(target, world, art)
+        if area is None:
+            return None
+        near = anchor_of(area, world, place_id) or self._way_in(area)
+        return tile_in(area, near, pid, p.w, p.h)
+
+    def placement_entries(
+        self, reply: dict[str, Any], path: Sequence[Node], world: WorldMap, held: str | None
+    ) -> tuple[dict[str, Any], list[tuple[dict[str, Any], str]]]:
+        """The read's thing entries that name one of the play view's own things
+        around the author's character (a plan's object or a piece of
+        furniture: the map's list hasn't got it), each with its placement
+        id, and the reply without them, for `resolve_reply` to read the
+        rest. The map's own things win a name; of several with one name,
+        the nearest the author's character."""
+        entries = reply.get("things")
+        if not self.map_first or not isinstance(entries, list) or not entries:
+            return reply, []
+        state = self._snapshot_on(path)
+        me = state.spots.get(held or "") if state is not None else None
+        area = self.area(me.area, world, things=state.things) if me and state else None
+        if area is None:
+            return reply, []
+        own = [p for p in area.placements if p.id not in world.things]
+        kept: list[Any] = []
+        found: list[tuple[dict[str, Any], str]] = []
+        for entry in entries:
+            name = str(entry.get("name") or "") if isinstance(entry, dict) else ""
+            wanted = key(bare(name))
+            # The map's thing by its exact name, then the play view's; then a
+            # shortening of either ("Second workbench"), the map's first.
+            exact = any(key(bare(t.name)) == wanted for t in world.things.values())
+            same = [p for p in own if key(bare(p.name)) == wanted] if not exact else []
+            if not same and not exact and _find_thing(world, name) is None:
+                same = [p for p in own if same_thing(name, p.name)]
+            if not name or not same:
+                kept.append(entry)
+                continue
+            # Of several of one name, the one beside the author's character
+            # (the spot is where it went, not where it was: live, the bench
+            # nearest the door was moved and the one shoved stayed).
+            best = min(same, key=lambda p: math.hypot(p.centre[0] - me.x, p.centre[1] - me.y))
+            found.append((entry, best.id))
+        if not found:
+            return reply, []
+        return {**reply, "things": kept}, found
+
+    def read_things_here(self, path: Sequence[Node], held: str | None = None) -> str:
+        """The things on the play view around the author's character, nearest
+        first, for the map read (`map_read.things_here`); "" when the story
+        isn't played on a map or there are none."""
+        if not self.map_first:
+            return ""
+        state = self._snapshot_on(path)
+        me = state.spots.get(held or self.held_name() or "") if state is not None else None
+        area = self.area(me.area, things=state.things) if me is not None and state else None
+        if me is None or area is None or not area.placements:
+            return ""
+        counts: dict[str, list[float]] = {}
+        for p in area.placements:
+            d = math.hypot(p.centre[0] - me.x, p.centre[1] - me.y)
+            counts.setdefault(bare(p.name), []).append(d)
+        ordered = sorted(counts.items(), key=lambda item: min(item[1]))[:THINGS_TOLD]
+        things = "; ".join(
+            f"the {name}" + (f" ({len(ds)})" if len(ds) > 1 else "") for name, ds in ordered
+        )
+        return self.texts.fill("map_read.things_here", things=things)
 
     def _map_person(self, name: str, world: WorldMap | None = None) -> str | None:
         """Who `name` is on the map: someone in the story, else (with the
@@ -1593,9 +2047,10 @@ class AreaRuntime:
     def fixed_here(
         self, nodes: Sequence[Node], held_id: str | None, *, turn_node_id: str | None = None
     ) -> list[str]:
-        """What can't be taken (engine/takeable.py `fixed_thing`) in the
-        author's character's area on the turn's map, nearest first, and the
-        map's things at their place, by name (without its article). The whole
+        """What is fixed in place (engine/takeable.py `fixed_thing`: built
+        in, rooted, bolted down) in the author's character's area on the
+        turn's map, nearest first, the map's things laid there among them,
+        by name (without its article). The whole
         area, not only what is in reach: asked to drag the bench over, the
         sergeant's companion did, from across the room (Oct 17 2026)."""
         held = self.map_held_name(held_id) if held_id is not None else self.held_name()
@@ -3037,6 +3492,40 @@ class AreaRuntime:
         with self._lock():
             art.tile_overrides[role] = ""
             self._save_art(art)
+
+
+def _went_far(area: Area, p, spot: Spot) -> bool:
+    """Whether a thing at `spot` is `MOVE_MIN_M` or more from where it stood,
+    or in another area."""
+    if spot.area != area.id:
+        return True
+    return math.hypot(spot.x - p.x, spot.y - p.y) * area.tile_m >= MOVE_MIN_M
+
+
+def _names_room_of(area: Area, spot: str, p) -> bool:
+    """Whether the spot named is the room the thing already stands in (the
+    read gave where it is, not where it went)."""
+    if not spot:
+        return False
+    room = area.room_at(int(p.centre[0]), int(p.centre[1]))
+    if room is None:
+        return False
+    wanted = key(bare(spot))
+    return wanted in (key(bare(room_words(area, room))), key(room.name), key(room.purpose))
+
+
+def _twin(area: Area, name: str, world: WorldMap):
+    """The area's own drawn thing of this name (a plan's object or a piece
+    of furniture, not one of the map's things laid on it), or None: a map's
+    thing that is one of those is shown as it, not laid beside it."""
+    wanted = key(bare(name))
+    own = [p for p in area.placements if p.id not in world.things]
+    exact = next((p for p in own if key(bare(p.name)) == wanted), None)
+    if exact is not None:
+        return exact
+    # The map's "Pickup truck" is the barn plan's "rusted pickup truck on
+    # flat tyres" (live, both were drawn).
+    return next((p for p in own if same_thing(name, p.name)), None)
 
 
 def _avatar_stands(art: WorldArt, name: str, portrait: str | None) -> bool:

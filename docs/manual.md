@@ -1118,17 +1118,29 @@ story or a walk takes them in.
   list knows follows suit (carried by you, broken, gone). A turn you rewrite
   so the menu's words are gone changes nothing, and neither does a failed
   dice roll: the attempt is the storyteller's to tell. **Use** changes
-  nothing either. A thing that can't be taken (anything **Take** isn't
-  offered for: furniture, a statue, the town's stores) stays where it is
-  whatever a passage says, unless your Direction or Narration moves it, or
-  a turn sent under **Fiat**: the map read may still change its state. On
-  every other turn the storyteller is told so: such things near you are
-  marked "fixed in place", and one your turn names is named again at the
-  very end of what it is sent, with word that an attempt to move it fails.
-  It writes them staying put (bolted down, too heavy, wedged fast), now and
-  then shifting one a little. To move one, send the turn under **Fiat**.
-  Something driven or ridden (a truck, a cart, a horse) goes with whoever
-  takes it.
+  nothing either.
+- **Every thing on the play view is a thing**, whoever put it there: the
+  plan's objects, the furniture the map laid in the rooms, and what the
+  story brought in (an anvil a Direction left by the door, a rifle on the
+  table). What the story adds lies at its place on the play view, beside
+  you when it turns up where you are, on the very spot when your turn marks
+  one. What a passage does to any of them follows on the map: shoved across
+  the doorway, it blocks the doorway; carried off, it is with whoever took
+  it; smashed, it is drawn broken; eaten or used up, it is gone.
+- Things come in four kinds, by what they are. Small things can be
+  **taken** and carried. **Heavy** things (a table, a chest, an anvil, a
+  boulder) can't be carried off, but they can be shoved, dragged or rolled
+  by someone strong enough: the storyteller decides whether an attempt
+  succeeds, and the map follows what it writes. Things that are **part of
+  the building or the ground** (a hearth, a stove, a well, a counter, a
+  tree, anything bolted down) stay where they are whatever a passage says,
+  unless your Direction or Narration moves them, or a turn sent under
+  **Fiat**; the map read may still change their state. On every other turn
+  the storyteller is told so: such things near you are marked "fixed in
+  place", and one your turn names is named again at the very end of what it
+  is sent, with word that an attempt to move it fails. To move one, send
+  the turn under **Fiat**. Something driven or ridden (a truck, a cart, a
+  horse) goes with whoever takes it.
 - **Carrying ▾** lists what your character carries, each with **Drop** (it
   lies at your feet again, to be picked up by anyone) and **Give to** each
   person within reach (it is theirs then, and their card says so). The

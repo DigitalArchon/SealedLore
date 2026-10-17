@@ -40,7 +40,7 @@ from sealedlore.engine.levels import (
 )
 from sealedlore.engine.marks import footprint
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
-from sealedlore.engine.takeable import FIXED_MARK, fixed_thing, item_verbs
+from sealedlore.engine.takeable import FIXED_MARK, fixed_thing, item_verbs, named_in
 from sealedlore.engine.tile_sets import LIGHT_WORDS, roof_material
 from sealedlore.engine.world import key
 from sealedlore.engine.world_art import (
@@ -1526,18 +1526,20 @@ BROKEN_KEEPS = ("use", "take")
 
 
 def apply_things(area: Area, records: Mapping[str, ThingRecord]) -> Area:
-    """The area with the turn's records on it (models/area.py `ThingRecord`;
-    the author's ruling: a taken thing is with its taker, a broken one is
-    visibly broken, in code): a taken or eaten thing is off the floor and
-    its tile plain ground; a broken one stays, `broken`; a dropped one lies
-    on the tile it was put down on, in whichever area that is. A copy: the
-    built area is kept as built and the records applied over it, so the
-    cache needn't know them. The area itself when no record touches it."""
+    """The area with the records on it (models/area.py `ThingRecord`; the
+    author's rulings: a taken thing is with its taker, a broken one is
+    visibly broken, in code, and anything the story moves is where it was
+    moved to): a taken or gone thing is off the floor and its tile plain
+    ground; a broken one stays, `broken`; one with a spot (dropped, moved,
+    put there by the story, or broken and moved) lies there, in whichever
+    area that is, as big as it was. A copy: the built area is kept as built
+    and the records laid over it, so the cache needn't know them. The area
+    itself when no record touches it."""
+    ids = {p.id for p in area.placements}
     mine = {
         pid: r
         for pid, r in records.items()
-        if pid in {p.id for p in area.placements}
-        or (r.state == "dropped" and r.spot is not None and r.spot.area == area.id)
+        if pid in ids or (r.spot is not None and r.spot.area == area.id)
     }
     if not mine:
         return area
@@ -1549,34 +1551,136 @@ def apply_things(area: Area, records: Mapping[str, ThingRecord]) -> Area:
         if record is None:
             placements.append(p)
             continue
-        if record.state in ("taken", "gone") or (
-            record.state == "dropped" and record.spot is not None
-        ):
+        if record.state in ("taken", "gone") or record.spot is not None:
             for x, y in p.tiles():  # the plan's digit stood for it: plain ground now
                 if 0 <= y < len(rows) and 0 <= x < len(rows[y]) and rows[y][x].isdigit():
                     rows[y][x] = ground
         elif record.state == "broken":
-            placements.append(
-                replace(p, broken=True, verbs=tuple(v for v in p.verbs if v in BROKEN_KEEPS))
-            )
+            placements.append(_broken(p))
+        else:
+            placements.append(p)
     for pid, record in mine.items():
-        if record.state != "dropped" or record.spot is None or record.spot.area != area.id:
+        spot = record.spot
+        if spot is None or spot.area != area.id or record.state not in ("dropped", "broken"):
             continue
-        room = area.room_at(record.spot.x, record.spot.y)
-        placements.append(
-            Placement(
-                id=pid,
-                name=record.name,
-                x=record.spot.x,
-                y=record.spot.y,
-                w=1,
-                h=1,
-                verbs=item_verbs(record.name),
-                kind="object",
-                room=room.index if room else None,
-            )
+        room = area.room_at(spot.x, spot.y)
+        placed = Placement(
+            id=pid,
+            name=record.name,
+            x=spot.x,
+            y=spot.y,
+            w=max(1, record.w),
+            h=max(1, record.h),
+            verbs=item_verbs(record.name),
+            kind="object",
+            room=room.index if room else None,
         )
+        placements.append(_broken(placed) if record.state == "broken" else placed)
     return replace(area, rows=["".join(r) for r in rows], placements=placements)
+
+
+def _broken(p: Placement) -> Placement:
+    return replace(p, broken=True, verbs=tuple(v for v in p.verbs if v in BROKEN_KEEPS))
+
+
+# --- Where a thing lies (the map's things, and what the story moved) -----------
+
+
+def thing_tile(
+    area: Area,
+    near: tuple[int, int],
+    taken: Collection[tuple[int, int]] = (),
+    *,
+    w: int = 1,
+    h: int = 1,
+    clear: bool = True,
+) -> tuple[int, int]:
+    """The top-left tile of a free footprint `w` x `h` near `near` for a thing
+    to lie on: ground one could stand on, clear of every placement and of
+    `taken`; with `clear`, also of doorways and the ways in and out, cutting
+    no ground off that could be reached before (as furniture is placed).
+    Without it (the story or the author said where: a bench shoved across
+    the doorway blocks it), the nearest free footprint. Else the nearest
+    free tile; else `near` clamped to the grid."""
+    width, height = area.width, area.height
+    blocked = set(taken) | area.blocked()
+    doors = {t for d in area.doorways for t in d.tiles()}
+    doors |= {(e.x, e.y) for e in area.entrances} | set(area.exits)
+    keep = {(x + dx, y + dy) for x, y in doors for dx in (-1, 0, 1) for dy in (-1, 0, 1)}
+    start = (min(max(near[0], 0), max(width - 1, 0)), min(max(near[1], 0), max(height - 1, 0)))
+    order = sorted(
+        (math.hypot(x - start[0], y - start[1]), x, y)
+        for y in range(height)
+        for x in range(width)
+        if math.hypot(x - start[0], y - start[1]) <= 24
+    )
+    free = {
+        (x, y)
+        for y in range(height)
+        for x in range(width)
+        if area.walkable(x, y) and (x, y) not in blocked
+    }
+    ins = [d.middle for d in area.doorways] + list(area.exits)
+    ins += [(e.x, e.y + 1) for e in area.entrances] + [start]
+    before: set[tuple[int, int]] | None = None
+    fallback: tuple[int, int] | None = None
+    tried = 0
+    for _d, x, y in order:
+        fp = [(x + dx, y + dy) for dy in range(h) for dx in range(w)]
+        if not all(t in free for t in fp):
+            continue
+        if fallback is None:
+            fallback = (x, y)
+            if not clear:
+                return x, y
+        if any(t in keep for t in fp):
+            continue
+        if before is None:
+            before = _reach(free, ins)
+        after = _reach(free - set(fp), ins)
+        if not ((before - set(fp)) - after):
+            return x, y
+        tried += 1
+        if tried >= 24:
+            break
+    return fallback if fallback is not None else start
+
+
+@dataclass(frozen=True)
+class LaidThing:
+    """One of the map's things laid on an area where it has no record yet:
+    its id (the map's), name, the tile it lies on, and whether it is broken."""
+
+    id: str
+    name: str
+    x: int
+    y: int
+    broken: bool = False
+
+
+def lay_things(area: Area, laid: Sequence[LaidThing]) -> Area:
+    """The area with the map's things (what a read or a plot file put at a
+    place) standing on it, each over its own tile, a thing to see and use
+    like any other (the author, Oct 17 2026: things the story adds must show
+    on the play view)."""
+    if not laid:
+        return area
+    placements = list(area.placements)
+    for t in laid:
+        room = area.room_at(t.x, t.y)
+        placed = Placement(
+            id=t.id,
+            name=t.name,
+            x=t.x,
+            y=t.y,
+            w=1,
+            h=1,
+            verbs=item_verbs(t.name),
+            kind="object",
+            room=room.index if room else None,
+        )
+        placements.append(_broken(placed) if t.broken else placed)
+    return replace(area, placements=placements)
 
 
 def carried_by(records: Mapping[str, ThingRecord], who: str) -> list[str]:
@@ -2096,7 +2200,8 @@ def render_positions(
     on another level of the place (`elsewhere`, lines the caller found), and
     how far they walked since the last passage. Never the clock's day (the
     author's ruling: the day is the plot's). `mark_fixed`: what can't be
-    taken is marked so in reach, on a turn that may not move it."""
+    taken or moved (built in, rooted, bolted down) is marked so in reach, on
+    a turn that may not move it."""
     me = spots.get(held)
     if me is None or me.area != area.id:
         return ""
@@ -2295,7 +2400,45 @@ def anchor_tile(
                 return tile
         if wanted in _DOORWAY and doors:
             return min(doors, key=lambda d: math.hypot(d[1][0] - near[0], d[1][1] - near[1]))[1]
+        if wanted in _DOORWAY:
+            # Standing in no room (in a doorway, outdoors): the nearest door
+            # of the area, a doorway, a way out or a building's door.
+            every = [d.middle for d in area.doorways] + list(area.exits)
+            every += [(e.x, e.y) for e in area.entrances if not e.stairs]
+            if every:
+                return min(every, key=lambda t: math.hypot(t[0] - near[0], t[1] - near[1]))
     return None
+
+
+# Words that say where something went, and a door named among them.
+_WENT = re.compile(
+    r"\b(?:to|against|across|behind|beside|by|at|into|under|blocking|blocks|blocked|"
+    r"wedged|next to|near|towards?|in front of|over to|up to|before|barring|bars)\b"
+)
+_A_DOOR = re.compile(
+    r"\b(?:doors?|doorways?|doorframe|door frame|doorstep|doorsill|threshold|entrance|way in|"
+    r"gates?)\b"
+)
+
+
+def spot_in_words(area: Area, words: str, near: tuple[int, int]) -> str:
+    """The spot a few words of the read's say a thing went to ("dragged to the
+    door", "shoved across the doorway, blocking it", "moved to the stove"):
+    a door or doorway (the nearest, `anchor_tile`), else the spot near `near`
+    the words name best (`anchors_near`); "" when they say no place it went.
+    The read put where a thing ended up in its state as often as in "spot"
+    (the replay, Oct 17 2026)."""
+    said = " ".join(words.lower().split())
+    if not said or _WENT.search(said) is None:
+        return ""
+    if _A_DOOR.search(said) is not None:
+        return "the doorway"
+    best, score = "", 0
+    for name in anchors_near(area, *near, limit=40):
+        found = named_in(name, said)
+        if found > score:
+            best, score = name, found
+    return best
 
 
 def fills_word(ch: str) -> str:

@@ -90,7 +90,8 @@ def test_an_ordinary_turn_moves_what_isn_t_fixed_and_never_what_is():
     for moved_id in ("stores", "rifle", "truck", "boulder"):
         assert by_id[moved_id].at == "house", moved_id
     assert len(refused) == 1 and "The old well" in refused[0] and "Fiat" in refused[0]
-    # Carried off is refused too.
+    # Dragged off by someone is refused too (where they are, the house).
+    world.where["Serrik Vaun"] = "house"
     carried = {"things": [moved("The old well", "carried by Serrik Vaun")]}
     delta, refused = resolve_reply(world, carried, source=SOURCE, people=[])
     assert delta.things == [] and refused
@@ -98,6 +99,18 @@ def test_an_ordinary_turn_moves_what_isn_t_fixed_and_never_what_is():
     spoilt = {"things": [{**moved("The old well"), "state": "poisoned"}]}
     delta, refused = resolve_reply(world, spoilt, source=SOURCE, people=[])
     assert [(t.at, t.state) for t in delta.things] == [("town", "poisoned")] and refused
+
+
+def test_a_heavy_thing_carried_by_someone_is_dragged_to_where_they_are():
+    world = world_with_things()
+    world.where["Serrik Vaun"] = "house"
+    reply = {"things": [moved("a large boulder", "carried by Serrik Vaun")]}
+    delta, refused = resolve_reply(world, reply, source=SOURCE, people=[])
+    (boulder,) = delta.things
+    assert (boulder.at, boulder.carried_by) == ("house", None) and refused == []
+    reply = {"things": [moved("A rifle", "carried by Serrik Vaun")]}
+    delta, _refused = resolve_reply(world, reply, source=SOURCE, people=[])
+    assert [(t.at, t.carried_by) for t in delta.things] == [(None, "Serrik Vaun")]
 
 
 def test_the_author_s_word_moves_it():
