@@ -4294,7 +4294,8 @@ _text(
 # stops short") 40 of 52; with REMEMBER naming it ("stay exactly where they
 # stand") 22 of 52; with REMEMBER saying an attempt fails, 2 of 52 (14 more
 # only budged), the reason natural in 31-32 of 34, preferred 10-6 to the
-# version without it on the shove. Things that can be taken (13-15 of 16)
+# version without it on the shove (GLM 5.3: 48 of 50 told nothing, 0 of 51
+# with it, 17 budged). Things that can be taken (13-15 of 16)
 # and Fiat turns (15 of 16) moved as before. Told nothing, readers preferred
 # the shove that worked (25-7 over both judges; a null control on Fiat came
 # out 21-10, so the judges are noisy). SealedLoreDocs design/map.md, "Fixed
