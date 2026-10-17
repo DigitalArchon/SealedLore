@@ -1272,6 +1272,19 @@ class AreaRuntime:
         self._record_action(state, user_node, world)
         spot = state.spots.get(held or "")
         to = to or self.place_of_spot(spot, world)
+        here = world.where.get(held or "")
+        if (
+            held in world.outside
+            and spot is not None
+            and here in world.places
+            and world.places[here].inside == to
+        ):
+            # Outside a building, on the ground round it: still at it while
+            # still at its door (the farm for the farmhouse's porch lost the
+            # "just outside" the storyteller was told).
+            around = self.area(spot.area, world)
+            if around is not None and self._still_at(around, world, spot, here):
+                to = here
         if held is not None and held in world.outside and to == world.where.get(held):
             # Walked in from its door: in it now.
             if spot is not None and place_of_area(spot.area) == to:

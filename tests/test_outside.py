@@ -73,3 +73,16 @@ def test_walking_in_from_the_door_puts_them_in(tmp_path, story, cast):
     assert session.area_state().spots["Serrik Vaun"].area == "house"
     list(session.send(turn("I warm my hands.")))
     assert "Serrik Vaun" not in session.world().outside
+
+
+def test_a_turn_at_the_door_keeps_them_outside_the_building(tmp_path, story, cast):
+    """Live: the turn after the knock was stamped "at The farm" (the ground
+    the porch is on), and the storyteller lost "just outside"."""
+    session = make_session(
+        tmp_path, story, cast, [KNOCK, json.dumps(at_house(True)), "Wait.", "{}"]
+    )
+    session.config.scene_reads = "manual"
+    list(session.send(turn("I knock.")))
+    list(session.send(turn("I wait.")))
+    world = session.world()
+    assert world.where["Serrik Vaun"] == "house" and "Serrik Vaun" in world.outside
