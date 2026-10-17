@@ -2199,19 +2199,54 @@ def walked_words(seconds: int, frm: str = "", to: str = "") -> str:
 
 def anchors_near(area: Area, x: int, y: int, limit: int = 12) -> list[str]:
     """Named spots near (x, y), nearest first, for the read to choose from
-    (design §5: a closed list, as the plot's places are)."""
+    (design §5: a closed list, as the plot's places are): the things, the
+    rooms and the doorways of the room (x, y) is in."""
     found: list[tuple[float, str]] = []
     for p in area.placements:
         d = math.hypot(p.centre[0] - x, p.centre[1] - y)
         found.append((d, f"the {_bare(p.name)}"))
     for room in area.rooms:
         found.append((math.hypot(room.cx - x, room.cy - y) + 0.5, room_words(area, room)))
+    for name, (dx, dy) in doorway_spots(area, x, y):
+        found.append((math.hypot(dx - x, dy - y), name))
     names = dict.fromkeys(name for _d, name in sorted(found))
     return list(names)[:limit]
 
 
-def anchor_tile(area: Area, name: str) -> tuple[int, int] | None:
-    """The tile a named spot stands for (`anchors_near`'s names)."""
+# A doorway is where people stand in prose ("Ruth came as far as the
+# doorway"), and the read reached for it with none on its list (live, Oct 17
+# 2026): it was dropped and she stayed 20 m off in the kitchen.
+_DOORWAY = frozenset({"doorway", "door", "doorframe", "threshold", "door frame"})
+
+
+def doorway_spots(area: Area, x: int, y: int) -> list[tuple[str, tuple[int, int]]]:
+    """The doorways of the room (x, y) is in, each named for where it
+    leads ("the doorway to the kitchen", "the doorway out of The barn")."""
+    room = area.room_at(x, y) if area.indoor else None
+    if room is None:
+        return []
+    found = []
+    for d in area.doorways:
+        sides = {r.index for bx, by in _beside(d) if (r := area.room_at(bx, by)) is not None}
+        if room.index not in sides:
+            continue
+        other = [area.rooms[i] for i in sides if i != room.index]
+        if d.middle in area.exits or any(t in area.exits for t in d.tiles()):
+            name = f"the doorway out of {area.name}"
+        elif other:
+            name = f"the doorway to {room_words(area, other[0])}"
+        else:
+            continue
+        found.append((name, d.middle))
+    return found
+
+
+def anchor_tile(
+    area: Area, name: str, near: tuple[int, int] | None = None
+) -> tuple[int, int] | None:
+    """The tile a named spot stands for (`anchors_near`'s names). `near`:
+    where the spots were listed from, so a bare "the doorway" is the
+    nearest doorway of that room."""
     wanted = key(_bare(name))
     for p in area.placements:
         if key(_bare(p.name)) == wanted:
@@ -2219,6 +2254,13 @@ def anchor_tile(area: Area, name: str) -> tuple[int, int] | None:
     for room in area.rooms:
         if key(_bare(room_words(area, room))) == wanted or key(room.name) == wanted:
             return int(room.cx), int(room.cy)
+    if near is not None:
+        doors = doorway_spots(area, *near)
+        for door, tile in doors:
+            if key(door) == wanted:
+                return tile
+        if wanted in _DOORWAY and doors:
+            return min(doors, key=lambda d: math.hypot(d[1][0] - near[0], d[1][1] - near[1]))[1]
     return None
 
 

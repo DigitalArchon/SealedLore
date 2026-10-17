@@ -1344,10 +1344,10 @@ class AreaRuntime:
             x, y = stand_near(marked, (spot.x, spot.y), taken)  # type: ignore[arg-type]
             state.spots[person] = Spot(area=spot.area, x=x, y=y)
         area = self.area(me.area, world, art, things=state.things) if me is not None else None
-        if area is not None:
+        if area is not None and me is not None:
             for name, spot_name in at.items():
                 person = self._map_person(str(name), world)
-                tile = anchor_tile(area, str(spot_name))
+                tile = anchor_tile(area, str(spot_name), (me.x, me.y))
                 if person is None or tile is None or person not in placed:
                     continue
                 current = state.spots.get(person)

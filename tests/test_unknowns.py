@@ -153,3 +153,23 @@ def test_someone_named_with_no_card_is_still_stood_at_a_spot(tmp_path, story, ca
     ruth = session.path()[-1].meta.area.spots["Ruth"]
     stove = next(p for p in session.area("house").placements if "stove" in p.name)
     assert abs(ruth.x - stove.x) + abs(ruth.y - stove.y) <= 2
+
+
+def test_a_doorway_is_a_spot_the_read_may_stand_someone_at(tmp_path, story, cast):
+    """Live (Oct 17 2026): "Ruth came as far as the doorway", the read stood
+    her "at the doorway", which wasn't on its list, and it was dropped."""
+    from sealedlore.engine.area import anchor_tile, anchors_near, doorway_spots
+
+    session = make_session(tmp_path, story, cast, [])
+    area = session.area("house")
+    room = next(r for r in area.rooms if doorway_spots(area, int(r.cx), int(r.cy)))
+    here = (int(room.cx), int(room.cy))
+    doors = doorway_spots(area, *here)
+    names = anchors_near(area, *here, limit=40)
+    assert all(name in names for name, _tile in doors)
+    name, tile = doors[0]
+    assert anchor_tile(area, name, here) == tile
+    nearest = min(doors, key=lambda d: abs(d[1][0] - here[0]) + abs(d[1][1] - here[1]))
+    assert anchor_tile(area, "the doorway", here) is not None
+    assert anchor_tile(area, "the doorway") is None  # with nothing to be near
+    assert nearest[1] in [t for _n, t in doors]
