@@ -871,10 +871,13 @@ lists them under Map as "Avatar", the one in use marked, with **Use as the
 avatar** on the others. **Choose a file…** takes a figure of your
 own (on a plain white or transparent ground), and **Back to the set's own**
 puts the tile set's figure back. Every character gets an avatar drawn from
-the portrait they have now: with map pictures on, one drawn from their card
-before a portrait came, or from an earlier portrait, is drawn again when a
-new portrait lands, as the rest of the map's pictures are (on its own, or
-among those waiting for you). An avatar you chose yourself stays until you
+the portrait they have now: with map pictures on, avatars are drawn once the
+story has begun (Start offers the portraits first), a character whose
+portrait is being drawn waits for it, and one drawn from their card before a
+portrait came, or from an earlier portrait, is drawn again when a new
+portrait lands, as the rest of the map's pictures are (on its own, or among
+those waiting for you). A character the plot keeps hidden gets none drawn
+until the story brings them in. An avatar you chose yourself stays until you
 say otherwise: when new portraits land on such cards (or map pictures are
 off), you are asked once whether to draw their avatars again from them, and
 they are drawn one after another, even if one is already being drawn. The
