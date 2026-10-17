@@ -33,20 +33,21 @@ RECOMMENDED_HOST = "nano-gpt.com"
 RECOMMENDED_MODELS: dict[str, str] = {
     # The scene read is as good as the reasoning behind it: of the models
     # tried on judged reads, only those that reason kept the roster right
-    # when someone came or went, and this one was the quickest of them.
+    # when someone came or went, and this one was the best of them that the
+    # subscription includes (re-checked Oct 2026).
     "scene_model": "z-ai/glm-5.3",
-    # The plot's director, which runs before the turn: the steadiest answers
-    # of those tried, and the shortest wait. A model that reads well can still
-    # begin events too readily, as the scene model does; the plot's clock read
-    # runs on the scene model.
-    "plot_model": "mistralai/mistral-medium-3.1",
+    # The plot's director, which runs before the turn (the author's choice,
+    # Oct 17 2026): re-measured, the models tried came out within a few wrong
+    # answers of each other, and this one is included in the subscription and
+    # waits ~2.5s. The plot's clock read runs on the scene model.
+    "plot_model": "deepseek/deepseek-v4.1-flash",
     "lore_model": "deepseek/deepseek-v4.1-flash",
-    # The map read after each passage: as accurate as GLM 5.3 on judged
-    # replays, ~4s a read, and no slowdown on a long story, where GLM 5.3
-    # reasoned thousands of tokens a read (SealedLoreDocs design/map.md).
+    # The map read after each passage (the author's choice, Oct 17 2026): the
+    # quickest by three times, included in the subscription; judged a little
+    # below GLM 5.3 and Kimi K3 on replays.
     "map_model": "deepseek/deepseek-v4.1-flash",
-    # The map's sprites and local layouts: second only to a paid model on
-    # blind judging, at ~5.5s a sprite, sent its lowest reasoning level.
+    # The map's sprites and local layouts: its whole areas were ranked first
+    # by both blind judges, sent its lowest reasoning level.
     "map_art_model": "z-ai/glm-5.3-flash",
 }
 
@@ -157,26 +158,31 @@ RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
 
 
 # The text models offered under Recommended beside Settings → Models' fields,
-# from what was measured (SealedLoreDocs design/*.md). The defaults are
-# unchanged: DEFAULT_STORY_MODEL and RECOMMENDED_MODELS come first.
+# from what was measured on blind-judged replays and live play (re-measured
+# for every role on Oct 17 2026). Each note says roughly what was found and
+# why the model is offered. DEFAULT_STORY_MODEL and RECOMMENDED_MODELS come
+# first.
 RECOMMENDED_TEXT_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
     "story": (
         RecommendedModel(
             id=DEFAULT_STORY_MODEL,
             label="Claude Sonnet 4.6",
             tag="default",
-            note="Best on price for quality of those measured, about $0.023 a turn on a warm "
-            "cache, and it keeps the rules: no held character written and no shortcut in 128 "
-            "judged passages.",
+            note="Best on price for quality: about 1¢ a turn on a map story and 2-3¢ on a "
+            "long story with a warm cache. It keeps the rules (no held character written and "
+            "no shortcut in 128 judged passages), writes short passages on the map (about 65 "
+            "words), and made a few errors fewer than Opus over whole stories.",
         ),
         RecommendedModel(
             id="anthropic/claude-opus-5.5",
             label="Claude Opus 5.5",
             tag="premium",
-            note="The better storyteller on every blind judge (ranked first 13-21 times of 32 "
-            "against Sonnet's 0-4): more specific detail, and it answers you fully. About "
-            "twice Sonnet's cost a turn ($0.047), and it counts about half as many tokens "
-            "again as the app estimates.",
+            note="The better writer on every blind judge, Claude and not: preferred in about 9 "
+            "turns of 10 by the Claude judges and more often than not by DeepSeek, with more "
+            "specific detail and fuller answers. About 2.4 times Sonnet's cost (2.3¢ a map "
+            "turn, ~5¢ on a long story), passages twice as long on the map (about 135 "
+            "words), and no fewer errors over whole stories. It counts about half as many "
+            "tokens again as the app estimates.",
         ),
         RecommendedModel(
             id="z-ai/glm-5.3",
@@ -191,9 +197,16 @@ RECOMMENDED_TEXT_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
             id=RECOMMENDED_MODELS["scene_model"],
             label="GLM 5.3",
             tag="recommended",
-            note="A scene read needs a model that reasons: 89 of 94 rosters right and 32 of 36 "
-            "comings and goings on judged reads, where every model that doesn't reason got "
-            "72-76 whatever its size. Included in a NanoGPT subscription.",
+            note="A scene read needs a model that reasons: 89 of 94 rosters right and 31-32 of "
+            "36 comings and goings on judged reads, where models that don't reason got 72-78. "
+            "About 8s after the passage, now and then 40s; included in a NanoGPT subscription.",
+        ),
+        RecommendedModel(
+            id="moonshotai/kimi-k3",
+            label="Kimi K3",
+            tag="premium",
+            note="As accurate as GLM 5.3 (88 of 94, 32 of 36) and steadier (rarely over 17s), "
+            "but outside the subscription: about 0.3¢ a read.",
         ),
         RecommendedModel(
             id="deepseek/deepseek-v4-pro:thinking",
@@ -204,17 +217,23 @@ RECOMMENDED_TEXT_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
     "plot_model": (
         RecommendedModel(
             id=RECOMMENDED_MODELS["plot_model"],
-            label="Mistral Medium 3.1",
+            label="DeepSeek V4.1 Flash",
             tag="recommended",
-            note="The steadiest director on repeats, about 1s before the turn, at about a "
-            "third of Medium 3.5's price. Not the scene model: GLM 5.3 reads well but begins "
-            "events too readily.",
+            note="As sound a director as any tried: on 69 logged plot questions asked twice, "
+            "both blind judges found 3 wrong answers in 138, about 2.5s before the turn, and "
+            "included in a NanoGPT subscription.",
         ),
         RecommendedModel(
-            id="mistralai/mistral-medium-3.5",
-            label="Mistral Medium 3.5",
-            tag="premium",
-            note="Measured best, but priced per call.",
+            id="mistralai/mistral-medium-3.1",
+            label="Mistral Medium 3.1",
+            note="As sound (6 wrong answers in 138) and the quickest, about 1s before the "
+            "turn, but priced per call: about 0.05¢.",
+        ),
+        RecommendedModel(
+            id="z-ai/glm-5.3",
+            label="GLM 5.3",
+            note="As sound (3 wrong in 138) and included in the subscription, but about 6s "
+            "before the turn; it used to begin events too readily and now does so less.",
         ),
     ),
     "lore_model": (
@@ -222,9 +241,9 @@ RECOMMENDED_TEXT_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
             id=RECOMMENDED_MODELS["lore_model"],
             label="DeepSeek V4.1 Flash",
             tag="recommended",
-            note="Picks the lore each turn needs, after the passage: tied with nano-gpt's Jev "
-            "and well ahead of similarity alone in live play, and included in a NanoGPT "
-            "subscription.",
+            note="Picks the lore each turn needs, after the passage: with 100 lore entries it "
+            "cut contradictions of the lore from about 10 in 32 passages to a few, tied with "
+            "nano-gpt's Jev, and it is included in a NanoGPT subscription.",
         ),
         RecommendedModel(
             id="mistralai/mistral-medium-3.5",
@@ -239,13 +258,25 @@ RECOMMENDED_TEXT_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
             id=RECOMMENDED_MODELS["map_model"],
             label="DeepSeek V4.1 Flash",
             tag="recommended",
-            note="As accurate as GLM 5.3 on judged replays, about 4s a read, and no slower on "
-            "a long story.",
+            note="The quickest map read by three times (under 2s, so the map catches up "
+            "first after a passage), the best at leaving alone what was only nudged, and "
+            "included in a NanoGPT subscription. Judged a little below GLM 5.3 and Kimi K3 on "
+            "replays: trusted 4.0-4.3 of 5 against their 4.4-4.7, with more wrong entries.",
         ),
         RecommendedModel(
             id="z-ai/glm-5.3",
             label="GLM 5.3",
-            note="As accurate, but on a long story it reasoned thousands of tokens a read.",
+            note="Trusted more on judged replays (4.4-4.5 of 5, a third of the wrong entries) "
+            "and included in the subscription, but about 6s a read, and on some hosts it has "
+            "reasoned thousands of tokens a read.",
+        ),
+        RecommendedModel(
+            id="moonshotai/kimi-k3",
+            label="Kimi K3",
+            tag="premium",
+            note="Judged best (trusted 4.6-4.7 of 5, the fewest wrong and missed entries), "
+            "about 4s a read, but outside the subscription at about 0.8¢ a read, and about 1 "
+            "read in 12 came back empty when something had moved.",
         ),
     ),
     "map_art_model": (
@@ -253,14 +284,16 @@ RECOMMENDED_TEXT_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
             id=RECOMMENDED_MODELS["map_art_model"],
             label="GLM 5.3 Flash",
             tag="recommended",
-            note="The best free sprite model: judged second only to Kimi K3, about 5.5s a "
-            "sprite at its lowest reasoning level, which SealedLore sends.",
+            note="Drew the best areas: ranked first in 3 of 4 by both blind judges, the best "
+            "looking and the easiest to walk, about 5.5s a sprite at its lowest reasoning "
+            "level, and included in a NanoGPT subscription. Now and then a drawing fails "
+            "and is asked for again.",
         ),
         RecommendedModel(
-            id="moonshotai/kimi-k3",
-            label="Kimi K3",
-            tag="premium",
-            note="Judged best for the map's drawings, but slower and paid.",
+            id="deepseek/deepseek-v4.1-flash",
+            label="DeepSeek V4.1 Flash",
+            note="Second on the same areas, and it drew a building's upper floor where GLM "
+            "5.3 Flash didn't. Included in the subscription.",
         ),
     ),
 }

@@ -508,8 +508,8 @@ possible**, which is also the fastest:
   thinking on.
 - On NanoGPT, which says what each model does when it isn't told, a model
   that reasons by default (Kimi K3 and Opus 5.5, for example) is asked for
-  its lowest level from the first request. One whose default already is its
-  lowest (GLM 5.3) is sent nothing. The note under the story model's
+  its lowest level from the first request, even when that is already its
+  default (GLM 5.3: left to itself it once reasoned far past it). The note under the story model's
   setting says what that model does left to itself, once SealedLore has
   read it.
 - A model that reasons at length anyway is caught doing it, and asked for
@@ -530,16 +530,18 @@ NanoGPT a new setup starts with the ones that measured best, and Settings →
 Models has **Use recommended models** to fill them in on a setup you already
 have (nothing changes until you press Save). **Recommended** beside the story,
 scene, plot, lore, map and map art fields lists the models measured for that
-job, the recommended one first, each with a note on what it is good at and
-what it costs (for the story, Claude Opus 5.5 as the premium choice: the
-better storyteller on every blind judge, at about twice Sonnet's price).
-Choosing one only fills in the field.
+job, the recommended one first, each with a note on roughly what it scored
+and what it costs (for the story, Claude Opus 5.5 as the premium choice: the
+better writer on every blind judge, at about 2.4 times Sonnet's price, with
+passages twice as long on the map). Choosing one only fills in the field.
 
 | For | Model | Why |
 |---|---|---|
-| Scene | `z-ai/glm-5.3` | The read needs a model that reasons; this was the most accurate and the quickest of those that do |
-| Plot | `mistralai/mistral-medium-3.1` | The steadiest answers and the shortest wait before a passage. Priced per call, a small fraction of a cent each |
-| Lore | `deepseek/deepseek-v4.1-flash` | As before |
+| Scene | `z-ai/glm-5.3` | The read needs a model that reasons: about 89 rosters of 94 right on judged reads, where models that don't reason got 72-78. Included in a NanoGPT subscription |
+| Plot | `deepseek/deepseek-v4.1-flash` | As sound a director as any tried (3 wrong answers in 138 to both judges), about 2.5 seconds before a passage, and included in the subscription |
+| Lore | `deepseek/deepseek-v4.1-flash` | Picks the lore a turn needs after each passage; with 100 entries it cut contradictions of the lore from about 10 in 32 passages to a few |
+| Map | `deepseek/deepseek-v4.1-flash` | The quickest map read by three times (under 2 seconds), included in the subscription. GLM 5.3 and Kimi K3 were judged a little more accurate |
+| Map art | `z-ai/glm-5.3-flash` | Its drawn areas were ranked first by both blind judges, and it is included in the subscription |
 
 They are NanoGPT model ids. On another endpoint the fields stay blank: choose
 a model that reasons for the scene and a quick one for the plot (Browse…).
