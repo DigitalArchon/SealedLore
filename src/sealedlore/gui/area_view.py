@@ -43,6 +43,7 @@ from sealedlore.gui import text_size
 from sealedlore.gui.area_render import px_for
 from sealedlore.gui.avatar_view import pixel_scaled
 from sealedlore.gui.map_art import FOG
+from sealedlore.gui.map_pan import MiddlePan
 from sealedlore.gui.wrap_row import WrapRow
 
 # Tiles a second the author's character walks on screen.
@@ -235,6 +236,14 @@ def sight_mask(area: Area, here: tuple[int, int]) -> QImage:
     return image
 
 
+# Someone the map hasn't a name for yet ("Unknown 1"): Name… rather than Is really….
+UNKNOWN_LABEL = re.compile(r"^Unknown \d+$")
+
+
+def _bare_name(name: str) -> str:
+    return re.sub(r"^(the|a|an)\s+", "", " ".join(name.split()), flags=re.IGNORECASE)
+
+
 class _Graphics(QGraphicsView):
     clicked = Signal(QPointF, QPoint)
     # A right-click: what can be done at a spot (mark it, walk there).
@@ -243,6 +252,10 @@ class _Graphics(QGraphicsView):
     # The pointer left the view.
     left = Signal()
     zoomed = Signal()
+    # A person or a thing dragged (what `grab_at` found, the scene point
+    # under the pointer), and let go.
+    item_dragging = Signal(object, QPointF)
+    item_dropped = Signal(object, QPointF)
 
     def __init__(self) -> None:
         super().__init__()
@@ -256,6 +269,13 @@ class _Graphics(QGraphicsView):
         self.setBackgroundBrush(QColor(FOG))
         self._press: QPoint | None = None
         self._dragging = False
+        self._pan = MiddlePan(self)
+        # A person or a thing pressed on, for dragging it to another tile (a
+        # correction): what `grab_at` (the play view's) found there, and
+        # whether the pointer has moved far enough to be a drag.
+        self.grab_at: Callable[[QPointF], object | None] | None = None
+        self._grabbed: object | None = None
+        self._item_drag = False
 
     resized = Signal()
 
@@ -277,16 +297,31 @@ class _Graphics(QGraphicsView):
         self.zoom_by(ZOOM_STEP if event.angleDelta().y() > 0 else 1 / ZOOM_STEP)
 
     def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt's name
+        if self._pan.press(event):
+            return
         if event.button() in (Qt.LeftButton, Qt.RightButton):
             self._press = event.position().toPoint()
             self._dragging = False
             self._button = event.button()
-        if event.button() == Qt.MiddleButton:
-            self.setDragMode(QGraphicsView.ScrollHandDrag)
+            self._grabbed = None
+            self._item_drag = False
+            if event.button() == Qt.LeftButton and self.grab_at is not None:
+                self._grabbed = self.grab_at(self.mapToScene(self._press))
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802 - Qt's name
-        self.hovered.emit(self.mapToScene(event.position().toPoint()))
+        if self._pan.move(event):
+            return
+        point = self.mapToScene(event.position().toPoint())
+        self.hovered.emit(point)
+        if self._grabbed is not None and event.buttons() & Qt.LeftButton:
+            delta = event.position().toPoint() - self._press
+            if self._item_drag or delta.manhattanLength() > 8:
+                # Dragging a person or a thing to another tile.
+                self._item_drag = True
+                self.item_dragging.emit(self._grabbed, point)
+            super().mouseMoveEvent(event)
+            return
         if self._press is not None and event.buttons() & Qt.LeftButton:
             delta = event.position().toPoint() - self._press
             if self._dragging or delta.manhattanLength() > 8:
@@ -305,14 +340,19 @@ class _Graphics(QGraphicsView):
         super().keyPressEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt's name
-        if self._press is not None and not self._dragging:
+        if self._pan.release(event):
+            return
+        if self._item_drag:
+            self.item_dropped.emit(self._grabbed, self.mapToScene(event.position().toPoint()))
+        elif self._press is not None and not self._dragging:
             signal = self.context if event.button() == Qt.RightButton else self.clicked
             signal.emit(
                 self.mapToScene(event.position().toPoint()), event.globalPosition().toPoint()
             )
         self._press = None
         self._dragging = False
-        self.setDragMode(QGraphicsView.NoDrag)
+        self._grabbed = None
+        self._item_drag = False
         super().mouseReleaseEvent(event)
 
 
@@ -620,6 +660,10 @@ class AreaView(QWidget):
     paintings_wanted = Signal()
     paint_place_requested = Signal()
     painting_chosen = Signal(str)
+    # A correction of the map (engine/session_corrections.py): what, and its
+    # arguments ("move_person", (name, x, y)); the window asks for any words
+    # and makes it. See `_correct`.
+    correction_requested = Signal(str, object)
 
     def __init__(self) -> None:
         super().__init__()
@@ -765,6 +809,10 @@ class AreaView(QWidget):
         self.view.left.connect(self._left)
         self.view.zoomed.connect(self._zoomed)
         self.view.resized.connect(self._resized)
+        # Corrections: a person or a thing dragged to another tile.
+        self.view.grab_at = self._grab_at
+        self.view.item_dragging.connect(self._item_dragging)
+        self.view.item_dropped.connect(self._item_dropped)
         # Fitted to the area until the author zooms (then it is theirs).
         self._fitted = True
         self.zoom_out.clicked.connect(lambda: self.view.zoom_by(1 / ZOOM_STEP))
@@ -819,6 +867,12 @@ class AreaView(QWidget):
         self._weather_timer = QTimer(self)
         self._weather_timer.setInterval(WEATHER_MS)
         self._weather_timer.timeout.connect(self._weather_tick)
+        # Corrections: Move… waiting for the tile (kind, id, its name), the
+        # ghost of a thing being dragged, and what Undo would put back
+        # (the window sets it, `set_undo`).
+        self._moving: tuple[str, str, str] | None = None
+        self._ghost: QGraphicsRectItem | None = None
+        self.undo_words: str | None = None
         self.set_message("No area here yet.")
 
     # --- what is shown -----------------------------------------------------------
@@ -1217,11 +1271,134 @@ class AreaView(QWidget):
     def _hint(self) -> str:
         if self.locked:
             return "The story is being written: the map waits for it."
+        if self._moving is not None:
+            return f"Click where {self._moving[2]} should be. Esc to cancel."
         return (
             "Click to walk there; click a person or a thing for what you can do. Walk into a "
             "door to go through it. Right-click a spot to mark it in your turn. Travel… for "
-            "another place. Drag or wheel to look around; ◎ Me (Home) finds you."
+            "another place. Drag the ground, or hold the middle button, to look around; wheel "
+            "to zoom; ◎ Me (Home) finds you. Drag a person or a thing to put the map right."
         )
+
+    def set_undo(self, words: str | None) -> None:
+        """What Undo would put back ("Ruth moved"), or None: offered in the menus."""
+        self.undo_words = words
+
+    # --- corrections ------------------------------------------------------------
+
+    def _grab_at(self, point: QPointF) -> tuple[str, str, str] | None:
+        """What a press here would drag to another tile: ("person", name,
+        name) or ("thing", id, name); None (the ground: the view pans)."""
+        if self.locked or self.area is None or self.walking():
+            return None
+        person = self.person_at(point)
+        if person is not None:
+            return ("person", person.name, person.name)
+        tile = self.tile_at(point)
+        thing = self.area.placement_at(*tile) if tile is not None else None
+        if thing is not None:
+            return ("thing", thing.id, _bare_name(thing.name))
+        return None
+
+    def _item_dragging(self, item, point: QPointF) -> None:
+        """The person or thing follows the pointer, tile by tile."""
+        tile = self.tile_at(point)
+        if self.area is None or tile is None:
+            return
+        self._hovered(point)
+        kind, ident, _name = item
+        if kind == "person":
+            person = self.people.get(ident)
+            if person is not None:
+                person.place_at(*tile)
+                self._tag_at(ident, *tile)
+            return
+        thing = next((p for p in self.area.placements if p.id == ident), None)
+        if thing is None:
+            return
+        px = px_for(self.area)
+        if self._ghost is None:
+            self._ghost = QGraphicsRectItem()
+            self._ghost.setPen(QPen(GOLD, 2))
+            self._ghost.setBrush(QColor(GOLD.red(), GOLD.green(), GOLD.blue(), 70))
+            self._ghost.setZValue(50)
+            self.scene.addItem(self._ghost)
+        self._ghost.setRect(QRectF(tile[0] * px, tile[1] * px, thing.w * px, thing.h * px))
+
+    def _item_dropped(self, item, point: QPointF) -> None:
+        if self._ghost is not None:
+            self.scene.removeItem(self._ghost)
+            self._ghost = None
+        tile = self.tile_at(point)
+        kind, ident, _name = item
+        if tile is None:
+            self.correction_requested.emit("refresh", ())
+            return
+        self.correction_requested.emit(f"move_{kind}", (ident, tile[0], tile[1]))
+
+    def _start_moving(self, kind: str, ident: str, name: str) -> None:
+        """Move…: the next click on a tile puts it there."""
+        self._moving = (kind, ident, name)
+        self.hint.setText(self._hint())
+
+    def _stop_moving(self) -> None:
+        self._moving = None
+        self.hint.setText(self._hint())
+
+    def _add_corrections(self, menu: QMenu, item: tuple[str, str, str] | None, tile=None):
+        """The menu's "Correct the map" section: for a person, a thing, or
+        (`item` None) the empty tile at `tile`; and Undo."""
+        if self.locked:
+            return
+        menu.addSection("Correct the map")
+        if item is not None:
+            kind, ident, name = item
+            move = menu.addAction("Move…")
+            move.setToolTip(f"Put {name} on another tile: click where (no time passes)")
+            move.triggered.connect(lambda: self._start_moving(kind, ident, name))
+        if item is not None and item[0] == "person":
+            ident = item[1]
+            held = self.held()
+            if UNKNOWN_LABEL.match(ident):
+                named = menu.addAction("Name…")
+                named.setToolTip("Who this is: one of the cards, or a name")
+            else:
+                named = menu.addAction("Is really…")
+                named.setToolTip("This is someone else: another card, a name, or not named yet")
+            named.triggered.connect(lambda: self.correction_requested.emit("name", (ident,)))
+            if held is None or held.name != ident:
+                gone = menu.addAction("Not here")
+                gone.setToolTip("Take them off the map: they aren't here")
+                gone.triggered.connect(lambda: self.correction_requested.emit("not_here", (ident,)))
+        elif item is not None:
+            ident = item[1]
+            thing = next((p for p in self.area.placements if p.id == ident), None)
+            rename = menu.addAction("Rename…")
+            rename.triggered.connect(
+                lambda: self.correction_requested.emit("rename_thing", (ident,))
+            )
+            broken = thing is not None and thing.broken
+            mend = menu.addAction("Whole again" if broken else "Broken")
+            mend.triggered.connect(
+                lambda: self.correction_requested.emit("broken", (ident, not broken))
+            )
+            remove = menu.addAction("Remove")
+            remove.setToolTip("Take it off the map")
+            remove.triggered.connect(
+                lambda: self.correction_requested.emit("remove_thing", (ident,))
+            )
+        elif tile is not None:
+            someone = menu.addAction("Put someone here…")
+            someone.triggered.connect(
+                lambda: self.correction_requested.emit("put_person", (tile[0], tile[1]))
+            )
+            thing = menu.addAction("Put a thing here…")
+            thing.triggered.connect(
+                lambda: self.correction_requested.emit("put_thing", (tile[0], tile[1]))
+            )
+        if self.undo_words:
+            undo = menu.addAction(f"Undo: {self.undo_words}")
+            undo.triggered.connect(lambda: self.correction_requested.emit("undo", ()))
 
     def set_locked(self, locked: bool) -> None:
         self.locked = locked
@@ -1514,6 +1691,13 @@ class AreaView(QWidget):
         if self.locked:
             self.hint.setText(self._hint())
             return
+        if self._moving is not None:
+            kind, ident, _name = self._moving
+            tile = self.tile_at(point)
+            self._stop_moving()
+            if tile is not None:
+                self.correction_requested.emit(f"move_{kind}", (ident, tile[0], tile[1]))
+            return
         person = self.person_at(point)
         tile = self.tile_at(point)
         if person is not None and not person.held:
@@ -1561,7 +1745,7 @@ class AreaView(QWidget):
         if self.area is None or tile is None:
             return
         person = self.person_at(point)
-        if person is not None and not person.held and not self.locked:
+        if person is not None and not self.locked:
             self._person_menu(person, global_pos, mark=(person.x, person.y))
             return
         thing = self.area.placement_at(*tile)
@@ -1579,7 +1763,14 @@ class AreaView(QWidget):
         walk = menu.addAction("Walk here")
         walk.setEnabled(not self.locked and self.area.walkable(*tile))
         walk.triggered.connect(lambda: self.walk_requested.emit(tile[0], tile[1], False))
-        menu.exec(global_pos)
+        self._add_corrections(menu, None, tile)
+        menu.setToolTipsVisible(True)
+        self._show_menu(menu, global_pos)
+
+    def _show_menu(self, menu: QMenu, at: QPoint) -> None:
+        """A menu shown where it was asked for, and let go (one place, so a
+        test can see what a menu offers without it waiting for a click)."""
+        menu.exec(at)
         menu.deleteLater()
 
     def _add_mark(self, menu: QMenu, tile: tuple[int, int] | None) -> None:
@@ -1595,17 +1786,18 @@ class AreaView(QWidget):
         menu.setToolTipsVisible(True)
         title = menu.addAction(person.name)
         title.setEnabled(False)
-        for verb in ("talk", "look", "attack"):
-            action = menu.addAction(VERB_LABELS[verb])
-            action.triggered.connect(
-                lambda _c=False, v=verb: self.action_chosen.emit(v, person.name, "")
-            )
-        menu.addSeparator()
-        walk = menu.addAction("Walk over")
-        walk.triggered.connect(lambda: self.walk_requested.emit(person.x, person.y, True))
+        if not person.held:
+            for verb in ("talk", "look", "attack"):
+                action = menu.addAction(VERB_LABELS[verb])
+                action.triggered.connect(
+                    lambda _c=False, v=verb: self.action_chosen.emit(v, person.name, "")
+                )
+            menu.addSeparator()
+            walk = menu.addAction("Walk over")
+            walk.triggered.connect(lambda: self.walk_requested.emit(person.x, person.y, True))
         self._add_mark(menu, mark)
-        menu.exec(at)
-        menu.deleteLater()
+        self._add_corrections(menu, ("person", person.name, person.name))
+        self._show_menu(menu, at)
 
     def _thing_menu(self, thing: Placement, at: QPoint, mark=None) -> None:
         menu = QMenu(self)
@@ -1621,10 +1813,14 @@ class AreaView(QWidget):
         cx, cy = thing.centre
         walk.triggered.connect(lambda: self.walk_requested.emit(int(cx), int(cy), True))
         self._add_mark(menu, mark)
-        menu.exec(at)
-        menu.deleteLater()
+        self._add_corrections(menu, ("thing", thing.id, _bare_name(thing.name)))
+        menu.setToolTipsVisible(True)
+        self._show_menu(menu, at)
 
     def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt's name
+        if event.key() == Qt.Key_Escape and self._moving is not None:
+            self._stop_moving()
+            return
         held = self.held()
         step = WALK_KEYS.get(event.key())
         if step is not None and held is not None and not self.locked and not self.walking():

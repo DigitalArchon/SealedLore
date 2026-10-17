@@ -87,6 +87,7 @@ from sealedlore.gui import text_size
 from sealedlore.gui.image_codec import image_from_data
 from sealedlore.gui.isometric_view import IsometricBar, IsometricDialog
 from sealedlore.gui.map_art import FOG, picture_sprite, sprite_pixmap
+from sealedlore.gui.map_pan import MiddlePan
 from sealedlore.gui.map_render import drawn_box, label_key
 from sealedlore.gui.map_tiles import (
     LOOKS,
@@ -557,12 +558,16 @@ class _WorldGraphics(QGraphicsView):
     # A right-click (scene point, screen point), and the pointer moving.
     context = Signal(QPointF, QPoint)
     hovered = Signal(QPointF)
+    # A left click that didn't drag the map (a scene point): Move… takes it.
+    clicked = Signal(QPointF)
 
     def __init__(self) -> None:
         super().__init__()
         self.setRenderHint(QPainter.Antialiasing, True)
         self.setMouseTracking(True)
         self.setDragMode(QGraphicsView.ScrollHandDrag)
+        self._pan = MiddlePan(self)
+        self._press: QPoint | None = None
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         # The middle stays where it is when the map's room changes (the
         # isometric bar over it, the card under it): what is in view stays.
@@ -591,13 +596,29 @@ class _WorldGraphics(QGraphicsView):
         self.scrolled.emit()  # a plan dragged into view is drawn then
 
     def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt's name
+        if self._pan.press(event):
+            self.dragged.emit()  # the author moves the map: no more refitting
+            return
         if event.button() == Qt.LeftButton:
+            self._press = event.position().toPoint()
             self.dragged.emit()  # the author moves the map: no more refitting
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802 - Qt's name
+        if self._pan.move(event):
+            return
         self.hovered.emit(self.mapToScene(event.position().toPoint()))
         super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt's name
+        if self._pan.release(event):
+            return
+        if event.button() == Qt.LeftButton and self._press is not None:
+            moved = (event.position().toPoint() - self._press).manhattanLength()
+            if moved <= 6:
+                self.clicked.emit(self.mapToScene(event.position().toPoint()))
+        self._press = None
+        super().mouseReleaseEvent(event)
 
     def contextMenuEvent(self, event) -> None:  # noqa: N802 - Qt's name
         self.context.emit(self.mapToScene(event.pos()), event.globalPos())
@@ -817,6 +838,10 @@ class WorldView(QWidget):
     # for one.
     mark_requested = Signal(float, float)
     go_requested = Signal(float, float)
+    # A correction of a place (engine/session_corrections.py): what
+    # ("rename", "move", "inside", "merge", "remove", "undo"), the place's id,
+    # and its arguments (Move…'s point, metres east and north).
+    place_correction = Signal(str, str, object)
 
     def __init__(self) -> None:
         super().__init__()
@@ -924,6 +949,11 @@ class WorldView(QWidget):
         self.view.resized.connect(self._resized)
         self.view.scrolled.connect(self._scrolled)
         self.view.context.connect(self._context)
+        self.view.clicked.connect(self._clicked_map)
+        # Move… on a place: waiting for the point (its id and name); and
+        # what Undo would put back (the window sets it).
+        self._moving_place: tuple[str, str] | None = None
+        self.undo_words: str | None = None
         self.view.hovered.connect(self._hovered)
         self.me_button.clicked.connect(self.centre_on_me)
         self.zoom_out.clicked.connect(lambda: self.view.zoom_by(1 / ZOOM_STEP))
@@ -1326,9 +1356,49 @@ class WorldView(QWidget):
         go.setEnabled(place_id is not None and not self.locked and self.here() is not None)
         go.setToolTip("Set off for this spot: the way's length on foot moves the clock")
         go.triggered.connect(lambda: self.go_requested.emit(x, y))
+        if not self.locked and (place_id is not None or self.undo_words):
+            menu.addSection("Correct the map")
+        if place_id is not None and not self.locked:
+            name = self.world.places[place_id].name
+            for label, action, tip in (
+                ("Rename this place…", "rename", "Its old name stays as another name for it"),
+                ("Move this place…", "move", "Click where it stands: what is inside goes too"),
+                ("Put it inside…", "inside", "It is part of another place"),
+                ("Merge into…", "merge", "It is the same place as another: one map entry"),
+                ("Remove from the map", "remove", "What was inside it goes to its parent"),
+            ):
+                entry = menu.addAction(label)
+                entry.setToolTip(tip)
+                if action == "move":
+                    entry.triggered.connect(
+                        lambda _c=False, p=place_id, n=name: self._start_moving_place(p, n)
+                    )
+                else:
+                    entry.triggered.connect(
+                        lambda _c=False, a=action, p=place_id: self.place_correction.emit(a, p, ())
+                    )
+        if self.undo_words and not self.locked:
+            undo = menu.addAction(f"Undo: {self.undo_words}")
+            undo.triggered.connect(lambda: self.place_correction.emit("undo", "", ()))
         menu.setToolTipsVisible(True)
         menu.exec(global_pos)
         menu.deleteLater()
+
+    def set_undo(self, words: str | None) -> None:
+        """What Undo would put back, or None: offered in the right-click menu."""
+        self.undo_words = words
+
+    def _start_moving_place(self, place_id: str, name: str) -> None:
+        self._moving_place = (place_id, name)
+        self.hint.setText(f"Click where {name} stands. Esc to cancel.")
+
+    def _clicked_map(self, point: QPointF) -> None:
+        if self._moving_place is None:
+            return
+        place_id, _name = self._moving_place
+        self._moving_place = None
+        self.hint.setText(self._hint_for(self.level()))
+        self.place_correction.emit("move", place_id, (point.x(), -point.y()))
 
     def _build_veil(self) -> None:
         """The fog over known country the character isn't in now, and the
@@ -2348,9 +2418,13 @@ class WorldView(QWidget):
             self.play.setFocus()
 
     def escape(self) -> bool:
-        """Esc on the map: the paintings off, else from the local
-        level (the play view too) out to the region; False when there is
-        nothing closer to go out from."""
+        """Esc on the map: Move… cancelled, else the paintings off, else from
+        the local level (the play view too) out to the region; False when
+        there is nothing closer to go out from."""
+        if self._moving_place is not None:
+            self._moving_place = None
+            self.hint.setText(self._hint_for(self.level()))
+            return True
         if self.leave_isometric():
             return True
         if self.play_shown() or (self.world.places and self.level() == "local"):

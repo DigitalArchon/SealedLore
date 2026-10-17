@@ -1095,8 +1095,9 @@ story or a walk takes them in.
   step); the tile under the pointer shows gold where you can stand and red
   where you can't, and a click while you are still walking goes on from
   where you are. Walking costs no model call and moves the clock a little;
-  walk into a door to go through it, into a building or back out. Drag or
-  use the wheel to look around; **−** and **+** zoom, up to twice the art's
+  walk into a door to go through it, into a building or back out. Drag the
+  ground, or hold the middle mouse button and move, to look around (the
+  middle button pans the Region and World maps too); the wheel zooms; **−** and **+** zoom, up to twice the art's
   own pixels. The hour tints the area (blue at night, amber at dawn and
   dusk), and indoors the rooms you can see into are lit and the rest dimmed.
   The storyteller is told the time of day in words ("It is dusk"), never
@@ -1205,6 +1206,26 @@ story or a walk takes them in.
   area you are in is walked to, one elsewhere is travelled to, as Travel…
   does (when the turn is sent).
 - **◎ Me** (or Home) centres the view on you, on Local and on the map.
+- **Correcting the map.** When a passage's reading of the map gets
+  something wrong, put it right by hand: no model is asked, and no time
+  passes. On Local, drag a person or a thing to the tile where they really
+  are (or right-click it, **Move…**, then click where; Esc cancels). The
+  right-click menus have a **Correct the map** section: for a person,
+  **Name…** (someone not named yet: one of the cards, or a name) or **Is
+  really…** (named wrongly: another card, a name, or someone not named yet
+  after all), and **Not here** (taken off the map and off the scene card);
+  for a thing, **Rename…**, **Broken** or **Whole again**, and **Remove**;
+  on an empty tile, **Put someone here…** and **Put a thing here…**. On the
+  Region and World maps, a place's right-click menu has **Rename this
+  place…** (its old name stays as another name for it), **Move this
+  place…** (then click where it stands; what is inside it goes too), **Put
+  it inside…**, **Merge into…** (a duplicate: its people, things and places
+  go to the other) and **Remove from the map**. Someone moved into or out
+  of your character's company is put on or taken off the scene card's
+  roster too. A correction belongs to the latest message, so each branch
+  keeps its own and the next passage is read from the corrected map; the
+  last one can be undone (**Undo** in the same menus) until the story
+  moves on.
 - **The clock** (Day 1, 08:00, beside the place's name) moves with walking
   and travel, with the time the passages tell, and with a Direction or
   Narration that says time goes by ("Three weeks pass"). In a story with a

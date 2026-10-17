@@ -110,6 +110,7 @@ from sealedlore.gui.usage_dialog import UsageDialog
 from sealedlore.gui.welcome import setup_missing, welcome_html
 from sealedlore.gui.window_area import AreaWindow
 from sealedlore.gui.window_chat import ChatWindow
+from sealedlore.gui.window_corrections import CorrectionWindow
 from sealedlore.gui.window_find import FindWindow
 from sealedlore.gui.window_images import ImagesWindow
 from sealedlore.gui.window_layout import LayoutWindow, StoriesDock
@@ -196,6 +197,7 @@ class MainWindow(
     FindWindow,
     WorldWindow,
     AreaWindow,
+    CorrectionWindow,
     ImagesWindow,
     VideosWindow,
     PrivateWindow,
@@ -389,6 +391,7 @@ class MainWindow(
         self.cast_panel.infer_requested.connect(self.infer_competence)
         self.cast_panel.picture_requested.connect(self._on_card_picture)
         self._wire_avatars()
+        self._wire_corrections()
         self.scene_panel = ScenePanel()
         self.scene_panel.changed.connect(self._on_scene_changed)
         self.scene_panel.update_requested.connect(self.update_scene_from_story)
