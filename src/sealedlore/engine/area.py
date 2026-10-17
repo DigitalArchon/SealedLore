@@ -31,7 +31,7 @@ from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from sealedlore.engine.deck_plan import use_of
+from sealedlore.engine.deck_plan import DRAWN_PIECES, use_of
 from sealedlore.engine.levels import (
     LevelLinks,
     level_area_id,
@@ -110,6 +110,10 @@ class Placement:
     # The author's character destroyed it (a record on the turn's snapshot,
     # `apply_things`): still here, drawn broken, no longer to be destroyed.
     broken: bool = False
+    # A deck's set piece, placed by the program before the furniture
+    # (engine/deck_plan.py): one it draws itself (DRAWN_PIECES: "reactor",
+    # "shaft", "beds"), "set" for one drawn from its sprite; "" for anything else.
+    piece: str = ""
 
     def tiles(self) -> list[tuple[int, int]]:
         return [(self.x + dx, self.y + dy) for dy in range(self.h) for dx in range(self.w)]
@@ -217,6 +221,10 @@ class Area:
     # index (0 is the plan itself) and name ("Upper floor", "Deck 2").
     level: int = 0
     level_name: str = ""
+    # A deck laid out by the program: its hull's mass, a row per row of the
+    # plan, "H" plating, "R" rock, "E" an engine, " " none (engine/deck_plan.py;
+    # drawn by gui/deck_look.py, never walked on: the rows keep " " there).
+    hull: list[str] = field(default_factory=list)
 
     @property
     def id(self) -> str:
@@ -973,6 +981,7 @@ def build_area(
     buildings: dict[str, tuple[int, int, int, int]] = {}
     people_keys = {key(n) for n in people}
     links: LevelLinks | None = None
+    generated = False
     if indoor:
         # The plan's own level, with the stairs the rules put in between it
         # and its other levels (engine/levels.py); a plan with none is as drawn.
@@ -1077,6 +1086,9 @@ def build_area(
         repairs=repairs,
     )
     area.placements = _object_placements(area)
+    if indoor and generated:
+        area.hull = _hull_rows(spec.get("hull"), rows)
+        area.placements += deck_pieces(area, spec.get("rooms"))
     if indoor and rooms:
         plan = art.furnishing_for(place.id, place.state)
         if plan is not None:
@@ -1172,6 +1184,10 @@ def build_level(
         level_name=level_name(layout, index, deck=deck),
     )
     area.placements = _object_placements(area)
+    if generated:
+        drawn_spec = drawn.spec or {}  # type: ignore[union-attr]
+        area.hull = _hull_rows(drawn_spec.get("hull"), rows)
+        area.placements += deck_pieces(area, drawn_spec.get("rooms"))
     if rooms:
         plan = art.furnishing_for(area.id, place.state)
         if plan is not None:
@@ -1540,6 +1556,60 @@ def _add_exit(rows: list[str], repairs: list[str]) -> tuple[list[str], list[tupl
     return rows, []
 
 
+def _hull_rows(raw: Any, rows: Sequence[str]) -> list[str]:
+    """A deck's hull marks as stored, held to its rows' size; [] for none."""
+    if not isinstance(raw, list) or len(raw) != len(rows):
+        return []
+    out = []
+    for line, row in zip(raw, rows, strict=True):
+        line = str(line)[: len(row)].ljust(len(row))
+        out.append("".join(ch if ch in "HRE" else " " for ch in line))
+    return out
+
+
+def deck_pieces(area: Area, records: Any) -> list[Placement]:
+    """A deck's set pieces (engine/deck_plan.py `_pieces`) as placements, each
+    in the room it stands in, named among what the room already has so the
+    furnisher plans round it and adds no second reactor."""
+    out: list[Placement] = []
+    for record in records if isinstance(records, list) else []:
+        if not isinstance(record, dict):
+            continue
+        for k, piece in enumerate(record.get("pieces") or []):
+            if not isinstance(piece, dict):
+                continue
+            box = piece.get("box")
+            name = " ".join(str(piece.get("name") or "").split())[:80]
+            if not name or not isinstance(box, list) or len(box) != 4:
+                continue
+            try:
+                x0, y0, x1, y1 = (int(v) for v in box)
+            except (TypeError, ValueError):
+                continue
+            tiles = [(x, y) for y in range(y0, y1 + 1) for x in range(x0, x1 + 1)]
+            if not tiles or not all(area.at(x, y) in FLOOR_TILES for x, y in tiles):
+                continue
+            room = area.room_at(x0, y0)
+            kind = str(piece.get("piece") or "")
+            out.append(
+                Placement(
+                    id=f"{area.id}:piece:{record.get('name', '')}:{k}",
+                    name=name,
+                    x=x0,
+                    y=y0,
+                    w=x1 - x0 + 1,
+                    h=y1 - y0 + 1,
+                    verbs=item_verbs(name),
+                    kind="furniture",
+                    room=room.index if room else None,
+                    piece=kind if kind in DRAWN_PIECES else "set",
+                )
+            )
+            if room is not None and name not in room.objects:
+                room.objects.append(name)
+    return out
+
+
 def _object_placements(area: Area) -> list[Placement]:
     out = []
     for y, row in enumerate(area.rows):
@@ -1784,6 +1854,7 @@ def furnish(area: Area, plan: FurnishPlan, density: str = "normal") -> list[Plac
     rows = area.rows
     floor = {(x, y) for y in range(h) for x in range(w) if rows[y][x] in FLOOR_TILES}
     taken = {(x, y) for y in range(h) for x in range(w) if rows[y][x] not in FLOOR_TILES}
+    taken |= {t for f in area.placements if f.piece for t in f.tiles()}  # a deck's set pieces
     keep: set[tuple[int, int]] = set()
     door_tiles = [d.middle for d in area.doorways]
     for d in area.doorways:

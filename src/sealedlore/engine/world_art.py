@@ -1262,6 +1262,16 @@ def deck_messages(
     ]
 
 
+def deck_hull(world: WorldMap, place: WorldPlace) -> str:
+    """What the hull is by the map's own words: "rock" for a station dug into
+    an asteroid, a moon or a cliff (its words, or the place it stands in), ""
+    to leave it to the brief."""
+    for p in [place, *_chain(world, place.inside)][:3]:
+        if deck_plan.hull_kind(p.name, p.what) == "rock":
+            return "rock"
+    return ""
+
+
 def deck_named(world: WorldMap, place: WorldPlace) -> list[tuple[str, str]]:
     """(name, what) of every place inside a station or ship, at any depth:
     each becomes one of its rooms."""
@@ -1284,13 +1294,15 @@ def deck_layout(job: ArtJob, text: str, *, model: str, made_at: str) -> PlaceLay
     rooms or they won't fit."""
     named = tuple(tuple(n) for n in job.extra.get("named") or ())
     brief = deck_plan.parse_brief(text, named=named)  # type: ignore[arg-type]
-    plan = deck_plan.generate(brief, job.subject_id)
+    plan = deck_plan.generate(brief, job.subject_id, hull=str(job.extra.get("hull") or ""))
     main = plan.decks[0]
     others = [d for i, d in sorted(plan.decks.items()) if i != 0]
     spec = {
         "ground": "space",
         "deck": True,
         "shape": plan.shape,
+        "hull_kind": plan.hull,
+        "hull": main.hull,
         "tile_m": plan.tile_m,
         "brief": brief.as_dict(),
         "rooms": main.room_records(),
@@ -1312,7 +1324,7 @@ def deck_layout(job: ArtJob, text: str, *, model: str, made_at: str) -> PlaceLay
                 name=d.name,
                 place_id=job.subject_id,
                 state=job.state,
-                spec={"rooms": d.room_records()},
+                spec={"rooms": d.room_records(), "hull": d.hull},
                 rows=d.rows,
                 labels=d.labels,
                 model=model,
@@ -1526,7 +1538,11 @@ def plan_art(
                     pid,
                     name=place.name,
                     order=-1,
-                    extra={"deck": True, "named": deck_named(world, place)},
+                    extra={
+                        "deck": True,
+                        "named": deck_named(world, place),
+                        "hull": deck_hull(world, place),
+                    },
                 )
             )
             continue
@@ -1567,7 +1583,11 @@ def plan_art(
                         pid,
                         name=place.name,
                         order=1,
-                        extra={"deck": True, "named": deck_named(world, place)},
+                        extra={
+                            "deck": True,
+                            "named": deck_named(world, place),
+                            "hull": deck_hull(world, place),
+                        },
                     )
                 )
             continue

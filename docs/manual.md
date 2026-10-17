@@ -1071,8 +1071,18 @@ A story that keeps a map makes it part of the window: the Inspector, beside
 the story, takes half the window with **Map** as its first page. **Map**,
 above the transcript, goes to it.
 
-A station or a ship is drawn as one deck: its rooms joined under the hull,
-space only outside it. A plan is drawn once and kept, so one that came out
+A station or a ship in space is laid out by SealedLore itself: the map art
+model only says what it holds (its shape, its decks, and each deck's rooms),
+and every deck is laid out round one lift lobby, the lifts in the same place
+on every deck, with corridors, airlocks and viewports. Its hull is drawn round
+it: a station's rounded body with its courtyards open to space, a ship's hull
+narrowing to its bridge at the bow with its engines at the stern, an outpost
+dug into an asteroid set in rock. Each room is drawn for what it is, and the
+rooms that make a station what it is have their set pieces: a reactor in
+engineering, consoles and a command chair facing a bridge's viewport, a
+shuttle in a hangar, a mine's shaft, a garden's beds.
+
+A plan is drawn once and kept, so one that came out
 wrong stays so; **Redraw plan…** on the local map draws the plan of the area
 in the middle of the view again (you are asked first; the buildings you have
 been inside keep their own plans).

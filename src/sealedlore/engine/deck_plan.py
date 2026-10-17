@@ -16,7 +16,16 @@ and each deck's rooms by name, use and size. The program lays it out:
   follows the rooms (as small ships' plans in pixel-art games do);
 - viewports in the hull walls of the rooms that look out (a promenade, a
   bridge, a lounge), portholes along the corridors that run by the hull;
-- an airlock at the end of each corridor on a deck that docks ships.
+- airlocks off the main corridors, facing open space, on a deck that docks
+  ships;
+- the hull's mass round it all (`HULL`, `ROCK`, `ENGINE`, painted by
+  gui/deck_look.py): a station's plating closed round its rooms, a ship's
+  hull tapering to its bridge with engines at the stern, an outpost's
+  asteroid rock; the blind judges (Oct 17 2026) found the bare outline
+  boxy, a ring's courtyards holes, and a freighter with no bow or stern;
+- set pieces in the rooms that make a station what it is (a reactor in
+  engineering, consoles facing a bridge's viewport, a shuttle in a hangar,
+  a mine's shaft, a garden's beds), placed before the furniture.
 
 Pure: no Qt, no network, the same layout for the same brief and place.
 """
@@ -126,6 +135,41 @@ _SHAPE_WORDS = (
     ("spine", r"spine|ship|long|needle|hull|wedge|arrow|narrow|bow"),
     ("cross", r"cross|plus|star|arms?|hub|spokes?|x"),
 )
+# What the hull is: a built station, a ship (a bow and engines), or rock
+# (an outpost dug into an asteroid, a moon, a cliff).
+HULLS = ("station", "ship", "rock")
+_HULL_KIND_WORDS = (
+    (
+        "rock",
+        r"rock|asteroids?|planetoids?|moons?|comets?|cliffs?|caverns?|caves?|dug|carved|"
+        r"hollow\w*|tunnel\w*|crust|bedrock",
+    ),
+    (
+        "ship",
+        r"ships?|starships?|vessels?|freighters?|craft|shuttles?|cruisers?|frigates?|"
+        r"haulers?|tugs?|carriers?|corvettes?|destroyers?|yachts?|transports?",
+    ),
+    ("station", r"stations?|starbases?|habitats?|platforms?|outposts?|orbitals?|bases?"),
+)
+# The hull's mass, as `Deck.hull` marks it (the deck's rows keep " " there:
+# nobody walks or sees through it any differently).
+HULL, ROCK, ENGINE = "H", "R", "E"
+# How far plating reaches past the outer walls, and the notches it closes.
+RIM = 1
+CLOSE = 3
+# The bare corridor before a ship's bridge, so its hull narrows to the bow.
+NECK = 5
+# Set pieces the program draws itself (gui/deck_look.py), and those it
+# places as furniture the set has sprites for.
+DRAWN_PIECES = ("reactor", "shaft", "beds")
+REACTOR_WORDS = re.compile(r"\b(drive|jump|warp|hyperdrive)\b", re.I)
+SHAFT_WORDS = re.compile(
+    r"\b(mine|mines|mining|shaft|drill\w*|pit|ore ?head|bore\w*|dig\w*)\b", re.I
+)
+CONSOLE = "a curved command console bank"
+CHAIR = "a stout captain's chair"
+SHUTTLE = "a small shuttlecraft"
+HOLO = "a holo-projection meeting table"
 MAX_ROOMS = 14
 CORRIDOR = 2  # tiles across
 LOBBY = 6  # the central lobby's interior, tiles across
@@ -163,10 +207,12 @@ class BriefDeck:
 class Brief:
     shape: str
     decks: list[BriefDeck]
+    hull: str = "station"
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "shape": self.shape,
+            "hull": self.hull,
             "decks": [
                 {
                     "index": d.index,
@@ -190,6 +236,16 @@ def _shape(word: Any) -> str:
         if re.search(rf"\b(?:{words})\b", text):
             return shape
     return "ring"
+
+
+def hull_kind(*words: str) -> str:
+    """What a hull is from words (the brief's own "hull", a place's name and
+    what is said of it), "" when none says."""
+    text = " ".join(w for w in words if w)
+    for kind, pattern in _HULL_KIND_WORDS:
+        if re.search(rf"\b(?:{pattern})\b", text, re.I):
+            return kind
+    return ""
 
 
 def _size(word: Any, use: str) -> str:
@@ -253,10 +309,28 @@ def parse_brief(text: str, *, named: tuple[tuple[str, str], ...] = ()) -> Brief:
             use = use_of(name, what) or "storage"
             main.rooms.append(BriefRoom(_clean(name), use, _size("", use)))
             seen.add(name.lower())
-    return Brief(_shape(data.get("shape")), [decks[i] for i in sorted(kept)])
+    shape = _shape(data.get("shape"))
+    hull = hull_kind(_clean(data.get("hull"))) or ("ship" if shape == "spine" else "station")
+    return Brief(shape, [decks[i] for i in sorted(kept)], hull)
 
 
 # --- The layout -----------------------------------------------------------------------
+
+
+@dataclass
+class Piece:
+    """A set piece in a room: drawn by the program (`piece` one of
+    DRAWN_PIECES) or a piece of furniture from the set's sprites ("")."""
+
+    name: str
+    box: tuple[int, int, int, int]  # inclusive
+    piece: str = ""
+
+    def record(self) -> dict[str, Any]:
+        out: dict[str, Any] = {"name": self.name, "box": list(self.box)}
+        if self.piece:
+            out["piece"] = self.piece
+        return out
 
 
 @dataclass
@@ -266,6 +340,8 @@ class DeckRoom:
     box: tuple[int, int, int, int]  # interior, inclusive
     door: tuple[int, int]
     view: bool = False
+    out: tuple[int, int] = (0, -1)  # the way it faces from its door
+    pieces: list[Piece] = field(default_factory=list)
 
 
 @dataclass
@@ -275,9 +351,16 @@ class Deck:
     rows: list[str]
     rooms: list[DeckRoom]
     labels: dict[str, list[int]]
+    hull: list[str] = field(default_factory=list)
 
     def room_records(self) -> list[dict[str, Any]]:
-        return [{"name": r.name, "use": r.use, "box": list(r.box)} for r in self.rooms]
+        out = []
+        for r in self.rooms:
+            record: dict[str, Any] = {"name": r.name, "use": r.use, "box": list(r.box)}
+            if r.pieces:
+                record["pieces"] = [p.record() for p in r.pieces]
+            out.append(record)
+        return out
 
 
 @dataclass
@@ -287,6 +370,7 @@ class DeckPlan:
     lifts: list[tuple[int, int]]
     tile_m: float = DECK_TILE_M
     dropped: list[str] = field(default_factory=list)
+    hull: str = "station"
 
 
 Rect = tuple[int, int, int, int]  # x0, y0, x1, y1 inclusive
@@ -466,7 +550,7 @@ def _need(deck: BriefDeck) -> int:
 
 def _pack(
     brief_deck: BriefDeck, shape: str, s: int, size: tuple[int, int], seed: int, most: int
-) -> tuple[_Canvas, list[DeckRoom], list[Rect], Rect, list[str]] | None:
+) -> tuple[_Canvas, list[DeckRoom], list[Rect], Rect, list[str], str] | None:
     """One deck packed on the shared skeleton, or None when a room won't fit
     (the caller grows the skeleton). A ring station's deck of few rooms (a
     spire's top, a small engineering deck) is a cross of short corridors
@@ -485,17 +569,87 @@ def _pack(
     rng = random.Random(seed * 31 + brief_deck.index)
     order = sorted(
         brief_deck.rooms,
-        key=lambda r: (-_SIZE_ORDER.index(r.size), r.use not in OUT_USES, r.name),
+        key=lambda r: (
+            not (shape == "spine" and r.use in ("command", "engineering")),
+            -_SIZE_ORDER.index(r.size),
+            r.use not in OUT_USES,
+            r.name,
+        ),
     )
     rooms: list[DeckRoom] = []
     load: dict[tuple[int, str], int] = {}
     edges = [lobby, *rects]
+    # The corridors an airlock may stand off: the main ones, never a branch
+    # or the lobby (live, two locks stood on a freighter's lobby and a third
+    # at the end of a branch, a knot of stubs the judges faulted).
+    mains = {1, 2} if shape == "spine" else {1, 2, 3, 4}
+    signature = shape == "spine" and any(r.use == "command" for r in brief_deck.rooms)
+    fore_end = rects[1][2] if shape == "spine" else width
+
+    def pull(use: str, name: str, slot: _Slot) -> float:
+        """A ship's bridge at its bow (the fore corridor's end) and its engines
+        at the stern (the aft one's); a station's command near its core."""
+        mx = (slot.room[0] + slot.room[2]) / 2
+        if shape == "spine":
+            if use == "command":
+                return -9.0 if slot.edge == (2, "e") else 0.2 * (width - mx)
+            if use == "engineering":
+                return -6.0 if slot.edge == (1, "w") else 0.12 * mx
+            if signature and (slot.edge == (2, "e") or slot.room[2] > fore_end - NECK):
+                return 9.0  # the bow is the bridge's, and the neck before it
+            return 0.0
+        if use == "command":
+            my = (slot.room[1] + slot.room[3]) / 2
+            return 0.3 * math.hypot(mx - cx, my - cy)
+        return 0.0
+
+    def lock_score(name: str, slot: _Slot) -> float | None:
+        if slot.edge[0] not in mains:
+            return None
+        x0, y0, x1, y1 = slot.room
+        dx, dy = slot.out
+        if dx == 0:
+            beyond = (x0 - 1, 0, x1 + 1, y0 - 2) if dy < 0 else (x0 - 1, y1 + 2, x1 + 1, height - 1)
+        else:
+            beyond = (0, y0 - 1, x0 - 2, y1 + 1) if dx < 0 else (x1 + 2, y0 - 1, width - 1, y1 + 1)
+        bx0, by0, bx1, by1 = beyond
+        clipped = (max(0, bx0), max(0, by0), min(width - 1, bx1), min(height - 1, by1))
+        if clipped[0] <= clipped[2] and clipped[1] <= clipped[3] and canvas.floor_in(clipped):
+            return None  # it must open onto space
+        score = 0.0
+        sx, sy = slot.door
+        score += 3.0 * sum(
+            max(abs(sx - ox), abs(sy - oy)) <= 2 for ox, oy in (r.door for r in rooms)
+        )
+        lower = name.lower()
+        if shape == "spine":
+            score += 0.4 * abs((x0 + x1) / 2 - cx)  # amidships
+            side = slot.edge[1]
+            if "port" in lower:
+                score += 0 if side == "n" else 4
+            elif "starboard" in lower:
+                score += 0 if side == "s" else 4
+        return score
+
+    # A ship's rooms either side of its spine (live, the shared walls drew
+    # all of a freighter's rooms below it, and its hull was lopsided).
+    sides = {"n": 0, "s": 0}
 
     def place(name: str, use: str, w: int, d: int, view: bool, outward: bool) -> bool:
         best: tuple[float, _Slot] | None = None
         for shape_wd in ((w, d), (d + 1, max(2, w - 1))) if w > d + 2 else ((w, d),):
             for slot in _slots(canvas, edges, *shape_wd):
-                score = _score(canvas, slot, outward, cx, cy, load) + rng.random() * 0.01
+                if use == "airlock":
+                    extra = lock_score(name, slot)
+                    if extra is None:
+                        continue
+                else:
+                    extra = pull(use, name, slot)
+                    side = slot.edge[1]
+                    if shape == "spine" and side in sides:
+                        extra += 4.0 * (sides[side] - sides["s" if side == "n" else "n"])
+                score = _score(canvas, slot, outward, cx, cy, load) + extra
+                score += rng.random() * 0.01
                 if best is None or score < best[0]:
                     best = (score, slot)
         if best is None:
@@ -503,7 +657,9 @@ def _pack(
         slot = best[1]
         canvas.fill(slot.room, len(rooms) + 1)
         load[slot.edge] = load.get(slot.edge, 0) + 1
-        rooms.append(DeckRoom(name, use, slot.room, slot.door, view))
+        if slot.edge[1] in sides and use != "airlock":
+            sides[slot.edge[1]] += 1
+        rooms.append(DeckRoom(name, use, slot.room, slot.door, view, slot.out))
         return True
 
     for room in order:
@@ -573,7 +729,7 @@ def _pack(
             True,
         ):
             notes.append(f"no room on the hull for {name}")
-    return canvas, rooms, rects, lobby, notes
+    return canvas, rooms, rects, lobby, notes, shape
 
 
 def _rows(
@@ -644,14 +800,368 @@ def _rows(
     return ["".join(r) for r in grid]
 
 
-def generate(brief: Brief, place_id: str) -> DeckPlan:
-    """Every deck of the brief laid out on one skeleton, cropped to one frame
-    so a tile is the same spot on every deck."""
+# --- The hull's mass and the set pieces ---------------------------------------------
+
+Tile = tuple[int, int]
+
+
+def _disc(r: int) -> list[Tile]:
+    return [
+        (dx, dy)
+        for dy in range(-r, r + 1)
+        for dx in range(-r, r + 1)
+        if dx * dx + dy * dy <= r * r + r
+    ]
+
+
+def _dilate(tiles: set[Tile], r: int) -> set[Tile]:
+    if r <= 0:
+        return set(tiles)
+    disc = _disc(r)
+    return {(x + dx, y + dy) for x, y in tiles for dx, dy in disc}
+
+
+def _erode(tiles: set[Tile], r: int) -> set[Tile]:
+    if r <= 0:
+        return set(tiles)
+    disc = _disc(r)
+    return {(x, y) for x, y in tiles if all((x + dx, y + dy) in tiles for dx, dy in disc)}
+
+
+def _closed(tiles: set[Tile], r: int) -> set[Tile]:
+    """Notches narrower than about 2r filled, a hole's corners rounded."""
+    return _erode(_dilate(tiles, r), r)
+
+
+def _built(rows: list[str]) -> set[Tile]:
+    return {(x, y) for y, row in enumerate(rows) for x, ch in enumerate(row) if ch != " "}
+
+
+def _ship(built: set[Tile], bridge: Rect | None, cy: int) -> dict[Tile, str]:
+    """A ship's hull: as wide either side of its spine (rows cy-1 and cy) as
+    its widest part there, widening from the bow and from the stern towards
+    its middle and never narrowing in between; chamfered down to its bridge
+    at the bow (east), or to a point past its last room when the bridge is on
+    another deck; engines out of a flat stern (west)."""
+    if not built:
+        return {}
+    xmin = min(x for x, _ in built)
+    xmax = max(x for x, _ in built)
+    north = dict.fromkeys(range(xmin, xmax + 1), 0)
+    south = dict.fromkeys(range(xmin, xmax + 1), 0)
+    for x, y in built:
+        if y < cy:
+            north[x] = max(north[x], cy - 1 - y)
+        else:
+            south[x] = max(south[x], y - cy)
+
+    def envelope(raw: dict[int, int]) -> dict[int, int]:
+        smooth = {x: max(raw.get(k, 0) for k in range(x - 3, x + 4)) for x in raw}
+        west: dict[int, int] = {}
+        run = 0
+        for x in range(xmin, xmax + 1):
+            run = max(run, smooth[x])
+            west[x] = run
+        out: dict[int, int] = {}
+        run = 0
+        for x in range(xmax, xmin - 1, -1):
+            run = max(run, smooth[x])
+            out[x] = min(west[x], run) + RIM
+        return out
+
+    # Each side as wide as its own rooms, and at least near the other's:
+    # a hull a little lopsided, never a slab of plating on the bare side.
+    n_side, s_side = envelope(north), envelope(south)
+    n_half = {x: max(n_side[x], round(0.5 * s_side[x])) for x in n_side}
+    s_half = {x: max(s_side[x], round(0.5 * n_side[x])) for x in s_side}
+    if bridge is not None:
+        # Down to the bridge along the neck before it, 45 degrees; never
+        # inside a room's own walls.
+        bn, bs = cy - 1 - (bridge[1] - 1), bridge[3] + 1 - cy
+        for x in n_half:
+            chamfer = 2 * max(0, bridge[0] - 1 - x)  # 2 to 1: a bow that reads as one
+            n_half[x] = max(min(n_half[x], bn + chamfer), north[x] + RIM)
+            s_half[x] = max(min(s_half[x], bs + chamfer), south[x] + RIM)
+    else:
+        for k in range(1, max(n_half[xmax], s_half[xmax]) + 1):
+            n_half[xmax + k] = max(0, n_half[xmax] - k)
+            s_half[xmax + k] = max(0, s_half[xmax] - k)
+    stern = xmin - RIM
+    n_half[stern], s_half[stern] = n_half[xmin], s_half[xmin]
+    out: dict[Tile, str] = {}
+    for x in n_half:
+        for y in range(cy - 1 - n_half[x], cy + s_half[x] + 1):
+            out[(x, y)] = HULL
+    if bridge is not None:  # nothing past the bridge's own walls
+        for t in [t for t in out if t[0] > bridge[2] + 1]:
+            del out[t]
+    # Engines: two or three nozzles out of the stern.
+    top, bottom = cy - 1 - n_half[stern], cy + s_half[stern]
+    e = (bottom - top) // 2
+    count = 3 if e >= 7 else 2
+    for k in range(count):
+        y = round(top + (bottom - top) * (k + 1) / (count + 1))
+        for dy in (-1, 0) if e < 7 else (-1, 0, 1):
+            for x in range(stern - 3, stern):
+                out[(x, y + dy)] = ENGINE
+    return out
+
+
+def _rock(core: set[Tile], seed: int) -> dict[Tile, str]:
+    """An asteroid round what is dug into it: rock a few tiles out from it,
+    further in some directions than others."""
+    if not core:
+        return {}
+    rng = random.Random(seed)
+    xs = [x for x, _ in core]
+    ys = [y for _, y in core]
+    mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
+    waves = [(rng.uniform(0, math.tau), rng.uniform(0.6, 1.4), n) for n in (2, 3, 5)]
+
+    def reach(x: int, y: int) -> float:
+        a = math.atan2(y - my, x - mx)
+        return 4.0 + sum(amp * math.sin(n * a + ph) for ph, amp, n in waves)
+
+    out: dict[Tile, str] = {}
+    frontier = set(core)
+    seen = set(core)
+    for step in range(1, 9):
+        nxt: set[Tile] = set()
+        for x, y in frontier:
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)):
+                t = (x + dx, y + dy)
+                if t in seen:
+                    continue
+                seen.add(t)
+                if step <= reach(*t):
+                    nxt.add(t)
+                    out[t] = ROCK
+        frontier = nxt
+    for t in core:
+        out[t] = ROCK
+    return out
+
+
+def _masses(
+    rows_by_deck: dict[int, list[str]],
+    shapes: dict[int, str],
+    hull: str,
+    bridges: dict[int, Rect | None],
+    cy: int,
+    seed: int,
+) -> dict[int, dict[Tile, str]]:
+    """Each deck's hull mass, from what that deck builds (the play view shows
+    one deck at a time; one outline for every deck put plating where the
+    others had rooms): a station's closed round its rooms with a rim, a
+    ship's shaped to a bow and a stern, an outpost's rock; never where the
+    deck builds or where its windows look out."""
+    out: dict[int, dict[Tile, str]] = {}
+    for index, rows in rows_by_deck.items():
+        own = _built(rows)
+        if hull == "rock":
+            marks = _rock(_closed(own, CLOSE), seed + index)
+        elif hull == "ship" and shapes[index] == "spine":
+            marks = _ship(_closed(own, CLOSE), bridges.get(index), cy)
+        else:
+            marks = {t: HULL for t in _station(own)}
+        out[index] = {t: m for t, m in marks.items() if t not in own}
+    return out
+
+
+def _station(built: set[Tile]) -> set[Tile]:
+    """A station's hull: a rounded body round all it builds (a superellipse,
+    so a ring reads as a wheel and a cross as a module, not a box), closed
+    round its rooms, with the courtyards a ring encloses left open to space,
+    their corners rounded (filled with plating, the judges' "holes" became a
+    solid block)."""
+    if not built:
+        return set()
+    xs = [x for x, _ in built]
+    ys = [y for _, y in built]
+    mx, my = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
+    a, b = max(1.0, (max(xs) - min(xs)) / 2), max(1.0, (max(ys) - min(ys)) / 2)
+    n = 3.0
+    k = max((abs(x - mx) / a) ** n + (abs(y - my) / b) ** n for x, y in built) ** (1 / n)
+    ax, by = a * k + RIM + 0.5, b * k + RIM + 0.5
+    body = {
+        (x, y)
+        for y in range(int(my - by) - 1, int(my + by) + 2)
+        for x in range(int(mx - ax) - 1, int(mx + ax) + 2)
+        if (abs(x - mx) / ax) ** n + (abs(y - my) / by) ** n <= 1
+    }
+    closed = _closed(built, 2)
+    # The courtyards: what the deck encloses and doesn't build, reached from
+    # nowhere outside it.
+    x0, x1, y0, y1 = min(xs) - 1, max(xs) + 1, min(ys) - 1, max(ys) + 1
+    outside: set[Tile] = set()
+    todo = [(x, y) for x in range(x0, x1 + 1) for y in (y0, y1)]
+    todo += [(x, y) for y in range(y0, y1 + 1) for x in (x0, x1)]
+    while todo:
+        t = todo.pop()
+        if t in outside or t in built or not (x0 <= t[0] <= x1 and y0 <= t[1] <= y1):
+            continue
+        outside.add(t)
+        x, y = t
+        todo += [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+    yards = {
+        (x, y)
+        for y in range(y0, y1 + 1)
+        for x in range(x0, x1 + 1)
+        if (x, y) not in built and (x, y) not in outside and (x, y) not in closed
+    }
+    # A yard too small to read as open space is plating.
+    return (body | _dilate(closed, RIM)) - (yards if len(yards) >= 12 else set())
+
+
+def _bays(rows: list[str], rooms: list[DeckRoom], depth: int = 2) -> set[Tile]:
+    """The space before the outer wall of each room that must look out or
+    that ships use (a viewport, a bay's doors, a lock's hatch), kept clear
+    of the hull's mass: two tiles out, the wall's length. The wall is the
+    one it faces out of, or for a room that looks out the side with the most
+    windows when that one has none."""
+    h, w = len(rows), len(rows[0]) if rows else 0
+
+    def at(x: int, y: int) -> str:
+        return rows[y][x] if 0 <= x < w and 0 <= y < h else " "
+
+    clear: set[Tile] = set()
+    for room in rooms:
+        if room.use not in OUT_USES:
+            continue
+        x0, y0, x1, y1 = room.box
+        walls = {
+            (0, -1): [(x, y0 - 1) for x in range(x0 - 1, x1 + 2)],
+            (0, 1): [(x, y1 + 1) for x in range(x0 - 1, x1 + 2)],
+            (-1, 0): [(x0 - 1, y) for y in range(y0 - 1, y1 + 2)],
+            (1, 0): [(x1 + 1, y) for y in range(y0 - 1, y1 + 2)],
+        }
+        windows = {
+            side: sum(at(x, y) in "W+" and at(x + side[0], y + side[1]) == " " for x, y in tiles)
+            for side, tiles in walls.items()
+        }
+        side = room.out
+        if room.use in VIEW_USES and not windows[side]:
+            side = max(windows, key=lambda k: windows[k])
+            if not windows[side]:
+                continue
+        dx, dy = side
+        for x, y in walls[side]:
+            for k in range(1, depth + 1):
+                t = (x + dx * k, y + dy * k)
+                if at(*t) != " ":
+                    break  # out as far as the deck's own next wall
+                clear.add(t)
+    return clear
+
+
+def _attached(mass: dict[Tile, str], built: set[Tile]) -> dict[Tile, str]:
+    """The mass with any scrap a bay cut off it taken away: each piece kept
+    only where it touches what the deck builds."""
+    out: dict[Tile, str] = {}
+    seen: set[Tile] = set()
+    for start in mass:
+        if start in seen:
+            continue
+        piece, todo = [], [start]
+        seen.add(start)
+        while todo:
+            x, y = todo.pop()
+            piece.append((x, y))
+            for t in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if t in mass and t not in seen:
+                    seen.add(t)
+                    todo.append(t)
+        touches = any(
+            (x + dx, y + dy) in built for x, y in piece for dx in (-1, 0, 1) for dy in (-1, 0, 1)
+        )
+        if touches:
+            out.update((t, mass[t]) for t in piece)
+    return out
+
+
+def _settled(rows: list[str], mass: dict[Tile, str]) -> list[str]:
+    """Windows that look onto the hull's mass made plain wall: a viewport
+    onto plating is no viewport."""
+    h, w = len(rows), len(rows[0]) if rows else 0
+    grid = [list(r) for r in rows]
+
+    def open_space(x: int, y: int) -> bool:
+        return (not (0 <= x < w and 0 <= y < h) or rows[y][x] == " ") and (x, y) not in mass
+
+    for y in range(h):
+        for x in range(w):
+            if grid[y][x] == "W" and not any(
+                open_space(x + dx, y + dy) for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0))
+            ):
+                grid[y][x] = "#"
+    return ["".join(r) for r in grid]
+
+
+def _pieces(room: DeckRoom) -> list[Piece]:
+    """The set pieces of a room that make it what it is: a reactor or a drive
+    core in engineering, a mine's shaft, a garden's beds, a shuttle on a
+    hangar's pad, a holo table in a lab, a bridge's consoles along the wall
+    it looks out of with the command chair before them. Each keeps a
+    walkway round it."""
+    x0, y0, x1, y1 = room.box
+    rw, rh = x1 - x0 + 1, y1 - y0 + 1
+
+    def centred(w: int, h: int) -> tuple[int, int, int, int]:
+        bx, by = x0 + (rw - w) // 2, y0 + (rh - h) // 2
+        return (bx, by, bx + w - 1, by + h - 1)
+
+    if SHAFT_WORDS.search(room.name) and rw >= 5 and rh >= 4:
+        n = 3 if min(rw, rh) >= 7 else 2
+        return [Piece("the mine shaft", centred(n, n), "shaft")]
+    if room.use == "engineering" and rw >= 5 and rh >= 4:
+        n = 3 if min(rw, rh) >= 7 else 2
+        name = "the drive core" if REACTOR_WORDS.search(room.name) else "the reactor core"
+        return [Piece(name, centred(n, n), "reactor")]
+    if room.use == "garden" and rw >= 5 and rh >= 4:
+        beds: list[Piece] = []
+        if rw >= rh:
+            for y in range(y0 + 1, y1, 2):
+                beds.append(Piece("a planter bed", (x0 + 1, y, x1 - 1, y), "beds"))
+        else:
+            for x in range(x0 + 1, x1, 2):
+                beds.append(Piece("a planter bed", (x, y0 + 1, x, y1 - 1), "beds"))
+        return beds
+    if room.use == "hangar" and rw >= 7 and rh >= 5:
+        return [Piece(SHUTTLE, centred(4, 3))]
+    if room.use == "science" and rw >= 5 and rh >= 4:
+        return [Piece(HOLO, centred(2, 2))]
+    if room.use == "command" and rw >= 4 and rh >= 3:
+        dx, dy = room.out
+        out: list[Piece] = []
+        if dy:
+            row = y0 if dy < 0 else y1
+            for x in range(x0 + 1, x1 - 1, 3):
+                out.append(Piece(CONSOLE, (x, row, min(x + 1, x1 - 1), row)))
+            chair_y = row + (2 if dy < 0 else -2)
+            if y0 <= chair_y <= y1:
+                out.append(Piece(CHAIR, ((x0 + x1) // 2, chair_y, (x0 + x1) // 2, chair_y)))
+        else:
+            col = x0 if dx < 0 else x1
+            for y in range(y0 + 1, y1 - 1, 3):
+                out.append(Piece(CONSOLE, (col, y, col, min(y + 1, y1 - 1))))
+            chair_x = col + (2 if dx < 0 else -2)
+            if x0 <= chair_x <= x1:
+                out.append(Piece(CHAIR, (chair_x, (y0 + y1) // 2, chair_x, (y0 + y1) // 2)))
+        return out
+    return []
+
+
+def generate(brief: Brief, place_id: str, *, hull: str = "") -> DeckPlan:
+    """Every deck of the brief laid out on one skeleton, its hull's mass round
+    it and its set pieces in its rooms, cropped to one frame so a tile is the
+    same spot on every deck. `hull` overrides the brief's ("rock" when the
+    place's own words say it is dug into an asteroid)."""
+    hull = hull if hull in HULLS else brief.hull
     seed = zlib.crc32(place_id.encode("utf-8"))
     need = max(_need(d) for d in brief.decks)
     s = max(8, round(need / (10 if brief.shape == "ring" else 8) * 1.2) + 3)
     for _attempt in range(6):
-        span = 2 * s + 2 * max(SIZES["huge"][1], 8) + 12
+        span = 2 * s + 2 * max(SIZES["huge"][1], 8) + 12 + 16
         size = (span + (2 * s if brief.shape == "spine" else 0), span)
         packed: dict[int, Any] = {}
         failed = False
@@ -670,45 +1180,70 @@ def generate(brief: Brief, place_id: str) -> DeckPlan:
     cx, cy = width // 2, height // 2
     lifts = [(cx - 1, cy), (cx, cy)]
     built: dict[int, tuple[list[str], list[DeckRoom]]] = {}
+    shapes: dict[int, str] = {}
+    bridges: dict[int, Rect | None] = {}
     dropped: list[str] = []
     for deck in brief.decks:
-        canvas, rooms, rects, lobby, notes = packed[deck.index]
+        canvas, rooms, rects, lobby, notes, shape = packed[deck.index]
         built[deck.index] = (_rows(canvas, rooms, lifts, rects), rooms)
+        shapes[deck.index] = shape
+        fore = [r for r in rooms if r.use == "command" and r.box[0] > cx and r.out == (1, 0)]
+        bridges[deck.index] = fore[0].box if fore else None
         dropped += notes
-    # One frame for every deck: what any deck builds, a tile of space round it.
+    masses = _masses({i: rows for i, (rows, _r) in built.items()}, shapes, hull, bridges, cy, seed)
+    for index, (rows, rooms) in list(built.items()):
+        # On a station's round body a bay runs out to open space: a lounge's
+        # viewports at its surface, not onto a slot in the plating.
+        bays = _bays(rows, rooms, depth=max(width, height) if hull == "station" else 2)
+        kept = {t: m for t, m in masses[index].items() if t not in bays or m == ENGINE}
+        masses[index] = _attached(kept, _built(rows))
+        built[index] = (_settled(rows, masses[index]), rooms)
+    # One frame for every deck: what any deck builds and its hull, a tile of
+    # space round it (a ship's engines a few more, for their glow).
     xs: list[int] = []
     ys: list[int] = []
-    for rows, _rooms in built.values():
+    for index, (rows, _rooms) in built.items():
         for y, row in enumerate(rows):
             for x, ch in enumerate(row):
                 if ch != " ":
                     xs.append(x)
                     ys.append(y)
-    fx0, fy0 = max(0, min(xs) - 1), max(0, min(ys) - 1)
+        for x, y in masses.get(index, {}):
+            xs.append(x)
+            ys.append(y)
+    glow = 4 if any(m == ENGINE for ms in masses.values() for m in ms.values()) else 0
+    fx0, fy0 = max(0, min(xs) - 1 - glow), max(0, min(ys) - 1)
     fx1, fy1 = min(width - 1, max(xs) + 1), min(height - 1, max(ys) + 1)
     decks: dict[int, Deck] = {}
     for deck in brief.decks:
         rows, rooms = built[deck.index]
         cropped = [row[fx0 : fx1 + 1] for row in rows[fy0 : fy1 + 1]]
-        moved = [
-            DeckRoom(
+        moved = []
+        for r in rooms:
+            room = DeckRoom(
                 r.name,
                 r.use,
                 (r.box[0] - fx0, r.box[1] - fy0, r.box[2] - fx0, r.box[3] - fy0),
                 (r.door[0] - fx0, r.door[1] - fy0),
                 r.view,
+                r.out,
             )
-            for r in rooms
+            room.pieces = _pieces(room)
+            moved.append(room)
+        mass = masses.get(deck.index, {})
+        hull_rows = [
+            "".join(mass.get((x, y), " ") for x in range(fx0, fx1 + 1)) for y in range(fy0, fy1 + 1)
         ]
         labels = {
             r.name: [(r.box[0] + r.box[2]) // 2, (r.box[1] + r.box[3]) // 2]
             for r in moved
             if r.use != "airlock"
         }
-        decks[deck.index] = Deck(deck.index, deck.name, cropped, moved, labels)
+        decks[deck.index] = Deck(deck.index, deck.name, cropped, moved, labels, hull_rows)
     return DeckPlan(
         brief.shape,
         decks,
         [(x - fx0, y - fy0) for x, y in lifts],
         dropped=dropped,
+        hull=hull,
     )

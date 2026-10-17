@@ -266,6 +266,10 @@ GROUND_TINTS: dict[str, tuple[int, int, int]] = {
 }
 # A deck's floor, for a set that has no deck of its own (a farm story's
 # starship): drawn on the fly as the grounds are.
+# A deck's hull seen from outside and an asteroid's rock round an outpost
+# (engine/deck_plan.py's hull mass): textures a set may have; without them
+# the renderer tints the set's wall top and makes its own rock.
+DECK_TEXTURES = ("hull", "rock")
 DECK_FLOOR_ROLE = "floor-deck"
 DECK_FLOOR_WORDS = "grey metal deck plating in square panels with rivets and thin seams"
 

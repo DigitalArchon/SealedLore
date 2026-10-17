@@ -128,6 +128,7 @@ def test_every_deck_lines_up_its_lifts_and_every_room_is_reached():
             assert deck.rows[room.door[1]][room.door[0]] == "+"
             if room.view:
                 ring = [deck.rows[y][x] for x in range(x0 - 1, x1 + 2) for y in (y0 - 1, y1 + 1)]
+                ring += [deck.rows[y][x] for y in range(y0, y1 + 1) for x in (x0 - 1, x1 + 1)]
                 assert "W" in ring, room.name  # a viewport onto space
         # Space round the hull: the frame's edge is never built on.
         assert set(deck.rows[0]) == {" "} and set(deck.rows[-1]) == {" "}
@@ -254,3 +255,173 @@ def test_a_deck_is_drawn_in_its_rooms_colours_and_a_house_as_before():
         room.use = ""
     plain = render_area(area, source)
     assert plain.size() == image.size() and plain != image
+
+
+# --- The hull's mass, the bow and stern, the rock, the set pieces --------------------
+
+SHIP = {
+    "shape": "spine",
+    "hull": "freighter",
+    "decks": [
+        {
+            "index": 0,
+            "name": "Main Deck",
+            "rooms": [
+                {"name": "Bridge", "use": "command", "size": "medium"},
+                {"name": "Engine Room", "use": "engineering", "size": "large"},
+                {"name": "Forward Hold", "use": "cargo", "size": "large"},
+                {"name": "Aft Hold", "use": "cargo", "size": "large"},
+                {"name": "Galley", "use": "dining", "size": "medium"},
+                {"name": "Port Airlock", "use": "airlock"},
+                {"name": "Starboard Airlock", "use": "airlock"},
+            ],
+        },
+        {
+            "index": -1,
+            "name": "Lower Deck",
+            "rooms": [
+                {"name": "Shuttle Bay", "use": "hangar", "size": "huge"},
+                {"name": "Hydroponics", "use": "garden", "size": "medium"},
+                {"name": "Crew Berths", "use": "quarters", "size": "medium"},
+            ],
+        },
+    ],
+}
+
+
+def _marks(deck) -> dict[tuple[int, int], str]:
+    return {(x, y): m for y, row in enumerate(deck.hull) for x, m in enumerate(row) if m != " "}
+
+
+def test_the_hull_s_mass_stands_round_each_deck_and_never_on_it_or_before_a_window():
+    for brief, place in ((BRIEF, "halcyon"), (SHIP, "lark")):
+        plan = generate(parse_brief(json.dumps(brief)), place)
+        for deck in plan.decks.values():
+            marks = _marks(deck)
+            assert marks, deck.name  # a hull round it, not bare walls on the stars
+            assert len(deck.hull) == len(deck.rows)
+            assert all(deck.rows[y][x] == " " for x, y in marks)  # never where it builds
+            h, w = len(deck.rows), len(deck.rows[0])
+            for y, row in enumerate(deck.rows):
+                for x, ch in enumerate(row):
+                    if ch != "W":
+                        continue
+                    # A viewport looks onto open space, never onto plating.
+                    assert any(
+                        not (0 <= x + dx < w and 0 <= y + dy < h)
+                        or (deck.rows[y + dy][x + dx] == " " and (x + dx, y + dy) not in marks)
+                        for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0))
+                    ), (deck.name, x, y)
+
+
+def test_a_ship_has_its_bridge_at_the_bow_and_its_engines_at_the_stern():
+    brief = parse_brief(json.dumps(SHIP))
+    assert brief.hull == "ship"
+    plan = generate(brief, "lark")
+    main = plan.decks[0]
+    bridge = next(r for r in main.rooms if r.use == "command")
+    built_x = [x for row in main.rows for x, ch in enumerate(row) if ch != " "]
+    assert bridge.box[2] + 1 == max(built_x)  # nothing further forward than the bridge
+    assert bridge.out == (1, 0) and "W" in "".join(r[bridge.box[2] + 1] for r in main.rows)
+    engines = [x for (x, _y), m in _marks(main).items() if m == "E"]
+    assert engines and max(engines) < min(built_x)  # out of the stern
+    engine_room = next(r for r in main.rooms if r.use == "engineering")
+    assert engine_room.box[0] < bridge.box[0]
+    # Airlocks off the spine itself, one each side, opening onto space.
+    locks = [r for r in main.rooms if r.use == "airlock"]
+    assert len(locks) == 2 and {r.out for r in locks} == {(0, -1), (0, 1)}
+    port = next(r for r in locks if r.name == "Port Airlock")
+    assert port.out == (0, -1)  # facing the bow, port is to the north
+    # Rooms both sides of the spine, not all on one.
+    cy = plan.lifts[0][1]
+    sides = {r.box[1] < cy for r in main.rooms if r.use not in ("airlock", "command")}
+    assert sides == {True, False}
+
+
+def test_an_outpost_dug_into_an_asteroid_is_set_in_rock():
+    plan = generate(parse_brief(json.dumps({**BRIEF, "shape": "cross"})), "carver", hull="rock")
+    assert plan.hull == "rock"
+    for deck in plan.decks.values():
+        assert set(_marks(deck).values()) == {"R"}
+    rock = WorldPlace(
+        id="rock",
+        name="Carver's Rock",
+        kind="site",
+        what="a small mining outpost dug into an asteroid in the belt",
+    )
+    from sealedlore.engine.world_art import deck_hull
+
+    assert deck_hull(WorldMap(places={"rock": rock}), rock) == "rock"
+    world, _art = _station()
+    assert deck_hull(world, world.places["st"]) == ""  # the brief says
+
+
+def test_a_ring_station_keeps_its_courtyards_open_to_space():
+    plan = generate(parse_brief(json.dumps(BRIEF)), "halcyon")
+    main = plan.decks[0]
+    marks = _marks(main)
+    h, w = len(main.rows), len(main.rows[0])
+    outside: set[tuple[int, int]] = set()
+    todo = [(0, 0)]
+    while todo:  # open space reached from the frame's corner
+        x, y = todo.pop()
+        if (x, y) in outside or not (0 <= x < w and 0 <= y < h):
+            continue
+        if main.rows[y][x] != " " or (x, y) in marks:
+            continue
+        outside.add((x, y))
+        todo += [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+    enclosed = [
+        (x, y)
+        for y in range(h)
+        for x in range(w)
+        if main.rows[y][x] == " " and (x, y) not in marks and (x, y) not in outside
+    ]
+    assert len(enclosed) >= 12  # a courtyard of open space inside the ring
+
+
+def test_set_pieces_stand_in_their_rooms_and_the_furniture_keeps_clear_of_them():
+    plan = generate(parse_brief(json.dumps(SHIP)), "lark")
+    pieces = {
+        r.use: [(p.name, p.piece) for p in r.pieces] for d in plan.decks.values() for r in d.rooms
+    }
+    assert ("the reactor core", "reactor") in pieces["engineering"]
+    assert all(kind == "beds" for _n, kind in pieces["garden"]) and pieces["garden"]
+    assert [n for n, _k in pieces["hangar"]] == ["a small shuttlecraft"]
+    assert any(n == "a stout captain's chair" for n, _k in pieces["command"])
+    for deck in plan.decks.values():
+        for room in deck.rooms:
+            x0, y0, x1, y1 = room.box
+            for p in room.pieces:
+                px0, py0, px1, py1 = p.box
+                assert x0 <= px0 <= px1 <= x1 and y0 <= py0 <= py1 <= y1, (room.name, p.name)
+    # In the area they are placements the furniture is placed round.
+    world, art = _station()
+    job = ArtJob("layout:st", "layout", [], "st", extra={"deck": True, "named": []})
+    ring = {**BRIEF}
+    ring["decks"] = [*BRIEF["decks"]]
+    ring["decks"][0] = {
+        **BRIEF["decks"][0],
+        "rooms": [*BRIEF["decks"][0]["rooms"], {"name": "Main Engineering", "use": "engineering"}],
+    }
+    art.layouts["st"] = {"": finish(job, json.dumps(ring), model="m", made_at="1")}
+    area = build_area(world, art, "st")
+    reactor = next(p for p in area.placements if p.piece == "reactor")
+    room = area.rooms[reactor.room]
+    assert "the reactor core" in room.objects  # the furnisher is told it is there
+    assert area.hull and len(area.hull) == len(area.rows)
+    from sealedlore.engine.area import furnish
+    from sealedlore.models.area import FurnishItem, FurnishPlan, FurnishRoom
+
+    plan_ = FurnishPlan(
+        place_id="st",
+        rooms=[
+            FurnishRoom(
+                room=room.index,
+                purpose="engineering",
+                items=[FurnishItem(name="a workbench", w=2, h=1, where="middle", count=6)],
+            )
+        ],
+    )
+    placed = furnish(area, plan_, "full")
+    assert placed and not set(reactor.tiles()) & {t for f in placed for t in f.tiles()}

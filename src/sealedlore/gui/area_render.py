@@ -26,8 +26,10 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPolygonF, QTransform
 
 from sealedlore.engine.area import Area, Placement
+from sealedlore.engine.deck_plan import DRAWN_PIECES
 from sealedlore.engine.tile_sets import (
     DECK_FLOOR_ROLE,
+    DECK_TEXTURES,
     GROUND_TINTS,
     LIGHT_WORDS,
     ROOF_TINTS,
@@ -143,7 +145,10 @@ def tileable(image: QImage) -> QImage:
 
 def is_texture(role: str) -> bool:
     return (
-        role in TEXTURES or role.startswith(("out-roof-", "out-ground-")) or role == DECK_FLOOR_ROLE
+        role in TEXTURES
+        or role in DECK_TEXTURES
+        or role.startswith(("out-roof-", "out-ground-"))
+        or role == DECK_FLOOR_ROLE
     )
 
 
@@ -483,6 +488,34 @@ def _stars(w: int, h: int, seed: int) -> QImage:
     return image
 
 
+def _hull_brushes(source: TileSource, px: int, seed: int) -> tuple[QBrush, QBrush]:
+    """The plating and the rock of a deck's hull mass: the set's own
+    textures when it has them, else its wall top tinted dark and cool, and
+    rock made here from noise."""
+    if source.image("hull") is not None:
+        plate = _texture_brush(source, "hull", px * 4)
+    else:
+        cap = source.image("cap")
+        if cap is None:
+            plate = QBrush(QColor(72, 80, 94))
+        else:
+            if "tint:hull" not in source._images:
+                source._images["tint:hull"] = _tinted(cap, (132, 142, 160))
+            image = source._images["tint:hull"]
+            plate = QBrush(image)
+            plate.setTransform(QTransform.fromScale(px * 2 / image.width(), px * 2 / image.width()))
+    if source.image("rock") is not None:
+        rock = _texture_brush(source, "rock", px * 5)
+    else:
+        np = _np()
+        n = _noise(256, 256, 48.0, seed, ((1, 0.55), (2.7, 0.3), (7, 0.15)))
+        base = np.array((150, 134, 118), np.float32)
+        image = tileable(_qimg(base * (0.6 + 0.75 * n[..., None])))
+        rock = QBrush(image)
+        rock.setTransform(QTransform.fromScale(px * 5 / 256, px * 5 / 256))
+    return plate, rock
+
+
 def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
     np = _np()
     info = source.info
@@ -510,6 +543,9 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
     else:
         base = QImage(W, HX, QImage.Format_RGB32)
         base.fill(QColor(20, 18, 16))
+    if area.hull:
+        brushes = _hull_brushes(source, px, _seed(area.id))
+        base = deck_look.hull_layer(base, area, px, *brushes, _upsample, _blur)
     p = QPainter(base)
     p.setRenderHint(QPainter.SmoothPixmapTransform, True)
     floor = source.floor(area.look, px * 4.8)
@@ -518,6 +554,8 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
         for x in range(w):
             if not space[y, x]:
                 p.fillRect(x * px, y * px, px, px, pool if water[y, x] else floor)
+    if area.hull:  # a deck laid out by the program: its hull's mass round it
+        deck_look.hull_details(p, area, px)
     p.end()
     img = _arr(base)
     # 2. large soft variation, so the texture doesn't read as a repeat
@@ -732,7 +770,10 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
     # 8. furniture and things, each over its footprint, its foot on its
     # last row, back to front; the flames over everything
     for f in sorted(area.placements, key=lambda f: f.y + f.h):
-        _draw_placement(p, source, f, px, lights, indoor=True)
+        if f.piece in DRAWN_PIECES:
+            deck_look.piece(p, f, px)
+        else:
+            _draw_placement(p, source, f, px, lights, indoor=True)
     for sprite, X, Y in flames:
         p.drawImage(X, Y, sprite)
     # ceiling lamps in the larger rooms
@@ -763,7 +804,10 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
         elif lum > 135:  # a pale world loses its depth: pulled down, with contrast
             mean = img[inside].mean(0)
             img = (img - mean) * 1.25 + mean * (135 / lum)
-    return _qimg(_vignette(img, 0.18, 0.3))
+    final = _qimg(_vignette(img, 0.18, 0.3))
+    if zoned:
+        deck_look.glows(final, area, px)
+    return final
 
 
 def _stairs(p: QPainter, x: int, y: int, px: int, *, deck: bool = False) -> None:

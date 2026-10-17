@@ -2180,6 +2180,7 @@ story game. You don't draw anything: you say what is there, and the program lays
 Reply with JSON and nothing else:
 {
   "shape": "ring | cross | spine",
+  "hull": "station | ship | rock",
   "decks": [
     {"index": 0, "name": "Promenade Deck", "rooms": [
       {"name": "The Promenade", "use": "promenade", "size": "huge"},
@@ -2191,6 +2192,8 @@ Reply with JSON and nothing else:
 shape is the hull seen from above: "ring" for a ring round a central core (most large \
 stations), "cross" for arms out from a central core (a smaller station or outpost), "spine" for \
 long and narrow, bow to stern (most ships).
+hull is "ship" for a vessel (a bridge at the bow, engines at the stern), "station" for one built \
+in open space, "rock" for one dug into an asteroid, a moon or a cliff.
 decks: the decks it really has, up to 7. Index 0 is the main deck, the one the story is on when \
 it arrives; positive indexes are above it, negative below. A small craft has one deck.
 rooms: 3 to 12 a deck, a believable mix for that deck's job. Each has a short name the story \
