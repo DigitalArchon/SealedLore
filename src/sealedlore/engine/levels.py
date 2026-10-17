@@ -106,8 +106,8 @@ def listed_levels(spec: dict[str, Any]) -> list[tuple[int, str]]:
     """The further levels a plan's reply lists, (index, name) each, held to
     the rules: whole indexes within LEVEL_RANGE, never 0, one per index,
     MAX_LEVELS at most, nearest the plan first."""
-    raw = spec.get("levels") if isinstance(spec, dict) else None
-    if not isinstance(raw, list):
+    raw = _raw_levels(spec)
+    if not raw:
         return []
     found: dict[int, str] = {}
     for entry in raw:
@@ -126,6 +126,24 @@ def listed_levels(spec: dict[str, Any]) -> list[tuple[int, str]]:
         found[index] = " ".join(str(name or "").split())[:40] or default_level_name(index)
     ordered = sorted(found.items(), key=lambda item: (abs(item[0]), item[0]))
     return ordered[:MAX_LEVELS]
+
+
+def _raw_levels(spec: dict[str, Any]) -> list:
+    """The reply's `levels` list: on the object, as asked, else wherever a
+    feature carries one. Live (Oct 17 2026), GLM 5.3 Flash put a watchtower's
+    three levels on its stairs feature, and the plan was read as having none:
+    its stairs led nowhere."""
+    if not isinstance(spec, dict):
+        return []
+    raw = spec.get("levels")
+    if isinstance(raw, list):
+        return raw
+    nested: list = []
+    features = spec.get("features")
+    for feature in features if isinstance(features, list) else []:
+        if isinstance(feature, dict) and isinstance(feature.get("levels"), list):
+            nested.extend(feature["levels"])
+    return nested
 
 
 def default_level_name(index: int) -> str:

@@ -157,6 +157,25 @@ def test_levels_are_asked_for_only_when_the_place_s_words_call_for_them():
     assert listed_levels(spec) == [(1, "Upper"), (2, "Level 2")]
 
 
+def test_levels_listed_on_a_stairs_feature_are_read_as_the_plan_s():
+    # GLM 5.3 Flash's live reply for a watchtower (Oct 17 2026).
+    spec = {
+        "ground": "rock",
+        "features": [
+            {"kind": "building", "name": "The watchtower", "x": 0, "y": 0, "w": 40, "h": 24},
+            {"kind": "stairs", "x": 20, "y": 4, "w": 1, "h": 2, "levels": [
+                {"index": 1, "name": "Upper floor"},
+                {"index": 2, "name": "Top of the tower"},
+                {"index": -1, "name": "Cellar"},
+            ]},
+            {"kind": "stairs", "x": 17, "y": 17, "w": 1, "h": 2},
+        ],
+    }
+    assert listed_levels(spec) == [(-1, "Cellar"), (1, "Upper floor"), (2, "Top of the tower")]
+    # The object's own list wins when there is one.
+    assert listed_levels({**spec, "levels": [{"index": 1, "name": "Loft"}]}) == [(1, "Loft")]
+
+
 def test_plan_art_plans_a_job_per_level_only_when_the_plan_lists_them():
     world, art = world_and_art(upper=False)
     world.visited = {"Serrik Vaun": ["house"]}
