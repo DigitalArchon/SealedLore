@@ -116,6 +116,13 @@ class WorldDelta(BaseModel):
     # (False); folded onto `WorldMap.outside`. Live (Oct 17 2026), a knock on
     # the farmhouse door stood John in its kitchen.
     outside: dict[str, bool] = Field(default_factory=dict)
+    # The author's corrections on the map (engine/session_corrections.py;
+    # `NodeMeta.world_fixes`, folded after the passage's own delta): people
+    # renamed (a wrong naming put right, old name to new), people taken off
+    # the map ("Not here"), and things taken off it.
+    renamed_people: dict[str, str] = Field(default_factory=dict)
+    left: list[str] = Field(default_factory=list)
+    things_removed: list[str] = Field(default_factory=list)
 
     def empty(self) -> bool:
         return not (
@@ -132,6 +139,9 @@ class WorldDelta(BaseModel):
             or self.unknowns
             or self.named
             or self.outside
+            or self.renamed_people
+            or self.left
+            or self.things_removed
         )
 
 

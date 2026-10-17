@@ -94,6 +94,10 @@ class NodeMeta(BaseModel):
     # or changed (models/world.py). The map anywhere is these, applied in
     # order along the path.
     world: WorldDelta | None = None
+    # The author's corrections on the map at this message (engine/
+    # session_corrections.py: a name put right, a place merged, someone taken
+    # off it), one delta each, folded after `world` in the order made.
+    world_fixes: list[WorldDelta] = Field(default_factory=list)
     # Map-first play (models/area.py): where everyone stood on the map's
     # tiles after this node, and the map's clock. On an author's turn, the
     # walking done before it was sent; on a passage, after the read placed

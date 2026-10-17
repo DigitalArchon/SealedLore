@@ -1159,6 +1159,20 @@ def applied(
         been = out.visited.pop(label, [])
         mine = out.visited.setdefault(name, [])
         mine.extend(p for p in been if p not in mine)
+    for old, new in delta.renamed_people.items():
+        # The author's correction: they were someone else all along.
+        if old in out.where:
+            out.where[new] = out.where.pop(old)
+        out.outside = [new if n == old else n for n in out.outside]
+        been = out.visited.pop(old, [])
+        mine = out.visited.setdefault(new, [])
+        mine.extend(p for p in been if p not in mine)
+        for thing in out.things.values():
+            if thing.carried_by == old:
+                thing.carried_by = new
+    for who in delta.left:
+        out.where.pop(who, None)
+        out.outside = [n for n in out.outside if n != who]
     for who, place_id in delta.where.items():
         out.where[who] = place_id
         seen = out.visited.setdefault(who, [])
@@ -1173,6 +1187,8 @@ def applied(
             out.outside.remove(who)
     for thing in delta.things:
         out.things[thing.id] = thing.model_copy(deep=True)
+    for thing_id in delta.things_removed:
+        out.things.pop(thing_id, None)
     out.conflicts.extend(delta.conflicts)
     if delta.weather is not None:
         out.weather = delta.weather
@@ -1280,6 +1296,8 @@ def world_at(
     for node in path:
         if node.meta.world is not None:
             world = applied(world, node.meta.world, in_place=True)  # ours alone: fresh above
+        for fix in node.meta.world_fixes:  # the author's corrections, after the read's
+            world = applied(world, fix, in_place=True)
     gone = {p.id for p in world.places.values() if p.lore_id is not None and p.lore_id in hidden}
     if not gone:
         return world
