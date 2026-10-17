@@ -31,6 +31,7 @@ from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from sealedlore.engine.deck_plan import use_of
 from sealedlore.engine.levels import (
     LevelLinks,
     level_area_id,
@@ -132,6 +133,10 @@ class Room:
     cy: float
     objects: list[str] = field(default_factory=list)
     purpose: str = ""
+    # What the room is for (engine/deck_plan.USES, or "corridor"): a deck's
+    # rooms say it in their plan; a drawn plan's are read from their names
+    # and purposes (`name_rooms`). The renderer's zone: its floor and light.
+    use: str = ""
 
 
 @dataclass(frozen=True)
@@ -664,6 +669,38 @@ def find_rooms(
     return rooms, label
 
 
+def name_rooms(
+    rooms: Sequence[Room], labels: Mapping[str, tuple[int, int]], records: Any = None
+) -> None:
+    """Each room's name and use: from the plan's own room records (a deck the
+    program laid out: name, use and box), else from a label standing in it
+    (a drawn plan's named building or room) read for its use. The space the
+    rooms open off is the corridor."""
+    by_box = [r for r in records if isinstance(r, dict)] if isinstance(records, list) else []
+    for room in rooms:
+        cx, cy = int(round(room.cx)), int(round(room.cy))
+        found = next(
+            (
+                r
+                for r in by_box
+                if len(r.get("box") or ()) == 4
+                and r["box"][0] <= cx <= r["box"][2]
+                and r["box"][1] <= cy <= r["box"][3]
+            ),
+            None,
+        )
+        if found is not None:
+            room.name = str(found.get("name") or room.name)[:60]
+            room.use = str(found.get("use") or "")
+            continue
+        x0, y0, x1, y1 = room.box
+        inside = [n for n, (lx, ly) in labels.items() if x0 <= lx <= x1 and y0 <= ly <= y1]
+        if len(inside) == 1:
+            room.use = use_of(inside[0])
+        if room.name in ("central hall", "hall") or (by_box and not room.use):
+            room.use = room.use or "corridor"
+
+
 def _outside_cells(rows: list[str]) -> set[tuple[int, int]]:
     """What lies outside an indoor plan's walls: reached from the grid's
     edge over ground that isn't floor, a wall, a door or a thing (a gap in
@@ -943,14 +980,16 @@ def build_area(
         rows = list(links.rows[0]) if links is not None else list(layout.rows)
         if links is not None:
             repairs += links.repairs
-        if look == "space" or place.kind not in ("building", "room"):
-            rows = list(decked(rows))
+        generated = bool(spec.get("deck"))
+        if not generated and (look == "space" or place.kind not in ("building", "room")):
+            rows = list(decked(rows))  # a deck laid out by the program has its courtyards
         objects = dict(layout.objects)
         labels = {k: (int(v[0]), int(v[1])) for k, v in layout.labels.items() if len(v) >= 2}
         # The map's own scale (the plan's rectangle over its tiles): the
         # positions, earshot, walking and the marks used to disagree by up
-        # to 25x on a deck (the second review).
-        tile_m = plan_tile(place)
+        # to 25x on a deck (the second review). A deck laid out by the
+        # program is at its own scale, a stride or so a tile.
+        tile_m = float(spec.get("tile_m") or 0) or plan_tile(place)
         # A plan drawn for the place's state shows what the story did to it
         # (walls gone, a breach): the wall rules would undo it. A room the
         # story sealed keeps no door either.
@@ -1013,6 +1052,8 @@ def build_area(
             rows = [r.replace(digit, "_" if indoor else ".") for r in rows]
     doorways = openings(rows)
     rooms, room_of = find_rooms(rows, objects, doorways) if indoor else ([], [])
+    if indoor:
+        name_rooms(rooms, labels, spec.get("rooms"))
     if links is not None:
         entrances += _stairs_entrances(links, 0, place.id)
     area = Area(
@@ -1043,6 +1084,7 @@ def build_area(
                 purpose = next((r.purpose for r in plan.rooms if r.room == room.index), "")
                 if purpose:
                     room.purpose = " ".join(purpose.split())[:60]
+                    room.use = room.use or use_of(room.purpose)
             area.placements += furnish(area, plan, density)
     return area
 
@@ -1090,7 +1132,8 @@ def build_level(
     if look != "space" and land_under(world, art, place) == "space":
         look = "space"
     repairs: list[str] = list(links.repairs)
-    if look == "space" or place.kind not in ("building", "room"):
+    generated = bool(spec.get("deck"))
+    if not generated and (look == "space" or place.kind not in ("building", "room")):
         rows = list(decked(rows))
     as_drawn = bool(place.state) and layout.state == place.state
     if place.kind in ("building", "room") and not as_drawn:
@@ -1106,6 +1149,7 @@ def build_level(
             rows = [r.replace(digit, "_") for r in rows]
     doorways = openings(rows)
     rooms, room_of = find_rooms(rows, objects, doorways)
+    name_rooms(rooms, labels, (drawn.spec or {}).get("rooms"))  # type: ignore[union-attr]
     deck = look == "space"
     area = Area(
         place_id=place.id,
@@ -1113,7 +1157,7 @@ def build_level(
         indoor=True,
         look=look or "floor",
         rows=rows,
-        tile_m=plan_tile(place),
+        tile_m=float(spec.get("tile_m") or 0) or plan_tile(place),
         objects=objects,
         labels=labels,
         rooms=rooms,
@@ -1135,6 +1179,7 @@ def build_level(
                 purpose = next((r.purpose for r in plan.rooms if r.room == room.index), "")
                 if purpose:
                     room.purpose = " ".join(purpose.split())[:60]
+                    room.use = room.use or use_of(room.purpose)
             area.placements += furnish(area, plan, density)
     return area
 

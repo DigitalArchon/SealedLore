@@ -23,6 +23,7 @@ from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from sealedlore.engine import deck_plan
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.levels import (
     STAIRS,
@@ -1186,6 +1187,146 @@ def _top(world: WorldMap, place_id: str) -> WorldPlace | None:
     return place
 
 
+# --- A station's or ship's decks (engine/deck_plan.py) ------------------------------
+
+# A hull's words, and the signs it is in space (a sailing ship has decks
+# and a hold too: "ship" alone is not enough).
+_HULL_WORDS = re.compile(
+    r"\b(space ?stations?|stations?|starships?|spaceships?|space ?craft|starbases?|"
+    r"outposts?|orbitals?|habitats?|ships?|vessels?|freighters?|shuttles?|cruisers?|"
+    r"frigates?|corvettes?|destroyers?|carriers?|tugs?|haulers?|derelicts?|platforms?)\b",
+    re.I,
+)
+_SPACE_SIGNS = re.compile(
+    r"\b(space|orbit\w*|starships?|spaceships?|space ?craft|starbases?|hyperspace|warp|"
+    r"jump ?(?:gates?|drives?|points?)|vacuum|zero-?g|airlocks?|gas giants?|asteroids?|"
+    r"nebula\w*|light-?years?|planets?|interstellar|galax\w+)\b",
+    re.I,
+)
+
+
+def deck_wanted(world: WorldMap, art: WorldArt, place: WorldPlace, setting: str = "") -> bool:
+    """A place whose plan is a deck plan the program lays out from a brief:
+    a station's or ship's hull, by its words, in space (the land under it,
+    its own words or the setting's say so), and not inside another such."""
+    if place.kind not in LAYOUT_KINDS or place.kind == "room":
+        return False
+    words = f"{place.name} {place.what}"
+    if not _HULL_WORDS.search(words):
+        return False
+    if land_under(world, art, place) != "space" and not _SPACE_SIGNS.search(f"{words} {setting}"):
+        return False
+    return deck_holder(world, art, place.inside, setting) is None
+
+
+def deck_holder(
+    world: WorldMap, art: WorldArt, place_id: str | None, setting: str = ""
+) -> WorldPlace | None:
+    """The station or ship round a place (itself included) whose plan is a
+    deck plan, drawn or wanted; None when there is none."""
+    for outer in reversed(_chain(world, place_id)):
+        drawn = art.layout_for(outer.id)
+        if drawn is not None and (drawn.spec or {}).get("deck"):
+            return outer
+        if drawn is None and outer.kind in LAYOUT_KINDS and outer.kind != "room":
+            words = f"{outer.name} {outer.what}"
+            if _HULL_WORDS.search(words) and (
+                land_under(world, art, outer) == "space"
+                or _SPACE_SIGNS.search(f"{words} {setting}")
+            ):
+                return outer
+    return None
+
+
+def deck_messages(
+    world: WorldMap, place: WorldPlace, setting: str, texts: PromptTexts
+) -> list[PromptMessage]:
+    """The brief's request: the place, and every place the map has in it,
+    each to be a room of that name."""
+    named = deck_named(world, place)
+    parts = []
+    if place.state:
+        parts.append(f"As it is now: {place.state}")
+    if named:
+        parts.append(
+            "Already named in it, each a room of that exact name on the deck where it "
+            "belongs: " + "; ".join(f"{n}" + (f" ({w})" if w else "") for n, w in named)
+        )
+    uses = ", ".join(deck_plan.USES)
+    return [
+        _message("system", texts.fill("map.deck.brief", uses=uses)),
+        _message(
+            "user",
+            texts.fill("map.deck.ask", place=_what(place), parts="\n".join(parts), setting=setting),
+        ),
+    ]
+
+
+def deck_named(world: WorldMap, place: WorldPlace) -> list[tuple[str, str]]:
+    """(name, what) of every place inside a station or ship, at any depth:
+    each becomes one of its rooms."""
+    inside = {place.id}
+    found: list[tuple[str, str]] = []
+    grew = True
+    while grew:
+        grew = False
+        for p in world.places.values():
+            if p.inside in inside and p.id not in inside and not moves(world.places, p):
+                inside.add(p.id)
+                found.append((p.name, " ".join(p.what.split())[:120]))
+                grew = True
+    return found[: deck_plan.MAX_ROOMS]
+
+
+def deck_layout(job: ArtJob, text: str, *, model: str, made_at: str) -> PlaceLayout:
+    """A brief's reply laid out as the plan (the main deck) with every other
+    deck as its levels, all drawn at once. ValueError when the brief has no
+    rooms or they won't fit."""
+    named = tuple(tuple(n) for n in job.extra.get("named") or ())
+    brief = deck_plan.parse_brief(text, named=named)  # type: ignore[arg-type]
+    plan = deck_plan.generate(brief, job.subject_id)
+    main = plan.decks[0]
+    others = [d for i, d in sorted(plan.decks.items()) if i != 0]
+    spec = {
+        "ground": "space",
+        "deck": True,
+        "shape": plan.shape,
+        "tile_m": plan.tile_m,
+        "brief": brief.as_dict(),
+        "rooms": main.room_records(),
+        "main": main.name,
+        "levels": [{"index": d.index, "name": d.name} for d in others],
+        "features": [],
+    }
+    return PlaceLayout(
+        place_id=job.subject_id,
+        state=job.state,
+        spec=spec,
+        rows=main.rows,
+        labels=main.labels,
+        model=model,
+        made_at=made_at,
+        levels=[
+            LevelLayout(
+                index=d.index,
+                name=d.name,
+                place_id=job.subject_id,
+                state=job.state,
+                spec={"rooms": d.room_records()},
+                rows=d.rows,
+                labels=d.labels,
+                model=model,
+                made_at=made_at,
+            )
+            for d in others
+        ],
+    )
+
+
+def is_deck_plan(layout: PlaceLayout | None) -> bool:
+    return layout is not None and bool((layout.spec or {}).get("deck"))
+
+
 def plan_art(
     world: WorldMap,
     art: WorldArt,
@@ -1375,6 +1516,20 @@ def plan_art(
         key = f"layout:{pid}:redraw"
         if place is None or place.kind not in LAYOUT_KINDS or failed(key):
             continue
+        if deck_holder(world, art, pid, setting) is place or is_deck_plan(art.layout_for(pid)):
+            # Laid out afresh by the program from a new brief.
+            jobs.append(
+                ArtJob(
+                    key,
+                    "layout",
+                    deck_messages(world, place, setting, texts),
+                    pid,
+                    name=place.name,
+                    order=-1,
+                    extra={"deck": True, "named": deck_named(world, place)},
+                )
+            )
+            continue
         fixed = fixed_in_plan(world, place)
         jobs.append(
             ArtJob(
@@ -1395,7 +1550,27 @@ def plan_art(
             )
         )
     for pid, place in wanted.items():
+        holder = deck_holder(world, art, pid, setting)
+        if holder is not None and holder.id != pid:
+            continue  # a room of a station's or ship's decks, not a plan of its own
         drawn_plan = art.layout_for(pid, place.state)
+        if drawn_plan is None and is_deck_plan(art.layout_for(pid)):
+            continue  # decks laid out by the program aren't redrawn for a state (yet)
+        if drawn_plan is None and holder is not None:
+            key = f"layout:{pid}"
+            if not failed(key):
+                jobs.append(
+                    ArtJob(
+                        key,
+                        "layout",
+                        deck_messages(world, place, setting, texts),
+                        pid,
+                        name=place.name,
+                        order=1,
+                        extra={"deck": True, "named": deck_named(world, place)},
+                    )
+                )
+            continue
         if drawn_plan is not None:
             # Its other floors or decks, one job each, once the plan's words
             # called for them and its reply listed them (engine/levels.py).
@@ -1639,6 +1814,8 @@ def finish(
     job: ArtJob, text: str, *, model: str, made_at: str
 ) -> WorldSprite | PlaceLayout | TerrainPatch | LevelLayout:
     """What a reply draws, checked; ValueError when it draws nothing usable."""
+    if job.kind == "layout" and job.extra.get("deck"):
+        return deck_layout(job, text, model=model, made_at=made_at)
     if job.kind == "sprite":
         svg = clean_svg(text)
         if svg is None:

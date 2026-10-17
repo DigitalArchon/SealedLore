@@ -40,6 +40,7 @@ from sealedlore.engine.tile_sets import (
     item_slugs,
     roof_role,
 )
+from sealedlore.gui import deck_look
 from sealedlore.gui.image_codec import image_from_data
 
 # Pixels a tile, indoors and out: the view scales the picture to the zoom.
@@ -534,6 +535,11 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
     sh = _blur(sh, max(2, px // 5), 2)
     dark = np.clip(ao * 0.45 + sh * 0.35, 0, 0.7) * inside * (1 - wm)
     img *= (1 - dark)[..., None]
+    # A deck's rooms each drawn for their use (gui/deck_look.py).
+    zoned = deck and any(room.use for room in area.rooms)
+    zones = deck_look.zone_of_tiles(area) if zoned else []
+    if zoned:
+        img = deck_look.grade(img, area, px, zones)
     out = _qimg(img)
     p = QPainter(out)
     p.setRenderHint(QPainter.SmoothPixmapTransform, True)
@@ -569,7 +575,12 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
             elif c == "~" and info.lava:
                 lights.append(((x + 0.5) * px, (y + 0.5) * px, px * 3.0))
             elif c == "&":
-                _stairs(p, x, y, px, deck=deck)
+                if zoned:
+                    deck_look.lift_pad(p, x, y, px)
+                else:
+                    _stairs(p, x, y, px, deck=deck)
+    if zoned:
+        deck_look.marks(p, area, px, zones)
     # 5. dressing: a rug in some rooms, decorations along walls, clear of
     # doorways and furniture
     near_door = np.zeros((h, w), bool)
@@ -636,6 +647,7 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
     cap = _texture_brush(source, "cap", px * 2)
     face = _texture_brush(source, "face", face_h * 1.6)
     edge = QColor(14, 12, 12)
+    stars = _stars(W, HX, _seed(area.id) + 1) if zoned else None
     glass_colour = QColor(20, 30, 60) if deck else QColor(170, 205, 235)
     sill_colour = QColor(40, 60, 100) if deck else QColor(222, 232, 242)
     for y in range(h):
@@ -664,6 +676,15 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
                 if at(x + dx, y + dy) not in "#W":
                     p.fillRect(QRectF(*rect), edge)
             if c != "W":
+                continue
+            if stars is not None and " " in (
+                at(x, y - 1),
+                at(x, y + 1),
+                at(x - 1, y),
+                at(x + 1, y),
+            ):
+                # A viewport in the hull: glass onto the stars.
+                deck_look.viewport(p, stars, X, top, px, face_h if faced else 0.0)
                 continue
             if faced and at(x, y + 1) != " ":
                 # A window in a wall facing us: glass on the face, its light
@@ -694,6 +715,8 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
                 )
                 if not deck:
                     lights.append((X + light_x, Y + px * 0.5, px * 4.0))
+    if zoned:
+        deck_look.hull(p, area, px, face_h)
     # 7. doorways: the floor runs through between dark jambs
     jamb = QColor(210, 170, 40) if deck else QColor(30, 22, 18)
     j = max(2, px * 0.14)
@@ -714,20 +737,29 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
         p.drawImage(X, Y, sprite)
     # ceiling lamps in the larger rooms
     for room in area.rooms:
-        if room.cells >= 40:
+        if room.cells >= 40 and not zoned:
             lights.append(((room.cx + 0.5) * px, (room.cy + 0.5) * px, px * 6.0))
     p.end()
     # 9. light: a glow from each source, kept to its room, the world's
     # grade, a vignette
     img = _arr(out)
-    glow = _light(lights, HX, W, _room_masks(area, px, HX, W))
+    masks = _room_masks(area, px, HX, W)
     lc = np.array(info.light, np.float32) / 255
-    img = img * (0.78 + 0.32 * glow[..., None] * lc) + glow[..., None] * lc * 18
+    if zoned:
+        # A deck: darker between its lamps, each lamp its room's colour.
+        coloured = [(x, y, r, tuple(int(c * 255) for c in lc)) for x, y, r in lights]
+        coloured += deck_look.lights(area, px, zones)
+        glow3 = deck_look.light_rgb(coloured, HX, W, masks)
+        img = img * (deck_look.AMBIENT + 0.6 * glow3) + glow3 * 26
+    else:
+        glow = _light(lights, HX, W, masks)
+        img = img * (0.78 + 0.32 * glow[..., None] * lc) + glow[..., None] * lc * 18
     img *= np.array(info.grade, np.float32)
     if inside.any():
         lum = float(img[inside].mean())
-        if lum < 95:
-            img = img * (95 / max(lum, 1.0)) ** 0.7
+        floor_lum = 78 if zoned else 95
+        if lum < floor_lum:
+            img = img * (floor_lum / max(lum, 1.0)) ** 0.7
         elif lum > 135:  # a pale world loses its depth: pulled down, with contrast
             mean = img[inside].mean(0)
             img = (img - mean) * 1.25 + mean * (135 / lum)

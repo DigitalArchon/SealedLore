@@ -2161,6 +2161,62 @@ _text(
     "only outside the hull; no roads, trees or open ground inside it.",
 )
 
+# Not measured (Oct 17 2026). A station's or ship's plan drawn as tile shapes
+# came back as one plate of floor with small boxes on it; for a place in
+# space the model writes only what is there, and the program lays out its
+# decks (engine/deck_plan.py). The uses and sizes are the program's lists.
+_text(
+    "map.deck.brief",
+    MAP,
+    "Map art: a station's or ship's decks",
+    "The system prompt for planning a space station's or ship's decks as words: the hull's "
+    "shape, the decks, and each deck's rooms by name, use and size. The program lays them out "
+    "(corridors, rooms off them, lifts between decks, airlocks, viewports, the hull).",
+    """\
+You plan the decks of a space station, starship or other sealed habitat for a top-down tile-map \
+story game. You don't draw anything: you say what is there, and the program lays it out \
+(corridors, rooms off them, lifts between the decks, airlocks, viewports, the hull round it all).
+
+Reply with JSON and nothing else:
+{
+  "shape": "ring | cross | spine",
+  "decks": [
+    {"index": 0, "name": "Promenade Deck", "rooms": [
+      {"name": "The Promenade", "use": "promenade", "size": "huge"},
+      {"name": "Medbay", "use": "medical", "size": "medium"}
+    ]}
+  ]
+}
+
+shape is the hull seen from above: "ring" for a ring round a central core (most large \
+stations), "cross" for arms out from a central core (a smaller station or outpost), "spine" for \
+long and narrow, bow to stern (most ships).
+decks: the decks it really has, up to 7. Index 0 is the main deck, the one the story is on when \
+it arrives; positive indexes are above it, negative below. A small craft has one deck.
+rooms: 3 to 12 a deck, a believable mix for that deck's job. Each has a short name the story \
+would use, a use from {uses}, and a size from small, medium, large, huge (a cabin is small, a \
+bridge medium or large, a cargo hold large, a promenade or hangar huge). Every room name once on \
+the whole station.""",
+    (("uses", "the room uses the program draws, listed"),),
+)
+
+_text(
+    "map.deck.ask",
+    MAP,
+    "Map art: which station or ship to plan",
+    "Asks for one station's or ship's decks: what the story said of it, the places the map "
+    "already has inside it (each to be a room of that name), and the setting.",
+    """\
+Plan: {place}
+{parts}
+Setting: {setting}.""",
+    (
+        ("place", "The station or ship and what the story said of it"),
+        ("parts", "The places already named inside it, each to be a room, a line each"),
+        ("setting", "The story's setting, briefly"),
+    ),
+)
+
 # Not measured: the map's own places inside the one being laid out, where
 # the map put them (world_art.fixed_in_plan); the program draws the
 # buildings among them itself (with_fixed), so a plan and the region agree.
