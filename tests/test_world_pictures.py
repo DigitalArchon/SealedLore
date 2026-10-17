@@ -173,7 +173,7 @@ def session(tmp_path: Path, monkeypatch, story, cast):
         active_provider_name="nano",
         scene_reads="manual",
         map_art=True,
-        map_pictures=True,
+        map_pictures_mode="auto",
         map_picture_daily_limit=2,
         image_endpoint=MediaEndpoint(),
     )
@@ -210,8 +210,11 @@ def test_pictures_are_drawn_kept_stripped_and_logged_within_the_daily_limit(sess
     assert any(first.prompt in json.dumps(e) for e in log if e["kind"] == "map_picture_request")
 
 
-def test_off_until_turned_on(session):
-    session.config.map_pictures = False
+def test_on_by_default_and_none_when_turned_off(session):
+    from sealedlore.models.config import Config
+
+    assert Config().map_pictures_mode == "auto"  # the author, Oct 17 2026
+    session.config.map_pictures_mode = "off"
     assert session.map_picture_jobs() == [] and not session.start_map_pictures()
 
 
@@ -254,7 +257,7 @@ def test_the_isometric_view_is_painted_only_when_asked_from_the_plan(session, tm
     pictures, and is kept for the map as it is now."""
     from sealedlore.engine.world_pictures import isometric_state
 
-    session.config.map_pictures = False  # the press is the approval
+    session.config.map_pictures_mode = "off"  # the press is the approval
     session.config.map_isometric_model = "qwen-image"
     session.config.image_models = [
         {
@@ -300,7 +303,7 @@ def test_the_isometric_view_is_painted_from_the_program_s_render_with_one_line(s
     the size the model paints, the area's first sentence, no writer call."""
     from sealedlore.engine.world_pictures import one_line
 
-    session.config.map_pictures = False
+    session.config.map_pictures_mode = "off"
     session.config.map_isometric_model = "qwen-image"
     session.config.image_models = [
         {
@@ -388,7 +391,7 @@ def test_painting_a_view_or_bringing_one_in_chooses_it_and_the_author_may_choose
     it is now. Never a picture that isn't one of the area's views."""
     from sealedlore.engine.world_pictures import isometric_state, shown_view
 
-    session.config.map_pictures = False
+    session.config.map_pictures_mode = "off"
     session.config.map_picture_daily_limit = 5
     state = isometric_state(session.world(), "farm")
     assert session.start_isometric("farm", lambda size: png(16, 12))
@@ -600,7 +603,7 @@ def test_the_default_painting_model_and_an_older_config_s_both_paint(session):
         "id": model,
         "supported_parameters": {"resolutions": ["1024x768", "1024x576"], "max_input_images": 3},
     }
-    session.config.map_pictures = False
+    session.config.map_pictures_mode = "off"
     default = Config().map_isometric_model
     assert default == "blackforestlabs/flux-3/klein/edit-image" == Config().map_sprite_model
     session.config.image_models = [listed(default), listed("flux-2-klein-9b")]
@@ -620,3 +623,38 @@ def test_the_default_painting_model_and_an_older_config_s_both_paint(session):
     assert when == "It is the small hours."
     assert people == ["A survivor in a heavy coat."] and "Jane" not in painted.prompt
     assert "heavy coat" in painted.prompt and painted.scene == "It is the small hours. 1 there."
+
+
+def test_asking_first_draws_nothing_until_approved_and_then_exactly_what_was_approved(session):
+    """Settings → Images → Draw map pictures: Ask before drawing (the
+    author, Oct 17 2026). What the run would draw waits with its price; the
+    approved ones go as approved, each once; the declined aren't asked
+    about again while the story is open."""
+    from dataclasses import replace
+
+    session.config.map_pictures_mode = "ask"
+    session.config.image_models = [
+        {"id": session.config.map_picture_model, "pricing": {"per_image": {"1024x1024": 0.01}}}
+    ]
+    assert not session.start_map_pictures() and FakeImages.sent == []
+    waiting = session.map_pictures_waiting()
+    assert len(waiting) == 2  # the day's limit, as a run would draw
+    assert all(w.model == session.config.map_picture_model and w.run == "map" for w in waiting)
+    first, second = waiting
+    assert session.approve_map_pictures([replace(first.job, prompt="Exactly this.")])
+    session._picture_thread.join(10)
+    assert [p["prompt"] for p in FakeImages.sent] == ["Exactly this."]
+    # (The play view's avatars wait beside them: that is the tile run's.)
+    map_run = [w for w in session.map_pictures_waiting() if w.run == "map"]
+    assert [w.job.key for w in map_run] == [second.job.key]
+    assert not session.map_pictures_approved_pending  # an approval is for one drawing
+    session.decline_map_pictures([second.job.key])
+    assert [w for w in session.map_pictures_waiting() if w.run == "map"] == []
+    session.config.map_picture_daily_limit = 10
+    session.start_map_pictures()
+    assert second.job.key not in {w.job.key for w in session.map_pictures_waiting()}
+    assert len(FakeImages.sent) == 1
+    # Automatically: drawn without asking.
+    session.config.map_pictures_mode = "auto"
+    run_pictures(session)
+    assert len(FakeImages.sent) > 1 and session.map_pictures_waiting() == []

@@ -968,8 +968,9 @@ def test_a_card_s_avatar_is_drawn_from_the_portrait_in_the_set_s_style_and_a_cho
     serrik.reference_images.insert(
         0, ImageRef(id="p1", file="images/refs/serrik.png", caption="portrait")
     )
-    prompt, _size, model, reference = session._asset_job("walker/Serrik Vaun", "")
+    prompt, _size, model, reference, drawn_from = session._asset_job("walker/Serrik Vaun", "")
     assert reference is not None and "image 1" in prompt and info.words["style"] in prompt
+    assert drawn_from == "images/refs/serrik.png"
     assert model == session.config.map_sprite_model
     assert session.redraw_tile_asset("walker/Serrik Vaun", "")
     session._asset_thread.join(5)
@@ -978,7 +979,7 @@ def test_a_card_s_avatar_is_drawn_from_the_portrait_in_the_set_s_style_and_a_cho
     # The author's choice stands: the standing approval never draws another
     # over it, nor over "the set's own" ("").
     session.config.map_art = True
-    session.config.map_pictures = True
+    session.config.map_pictures_mode = "auto"
     _furnish, jobs = session.tile_art_jobs()
     assert not any(j.subject == "walker" and j.name == "Serrik Vaun" for j in jobs)
     session.reset_tile_asset("walker/Serrik Vaun")
@@ -1424,3 +1425,90 @@ def test_an_opening_whose_read_gives_no_time_starts_the_clock_in_the_morning(tmp
     assert session.map_clock() == (1, DEFAULT_START_MINUTE)
     assert opening_minute("7.05") == 7 * 60 + 5
     assert opening_minute("25:00") == opening_minute("dusk") == DEFAULT_START_MINUTE
+
+
+def test_every_character_s_avatar_is_drawn_from_the_portrait_they_have_now(tmp_path, story, cast):
+    """The author, Oct 17 2026: every character has an avatar or gets one.
+    One the map drew from their words before a portrait came is drawn again
+    from the portrait; one drawn from a portrait they no longer lead with,
+    likewise. A sample's (drawn before this was kept) and the author's own
+    choice stand."""
+    from sealedlore.models.image import ImageRef
+    from sealedlore.models.world import MapPicture
+
+    session = make_session(tmp_path, story, cast)
+    session.config.providers[0].api_key = "k"
+    session.config.map_art = True
+    assert session.config.map_pictures_mode == "auto" and session.map_pictures_on
+
+    def walker_job(name: str):
+        _furnish, jobs = session.tile_art_jobs()
+        return next((j for j in jobs if j.subject == "walker" and j.name == name), None)
+
+    def drawn(name: str, from_picture: str | None) -> None:
+        art = session.world_art
+        art.pictures.append(
+            MapPicture(
+                subject="walker",
+                subject_id=name,
+                name=name,
+                file="images/map/w.png",
+                from_picture=from_picture,
+            )
+        )
+
+    job = walker_job("Serrik Vaun")
+    assert job is not None and job.reference is None and job.from_picture == ""
+    drawn("Serrik Vaun", "")  # from their words: no portrait yet
+    assert walker_job("Serrik Vaun") is None
+    serrik = next(c for c in session.cast if c.name == "Serrik Vaun")
+    serrik.reference_images.insert(0, ImageRef(id="p1", file="images/refs/p1.png"))
+    job = walker_job("Serrik Vaun")
+    assert job is not None and job.reference == job.from_picture == "images/refs/p1.png"
+    drawn("Serrik Vaun", "images/refs/p1.png")
+    assert walker_job("Serrik Vaun") is None
+    serrik.reference_images.insert(0, ImageRef(id="p2", file="images/refs/p2.png"))
+    assert walker_job("Serrik Vaun").from_picture == "images/refs/p2.png"
+    # A sample's avatar (None: what it was drawn from isn't known) stands: a
+    # new portrait is asked about instead.
+    drawn("Serrik Vaun", None)
+    assert walker_job("Serrik Vaun") is None and not session.avatar_due("Serrik Vaun")
+    # One the map drew from their words is drawn again from the portrait.
+    drawn("Serrik Vaun", "")
+    assert session.avatar_due("Serrik Vaun")
+    # The author's own choice stands.
+    session.world_art.tile_overrides["walker/Serrik Vaun"] = "images/map/mine.png"
+    assert walker_job("Serrik Vaun") is None and not session.avatar_due("Serrik Vaun")
+
+
+def test_avatars_asked_for_while_one_is_drawing_join_its_run(tmp_path, story, cast, monkeypatch):
+    """Live, portraits landed one after another and every avatar offered
+    after the first was refused ("Another asset is being drawn now")."""
+    import threading
+
+    from sealedlore.engine import session_area
+    from tests.test_world_pictures import FakeImages
+
+    release = threading.Event()
+
+    class SlowImages(FakeImages):
+        def generate(self, payload):
+            release.wait(10)
+            return super().generate(payload)
+
+    FakeImages.sent = []
+    monkeypatch.setattr(session_area, "ImageClient", SlowImages)
+    session = make_session(tmp_path, story, cast)
+    session.config.providers[0].api_key = "k"
+    assert session.redraw_tile_assets([("walker/Serrik Vaun", "")])
+    assert session.tile_asset_offer("walker/Maela Orr", "")[2] is None
+    assert session.redraw_tile_assets([("walker/Maela Orr", ""), ("walker/Serrik Vaun", "x")])
+    assert session.redraw_tile_assets([("walker/Maela Orr", "")])  # already queued: once
+    release.set()
+    session._asset_thread.join(10)
+    assert len(FakeImages.sent) == 3
+    assert session.walker_asset("Maela Orr")[1] == "changed for this story"
+    # Once the run is over, the next ask starts one of its own.
+    assert session.redraw_tile_assets([("walker/Maela Orr", "y")])
+    session._asset_thread.join(10)
+    assert len(FakeImages.sent) == 4

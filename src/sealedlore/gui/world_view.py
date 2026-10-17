@@ -808,6 +808,11 @@ class WorldView(QWidget):
     redraw_requested = Signal(str)
     # Try again on what the map gave up drawing (`session.retry_map_art`).
     retry_requested = Signal()
+    # Map pictures waiting for the author (Settings: Ask before drawing):
+    # see them, draw them all as they are, or not now.
+    review_pictures_requested = Signal()
+    draw_pictures_requested = Signal()
+    decline_pictures_requested = Signal()
     # Mark a point (metres east, north) in the turn being written; set off
     # for one.
     mark_requested = Signal(float, float)
@@ -872,6 +877,36 @@ class WorldView(QWidget):
         progress_row.addStretch(1)
         self.progress_label.hide()
         self.progress.hide()
+        # Map pictures that wait for the author's approval (`set_waiting`).
+        self.waiting = QWidget()
+        self.waiting.setObjectName("mapWaiting")
+        self.waiting_label = QLabel()
+        self.waiting_label.setObjectName("hintLabel")
+        self.waiting_label.setWordWrap(True)
+        self.waiting_review = QPushButton("Review…")
+        self.waiting_review.setObjectName("smallButton")
+        self.waiting_review.setToolTip(
+            "Every picture the map wants, with its prompt and price: draw some or all"
+        )
+        self.waiting_review.clicked.connect(self.review_pictures_requested)
+        self.waiting_draw = QPushButton("Draw them")
+        self.waiting_draw.setObjectName("smallButton")
+        self.waiting_draw.setToolTip("Draw them all as they are, in the background")
+        self.waiting_draw.clicked.connect(self.draw_pictures_requested)
+        self.waiting_decline = QPushButton("Not now")
+        self.waiting_decline.setObjectName("smallButton")
+        self.waiting_decline.setToolTip(
+            "Leave them undrawn; you aren't asked about them again while the story is open"
+        )
+        self.waiting_decline.clicked.connect(self.decline_pictures_requested)
+        waiting_row = QHBoxLayout(self.waiting)
+        waiting_row.setContentsMargins(0, 0, 0, 0)
+        waiting_row.setSpacing(6)
+        waiting_row.addWidget(self.waiting_label, 1)
+        waiting_row.addWidget(self.waiting_review)
+        waiting_row.addWidget(self.waiting_draw)
+        waiting_row.addWidget(self.waiting_decline)
+        self.waiting.hide()
         # Paused for a private scene (`set_paused`).
         self.pause_note = QLabel(PAUSED_NOTE)
         self.pause_note.setObjectName("mapPaused")
@@ -943,6 +978,7 @@ class WorldView(QWidget):
         layout.setSpacing(8)
         layout.addLayout(header)
         layout.addLayout(progress_row)
+        layout.addWidget(self.waiting)
         layout.addWidget(self.pause_note)
         layout.addWidget(self.hint)
         self.legend = _FogLegend()
@@ -2176,6 +2212,21 @@ class WorldView(QWidget):
         self.paused = paused
         if self.world.places:
             self._sync_buttons()
+
+    def set_waiting(self, count: int, price: float | None, unpriced: bool = False) -> None:
+        """How many map pictures wait for the author's approval and what
+        they cost listed (`unpriced`: some have no listed price); hidden
+        at none."""
+        if count <= 0:
+            self.waiting.hide()
+            return
+        noun = "map picture waits" if count == 1 else "map pictures wait"
+        if price is None:
+            cost = "at a price the listing doesn't give"
+        else:
+            cost = f"about ${price:.2f}" + (", some unpriced" if unpriced else "")
+        self.waiting_label.setText(f"{count} {noun} for your approval ({cost}).")
+        self.waiting.show()
 
     def set_progress(
         self, done: int, total: int, activity: str = "", failed: Sequence[str] = ()

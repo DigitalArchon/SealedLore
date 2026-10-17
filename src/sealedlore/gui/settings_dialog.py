@@ -141,6 +141,13 @@ RECALL_CHOICES = (
     ("Questions and turns: chapters and passages", "exchanges|everywhere"),
 )
 
+# Settings → Images → Draw map pictures (`Config.map_pictures_mode`).
+MAP_PICTURE_MODES = (
+    ("auto", "Automatically"),
+    ("ask", "Ask before drawing"),
+    ("off", "Off"),
+)
+
 
 class SettingsDialog(QDialog):
     def __init__(
@@ -1455,17 +1462,24 @@ class SettingsDialog(QDialog):
         )
 
     def _map_pictures_rows(self, form: QFormLayout) -> None:
-        """Map pictures: a standing approval (the author's call, Oct 2026),
-        unlike story pictures, which ask each time."""
+        """Map pictures: drawn on their own under a standing approval (the
+        default), or each run's approved first on the Map page (the author,
+        Oct 17 2026), or none. Story pictures ask each time."""
         form.addRow(QLabel("<b>Map pictures</b>"))
-        self.map_pictures = QCheckBox("Draw map pictures with an image model")
-        self.map_pictures.setChecked(self.config.map_pictures)
-        self.map_pictures.setToolTip(
-            "For a story that keeps a map: everyone's avatar, the buildings and things on "
-            "it, drawn in the background as the story goes, without asking each time. "
-            "Needs Draw the map (Models) on."
+        self.map_pictures = QComboBox()
+        for value, label in MAP_PICTURE_MODES:
+            self.map_pictures.addItem(label, value)
+        self.map_pictures.setCurrentIndex(
+            max(self.map_pictures.findData(self.config.map_pictures_mode), 0)
         )
-        form.addRow(self.map_pictures)
+        self.map_pictures.setToolTip(
+            "For a story that keeps a map: everyone's avatar, roofs, the buildings and things "
+            "on it, drawn by an image model as the story reaches them. Drawn automatically: "
+            "in the background, without asking. Ask before drawing: what the map wants waits "
+            "on the Map page with its price until you approve it. Needs Draw the map (Models) "
+            "on."
+        )
+        form.addRow("Draw map pictures", self.map_pictures)
         self.map_picture_model = ModelField(
             self.config.map_picture_model,
             self._browse_image_models if self.image_catalog is not None else None,
@@ -1784,7 +1798,7 @@ class SettingsDialog(QDialog):
         self.config.image_size = self.image_size.currentText().strip() or self.config.image_size
         self.config.image_count = self.image_count.value()
         self.config.image_prompt_model = self.image_prompt_model.text().strip() or None
-        self.config.map_pictures = self.map_pictures.isChecked()
+        self.config.map_pictures_mode = self.map_pictures.currentData()
         self.config.portrait_model = (
             self.portrait_model.text().strip() or self.config.portrait_model
         )

@@ -214,7 +214,7 @@ def test_a_tee_chats_map_is_read_by_its_own_model_and_draws_no_map_pictures(tmp_
         map_model="small/map",
         map_art_model="small/art",
         map_art=True,
-        map_pictures=True,
+        map_pictures_mode="auto",
     )
     session, provider = chat_session(tmp_path, ["Hi.", "{}"], config=config)
     session.story.defaults.world_map = True

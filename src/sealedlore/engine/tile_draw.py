@@ -180,7 +180,9 @@ def walker_jobs(
     failed: Callable[[str], bool] = lambda _k: False,
 ) -> list[PictureJob]:
     """A walking sprite for each person (name, portrait file or None, how
-    their card describes them) who has none."""
+    their card describes them) who has none. Each records what it is drawn
+    from (`from_picture`: the portrait's file, "" for the words), so one
+    drawn before a portrait came is known to be drawn again."""
     out: list[PictureJob] = []
     for name, portrait, looks in people:
         key = f"walker:{name}"
@@ -199,6 +201,7 @@ def walker_jobs(
                 name=name,
                 prompt=prompt,
                 reference=portrait or None,
+                from_picture=portrait or "",
             )
         )
     return out

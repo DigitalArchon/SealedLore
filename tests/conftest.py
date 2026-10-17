@@ -116,6 +116,37 @@ def _crops_take_the_whole_picture(request, monkeypatch):
     yield
 
 
+class RefusingImages:
+    """The image client a test gets unless it stands in one of its own: map
+    pictures are on by default (`Config.map_pictures_mode`), and any test
+    with a NanoGPT chat endpoint and a key has an image endpoint too. Every
+    picture is refused, as an endpoint that is down would; nothing reaches
+    the network."""
+
+    def __init__(self, base_url: str = "", api_key: str = "", **kwargs) -> None:
+        self.base_url, self.api = base_url, kwargs.get("api", "")
+
+    def generate(self, payload):
+        from sealedlore.providers.base import ProviderError
+
+        raise ProviderError("tests never reach an image model")
+
+    def cancel(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+@pytest.fixture(autouse=True)
+def _no_image_model(monkeypatch):
+    from sealedlore.engine import session_area, session_world_art
+
+    monkeypatch.setattr(session_world_art, "ImageClient", RefusingImages)
+    monkeypatch.setattr(session_area, "ImageClient", RefusingImages)
+    monkeypatch.setattr(session_world_art, "list_image_models", lambda *a, **k: [])
+
+
 @pytest.fixture(autouse=True)
 def memory_keychain():
     from sealedlore.storage import keychain

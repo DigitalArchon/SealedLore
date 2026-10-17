@@ -8,8 +8,9 @@ Each piece is checked, kept and saved as it comes back, so nothing waits for
 the art and nothing done is lost if the story is closed meanwhile. A
 provider without `detached` (the scripted mock) draws inline.
 
-Map pictures from an image model (`Config.map_pictures`, the author's
-standing approval: engine/world_pictures.py) go on a thread of their own,
+Map pictures from an image model (`Config.map_pictures_mode`: the author's
+standing approval, or each run's pictures approved first,
+engine/session_map_approval.py; engine/world_pictures.py) go on a thread of their own,
 one at a time, each counted against the story's daily limit before it is
 sent, logged with its prompt, and its file stripped of hidden data like any
 picture.
@@ -258,10 +259,11 @@ class WorldArtRuntime:
 
     @property
     def map_pictures_on(self) -> bool:
-        """The author has turned map pictures on and there is somewhere to
-        send them; never in a private scene, nor in a TEE chat (private
-        throughout, which the image endpoint is not)."""
-        if not (self.map_on and self.config.map_art and self.config.map_pictures):
+        """Map pictures are on (drawn on their own, or each asked for:
+        `map_pictures_asking`) and there is somewhere to send them; never in
+        a private scene, nor in a TEE chat (private throughout, which the
+        image endpoint is not)."""
+        if not (self.map_on and self.config.map_art and self.config.map_pictures_mode != "off"):
             return False
         if self.tee_chat:
             return False
@@ -534,7 +536,8 @@ class WorldArtRuntime:
         thread = self._picture_thread
         if thread is not None and thread.is_alive():
             return False
-        jobs = self.map_picture_jobs()
+        # Asking first: only what the author approved is drawn, the rest waits.
+        jobs = self._held_for_approval("map", self.map_picture_jobs())
         media = self.config.images()
         if not jobs or media is None:
             return False

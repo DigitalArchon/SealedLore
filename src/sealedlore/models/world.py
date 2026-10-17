@@ -224,7 +224,7 @@ class PlaceLayout(BaseModel):
 
 
 class MapPicture(BaseModel):
-    """A picture an image model drew for the map (`Config.map_pictures`): a
+    """A picture an image model drew for the map (`Config.map_pictures_mode`): a
     person's avatar, a place or a thing standing on the map (the view cuts it
     out of its plain background and shrinks it to the map's scale), or a
     place's postcard. The file is in the story's pictures, under images/map/."""
@@ -244,6 +244,11 @@ class MapPicture(BaseModel):
     # As for sprites: the state it shows, drawn from the picture before it.
     state: str = ""
     file: str
+    # A changed sprite: the picture it was drawn from. A person's avatar
+    # ("walker"): the portrait file it was drawn from, "" when drawn from
+    # the card's words; None for one from before that was kept, or a
+    # sample's (`tile_art_jobs` draws an avatar again only when it knows the
+    # portrait has changed since).
     from_picture: str | None = None
     prompt: str = ""
     model: str = ""

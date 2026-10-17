@@ -754,10 +754,16 @@ class Config(BaseModel):
     # plainly, with no calls for art.
     map_art: bool = True
     # Map pictures from an image model (Settings → Images): avatars, buildings,
-    # things and postcards, drawn in the background under a standing approval
-    # (the author, Oct 2026), off until turned on. Story pictures still ask
-    # each time. The limit is per story and day; the subscription allows ~100.
-    map_pictures: bool = False
+    # things, roofs and postcards, whatever the map needs as play reaches it.
+    # "auto": drawn in the background under a standing approval; "ask": what
+    # the map wants waits on the Map page, with the price, until the author
+    # approves it; "off": none (the map art model's own sprites stand in).
+    # On by default since Oct 17 2026 (the author: the game must compensate
+    # for new graphics on the fly); it was a tickbox, off by default, whose
+    # saved False was nobody's choice, so it is a new field and the old one
+    # is left unread. Story pictures still ask each time. The limit is per
+    # story and day; the subscription allows ~100.
+    map_pictures_mode: Literal["auto", "ask", "off"] = "auto"
     # FLUX.3 Klein from words, as the map's sprites (the author, Oct 17 2026:
     # Klein, not Qwen; Qwen's paintings drew roofs as black-and-white noise).
     map_picture_model: str = "blackforestlabs/flux-3/klein/text-to-image"

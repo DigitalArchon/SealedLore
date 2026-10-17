@@ -1479,7 +1479,7 @@ def test_paint_this_place_paints_the_area_stood_in_and_media_lists_the_painting(
     FakeImages.sent = []
     monkeypatch.setattr(session_world_art, "ImageClient", FakeImages)
     monkeypatch.setattr(session_world_art, "list_image_models", lambda *a, **k: [])
-    assert session.config.map_pictures is False  # the press is the approval
+    session.config.map_pictures_mode = "off"  # the press is the approval
     stand(window, {"Serrik Vaun": ("house", 5, 10), "Maela Orr": ("house", 6, 10)})
     assert view.area.place_id == "house"
     window._area_paintings_menu()
@@ -1548,3 +1548,64 @@ def test_the_map_s_heading_is_neutral_under_the_play_view_and_a_plan_never_label
     marks = window._place_marks(labelled, window.session, window.session.map_art_copy())
     names = [m.name for m in marks]
     assert "Old Two-Storey House" not in names and "A rift" in names
+
+
+def test_map_pictures_that_wait_show_on_the_map_and_go_as_approved(app, window, monkeypatch):
+    """Settings → Images → Draw map pictures: Ask before drawing. The Map
+    page says how many wait and their price; Review… shows each prompt, and
+    what is ticked goes as it stands, the rest left out for the session."""
+    from dataclasses import replace
+
+    from PySide6.QtWidgets import QDialog
+
+    from sealedlore.engine.world_pictures import PictureJob
+    from sealedlore.gui.map_pictures_dialog import MapPicturesDialog
+
+    session, view = window.session, window.world_view
+    session.config.image_endpoint.base_url = "https://nano-gpt.com/api/v1"
+    session.config.image_endpoint.api_key = "k"
+    session.config.map_art = True
+    session.config.map_pictures_mode = "ask"
+    jobs = [
+        PictureJob(
+            key="walker:Maela Orr",
+            subject="walker",
+            subject_id="Maela Orr",
+            name="Maela Orr",
+            prompt="Maela, small.",
+        ),
+        PictureJob(
+            key="texture:out-roof-stone",
+            subject="texture",
+            subject_id="out-roof-stone",
+            name="stone roof",
+            prompt="A stone roof.",
+        ),
+    ]
+    assert session._held_for_approval("tile", jobs) == []  # nothing drawn: asked first
+    window._sync_progress()
+    assert not view.waiting.isHidden()
+    assert view.waiting_label.text().startswith("2 map pictures wait for your approval")
+    approved: list = []
+    monkeypatch.setattr(
+        session,
+        "approve_map_pictures",
+        lambda jobs, start=True: approved.append((list(jobs), start)) or False,
+    )
+
+    def review(dialog: MapPicturesDialog) -> int:
+        assert [r.tick.text() for r in dialog.rows] == ["Avatar: Maela Orr", "Texture: stone roof"]
+        dialog.rows[0].prompt.setPlainText("Maela, smaller.")
+        dialog.rows[1].tick.setChecked(False)
+        assert dialog.draw_button.text() == "Draw 1"
+        return QDialog.Accepted
+
+    monkeypatch.setattr(MapPicturesDialog, "exec", review)
+    window._review_map_pictures()
+    assert approved == [([replace(jobs[0], prompt="Maela, smaller.")], True)]
+    # The roof was left out: not asked about again while the story is open.
+    assert [w.job.key for w in session.map_pictures_waiting()] == ["walker:Maela Orr"]
+    window._decline_map_pictures()
+    assert session.map_pictures_waiting() == [] and view.waiting.isHidden()
+    session._held_for_approval("tile", jobs)
+    assert session.map_pictures_waiting() == []

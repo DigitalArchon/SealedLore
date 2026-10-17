@@ -23,6 +23,7 @@ from sealedlore.engine.world_pictures import shown_view, view_current, views_of
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.isometric_view import CHOICE_THUMB, ChooseViewDialog, ViewChoice
 from sealedlore.gui.map_iso import iso_png
+from sealedlore.gui.map_pictures_dialog import MapPicturesDialog
 from sealedlore.gui.map_tiles import texture_colours
 from sealedlore.gui.ref_images import PICTURE_FILTER, thumbnail_of
 from sealedlore.gui.world_view import WorldView
@@ -49,6 +50,9 @@ class WorldWindow:
         self.world_view.choose_view_requested.connect(self._choose_isometric)
         self.world_view.redraw_requested.connect(self._redraw_plan)
         self.world_view.retry_requested.connect(self._retry_map_art)
+        self.world_view.review_pictures_requested.connect(self._review_map_pictures)
+        self.world_view.draw_pictures_requested.connect(self._draw_map_pictures)
+        self.world_view.decline_pictures_requested.connect(self._decline_map_pictures)
         self.world_button = QToolButton()
         self.world_button.setObjectName("viewToggleButton")
         self.world_button.setText("Map")
@@ -208,6 +212,7 @@ class WorldWindow:
         activity = f"Reading the passage for the map with {reading}…" if reading else ""
         failed = session.map_art_failed() if not total and not activity else []
         self.world_view.set_progress(done, total, activity, failed)
+        self._sync_waiting_pictures(drawing=bool(total))
         painting = session.isometric_painting
         if painting != self.world_view.isometric_painting:
             self.world_view.isometric_painting = painting
@@ -217,6 +222,78 @@ class WorldWindow:
             self._progress_timer.start()
         elif not total and not activity:
             self._progress_timer.stop()
+
+    # --- map pictures that wait for the author (Ask before drawing) ----------------
+
+    def _sync_waiting_pictures(self, *, drawing: bool) -> None:
+        """The Map page's line for the map pictures that wait for approval;
+        and pictures approved while a run was busy, drawn once it is free."""
+        session = self.session
+        waiting = session.map_pictures_waiting() if session is not None else []
+        prices = [w.price for w in waiting]
+        known = [p for p in prices if p is not None]
+        self.world_view.set_waiting(
+            len(waiting), sum(known) if known else None, unpriced=None in prices
+        )
+        if (
+            session is not None
+            and not drawing
+            and not self._busy
+            and not session.in_private
+            and session.map_pictures_approved_pending
+        ):
+            session.start_map_art()
+
+    def _review_map_pictures(self) -> None:
+        """Every map picture waiting, with its prompt and price: the ticked
+        ones are drawn as they stand, the rest left out for this session."""
+        session = self.session
+        if session is None:
+            return
+        waiting = session.map_pictures_waiting()
+        if not waiting:
+            self._sync_progress()
+            return
+        dialog = MapPicturesDialog(waiting, session.pictures.read, self)
+        try:
+            result = dialog.exec()
+            approved, left_out = dialog.approved(), dialog.left_out()
+        finally:
+            dialog.deleteLater()
+        if self.session is not session:
+            return  # another story opened meanwhile
+        if result == QDialog.Accepted:
+            session.decline_map_pictures(left_out)
+            self._approve_map_pictures(approved)
+        elif result == MapPicturesDialog.DECLINED:
+            session.decline_map_pictures(w.job.key for w in waiting)
+        self._sync_progress()
+
+    def _draw_map_pictures(self) -> None:
+        """Draw them, all as they stand."""
+        session = self.session
+        if session is None:
+            return
+        self._approve_map_pictures([w.job for w in session.map_pictures_waiting()])
+        self._sync_progress()
+
+    def _approve_map_pictures(self, jobs) -> None:
+        session = self.session
+        if session is None or not jobs:
+            return
+        # While a job runs the worker owns the story: kept approved, and the
+        # next run takes them (after the passage's reads, or once the worker
+        # is done: `_sync_waiting_pictures`).
+        start = not self._busy and not session.in_private
+        session.approve_map_pictures(jobs, start=start)
+        self._progress_timer.start()
+
+    def _decline_map_pictures(self) -> None:
+        session = self.session
+        if session is None:
+            return
+        session.decline_map_pictures(w.job.key for w in session.map_pictures_waiting())
+        self._sync_progress()
 
     def _paint_isometric(self, area_id: str) -> None:
         """Paint the place as the author asked on the 2D map: the program's

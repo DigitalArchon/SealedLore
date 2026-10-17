@@ -146,6 +146,7 @@ from sealedlore.engine.scene_update import (
 from sealedlore.engine.session_archival import LEDGER_MAX_TOKENS, ArchivalRuntime
 from sealedlore.engine.session_area import AreaRuntime
 from sealedlore.engine.session_images import ImageRuntime
+from sealedlore.engine.session_map_approval import MapApprovalRuntime
 from sealedlore.engine.session_merge import MergeRuntime, _close
 from sealedlore.engine.session_plot import PlotRuntime, SessionNotice
 from sealedlore.engine.session_portraits import PortraitRuntime
@@ -424,6 +425,7 @@ class StorySession(
     PlotRuntime,
     WorldRuntime,
     WorldArtRuntime,
+    MapApprovalRuntime,
     AreaRuntime,
     MergeRuntime,
     ArchivalRuntime,

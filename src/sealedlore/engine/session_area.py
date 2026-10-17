@@ -250,8 +250,11 @@ class AreaRuntime:
     _asset_thread: threading.Thread | None = None
     _asset_client: ImageClient | None = None
     _asset_role: str | None = None
-    # The roles queued after the one being drawn (several avatars at once).
+    # The roles queued after the one being drawn (several avatars at once),
+    # under `_queue_lock()`; `_asset_closing` once the run takes no more.
     _asset_queue: list[tuple[str, str]] = []
+    _asset_queue_lock: threading.Lock | None = None
+    _asset_closing = False
     # The picture jobs of the tile run under way (`tile_art_jobs`'s keys).
     _tile_keys: set[str] = set()
     _tile_thread: threading.Thread | None = None
@@ -386,6 +389,22 @@ class AreaRuntime:
             return changed or None  # "": the set's generic people
         found = art.picture_for("walker", name)
         return found.file if found is not None else None
+
+    def avatar_due(self, name: str) -> bool:
+        """The map will draw this person's avatar itself, under map pictures
+        (`tile_art_jobs`): they have none, or one it drew from their words or
+        from a portrait they no longer lead with. Not when the author chose
+        it (drew it, chose a file or one drawn before, or the set's own
+        figure), nor a sample's: a new portrait asks before drawing over
+        those."""
+        if not self.map_pictures_on:
+            return False
+        card = next(
+            (c for c in (*self.visible_cast(), *self.visible_supporting()) if c.name == name),
+            None,
+        )
+        portrait = card.reference_images[0].file if card and card.reference_images else None
+        return not _avatar_stands(self.map_art_copy(), name, portrait)
 
     def walker_asset(self, name: str) -> tuple[bytes | None, str]:
         """A person's avatar on the map as the Cast page shows it: its file,
@@ -1960,13 +1979,10 @@ class AreaRuntime:
             people.append((card.name, portrait, looks_of(card.summary, card.full_description)))
         people.sort(key=lambda p: p[0] not in here)
 
+        portraits = {name: portrait for name, portrait, _looks in people}
+
         def has_walker(name: str) -> bool:
-            # Drawn for the story, or the author's own choice for them (a
-            # redraw, their own picture, or the set's figure: "").
-            return (
-                art.picture_for("walker", name) is not None
-                or art.tile_overrides.get(f"walker/{name}") is not None
-            )
+            return _avatar_stands(art, name, portraits.get(name))
 
         roofs = roof_jobs(
             areas,
@@ -1995,6 +2011,8 @@ class AreaRuntime:
         if thread is not None and thread.is_alive():
             return False
         furnish, pictures = self.tile_art_jobs()
+        # Asking first: only what the author approved is drawn, the rest waits.
+        pictures = self._held_for_approval("tile", pictures)
         if not furnish and not pictures:
             return False
         self._tile_total, self._tile_done = len(furnish) + len(pictures), 0
@@ -2569,9 +2587,9 @@ class AreaRuntime:
         _info, read = self.tile_set()
         return read(role)
 
-    def _asset_job(self, role: str, words: str) -> tuple[str, str, str, bytes | None]:
-        """(prompt, size, model, the picture it is drawn from) for redrawing
-        one asset from these words."""
+    def _asset_job(self, role: str, words: str) -> tuple[str, str, str, bytes | None, str]:
+        """(prompt, size, model, the picture it is drawn from, that
+        picture's file or "") for redrawing one asset from these words."""
         art = self.map_art_copy()
         info, _read = self.tile_set(art)
         world = world_words(self._set_words(art, info), self.map_setting())
@@ -2586,7 +2604,7 @@ class AreaRuntime:
             prompt = self.texts.fill(
                 "map.tile.texture", what=what, world=world, view=view, style=style
             )
-            return prompt, TEXTURE_SIZE, self.config.map_tile_model, None
+            return prompt, TEXTURE_SIZE, self.config.map_tile_model, None, ""
         if role == "rug":
             prompt = self.texts.fill("map.tile.rug", what=what, world=world, style=style)
         elif role in OUTDOOR_SPRITES:
@@ -2607,19 +2625,19 @@ class AreaRuntime:
                     data = strip_metadata(data)
                 except MetadataError:
                     data = None  # never sent unstripped: drawn from the words
-            if data is not None:
+            if data is not None and portrait:
                 prompt = self.texts.fill("map.tile.portrait", style=style)
-                return prompt, SPRITE_SIZE, self.config.map_sprite_model, data
+                return prompt, SPRITE_SIZE, self.config.map_sprite_model, data, portrait
             who = f"{name}, {what}" if what else name
             prompt = self.texts.fill("map.tile.person", what=who, world=world, style=style)
         else:
             prompt = self.texts.fill("map.tile.sprite", what=what, world=world, style=style)
-        return prompt, SPRITE_SIZE, self.config.map_tile_model, None
+        return prompt, SPRITE_SIZE, self.config.map_tile_model, None, ""
 
     def tile_asset_offer(self, role: str, words: str) -> tuple[str, float | None, str | None]:
         """(the model it would be drawn by, its listed price, why it can't be
         drawn now)."""
-        _prompt, size, model, _ref = self._asset_job(role, words)
+        _prompt, size, model, _ref, _source = self._asset_job(role, words)
         listed = self._listed_image_model(model)
         price = listed.price(size) if listed is not None else None
         if self.in_private or self.tee_chat:
@@ -2629,13 +2647,15 @@ class AreaRuntime:
             return model, price, "Pictures have no endpoint or key (Settings → Images)."
         if self.map_pictures_left_today(self.map_art_copy()) <= 0:
             return model, price, "Today's map pictures are all drawn (Settings → Images)."
-        thread = self._asset_thread
-        if thread is not None and thread.is_alive():
-            return model, price, "Another asset is being drawn now."
         run = self._tile_thread
         if run is not None and run.is_alive() and _asset_key(role) in self._tile_keys:
             return model, price, "It is being drawn now, under the standing approval."
         return model, price, None
+
+    def _queue_lock(self) -> threading.Lock:
+        if self._asset_queue_lock is None:
+            self._asset_queue_lock = threading.Lock()
+        return self._asset_queue_lock
 
     def redraw_tile_asset(self, role: str, words: str) -> bool:
         """Draw one asset again from these words (the author asked, with the
@@ -2646,10 +2666,20 @@ class AreaRuntime:
         """Several assets drawn again, one after another on one thread (the
         avatars of every card a new portrait landed on): each counted
         against the day as it is sent, the map taking each as it is in.
-        False when the first can't be drawn now."""
+        Asked while a run is drawing, they join its queue: live, portraits
+        landing one after another were each offered an avatar, and every
+        offer after the first was dropped ("Another asset is being drawn
+        now"), so the author's own character got none. False when none of
+        them can be drawn now."""
         wanted = [(role, " ".join(words.split())) for role, words in wanted]
         if not wanted or self._map_closed:
             return False
+        with self._queue_lock():
+            thread = self._asset_thread
+            if thread is not None and thread.is_alive() and not self._asset_closing:
+                queued = set(self._asset_queue)
+                self._asset_queue.extend(w for w in wanted if w not in queued)
+                return True
         if self.tile_asset_offer(wanted[0][0], wanted[0][1])[2] is not None:
             return False
         media = self.config.images()
@@ -2658,6 +2688,7 @@ class AreaRuntime:
         self._art_stop = False
         art = self.world_art
         self._asset_queue = list(wanted[1:])
+        self._asset_closing = False
 
         def run() -> None:
             try:
@@ -2667,9 +2698,13 @@ class AreaRuntime:
                         return
                     self._asset_role = role
                     self._draw_asset(client, art, role, words)
-                    if not self._asset_queue:
-                        return
-                    role, words = self._asset_queue.pop(0)
+                    with self._queue_lock():
+                        if not self._asset_queue:
+                            # Nothing more can join this run: a later ask
+                            # starts its own.
+                            self._asset_closing = True
+                            return
+                        role, words = self._asset_queue.pop(0)
                     with self._lock():
                         if self.map_pictures_left_today(art) <= 0:
                             return  # the day's pictures all drawn: the rest wait
@@ -2678,7 +2713,9 @@ class AreaRuntime:
                         self._save_art(art)
             finally:
                 client.close()
-                self._asset_queue = []
+                with self._queue_lock():
+                    self._asset_closing = True
+                    self._asset_queue = []
 
         with self._lock():
             day = _today()
@@ -2694,7 +2731,7 @@ class AreaRuntime:
         """One asset of a redraw run: drawn, kept as the author's change,
         said to the window either way (the Cast page's avatar waits on it)."""
         try:
-            prompt, size, model, reference = self._asset_job(role, words)
+            prompt, size, model, reference, source = self._asset_job(role, words)
             file = self._draw_tile(
                 client, role, prompt, size, model, self._listed_image_model(model), reference
             )
@@ -2705,7 +2742,11 @@ class AreaRuntime:
                 if role.startswith("walker/"):
                     # Kept with the others drawn for them: Media lists every
                     # avatar and the author chooses among them (Oct 17 2026).
-                    art.pictures.append(_walker_picture(role[7:], file, prompt=prompt, model=model))
+                    art.pictures.append(
+                        _walker_picture(
+                            role[7:], file, prompt=prompt, model=model, from_picture=source
+                        )
+                    )
                 self._save_art(art)
         except Exception as exc:  # noqa: BLE001 - a thread dies silently otherwise
             self._log(
@@ -2770,14 +2811,35 @@ class AreaRuntime:
             self._save_art(art)
 
 
-def _walker_picture(name: str, file: str, *, prompt: str = "", model: str = "") -> MapPicture:
+def _avatar_stands(art: WorldArt, name: str, portrait: str | None) -> bool:
+    """Whether a person's avatar is as it should be, with `portrait` (a
+    file) the one their card leads with: the author's own choice stands (a
+    redraw, their own picture, or the set's figure: ""); else every
+    character has an avatar drawn from the portrait they have now (the
+    author, Oct 17 2026), so one drawn here from their words before a
+    portrait came, or from a portrait they no longer lead with, doesn't. A
+    sample's, or one from before this was kept (`from_picture` None),
+    stands."""
+    if art.tile_overrides.get(f"walker/{name}") is not None:
+        return True
+    drawn = art.picture_for("walker", name)
+    if drawn is None:
+        return False
+    return drawn.from_picture is None or not portrait or drawn.from_picture == portrait
+
+
+def _walker_picture(
+    name: str, file: str, *, prompt: str = "", model: str = "", from_picture: str | None = None
+) -> MapPicture:
     """The record of an avatar drawn or chosen for a person, kept with the
-    map's pictures (`subject` "walker"); `model` "" for the author's own."""
+    map's pictures (`subject` "walker"); `model` "" for the author's own.
+    `from_picture`: the portrait it was drawn from, "" from words."""
     return MapPicture(
         subject="walker",
         subject_id=name,
         name=name,
         file=file,
+        from_picture=from_picture,
         prompt=prompt,
         model=model,
         made_at=utc_now_iso(),

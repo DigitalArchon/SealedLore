@@ -369,7 +369,7 @@ def test_the_standing_approval_and_the_author_s_draw_never_draw_one_figure_twice
 ):
     session = make_session(tmp_path, story, cast)
     session.config.map_art = True
-    session.config.map_pictures = True
+    session.config.map_pictures_mode = "auto"
     session.config.image_endpoint.base_url = "https://nano-gpt.com/api/v1"
     session.config.image_endpoint.api_key = "k"
     assert _asset_key("walker/Serrik Vaun") == "walker:Serrik Vaun"

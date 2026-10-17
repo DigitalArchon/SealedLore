@@ -47,6 +47,9 @@ PAINTED_KEPT = 6
 WALK_UP = ("talk", "attack", "use", "take", "eat", "destroy")
 # How long the window waits for the painting threads as it closes.
 PAINT_JOIN_SECONDS = 1.0
+# A new portrait landed while a job ran: its avatar is seen to this often
+# until the job is done.
+AVATAR_RETRY_MS = 1000
 
 log = logging.getLogger("sealedlore.gui")
 
@@ -893,6 +896,10 @@ class AreaWindow:
         self.cast_panel.refresh_avatar()
         return started
 
+    def _ask_again(self, session, card_ids: list[str]) -> None:
+        if self.session is session:
+            self._ask_avatars(card_ids)
+
     def _offer_avatars(self, card_ids: list[str]) -> None:
         """A new portrait landed on these cards (drawn, or chosen from a
         file): offer their avatars drawn from it, in one question, once the
@@ -902,23 +909,36 @@ class AreaWindow:
         QTimer.singleShot(0, self, lambda: self._ask_avatars(ids))
 
     def _ask_avatars(self, card_ids: list[str]) -> None:
-        """One question for every card that got a new portrait, then one
-        run drawing them all (asked one by one, the second was refused:
-        "Another asset is being drawn now"). Not for a card whose avatar is
-        coming anyway: a character with no avatar yet gets one under the
-        standing approval for map pictures."""
+        """Every character has an avatar, drawn from the portrait they have
+        now (the author, Oct 17 2026). With map pictures on, the map draws
+        it from a new portrait itself (or offers it among the pictures that
+        wait, when it asks first: `avatar_due`), unless the author chose the
+        avatar or it is a sample's: then, and with map pictures off, one
+        question for every card that got a new portrait, and one run drawing
+        them all. Live, portraits landing
+        one after another were each asked about alone, and every answer
+        after the first was refused ("Another asset is being drawn now"):
+        the author's own character got no avatar."""
         session = self.session
-        if session is None or self._busy:
+        if session is None:
+            return
+        if self._busy:
+            # The worker owns the story: asked once it is done.
+            QTimer.singleShot(AVATAR_RETRY_MS, self, lambda: self._ask_again(session, card_ids))
             return
         cards: list[Character] = []
+        drawn_by_the_map = False
         for card_id in card_ids:
             card = self._avatar_card(card_id)
             if card is None:
                 continue
-            data, _source = session.walker_asset(card.name)
-            if data is None and session.map_pictures_on:
+            if session.avatar_due(card.name):
+                drawn_by_the_map = True
                 continue
             cards.append(card)
+        if drawn_by_the_map:
+            session.start_tile_art()
+            self._sync_progress()
         if not cards:
             return
         model, price, problem = session.tile_asset_offer(f"walker/{cards[0].name}", "")

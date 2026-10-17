@@ -1,4 +1,4 @@
-"""Map pictures from an image model (`Config.map_pictures`): what the map
+"""Map pictures from an image model (`Config.map_pictures_mode`): what the map
 still needs drawn, as prompts. Pure; the session sends them
 (engine/session_world_art.py) and the view cuts them out
 (gui/map_art.py).
