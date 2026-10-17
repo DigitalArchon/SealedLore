@@ -2008,7 +2008,11 @@ class AreaRuntime:
         jobs = item_jobs(areas, has_sprite, words, self.texts, style=style, failed=failed)
         here = {name for name, spot in self.area_state().spots.items()}
         people = []
-        for card in (*self.visible_cast(), *self.visible_supporting()):
+        # Not before the story begins: Start offers portraits, and live the
+        # avatars were drawn from the cards' words while Setup and Start were
+        # still open, then again from the portraits.
+        begun = bool(self.path())
+        for card in (*self.visible_cast(), *self.visible_supporting()) if begun else ():
             if card.id in self.portraits_coming:
                 continue  # drawn from the portrait once it lands
             portrait = card.reference_images[0].file if card.reference_images else None

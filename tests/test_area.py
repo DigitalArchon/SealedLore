@@ -1436,7 +1436,7 @@ def test_every_character_s_avatar_is_drawn_from_the_portrait_they_have_now(tmp_p
     from sealedlore.models.image import ImageRef
     from sealedlore.models.world import MapPicture
 
-    session = make_session(tmp_path, story, cast)
+    session = make_session(tmp_path, story, cast, ["He waits.", "{}"])
     session.config.providers[0].api_key = "k"
     session.config.map_art = True
     assert session.config.map_pictures_mode == "auto" and session.map_pictures_on
@@ -1457,6 +1457,12 @@ def test_every_character_s_avatar_is_drawn_from_the_portrait_they_have_now(tmp_p
             )
         )
 
+    # Not before the story begins: Start offers portraits, and live the
+    # avatars were drawn from the words while Setup and Start were open.
+    assert walker_job("Serrik Vaun") is None
+    session.config.map_art = False
+    list(session.send(turn("I wait.")))
+    session.config.map_art = True
     job = walker_job("Serrik Vaun")
     assert job is not None and job.reference is None and job.from_picture == ""
     # While a portrait is being drawn for them, their avatar waits for it
