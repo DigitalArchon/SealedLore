@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.plot_md import ParsedPlotFile, PlotProblem
 from sealedlore.gui.image_codec import encoded, read_image
+from sealedlore.gui.picture_words import AGAIN_LABEL, EDIT_LABEL
 from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.ids import new_id
 from sealedlore.models.image import ImageRef
@@ -334,11 +335,16 @@ class RefImageStrip(QWidget):
             "Show this one large, as their portrait" if person else "Show this one large, first"
         )
         self.portrait_button.clicked.connect(self._make_portrait)
-        self.again_button = QPushButton("Draw again…")
-        self.again_button.setToolTip("This picture drawn again; the new one is added")
+        self.again_button = QPushButton(AGAIN_LABEL)
+        self.again_button.setToolTip(
+            "Another take from this picture's own prompt (this picture isn't sent); the new "
+            "one is added"
+        )
         self.again_button.clicked.connect(lambda: self._ask(self.again_requested))
-        self.edit_button = QPushButton("Edit…")
-        self.edit_button.setToolTip("A changed copy of this picture; it is added")
+        self.edit_button = QPushButton(EDIT_LABEL)
+        self.edit_button.setToolTip(
+            "This picture is sent with what you want changed; the changed copy is added"
+        )
         self.edit_button.clicked.connect(lambda: self._ask(self.edit_requested))
         if not after_portrait:
             # Hidden, never shown here: shown before it has a parent, a

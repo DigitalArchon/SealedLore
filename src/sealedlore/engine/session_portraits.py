@@ -188,9 +188,12 @@ class PortraitRuntime:
         portrait); else it goes after the others. `source`: the picture
         an edit is of, sent with the prompt; else `references`, the pictures
         a picture drawn again was drawn from."""
-        size = card_size(card, info)
         person = isinstance(card, Character)
         references = tuple(references)
+        sending = 1 if source is not None else len(references)
+        # The model's text or edit version, for what goes with the prompt.
+        model, info = self.fitting_image_model(model, sending, info)
+        size = card_size(card, info)
         if source is not None:
             references = (
                 RefUse(

@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.image_prompt import ImagePromptDraft, mentioned_numbers
+from sealedlore.engine.image_variants import fitting_model, version_words
 from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.session_images import DEFAULT_MAX_REFS
@@ -49,6 +50,7 @@ from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.image_picker import ImagePickerDialog, pick_image_model
 from sealedlore.gui.model_picker import ModelField
+from sealedlore.gui.picture_words import WORDS_ONLY
 from sealedlore.gui.ref_images import (
     PICTURE_FILTER,
     THUMB,
@@ -348,8 +350,15 @@ class ImageDialog(QDialog):
 
     # --- the image models ---------------------------------------------------
 
+    def sent_model(self) -> str:
+        """The version of the chosen model the request goes to: its edit
+        version when pictures go with the prompt and it takes none, its text
+        version when none go and it is an edit version
+        (engine/image_variants.py)."""
+        return fitting_model(self.model.text().strip(), len(self._refs), self._models)
+
     def _info(self) -> ImageModelInfo | None:
-        wanted = self.model.text().strip()
+        wanted = self.sent_model()
         return next((info for info in self._models if info.id == wanted), None)
 
     def _fill_models(self, selected: str) -> None:
@@ -642,18 +651,25 @@ class ImageDialog(QDialog):
         else:
             self.price.setText("Price unknown: the endpoint doesn't list this model.")
             self.generate_button.setText(self._generate_word())
+        sent = self.sent_model()
+        if sent and sent != self.model.text().strip():
+            self.price.setText(self.price.text() + " · " + version_words(sent, len(self._refs)))
         accepts = info is None or info.max_inputs > 0
+        sending = len(self._sent_refs())
         if not self._choices:
             self.ref_note.setText(
-                "No reference pictures in this story yet. Add them to characters and lore "
-                "entries (Cast and Lore tabs) to keep their look."
+                f"{WORDS_ONLY} There are no reference pictures in this story yet: add them "
+                "to characters and lore entries (Cast and Lore tabs) to keep their look."
             )
         elif not accepts:
-            self.ref_note.setText("This model takes no reference pictures.")
+            self.ref_note.setText(f"{WORDS_ONLY} This model takes no reference pictures.")
+        elif not sending:
+            self.ref_note.setText(f"{WORDS_ONLY} Add a picture below to keep a look.")
         else:
+            what = "this picture" if sending == 1 else f"these {sending} pictures"
             self.ref_note.setText(
-                "Sent with the prompt, numbered as shown. The prompt refers to them as "
-                "“image 1”, “image 2”…"
+                f"Sent with the prompt: {what}, numbered as shown. The prompt refers to them "
+                "as “image 1”, “image 2”…"
             )
         problems = self._problems()
         self.warning.setText("\n".join(problems))
@@ -676,7 +692,8 @@ class ImageDialog(QDialog):
         info = self._info()
         self.request = ImageRequest(
             story_id=self.session.story.id,
-            model=model,
+            # The version the pictures sent call for (what the price line said).
+            model=self.sent_model(),
             # Exactly what is on screen.
             prompt=text,
             size=size,

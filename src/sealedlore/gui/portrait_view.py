@@ -21,6 +21,14 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.gui.image_dialog import FitPicture
+from sealedlore.gui.picture_words import (
+    AGAIN_LABEL,
+    DRAW_LABELS,
+    EDIT_LABEL,
+    FROM_WORDS,
+    SCENE_LABEL,
+    SENDS_PICTURE,
+)
 from sealedlore.gui.ref_images import image_of, pixmap_of
 from sealedlore.gui.wrap_row import WrapRow
 
@@ -87,10 +95,6 @@ class _Picture(QLabel):
 
 # Written out whole: tests/test_readme_labels.py finds a control the manual
 # names among the GUI's string literals.
-DRAW_LABELS = {
-    "portrait": ("Draw a portrait…", "Draw a new portrait…"),
-    "picture": ("Draw a picture…", "Draw a new picture…"),
-}
 
 
 class PortraitView(QWidget):
@@ -123,29 +127,36 @@ class PortraitView(QWidget):
         whose = "their card" if person else "the entry"
         self.draw_button = self._button(
             DRAW_LABELS[self._noun][0],
-            f"A {self._noun} from {whose} by an image model; you see the prompt and the "
-            "price first. It goes first among the pictures.",
+            f"A new {self._noun} written from {whose}'s description: no picture is sent, "
+            "only words. You see the prompt and the price first. It goes first among the "
+            "pictures.",
             self.draw_requested,
         )
         self.again_button = self._button(
-            "Draw again…",
-            "This picture drawn again, by the same model or another: the new one is added "
-            "to the pictures, and this one stays until you remove it.",
+            AGAIN_LABEL,
+            "Another take from this picture's own prompt, by the same model or another. "
+            "This picture isn't sent (only any pictures it was itself drawn from, as "
+            "before). The new one is added to the pictures; this one stays.",
             self.again_requested,
         )
         self.edit_button = self._button(
-            "Edit…",
-            "A changed copy of this picture (a scar, other clothes, another background, "
-            "years older): you say what to change. It is added to the pictures.",
+            EDIT_LABEL,
+            "This picture is sent to the image model with what you want changed (a scar, "
+            "other clothes, another background, years older), so it stays the same "
+            f"{'person' if person else 'thing'}. The changed copy is added to the pictures.",
             self.edit_requested,
         )
         self.scene_button = self._button(
-            "In the scene…",
-            "A picture of them alone as they are now in the story: where they are, what "
-            "they wear and are doing. The story's prompt writer describes it; it is added "
-            "to their pictures.",
+            SCENE_LABEL,
+            "Their portrait is sent to the image model with a description of them as they "
+            "are now in the story (where they are, what they wear and are doing), so it is "
+            "the same face. It is added to their pictures.",
             self.scene_requested,
         )
+        self.from_words = QLabel(FROM_WORDS)
+        self.from_words.setObjectName("hintLabel")
+        self.sends_picture = QLabel(SENDS_PICTURE)
+        self.sends_picture.setObjectName("hintLabel")
         self.scene_button.setVisible(person)
         self.add_button = self._button(
             "Choose a file…",
@@ -158,16 +169,25 @@ class PortraitView(QWidget):
             self.remove_requested,
         )
         # Wraps rather than widen the Inspector.
-        buttons = WrapRow(spacing=6, group_spacing=6)
-        for button in (
-            self.draw_button,
-            self.again_button,
-            self.edit_button,
-            self.scene_button,
-            self.add_button,
-            self.remove_button,
-        ):
-            buttons.add_group([button])
+        # Each kind under its caption, the buttons wrapping under it: as narrow
+        # as the widest button, so the portrait's column keeps its width.
+        words = WrapRow(spacing=6, group_spacing=6)
+        for button in (self.draw_button, self.again_button):
+            words.add_group([button])
+        sends = WrapRow(spacing=6, group_spacing=6)
+        for button in (self.edit_button, self.scene_button):
+            sends.add_group([button])
+        files = WrapRow(spacing=6, group_spacing=6)
+        for button in (self.add_button, self.remove_button):
+            files.add_group([button])
+        buttons = QVBoxLayout()
+        buttons.setSpacing(4)
+        buttons.addWidget(self.from_words)
+        buttons.addLayout(words)
+        buttons.addWidget(self.sends_picture)
+        buttons.addLayout(sends)
+        buttons.addSpacing(4)
+        buttons.addLayout(files)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 4)
         layout.setSpacing(4)
@@ -210,10 +230,13 @@ class PortraitView(QWidget):
     def _sync_buttons(self) -> None:
         on, has = self._offered, getattr(self, "_has", False)
         self.draw_button.setVisible(on)
+        self.from_words.setVisible(on)
         self.add_button.setVisible(on)
         for button in (self.again_button, self.edit_button, self.remove_button):
             button.setVisible(on and has)
-        self.scene_button.setVisible(on and self._person)
+        self.sends_picture.setVisible(on and has)
+        # Their portrait is what keeps the face: with none, Draw a portrait first.
+        self.scene_button.setVisible(on and has and self._person)
 
     def _show_whole(self) -> None:
         if not self._data:

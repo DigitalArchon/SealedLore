@@ -22,6 +22,7 @@ from sealedlore.engine.image_prompt import (
     parse_image_prompt,
     ref_choices,
 )
+from sealedlore.engine.image_variants import fitting_model
 from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.portraits import edit_prompt
 from sealedlore.engine.prompt import assemble_chat, assemble_question
@@ -35,7 +36,7 @@ from sealedlore.models.image import GeneratedImage, ImageRef, RefUse
 from sealedlore.models.node import Node
 from sealedlore.models.video import GeneratedVideo
 from sealedlore.providers.base import ChatRequest
-from sealedlore.providers.images import ImageClient, ImageModelInfo
+from sealedlore.providers.images import ImageClient, ImageModelInfo, parse_image_models
 from sealedlore.providers.tee import is_tee
 from sealedlore.providers.videos import VideoClient
 from sealedlore.storage.images import IMAGES_DIR, clean_story_images
@@ -332,6 +333,22 @@ class ImageRuntime:
 
     # --- pictures made ---------------------------------------------------------
 
+    def image_listing(self) -> list[ImageModelInfo]:
+        """The picture models the endpoint lists, as last fetched."""
+        return parse_image_models({"data": self.config.image_models})
+
+    def fitting_image_model(
+        self, model: str, pictures: int, info: ImageModelInfo | None = None
+    ) -> tuple[str, ImageModelInfo | None]:
+        """The version of `model` a request with `pictures` pictures goes to
+        (engine/image_variants.py: an edit version with no picture fails,
+        and a text version that takes none can't use one), and its listing."""
+        listing = self.image_listing()
+        sent = fitting_model(model, pictures, listing)
+        if sent == model.strip() and info is not None:
+            return sent, info
+        return sent, next((m for m in listing if m.id == sent), info if sent == model else None)
+
     def generated_images(self) -> list[GeneratedImage]:
         """Read afresh each time: a job may have added one since."""
         return self.pictures.images()
@@ -355,6 +372,7 @@ class ImageRuntime:
             ref_id=image.id,
             file=image.file,
         )
+        model, info = self.fitting_image_model(model, 1, info)
         return ImageRequest(
             story_id=self.story.id,
             model=model,
@@ -380,6 +398,7 @@ class ImageRuntime:
             ref_id="background",
             file=relative,
         )
+        model, info = self.fitting_image_model(model, 1, info)
         return ImageRequest(
             story_id=self.story.id,
             model=model,

@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.gui.picture_words import AGAIN_LABEL, EDIT_LABEL
 from sealedlore.gui.ref_images import thumbnail_of
 from sealedlore.gui.transcript import IMAGE_ACTIONS, picture_caption
 from sealedlore.gui.video_view import VIDEO_ACTIONS, video_caption
@@ -430,15 +431,15 @@ CARD_ACTIONS = (
     ("show", "Show its card"),
     ("save", "Save picture as…"),
     ("-", ""),
-    ("again", "Draw again…"),
-    ("edit", "Edit…"),
+    ("again", AGAIN_LABEL),
+    ("edit", EDIT_LABEL),
 )
 BACKGROUND_ACTIONS = (
     ("open", "See it whole"),
     ("save", "Save picture as…"),
     ("-", ""),
     ("draw", "Draw a new background…"),
-    ("edit", "Edit…"),
+    ("edit", EDIT_LABEL),
     ("file", "Choose a file instead…"),
     ("-", ""),
     ("clear", "Clear the background"),

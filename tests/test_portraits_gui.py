@@ -30,6 +30,9 @@ from sealedlore.providers.mock import MockChatProvider  # noqa: E402
 from sealedlore.storage.picture_store import MemoryPictures  # noqa: E402
 from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
 
+K3 = "blackforestlabs/flux-3/klein/text-to-image"
+K3E = "blackforestlabs/flux-3/klein/edit-image"
+
 
 def _png(width: int = 2, height: int = 2) -> bytes:
     """A grey PNG (2x2 by default), valid to the byte."""
@@ -90,7 +93,7 @@ def test_the_dialog_shows_every_prompt_and_draws_them_as_they_stand(
         f"A face for {i}." for i in range(len(cast))
     ]
     assert dialog.draw_button.isEnabled()
-    assert dialog.model.text() == Config().portrait_model == "flux-2-klein-9b"
+    assert dialog.model.text() == Config().portrait_model == K3
     # The author edits one and leaves another out.
     dialog.rows[0].prompt.setPlainText("  My own words.\n")
     dialog.rows[1].tick.setChecked(False)
@@ -203,24 +206,32 @@ def test_an_edit_says_what_changes_and_needs_a_model_that_takes_a_picture(
     catalog = _Catalog(
         [
             ImageModelInfo(id="words-only", name="W", resolutions=("1024x1024",)),
+            # Both FLUX.3 Klein versions list pictures, as the endpoint's do.
             ImageModelInfo(
-                id="flux-2-klein-9b",
-                name="F",
-                resolutions=("1024*1024",),
-                max_inputs=4,
-                per_image={"*": 0.016},
+                id=K3, name="K", resolutions=("1024x1024",), max_inputs=10, per_image={"*": 0.009}
+            ),
+            ImageModelInfo(
+                id=K3E, name="KE", resolutions=("1024x1024",), max_inputs=10, per_image={"*": 0.009}
             ),
         ]
     )
+    session.config.image_models = [
+        {"id": m.id, "supported_parameters": {"max_input_images": m.max_inputs}}
+        for m in catalog.models
+    ]
     dialog = PictureVariantDialog(session, hero, portrait, edit=True, catalog=catalog, browse=None)
-    # Its own model can't be given the picture: the default edit model instead.
-    assert dialog.model.text() == "flux-2-klein-9b"
+    # Its own model can't be given the picture: the portrait model, which can,
+    # and since the picture goes with the prompt, its edit version is sent.
+    assert dialog.model.text() == K3
+    assert dialog.sent_model() == K3E and "its edit version" in dialog.note.text()
+    assert "this picture, as image 1" in dialog.sends.text()
     assert not dialog.draw_button.isEnabled()  # nothing said to change yet
     dialog.change.setText("twenty years older")
     assert dialog.prompt.toPlainText().startswith("Edit this picture: twenty years older.")
     assert dialog.draw_button.isEnabled()
     request = dialog.request()
     assert request.references[0].ref_id == "p" and request.card_caption == "twenty years older"
+    assert request.model == K3E, "what the dialog said is what is sent"
     assert not request.card_first
     dialog.model.setText("words-only")
     assert not dialog.draw_button.isEnabled() and "can't be given a picture" in dialog.note.text()
@@ -230,6 +241,7 @@ def test_an_edit_says_what_changes_and_needs_a_model_that_takes_a_picture(
     assert again.prompt.toPlainText() == "A man." and again.model.text() == "words-only"
     request = again.request()
     assert request.references == () and request.card_caption == "drawn again"
+    assert "no picture, only the words" in again.sends.text()
     again.reject()
 
 
@@ -430,7 +442,9 @@ def test_an_edit_of_a_story_picture_keeps_the_scene_and_goes_after_its_passage(
     dialog = PictureVariantDialog(
         session, VariantSubject.of_picture(scene), edit=True, catalog=catalog, browse=None
     )
-    assert dialog.windowTitle() == "Edit the picture"
+    assert dialog.windowTitle() == "Change the picture"
+    # The only model listed here that takes a picture (the default edit model isn't).
+    dialog.model.setText("flux-2-klein-9b")
     dialog.change.setText("at night")
     assert "Keep the same scene: the same people" in dialog.prompt.toPlainText()
     request = dialog.request()

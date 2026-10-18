@@ -30,6 +30,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 
 from sealedlore.engine.area import now_words
+from sealedlore.engine.image_variants import fitting_model
 from sealedlore.engine.world_art import (
     LAYOUT_MAX_TOKENS,
     MAX_FAILURES,
@@ -626,6 +627,8 @@ class WorldArtRuntime:
             if data is not None:
                 references.append(data_url(data, MEDIA_TYPES[picture_kind(data)]))
                 names.append(f"{job.name}: {job.reference}")
+        # The model's text or edit version, for whether a picture goes with it.
+        model = fitting_model(model, len(references), self.image_listing())
         payload = build_image_payload(model, job.prompt, size, 1, references, api=client.api)
         if extra and client.api == "nanogpt":
             payload.update(extra)

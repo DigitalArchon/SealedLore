@@ -899,10 +899,11 @@ named characters who aren't on file yet:
 
 A selected character's **portrait** is shown large at the left of their
 sheet, with their other pictures small under it and the sheet's fields to the
-right. Portraits are drawn taller than wide. The portrait is simply their
-first picture: **Make portrait** under the others puts another first, **Choose
-a file…** takes one from your computer, and **Draw a portrait…**, **Draw
-again…**, **Edit…** and **In the scene…** have an image model draw one (see
+right. The portrait is simply their first picture: **Make portrait** under the
+others puts another first, **Choose a file…** takes one from your computer,
+and the buttons under it have an image model draw one, grouped by what is
+sent: **From words:** **Draw a new portrait…** and **Same prompt again…**;
+**Sends this picture:** **Change this picture…** and **In a scene…** (see
 Pictures → Pictures for the cards). Click the portrait to see it whole. Each
 name in the list has its portrait beside it, small. A lore entry's first
 picture is shown the same way on the Lore page.
@@ -1635,14 +1636,15 @@ the story in one place: **Cast** (every picture on every character's card),
 **Lore** (the same for lore entries), **Story** (the background first, then
 the story's own pictures and videos, newest first) and **Map** (the map's
 paintings and postcards, and the avatars). A picture drawn for a card shows under its
-card; right-click one to see it whole, go to its card, save it, **Draw
-again…** or **Edit…**, as on its card. Right-click the background to see it
-whole, save it, **Draw a new background…** (the picture dialog, with a
-direction for a picture to stand behind the story's text), **Edit…** it, choose
+card; right-click one to see it whole, go to its card, save it, **Same
+prompt again…** or **Change this picture…**, as on its card. Right-click the
+background to see it whole, save it, **Draw a new background…** (the picture
+dialog, with a direction for a picture to stand behind the story's text),
+**Change this picture…** to change it, choose
 a file instead or clear it; a background drawn or edited goes behind the
 story when it is done, and the old one stays in Media when it was drawn here.
-A story picture's menu (here, or its ⋯ in the story) has **Edit…** too: the
-changed copy goes after the same passage. **Save all…** copies everything
+A story picture's menu (here, or its ⋯ in the story) has **Change this
+picture…** too: the changed copy goes after the same passage. **Save all…** copies everything
 there into a folder you choose, the cards' pictures named by card; each
 picture's ⋯ menu saves one.
 
@@ -1693,20 +1695,32 @@ Characters the plot hasn't brought in yet, and lore held back until you
 mention it, are never offered: their picture would tell a model about them
 early.
 
-Under a card's large picture, and for any of its other pictures:
+Under a card's large picture the buttons are grouped by what goes to the
+image model with the prompt, and every dialog says it again on a line of its
+own (**Sent with the prompt:**):
 
-- **Draw again…** draws it again from its own prompt (or a prompt written
-  from the card, for a picture added from a file), by the same model or
-  another.
-- **Edit…** makes a changed copy: say what to change (a scar, other clothes,
-  another background, years older) and the picture is sent with that. It
-  needs a model that can be given a picture; the card's own model is used
-  when it can, otherwise FLUX.2 klein 9B, and **Recommended** lists the
-  models that edited well.
-- **In the scene…** (a character) pictures them alone as they are at this
-  moment of the story: where they are, what they wear and are doing. The
-  story's own prompt writer, which has read the story, writes it, with their
-  pictures as references, in the usual picture dialog.
+- **From words:** **Draw a new portrait…** (a new picture from the card's
+  description) and **Same prompt again…** (another take from the picture's own
+  prompt, or one written from the card for a picture added from a file). The
+  picture itself isn't sent; a picture that was itself drawn from others (a
+  changed copy, a picture in a scene) is drawn again from those same pictures.
+- **Sends this picture:** **Change this picture…** makes a changed copy: say
+  what to change (a scar, other clothes, another background, years older) and
+  the picture goes with that, so the face and everything else stay. **In a
+  scene…** (a character) pictures them alone as they are at this moment of the
+  story, where they are, what they wear and are doing, with their pictures sent
+  so it is the same face; the story's own prompt writer, which has read the
+  story, writes it, in the usual picture dialog.
+
+The small pictures under the large one offer **Same prompt again…** and
+**Change this picture…** too.
+
+Some image models come in two versions, one drawing from words and one
+changing a picture (FLUX.3 Klein's text-to-image and edit). You choose the
+model, and the version is chosen for you: with a picture going with the
+prompt the edit version is sent, with none the text version (an edit version
+given no picture fails). A model that takes pictures itself, as Seedream does,
+is sent as it is. The dialog names the version it sends.
 
 A new picture is added to the card's pictures; the original stays. **Make
 portrait** (**Show first** on a lore entry) puts the one you like first, and
@@ -1715,9 +1729,14 @@ portrait** (**Show first** on a lore entry) puts the one you like first, and
 The portrait model is Settings → Images → **Portrait model**; **Recommended**
 beside it lists the models measured for portraits, with what each is good at:
 
-- **FLUX.2 klein 9B** (the default, about $0.01): follows a character's
-  description closely, and can be given their earlier pictures to keep them
-  the same in later pictures.
+- **FLUX.3 Klein** (the default, about $0.009, a few seconds): ahead of FLUX.2
+  klein on five of six characters for two blind judges, and its edit version
+  changes a picture best of those tried while keeping the face. Its portraits
+  are square.
+- **FLUX.3 Klein Base** (best, about $0.027): the judges' first choice on most
+  characters, truer to age, scars and clothes, at three times the price.
+- **FLUX.2 klein 9B** (the earlier default, about $0.01): tall portraits, but
+  last on five of six characters against FLUX.3 Klein.
 - **Z Image Turbo** (about $0.012) and **Recraft V4.1 Flash** (about $0.008):
   as good or better for a single portrait, Recraft's the most striking, but
   neither can be given reference pictures, so they can't keep a character the

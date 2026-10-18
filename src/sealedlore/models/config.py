@@ -69,14 +69,31 @@ class RecommendedModel(BaseModel):
 # SealedLoreDocs design/images.md and design/map.md (Oct 15 2026).
 RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
     "portrait_model": (
-        # Three Doomsville characters on nine models: it followed every
-        # detail of the description, and it takes reference pictures.
+        # Six characters (three Doomsville, AfterDark's Suzuka, Brasshaven's
+        # automaton, the Silverwood's dwarf) on three models, two blind Claude
+        # judges (SealedLoreDocs design/images.md, Oct 18 2026): FLUX.3 Klein
+        # Base first on 4-5 of 6, FLUX.3 Klein second nearly everywhere,
+        # FLUX.2 klein 9B last on 5 of 6. FLUX.3 Klein draws squares only.
+        RecommendedModel(
+            id="blackforestlabs/flux-3/klein/text-to-image",
+            tag="default",
+            label="FLUX.3 Klein",
+            note="Ahead of FLUX.2 klein on five of six characters for both blind judges, at "
+            "about $0.009 a portrait and in 4-7 seconds. Square portraits. Given a "
+            "character's earlier pictures, its edit version is used for you.",
+        ),
+        RecommendedModel(
+            id="blackforestlabs/flux-3/klein/base/text-to-image",
+            tag="best",
+            label="FLUX.3 Klein Base",
+            note="The judges' first choice on four or five of six characters (truer to age, "
+            "scars and clothing), at about $0.027 a portrait: three times FLUX.3 Klein.",
+        ),
         RecommendedModel(
             id="flux-2-klein-9b",
-            tag="default",
             label="FLUX.2 klein 9B",
-            note="Follows a character's description closely, about $0.01 a portrait, and "
-            "can be given a character's earlier pictures to keep them the same.",
+            note="The earlier default: tall portraits at about $0.01, but last on five of six "
+            "characters against FLUX.3 Klein (people looked older than their cards).",
         ),
         RecommendedModel(
             id="z-image-turbo",
@@ -104,12 +121,16 @@ RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
     # twenty years older and a suit at dinner. Picked in the Edit dialog;
     # the card's own model is used when it can take the picture.
     "picture_edit": (
+        # John's portrait with a scar, twenty years older, a suit at dinner:
+        # two blind judges ranked FLUX.3 Klein Edit first on all three, and
+        # FLUX.2 klein last (it changed his face twice); Oct 18 2026.
         RecommendedModel(
-            id="flux-2-klein-9b",
-            label="FLUX.2 klein 9B",
+            id="blackforestlabs/flux-3/klein/edit-image",
+            label="FLUX.3 Klein Edit",
             tag="default",
-            note="Made all three edits tried (a scar, twenty years older, a suit at dinner) "
-            "and kept the face, about $0.016 with the picture.",
+            note="First on all three edits tried (a scar, twenty years older, a suit at "
+            "dinner) for both blind judges, keeping the face and everything else, at about "
+            "$0.009 with the picture.",
         ),
         RecommendedModel(
             id="qwen-image",
@@ -121,6 +142,12 @@ RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
             id="bytedance/seedream-v5.0-flash/edit",
             label="Seedream 5.0 Flash Edit",
             note="Made all three, the subtlest scar and the most finished suit, about $0.027.",
+        ),
+        RecommendedModel(
+            id="flux-2-klein-9b",
+            label="FLUX.2 klein 9B",
+            note="The earlier default, about $0.016 with the picture: made the changes, but "
+            "changed John's face on two of three against FLUX.3 Klein.",
         ),
     ),
     # Paintings of a place (Paintings on the map, Paint this place… on the
@@ -842,11 +869,12 @@ class Config(BaseModel):
     # cached prefix) and always shown to the author before anything is sent.
     image_model: str = "bytedance/seedream-v5.0-pro"
     # A portrait of each character (engine/portraits.py), offered at a
-    # story's start and on the Cast page, every prompt shown first. FLUX.2
-    # klein 9B followed every detail of three Doomsville cards at $0.01, and
-    # takes reference pictures (RECOMMENDED_IMAGE_MODELS: the others, with
-    # what each is good at).
-    portrait_model: str = "flux-2-klein-9b"
+    # story's start and on the Cast page, every prompt shown first. FLUX.3
+    # Klein beat FLUX.2 klein 9B on five of six characters for two blind
+    # judges at $0.009 (Oct 18 2026); with a picture to work from its edit
+    # version is sent (engine/image_variants.py). RECOMMENDED_IMAGE_MODELS:
+    # the others, with what each is good at.
+    portrait_model: str = "blackforestlabs/flux-3/klein/text-to-image"
     image_prompt_model: str | None = None
     # NanoGPT's host for each role's model (models/route.py), keyed by
     # `ROUTE_ROLES`; missing means the subscription's routing.

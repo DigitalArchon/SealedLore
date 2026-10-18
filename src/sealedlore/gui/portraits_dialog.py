@@ -32,6 +32,7 @@ from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.portraits import Card, card_size
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.model_picker import ModelField
+from sealedlore.gui.picture_words import WORDS_ONLY
 from sealedlore.gui.ref_images import thumbnail_of
 from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.gui.worker import GenerationWorker
@@ -138,7 +139,7 @@ class PortraitsDialog(QDialog):
             "prompt for each: read them, change any you like and untick anything you'd "
             "rather not draw. Nothing is drawn until you press Draw. Each picture goes "
             "first among its card's pictures, shown large on the Cast or Lore page, and "
-            "is kept in Media with its prompt and cost."
+            f"is kept in Media with its prompt and cost. {WORDS_ONLY}"
         )
         intro.setWordWrap(True)
         self.model = ModelField(

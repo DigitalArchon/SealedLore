@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 from sealedlore.engine.dice import chip_text
 from sealedlore.engine.reasoning import caught_note
 from sealedlore.gui import theme
+from sealedlore.gui.picture_words import EDIT_LABEL
 from sealedlore.gui.ref_images import pixmap_of, pixmap_within
 from sealedlore.gui.video_view import PendingVideoWidget, VideoItem, VideoMessageWidget
 from sealedlore.models.aside import Aside
@@ -717,7 +718,7 @@ IMAGE_ACTIONS = (
     ("reference", "Use as a reference picture for…"),
     ("background", "Set as background"),
     ("again", "Generate again…"),
-    ("edit", "Edit…"),
+    ("edit", EDIT_LABEL),
     ("-", ""),
     ("delete", "Delete picture"),
 )

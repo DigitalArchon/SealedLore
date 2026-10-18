@@ -16,6 +16,7 @@ nothing is sent before Draw; the prompt is sent exactly as it stands.
 
 from __future__ import annotations
 
+import html
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -31,10 +32,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.image_variants import fitting_model, version_words
 from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.portraits import Card, card_size, size_like
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.model_picker import ModelField
+from sealedlore.gui.picture_words import WORDS_ONLY
 from sealedlore.gui.portraits_dialog import card_name
 from sealedlore.gui.ref_images import image_of, thumbnail_of
 from sealedlore.gui.sizing import GrowingText, size_to_screen
@@ -45,6 +48,7 @@ from sealedlore.models.image import GeneratedImage, ImageRef, RefUse
 from sealedlore.providers.images import ImageModelInfo
 
 THUMB_SIDE = 160
+_SAME = "The model works from it, so the face and everything you don't change stay."
 # The caption a picture drawn again is given on its card.
 AGAIN_CAPTION = "drawn again"
 
@@ -149,9 +153,11 @@ class PictureVariantDialog(QDialog):
         self._prompts: dict[str, str] = {}
         name = subject.name
         if subject.card is None:
-            self.setWindowTitle(f"Edit {name}")
+            self.setWindowTitle(f"Change {name}")
         else:
-            self.setWindowTitle(f"Edit a picture of {name}" if edit else f"Draw {name} again")
+            self.setWindowTitle(
+                f"Change a picture of {name}" if edit else f"Same prompt again: {name}"
+            )
         self.setMinimumWidth(620)
         size_to_screen(self, 0.45, 0.8)
 
@@ -175,14 +181,19 @@ class PictureVariantDialog(QDialog):
             goes = "The new picture is added to the card's pictures"
             stays = "this one stays until you remove it"
         intro = QLabel(
-            "A copy of this picture with what you say changed. The picture itself is sent "
-            "with the prompt, so the model must be one that can be given a picture. "
-            f"{goes}; {stays}."
+            "A copy of this picture with what you say changed: the picture itself is sent "
+            f"with the prompt, so it stays the same. {goes}; {stays}."
             if edit
-            else "This picture drawn again from its prompt, by the same model or another. "
+            else "Another take from this picture's own prompt, by the same model or another. "
             f"{goes}; {stays}."
         )
         intro.setWordWrap(True)
+        # What goes with the prompt, said plainly (the author, Oct 18 2026:
+        # "you can't clearly tell if a reference picture is being used").
+        self.sends = QLabel()
+        self.sends.setObjectName("sentWithPrompt")
+        self.sends.setWordWrap(True)
+        self.sends.setTextFormat(Qt.RichText)
 
         self.change = QLineEdit()
         if subject.keep == "person":
@@ -229,6 +240,7 @@ class PictureVariantDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(picture)
         layout.addWidget(intro)
+        layout.addWidget(self.sends)
         layout.addLayout(form)
         layout.addWidget(self.busy)
         layout.addWidget(self.buttons)
@@ -327,8 +339,19 @@ class PictureVariantDialog(QDialog):
             return None
         return next((m for m in self._catalog.models if m.id == model), None)
 
+    def pictures_sent(self) -> int:
+        """How many pictures go with the prompt: the picture itself for an
+        edit, else those it was drawn from (as many as can be sent)."""
+        return 1 if self.edit else len(self._from)
+
+    def sent_model(self) -> str:
+        """The chosen model's version the request goes to, for whether a
+        picture goes with it (engine/image_variants.py)."""
+        listing = self._catalog.models if self._catalog is not None else []
+        return fitting_model(self.model.text().strip(), self.pictures_sent(), listing)
+
     def model_info(self) -> ImageModelInfo | None:
-        return self._info(self.model.text().strip())
+        return self._info(self.sent_model())
 
     def size(self) -> str:
         """A card's size, or, for a picture of the story or the background,
@@ -339,7 +362,7 @@ class PictureVariantDialog(QDialog):
         return size_like(info, *self._shape)
 
     def _sync(self, *_args) -> None:
-        model = self.model.text().strip()
+        model = self.sent_model()
         info = self.model_info()
         size = self.size()
         each = info.price(size) if info is not None else None
@@ -356,6 +379,8 @@ class PictureVariantDialog(QDialog):
             # $0.010, with a picture sent (design/images.md).
             price += ", and a picture sent with it may cost more"
         parts = [f"{model or 'No model'}: {price}"]
+        if model and model != self.model.text().strip():
+            parts[0] += " (" + version_words(model, self.pictures_sent()) + ")"
         if cannot and drawn_from:
             parts.append(
                 f"It was drawn from {_pictures(drawn_from)}, sent with its prompt, and this "
@@ -388,10 +413,27 @@ class PictureVariantDialog(QDialog):
             if known is not None:
                 parts.append(known.note)
         self.note.setText(". ".join(parts))
+        self.sends.setText(self._sends_words(takes))
         ready = self._worker is None and bool(model) and bool(self.prompt.toPlainText().strip())
         if self.edit:
             ready = ready and bool(self.change.text().strip() or self._hand_edited)
         self.draw_button.setEnabled(ready and not cannot)
+
+    def _sends_words(self, takes: int | None) -> str:
+        """What goes with the prompt, for the line under the intro."""
+        if self.edit:
+            return f"<b>Sent with the prompt:</b> this picture, as image 1. {_SAME}"
+        sent = self._from[:takes] if takes is not None else self._from
+        if not sent:
+            return f"<b>Sent with the prompt:</b> {html.escape(WORDS_ONLY[22:])}"
+        names = ", ".join(
+            f"image {i}: {html.escape(use.owner_name)}" for i, use in enumerate(sent, 1)
+        )
+        what = "the picture" if len(sent) == 1 else f"the {len(sent)} pictures"
+        return (
+            f"<b>Sent with the prompt:</b> {what} it was drawn from ({names}), as when it was "
+            "first drawn. This picture itself isn't sent."
+        )
 
     # --- the result ------------------------------------------------------------------
 
@@ -400,7 +442,8 @@ class PictureVariantDialog(QDialog):
 
     def request(self) -> ImageRequest:
         """The approved request: the prompt exactly as it stands."""
-        prompt, model, info = self.prompt.toPlainText(), self.chosen_model(), self.model_info()
+        # The version the dialog priced and named (what goes with it decides).
+        prompt, model, info = self.prompt.toPlainText(), self.sent_model(), self.model_info()
         if self.subject.image is not None:
             return self.session.picture_edit_request(
                 self.subject.image, prompt, model=model, info=info, size=self.size()

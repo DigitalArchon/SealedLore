@@ -67,6 +67,7 @@ from sealedlore.engine.area import (
 )
 from sealedlore.engine.chronicle_read import stated_skip
 from sealedlore.engine.furnish import FURNISH_MAX_TOKENS, furnish_messages, parse_furnishing
+from sealedlore.engine.image_variants import fitting_model
 from sealedlore.engine.levels import level_name, parse_level, place_of_area
 from sealedlore.engine.map_presence import reconcile_scene
 from sealedlore.engine.marks import (
@@ -3327,6 +3328,8 @@ class AreaRuntime:
         references = []
         if reference is not None:
             references.append(data_url(reference, MEDIA_TYPES[picture_kind(reference)]))
+        # The model's text or edit version, for whether a picture goes with it.
+        model = fitting_model(model, len(references), self.image_listing())
         payload = build_image_payload(model, prompt, size, 1, references, api=client.api)
         if client.api == "nanogpt":
             payload["enable_prompt_expansion"] = False
