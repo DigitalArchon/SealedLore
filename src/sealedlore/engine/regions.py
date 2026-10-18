@@ -28,7 +28,7 @@ from typing import Any
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import PromptTexts
 from sealedlore.engine.world_art import REGION_GRID_SIDE, REGION_GRID_TILES, rasterise
-from sealedlore.engine.world_layout import position, size_of
+from sealedlore.engine.world_layout import meets, position, size_of
 from sealedlore.ids import new_id
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.world import (
@@ -57,6 +57,8 @@ BESIDE = 10.0
 # Nobody the designer puts in the player's own region stands this close to
 # them: they would be simply there (the arrival rule).
 CLEAR_OF_PLAYER = 120.0
+# Someone moved into a region stands this far inside its edge.
+INSET = 5.0
 # Designed people's labels start here, clear of the story's own unknowns.
 LABEL_FROM = 101
 # The rings of regions designed round the player's: theirs, then the ring.
@@ -640,3 +642,79 @@ def designed_spot(art: WorldArt, thing_id: str) -> tuple[float, float] | None:
         if spot is not None and len(spot) == 2:
             return float(spot[0]), float(spot[1])
     return None
+
+
+def standing_region(art: WorldArt, point: tuple[float, float]) -> tuple[float, float, float]:
+    """The region of the grid (west, north, side) a point lies in."""
+    origin = (float(art.region_origin[0]), float(art.region_origin[1]))
+    return cell_rect(origin, *cell_of(origin, *point))
+
+
+def into_place(
+    world: WorldMap, art: WorldArt, place_id: str | None, point: tuple[float, float] | None
+) -> tuple[float, float] | None:
+    """Where someone the map has at a place stands, from their own point:
+    that point, unless the place lies wholly in other regions of the grid (a
+    read moved them there, its passage naming it: `world.resolve_reply(
+    standing_in=)`). Then the nearest ground of the place to it, a few metres
+    in: kept at their own point, they stood on in the region they had left
+    while the map had them in the next."""
+    if point is None or not art.region_origin:
+        return point
+    place = world.places.get(place_id or "")
+    centre = position(world, place_id) if place is not None else None
+    if place is None or centre is None or place.kind == "route":
+        return point
+    half = size_of(place) / 2
+    if meets(centre, half, standing_region(art, point)):
+        return point
+    inset = min(INSET, half)
+    x = min(max(point[0], centre[0] - half + inset), centre[0] + half - inset)
+    y = min(max(point[1], centre[1] - half + inset), centre[1] + half - inset)
+    return x, y
+
+
+def for_the_read(world: WorldMap, art: WorldArt, point: tuple[float, float] | None) -> WorldMap:
+    """The map as the map read is shown it: of the designer's regions, only
+    the one the author's character stands in, with all that is in it (none
+    when they stand nowhere yet). The rest go with their places, things and
+    people; their names still find them, since the read's reply is matched
+    against the whole map. Live (Oct 18 2026) the read was shown every
+    designed region and took John's own fields for the North Woodlot next
+    door, whose words said dead farmland."""
+    if not art.regions:
+        return world
+    here = None
+    if point is not None and art.region_origin:
+        origin = (float(art.region_origin[0]), float(art.region_origin[1]))
+        here = region_at(art, origin, *point)
+    hidden = {r.place_id for r in art.regions.values() if r is not here}
+    if not hidden:
+        return world
+    # Everything inside a hidden region goes with it (a place the story
+    # added inside one too).
+    grown = True
+    while grown:
+        inner = {k for k, p in world.places.items() if p.inside in hidden and k not in hidden}
+        grown = bool(inner)
+        hidden |= inner
+    places = {k: p for k, p in world.places.items() if k not in hidden}
+    where = {n: p for n, p in world.where.items() if p not in hidden}
+    gone = set(world.where) - set(where)
+    things = {
+        k: t
+        for k, t in world.things.items()
+        if (t.carried_by not in gone if t.carried_by else t.at not in hidden)
+    }
+    return world.model_copy(
+        update={
+            "places": places,
+            "links": [k for k in world.links if k.a in places and k.b in places],
+            "where": where,
+            "things": things,
+            "outside": [n for n in world.outside if n in where],
+            "unknowns": {
+                k: v for k, v in world.unknowns.items() if k in where or k not in world.where
+            },
+        }
+    )

@@ -25,6 +25,7 @@ from typing import Any
 from sealedlore.engine.area import BRIDGE_PART, crossing_middle, tile_point
 from sealedlore.engine.chronicle import introduced, variant_named
 from sealedlore.engine.marks import footprint, place_at
+from sealedlore.engine.regions import for_the_read
 from sealedlore.engine.scene_state import scene_at
 from sealedlore.engine.session_area import is_opening
 from sealedlore.engine.session_plot import SessionNotice
@@ -278,6 +279,12 @@ class WorldRuntime:
             name = speaker.name if speaker is not None else (held or "")
             label = f"The author's turn, as {name}"
         people = [c.name for c in self.map_people(path)]
+        # Of the world designer's regions, the read is shown the one the
+        # author's character stands in (engine/regions.py `for_the_read`).
+        shown = before
+        if self.world_art.regions:
+            point = self.held_point(self._snapshot_on(path[:-1]), before, held=held)
+            shown = for_the_read(before, self.map_art_copy(), point)
         begins = self.read_begins_at(path[:-1])
         # Its words count as a quote: the read quoted the location, or (live)
         # the whole line saying it.
@@ -287,7 +294,7 @@ class WorldRuntime:
             model=model,
             extra_body=self.route_for("map"),
             messages=build_world_read_messages(
-                world=before,
+                world=shown,
                 people=people,
                 held=held,
                 author_label=label,
@@ -303,7 +310,7 @@ class WorldRuntime:
                         self.read_minutes(author, opening=is_opening(path[:-1])),
                         begins_at,
                         self.read_marks(author),
-                        self.read_unknowns(before),
+                        self.read_unknowns(shown),
                         direction,
                     )
                     if n
@@ -391,6 +398,11 @@ class WorldRuntime:
             author_says=says,
             marked=self._marked_places(reply, author),  # refused, and logged, in character
             moves_fixed=moves_fixed,
+            # Nobody is put in another region of the world designer's grid
+            # than they stand in unless the passage names the place.
+            standing_in=self.standing_regions(self._snapshot_on(path[:-1]), pending.before)
+            if self.map_first
+            else None,
         )
         # Map-first: what the author marked is put exactly there, and what
         # has nothing else to go on goes beside where they stand (the turn's

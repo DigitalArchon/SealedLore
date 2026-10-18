@@ -162,6 +162,15 @@ def size_of(place: WorldPlace) -> float:
     return place.size if place.size is not None else KIND_SIZE.get(place.kind, KIND_SIZE[None])
 
 
+def meets(centre: tuple[float, float], half: float, rect: tuple[float, float, float]) -> bool:
+    """Whether a square of ground (its middle, half its side) and a region of
+    the grid (west, north, side) share ground, more than an edge."""
+    west, north, side = rect
+    dx = min(centre[0] + half, west + side) - max(centre[0] - half, west)
+    dy = min(centre[1] + half, north) - max(centre[1] - half, north - side)
+    return dx > 1.0 and dy > 1.0
+
+
 def bearing(direction: str | None) -> float | None:
     """The compass bearing a link's direction names, or None."""
     match = _BEARING.search(direction or "")

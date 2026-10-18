@@ -336,3 +336,92 @@ def test_every_edge_of_a_region_is_reached_after_its_buildings_are_stamped():
     assert sum(ch not in CARVABLE for row in opened for ch in row) > sum(
         ch not in CARVABLE for row in rows for ch in row
     )
+
+
+def _region_north(session, name: str = "The North Woodlot"):
+    """A second designed region, north of the first (`_with_region`)."""
+    from sealedlore.engine.regions import next_label
+
+    art = session.world_art
+    origin = (art.region_origin[0], art.region_origin[1])
+    i, j = cell_of(origin, 800.0, 800.0)
+    design = {**DESIGN, "name": name, "places": [], "things": [], "people": []}
+    region, patch = build_region(
+        parse_region(json.dumps(design)),
+        key=cell_key(i, j - 1),
+        rect=cell_rect(origin, i, j - 1),
+        holder_id=None,
+        labels_from=next_label(art),
+    )
+    art.regions[region.key] = region
+    art.terrain.append(patch)
+    session._area_cache = None
+    session._designed_cache = None
+    return region
+
+
+def test_the_read_never_puts_someone_in_another_region_unless_the_passage_names_it(
+    tmp_path, story, cast
+):
+    """The live test (Oct 18 2026): John went out to check his fields, the
+    read was shown every designed region and took "The fields were empty."
+    for the North Woodlot next door, and the map had him there."""
+    misread = {"where": [{"who": "Serrik", "place": "The North Woodlot", "quote": "were empty"}]}
+    session = open_session(tmp_path, story, cast, ["The fields were empty.", json.dumps(misread)])
+    here = _with_region(session)
+    north = _region_north(session)
+    list(session.send(turn("I go out to check the fields.")))
+    asked = session.provider.requests[-1].messages[-1].text
+    # Shown only the region they stand in, with what is in it.
+    assert "The Kessler fields" in asked and "the Kessler barn" in asked
+    assert "North Woodlot" not in asked
+    world = session.world()
+    assert world.where["Serrik Vaun"] == here.place_id != north.place_id
+    me = session.path()[-1].meta.area.spots["Serrik Vaun"]
+    assert session.area(me.area).place_id == here.place_id
+
+
+def test_a_passage_that_names_the_next_region_takes_them_into_it(tmp_path, story, cast):
+    read = {"where": [{"who": "Serrik", "place": "The North Woodlot", "quote": "the woodlot"}]}
+    session = open_session(
+        tmp_path, story, cast, ["He walked north into the woodlot.", json.dumps(read)]
+    )
+    _with_region(session)
+    north = _region_north(session)
+    list(session.send(turn("I walk north to the woodlot.")))
+    assert session.world().where["Serrik Vaun"] == north.place_id
+    me = session.path()[-1].meta.area.spots["Serrik Vaun"]
+    area = session.area(me.area)
+    assert area.place_id == north.place_id  # stood in it, not left in the region below
+    assert area.rect[1] == north.north
+
+
+def test_a_region_the_read_can_t_see_is_still_found_by_its_name_and_someone_new_has_none():
+    from sealedlore.engine.regions import for_the_read
+    from sealedlore.engine.world import resolve_reply
+
+    world, art, region, _patch = designed()
+    origin = (art.region_origin[0], art.region_origin[1])
+    folded = world_at([], None, designed=designed_delta(art))
+    west, north, side = cell_rect(origin, 0, 0)
+    inside = (west + 100.0, north - 100.0)
+    shown = for_the_read(folded, art, inside)
+    assert region.place_id in shown.places and region.people[0].label in shown.where
+    away = for_the_read(folded, art, (west + side + 100.0, north - 100.0))
+    assert not {p.id for p in region.places} & set(away.places)
+    assert not away.where and not away.unknowns and not away.things
+    # Someone standing in the next region east: the barn is elsewhere, and
+    # named by the passage it is where they are; someone new is never held.
+    east = cell_rect(origin, 1, 0)
+    source = "He stood by the fence. Then he went to the barn."
+    for quote, kept in (("stood by the fence", False), ("went to the barn", True)):
+        reply = {"where": [{"who": "Serrik Vaun", "place": "the Kessler barn", "quote": quote}]}
+        delta, refused = resolve_reply(
+            folded, reply, source=source, people=[], standing_in={"Serrik Vaun": east}
+        )
+        assert ("Serrik Vaun" in delta.where) is kept and bool(refused) is not kept
+    reply = {"where": [{"who": "a woman in grey", "place": "the Kessler barn", "quote": "fence"}]}
+    delta, refused = resolve_reply(
+        folded, reply, source=source, people=[], standing_in={"Serrik Vaun": east}
+    )
+    assert delta.unknowns and not refused

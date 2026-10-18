@@ -16,12 +16,14 @@ from sealedlore.engine.regions import (
     cell_of,
     cell_rect,
     designed_delta,
+    designed_point,
     edge_lines,
     next_label,
     origin_of,
     parse_region,
     place_lines,
     region_messages,
+    standing_region,
     taken_lines,
     waves,
     where_words,
@@ -103,6 +105,29 @@ class RegionRuntime:
     def designed_place_ids(self) -> set[str]:
         """Every place the world designer put on the map."""
         return {p.id for r in self.world_art.regions.values() for p in r.places}
+
+    def standing_regions(
+        self, state: AreaState | None, world: WorldMap
+    ) -> dict[str, tuple[float, float, float]]:
+        """The region of the grid each person on the map stands in (their
+        tile, else where the designer put them), for the map read
+        (`world.resolve_reply(standing_in=)`); none in a story without the
+        grid."""
+        art = self.map_art_copy()
+        if not art.region_origin:
+            return {}
+        spots = state.spots if state is not None else {}
+        out: dict[str, tuple[float, float, float]] = {}
+        for name in {*world.where, *spots}:
+            spot = spots.get(name)
+            point = (
+                self._spot_point(spot, world, art)
+                if spot is not None
+                else designed_point(art, name)
+            )
+            if point is not None:
+                out[name] = standing_region(art, point)
+        return out
 
     def mark_explored(self, state: AreaState | None = None) -> None:
         """The region the author's character stands in is explored: out of

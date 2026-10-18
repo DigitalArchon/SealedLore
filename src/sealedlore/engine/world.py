@@ -33,6 +33,7 @@ from sealedlore.engine.world_layout import (
     describe_metres,
     geometry_conflicts,
     is_close,
+    meets,
     metres,
     moves,
     place_new,
@@ -488,6 +489,45 @@ def _sex_of(text: str) -> set[str]:
     return ({"f"} if words & _FEMALE else set()) | ({"m"} if words & _MALE else set())
 
 
+# Words a place's name shares with any passage, never enough to name it.
+_PLACE_NOISE = _ROAD_NOISE | frozenset("old new place area land lands".split())
+
+
+def _names_place(text: str, place: WorldPlace) -> bool:
+    """Whether the text names the place: a word of its name or an alias, not
+    an article or the compass ("the North Woodlot" is named by "woodlot")."""
+    said = set(re.findall(r"[\w'-]+", text.lower()))
+    for name in (place.name, *place.aliases):
+        own = {w for w in re.findall(r"[\w'-]+", name.lower()) if w not in _PLACE_NOISE}
+        if own & said:
+            return True
+    return False
+
+
+def _elsewhere(
+    world: WorldMap,
+    delta: WorldDelta,
+    place_id: str,
+    region: tuple[float, float, float],
+    source: str,
+    entry: dict[str, Any],
+) -> bool:
+    """Whether a `where` entry puts someone standing in `region` in a place
+    lying wholly in other regions, which its passage doesn't name. A place
+    with no spot yet (new in this reply) or a road (a line, through many
+    regions) is never elsewhere."""
+    place = next((p for p in delta.places if p.id == place_id), None) or world.places.get(place_id)
+    centre = position_any(world, delta, place_id)
+    if place is None or centre is None or place.kind == "route":
+        return False
+    if meets(centre, size_of(place) / 2, region):
+        return False
+    quote = _text(entry.get("quote"))
+    span = locate_quote(source, quote) if quote else None
+    around = _sentences_to(source, span[1]) if span is not None else quote
+    return not _names_place(around, place)
+
+
 def _sentences_to(source: str, end: int) -> str:
     """The sentence the quote ends in, and the one before it."""
     head = source[:end]
@@ -599,6 +639,7 @@ def resolve_reply(
     author_says: bool = False,
     marked: Mapping[str, tuple[float, float]] | None = None,
     moves_fixed: bool | None = None,
+    standing_in: Mapping[str, tuple[float, float, float]] | None = None,
 ) -> tuple[WorldDelta, list[str]]:
     """What the reply changes, as a delta on `world`, and what was refused
     and why (for the log and the panel). `source` is the author's turn and
@@ -621,7 +662,15 @@ def resolve_reply(
     Direction or Narration, or a turn under Fiat (the author, Oct 17 2026).
     On any other turn such a thing stays where it is and only its state may
     change: live, the read moved "The town's stores" from Hellsville into
-    the farmhouse on a passage that only named them. None: as `author_says`."""
+    the farmhouse on a passage that only named them. None: as `author_says`.
+
+    `standing_in`: in a story the world designer builds (engine/regions.py),
+    the region of its grid (west, north, side) each person stands in now. A
+    place lying wholly in other regions is where someone is only when the
+    passage names it, in the quote's sentence or the one before: live (Oct
+    18 2026), John went out onto his own fields, the read took "The fields
+    were empty." for the North Woodlot, the designed region next door whose
+    words said dead farmland, and the map had him there."""
     # `added` is always a list from here: a delta that changes known places
     # and makes none must still skip their copies on a fold without them.
     delta = WorldDelta(added=[])
@@ -853,6 +902,21 @@ def resolve_reply(
         if place in delta.removed:
             refused.append(f"where {who} @ {_text(entry.get('place'))}: taken off the map")
             continue
+        canonical = (
+            None
+            if label is not None or described
+            else person_name(
+                who, people, [*named_people, *(n for n in delta.where if not is_unknown(n))]
+            )
+        )
+        # Someone new has no region yet; the rest stand where they stand.
+        region = (standing_in or {}).get(label or canonical or "")
+        if region is not None and _elsewhere(world, delta, place, region, source, entry):
+            refused.append(
+                f"where {who} @ {_text(entry.get('place'))}: in another region than they "
+                "stand in, and the passage doesn't name it"
+            )
+            continue
         if described:
             # Placed but not named: shown as Unknown 1, 2… until a passage
             # names them (the author, Oct 17 2026), the description kept so
@@ -864,9 +928,7 @@ def resolve_reply(
             delta.where[label] = place
             delta.outside[label] = outside
             continue
-        canonical = person_name(
-            who, people, [*named_people, *(n for n in delta.where if not is_unknown(n))]
-        )
+        assert canonical is not None
         if "outside" not in entry and _left_outside(
             world, delta, canonical, place, quoted(entry) or ""
         ):

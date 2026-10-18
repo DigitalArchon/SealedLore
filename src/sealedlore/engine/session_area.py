@@ -81,7 +81,7 @@ from sealedlore.engine.marks import (
     nearest_place,
     place_at,
 )
-from sealedlore.engine.regions import designed_point, designed_spot
+from sealedlore.engine.regions import designed_point, designed_spot, into_place
 from sealedlore.engine.session_world_art import _today, job_words
 from sealedlore.engine.takeable import fixed_thing, same_thing, the, thing_class
 from sealedlore.engine.tile_draw import (
@@ -841,6 +841,10 @@ class AreaRuntime:
             point = self._spot_point(spot, world, art)
             if point is None and spot is None:
                 point = designed_point(art, name)  # where the world designer put them
+            # Moved by a read into a place in another region of the world
+            # designer's grid: into it, not at their own point in the region
+            # they left (engine/regions.py `into_place`).
+            point = into_place(world, art, place_id, point)
             mine = spots.get(held or "")
             # Being in the same region of open country as the author's
             # character is not being in their company: a zombie at the far
