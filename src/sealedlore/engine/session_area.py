@@ -1250,8 +1250,10 @@ class AreaRuntime:
         if entrance is not None:
             return entrance.place_id, self.area_title(entrance.place_id, world)
         if area.indoor and (me.x, me.y) in area.exits and area.parent is not None:
-            parent = world.places.get(area.parent)
-            return area.parent, parent.name if parent else "outside"
+            # Open country is named for the region it lies in, when it does.
+            around = self.area(area.parent, world)
+            holder = world.places.get(around.place_id) if around and around.window else None
+            return area.parent, holder.name if holder else self.area_title(area.parent, world)
         return None
 
     def area_title(self, area_id: str, world: WorldMap | None = None) -> str:
@@ -1611,7 +1613,8 @@ class AreaRuntime:
         self._record_action(state, user_node, world)
         spot = state.spots.get(held or "")
         to = to or self.place_of_spot(spot, world)
-        here = world.where.get(held or "")
+        # Before any read has placed them, where the story starts (as `settle`).
+        here = world.where.get(held or "", world.start)
         if (
             held in world.outside
             and spot is not None
@@ -1623,6 +1626,29 @@ class AreaRuntime:
             # "just outside" the storyteller was told).
             around = self.area(spot.area, world)
             if around is not None and self._still_at(around, world, spot, here):
+                to = here
+        if (
+            held is not None
+            and held not in world.outside
+            and spot is not None
+            and here in world.places
+            and (action is None or action.verb != "travel")
+            and is_window(spot.area)
+            and _has_an_inside(world, here)
+        ):
+            # Walked out of its door onto open country: at it, outside, while
+            # still by its door (out into a farm's yard, they are at the farm).
+            # AfterDark (Oct 18 2026): out of the farmhouse onto open country,
+            # which is no place, the map still had John inside.
+            around = self.area(spot.area, world)
+            if (
+                around is not None
+                and here in around.buildings
+                and self._still_at(around, world, spot, here)
+            ):
+                delta = user_node.meta.world or WorldDelta()
+                delta.outside[held] = True
+                user_node.meta.world = delta
                 to = here
         if held is not None and held in world.outside and to == world.where.get(held):
             # Walked in from its door: in it now.

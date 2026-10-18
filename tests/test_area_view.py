@@ -1616,3 +1616,27 @@ def test_map_pictures_that_wait_show_on_the_map_and_go_as_approved(app, window, 
     assert session.map_pictures_waiting() == [] and view.waiting.isHidden()
     session._held_for_approval("tile", jobs)
     assert session.map_pictures_waiting() == []
+
+
+def test_a_change_indoors_keeps_the_last_picture_until_the_new_one_is_painted(app, window):
+    """The author (Oct 18 2026): the map flashed black at every thing moved
+    or added. An indoor picture is taller than its tiles (the south wall's
+    face), so the last picture was never kept indoors and a dark stand-in
+    showed while the new one painted."""
+    from dataclasses import replace
+
+    from sealedlore.gui.area_view import px_for
+
+    view = window.area_view
+    area = view.area
+    assert area is not None and area.indoor
+    px = px_for(area)
+    tall = QImage(area.width * px, area.height * px + 20, QImage.Format_RGB32)
+    tall.fill(QColor("green"))
+    view.set_area(area, tall, view.walkers, key=("painted",))
+    view.set_area(area, None, view.walkers, key=("a thing moved",))
+    assert view._background is not None and view._stale  # the last picture stands
+    assert view._background.pixmap().height() == tall.height()
+    other = replace(area, place_id=area.place_id + "-next-door")
+    view.set_area(other, None, view.walkers, key=("another area",))
+    assert view._background is None  # another area: nothing of the last one

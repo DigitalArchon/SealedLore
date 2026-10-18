@@ -21,6 +21,7 @@ from sealedlore.engine.area import (
     build_area,
     build_window,
     front_of,
+    path,
     point_tile,
     render_positions,
     tile_point,
@@ -441,3 +442,127 @@ def test_a_companion_at_the_same_place_stands_on_the_author_s_window_beside_them
     me, her = settled.spots["Serrik Vaun"], settled.spots["Maela"]
     assert her.area == me.area == HERE
     assert abs(her.x - me.x) <= 3 and abs(her.y - me.y) <= 3
+
+
+COTTAGE_ROWS = [
+    "########",
+    "#______#",
+    "#______#",
+    "#______#",
+    "#______#",
+    "###+####",
+]
+
+
+@pytest.mark.parametrize("inside", ["erg", None])
+def test_a_house_on_no_plan_is_left_by_its_door_onto_the_land_round_it(
+    tmp_path, story, cast, inside
+):
+    """AfterDark (Oct 18 2026): John walked to the farmhouse door and nothing
+    happened. The farmhouse stood alone on the land, so its door led nowhere;
+    in a region with no plan it led to the window at the region's middle, not
+    the house's. Out of the door, a turn has him at the house, outside it."""
+    session = open_session(tmp_path, story, cast, ["Cold air.", "{}"])
+    cottage = WorldPlace(
+        id="cottage", name="The cottage", kind="building", inside=inside,
+        x=2400.0, y=1200.0, size=15.0,
+    )  # fmt: skip
+    session.story.world_base.places.append(cottage)
+    session.story.world_base.seen.append("cottage")
+    session.story.world_start = "cottage"
+    session.world_art.layouts["cottage"] = {
+        "": PlaceLayout(place_id="cottage", spec={}, rows=COTTAGE_ROWS, made_at="1")
+    }
+    session._area_cache = None
+    me = session.area_state().spots["Serrik Vaun"]
+    house = session.area("cottage")
+    assert me.area == "cottage" and house.indoor and house.exits
+    door = house.exits[0]
+    session.walked(session.walk_route(*door))
+    leads, name = session.door_here()
+    assert leads.startswith("window:") and leads != HERE  # the house's own ground
+    assert name == "The Great Erg"  # the region the land lies in, by where it is
+    state = session.go_through()
+    out = state.spots["Serrik Vaun"]
+    land = session.area(out.area)
+    assert out.area == leads and "cottage" in land.buildings
+    list(session.send(turn("I step out and look at the sky.")))
+    world = session.world()
+    assert world.where["Serrik Vaun"] == "cottage" and "Serrik Vaun" in world.outside
+    assert session.area_state().spots["Serrik Vaun"].area == leads  # not pulled back in
+
+
+def ways_in_and_out(session: StorySession, place_id: str) -> list[str]:
+    """What stops someone getting into or out of a place with an inside: []
+    when every way out leads onto ground, the ground round it has a door in,
+    going in lands on floor, and a way out can be walked to from there. The
+    author (Oct 18 2026): no building you can't enter and leave."""
+    world, art = session.world(), session.map_art_copy()
+    held = session.held_name()
+    inside = session.area(place_id, world, art)
+    name = world.places[place_id].name
+
+    def put(spot: Spot) -> None:
+        state = session.area_state()
+        state.spots[held] = spot
+        session._set_live(state)
+
+    if inside is None or not inside.indoor:
+        return [f"{name}: no inside"]
+    problems = [] if inside.exits else [f"{name}: no way out"]
+    for ex in inside.exits:
+        put(Spot(area=inside.id, x=ex[0], y=ex[1]))
+        if session.door_here() is None:
+            problems.append(f"{name}: the way out at {ex} leads nowhere")
+            continue
+        out = session.go_through().spots[held]
+        there = session.area(out.area, world, art)
+        if there is None or not there.walkable(out.x, out.y):
+            problems.append(f"{name}: out at {ex} lands on no ground")
+    around = session.area(inside.parent, world, art) if inside.parent else None
+    doors = [e for e in around.entrances if e.place_id == place_id] if around else []
+    if not doors:
+        problems.append(f"{name}: no door in from outside")
+    for door in doors:
+        put(Spot(area=around.id, x=door.x, y=door.y))
+        state = session.go_through()
+        spot = state.spots[held] if state else None
+        if spot is None or spot.area != inside.id or not inside.walkable(spot.x, spot.y):
+            problems.append(f"{name}: in by {(door.x, door.y)} lands on no floor")
+        elif not any(path(inside, (spot.x, spot.y), ex) for ex in inside.exits):
+            problems.append(f"{name}: no way out can be walked to from the door in")
+    return problems
+
+
+def test_a_house_in_a_camp_with_no_plan_has_its_door_on_the_land(tmp_path, story, cast):
+    """Older Doomsville stories (Oct 18 2026): the farm was never drawn, so
+    the land showed it as a fenced yard and left the farmhouse out (it would
+    be on the farm's own plan): its way out worked, and nothing led in."""
+    session = open_session(tmp_path, story, cast)
+    camp = WorldPlace(
+        id="camp", name="The camp", kind="site", inside="erg", x=2400.0, y=400.0, size=200.0
+    )
+    hut = WorldPlace(
+        id="hut", name="The hut", kind="building", inside="camp", x=2400.0, y=400.0, size=12.0
+    )
+    session.story.world_base.places += [camp, hut]
+    session.story.world_base.seen += ["camp", "hut"]
+    session.story.world_start = "hut"
+    session.world_art.layouts["hut"] = {
+        "": PlaceLayout(place_id="hut", spec={}, rows=COTTAGE_ROWS, made_at="1")
+    }
+    session._area_cache = None
+    land = session.area(session.area("hut").parent)
+    assert {"camp", "hut"} <= set(land.buildings)  # the hut stands in the camp's yard
+    assert ways_in_and_out(session, "hut") == []
+
+
+def test_a_vehicle_drawn_sealed_gets_a_door_but_not_a_deck_in_space():
+    rows = ["########", "#______#", "#______#", "########"]
+    for kind, look, doors in (("vehicle", "", 1), ("building", "", 1), ("vehicle", "space", 0)):
+        place = WorldPlace(id="v", name="The wagon", kind=kind, x=0.0, y=0.0, size=10.0)
+        world = WorldMap(places={"v": place}, seen=["v"])
+        art = WorldArt()
+        spec = {"ground": look} if look else {}
+        art.layouts["v"] = {"": PlaceLayout(place_id="v", spec=spec, rows=rows, made_at="1")}
+        assert len(build_area(world, art, "v").exits) == doors, (kind, look)

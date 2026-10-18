@@ -311,6 +311,20 @@ def area_of(
     return window_id(*window_rect(art, *point))
 
 
+def ground_round(world: WorldMap, art: WorldArt, place: WorldPlace, look: str = "") -> str | None:
+    """Where a building's doors lead out: the area of the place it stands
+    in, found at the building's own spot, so where that place has no plan
+    (a region, or no place at all) the window of open country it stands in.
+    AfterDark (Oct 18 2026): a farmhouse alone on the land had doors that
+    led nowhere, and one in a region with no plan led to the window at the
+    region's middle. None for a deck in space (`look` "space"): a hatch
+    opens on the void, not on ground."""
+    if look == "space" or place.kind not in ("building", "room", "vehicle"):
+        return area_of(world, art, place.inside) if place.inside else None
+    around = area_of(world, art, place.inside, position(world, place.id))
+    return around if around != place.id else None
+
+
 # --- Building an area ---------------------------------------------------------
 
 
@@ -1120,7 +1134,11 @@ def build_area(
         if place.kind in ("building", "room") and not as_drawn:
             rows = _whole_outer_wall(rows, repairs)
         exits = _exits(rows)
-        if not exits and place.kind in ("building", "room") and not (as_drawn or sealed):
+        # A vehicle too (a wagon, a boat at the quay): one drawn sealed could
+        # be got into and never left. Not a deck in space: its hatches open
+        # on the void.
+        doored = ("building", "room") if look == "space" else ("building", "room", "vehicle")
+        if not exits and place.kind in doored and not (as_drawn or sealed):
             rows, exits = _add_exit(rows, repairs)
         rows = _open_sealed(rows, exits, repairs)
         exits = _exits(rows)
@@ -1204,7 +1222,7 @@ def build_area(
         names={pid: world.places[pid].name for pid in buildings if pid in world.places},
         roofs=_roofs(world, buildings),
         exits=exits,
-        parent=area_of(world, art, place.inside) if place.inside else None,
+        parent=ground_round(world, art, place, look),
         repairs=repairs,
     )
     area.placements = _object_placements(area)
@@ -1432,12 +1450,15 @@ def window_places(
 ) -> list[dict[str, Any]]:
     """What the map has on a window of open country, as `fixed_in_plan`
     gives a plan's: the outermost places whose footprint reaches into the
-    window (not those inside one of them: a farm's barn is reached from the
-    farm's own plan; not a place wider than the window, which holds it),
-    each as a tile box, cut at the window's edge where it runs past (a town
-    lies across several windows, a part in each). A building, or a place
-    with a plan of its own, is a "building" box with a door that leads into
-    its area; the rest are labelled where they are."""
+    window (not those inside one of them that has a plan: a farm's barn is
+    reached from the farm's own plan; not a place wider than the window,
+    which holds it), each as a tile box, cut at the window's edge where it
+    runs past (a town lies across several windows, a part in each). A
+    building, or a place with a plan of its own, is a "building" box with a
+    door that leads into its area; the rest are labelled where they are.
+    Inside a place with no plan, they stand in its yard, drawn after it:
+    the farmhouse of a farm never drawn had no door on the land at all
+    (older Doomsville stories, Oct 18 2026)."""
     west, north, width, height = rect
     candidates: dict[str, tuple[float, float, float, float]] = {}
     for place in world.places.values():
@@ -1455,13 +1476,16 @@ def window_places(
     for pid, (w0, s0, e0, n0) in candidates.items():
         place = world.places[pid]
         inner = False
+        depth = 0
         seen: set[str] = set()
         current = world.places.get(place.inside or "")
         while current is not None and current.id not in seen:
             seen.add(current.id)
             if current.id in candidates:
-                inner = True
-                break
+                if plan_place(world, art, current.id) is not None:
+                    inner = True  # reached on that place's own plan
+                    break
+                depth += 1
             current = world.places.get(current.inside or "")
         if inner:
             continue
@@ -1495,8 +1519,11 @@ def window_places(
                 "w": w,
                 "h": h,
                 "what": place.what,
+                "depth": depth,
             }
         )
+    # A yard first, what stands in it after (each is stamped over the last).
+    out.sort(key=lambda f: f["depth"])
     return out
 
 

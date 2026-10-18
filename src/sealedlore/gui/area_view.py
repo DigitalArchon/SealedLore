@@ -20,7 +20,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from PySide6.QtCore import QElapsedTimer, QPoint, QPointF, QRectF, QSizeF, Qt, QTimer, Signal
+from PySide6.QtCore import QElapsedTimer, QPoint, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPixmap, QTransform
 from PySide6.QtWidgets import (
     QGraphicsItem,
@@ -1070,6 +1070,15 @@ class AreaView(QWidget):
             or self.area is None
             or self.area.id != area.id
             or (image is not None and (self._background is None or self._stale))
+            or (failed and self._stale)  # the plain map, not the last picture
+        )
+        # The same area, the same size: its last picture can stand in while
+        # the new one is painted (a thing moved, a tile painted).
+        same_shape = (
+            self.area is not None
+            and self.area.id == area.id
+            and (self.area.width, self.area.height) == (area.width, area.height)
+            and px_for(self.area) == px
         )
         self.area, self.walkers = area, walkers
         if self.editing:
@@ -1085,16 +1094,17 @@ class AreaView(QWidget):
             # drawn): its last picture stays until the new one is ready. A
             # dark stand-in each time made the map flash black as it drew
             # (the author, Oct 18 2026).
+            # Compared by the area's own size, not the picture's: an indoor
+            # picture is taller than its tiles (the south wall's face), so
+            # indoors the dark stand-in came back on every change (the
+            # author, Oct 18 2026: it flashed black at each thing moved). Not
+            # once its painting failed: the plain map stands in, not an old
+            # picture for good.
             last = (
                 self._background.pixmap()
-                if image is None
-                and self._background is not None
-                and self.area is not None
-                and self.area.id == area.id
+                if image is None and not failed and self._background is not None and same_shape
                 else None
             )
-            if last is not None and QSizeF(last.size()) != bounds.size():
-                last = None
             self.scene.clear()
             self._stroke_items, self._stroke_tiles, self._band = [], {}, None
             self.people, self._tags, self._hover = {}, {}, None

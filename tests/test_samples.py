@@ -296,3 +296,49 @@ def test_a_map_sample_is_ready_to_play_on_its_map():
                 assert any(read_asset(folder, f"items/{s}") for s in item_slugs(thing.name)), (
                     f"{path.name}: {area.name}: no sprite for {thing.name!r}"
                 )
+
+
+def test_every_building_on_a_sample_s_map_can_be_entered_and_left(tmp_path: Path):
+    """The author (Oct 18 2026): John couldn't leave AfterDark's farmhouse,
+    and no story, sample or new, should have a building you can't get into
+    and out of. Every place with an inside drawn: a door in from the ground
+    round it, every way out onto ground, a way out walkable from the door."""
+    from sealedlore.engine.session import StorySession
+    from sealedlore.engine.world_art import is_deck
+    from sealedlore.models.config import Config
+    from sealedlore.providers.mock import MockChatProvider
+    from sealedlore.storage.repository import load_story_bundle, save_story_bundle
+    from sealedlore.storage.scenario import bundle_from_scenario
+    from sealedlore.storage.world_art import load_sidecar, sidecar_art_path
+    from tests.test_open_country import ways_in_and_out
+
+    checked, problems = 0, []
+    for path in sorted(SAMPLES.glob("*.md")):
+        if not sidecar_art_path(path).exists():
+            continue
+        art, _files = load_sidecar(path)
+        scenario = parse_plot_markdown(path.read_text(encoding="utf-8")).scenario
+        bundle = bundle_from_scenario(scenario)
+        bundle.world_art = art
+        save_story_bundle(bundle, root=tmp_path)
+        session = StorySession(
+            load_story_bundle(bundle.story.id, root=tmp_path),
+            Config(map_art=False),
+            MockChatProvider(),
+            root=tmp_path,
+            learn_corrections=False,
+        )
+        session.save = lambda *a, **k: None
+        session.story.held_character_id = session.story.held_character_id or session.cast[0].id
+        world, art = session.world(), session.map_art_copy()
+        for pid, place in world.places.items():
+            if place.kind not in ("building", "room", "vehicle"):
+                continue
+            if art.layout_shown(pid, place.state) is None or is_deck(world, art, pid):
+                continue
+            if not session.area(pid, world, art).indoor:
+                continue
+            checked += 1
+            problems += [f"{path.stem}: {p}" for p in ways_in_and_out(session, pid)]
+    assert checked >= 20
+    assert problems == []
