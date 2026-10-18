@@ -621,6 +621,24 @@ def outside_part(world: WorldMap, place: WorldPlace | None) -> bool:
     )
 
 
+def _drawn_in(world: WorldMap, child: WorldPlace, plan_id: str) -> bool:
+    """Whether `child` is drawn in the plan of `plan_id`: inside it, or
+    inside a place in it that stands on its plan (a quarter, a square, a
+    yard: anything but a building, room or vehicle, which have insides of
+    their own). Live (Oct 18 2026) Cade's shop, in Saltmarsh's guild
+    quarter, had no box on the town's plan and no door: nobody could go in."""
+    at, seen = child.inside, set()
+    while at and at not in seen:
+        if at == plan_id:
+            return True
+        seen.add(at)
+        parent = world.places.get(at)
+        if parent is None or parent.kind in ("building", "room", "vehicle"):
+            return False
+        at = parent.inside
+    return False
+
+
 def fixed_in_plan(world: WorldMap, place: WorldPlace) -> list[dict[str, Any]]:
     """What the map already puts in a place's plan, where it stays: each
     place inside it with a spot of its own, as a tile box. A building is
@@ -635,7 +653,7 @@ def fixed_in_plan(world: WorldMap, place: WorldPlace) -> list[dict[str, Any]]:
     columns, rows = plan_grid(place)
     out: list[dict[str, Any]] = []
     for child in world.places.values():
-        if child.inside != place.id or child.x is None or child.y is None:
+        if not _drawn_in(world, child, place.id) or child.x is None or child.y is None:
             continue
         if moves(world.places, child) or outside_part(world, child):
             continue

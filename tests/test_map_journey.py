@@ -676,3 +676,18 @@ def test_someone_in_a_building_whose_inside_isn_t_drawn_yet_goes_in_once_it_is(
     }
     state = session.settle(state, world, art, walked=False)
     assert state.spots["Serrik Vaun"].area == "shed"
+
+
+def test_a_building_in_a_quarter_of_a_town_is_drawn_on_the_town_s_plan():
+    """The replay (Oct 18 2026): Cade's shop, in Saltmarsh's guild quarter
+    (an area with no plan of its own), had no box on the town's plan and no
+    door, so nobody could go in."""
+    from sealedlore.engine.world_art import fixed_in_plan
+
+    town = WorldPlace(id="t", name="Saltmarsh", kind="settlement", x=0.0, y=0.0, size=600.0)
+    quarter = WorldPlace(id="q", name="the guild quarter", kind="area", inside="t", x=150.0, y=0.0)
+    shop = WorldPlace(id="s", name="Cade's shop", kind="building", inside="q", x=160.0, y=10.0)
+    back = WorldPlace(id="r", name="the back room", kind="room", inside="s", x=162.0, y=12.0)
+    world = WorldMap(places={p.id: p for p in (town, quarter, shop, back)})
+    boxed = {f["place_id"]: f["kind"] for f in fixed_in_plan(world, town)}
+    assert boxed == {"q": "place", "s": "building"}  # never what is inside a building
