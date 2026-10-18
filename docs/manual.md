@@ -565,7 +565,7 @@ set them to one it lists (Browse…).
 | Map picture model ★ | Settings → Images | every picture the map wants: avatars (from the portraits), things, roofs and ground, a tile set of your own, postcards and the Region map's pictures | starts as FLUX.3 Klein |
 | Painting model ★ | Settings → Images | paintings of a place on the map | starts as FLUX.3 Klein |
 | Video model ★ | Settings → Video | videos | starts as Seedance 2.5 |
-| Tile set designer | **Designed by** in the tile set designer (Look → Tile sets… → Draw a new set…) | designing a tile set for your world | Claude Opus 5.5 on NanoGPT, else the map art model |
+| Tile set designer | **Designed by** in the tile set designer (Look → Tile sets… → Design a new set…) | designing a tile set for your world | Claude Opus 5.5 on NanoGPT, else the map art model |
 | Private model | Settings → Private | private scenes | — |
 | Embeddings model | Settings → Lore | lore vectors | `BAAI/bge-m3` |
 
@@ -1433,33 +1433,46 @@ map art model the first time the story is in or beside it.
 
 **Look** chooses the tile set the map is drawn in: one of those that come
 with SealedLore (a snowbound farm, an elven forest, a steampunk city, an
-industrial wasteland, Hell, a space station), chosen for the setting unless
-you choose, or one drawn for your story. The set is chosen once, when the
-story begins, and kept for the whole story: it changes only when you choose
-another. The first time a story's map
-opens, a line over it says which set it is drawn in, with **Tile sets…** a
-button away; the same is under Look. The gallery shows every set as a card,
-with a strip of its textures and sprites, its style in words and what it
-suits, the one in use marked: **Use this set** switches, **Remove…** takes a
-set drawn for this story out again (its pictures deleted; the ones that
-come with SealedLore stay), and **Draw a new set…** opens the designer. There
-you name the set and describe the look you want, in your own words
-(prefilled with your world and the style now in use: "gritty rain-slick
-cyberpunk alleys, neon and wet concrete", "bright and cheerful storybook
-meadow"); **Designed by** is the model that designs it, Claude Opus 5.5
-unless you choose another (Recommended ▾ beside the field), and your choice
-is kept. **Write the design** has it write the set's words and a prompt
-tailored to every picture from your description and the world; you see and
-may change each of them, with the number of pictures, the image model that
-draws them and the price of the whole set at the model's listed prices, and
-nothing is drawn until you press
-**Draw the set…** and confirm. Each picture is then sent exactly as its
-prompt stands, in the background, and the map is drawn in the new set once
-all of it is in; the set it had stays until then. A story may keep several
-sets of its own and swap between them under Look, and they travel with
-Restart, Duplicate settings and scenario files.
+industrial wasteland, Hell, a space station), or one designed for your
+story. A sample comes with its own. For a new world there are three ways,
+offered as **Map tiles** in the Start dialog, before anything is drawn:
+**The AI chooses the closest set** (the map read's model reads your world
+and picks the nearest set, and says why), a set you choose yourself, or
+**Design a new set for this world…**, which opens the designer before the
+opening is written; the map's things then wait for the new set rather than
+being drawn in another's style. The set is chosen once, when the story
+begins, and kept for the whole story: it changes only when you choose
+another. The first time a story's map opens, a line over it says which set
+it is drawn in (and, when the AI chose it, why), with **Choose a set…** and
+**Design a new set…** a button away; the same is under Look, where **The
+AI's choice, closest to this world** asks again. The gallery shows every set
+as a card, with a strip of its textures and sprites, its style in words and
+what it suits, the one in use marked: **Use this set** switches, **Remove…**
+takes a set drawn for this story out again (its pictures deleted; the ones
+that come with SealedLore stay), **Let the AI choose** has the AI choose
+again, and **Design a new set…** opens the designer. There you name the set
+and describe the look you want, in your own words (prefilled with your
+world and the style now in use: "gritty rain-slick cyberpunk alleys, neon
+and wet concrete", "bright and cheerful storybook meadow"). Under
+**Pictures of the world** you may add up to six photos or renders, each
+with what it shows ("a photo of what a typical bar looks like in this
+setting"): the designer looks at them and works the set's materials,
+colours and buildings out from them, while the image model that draws the
+tiles never sees them (it would copy them). **Designed by** is the model
+that designs it, Claude Opus 5.5 unless you choose another (Recommended ▾
+beside the field), and your choice is kept; a model that can't read
+pictures is sent none, and the dialog says so. **Write the design** has it
+write the set's words and a prompt tailored to every picture from your
+description, your pictures and the world; you see and may change each of
+them, with the number of pictures, the image model that draws them and the
+price of the whole set at the model's listed prices, and nothing is drawn
+until you press **Draw the set…** and confirm. Each picture is then sent
+exactly as its prompt stands, in the background, and the map is drawn in the
+new set once all of it is in; the set it had stays until then. A story may
+keep several sets of its own and swap between them under Look, and they
+travel with Restart, Duplicate settings and scenario files.
 
-![The tile set gallery: a card for each set with a strip of its textures and things, its style in words and the settings it suits, and Use this set; Draw a new set… and Edit the tile set… at the bottom](screenshots/tile-sets.png)
+![The tile set gallery: a card for each set with a strip of its textures and things, its style in words and the settings it suits, and Use this set; Let the AI choose, Design a new set… and Edit the tile set… at the bottom](screenshots/tile-sets.png)
 
 Things and people the set doesn't have are drawn as the story needs them,
 with **Draw map pictures** on (Settings → Images; FLUX.3 Klein, about a
@@ -1487,7 +1500,9 @@ drawn it shows the region. A story opens on **Local**. **Region**
 is the country around you that the story has reached: each place with its
 picture, small when far, its name bright where you have been or can see now,
 dim where the story only told of it, ringed where you are now; it is where you
-look to decide where to go next. The fog has three shades, named under the
+look to decide where to go next. Where several places lie too close together
+at the zoom to name apart, their names stand in a column under them, in order
+down the map, the place you are at first. The fog has three shades, named under the
 map's buttons: the area you are in now is clear and edged in gold (what Local
 shows), country you know but aren't in lies under a grey haze, and anywhere
 unexplored is dark. **World** is the whole map zoomed out, its settlements and regions

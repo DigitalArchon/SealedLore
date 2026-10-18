@@ -2,15 +2,18 @@
 set the map can be drawn in, each as a card with its pictures, and drawing a
 new one. The author's ruling (Oct 16 2026): show the sets there are, ask
 whether they want to generate new ones, have them describe what they want,
-and use Opus 5.5 to manage the calls required to create them.
+and use Opus 5.5 to manage the calls required to create them. And (Oct 18
+2026): choose a set by hand, let the AI choose the closest, or have a new
+one designed with pictures of the world.
 
 `TileSetGallery`: the shipped sets and this story's own, the one in use
-marked; Use this set, Remove (an own set, its pictures deleted from the
-story), Draw a new set… (the designer) and Edit the tile set… (the editor,
-gui/tile_set_editor.py).
+marked (and why, when the AI chose it); Use this set, Remove (an own set,
+its pictures deleted from the story), Let the AI choose, Design a new set…
+(the designer) and Edit the tile set… (the editor, gui/tile_set_editor.py).
 
-`TileSetDesigner`: the author names the set and describes the look they want
-(prefilled with the world and the style now in use); the designer model
+`TileSetDesigner`: the author names the set, describes the look they want
+(prefilled with the world and the style now in use) and may add pictures of
+the world, each with what it shows; the designer model
 (`Config.tileset_model`, Opus 5.5 by default) writes the set's words and a
 prompt tailored to every picture; the author sees and may change each, with
 the pictures' price at the tile model's listed prices, and only then is
@@ -20,12 +23,15 @@ anything drawn, each picture exactly as approved.
 from __future__ import annotations
 
 from collections.abc import Callable
+from html import escape
+from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
     QFrame,
     QHBoxLayout,
@@ -35,18 +41,28 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
+from sealedlore.engine.picture_shapes import FREE
 from sealedlore.engine.session_area import ASSET_LABELS, CARD_ROLES, TileSetCard
 from sealedlore.engine.tile_draw import DESIGNER_MODELS, PROMPT_KEY, tile_jobs, world_words
 from sealedlore.engine.tile_sets import SPRITES, TEXTURES
+from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.image_codec import image_from_data
 from sealedlore.gui.model_picker import ModelField
+from sealedlore.gui.ref_images import PICTURE_FILTER, pixmap_within, scaled_down
 from sealedlore.gui.sizing import GrowingText, size_to_screen
 
 THUMB = 56
+# The author's pictures of the world in a design: how many, shown how
+# large in the dialog, and sent no larger than this (a 1024-pixel picture is
+# about 1.4k tokens to Claude).
+MAX_WORLD_PICTURES = 6
+PICTURE_THUMB = 96
+DESIGNER_PICTURE_SIDE = 1024
 # Thumbnails read a few at a time, so the gallery opens at once.
 THUMBS_A_TICK = 8
 # How often the designer looks whether the design has come in.
@@ -75,16 +91,23 @@ class TileSetGallery(QDialog):
         scroll.setWidgetResizable(True)
         scroll.setWidget(host)
         self.cards: list[_Card] = []
-        self.design_button = QPushButton("Draw a new set…")
+        self.pick_button = QPushButton("Let the AI choose")
+        self.pick_button.setToolTip(
+            "The map model reads this world and chooses the set closest to it, and says why"
+        )
+        self.pick_button.clicked.connect(self._pick)
+        self.design_button = QPushButton("Design a new set…")
         self.design_button.setToolTip(
-            "Describe the look you want; a designer model writes the set and you see every "
-            "prompt and the price before anything is drawn"
+            "Describe the look you want, with pictures of the world if you have them; a "
+            "designer model writes the set and you see every prompt and the price before "
+            "anything is drawn"
         )
         self.design_button.clicked.connect(lambda: self.done(self.DESIGN))
         self.edit_button = QPushButton("Edit the tile set…")
         self.edit_button.setToolTip("Every picture of the set in use, one at a time")
         self.edit_button.clicked.connect(lambda: self.done(self.EDIT))
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.addButton(self.pick_button, QDialogButtonBox.ActionRole)
         buttons.addButton(self.design_button, QDialogButtonBox.ActionRole)
         buttons.addButton(self.edit_button, QDialogButtonBox.ActionRole)
         buttons.rejected.connect(self.reject)
@@ -96,7 +119,13 @@ class TileSetGallery(QDialog):
         self._thumbs = QTimer(self)
         self._thumbs.setInterval(0)
         self._thumbs.timeout.connect(self._read_thumbs)
+        # While the AI chooses: the cards are filled again once it has.
+        self._picking = QTimer(self)
+        self._picking.setInterval(POLL_MS)
+        self._picking.timeout.connect(self._check_pick)
         self._fill()
+        if session.tile_set_picking:
+            self._picking.start()
 
     def _fill(self) -> None:
         while self.column.count():
@@ -108,10 +137,18 @@ class TileSetGallery(QDialog):
         self._pending = []
         cards = self.session.tile_set_cards()
         in_use = next((c.title for c in cards if c.in_use), "no set")
+        art = self.session.map_art_copy()
+        if self.session.tile_set_picking:
+            why = " The AI is choosing the set closest to this world…"
+        elif art.tile_set_why and art.tile_set_auto:
+            why = f" The AI chose it as the closest to this world: {escape(art.tile_set_why)}"
+        else:
+            why = ""
+        self.pick_button.setEnabled(not self.session.tile_set_picking)
         self.heading.setText(
-            f"The map is drawn in <b>{in_use}</b>. Each set is pixel art in a style of its own; "
-            "one drawn for this story is kept with it, and a change under Edit the tile set… is "
-            "for this story only."
+            f"The map is drawn in <b>{escape(in_use)}</b>.{why}<br>Each set is pixel art in a "
+            "style of its own; one drawn for this story is kept with it, and a change under Edit "
+            "the tile set… is for this story only."
         )
         for card in cards:
             widget = _Card(card, self._use, self._remove)
@@ -143,6 +180,19 @@ class TileSetGallery(QDialog):
 
     def _use(self, name: str) -> None:
         self.session.set_tile_set(name)
+        self._fill()
+
+    def _pick(self) -> None:
+        """The AI chooses again; the setting's words stand in until it has."""
+        self.session.set_tile_set("")
+        self._fill()
+        if self.session.tile_set_picking:
+            self._picking.start()
+
+    def _check_pick(self) -> None:
+        if self.session.tile_set_picking:
+            return
+        self._picking.stop()
         self._fill()
 
     def _remove(self, name: str, title: str) -> None:
@@ -222,7 +272,7 @@ class TileSetDesigner(QDialog):
     ) -> None:
         super().__init__(parent)
         self.session = session
-        self.setWindowTitle("Draw a new tile set")
+        self.setWindowTitle("Design a new tile set")
         size_to_screen(self, 0.55, 0.88, at_least=QSize(900, 760))
         intro = QLabel(
             "Describe the look you want for the map. The designer writes the set's words and "
@@ -247,6 +297,30 @@ class TileSetDesigner(QDialog):
             session.config.tileset_model or "", browse, recommended=DESIGNER_MODELS
         )
         self.designer.setPlaceholderText(session.tileset_designer)
+        self.designer.textChanged.connect(lambda _t: self._sync_pictures_note())
+        # Pictures of the world, each with what it shows (the author, Oct
+        # 18 2026: "This is a photo of what a typical bar looks like in this
+        # setting"): shown to the designer, never to the image model.
+        self.pictures_column = QVBoxLayout()
+        self.pictures_column.setContentsMargins(0, 0, 0, 0)
+        self.pictures_column.setSpacing(6)
+        self.add_picture = QPushButton("Add a picture…")
+        self.add_picture.setToolTip(
+            "A photo or a render of a place like those in this world; say what it shows"
+        )
+        self.add_picture.clicked.connect(self._add_picture)
+        self.pictures_note = QLabel()
+        self.pictures_note.setObjectName("hintLabel")
+        self.pictures_note.setWordWrap(True)
+        pictures_host = QWidget()
+        pictures_layout = QVBoxLayout(pictures_host)
+        pictures_layout.setContentsMargins(0, 0, 0, 0)
+        pictures_layout.addLayout(self.pictures_column)
+        add_row = QHBoxLayout()
+        add_row.addWidget(self.add_picture)
+        add_row.addWidget(self.pictures_note, 1)
+        pictures_layout.addLayout(add_row)
+        self._pictures: list[_WorldPicture] = []
         self.drawn_by = QLabel(
             f"Drawn by {session.model_name(session.config.map_picture_model)}, the map picture "
             "model (Settings → Images)"
@@ -265,6 +339,7 @@ class TileSetDesigner(QDialog):
         form = QFormLayout()
         form.addRow("Name", self.name)
         form.addRow("The look", self.description)
+        form.addRow("Pictures of the world", pictures_host)
         form.addRow("Designed by", self.designer)
         form.addRow("", self.drawn_by)
         form.addRow("", self.write_button)
@@ -303,9 +378,70 @@ class TileSetDesigner(QDialog):
         self._poll = QTimer(self)
         self._poll.setInterval(POLL_MS)
         self._poll.timeout.connect(self._check)
+        self._sync_pictures_note()
 
     def designer_model(self) -> str:
         return self.designer.text().strip()
+
+    # --- pictures of the world ---------------------------------------------------
+
+    def _reads_pictures(self) -> bool | None:
+        return self.session.reads_pictures(self.designer_model() or self.session.tileset_designer)
+
+    def _sync_pictures_note(self) -> None:
+        count = len(self._pictures)
+        self.add_picture.setEnabled(count < MAX_WORLD_PICTURES)
+        model = self.session.model_name(self.designer_model() or self.session.tileset_designer)
+        if self._reads_pictures() is False:
+            note = f"⚠ {model} doesn't read pictures: they won't be sent to it."
+        elif count >= MAX_WORLD_PICTURES:
+            note = f"{MAX_WORLD_PICTURES} pictures at most."
+        else:
+            note = (
+                "Optional: photos or renders of places like this world's, each with what it "
+                "shows. The designer looks at them; the image model never sees them."
+            )
+        self.pictures_note.setText(note)
+
+    def _add_picture(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "A picture of this world", str(Path.home()), PICTURE_FILTER
+        )
+        if not path:
+            return
+        try:
+            picture = cropped_picture(self, Path(path), FREE)
+        except (OSError, ValueError) as exc:
+            self.status.setText(f"Couldn't use the picture: {exc}")
+            return
+        if picture is not None:
+            self.add_world_picture(picture[0])
+
+    def add_world_picture(self, data: bytes, caption: str = "") -> None:
+        """A picture added to the design, its words to fill in."""
+        if len(self._pictures) >= MAX_WORLD_PICTURES:
+            return
+        row = _WorldPicture(data, caption)
+        row.remove.clicked.connect(lambda: self._remove_picture(row))
+        self._pictures.append(row)
+        self.pictures_column.addWidget(row)
+        row.caption.setFocus()
+        self._sync_pictures_note()
+
+    def _remove_picture(self, row: _WorldPicture) -> None:
+        self._pictures.remove(row)
+        row.deleteLater()
+        self._sync_pictures_note()
+
+    def world_pictures(self) -> list[tuple[bytes, str]]:
+        """The pictures to send, each scaled for the designer, with what the
+        author said it shows; none for a designer that reads no pictures."""
+        if self._reads_pictures() is False:
+            return []
+        return [
+            (scaled_down(row.data, DESIGNER_PICTURE_SIDE), " ".join(row.caption.text().split()))
+            for row in self._pictures
+        ]
 
     def reject(self) -> None:
         """Cancel while the designer writes stops its call."""
@@ -322,7 +458,7 @@ class TileSetDesigner(QDialog):
             self.status.setText(problem)
             return
         if not self.session.start_tile_set_design(
-            self.description.toPlainText(), self.designer_model()
+            self.description.toPlainText(), self.designer_model(), self.world_pictures()
         ):
             self.status.setText("The design couldn't be started.")
             return
@@ -454,6 +590,29 @@ class TileSetDesigner(QDialog):
             self.status.setText(
                 self.session.own_tile_set_offer()[2] or "The set couldn't be started."
             )
+
+
+class _WorldPicture(QWidget):
+    """A picture of the world in the design, with what it shows."""
+
+    def __init__(self, data: bytes, caption: str = "") -> None:
+        super().__init__()
+        self.data = data
+        thumb = QLabel()
+        thumb.setPixmap(pixmap_within(data, QSize(PICTURE_THUMB, PICTURE_THUMB)))
+        thumb.setFixedWidth(PICTURE_THUMB)
+        self.caption = QLineEdit(caption)
+        self.caption.setPlaceholderText(
+            "What it shows (a photo of what a typical bar looks like in this world)"
+        )
+        self.remove = QToolButton()
+        self.remove.setText("×")
+        self.remove.setToolTip("Take this picture out of the design")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(thumb)
+        layout.addWidget(self.caption, 1)
+        layout.addWidget(self.remove)
 
 
 class _Row(QWidget):

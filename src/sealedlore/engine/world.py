@@ -82,6 +82,55 @@ def find_place(world: WorldMap, name: str | None, pending: Sequence[WorldPlace] 
     return None
 
 
+# A road's name, as compared with another's for the same road: the words
+# that say which road it is, without the compass, the joining words or
+# which end it leads to ("river road south" is "the river road", "the road
+# to Saltmarsh" "the Saltmarsh road"). A name of road words alone ("the
+# north road") says nothing of which road and matches none.
+_ROAD_WORDS = frozenset(
+    "road roads way track trail path lane street highway causeway route avenue".split()
+)
+_ROAD_NOISE = frozenset(
+    "the a an to from towards toward out of into onto up down along "
+    "north south east west northern southern eastern western "
+    "northbound southbound eastbound westbound "
+    "north-east north-west south-east south-west northeast northwest southeast southwest".split()
+)
+
+
+def _road_words(name: str) -> frozenset[str]:
+    words = re.findall(r"[a-z][a-z'-]*", str(name or "").lower())
+    return frozenset(w.removesuffix("'s") for w in words) - _ROAD_NOISE
+
+
+def known_road(
+    world: WorldMap, name: str, kind: str | None, pending: Sequence[WorldPlace] = ()
+) -> str | None:
+    """The one route on the map (or added in the same reply) that a new
+    road's name is another name for, else None. Live (Oct 18 2026), the
+    read added "river road south" for the walk out of the village and, on
+    the way back, "the river road" beside it: two routes for one road.
+    Only a route (or a place of no kind) named with a road word, only into
+    a route, and only when the words that say which road are shared (one
+    name's in the other's: "the old river road" is the "river road") and
+    exactly one route answers."""
+    if kind not in (None, "route"):
+        return None
+    mine = _road_words(name)
+    if not mine & _ROAD_WORDS or not mine - _ROAD_WORDS:
+        return None
+    found = []
+    for place in [*world.places.values(), *pending]:
+        if place.kind != "route":
+            continue
+        for known in (place.name, *place.aliases):
+            theirs = _road_words(known)
+            if theirs - _ROAD_WORDS and (mine <= theirs or theirs <= mine):
+                found.append(place.id)
+                break
+    return found[0] if len(set(found)) == 1 else None
+
+
 def _find_thing(world: WorldMap, name: str) -> WorldThing | None:
     """The map's thing of this name; else the one thing whose name it
     shortens or lengthens (`same_thing`: "heavy iron anvil" for the "heavy
@@ -608,6 +657,10 @@ def resolve_reply(
         if kind not in PLACE_KINDS:
             kind = None
         existing = find_place(world, name, delta.places)
+        road_alias = False
+        if existing is None and not _text(entry.get("was")):
+            existing = known_road(world, name, kind, delta.places)
+            road_alias = existing is not None
         inside_name = _text(entry.get("inside"))
         inside = find_place(world, inside_name, delta.places) if inside_name else None
         was = _text(entry.get("was"))
@@ -642,6 +695,10 @@ def resolve_reply(
             changed.state = state or changed.state
             changed.kind = changed.kind or kind  # type: ignore[assignment]
             known_places = {**world.places, **{p.id: p for p in delta.places}}
+            if road_alias and key(name) not in {key(a) for a in changed.aliases}:
+                # Another name for a road the map has: kept, so a later read
+                # naming it so finds the road at once.
+                changed.aliases.append(name)
             if rename is not None and key(rename) != key(changed.name):
                 # The old name stays an alias: a later read (or the author)
                 # naming it so finds this place rather than making a second.
@@ -649,8 +706,10 @@ def resolve_reply(
                     changed.aliases.append(changed.name)
                 changed.name = rename
                 delta.renamed[existing] = rename
+            # Another name for a known road says nothing new of where it is.
             renest = (
-                inside is not None
+                not road_alias
+                and inside is not None
                 and inside != changed.inside
                 and not _would_loop(world, delta, changed.id, inside)
             )
@@ -669,7 +728,7 @@ def resolve_reply(
                 changed.inside = inside
                 if not moves(known_places, changed):
                     unplace(changed)
-            size = _size(entry.get("size"))
+            size = None if road_alias else _size(entry.get("size"))
             if size is not None and size != size_of(changed):
                 if author_says:
                     changed.size = size

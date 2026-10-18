@@ -95,7 +95,7 @@ from sealedlore.gui.session_line import SessionLine
 from sealedlore.gui.settings_dialog import SettingsDialog
 from sealedlore.gui.setup_dialog import SetupDialog
 from sealedlore.gui.speed_test import speed_tests
-from sealedlore.gui.start_dialog import StartDialog
+from sealedlore.gui.start_dialog import DESIGN, StartDialog
 from sealedlore.gui.start_page import NewDialog, StartChooser
 from sealedlore.gui.status import NoticeStatusBar, StatusStrip
 from sealedlore.gui.stories import StoryListPanel
@@ -1435,10 +1435,23 @@ class MainWindow(
             if self.session.config.images() is not None
             else ([], [])
         )
-        dialog = StartDialog(story, self.session.cast, parent=self, without_pictures=offered)
+        dialog = StartDialog(
+            story,
+            self.session.cast,
+            parent=self,
+            without_pictures=offered,
+            tile_sets=self.session.tile_sets_at_start(),
+        )
         if dialog.exec() != StartDialog.Accepted:
             return
         held = dialog.held_character_id()
+        tile_set = dialog.tile_set_choice()
+        if tile_set == DESIGN:
+            # Designed and set drawing before the opening; the map's things
+            # wait for it (`tile_set_waiting`). Cancelled: the AI chooses.
+            self._area_own_look()
+        elif tile_set:
+            self.session.set_tile_set(tile_set)
         # Before holding: pinning resets the roster the held character joins.
         if (pinned := dialog.pinned()) is not None:
             self.session.pin_at_start(*pinned)

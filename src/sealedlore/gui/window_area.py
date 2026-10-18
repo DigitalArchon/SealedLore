@@ -778,7 +778,7 @@ class AreaWindow:
         self.area_view.set_offer(None)
 
     def _area_own_look(self) -> None:
-        """Draw a new tile set for this story (gui/tile_set_gallery.py): the
+        """Design a new tile set for this story (gui/tile_set_gallery.py): the
         author describes it, the designer writes the words and every prompt,
         and nothing is drawn until they have approved them with the price."""
         session = self.session
@@ -786,7 +786,7 @@ class AreaWindow:
             return
         problem = session.own_tile_set_offer()[2]
         if problem is not None:
-            QMessageBox.information(self, "Draw a new tile set", problem)
+            QMessageBox.information(self, "Design a new tile set", problem)
             return
         dialog = TileSetDesigner(session, self, browse=self._browse_models)
         try:

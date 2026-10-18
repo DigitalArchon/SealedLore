@@ -12,7 +12,7 @@ from sealedlore.engine.area import BRIDGE, build_area
 from sealedlore.engine.session import SessionNotice
 from sealedlore.engine.takeable import the
 from sealedlore.engine.tile_sets import closest_item
-from sealedlore.engine.world import place_delta, resolve_reply
+from sealedlore.engine.world import applied, place_delta, resolve_reply
 from sealedlore.engine.world_art import (
     covering_plan,
     plan_art,
@@ -148,6 +148,52 @@ def test_a_town_only_named_waits_until_the_story_says_where_it_is():
     }
     delta, _ = resolve_reply(world, reply, source=there, people=[WREN])
     assert [p.name for p in delta.places] == ["Saltmarsh"]
+
+
+def test_another_name_for_a_road_the_map_has_is_that_road():
+    """The walk out of the village made "river road south"; the walk back,
+    "the river road" beside it: two routes for one road."""
+    road = WorldPlace(id="r", name="river road south", kind="route", x=0.0, y=-900.0)
+    lane = WorldPlace(id="l", name="the lane", kind="route", x=10.0, y=50.0)
+    world = WorldMap(places={"r": road, "l": lane}, seen=["r", "l"])
+    said = "They walked north on the river road, the Callow loud beside them."
+    reply = {
+        "places": [
+            {"name": "the river road", "kind": "route", "inside": "the valley", "quote": said}
+        ],
+        "where": [{"who": "Wren Halloway", "place": "the river road", "quote": said}],
+    }
+    delta, refused = resolve_reply(world, reply, source=said, people=[WREN])
+    assert delta.added == [] and refused == []
+    assert [(p.id, p.name, p.aliases) for p in delta.places] == [
+        ("r", "river road south", ["the river road"])
+    ]
+    assert delta.where == {"Wren Halloway": "r"}
+    # Folded, a later read naming it so finds it by that name.
+    folded = applied(world, delta)
+    assert "the river road" in folded.places["r"].aliases
+    assert resolve_reply(folded, reply, source=said, people=[WREN])[0].added == []
+    # The road to a town is the town's road; road words alone name no road,
+    # nor do the words of a different one.
+    to_town = WorldPlace(id="s", name="the road to Saltmarsh", kind="route")
+    world = WorldMap(places={"r": road, "s": to_town})
+    for name, found in [
+        ("the Saltmarsh road", "s"),
+        ("the old river road", "r"),
+        ("the north road", None),
+        ("the mill road", None),
+    ]:
+        said = f"They took {name} at dawn."
+        entry = {"places": [{"name": name, "kind": "route", "quote": said}]}
+        delta, _ = resolve_reply(world, entry, source=said, people=[])
+        assert (delta.added == [] and delta.places[0].id == found) or (
+            found is None and len(delta.added) == 1
+        ), name
+    # Never into a place that isn't a route, nor for one that isn't.
+    world = WorldMap(places={"r": road})
+    said = "The river road inn stood by the ford."
+    entry = {"places": [{"name": "the river road inn", "kind": "building", "quote": said}]}
+    assert len(resolve_reply(world, entry, source=said, people=[])[0].added) == 1
 
 
 @pytest.mark.parametrize(

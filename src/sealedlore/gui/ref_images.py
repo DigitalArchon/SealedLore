@@ -113,6 +113,19 @@ def pixmap_within(data: bytes | None, box: QSize) -> QPixmap:
     )
 
 
+def scaled_down(data: bytes, side: int) -> bytes:
+    """A picture no wider or taller than `side`, re-encoded (JPEG, or PNG
+    when it has transparency) with its hidden data removed; as it was when
+    it is small enough already, or isn't a picture this app reads."""
+    image = image_of(data)
+    if image.isNull() or max(image.width(), image.height()) <= side:
+        return data
+    image = image.scaled(side, side, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    if image.hasAlphaChannel():
+        return strip_metadata(_encoded(image, "PNG"))
+    return strip_metadata(_encoded(image.convertToFormat(QImage.Format_RGB32), "JPEG", 88))
+
+
 def picture_bytes(source: Path) -> tuple[bytes, str]:
     """A picture file's bytes and extension, its hidden data removed, and
     scaled and re-encoded if needed.

@@ -96,16 +96,25 @@ def render_messages(
             blocks = wire[-1]["content"]
         for part in message.parts:
             marker = cache_marker(ttl) if use_cache_control and part.cache_breakpoint else None
-            if not part.text:
-                if marker is not None and blocks:
-                    blocks[-1]["cache_control"] = marker
-                continue
-            text = part.text if not blocks else PART_JOINER + part.text
-            block: dict[str, Any] = {"type": "text", "text": text}
-            if marker is not None:
-                block["cache_control"] = marker
-            blocks.append(block)
+            if part.text:
+                text = part.text if not blocks else PART_JOINER + part.text
+                block: dict[str, Any] = {"type": "text", "text": text}
+                if marker is not None:
+                    block["cache_control"] = marker
+                blocks.append(block)
+            elif marker is not None and blocks:
+                blocks[-1]["cache_control"] = marker
+            if part.image:
+                blocks.append(_picture_block(part.image))
     return system, wire
+
+
+def _picture_block(url: str) -> dict[str, Any]:
+    """A picture sent as data (`ContentPart.image`, a data URL) as the
+    Messages API takes one."""
+    head, _, data = url.partition(",")
+    media_type = head.removeprefix("data:").split(";")[0] or "image/jpeg"
+    return {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": data}}
 
 
 def build_messages_payload(

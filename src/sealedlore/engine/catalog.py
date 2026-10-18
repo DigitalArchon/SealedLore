@@ -35,6 +35,9 @@ class ModelInfo:
     # NanoGPT's upstream hosts for the model (its detailed listing's
     # `providers`); two or more is a choice of route (engine/routing.py).
     hosts: tuple[str, ...] = field(default_factory=tuple)
+    # Whether it reads pictures (the listing's `capabilities.vision`, else an
+    # "image" among its input modalities); None when the listing doesn't say.
+    vision: bool | None = None
 
     def facts(self) -> dict[str, Any]:
         """What the settings review is told about the story's model."""
@@ -91,7 +94,18 @@ def model_info(model_id: str, entry: Mapping[str, Any]) -> ModelInfo:
         prompt_price=price.prompt if price else None,
         completion_price=price.completion if price else None,
         hosts=tuple(h for h in hosts if isinstance(h, str)) if isinstance(hosts, list) else (),
+        vision=_vision(entry, capabilities),
     )
+
+
+def _vision(entry: Mapping[str, Any], capabilities: Mapping[str, Any]) -> bool | None:
+    if isinstance(capabilities.get("vision"), bool):
+        return capabilities["vision"]
+    architecture = entry.get("architecture")
+    inputs = architecture.get("input_modalities") if isinstance(architecture, dict) else None
+    if isinstance(inputs, list):
+        return "image" in inputs
+    return None
 
 
 def chat_models(listing: Mapping[str, Mapping[str, Any]]) -> dict[str, ModelInfo]:

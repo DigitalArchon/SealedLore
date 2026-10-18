@@ -17,6 +17,7 @@ from PySide6.QtWidgets import QApplication, QDialog, QGraphicsSimpleTextItem  # 
 
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.gui.map_art import picture_sprite, pixel_art, tile_image  # noqa: E402
+from sealedlore.gui.map_labels import STACK_GAP, Block, stack_labels  # noqa: E402
 from sealedlore.gui.world_view import (  # noqa: E402
     ISO_Z,
     MIN_PLACE_PX,
@@ -107,6 +108,62 @@ def test_a_place_inside_another_shows_once_zoomed_in_far_enough(app):
     view.view.resetTransform()
     view.view.zoom_by(0.2)
     assert "Diner" in visible_names(view)
+
+
+def test_names_that_would_overlap_stand_in_a_column_where_you_are_first():
+    """Live (Oct 18 2026): a toll bridge, its boundary stone, a cairn and a
+    marker post a few metres apart were four names on top of each other."""
+    blocks = [
+        Block("here", 0, 10, 100, 30),
+        Block("near", 4, 12, 80, 15),  # all but on the first: under it
+        Block("also", -3, 11, 90, 15),  # and under that
+        Block("far", 400, 10, 100, 30),  # clear: where it is
+    ]
+    shifts = stack_labels(blocks)
+    assert shifts["here"] == 0 and shifts["far"] == 0
+    assert shifts["near"] == pytest.approx(10 + 30 + STACK_GAP - 12)
+    assert shifts["also"] == pytest.approx(12 + shifts["near"] + 15 + STACK_GAP - 11)
+    # Nor under another place's picture; its own is above it anyway.
+    shifts = stack_labels(
+        [Block("house", 0, 10, 100, 15)],
+        [Block("house", 0, -12, 24, 24), Block("ring", 2, 8, 30, 30)],
+    )
+    assert shifts["house"] == pytest.approx(8 + 30 + STACK_GAP - 10)
+
+
+def test_the_region_s_names_never_lie_over_each_other(app):
+    view = WorldView()
+    view.resize(900, 700)
+    places = {
+        "bridge": WorldPlace(id="bridge", name="The toll bridge", kind="site", x=0.0, y=0.0),
+        "stone": WorldPlace(id="stone", name="Boundary stone", kind="area", x=4.0, y=-3.0),
+        "cairn": WorldPlace(id="cairn", name="The cairn", kind="area", x=6.0, y=-5.0),
+        "post": WorldPlace(id="post", name="Marker post", kind="area", x=2.0, y=-7.0),
+        "town": WorldPlace(id="town", name="Saltmarsh", kind="settlement", x=0.0, y=-9000.0),
+    }
+    world = WorldMap(places=places, where={"Wren": "cairn", "Tobias": "cairn"}, seen=list(places))
+    view.set_world(world, WorldArt(), "Wren", keep_view=False)
+    view.go_region()
+    shown = [item for item in view._items if item.isVisible()]
+    assert len(shown) == 5
+    port = view.view
+
+    def label(item):
+        width, height, top = item.label_block()
+        spot = port.mapFromScene(item.pos())
+        return QRectF(spot.x() - width / 2, spot.y() + top + item.shift, width, height)
+
+    rects = {item.place.name: label(item) for item in shown}
+    names = sorted(rects)
+    for i, a in enumerate(names):
+        for b in names[i + 1 :]:
+            assert not rects[a].intersects(rects[b]), (a, b)
+    # Where Wren is reads first, with who is there; the rest in a column
+    # under it, the larger kinds first.
+    column = sorted((n for n in names if n != "Saltmarsh"), key=lambda n: rects[n].top())
+    assert column == ["The cairn", "The toll bridge", "Boundary stone", "Marker post"]
+    town = next(i for i in shown if i.place.id == "town")
+    assert town.shift == 0  # nothing near it: where it always was
 
 
 def test_the_world_level_names_the_big_places_large(app):

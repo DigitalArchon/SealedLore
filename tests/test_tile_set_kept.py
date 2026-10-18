@@ -56,7 +56,8 @@ def test_the_set_is_chosen_once_the_story_begins_and_kept_after(tmp_path, story,
     art = session.map_art_copy()
     assert (art.tile_set, art.tile_set_auto) == ("brasshaven", False)
     assert session.tile_set_offer() is None
-    # "Chosen for the setting": chosen now, from the setting, and kept.
+    # The AI's choice: the setting's words choose while it thinks, and when
+    # it can't (the scripted mock has no client of its own to ask on).
     session.set_tile_set("")
     art = session.map_art_copy()
     assert (art.tile_set, art.tile_set_auto) == ("station", True)

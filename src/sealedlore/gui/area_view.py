@@ -847,11 +847,19 @@ class AreaView(QWidget):
         self.offer_label = QLabel()
         self.offer_label.setObjectName("hintLabel")
         self.offer_label.setWordWrap(True)
-        self.offer_button = QPushButton("Tile sets…")
+        self.offer_button = QPushButton("Choose a set…")
         self.offer_button.setToolTip(
-            "Every tile set the map can be drawn in, and drawing a new one"
+            "Every tile set the map can be drawn in, each with its pictures, and letting the "
+            "AI choose again"
         )
         self.offer_button.clicked.connect(self.gallery_requested.emit)
+        self.offer_design = QPushButton("Design a new set…")
+        self.offer_design.setToolTip(
+            "Describe how this world looks, with pictures of it if you have them; a designer "
+            "model writes a set for it, and you see every prompt and the price before anything "
+            "is drawn"
+        )
+        self.offer_design.clicked.connect(self.own_look_requested.emit)
         self.offer_close = QToolButton()
         self.offer_close.setText("×")
         self.offer_close.setToolTip("Not now")
@@ -861,6 +869,7 @@ class AreaView(QWidget):
         offer_row.setSpacing(6)
         offer_row.addWidget(self.offer_label, 1)
         offer_row.addWidget(self.offer_button)
+        offer_row.addWidget(self.offer_design)
         offer_row.addWidget(self.offer_close)
         self.offer.hide()
         # And while a story's first area is set up, before the author's first
@@ -1728,7 +1737,7 @@ class AreaView(QWidget):
         gallery.setToolTip("Every tile set the map can be drawn in, and drawing a new one")
         gallery.triggered.connect(self.gallery_requested.emit)
         self.look_menu.addSeparator()
-        auto = self.look_menu.addAction("Chosen for the setting")
+        auto = self.look_menu.addAction("The AI's choice, closest to this world")
         auto.setCheckable(True)
         auto.setChecked(not chosen)
         auto.triggered.connect(lambda: self.look_chosen.emit(""))
@@ -1738,7 +1747,7 @@ class AreaView(QWidget):
             action.setChecked(name == current)
             action.triggered.connect(lambda _c=False, n=name: self.look_chosen.emit(n))
         self.look_menu.addSeparator()
-        own = self.look_menu.addAction("Draw a new tile set…")
+        own = self.look_menu.addAction("Design a new tile set…")
         own.setEnabled(not self.locked)
         own.triggered.connect(self.own_look_requested.emit)
         edit = self.look_menu.addAction("Edit the tile set…")

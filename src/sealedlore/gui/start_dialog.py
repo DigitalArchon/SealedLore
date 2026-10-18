@@ -22,6 +22,12 @@ from sealedlore.models.lore import LoreEntry
 from sealedlore.models.story import Story
 
 
+# The Map tiles row's first and last choices.
+AI_CHOOSES = "The AI chooses the closest set"
+DESIGN_ONE = "Design a new set for this world…"
+DESIGN = "design"
+
+
 def opening_note(story: Story) -> str:
     setup = story.setup
     if not setup.opening_text.strip():
@@ -44,10 +50,15 @@ class StartDialog(QDialog):
         parent: QWidget | None = None,
         *,
         without_pictures: tuple[Sequence[Character], Sequence[LoreEntry]] = ((), ()),
+        tile_sets: Sequence[tuple[str, str]] = (),
     ) -> None:
         """`without_pictures`: the characters and lore entries the models may
         see that have no picture yet; when there are any, a picture of each
-        is offered (a plot file or premise often brings none)."""
+        is offered (a plot file or premise often brings none). `tile_sets`:
+        (name, title) of each set a new world's map may be drawn in; when
+        there are any, the look of the map is chosen here, before anything
+        is drawn (the author, Oct 18 2026: by hand, by the AI, or a new set
+        designed for the world)."""
         super().__init__(parent)
         self.setWindowTitle(f"Start — {story.title}")
         self.setMinimumWidth(460)
@@ -66,6 +77,20 @@ class StartDialog(QDialog):
 
         form = QFormLayout()
         form.addRow("Play as", self.play_as)
+        self.tile_set: QComboBox | None = None
+        if tile_sets:
+            self.tile_set = QComboBox()
+            self.tile_set.addItem(AI_CHOOSES, "")
+            for name, title in tile_sets:
+                self.tile_set.addItem(title, name)
+            self.tile_set.addItem(DESIGN_ONE, DESIGN)
+            self.tile_set.setToolTip(
+                "The pixel art the map is drawn in. The AI reads this world and chooses the "
+                "closest of the sets; or choose one yourself; or have a new set designed for "
+                "this world, from your words and pictures of it, before the story starts. "
+                "Look ▾ → Tile sets… changes it later."
+            )
+            form.addRow("Map tiles", self.tile_set)
 
         layout = QVBoxLayout(self)
         if story.setup.description:
@@ -145,6 +170,11 @@ class StartDialog(QDialog):
         return (
             self.pictures is not None and self.pictures.isChecked() and not self.pictures.isHidden()
         )
+
+    def tile_set_choice(self) -> str | None:
+        """None: not asked; "": the AI chooses; DESIGN: a new set designed
+        first; else the name of the set chosen."""
+        return self.tile_set.currentData() if self.tile_set is not None else None
 
     def held_character_id(self) -> str | None:
         return self.play_as.currentData()

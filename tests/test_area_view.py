@@ -696,7 +696,10 @@ def test_the_tile_sets_are_offered_once_when_a_map_story_first_opens(app, window
     text = view.offer_label.text()
     titles = dict(session.tile_set_choices())
     title = titles[session.tile_set_name()]
-    assert text == f"The map is drawn in {title}: choose another or draw one for this world."
+    assert text == f"The map is drawn in {title}. Choose another, or design one for this world."
+    # The gallery and the designer, a button each.
+    assert view.offer_button.text() == "Choose a set…"
+    assert view.offer_design.text() == "Design a new set…"
     view.offer_close.click()
     assert session.story.tile_set_offered and view.offer.isHidden()
     window.refresh_area()

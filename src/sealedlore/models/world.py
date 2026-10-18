@@ -385,6 +385,10 @@ class WorldArt(BaseModel):
     # it, not the author (the offer to choose another still shows).
     tile_set: str = ""
     tile_set_auto: bool = False
+    # Why, when the AI chose it as the set closest to the world (the
+    # author, Oct 18 2026; `start_tile_set_pick`): its one sentence, shown
+    # with the offer and in the gallery. "" when the setting's words chose.
+    tile_set_why: str = ""
     # The tile sets drawn for this story, by key (engine/tile_sets.py
     # `own_key`: from the title, "rain-slick-alleys").
     tile_sets: dict[str, OwnTileSet] = Field(default_factory=dict)

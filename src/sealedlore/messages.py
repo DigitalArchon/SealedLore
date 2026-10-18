@@ -20,6 +20,12 @@ PART_JOINER = "\n\n"
 class ContentPart:
     text: str
     cache_breakpoint: bool = False
+    # A picture sent after the part's text, as a data URL
+    # ("data:image/jpeg;base64,…"), for a model that reads pictures: the
+    # tile set designer is shown the author's pictures of their world. Never
+    # part of `PromptMessage.text`, and never in the API log
+    # (`wire.without_pictures`).
+    image: str = ""
 
 
 @dataclass(frozen=True)

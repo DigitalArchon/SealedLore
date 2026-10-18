@@ -4850,3 +4850,44 @@ three-quarter view, square to the frame, not rotated and not isometric.
 Each description is short and concrete, something a pixel artist could paint. Answer with the
 JSON only.""",
 )
+
+# The author (Oct 18 2026): pictures of the world, each with what it shows
+# ("This is a photo of what a typical bar looks like in this setting"), for
+# the designer to work the tiles out from. In the user message, and only
+# when there are pictures: a design without them is sent as before. Not
+# measured.
+_text(
+    "map.tileset.pictures",
+    MAP,
+    "Map-first: the author's pictures of the world",
+    "Heads the pictures the author added to a tile set's design, each with what they said "
+    "it shows. Sent only with pictures.",
+    "The author added pictures of how this world looks, each after what they said it shows. "
+    "Take the look from them: the materials, colours, light, wear and mood, and how its "
+    "buildings, rooms and land are made. Describe what you see in your own words in the style "
+    "and every prompt: the image model never sees these pictures, so never refer to them.",
+)
+
+# The AI's choice of the shipped set closest to a world no set was made for
+# (the author, Oct 18 2026: "have the AI choose the closest set"). Before,
+# the sets' keywords chose, and a world none of them named got the first set
+# by name: a river valley of map shops and toll bridges was drawn as an
+# elven forest. Not measured.
+_text(
+    "map.tileset.pick",
+    MAP,
+    "Map-first: the closest tile set",
+    "The system message for choosing which of the program's tile sets a new world's map is "
+    "drawn in (engine/tile_draw.py), when the author leaves the choice to the AI.",
+    """\
+You choose the pixel-art tile set a story's map is drawn in. You are given the story's world
+and where it begins, and the tile sets there are: each one's name, the world it was made for,
+its style and the ground it has. Choose the one set closest to how this world looks: its era
+and technology, its buildings, its land and climate, its mood. None may fit well; choose the
+closest all the same.
+Answer as a JSON object with exactly these keys:
+"set": the chosen set's name, exactly as given;
+"why": one short sentence saying what in the world decides it ("a low-fantasy river valley of
+villages and stone bridges is closest to the timbered village set").
+Answer with the JSON only.""",
+)

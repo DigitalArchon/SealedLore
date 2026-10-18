@@ -3194,6 +3194,12 @@ class StorySession(
         info = self._models.get(model) if self._models else None
         return info.context_length if info else None
 
+    def reads_pictures(self, model: str) -> bool | None:
+        """Whether a model reads pictures, from the list already fetched
+        (never the network); None when the list is not in or doesn't say."""
+        info = self._models.get(model) if self._models else None
+        return info.vision if info else None
+
     def cached_output_limit(self, model: str) -> int | None:
         """A model's output limit from the list already fetched; never the network."""
         info = self._models.get(model) if self._models else None

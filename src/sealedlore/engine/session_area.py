@@ -90,7 +90,9 @@ from sealedlore.engine.tile_draw import (
     TEXTURE_SIZE,
     ground_jobs,
     item_jobs,
+    parse_pick,
     parse_tile_words,
+    pick_messages,
     roof_jobs,
     style_words,
     tile_jobs,
@@ -156,6 +158,7 @@ from sealedlore.models.scene import SceneState
 from sealedlore.models.world import MapPicture, OwnTileSet, WorldArt, WorldDelta, WorldMap
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError
 from sealedlore.providers.images import ImageClient, build_image_payload, data_url, loggable_payload
+from sealedlore.providers.wire import without_pictures
 from sealedlore.storage import tile_sets as shipped
 from sealedlore.storage.image_meta import MetadataError, picture_kind, strip_metadata
 from sealedlore.storage.images import MEDIA_TYPES
@@ -281,6 +284,11 @@ ASSET_LABELS = {
 # How far along an outdoor area's edge a journey looks for the road it
 # comes in by, in tiles.
 ARRIVAL_ROAD_REACH = 16
+# The AI's choice of tile set (`start_tile_set_pick`): how much of the
+# world's text it is shown, and the room for its short answer (reasoning
+# models think first).
+PICK_SETTING_LIMIT = 6000
+PICK_MAX_TOKENS = 4000
 # What a thing's state says became of it (the map's own things, and what the
 # read found the passage did to one on the play view): used up or gone
 # (off the floor), or broken (still there, drawn broken).
@@ -2807,7 +2815,7 @@ class AreaRuntime:
         if not self.map_pictures_on:
             return furnish, []
         room = self.map_pictures_left_today(art)
-        if room <= 0:
+        if room <= 0 or self.tile_set_waiting():
             return furnish, []
         info, read = self.tile_set(art)
         source_items = {p.subject_id for p in art.pictures if p.subject == "item"}
@@ -3121,14 +3129,18 @@ class AreaRuntime:
         return out
 
     def set_tile_set(self, name: str) -> None:
-        """The author's choice of tile set ("" lets the program choose: the
-        set the setting names, kept from now on as any choice is)."""
+        """The author's choice of tile set ("" leaves it to the AI: the
+        shipped set closest to the world, `start_tile_set_pick`, kept from
+        then on as any choice is; the setting's words choose while it
+        thinks, and if it can't)."""
         art = self.world_art
         with self._lock():
-            art.tile_set, art.tile_set_auto = name, False
+            art.tile_set, art.tile_set_auto, art.tile_set_why = name, False, ""
             if not name:
                 self._pin_tile_set(art)
             self._save_art(art)
+        if not name:
+            self.start_tile_set_pick(again=True)
 
     def pin_tile_set(self) -> None:
         """The tile set is chosen once the story has begun and kept for it
@@ -3142,6 +3154,10 @@ class AreaRuntime:
         if not self.map_first or self.in_private or not self.path():
             return
         art = self.world_art
+        # The author's own set being drawn is chosen once it is in; the AI's
+        # choice is written when it comes back.
+        if art.tile_set or self.tile_set_waiting() or self.start_tile_set_pick():
+            return
         with self._lock():
             if art.tile_set or not self._pin_tile_set(art):
                 return
@@ -3155,6 +3171,102 @@ class AreaRuntime:
             return False
         art.tile_set, art.tile_set_auto = name, True
         return True
+
+    # --- the AI's choice of the closest set ---------------------------------------
+
+    @property
+    def tile_set_picking(self) -> bool:
+        """The AI is choosing the set now (`start_tile_set_pick`)."""
+        thread = getattr(self, "_pick_thread", None)
+        return thread is not None and thread.is_alive()
+
+    def tile_set_waiting(self) -> bool:
+        """The map's set isn't settled yet: the AI is choosing it, or the
+        author's own set is being drawn to be used. Its items and avatars
+        wait (`tile_art_jobs`), or they are drawn in the style of a set the
+        map is about to leave."""
+        thread = getattr(self, "_own_set_thread", None)
+        return self.tile_set_picking or (thread is not None and thread.is_alive())
+
+    def start_tile_set_pick(self, *, again: bool = False) -> bool:
+        """The map model chooses the shipped set closest to the world, on a
+        thread (the author, Oct 18 2026: "have the AI choose the closest
+        set"), once a session unless asked `again`; True when it started.
+        Only while the program chooses: never over the author's choice, a
+        sample's set or one of the story's own. Its answer is the program's
+        choice, pinned with why (`WorldArt.tile_set_why`); if it fails, the
+        setting's words choose as before."""
+        if not self.map_first or self.in_private or self._map_closed or self.tile_set_picking:
+            return False
+        if getattr(self, "_pick_tried", False) and not again:
+            return False
+        art = self.map_art_copy()
+        if art.tile_set and not art.tile_set_auto:
+            return False
+        sets = {name: info for name, (info, _folder) in shipped.shipped_sets().items()}
+        setting = self._setting_words().strip() or self.map_setting()
+        # On a client of its own: a provider with none (the scripted mock)
+        # leaves the choice to the setting's words.
+        detached = getattr(self.provider, "detached", None)
+        if len(sets) < 2 or not setting or not callable(detached):
+            return False
+        self._pick_tried = True
+        text = detached()
+        model = self.map_model
+        request = ChatRequest(
+            model=model,
+            extra_body=self.route_for("map", model),
+            messages=pick_messages(setting[:PICK_SETTING_LIMIT], sets, self.texts),
+            params=self.side_params(model, max_tokens=PICK_MAX_TOKENS),
+        )
+        thread = threading.Thread(
+            target=self._pick_run,
+            args=(text, request, list(sets)),
+            name="map-tileset-pick",
+            daemon=True,
+        )
+        self._pick_thread = thread
+        thread.start()
+        return True
+
+    def _pick_run(self, text: ChatProvider, request: ChatRequest, names: list[str]) -> None:
+        chosen: tuple[str, str] | None = None
+        try:
+            log_ref = self._log(
+                "map_tileset_pick_request", {"payload": self.provider.build_payload(request)}
+            )
+            try:
+                reply, completed = text.complete(request)
+                self._log(
+                    "map_tileset_pick_response",
+                    {"request_log_ref": log_ref, "text": reply, "usage": completed.raw_usage},
+                )
+                self.unreported_usage.append(self.priced(completed.usage, request.model))
+                chosen = parse_pick(reply, names)
+            except (ProviderError, ValueError) as exc:
+                self._log(
+                    "map_tileset_pick_error",
+                    {"request_log_ref": log_ref, "error": str(exc)[:300]},
+                )
+        except Exception as exc:  # noqa: BLE001 - a thread dies silently otherwise
+            self._log("map_tileset_pick_error", {"error": f"{type(exc).__name__}: {exc}"[:300]})
+        finally:
+            _close_quietly(text)
+        if self._map_closed or self._closed:
+            return
+        art = self.world_art
+        with self._lock():  # never inside `_closing` (see `_furnish_one`)
+            if art.tile_set and not art.tile_set_auto:
+                return  # the author chose meanwhile
+            if chosen is not None:
+                art.tile_set, art.tile_set_auto, art.tile_set_why = chosen[0], True, chosen[1]
+            elif not self.path() or not self._pin_tile_set(art):
+                return
+            self._save_art(art)
+        self._tile_again = True  # what waited for the set is drawn in it now
+        callback = self.on_map_art
+        if callback is not None:
+            callback()
 
     def remove_own_tile_set(self, name: str) -> bool:
         """One of the story's own sets taken out, its pictures deleted from
@@ -3177,6 +3289,17 @@ class AreaRuntime:
                 self.pictures.remove(file)
         return True
 
+    def tile_sets_at_start(self) -> list[tuple[str, str]]:
+        """(name, title) of the sets Start offers for a new world's map, its
+        look chosen before anything is drawn; none when the story keeps no
+        map, or its map has its set already (a sample's, or the author's)."""
+        if not self.map_first or self.in_private:
+            return []
+        art = self.map_art_copy()
+        if art.tile_set and not art.tile_set_auto:
+            return []
+        return self.tile_set_choices(art)
+
     # --- the offer when a story's map begins ---------------------------------------
 
     def tile_set_offer(self, art: WorldArt | None = None) -> str | None:
@@ -3188,12 +3311,20 @@ class AreaRuntime:
         art = art or self.map_art_copy()
         if art.tile_set and not art.tile_set_auto:
             return None
+        if self.tile_set_picking:
+            return "The AI is choosing the tile set closest to this world…"
         titles = dict(self.tile_set_choices(art))
         name = self.tile_set_name(art)
         title = titles.get(name, name)
         if not title:
             return None
-        return f"The map is drawn in {title}: choose another or draw one for this world."
+        if art.tile_set_why:
+            why = art.tile_set_why.rstrip(".")
+            return (
+                f"The map is drawn in {title}, the set the AI found closest to this world: "
+                f"{why}. Choose another, or design one for this world."
+            )
+        return f"The map is drawn in {title}. Choose another, or design one for this world."
 
     def tile_sets_offered(self) -> None:
         """The offer was answered (the gallery opened, or the line dismissed):
@@ -3250,10 +3381,19 @@ class AreaRuntime:
         price = tile_set_price(jobs, info.price if info is not None else lambda _s: None)
         return len(jobs), price
 
-    def start_tile_set_design(self, description: str, model: str = "") -> bool:
+    def start_tile_set_design(
+        self,
+        description: str,
+        model: str = "",
+        pictures: Sequence[tuple[bytes, str]] = (),
+    ) -> bool:
         """The designer writes a set's words and a prompt for every picture
         from the world and the author's description, on a thread (nothing is
-        drawn: the author sees and approves them first, `tile_set_design`)."""
+        drawn: the author sees and approves them first, `tile_set_design`).
+        `pictures`: the author's pictures of the world, each with what they
+        said it shows (the author, Oct 18 2026: "This is a photo of what a
+        typical bar looks like in this setting"), stripped and sized by the
+        window; shown to the designer only, never to the image model."""
         if self.own_tile_set_offer()[2] is not None or self._map_closed:
             return False
         detached = getattr(self.provider, "detached", None)
@@ -3261,9 +3401,14 @@ class AreaRuntime:
         self._design_text = text
         self._design_words, self._design_error = None, None
         designer = " ".join(model.split()) or self.tileset_designer
+        shown = [
+            (data_url(data, MEDIA_TYPES[picture_kind(data)]), caption)
+            for data, caption in pictures
+            if picture_kind(data) in MEDIA_TYPES
+        ]
         thread = threading.Thread(
             target=self._design_run,
-            args=(text, designer, " ".join(description.split())),
+            args=(text, designer, " ".join(description.split()), shown),
             name="map-tileset-design",
             daemon=True,
         )
@@ -3296,16 +3441,27 @@ class AreaRuntime:
             return "failed", None, self._design_error
         return "", None, None
 
-    def _design_run(self, text: ChatProvider, model: str, description: str) -> None:
+    def _design_run(
+        self,
+        text: ChatProvider,
+        model: str,
+        description: str,
+        pictures: Sequence[tuple[str, str]] = (),
+    ) -> None:
         try:
             request = ChatRequest(
                 model=model,
                 extra_body=self.route_for("map_art", model),
-                messages=tileset_messages(self.map_setting(), self.texts, description=description),
+                messages=tileset_messages(
+                    self.map_setting(), self.texts, description=description, pictures=pictures
+                ),
                 params=self.side_params(model, max_tokens=FURNISH_MAX_TOKENS),
             )
+            # The pictures' bytes stay out of the log, as a picture request's
+            # references do; what the author said of each is kept.
             log_ref = self._log(
-                "map_tileset_request", {"payload": self.provider.build_payload(request)}
+                "map_tileset_request",
+                {"payload": without_pictures(self.provider.build_payload(request))},
             )
             try:
                 reply, completed = text.complete(request)
@@ -3385,6 +3541,7 @@ class AreaRuntime:
                 )
                 art.tile_set, art.tile_set_auto = own_set_name(key), False
                 self._save_art(art)
+            self._tile_again = True  # what waited for the set is drawn in it now
             callback = self.on_map_art
             if callback is not None:
                 callback()

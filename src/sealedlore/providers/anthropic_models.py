@@ -168,6 +168,8 @@ def listing_entry(item: dict[str, Any]) -> dict[str, Any]:
     entry.setdefault("context_length", item.get("max_input_tokens"))
     entry.setdefault("max_output_tokens", item.get("max_tokens"))
     entry["capabilities"] = {
+        # Every Claude model the API lists reads pictures.
+        "vision": True,
         **(capabilities if isinstance(capabilities, dict) else {}),
         "reasoning": True,
     }

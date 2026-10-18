@@ -53,7 +53,12 @@ def to_wire_messages(
     messages: Sequence[PromptMessage], *, use_cache_control: bool, ttl: str = "5m"
 ) -> list[dict[str, Any]]:
     if not use_cache_control:
-        return [{"role": message.role, "content": message.text} for message in messages]
+        return [
+            {"role": message.role, "content": message.text}
+            if not any(part.image for part in message.parts)
+            else {"role": message.role, "content": _with_pictures(message)}
+            for message in messages
+        ]
 
     # Anthropic concatenates a message's text blocks with nothing between them
     # (measured on Sonnet 4.6: two blocks cost exactly the tokens of the glued
@@ -70,9 +75,47 @@ def to_wire_messages(
             block: dict[str, Any] = {"type": "text", "text": text}
             if part.cache_breakpoint:
                 block["cache_control"] = cache_marker(ttl)
-            blocks.append(block)
+            if part.text or not part.image:
+                blocks.append(block)
+            if part.image:
+                blocks.append(_picture_block(part.image))
         wire.append({"role": message.role, "content": blocks})
     return wire
+
+
+def _picture_block(url: str) -> dict[str, Any]:
+    return {"type": "image_url", "image_url": {"url": url}}
+
+
+def _with_pictures(message: PromptMessage) -> list[dict[str, Any]]:
+    """A message with pictures as content blocks, its text as one string
+    would be (the parts joined) with each picture after its part's text."""
+    blocks: list[dict[str, Any]] = []
+    for index, part in enumerate(message.parts):
+        text = part.text if index == 0 else PART_JOINER + part.text
+        if part.text:
+            blocks.append({"type": "text", "text": text})
+        if part.image:
+            blocks.append(_picture_block(part.image))
+    return blocks
+
+
+def without_pictures(payload: Any) -> Any:
+    """A request body as the API log keeps it: every picture sent as data
+    (a data URL, or Anthropic's base64 source) replaced by a note of its
+    size, as the picture requests' references are logged by name, never
+    their bytes. The body sent is left as it is."""
+    if isinstance(payload, dict):
+        if payload.get("type") == "base64" and isinstance(payload.get("data"), str):
+            kept = dict(payload)
+            kept["data"] = f"[a picture, {len(payload['data']) * 3 // 4 // 1024} KB]"
+            return kept
+        return {key: without_pictures(value) for key, value in payload.items()}
+    if isinstance(payload, list):
+        return [without_pictures(value) for value in payload]
+    if isinstance(payload, str) and payload.startswith("data:image/"):
+        return f"[a picture, {len(payload) * 3 // 4 // 1024} KB]"
+    return payload
 
 
 def build_chat_payload(

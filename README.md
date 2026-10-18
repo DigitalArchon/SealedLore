@@ -60,7 +60,9 @@ Every building is furnished, as sparsely or as fully as you like, and every
 character gets a pixel-art avatar drawn from their portrait. Everything is
 drawn in a tile set whose style suits the world rather than any one game's
 (a bleak snowbound farm, a whimsical elven forest, a brass-and-soot
-steampunk city…), and a new one can be designed for your own world.
+steampunk city…): the AI picks the one closest to a new world, or you pick,
+or a new one is designed for your world from your words and, if you like,
+photos or renders of how it looks.
 
 **Edit Mode** changes the map by hand rather than asking the storyteller and
 hoping: paint walls, doors, windows, floors and ground, draw rooms and

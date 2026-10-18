@@ -87,6 +87,7 @@ from sealedlore.gui import text_size
 from sealedlore.gui.image_codec import image_from_data
 from sealedlore.gui.isometric_view import IsometricBar, IsometricDialog
 from sealedlore.gui.map_art import FOG, picture_sprite, sprite_pixmap
+from sealedlore.gui.map_labels import Block, stack_labels
 from sealedlore.gui.map_pan import MiddlePan
 from sealedlore.gui.map_render import drawn_box, label_key
 from sealedlore.gui.map_tiles import (
@@ -141,6 +142,9 @@ PAUSED_NOTE = (
 # grows with the font), and the gap between picture and name.
 LABEL_WIDTH = 176
 LABEL_GAP = 3
+# Places whose spots are this many pixels apart down the screen or less
+# share a row of names: their order is by `_label_order`, not by the map.
+LABEL_ROW = 6
 # A scene's people, in art pixels (the tileset's scale) before the view's zoom,
 # and how far apart several in one spot stand.
 AVATAR_HEIGHT = 26
@@ -215,6 +219,26 @@ def place_card(world: WorldMap, place: WorldPlace) -> str:
 
 _key = label_key
 
+# The order names are read in where several share a spot (`_lay_labels`):
+# the larger kinds first.
+_KIND_RANK = {
+    kind: rank
+    for rank, kind in enumerate(
+        ("settlement", "region", "site", "area", "building", "vehicle", "route", "room")
+    )
+}
+
+
+def _label_order(item: _PlaceItem) -> tuple:
+    place = item.place
+    return (
+        not item.ringed,
+        item.opacity() < 1.0,  # dim: only told of
+        _KIND_RANK.get(place.kind or "", len(_KIND_RANK)),
+        -size_of(place),
+        place.name.lower(),
+    )
+
 
 class _PlaceItem(QGraphicsItem):
     """A place on the region: its picture (or a mark) scaled with the map
@@ -258,6 +282,9 @@ class _PlaceItem(QGraphicsItem):
         self._pressed = False
         self._card_tip = ""
         self._name = place.name + (f" ({place.state})" if place.state else "")
+        # How far the name is moved down, out from under another's
+        # (`map_labels.stack_labels`, laid at every zoom by the view).
+        self.shift = 0.0
         self._fonts()
         self.set_pixels(MIN_PLACE_PX)
 
@@ -286,7 +313,7 @@ class _PlaceItem(QGraphicsItem):
         if not self.painted:
             return QRectF()
         left, width = self._mark_x
-        return QRectF(left, self._half() + LABEL_GAP, width, self._line)
+        return QRectF(left, self._half() + LABEL_GAP + self.shift, width, self._line)
 
     def set_card_tip(self, text: str) -> None:
         """The hover card; the ◆ shows the mark's tip instead."""
@@ -347,9 +374,28 @@ class _PlaceItem(QGraphicsItem):
     def _half(self) -> float:
         return self.pixels / 2 if self.pixmap is not None else max(7.0, self.pixels / 4)
 
+    def label_block(self) -> tuple[float, float, float]:
+        """The name's block where it stands unmoved: its width, its height
+        (a line for the name, one for who is there) and its top, in the
+        item's (screen) pixels below its spot."""
+        lines = 2 if self._who else 1
+        return self._width, lines * self._line, self._half() + LABEL_GAP
+
+    def picture_reach(self) -> float:
+        """How far its picture (and its ring) reaches from its spot."""
+        return self._half() + (5 if self.ringed else 0)
+
+    def set_shift(self, shift: float) -> None:
+        """The name moved this far down, under another's."""
+        if abs(shift - self.shift) < 0.5:
+            return
+        self.prepareGeometryChange()
+        self.shift = shift
+        self.update()
+
     def boundingRect(self) -> QRectF:
         half = self._half()
-        height = half + 6 + LABEL_GAP + 2 * self._line + 2
+        height = half + 6 + LABEL_GAP + self.shift + 2 * self._line + 2
         return QRectF(-self._width / 2 - 2, -half - 6, self._width + 4, height)
 
     def paint(self, painter: QPainter, _option, _widget=None) -> None:
@@ -367,7 +413,7 @@ class _PlaceItem(QGraphicsItem):
             painter.setPen(QPen(QColor("#1b1d2b"), 1.5))
             painter.setBrush(colour)
             painter.drawEllipse(QPointF(0, 0), half, half)
-        top = half + LABEL_GAP
+        top = half + LABEL_GAP + self.shift
         self._text(painter, self._label, top, self._bold)
         if self._who:
             self._text(painter, self._who, top + self._line, self._font)
@@ -1765,12 +1811,34 @@ class WorldView(QWidget):
                 ringed = here
         for item in self._items:
             item.set_ringed(item.place.id == ringed)
+        self._lay_labels()
         self._place_marks(shown_plans)
         self._sync_buttons()
         self._sync_card(level, shown_plans)
         focus = self.area_in_view(level)
         if (focus.id if focus is not None else None) != self._focus:
             self.sync_isometric()  # the bar follows the area in view
+
+    def _lay_labels(self) -> None:
+        """Names that would lie over each other, or under another place's
+        picture, at this zoom stand in a column instead
+        (`map_labels.stack_labels`), read down the map; where places share
+        a spot, where the character is first, then the places lit before
+        the dim ones, the larger kinds and places before the smaller."""
+        scale = self.view.transform().m11()
+        shown = [item for item in self._items if item.isVisible()]
+        spots = {id(item): (item.pos().x() * scale, item.pos().y() * scale) for item in shown}
+        shown.sort(key=lambda item: (round(spots[id(item)][1] / LABEL_ROW), _label_order(item)))
+        blocks, pictures = [], []
+        for item in shown:
+            x, y = spots[id(item)]
+            width, height, top = item.label_block()
+            blocks.append(Block(item.place.id, x, y + top, width, height))
+            reach = item.picture_reach()
+            pictures.append(Block(item.place.id, x, y - reach, 2 * reach, 2 * reach))
+        shifts = stack_labels(blocks, pictures)
+        for item in self._items:
+            item.set_shift(shifts.get(item.place.id, 0.0))
 
     def _place_marks(self, shown_plans: set[str]) -> None:
         """Each area's badge at its plan's corner on the local map while its

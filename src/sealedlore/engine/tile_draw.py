@@ -270,18 +270,68 @@ def walker_jobs(
 
 
 def tileset_messages(
-    setting: str, texts: PromptTexts = DEFAULT_TEXTS, *, description: str = ""
+    setting: str,
+    texts: PromptTexts = DEFAULT_TEXTS,
+    *,
+    description: str = "",
+    pictures: Sequence[tuple[str, str]] = (),
 ) -> list[PromptMessage]:
     """The designer's request: the world, and what the author asked the set
-    to look like when they said ("gritty rain-slick cyberpunk alleys")."""
+    to look like when they said ("gritty rain-slick cyberpunk alleys").
+    `pictures`: (a data URL, what the author said it shows) for each picture
+    of the world they added; each goes after its words, headed by
+    `map.tileset.pictures`. Without any, the request is as it always was."""
     asked = " ".join(description.split())
     text = setting
     if asked:
         text = f"The world: {setting}\n\nThe look the author wants for the set: {asked}"
+    parts = [ContentPart(text=text)]
+    if pictures:
+        parts.append(ContentPart(text=texts["map.tileset.pictures"]))
+        for number, (url, caption) in enumerate(pictures, 1):
+            said = " ".join(caption.split()) or "(the author said nothing of it)"
+            parts.append(ContentPart(text=f"Picture {number}: {said}", image=url))
     return [
         PromptMessage(role="system", parts=(ContentPart(text=texts["map.tileset.system"]),)),
+        PromptMessage(role="user", parts=tuple(parts)),
+    ]
+
+
+def pick_messages(
+    setting: str, sets: Mapping[str, TileSetInfo], texts: PromptTexts = DEFAULT_TEXTS
+) -> list[PromptMessage]:
+    """The request for the shipped set closest to a world: the world and
+    where it begins, then each set by name with the world it was made for,
+    its style, its ground and the words it was chosen by."""
+    lines = []
+    for name, info in sorted(sets.items()):
+        words = info.words
+        about = [
+            f"{info.title or name}.",
+            f"Made for: {words['world']}." if words.get("world") else "",
+            f"Style: {words['style']}." if words.get("style") else "",
+            f"Ground: {words['out-ground']}." if words.get("out-ground") else "",
+            "Its outside is space (a station or ship)." if info.deck else "",
+            f"Fits: {', '.join(info.keywords)}." if info.keywords else "",
+        ]
+        lines.append(f"- {name}: " + " ".join(a for a in about if a))
+    text = f"THE WORLD:\n{setting.strip()}\n\nTHE TILE SETS:\n" + "\n".join(lines)
+    return [
+        PromptMessage(role="system", parts=(ContentPart(text=texts["map.tileset.pick"]),)),
         PromptMessage(role="user", parts=(ContentPart(text=text),)),
     ]
+
+
+def parse_pick(text: str, names: Iterable[str]) -> tuple[str, str]:
+    """(the set chosen, why) from the reply; ValueError when it names no set
+    there is. A name matched ignoring case and spacing."""
+    reply = extract_json(text, dict, "choice of tile set")
+    said = " ".join(str(reply.get("set") or "").lower().split())
+    found = next((n for n in names if " ".join(n.lower().split()) == said), None)
+    if found is None:
+        raise ValueError(f"no tile set is called {reply.get('set')!r}")
+    why = " ".join(str(reply.get("why") or "").split())[:WORDS_LIMIT]
+    return found, why
 
 
 def with_style(prompt: str, style: str) -> str:
