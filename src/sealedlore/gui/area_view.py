@@ -38,11 +38,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from sealedlore.engine.area import Area, Placement, sees
+from sealedlore.engine.area import Area, Placement, _line, sees
 from sealedlore.gui import text_size
 from sealedlore.gui.area_render import px_for
 from sealedlore.gui.avatar_view import pixel_scaled
 from sealedlore.gui.map_art import FOG
+from sealedlore.gui.map_edit_bar import EDIT_LABEL, TILE_COLOURS, EditBar
 from sealedlore.gui.map_pan import MiddlePan
 from sealedlore.gui.people_page import card_choices
 from sealedlore.gui.wrap_row import WrapRow
@@ -284,6 +285,11 @@ class _Graphics(QGraphicsView):
         self.grab_at: Callable[[QPointF], object | None] | None = None
         self._grabbed: object | None = None
         self._item_drag = False
+        # Edit Mode: a left press the play view takes for a stroke (painting
+        # tiles, drawing a box) rather than a pan; called with "press",
+        # "move" or "release" and the scene point, and True on a press it took.
+        self.stroke: Callable[[str, QPointF], bool] | None = None
+        self._stroking = False
 
     resized = Signal()
 
@@ -317,6 +323,14 @@ class _Graphics(QGraphicsView):
     def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt's name
         if self._pan.press(event):
             return
+        if (
+            event.button() == Qt.LeftButton
+            and self.stroke is not None
+            and self.stroke("press", self.mapToScene(event.position().toPoint()))
+        ):
+            self._stroking = True
+            event.accept()
+            return
         if event.button() in (Qt.LeftButton, Qt.RightButton):
             self._press = event.position().toPoint()
             self._dragging = False
@@ -332,6 +346,10 @@ class _Graphics(QGraphicsView):
             return
         point = self.mapToScene(event.position().toPoint())
         self.hovered.emit(point)
+        if self._stroking and self.stroke is not None:
+            self.stroke("move", point)
+            event.accept()
+            return
         if self._grabbed is not None and event.buttons() & Qt.LeftButton:
             delta = event.position().toPoint() - self._press
             if self._item_drag or delta.manhattanLength() > 8:
@@ -359,6 +377,12 @@ class _Graphics(QGraphicsView):
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt's name
         if self._pan.release(event):
+            return
+        if self._stroking:
+            self._stroking = False
+            if self.stroke is not None:
+                self.stroke("release", self.mapToScene(event.position().toPoint()))
+            event.accept()
             return
         if self._item_drag:
             self.item_dropped.emit(self._grabbed, self.mapToScene(event.position().toPoint()))
@@ -690,6 +714,16 @@ class AreaView(QWidget):
     tool_stopped = Signal()
     # Make a card for someone shown with none: their name, into the cast.
     card_requested = Signal(str, bool)
+    # Edit Mode (gui/map_edit_bar.py): asked for, done, Undo, back to where
+    # the author's character is; tiles painted ({(x, y): tile}), a box drawn
+    # (the tool, its corners), a building clicked (the tool, the tile).
+    edit_requested = Signal()
+    edit_done = Signal()
+    edit_undo = Signal()
+    edit_back = Signal()
+    tiles_painted = Signal(object)
+    box_drawn = Signal(str, int, int, int, int)
+    building_clicked = Signal(str, int, int)
 
     def __init__(self) -> None:
         super().__init__()
@@ -786,6 +820,21 @@ class AreaView(QWidget):
             "on the map, and remove anything that is here"
         )
         self.objects_button.clicked.connect(self.objects_requested.emit)
+        self.edit_button = QToolButton()
+        self.edit_button.setObjectName("viewToggleButton")
+        self.edit_button.setText(EDIT_LABEL)
+        self.edit_button.setToolTip(
+            "Change the map by hand: paint walls, doors, floors and ground, draw rooms, add or "
+            "take off buildings, and place or remove things. Nothing is asked of a model."
+        )
+        self.edit_button.clicked.connect(self.edit_requested.emit)
+        self.edit_bar = EditBar()
+        self.edit_bar.hide()
+        self.edit_bar.tool_changed.connect(self._edit_tool_changed)
+        self.edit_bar.objects_requested.connect(self.objects_requested.emit)
+        self.edit_bar.undo_requested.connect(self.edit_undo.emit)
+        self.edit_bar.back_requested.connect(self.edit_back.emit)
+        self.edit_bar.done_requested.connect(self.edit_done.emit)
         self.hint = QLabel()
         self.hint.setObjectName("hintLabel")
         self.hint.setWordWrap(True)
@@ -818,8 +867,11 @@ class AreaView(QWidget):
         self.setup_offer_label = QLabel()
         self.setup_offer_label.setObjectName("hintLabel")
         self.setup_offer_label.setWordWrap(True)
-        self.setup_offer_button = QPushButton(OBJECTS_LABEL)
-        self.setup_offer_button.setToolTip(self.objects_button.toolTip())
+        self.setup_offer_button = QPushButton(EDIT_LABEL)
+        self.setup_offer_button.setToolTip(
+            "Edit Mode: paint walls, doors and floors, add or take off buildings, and place "
+            "or remove things"
+        )
         self.setup_offer_button.clicked.connect(self.objects_requested.emit)
         self.setup_offer_close = QToolButton()
         self.setup_offer_close.setText("×")
@@ -855,6 +907,8 @@ class AreaView(QWidget):
                 self.zoom_in,
             ]
         )
+        # Its own group: in play's, it widened the page's least width.
+        header.add_group([self.edit_button])
         header.add_group([self.coords])
         self.view = _Graphics()
         self.scene = QGraphicsScene(self)
@@ -869,6 +923,7 @@ class AreaView(QWidget):
         self.view.grab_at = self._grab_at
         self.view.item_dragging.connect(self._item_dragging)
         self.view.item_dropped.connect(self._item_dropped)
+        self.view.stroke = self._stroke
         # Fitted to the area until the author zooms (then it is theirs).
         self._fitted = True
         self.zoom_out.clicked.connect(lambda: self.view.zoom_by(1 / ZOOM_STEP))
@@ -878,6 +933,7 @@ class AreaView(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
         layout.addLayout(header)
+        layout.addWidget(self.edit_bar)
         layout.addWidget(self.hint)
         layout.addWidget(self.offer)
         layout.addWidget(self.setup_offer)
@@ -937,6 +993,13 @@ class AreaView(QWidget):
         self._removing = False
         self._ghost: QGraphicsRectItem | None = None
         self.undo_words: str | None = None
+        # Edit Mode: on or off; a stroke under way (its first tile, the tiles
+        # painted, what is shown of them), and a box being drawn.
+        self.editing = False
+        self._stroke_from: tuple[int, int] | None = None
+        self._stroke_tiles: dict[tuple[int, int], str] = {}
+        self._stroke_items: list[QGraphicsRectItem] = []
+        self._band: QGraphicsRectItem | None = None
         self.set_message("No area here yet.")
 
     # --- what is shown -----------------------------------------------------------
@@ -995,6 +1058,8 @@ class AreaView(QWidget):
             or (image is not None and (self._background is None or self._stale))
         )
         self.area, self.walkers = area, walkers
+        if self.editing:
+            self.edit_bar.set_outdoor(not area.indoor)
         self.title.setText(area.title)  # "The farmhouse · Upper floor" on a level
         self.clock.setText(clock)
         self.hint.setText(hint or self._hint())
@@ -1017,6 +1082,7 @@ class AreaView(QWidget):
             if last is not None and QSizeF(last.size()) != bounds.size():
                 last = None
             self.scene.clear()
+            self._stroke_items, self._stroke_tiles, self._band = [], {}, None
             self.people, self._tags, self._hover = {}, {}, None
             self.places = {}
             self._note = None
@@ -1316,11 +1382,19 @@ class AreaView(QWidget):
         self._fitted_for = area.id
         self._fitted = True
         px = px_for(area)
-        port = self.view.viewport().rect()
+        # The room there is with no scroll bars, and the whole scene, its
+        # padding included: fitted to the viewport as it stood, an indoor
+        # area needed scroll bars at its own fit, which shrank the viewport,
+        # refitted it smaller, dropped them again, and so on for a minute
+        # (Edit Mode's bar made the heights meet, Oct 18 2026).
+        room = self.view.maximumViewportSize()
+        bounds = self.scene.sceneRect()
         if area.indoor:
-            scale = min(port.width() / (area.width * px), port.height() / (area.height * px))
+            wide = max(bounds.width(), area.width * px)
+            high = max(bounds.height(), area.height * px)
+            scale = min(room.width() / wide, room.height() / high)
         else:
-            scale = port.width() / (min(area.width, 48) * px)
+            scale = room.width() / (min(area.width, 48) * px)
         self.view.resetTransform()
         scale = max(ZOOM_MIN, min(scale, ZOOM_MAX))
         self.view.blockSignals(True)
@@ -1365,6 +1439,8 @@ class AreaView(QWidget):
             )
         if self._removing:
             return "Click a thing to take it off the map. Esc to stop."
+        if self.editing:
+            return ""  # the bar says what the tool in hand does
         return (
             "Click to walk there; click a person or a thing for what you can do. Walk into a "
             "door to go through it. Right-click a spot to mark it in your turn. Travel… for "
@@ -1382,6 +1458,8 @@ class AreaView(QWidget):
         """What a press here would drag to another tile: ("person", name,
         name) or ("thing", id, name); None (the ground: the view pans)."""
         if self.locked or self.area is None or self.walking():
+            return None
+        if self.editing and self.edit_tool() != "move":
             return None
         person = self.person_at(point)
         if person is not None:
@@ -1544,7 +1622,7 @@ class AreaView(QWidget):
         Give to each of `people` under it. The button shows while anything
         is carried."""
         self.carry_menu.clear()
-        self.carry_button.setVisible(bool(things))
+        self.carry_button.setVisible(bool(things) and not self.editing)
         for thing_id, name in things:
             sub = self.carry_menu.addMenu(name[0].upper() + name[1:])
             drop = sub.addAction("Drop")
@@ -1603,7 +1681,7 @@ class AreaView(QWidget):
         """The author's character stands on this side's edge (None: not on one)."""
         self._edge = side
         self.edge_button.setText(f"Leave {side}" if side else "")
-        self.edge_button.setVisible(side is not None)
+        self.edge_button.setVisible(side is not None and not self.editing)
 
     def set_edge_choices(self, side: str, choices: list[tuple[str, str]]) -> None:
         """The edge menu's entries: (an id, what it says)."""
@@ -1785,6 +1863,115 @@ class AreaView(QWidget):
 
     # --- clicks and keys -------------------------------------------------------------
 
+    # --- Edit Mode --------------------------------------------------------------
+
+    def set_editing(self, on: bool) -> None:
+        """Edit Mode on or off: the edit bar in place of play's buttons, no
+        walking, and clicks for the tool in hand."""
+        if on == self.editing:
+            return
+        self.editing = on
+        if on:
+            self.finish_walk()
+            self._stop_moving()
+            self._placing, self._removing = None, False
+        self.edit_bar.setVisible(on)
+        for button in (self.edit_button, self.travel_button, self.objects_button):
+            button.setVisible(not on)
+        self.paintings_button.setVisible(not on)
+        if on:
+            self.carry_button.hide()
+            self.edge_button.hide()
+        self._clear_stroke()
+        if self.area is not None:
+            self.edit_bar.set_outdoor(not self.area.indoor)
+        self.hint.setText(self._hint())
+        self.hint.setVisible(not on)
+
+    def edit_tool(self) -> str | None:
+        """The tool in hand in Edit Mode, or None out of it."""
+        return self.edit_bar.tool() if self.editing else None
+
+    def _edit_tool_changed(self, _name: str) -> None:
+        self._clear_stroke()
+        self._placing, self._removing = None, False
+
+    def _stroke(self, phase: str, point: QPointF) -> bool:
+        """A left press, drag and release in Edit Mode with Paint, Room,
+        Fence or Building in hand: tiles painted as the pointer passes, or a
+        box drawn corner to corner. Anything else is not a stroke (Move keeps
+        dragging people and things, and the ground pans)."""
+        tool = self.edit_tool()
+        if tool not in ("paint", "room", "fence", "building") or self.area is None or self.locked:
+            return False
+        tile = self.tile_at(point)
+        if phase == "press":
+            if tile is None:
+                return False
+            self._clear_stroke()
+            self._stroke_from = tile
+        if self._stroke_from is None:
+            return False
+        if tool == "paint":
+            if tile is not None and tile not in self._stroke_tiles:
+                for step in _line(self._last_painted() or tile, tile):
+                    self._paint_preview(step)
+            if phase == "release":
+                tiles = dict(self._stroke_tiles)
+                self._stroke_from = None
+                if tiles:
+                    self.tiles_painted.emit(tiles)
+            return True
+        corner = tile or self._stroke_from
+        self._show_band(self._stroke_from, corner)
+        if phase == "release":
+            (x0, y0), (x1, y1) = self._stroke_from, corner
+            self._clear_stroke()
+            self.box_drawn.emit(tool, x0, y0, x1, y1)
+        return True
+
+    def _last_painted(self) -> tuple[int, int] | None:
+        return next(reversed(self._stroke_tiles), None) if self._stroke_tiles else None
+
+    def _paint_preview(self, tile: tuple[int, int]) -> None:
+        if self.area is None or tile in self._stroke_tiles:
+            return
+        ch = self.edit_bar.paint_tile()
+        self._stroke_tiles[tile] = ch
+        px = px_for(self.area)
+        item = QGraphicsRectItem(QRectF(tile[0] * px, tile[1] * px, px, px))
+        colour = QColor(TILE_COLOURS.get(ch, "#808080"))
+        colour.setAlpha(200)
+        item.setBrush(colour)
+        item.setPen(QPen(QColor(GOLD.red(), GOLD.green(), GOLD.blue(), 160), 1))
+        item.setZValue(60)
+        self.scene.addItem(item)
+        self._stroke_items.append(item)
+
+    def _show_band(self, a: tuple[int, int], b: tuple[int, int]) -> None:
+        if self.area is None:
+            return
+        px = px_for(self.area)
+        x0, x1 = sorted((a[0], b[0]))
+        y0, y1 = sorted((a[1], b[1]))
+        rect = QRectF(x0 * px, y0 * px, (x1 - x0 + 1) * px, (y1 - y0 + 1) * px)
+        if self._band is None:
+            self._band = QGraphicsRectItem()
+            self._band.setPen(QPen(GOLD, 2, Qt.DashLine))
+            self._band.setBrush(QColor(GOLD.red(), GOLD.green(), GOLD.blue(), 50))
+            self._band.setZValue(60)
+            self.scene.addItem(self._band)
+        self._band.setRect(rect)
+
+    def _clear_stroke(self) -> None:
+        """Forget a stroke's start and box; the painted tiles stay shown
+        until the area is drawn again with them (`set_area` clears them)."""
+        self._stroke_from = None
+        if self._band is not None:
+            if self._band.scene() is self.scene:
+                self.scene.removeItem(self._band)
+            self._band = None
+
     def tile_at(self, point: QPointF) -> tuple[int, int] | None:
         if self.area is None:
             return None
@@ -1832,8 +2019,22 @@ class AreaView(QWidget):
             if thing is not None:
                 self.correction_requested.emit("remove_thing", (thing.id,))
             return
+        tool = self.edit_tool()
+        if tool in ("remove", "inside"):
+            tile = self.tile_at(point)
+            if tile is not None:
+                self.building_clicked.emit(tool, tile[0], tile[1])
+            return
         person = self.person_at(point)
         tile = self.tile_at(point)
+        if self.editing:
+            # Move: a person's or a thing's menu (their corrections); the
+            # ground does nothing (no walking while editing).
+            if person is not None:
+                self._person_menu(person, global_pos)
+            elif tile is not None and self.area.placement_at(*tile) is not None:
+                self._thing_menu(self.area.placement_at(*tile), global_pos)
+            return
         if person is not None and not person.held:
             self._person_menu(person, global_pos)
             return
@@ -1895,7 +2096,7 @@ class AreaView(QWidget):
         mark.setEnabled(spot is not None)
         mark.triggered.connect(lambda: self.mark_requested.emit(*tile))
         walk = menu.addAction("Walk here")
-        walk.setEnabled(not self.locked and self.area.walkable(*tile))
+        walk.setEnabled(not self.locked and not self.editing and self.area.walkable(*tile))
         walk.triggered.connect(lambda: self.walk_requested.emit(tile[0], tile[1], False))
         self._add_corrections(menu, None, tile)
         menu.setToolTipsVisible(True)
@@ -1970,6 +2171,8 @@ class AreaView(QWidget):
             return
         held = self.held()
         step = WALK_KEYS.get(event.key())
+        if step is not None and self.editing:
+            return  # no walking while the map is edited
         if step is not None and held is not None and not self.locked and not self.walking():
             dx, dy = step
             side = self._off_the_edge(held.x + dx, held.y + dy)

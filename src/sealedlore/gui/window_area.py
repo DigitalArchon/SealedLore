@@ -147,7 +147,13 @@ class AreaWindow:
         state = session.area_state()
         held = session.held_name()
         me = state.spots.get(held or "")
-        area = session.area(me.area) if me is not None else None
+        shown_id = me.area if me is not None else None
+        # Edit Mode on another building's inside (Go inside): that one,
+        # whoever is there with it.
+        editing_elsewhere = getattr(self, "_edit_area_id", None)
+        if editing_elsewhere and getattr(self, "_map_editing", False):
+            shown_id = editing_elsewhere
+        area = session.area(shown_id) if shown_id is not None else None
         if me is None or area is None:
             self.area_view.set_message(self._no_area_words(session))
             return
@@ -162,20 +168,21 @@ class AreaWindow:
                 carded=name == held or session.has_card(name),
             )
             for name, spot in state.spots.items()
-            if spot.area == me.area
+            if spot.area == area.id
         ]
         # Whoever is at a door from outside, shown at it (seen through it).
-        walkers += [
-            Walker(
-                name,
-                bx,
-                by,
-                self._walker_image(name, art),
-                door=(dx, dy),
-                carded=session.has_card(name),
-            )
-            for name, bx, by, dx, dy in session.at_the_door()
-        ]
+        if area.id == me.area:
+            walkers += [
+                Walker(
+                    name,
+                    bx,
+                    by,
+                    self._walker_image(name, art),
+                    door=(dx, dy),
+                    carded=session.has_card(name),
+                )
+                for name, bx, by, dx, dy in session.at_the_door()
+            ]
         places = self._place_marks(area, session, art)
         key = self._area_key(area, session, art)
         image = self._area_images.get(key)
@@ -201,6 +208,7 @@ class AreaWindow:
         self.area_view.set_offer(session.tile_set_offer(art))
         self.area_view.set_setup_offer(session.objects_offer_line())
         self._sync_objects_panel()
+        self._sync_map_edit()
         self._sync_marks()
         self.cast_panel.refresh_carrying()
 
@@ -372,6 +380,9 @@ class AreaWindow:
         if hasattr(self, "area_view") and self.area_view.walking():
             self._area_pending = None  # a menu choice mid-walk: the job came first
             self.area_view.finish_walk()
+        if getattr(self, "_map_editing", False):
+            # A turn sent, or any job: the map is played on again.
+            self.leave_map_edit()
 
     def _play_area_id(self) -> str | None:
         area = self.area_view.area if hasattr(self, "area_view") else None

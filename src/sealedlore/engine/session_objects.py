@@ -207,9 +207,11 @@ class ObjectsRuntime:
             return None
         if not self.path() or self._played():
             return None
+        if self.story.world_base is None:
+            return None  # a map the story grows opens in Edit Mode (`map_setup_due`)
         return (
-            "Set this place up before you play: make objects (an armchair, a side table…), "
-            "place them, and move or remove what is here."
+            "Want anything changed before you play? Edit the map: walls, doors and floors, "
+            "buildings, and the things in each place."
         )
 
     def objects_offered(self) -> None:

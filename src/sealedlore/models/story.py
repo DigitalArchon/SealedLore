@@ -193,6 +193,10 @@ class Story(BaseModel):
     # The play view's line offering Objects… while an area is set up at the
     # start (engine/session_objects.py), answered or dismissed: it goes.
     objects_offered: bool = False
+    # Edit Mode on the map was offered at the start: a map the story grows
+    # (not a plot file's, drawn beforehand) opens in it once, after the
+    # opening (engine/session_edit.py `map_setup_due`).
+    map_edit_offered: bool = False
     # Private scenes played in this story, oldest first (models/private.py),
     # and how the private model is told to write.
     private_spans: list[PrivateSpan] = Field(default_factory=list)

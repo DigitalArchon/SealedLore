@@ -450,6 +450,46 @@ class CorrectionRuntime:
         self._done()
         return True
 
+    def correct_add_place(
+        self,
+        name: str,
+        kind: str,
+        *,
+        inside: str | None,
+        x: float,
+        y: float,
+        size: float,
+        what: str = "",
+    ) -> str | None:
+        """A place the author puts on the map (Edit Mode: a building drawn on
+        the ground, Add a place here… on the Region map), where they put it
+        and as wide; seen at once. Its id, or None."""
+        name = " ".join(name.split())
+        world = self.world()
+        if (
+            not name
+            or not all(math.isfinite(v) for v in (x, y, size))
+            or size <= 0
+            or (inside is not None and inside not in world.places)
+        ):
+            return None
+        self._begin_correction(f"{name} added")
+        place = WorldPlace(
+            name=name,
+            kind=kind,
+            inside=inside,
+            what=" ".join(what.split()),
+            x=float(x),
+            y=float(y),
+            size=float(size),
+        )
+        fix = self._fix()
+        fix.places.append(place)
+        fix.added = [*(fix.added or []), place.id]
+        fix.seen.append(place.id)
+        self._done()
+        return place.id
+
     def correct_remove_place(self, place_id: str) -> bool:
         """A place taken off the map: what was inside it, and anyone or
         anything there, go to the place it was in."""

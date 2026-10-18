@@ -1963,6 +1963,11 @@ def adopt(
         art.layouts[drawn.place_id] = {drawn.state: drawn}
         if drawn.place_id in art.redraw:
             art.redraw.remove(drawn.place_id)
+        # The author's own tiles were laid on the old plan (Edit Mode): on
+        # the new one they would land on the wrong tiles.
+        for area_id in list(art.tile_edits):
+            if area_id == drawn.place_id or area_id.startswith(f"{drawn.place_id}#"):
+                del art.tile_edits[area_id]
         return
     if isinstance(drawn, WorldSprite):
         art.sprites.append(drawn)

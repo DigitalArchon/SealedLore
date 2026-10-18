@@ -69,6 +69,7 @@ from sealedlore.engine.chronicle_read import stated_skip
 from sealedlore.engine.furnish import FURNISH_MAX_TOKENS, furnish_messages, parse_furnishing
 from sealedlore.engine.image_variants import fitting_model
 from sealedlore.engine.levels import level_name, parse_level, place_of_area
+from sealedlore.engine.map_edit import apply_tile_edits
 from sealedlore.engine.map_presence import reconcile_scene
 from sealedlore.engine.marks import (
     chain_words,
@@ -588,6 +589,27 @@ class AreaRuntime:
     def _built_area(
         self, area_id: str | None, world: WorldMap | None = None, art: WorldArt | None = None
     ) -> Area | None:
+        """The area as built from its plan, with the author's own tiles laid
+        over it (Edit Mode, engine/map_edit.py), kept while the same."""
+        art = art if art is not None else self.map_art_copy()
+        base = self._base_area(area_id, world, art)
+        edits = art.tile_edits.get(area_id or "")
+        if base is None or edits is None or not edits.tiles:
+            return base
+        cache = self.__dict__.setdefault("_edited_cache", {})
+        cache_key = (id(base), tuple(edits.size), tuple(sorted(edits.tiles.items())))
+        found = cache.get(cache_key)
+        if found is None or found[0] is not base:
+            if len(cache) > 24:
+                cache.clear()
+            found = (base, apply_tile_edits(base, edits))
+            cache[cache_key] = found
+        return found[1]
+
+    def _base_area(
+        self, area_id: str | None, world: WorldMap | None = None, art: WorldArt | None = None
+    ) -> Area | None:
+        """The area as its plan builds it, before the author's own tiles."""
         if area_id is None:
             return None
         world = world if world is not None else self.world()

@@ -338,6 +338,20 @@ def own_set_name(key: str) -> str:
     return OWN_SET_PREFIX + key
 
 
+class TileEdits(BaseModel):
+    """The author's own changes to an area's tiles, made in Edit Mode (the
+    author, Oct 18 2026: walls, doors, floors and the rest, changed by hand
+    rather than asked of the Director and hoped for). Laid over the area as
+    it is built (engine/area.py `apply_tile_edits`), only while the area
+    still has the size it had when they were made: a plan drawn again from
+    scratch drops them (`redraw_plan`)."""
+
+    # The area's width and height in tiles when they were made.
+    size: tuple[int, int] = (0, 0)
+    # By "x,y": the tile's character (engine/world_art.py TILES).
+    tiles: dict[str, str] = Field(default_factory=dict)
+
+
 class WorldArt(BaseModel):
     sprites: list[WorldSprite] = Field(default_factory=list)
     # By place id, then by state ("" before any change). Art is not branch
@@ -383,6 +397,10 @@ class WorldArt(BaseModel):
     # by name as typed, oldest first: drawn as things of the set's
     # ("items/<slug>" in `tile_overrides`) and offered for placing.
     objects: list[str] = Field(default_factory=list)
+    # The author's Edit Mode changes to each area's tiles, by area id (a
+    # place's, a level's "<place>#<n>", or a window of open country's). Art,
+    # like the plan they change: the same on every branch.
+    tile_edits: dict[str, TileEdits] = Field(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod

@@ -152,12 +152,72 @@ class CorrectionWindow:
 
     # --- the region map -------------------------------------------------------------
 
+    def _add_place_at(self, x: float, y: float) -> None:
+        """Add a place here…: its name, what kind of place and how wide."""
+        from PySide6.QtWidgets import (
+            QComboBox,
+            QDialog,
+            QDialogButtonBox,
+            QDoubleSpinBox,
+            QFormLayout,
+            QLineEdit,
+            QVBoxLayout,
+        )
+
+        from sealedlore.engine.session_edit import PLACE_KINDS
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Add a place here")
+        name = QLineEdit()
+        name.setPlaceholderText("Ravens' Rock")
+        kind = QComboBox()
+        for value, words in PLACE_KINDS.items():
+            kind.addItem(words, value)
+        kind.setCurrentIndex(kind.findData("site"))
+        wide = QDoubleSpinBox()
+        wide.setRange(3, 50000)
+        wide.setDecimals(0)
+        wide.setSuffix(" m across")
+        sizes = {"building": 20, "settlement": 600, "site": 150, "area": 400}
+        wide.setValue(sizes["site"])
+        kind.currentIndexChanged.connect(
+            lambda _i: wide.setValue(sizes.get(str(kind.currentData()), 150))
+        )
+        what = QLineEdit()
+        what.setPlaceholderText("Optional: a black crag where the ravens nest")
+        form = QFormLayout()
+        form.addRow("Name", name)
+        form.addRow("What it is", kind)
+        form.addRow("How wide", wide)
+        form.addRow("Like", what)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout = QVBoxLayout(dialog)
+        layout.addLayout(form)
+        layout.addWidget(buttons)
+        try:
+            if dialog.exec() != QDialog.Accepted or not name.text().strip():
+                return
+            words = " ".join(name.text().split())
+            place_id = self.session.add_place(
+                words, str(kind.currentData()), x, y, wide.value(), what.text()
+            )
+        finally:
+            dialog.deleteLater()
+        self._after_correction(place_id is not None, f"{words} added")
+        if place_id is not None:
+            self._sync_world()  # drawn when the story goes there
+
     def _place_correct(self, action: str, place_id: str, args: tuple) -> None:
         session = self.session
         if self._correction_blocked():
             return
         if action == "undo":
             self._after_correction(session.undo_correction(), "Put back")
+            return
+        if action == "add":
+            self._add_place_at(*args)
             return
         world = session.world()
         place = world.places.get(place_id)

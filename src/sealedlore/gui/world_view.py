@@ -1359,8 +1359,14 @@ class WorldView(QWidget):
         go.setEnabled(place_id is not None and not self.locked and self.here() is not None)
         go.setToolTip("Set off for this spot: the way's length on foot moves the clock")
         go.triggered.connect(lambda: self.go_requested.emit(x, y))
-        if not self.locked and (place_id is not None or self.undo_words):
+        if not self.locked:
             menu.addSection("Correct the map")
+            add = menu.addAction("Add a place here…")
+            add.setToolTip(
+                "A place of your own on the map, here: a building, a village, a site or an "
+                "area. The storyteller is told of it, and it is drawn when the story goes there."
+            )
+            add.triggered.connect(lambda: self.place_correction.emit("add", "", (x, y)))
         if place_id is not None and not self.locked:
             name = self.world.places[place_id].name
             for label, action, tip in (

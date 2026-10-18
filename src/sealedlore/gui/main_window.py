@@ -115,6 +115,7 @@ from sealedlore.gui.welcome import setup_missing, welcome_html
 from sealedlore.gui.window_area import AreaWindow
 from sealedlore.gui.window_chat import ChatWindow
 from sealedlore.gui.window_corrections import CorrectionWindow
+from sealedlore.gui.window_edit import MapEditWindow
 from sealedlore.gui.window_find import FindWindow
 from sealedlore.gui.window_images import ImagesWindow
 from sealedlore.gui.window_layout import LayoutWindow, StoriesDock
@@ -223,6 +224,7 @@ class MainWindow(
     AreaWindow,
     CorrectionWindow,
     ObjectsWindow,
+    MapEditWindow,
     ImagesWindow,
     VideosWindow,
     PrivateWindow,
@@ -469,6 +471,7 @@ class MainWindow(
         self._people_dirty = True
         self._wire_people()
         self._wire_objects()
+        self._wire_map_edit()
         # The pages a job locks read-only rather than greys out.
         self._busy_locks = [
             BusyLock(page)
@@ -1315,6 +1318,7 @@ class MainWindow(
             self.session.close(wait_seconds=0)
             self.session.save()
         self.session = None
+        self.leave_map_edit()
         self._close_area()
         self._close_objects()
         # Nothing of the story's map stays for the next: a memory chat's
