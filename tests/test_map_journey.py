@@ -628,3 +628,19 @@ def test_the_author_s_character_stays_when_only_the_other_goes(tmp_path, story, 
     session.story.world_base.where.update({"Serrik Vaun": "house", "Maela Orr": "house"})
     list(session.send(turn("Go and watch the road, Maela.")))
     assert session.world().where.get("Serrik Vaun") == "house"
+
+
+def test_a_place_named_for_a_side_of_its_parent_is_at_that_edge():
+    """The replay (Oct 18 2026): "Saltmarsh's north gate" went to the town's
+    middle, and Wren, at the gate, stood in the market square."""
+    from sealedlore.engine.world_layout import place_new
+
+    town = WorldPlace(id="t", name="Saltmarsh", kind="settlement", x=0.0, y=-15000.0, size=1500.0)
+    world = WorldMap(places={"t": town}, seen=["t"])
+    gate = WorldPlace(id="g", name="Saltmarsh's north gate", kind="site", inside="t")
+    quarter = WorldPlace(id="q", name="the eastern quarter", kind="area", inside="t")
+    square = WorldPlace(id="s", name="the market square", kind="area", inside="t")
+    place_new(world, [gate, quarter, square], [], "t", (0.0, -5000.0))
+    assert gate.y >= town.y + 250 and abs(gate.x - town.x) < 200  # its north edge
+    assert quarter.x > town.x + 300
+    assert abs(square.x - town.x) < 300 and abs(square.y - town.y) < 300  # nothing said: the middle

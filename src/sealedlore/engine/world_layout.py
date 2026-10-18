@@ -329,6 +329,37 @@ def _within(
     return None
 
 
+# A side of its parent in a place's own name: "north gate", "the eastern
+# quarter", "south-west tower".
+_SIDE = re.compile(
+    r"\b(north|south)?-?(east|west)?(?:ern)?\b(?=\s+\w)",
+    re.IGNORECASE,
+)
+
+
+def _side_named(name: str) -> float | None:
+    """The compass bearing of the side of its parent a place's name puts it
+    on, or None ("the north gate" 0, "the eastern quarter" 90)."""
+    for match in _SIDE.finditer(name or ""):
+        ns, ew = (match.group(1) or "").lower(), (match.group(2) or "").lower()
+        if ns or ew:
+            word = f"{ns}-{ew}" if ns and ew else ns or ew
+            return _COMPASS.get(word)
+    return None
+
+
+def _edge_of(parent: WorldPlace, angle: float, size: float) -> tuple[float, float]:
+    """The point on the parent's drawn rectangle that way from its middle,
+    a child's half-width in."""
+    half_w, half_h = _bounds(parent, size)
+    dx, dy = _offset(angle, 1.0)
+    reach = min(
+        half_w / abs(dx) if abs(dx) > 1e-9 else math.inf,
+        half_h / abs(dy) if abs(dy) > 1e-9 else math.inf,
+    )
+    return parent.x + dx * reach, parent.y + dy * reach  # type: ignore[operator]
+
+
 def _near_enough(parent: WorldPlace, point: tuple[float, float]) -> bool:
     """`point` (where the author's character is) in the parent's drawn
     rectangle, or near it: within half its size outside (a village 3 km from
@@ -410,6 +441,12 @@ def place_one(
         ]
         near_me = near_point is not None and _near_enough(parent, near_point)
         origin = near_point if near_me else (parent.x, parent.y)
+        side = _side_named(place.name)
+        if side is not None:
+            # Named for a side of its parent ("Saltmarsh's north gate", the
+            # east quarter): at that edge, wherever the story is. Live (Oct
+            # 18 2026) the north gate went to the town's middle.
+            origin = _edge_of(parent, side, size)
         # In its parent's rectangle, at its size; no room there, smaller
         # (down to a quarter) rather than outside the plan, where the view
         # clamped its box to the edge and the map disagreed (the second review).
