@@ -213,6 +213,33 @@ def test_the_storyteller_is_told_the_region_and_its_places_with_their_distances(
     assert " m " in sent[sent.find("the Kessler barn") - 80 : sent.find("the Kessler barn") + 80]
 
 
+def test_the_storyteller_is_told_every_region_in_full_far_ones_too(tmp_path, story, cast):
+    """Measured (Oct 19 2026, SealedLoreDocs design/map.md): told only the
+    region it stood in and its neighbours by name, the storyteller's passages
+    lost to every region in full with every judge on both models."""
+    session = open_session(tmp_path, story, cast, ["Snow.", "{}"])
+    region = _with_region(session)
+    art = session.world_art
+    origin = (art.region_origin[0], art.region_origin[1])
+    i, j = cell_of(origin, 800.0, 800.0)
+    far = {**DESIGN, "name": "The Hollow Reach", "what": "A drowned quarry under black ice.",
+           "places": [], "things": [], "people": []}  # fmt: skip
+    built, patch = build_region(
+        parse_region(json.dumps(far)),
+        key=cell_key(i + 3, j),
+        rect=cell_rect(origin, i + 3, j),
+        holder_id=None,
+        labels_from=LABEL_FROM + 50,
+    )
+    art.regions[built.key] = built
+    art.terrain.append(patch)
+    session.story.world_base.where["Serrik Vaun"] = region.place_id
+    session._designed_cache = None
+    list(session.send(turn("I look along the fence.")))
+    sent = session.provider.requests[0].messages[-1].text
+    assert "The Hollow Reach" in sent and "drowned quarry" in sent
+
+
 class _Designer(MockChatProvider):
     """A provider whose background clients answer every design with DESIGN."""
 

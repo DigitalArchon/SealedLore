@@ -344,17 +344,9 @@ def _far(distance: float) -> str:
     return far
 
 
-def _around(
-    world: WorldMap,
-    here: str | None,
-    place: WorldPlace,
-    fixed: Collection[str],
-    brief: bool = False,
-) -> str:
+def _around(world: WorldMap, here: str | None, place: WorldPlace, fixed: Collection[str]) -> str:
     where = _how_far(world, here, place.id, fixed)
     head = f"{place.name} ({place.kind or 'place'}" + (f", {where}" if where else "") + ")"
-    if brief:
-        return head
     what = " ".join(place.what.split())
     if place.state:  # what the story did to it, else the map says a barn stands burnt
         what = (what + " " if what else "") + f"Now: {' '.join(place.state.split())}."
@@ -368,8 +360,6 @@ def render_map_context(
     *,
     fixed: Collection[str] = (),
     mark_fixed: bool = False,
-    left_out: Collection[str] = (),
-    brief: Collection[str] = (),
 ) -> str:
     """The local map for the storyteller's tail: where the author's character
     is (the start before any read), what is inside it, what else is around
@@ -377,10 +367,7 @@ def render_map_context(
     is `established`; `fixed` are the places a plot file put, whose distance
     and bearing are given, from the nearest of them the character is in.
     `mark_fixed`: a thing that can't be taken is marked so, on a turn that
-    may not move it. `left_out`: places never listed (the world designer's
-    regions beyond the next, whose descriptions filled the tail: the author,
-    Oct 18 2026); `brief`: listed by name, kind and distance only (the
-    neighbouring regions). Empty without a place."""
+    may not move it. Empty without a place."""
     here_id = world.where.get(held or "") or world.start
     chain = _chain(world, here_id)
     if not chain:
@@ -399,33 +386,20 @@ def render_map_context(
         if here.state:
             said = (said + " " if said else "") + f"Now: {' '.join(here.state.split())}."
         lines.append("  " + said)
-    left = set(left_out) - {p.id for p in chain}
-    short = set(brief) - {p.id for p in chain}
-    inside = [p for p in world.places.values() if p.inside == here.id and p.id not in left][
-        :MAP_LIST_LIMIT
-    ]
+    inside = [p for p in world.places.values() if p.inside == here.id][:MAP_LIST_LIMIT]
     if inside:
-        lines.append(
-            "Inside it: "
-            + "; ".join(_around(world, origin, p, fixed, p.id in short) for p in inside)
-        )
+        lines.append("Inside it: " + "; ".join(_around(world, origin, p, fixed) for p in inside))
     shown = {p.id for p in chain} | {p.id for p in inside}
     for level, outer in enumerate([*chain[1:], None]):
         parent = outer.id if outer is not None else None
         around = [
             p
             for p in world.places.values()
-            if p.inside == parent
-            and p.id != chain[level].id
-            and p.id not in shown
-            and p.id not in left
+            if p.inside == parent and p.id != chain[level].id and p.id not in shown
         ][:MAP_LIST_LIMIT]
         if around:
             label = f"Also in {outer.name}" if outer is not None else "Elsewhere on the map"
-            lines.append(
-                f"{label}: "
-                + "; ".join(_around(world, origin, p, fixed, p.id in short) for p in around)
-            )
+            lines.append(f"{label}: " + "; ".join(_around(world, origin, p, fixed) for p in around))
             shown |= {p.id for p in around}
     ways = [
         f"- from {place_name(world, k.a)} to {place_name(world, k.b)}"

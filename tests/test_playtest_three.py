@@ -183,32 +183,6 @@ def test_a_small_vehicle_has_no_inside_and_a_moored_one_is_laid_at_its_dock():
     assert low.labels["Dav's barge"] == (5, 11)
 
 
-def test_regions_beyond_the_next_leave_the_storyteller_s_tail():
-    from sealedlore.engine.world import render_map_context
-
-    town = WorldPlace(name="Marrowgate", kind="settlement", x=0.0, y=0.0, size=1500.0)
-    near = WorldPlace(
-        name="the Cull Marsh",
-        kind="region",
-        what="A broad wedge of marsh.",
-        x=600.0,
-        y=0.0,
-        size=400.0,
-    )
-    far = WorldPlace(
-        name="the Holt Ground",
-        kind="region",
-        what="Old common ground.",
-        x=-1000.0,
-        y=1000.0,
-        size=400.0,
-    )
-    world = WorldMap(places={town.id: town, near.id: near, far.id: far}, where={"Ines": town.id})
-    text = render_map_context(world, "Ines", left_out={far.id}, brief={near.id})
-    assert "Holt Ground" not in text
-    assert "the Cull Marsh (region" in text and "broad wedge" not in text
-
-
 def test_only_the_company_goes_together_where_one_of_them_may_go():
     """A place one of the company may go is within reach of the rest of the
     company (Adelaide into the carriage Silas stood by, her own spot three
