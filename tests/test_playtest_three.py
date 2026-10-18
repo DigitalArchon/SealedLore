@@ -150,6 +150,16 @@ def test_a_small_vehicle_has_no_inside_and_a_moored_one_is_laid_at_its_dock():
     skiff = WorldPlace(name="Maret's skiff", kind="vehicle", size=6.0)
     barge = WorldPlace(name="Dav's barge", kind="vehicle", size=25.0)
     assert small_vehicle(skiff) and not small_vehicle(barge)
+    # As the playtest had it: "a small boat" read with no size, given the
+    # kind's 25 m, and drawn as a boathouse inside.
+    kept = WorldPlace(name="Maret's skiff", kind="vehicle", what="a small boat", size=25.0)
+    assert small_vehicle(kept)
+    new = WorldPlace(name="Maret's skiff", kind="vehicle", what="a small boat")
+    place_new(WorldMap(), [new], [], None, (0.0, 0.0))
+    assert new.size is not None and new.size <= 12
+    carriage = WorldPlace(name="the rail carriage", kind="vehicle")
+    place_new(WorldMap(), [carriage], [], None, (0.0, 0.0))
+    assert not small_vehicle(carriage)
     rows = ["." * 20 for _ in range(12)]
     area = Area(
         place_id="q",

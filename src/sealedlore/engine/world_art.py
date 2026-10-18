@@ -37,7 +37,7 @@ from sealedlore.engine.levels import (
 )
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.world import key
-from sealedlore.engine.world_layout import moves, position, size_of
+from sealedlore.engine.world_layout import SMALL_CRAFT, moves, position, size_of
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.world import (
     LevelLayout,
@@ -720,7 +720,13 @@ SMALL_VEHICLE_M = 12.0
 
 
 def small_vehicle(place: WorldPlace) -> bool:
-    return place.kind == "vehicle" and size_of(place) <= SMALL_VEHICLE_M
+    """No wider than `SMALL_VEHICLE_M`, or named a small craft whatever its
+    size says: a map from before kept the kind's 25 m for "a small boat"."""
+    if place.kind != "vehicle":
+        return False
+    return size_of(place) <= SMALL_VEHICLE_M or bool(
+        SMALL_CRAFT.search(f"{place.name} {place.what}")
+    )
 
 
 def has_inside(art: WorldArt, place: WorldPlace) -> bool:

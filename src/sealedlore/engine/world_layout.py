@@ -57,6 +57,18 @@ KIND_SIZE: dict[str | None, float] = {
     "room": 8.0,
     None: 100.0,
 }
+# A vehicle its words say is small (a skiff, a rowing boat, a cart, a car):
+# so wide when the passage gives no size, rather than the kind's 25 m (live,
+# Oct 18 2026: "a small boat" read with no size became a 25 m skiff, and was
+# drawn as a 40-tile boathouse inside).
+SMALL_CRAFT = re.compile(
+    r"\b(?:skiffs?|rowboats?|rowing boats?|dinghy|dinghies|canoes?|kayaks?|punts?|rafts?|"
+    r"coracles?|small boats?|little boats?|bicycles?|bikes?|motorbikes?|motorcycles?|"
+    r"scooters?|sleds?|sledges?|sleighs?|handcarts?|wheelbarrows?|carts?|buggy|buggies|"
+    r"rickshaws?|cars?|jeeps?|pickups?|vans?)\b",
+    re.IGNORECASE,
+)
+SMALL_CRAFT_M = 6.0
 # Children are drawn within their parent, never wider than this share of it.
 CHILD_SHARE = 0.45
 # A place's plan is drawn as a rectangle this many rows to its columns
@@ -560,7 +572,8 @@ def place_new(
     waiting = [p for p in places if (p.x is None or p.y is None) and not moves(known, p)]
     for vehicle in places:
         if vehicle.kind == "vehicle" and vehicle.size is None:
-            vehicle.size = KIND_SIZE["vehicle"]
+            small = SMALL_CRAFT.search(f"{vehicle.name} {vehicle.what}") is not None
+            vehicle.size = SMALL_CRAFT_M if small else KIND_SIZE["vehicle"]
 
     def placed(place_id: str) -> bool:
         other = known.get(place_id)
