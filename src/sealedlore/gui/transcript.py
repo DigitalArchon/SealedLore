@@ -1277,7 +1277,7 @@ class TranscriptView(QScrollArea):
             label = QLabel(
                 "What the storyteller is given as the story so far: summaries where the "
                 "prose has been archived, then the passages sent word for word. The world, "
-                "cast, lore and scene are in the Context tab."
+                "cast, lore and scene are on the Prompt page (View → Prompt page (advanced))."
             )
             label.setObjectName("viewNote")
             label.setWordWrap(True)

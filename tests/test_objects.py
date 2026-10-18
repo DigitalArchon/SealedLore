@@ -363,6 +363,9 @@ def test_objects_in_the_window_make_place_and_say_so(app, window):
     panel = window._objects_panel
     assert panel is not None and panel.isVisible()
     assert window.right_tabs.currentWidget() is window.world_view
+    # Filled as it opens: a hidden panel isn't, and the lists came up empty.
+    choices = window.session.object_choices()
+    assert choices and panel.set_list.count() + panel.mine.count() == len(choices)
     window._objects_create(["armchair"])
     area_tests.pump(app)
     assert panel.mine.count() == 1

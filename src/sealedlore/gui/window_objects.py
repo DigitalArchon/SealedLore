@@ -52,8 +52,12 @@ class ObjectsWindow:
             self.right_tabs.setCurrentWidget(self.world_view)
         if hasattr(self.world_view, "go_local"):
             self.world_view.go_local()
-        self._sync_objects_panel()
+        # The price and the model's name are the image listing's.
+        self.image_catalog.ensure()
+        # Shown first: a hidden panel isn't filled, and the lists came up
+        # empty every time it opened.
         panel.show()
+        self._sync_objects_panel()
         panel.raise_()
         panel.what.setFocus()
 
@@ -95,7 +99,8 @@ class ObjectsWindow:
             if offer.price_each is not None
             else "at a price the listing doesn't give"
         )
-        words = f"Draws {count} picture{'s' if count > 1 else ''} with {offer.model}, {each}"
+        model = session.model_name(offer.model)
+        words = f"Draws {count} picture{'s' if count > 1 else ''} with {model}, {each}"
         if have:
             words += f"; the tile set has {', '.join(have)} already"
         return words + ".", True

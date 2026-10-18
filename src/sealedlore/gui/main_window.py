@@ -1532,6 +1532,11 @@ class MainWindow(
         self._attest_chat()
         self._update_controls()
         self._sync_world()
+        if self.session.map_first and self.session.map_pictures_on:
+            # The map's pictures are priced and named from the image listing,
+            # read otherwise only when a picture dialog opens: on a new setup
+            # the Map page named raw ids and Objects… had no price.
+            self.image_catalog.ensure()
         self._sync_stories_list()
         # A story opens on its map where the story is now, not where the last left it.
         self.refresh_world(keep_view=False)
