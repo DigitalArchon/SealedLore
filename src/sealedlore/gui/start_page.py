@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.plot_md import front_matter_of
+from sealedlore.gui.sizing import size_to_screen
 from sealedlore.storage.paths import sample_stories
 
 # What a choice is, as `chosen` carries it: the value is the story's id for
@@ -382,7 +383,7 @@ class NewDialog(QDialog):
     def __init__(self, parent: QWidget | None = None, *, samples_folder: Path | None = None):
         super().__init__(parent)
         self.setWindowTitle("New")
-        self.resize(1040, 760)
+        size_to_screen(self, 0.6, 0.82, at_least=QSize(1040, 760))
         self.choice: tuple[str, object] | None = None
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)

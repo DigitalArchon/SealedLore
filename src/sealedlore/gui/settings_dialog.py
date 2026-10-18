@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import urlparse
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -56,6 +56,7 @@ from sealedlore.gui.model_picker import (
     pick_model_and_route,
 )
 from sealedlore.gui.settings_pages import Fold, SettingsPages
+from sealedlore.gui.sizing import size_to_screen
 from sealedlore.gui.speed_test import SpeedTestDialog, speed_tests
 from sealedlore.gui.video_jobs import VideoCatalog
 from sealedlore.models.config import (
@@ -190,7 +191,7 @@ class SettingsDialog(QDialog):
         # enough for most pages without scrolling (they scroll, so the
         # dialog no longer grows to its tallest page).
         self.setMinimumWidth(860)
-        self.resize(900, 680)
+        size_to_screen(self, 0.55, 0.86, at_least=QSize(900, 680))
         self.config = config
         self.story = story
         self._catalog = catalog

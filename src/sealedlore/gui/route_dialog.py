@@ -13,7 +13,7 @@ thread of this dialog's own.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QPushButton,
     QRadioButton,
@@ -34,6 +33,7 @@ from PySide6.QtWidgets import (
 from sealedlore.engine.routing import PRIORITY_LABELS
 from sealedlore.gui.bad_hosts import bad_hosts
 from sealedlore.gui.model_hosts import hosts_catalog
+from sealedlore.gui.sizing import adjustable_columns, size_to_screen
 from sealedlore.models.route import ModelRoute
 from sealedlore.providers.model_hosts import Host, ModelHosts
 
@@ -90,7 +90,7 @@ class RouteDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(f"Route for {model}")
-        self.resize(960, 560)
+        size_to_screen(self, 0.6, 0.66, at_least=QSize(960, 560))
         self.base_url, self.model = base_url, model
         route = route or ModelRoute()
 
@@ -143,13 +143,9 @@ class RouteDialog(QDialog):
         self.table.setRootIsDecorated(False)
         self.table.setUniformRowHeights(True)
         self.table.setAlternatingRowColors(True)
-        header = self.table.header()
-        for column in range(len(HOST_COLUMNS)):
-            header.setSectionResizeMode(column, QHeaderView.ResizeToContents)
         # The privacy terms give way, whole in their tooltips, before the
-        # table scrolls sideways.
-        header.setSectionResizeMode(2, QHeaderView.Stretch)
-        header.setStretchLastSection(False)
+        # table scrolls sideways; every column draggable (gui/sizing.py).
+        adjustable_columns(self.table, stretch=2)
         self.table.itemClicked.connect(self._host_clicked)
 
         self.status = QLabel()

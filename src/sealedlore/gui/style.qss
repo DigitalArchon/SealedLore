@@ -14,6 +14,17 @@ QMainWindow::separator {
   height: 4px;
 }
 
+/* The divider between the story and the composer: drag it to make the box
+   you type in taller. A short grip line shows where it is. */
+#storySplit::handle:vertical {
+  background: transparent;
+  image: @grip;
+}
+
+#storySplit::handle:vertical:hover {
+  background: @separator;
+}
+
 /* --- docks ---------------------------------------------------------- */
 
 QDockWidget {
@@ -143,9 +154,8 @@ QDockWidget::title {
   border-color: @checked_border;
 }
 
-#branchButton::menu-indicator {
-  image: none;
-  width: 0;
+#branchButton[popupMode="2"] {
+  padding-right: 24px;
 }
 
 /* The story map's hover card (gui/story_map.py): it stays while read. */
@@ -608,21 +618,81 @@ QDockWidget::title {
 QToolButton {
   background: @button;
   border: 1px solid @button_border;
-  border-radius: 5px;
+  border-radius: 6px;
   padding: 6px 10px;
   color: @text;
 }
 
 QToolButton:hover {
   background: @button_hover;
+  border-color: @hover_border;
+}
+
+QToolButton:pressed {
+  background: @button_pressed;
+}
+
+QToolButton:disabled {
+  color: @text_disabled;
+  border-color: @border;
+}
+
+/* A button that opens a menu: a chevron at its right, centred. Qt's own was
+   a dark speck in the corner (the author, Oct 18 2026). Buttons with padding
+   of their own (an id's rule) make room for it below. */
+QToolButton[popupMode="2"] {
+  padding-right: 26px;
+}
+
+QToolButton::menu-indicator {
+  image: @chevron_down;
+  subcontrol-origin: padding;
+  subcontrol-position: center right;
+  right: 7px;
+  width: 12px;
+  height: 12px;
+}
+
+QToolButton::menu-indicator:disabled {
+  image: @chevron_down_disabled;
+}
+
+#messageAction[popupMode="2"] {
+  padding-right: 20px;
+}
+
+#messageAction::menu-indicator {
+  right: 4px;
+  width: 10px;
+  height: 10px;
+}
+
+#viewToggleButton[popupMode="2"] {
+  padding-right: 24px;
+}
+
+#viewToggleButton::menu-indicator {
+  right: 6px;
 }
 
 QPushButton {
   background: @button;
   border: 1px solid @button_border;
-  border-radius: 6px;
+  border-radius: 7px;
   padding: 7px 16px;
   color: @text;
+}
+
+QPushButton:focus {
+  border-color: @hover_border_accent;
+}
+
+QPushButton::menu-indicator {
+  image: @chevron_down;
+  subcontrol-origin: padding;
+  subcontrol-position: center right;
+  width: 12px;
+  height: 12px;
 }
 
 QPushButton:hover {
@@ -666,11 +736,15 @@ QPushButton#smallButton {
 
 /* --- lists, trees, tabs --------------------------------------------- */
 
-QListWidget, QTreeWidget, QPlainTextEdit {
+QListWidget, QTreeWidget, QPlainTextEdit, QTextEdit {
   background: @field;
   border: 1px solid @border;
   border-radius: 6px;
   color: @text;
+}
+
+QListWidget, QTreeWidget {
+  outline: none;
 }
 
 QListWidget::item {
@@ -701,32 +775,75 @@ QHeaderView::section {
   color: @text_dim;
   border: none;
   border-bottom: 1px solid @border;
-  padding: 6px;
+  border-right: 1px solid @list_divider;
+  padding: 6px 8px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 1px;
 }
 
-QTabWidget::pane {
+QHeaderView::section:hover {
+  color: @text_heading;
+}
+
+QHeaderView::down-arrow {
+  image: @chevron_down;
+  width: 10px;
+  height: 10px;
+}
+
+QHeaderView::up-arrow {
+  image: @chevron_up;
+  width: 10px;
+  height: 10px;
+}
+
+QTableView {
+  background: @field;
   border: 1px solid @border;
   border-radius: 6px;
+  gridline-color: @list_divider;
+  selection-background-color: @selection;
+  selection-color: @text_selected;
+  alternate-background-color: @row_alternate;
+}
+
+QTableView QTableCornerButton::section {
+  background: @panel;
+  border: none;
+}
+
+QTabWidget::pane {
+  border: 1px solid @border;
+  border-radius: 8px;
   top: -1px;
 }
 
+/* Tabs read as a row of names, the current one underlined. */
 QTabBar::tab {
-  background: @panel;
+  background: transparent;
   color: @text_dim;
-  /* Six tabs in the right dock: 10px keeps them all visible at its default width. */
-  padding: 7px 10px;
-  border: 1px solid @border;
-  border-bottom: none;
-  border-top-left-radius: 6px;
-  border-top-right-radius: 6px;
+  padding: 8px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-right: 2px;
+}
+
+QTabBar::tab:hover {
+  color: @text_heading;
 }
 
 QTabBar::tab:selected {
-  background: @button;
   color: @text_bright;
+  border-bottom: 2px solid @accent;
+}
+
+QTabBar::scroller {
+  width: 28px;
+}
+
+QTabBar QToolButton {
+  padding: 2px;
 }
 
 #inspectorSummary {
@@ -752,19 +869,54 @@ QMenuBar::item:selected {
   background: @button_hover;
 }
 
+QMenuBar::item {
+  padding: 4px 10px;
+  border-radius: 5px;
+  background: transparent;
+}
+
 QMenu {
   background: @panel;
   border: 1px solid @control_border;
-  padding: 4px;
+  border-radius: 8px;
+  padding: 6px;
 }
 
 QMenu::item {
-  padding: 6px 22px;
-  border-radius: 4px;
+  padding: 7px 28px 7px 28px;
+  border-radius: 5px;
 }
 
 QMenu::item:selected {
   background: @selection;
+  color: @text_selected;
+}
+
+QMenu::item:disabled {
+  color: @text_hint;
+}
+
+QMenu::separator {
+  height: 1px;
+  background: @border;
+  margin: 5px 10px;
+}
+
+QMenu::right-arrow {
+  image: @chevron_right;
+  width: 12px;
+  height: 12px;
+}
+
+/* A ticked item (View → Prompt page, a branch being read): a check mark. */
+QMenu::indicator {
+  width: 14px;
+  height: 14px;
+  left: 8px;
+}
+
+QMenu::indicator:checked {
+  image: @check;
 }
 
 QStatusBar {
@@ -823,14 +975,110 @@ QProgressBar::chunk {
 QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
   background: @panel;
   border: 1px solid @control_border;
-  border-radius: 5px;
+  border-radius: 6px;
   padding: 6px 8px;
   color: @text_bright;
   selection-background-color: @text_selection;
 }
 
+QLineEdit:hover, QSpinBox:hover, QDoubleSpinBox:hover, QComboBox:hover {
+  border-color: @hover_border;
+}
+
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {
   border-color: @accent;
+}
+
+QPlainTextEdit:focus, QTextEdit:focus {
+  border-color: @accent;
+}
+
+/* Drop-downs and spin boxes draw their own arrows: chevrons in the text's
+   colour. Qt's were black on these grounds, spin boxes' all but invisible. */
+QComboBox::drop-down {
+  subcontrol-origin: padding;
+  subcontrol-position: center right;
+  width: 24px;
+  border: none;
+  background: transparent;
+}
+
+QComboBox::down-arrow {
+  image: @chevron_down;
+  width: 14px;
+  height: 14px;
+}
+
+QComboBox::down-arrow:on {
+  image: @chevron_up;
+}
+
+QComboBox::down-arrow:disabled {
+  image: @chevron_down_disabled;
+}
+
+QSpinBox, QDoubleSpinBox {
+  padding-right: 28px;
+}
+
+QSpinBox::up-button, QDoubleSpinBox::up-button,
+QSpinBox::down-button, QDoubleSpinBox::down-button {
+  subcontrol-origin: border;
+  width: 24px;
+  background: @button;
+  border: none;
+  border-left: 1px solid @control_border;
+}
+
+QSpinBox::up-button, QDoubleSpinBox::up-button {
+  subcontrol-position: top right;
+  border-top-right-radius: 6px;
+  border-bottom: 1px solid @control_border;
+}
+
+QSpinBox::down-button, QDoubleSpinBox::down-button {
+  subcontrol-position: bottom right;
+  border-bottom-right-radius: 6px;
+}
+
+QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
+QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
+  background: @button_hover;
+}
+
+QSpinBox::up-button:pressed, QDoubleSpinBox::up-button:pressed,
+QSpinBox::down-button:pressed, QDoubleSpinBox::down-button:pressed {
+  background: @button_pressed;
+}
+
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
+  image: @chevron_up;
+  width: 12px;
+  height: 12px;
+}
+
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
+  image: @chevron_down;
+  width: 12px;
+  height: 12px;
+}
+
+QSpinBox::up-arrow:hover, QDoubleSpinBox::up-arrow:hover {
+  image: @chevron_up_hover;
+}
+
+QSpinBox::down-arrow:hover, QDoubleSpinBox::down-arrow:hover {
+  image: @chevron_down_hover;
+}
+
+QSpinBox::up-arrow:disabled, QDoubleSpinBox::up-arrow:disabled,
+QSpinBox::up-arrow:off, QDoubleSpinBox::up-arrow:off {
+  image: @chevron_up_disabled;
+}
+
+QSpinBox::down-arrow:disabled, QDoubleSpinBox::down-arrow:disabled,
+QSpinBox::down-arrow:off, QDoubleSpinBox::down-arrow:off {
+  image: @chevron_down_disabled;
 }
 
 QLineEdit:disabled, QComboBox:disabled, QPlainTextEdit:disabled {
@@ -842,7 +1090,11 @@ QLineEdit:disabled, QComboBox:disabled, QPlainTextEdit:disabled {
 QComboBox QAbstractItemView {
   background: @panel;
   border: 1px solid @control_border;
+  border-radius: 6px;
+  padding: 4px;
   selection-background-color: @selection;
+  selection-color: @text_selected;
+  outline: none;
 }
 
 /* --- settings review ----------------------------------------------- */
@@ -897,10 +1149,22 @@ QRadioButton::indicator {
   border-radius: 8px;
 }
 
-QCheckBox::indicator:checked, QListView::indicator:checked,
+QCheckBox::indicator:hover, QRadioButton::indicator:hover {
+  border-color: @hover_border;
+}
+
+/* Ticked: the accent with a check mark (it was a filled square). */
+QCheckBox::indicator:checked, QListView::indicator:checked {
+  background: @primary;
+  border-color: @primary_border;
+  image: @check;
+}
+
+/* Chosen: a dot in the accent. */
 QRadioButton::indicator:checked {
-  background: @accent;
   border-color: @accent;
+  background: qradialgradient(cx: 0.5, cy: 0.5, radius: 0.5, fx: 0.5, fy: 0.5,
+    stop: 0 @accent, stop: 0.45 @accent, stop: 0.55 @field, stop: 1 @field);
 }
 
 QCheckBox::indicator:disabled, QListView::indicator:disabled {
@@ -940,6 +1204,34 @@ QScrollBar::handle:horizontal {
   min-width: 28px;
 }
 
+QScrollBar::handle:horizontal:hover {
+  background: @scrollbar_hover;
+}
+
+QScrollBar::add-page, QScrollBar::sub-page {
+  background: transparent;
+}
+
+QSlider::groove:horizontal {
+  height: 4px;
+  background: @control_border;
+  border-radius: 2px;
+}
+
+QSlider::sub-page:horizontal {
+  background: @accent;
+  border-radius: 2px;
+}
+
+QSlider::handle:horizontal {
+  background: @text_bright;
+  border: 1px solid @control_border;
+  width: 14px;
+  height: 14px;
+  margin: -6px 0;
+  border-radius: 8px;
+}
+
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
   height: 0;
   width: 0;
@@ -949,7 +1241,8 @@ QToolTip {
   background: @button;
   color: @text_bright;
   border: 1px solid @hover_border;
-  padding: 6px;
+  border-radius: 6px;
+  padding: 6px 8px;
 }
 
 /* --- private scenes ------------------------------------------------------ */

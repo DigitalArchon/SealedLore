@@ -27,7 +27,6 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMessageBox,
-    QPlainTextEdit,
     QPushButton,
     QSizePolicy,
     QSplitter,
@@ -43,6 +42,7 @@ from sealedlore.gui.avatar_view import AvatarView
 from sealedlore.gui.fields import FormScroll, set_field_text
 from sealedlore.gui.portrait_view import PortraitView
 from sealedlore.gui.ref_images import CardIcons, RefImageStrip, StoryPictures
+from sealedlore.gui.sizing import GrowingText
 from sealedlore.models.character import Character
 from sealedlore.models.supporting import CharacterSuggestion
 
@@ -135,17 +135,13 @@ class CastPanel(QWidget):
         self.name = QLineEdit()
         self.aliases = QLineEdit()
         self.aliases.setPlaceholderText("comma-separated")
-        self.summary = QPlainTextEdit()
-        self.summary.setMaximumHeight(60)
+        self.summary = GrowingText(lines=2, most=8)
         self.summary.setPlaceholderText("One or two lines. Always included in the prompt.")
-        self.full_description = QPlainTextEdit()
-        self.full_description.setMaximumHeight(110)
+        self.full_description = GrowingText(lines=4, most=18)
         self.full_description.setPlaceholderText("Longer sheet. Included when the budget allows.")
-        self.voice_notes = QPlainTextEdit()
-        self.voice_notes.setMaximumHeight(60)
+        self.voice_notes = GrowingText(lines=2, most=8)
         self.voice_notes.setPlaceholderText("Speech patterns, verbal tics, register.")
-        self.competence = QPlainTextEdit()
-        self.competence.setMaximumHeight(60)
+        self.competence = GrowingText(lines=2, most=8)
         self.competence.setPlaceholderText(
             "Freeform: 'a veteran duellist, illiterate, hopeless at deception'"
         )

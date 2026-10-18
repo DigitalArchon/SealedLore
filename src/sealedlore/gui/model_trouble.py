@@ -26,7 +26,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -34,7 +34,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
-    QHeaderView,
     QInputDialog,
     QLabel,
     QPlainTextEdit,
@@ -65,6 +64,7 @@ from sealedlore.engine.speed_test import SpeedResult, SpeedTarget
 from sealedlore.engine.tokens import TokenEstimator
 from sealedlore.gui.bad_hosts import bad_hosts
 from sealedlore.gui.model_hosts import hosts_catalog
+from sealedlore.gui.sizing import adjustable_columns, size_to_screen
 from sealedlore.gui.speed_test import SpeedTests, speed_tests
 from sealedlore.messages import PromptMessage
 from sealedlore.models.config import ModelPrice, ProviderConfig
@@ -183,7 +183,7 @@ class ModelTroubleDialog(QDialog):
         self.context, self.mode = context, mode
         self.runner = runner or speed_tests()
         self.setWindowTitle(TITLES[mode])
-        self.resize(900, 720)
+        size_to_screen(self, 0.55, 0.86, at_least=QSize(900, 720))
         self._hosts: ModelHosts | None = None
         self._candidates: list[Candidate] = []
         self._run_id: int | None = None
@@ -214,7 +214,7 @@ class ModelTroubleDialog(QDialog):
         self.hosts.setColumnCount(len(HOST_COLUMNS))
         self.hosts.setHeaderLabels(list(HOST_COLUMNS))
         self.hosts.setRootIsDecorated(False)
-        self.hosts.header().setSectionResizeMode(0, QHeaderView.Stretch)
+        adjustable_columns(self.hosts, stretch=0)
         self.hosts.setMaximumHeight(190)
         self.hosts.setSortingEnabled(True)
         self.hosts.header().setSortIndicatorShown(True)
@@ -273,7 +273,7 @@ class ModelTroubleDialog(QDialog):
         self.table.setColumnCount(len(COLUMNS))
         self.table.setHeaderLabels(list(COLUMNS))
         self.table.setRootIsDecorated(False)
-        self.table.header().setSectionResizeMode(len(COLUMNS) - 1, QHeaderView.Stretch)
+        adjustable_columns(self.table, stretch=len(COLUMNS) - 1)
         self.table.setSortingEnabled(True)
         self.table.header().setSortIndicatorShown(True)
         self.table.itemSelectionChanged.connect(self._sync_actions)

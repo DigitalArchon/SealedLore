@@ -3,6 +3,7 @@ approving the summary that goes back into the story."""
 
 from __future__ import annotations
 
+from PySide6.QtCore import QSize
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -14,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.session_private import PrivateFit
+from sealedlore.gui.sizing import size_to_screen
 
 # A simple chat has private parts on a story's terms, so every message about
 # one is written once, of a story, and said of a chat by these. In order: the
@@ -170,7 +172,7 @@ class PrivateSummaryDialog(QDialog):
         layout.addWidget(intro)
         layout.addWidget(self.editor, 1)
         layout.addLayout(row)
-        self.resize(640, 420)
+        size_to_screen(self, 0.42, 0.6, at_least=QSize(640, 420))
 
     def text(self) -> str:
         return self.editor.toPlainText()

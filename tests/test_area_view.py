@@ -437,7 +437,7 @@ def test_walking_off_an_area_s_edge_offers_what_lies_that_way(app, window):
     session.story.area_live = LiveArea(leaf_id=session.story.active_leaf_id, state=state)
     window.refresh_area()
     view = window.area_view
-    assert view.edge_button.isVisible() or view.edge_button.text() == "Leave north ▾"
+    assert view.edge_button.isVisible() or view.edge_button.text() == "Leave north"
     view.keyPressEvent(QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Up, Qt.NoModifier))
     labels = [a.text() for a in view.edge_menu.actions()]
     # The open country past the edge first (tests/test_open_country.py),

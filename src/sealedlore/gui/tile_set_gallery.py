@@ -32,7 +32,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
-    QPlainTextEdit,
     QProgressBar,
     QPushButton,
     QScrollArea,
@@ -45,6 +44,7 @@ from sealedlore.engine.tile_draw import DESIGNER_MODELS, PROMPT_KEY, tile_jobs, 
 from sealedlore.engine.tile_sets import SPRITES, TEXTURES
 from sealedlore.gui.image_codec import image_from_data
 from sealedlore.gui.model_picker import ModelField
+from sealedlore.gui.sizing import GrowingText, size_to_screen
 
 THUMB = 56
 # Thumbnails read a few at a time, so the gallery opens at once.
@@ -64,7 +64,7 @@ class TileSetGallery(QDialog):
         super().__init__(parent)
         self.session = session
         self.setWindowTitle("Tile sets")
-        self.resize(760, 640)
+        size_to_screen(self, 0.5, 0.8, at_least=QSize(760, 640))
         self.heading = QLabel()
         self.heading.setWordWrap(True)
         self.column = QVBoxLayout()
@@ -223,7 +223,7 @@ class TileSetDesigner(QDialog):
         super().__init__(parent)
         self.session = session
         self.setWindowTitle("Draw a new tile set")
-        self.resize(900, 760)
+        size_to_screen(self, 0.55, 0.88, at_least=QSize(900, 760))
         intro = QLabel(
             "Describe the look you want for the map. The designer writes the set's words and "
             "a prompt for every picture; you see and may change each, with the price, before "
@@ -232,12 +232,11 @@ class TileSetDesigner(QDialog):
         intro.setWordWrap(True)
         self.name = QLineEdit()
         self.name.setPlaceholderText("A name for the set (Neon alleys)")
-        self.description = QPlainTextEdit()
+        self.description = GrowingText(lines=3, most=10)
         self.description.setPlaceholderText(
             "gritty rain-slick cyberpunk alleys, neon and wet concrete; bright and cheerful "
             "storybook meadow"
         )
-        self.description.setFixedHeight(72)
         # The story's own world in a sentence, and the style the map is drawn
         # in now: a start the author rewrites to the look they want.
         world = world_words({}, session.map_setting())
@@ -461,8 +460,7 @@ class _Row(QWidget):
         self.title = QLabel(f"<b>{label}</b>")
         self.words = QLineEdit(words)
         self.words.setToolTip("What it shows, in a few words")
-        self.prompt = QPlainTextEdit(prompt)
-        self.prompt.setFixedHeight(64)
+        self.prompt = GrowingText(prompt, lines=3, most=10)
         self.prompt.setToolTip("Sent to the image model exactly as it is here")
         # The template's prompt follows the words until the author changes
         # it; the designer's own never does.

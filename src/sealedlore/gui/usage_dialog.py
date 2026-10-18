@@ -6,7 +6,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
-    QHeaderView,
     QLabel,
     QTableWidget,
     QTableWidgetItem,
@@ -15,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.usage import UsageLine, UsageReport
+from sealedlore.gui.sizing import adjustable_columns, size_to_screen
 
 COLUMNS = ["", "Calls", "Tokens in", "Cached", "Written to cache", "Tokens out", "Cost"]
 
@@ -45,6 +45,7 @@ class UsageDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(f"Usage — {title}")
         self.setMinimumWidth(760)
+        size_to_screen(self, 0.5, 0.66)
 
         rows = [*report.lines, report.total] if report.lines else []
         table = QTableWidget(len(rows), len(COLUMNS))
@@ -52,8 +53,7 @@ class UsageDialog(QDialog):
         table.verticalHeader().setVisible(False)
         table.setEditTriggers(QTableWidget.NoEditTriggers)
         table.setSelectionMode(QTableWidget.NoSelection)
-        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        adjustable_columns(table, stretch=0)
         for row, line in enumerate(rows):
             for column, text in enumerate(_cells(line)):
                 item = QTableWidgetItem(text)

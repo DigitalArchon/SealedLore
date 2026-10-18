@@ -18,10 +18,8 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QLineEdit,
-    QPlainTextEdit,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -32,6 +30,7 @@ from PySide6.QtWidgets import (
 from sealedlore.engine.scene_state import describe_changes, same_person
 from sealedlore.gui import theme
 from sealedlore.gui.fields import FormScroll, line_edit, set_field_text
+from sealedlore.gui.sizing import GrowingText, adjustable_columns
 from sealedlore.models.character import Character
 from sealedlore.models.scene import OffstageCharacter, SceneLogEntry, SceneState
 
@@ -66,8 +65,7 @@ class ScenePanel(QWidget):
 
         self.location = QLineEdit()
         self.time_of_day = QLineEdit()
-        self.situation = QPlainTextEdit()
-        self.situation.setMaximumHeight(72)
+        self.situation = GrowingText(lines=2, most=8)
         self.situation.setPlaceholderText("One or two lines of immediate framing.")
         self.privacy = QComboBox()
         for label, value in _PRIVACY_CHOICES:
@@ -113,9 +111,7 @@ class ScenePanel(QWidget):
         self.roster = QTableWidget(0, 3)
         self.roster.setHorizontalHeaderLabels(["Here", "Character", "If elsewhere, where?"])
         self.roster.verticalHeader().setVisible(False)
-        self.roster.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self.roster.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        self.roster.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        adjustable_columns(self.roster, stretch=2)
         self.roster.setSelectionMode(QTableWidget.NoSelection)
 
         self.others = QLineEdit()

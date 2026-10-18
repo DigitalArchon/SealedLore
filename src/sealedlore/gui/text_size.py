@@ -81,4 +81,6 @@ def apply(app: QApplication, factor: float, base_stylesheet: str | None = None) 
     font.setPointSizeF(_base_points * _scale)
     font.setFamily(theme.fonts().ui or _base_family)
     app.setFont(font)
+    # What the stylesheet leaves to the style is drawn in the theme too.
+    app.setPalette(theme.palette())
     app.setStyleSheet(scaled_stylesheet(base_stylesheet, _scale))

@@ -43,6 +43,7 @@ from sealedlore.gui.composer import (
 )
 from sealedlore.gui.fields import set_field_text
 from sealedlore.gui.plot_pictures import Folder, PlotPictureStrip, SaveFirst
+from sealedlore.gui.sizing import GrowingText
 from sealedlore.gui.style_panel import PERSPECTIVE_SUMMARIES
 from sealedlore.models.plot_file import (
     AssignmentDoc,
@@ -109,9 +110,10 @@ def _split(text: str) -> list[str]:
 
 
 def _short_edit(placeholder: str = "", height: int = 60) -> QPlainTextEdit:
-    edit = QPlainTextEdit()
+    """A box `height` pixels tall to begin with (about a line in twenty),
+    growing with what is written in it (gui/sizing.py)."""
+    edit = GrowingText(lines=max(2, height // 20), most=16)
     edit.setPlaceholderText(placeholder)
-    edit.setMaximumHeight(height)
     return edit
 
 

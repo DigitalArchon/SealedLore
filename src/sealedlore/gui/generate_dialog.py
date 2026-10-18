@@ -27,6 +27,7 @@ from sealedlore.engine.authoring import parse_generated
 from sealedlore.engine.drafting import StoryDraft
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.gui.model_picker import Browse, ModelField
+from sealedlore.gui.sizing import size_to_screen
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.generation import ReasoningConfig
 from sealedlore.providers.base import ChatProvider
@@ -60,6 +61,7 @@ class GenerateDialog(QDialog):
         # The author's edits for every story: a draft has no story of its own yet.
         self.texts = texts
         self.setMinimumWidth(620)
+        size_to_screen(self, 0.45, 0.75)
         self.provider = provider
         self.default_model = default_model
         self.draft: StoryDraft | None = None

@@ -569,6 +569,9 @@ class WindowLayout(BaseModel):
     maximized: bool = False
     stories_width: int = 0
     inspector_width: int = 0
+    # The composer's height, as the divider above it was last dragged; 0 is
+    # its natural height.
+    composer_height: int = 0
 
 
 class Config(BaseModel):

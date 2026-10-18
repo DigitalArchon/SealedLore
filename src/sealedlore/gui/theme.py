@@ -20,11 +20,14 @@ distinct but bright enough to read on black.
 
 from __future__ import annotations
 
+import atexit
 import re
+import shutil
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QPalette
 
 TEMPLATE = Path(__file__).with_name("style.qss")
 
@@ -39,15 +42,15 @@ DARK: dict[str, str] = {
     "row_alternate": "#171a20",
     # borders
     "border": "#23262f",
-    "control_border": "#2a2e39",
-    "button_border": "#2f3441",
-    "hover_border": "#3b4356",
+    "control_border": "#313644",
+    "button_border": "#363c4b",
+    "hover_border": "#4a5370",
     "hover_border_accent": "#3b4261",
     "list_divider": "#1d2027",
     "indicator_border": "#4a5163",
     # buttons
-    "button": "#232733",
-    "button_hover": "#2b3040",
+    "button": "#252a36",
+    "button_hover": "#2e3445",
     "button_pressed": "#1f2330",
     "button_disabled": "#1a1c22",
     "primary": "#3b5ea8",
@@ -64,8 +67,8 @@ DARK: dict[str, str] = {
     "text_heading": "#c9ceda",
     "text_payload": "#c3c9d4",
     "text_dim": "#8a91a0",
-    "text_hint": "#757d8c",
-    "text_placeholder": "#6b7383",
+    "text_hint": "#828a99",
+    "text_placeholder": "#737b8c",
     "text_faint": "#5d6472",
     "text_disabled": "#565c69",
     "text_disabled_faint": "#3a3f4b",
@@ -313,6 +316,103 @@ def translucent(name: str, alpha: int) -> str:
     return f"rgba({value.red()}, {value.green()}, {value.blue()}, {alpha})"
 
 
+# Marks Qt would otherwise draw itself, in its light palette's black: the
+# arrows on spin boxes, drop-downs and menu buttons were all but invisible on
+# the dark grounds (the author, Oct 18 2026). The stylesheet names them like
+# colours (`image: @chevron_down`), and each is a small SVG in the theme's
+# colour: QSS takes no inline images, so they are written once a process
+# into a folder of their own, removed on exit. Name: (shape, colour name).
+ICONS: dict[str, tuple[str, str]] = {
+    "chevron_down": ("down", "text_soft"),
+    "chevron_down_hover": ("down", "text_bright"),
+    "chevron_down_disabled": ("down", "text_disabled"),
+    "chevron_up": ("up", "text_soft"),
+    "chevron_up_hover": ("up", "text_bright"),
+    "chevron_up_disabled": ("up", "text_disabled"),
+    "chevron_right": ("right", "text_soft"),
+    "check": ("check", "primary_text"),
+    "grip": ("grip", "scrollbar"),
+}
+_SHAPES = {
+    "down": "M4 6.5 L8 10.5 L12 6.5",
+    "up": "M4 9.5 L8 5.5 L12 9.5",
+    "right": "M6.5 4 L10.5 8 L6.5 12",
+    "check": "M3.5 8.5 L6.5 11.5 L12.5 4.5",
+}
+# The grip is wide and flat: a line across the middle of a divider.
+_GRIP = (
+    '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="6" viewBox="0 0 48 6">'
+    '<path d="M2 3 H46" stroke="{colour}" stroke-width="3" stroke-linecap="round"/></svg>'
+)
+_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">'
+    '<path d="{path}" fill="none" stroke="{colour}" stroke-width="{width}" '
+    'stroke-linecap="round" stroke-linejoin="round"/></svg>'
+)
+_icon_folder: Path | None = None
+
+
+def _icons() -> Path:
+    global _icon_folder
+    if _icon_folder is None or not _icon_folder.is_dir():
+        _icon_folder = Path(tempfile.mkdtemp(prefix="sealedlore-icons-"))
+        atexit.register(shutil.rmtree, _icon_folder, True)
+    return _icon_folder
+
+
+def icon_url(shape: str, colour: str) -> str:
+    """A stylesheet `url()` of the `shape` mark in `colour` (#rrggbb)."""
+    path = _icons() / f"{shape}-{colour.lstrip('#')}.svg"
+    if not path.exists():
+        width = "2" if shape == "check" else "1.8"
+        svg = (
+            _GRIP.format(colour=colour)
+            if shape == "grip"
+            else _SVG.format(path=_SHAPES[shape], colour=colour, width=width)
+        )
+        path.write_text(svg, encoding="utf-8")
+    return f'url("{path.as_posix()}")'
+
+
+def palette(chosen: Theme | None = None) -> QPalette:
+    """Qt's palette in the theme's colours. What the stylesheet doesn't draw
+    (a dialog Qt builds, a frame, an arrow left to the style) is drawn from
+    the palette, and Qt's own was light: black arrows on dark buttons."""
+    colours = (chosen or _theme).colours
+
+    def c(name: str) -> QColor:
+        return QColor(colours[name])
+
+    result = QPalette()
+    roles = {
+        QPalette.Window: "window",
+        QPalette.WindowText: "text",
+        QPalette.Base: "field",
+        QPalette.AlternateBase: "row_alternate",
+        QPalette.ToolTipBase: "button",
+        QPalette.ToolTipText: "text_bright",
+        QPalette.PlaceholderText: "text_placeholder",
+        QPalette.Text: "text",
+        QPalette.Button: "button",
+        QPalette.ButtonText: "text",
+        QPalette.BrightText: "text_bright",
+        QPalette.Light: "hover_border",
+        QPalette.Midlight: "button_border",
+        QPalette.Mid: "control_border",
+        QPalette.Dark: "border",
+        QPalette.Shadow: "window",
+        QPalette.Highlight: "selection",
+        QPalette.HighlightedText: "text_selected",
+        QPalette.Link: "accent",
+        QPalette.LinkVisited: "accent",
+    }
+    for role, name in roles.items():
+        result.setColor(role, c(name))
+    for role in (QPalette.WindowText, QPalette.Text, QPalette.ButtonText):
+        result.setColor(QPalette.Disabled, role, c("text_disabled"))
+    return result
+
+
 def _quoted(family: str) -> str:
     return '"' + family.replace("\\", "").replace('"', "") + '"'
 
@@ -326,6 +426,9 @@ def render(template: str, theme: Theme, chosen: Fonts | None = None) -> str:
     """
     chosen = chosen or Fonts()
     values = {**theme.colours, "font_mono": _quoted(chosen.mono) if chosen.mono else DEFAULT_MONO}
+    values.update(
+        {name: icon_url(shape, theme.colours[colour]) for name, (shape, colour) in ICONS.items()}
+    )
 
     def fill(match: re.Match[str]) -> str:
         name = match.group(1)

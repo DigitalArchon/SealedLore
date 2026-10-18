@@ -20,7 +20,6 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -33,6 +32,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.chronicle import clock_minutes, day_of, describe_changes, format_clock
+from sealedlore.gui.sizing import adjustable_columns
 from sealedlore.models.plot import MINUTES_PER_DAY, Chronicle, EventDef, EventStatus, Plot
 
 _STATE_LABELS = {
@@ -128,8 +128,7 @@ class PlotPanel(QWidget):
         self.facts = QTableWidget(0, 2)
         self.facts.setHorizontalHeaderLabels(["Fact", "Now"])
         self.facts.verticalHeader().setVisible(False)
-        self.facts.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self.facts.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        adjustable_columns(self.facts, stretch=1)
         self.facts.setSelectionMode(QTableWidget.NoSelection)
 
         self.spoilers = QCheckBox("Show plot (spoilers)")
@@ -142,9 +141,7 @@ class PlotPanel(QWidget):
         self.events = QTableWidget(0, 3)
         self.events.setHorizontalHeaderLabels(["Event", "State", "When"])
         self.events.verticalHeader().setVisible(False)
-        self.events.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.events.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        self.events.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        adjustable_columns(self.events, stretch=0)
         self.events.setSelectionBehavior(QTableWidget.SelectRows)
         self.events.setSelectionMode(QTableWidget.SingleSelection)
         self.events.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -175,8 +172,7 @@ class PlotPanel(QWidget):
         self.held_back = QTableWidget(0, 2)
         self.held_back.setHorizontalHeaderLabels(["Who or where", "In the story"])
         self.held_back.verticalHeader().setVisible(False)
-        self.held_back.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.held_back.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        adjustable_columns(self.held_back, stretch=0)
         self.held_back.setSelectionBehavior(QTableWidget.SelectRows)
         self.held_back.setSelectionMode(QTableWidget.SingleSelection)
         self.held_back.setEditTriggers(QTableWidget.NoEditTriggers)

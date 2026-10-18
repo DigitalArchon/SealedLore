@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import replace
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 from sealedlore.engine.session_map_approval import WaitingPicture
 from sealedlore.engine.world_pictures import PictureJob
 from sealedlore.gui.ref_images import thumbnail_of
+from sealedlore.gui.sizing import size_to_screen
 
 THUMB_SIDE = 64
 # What each kind of map picture is, as the dialog names it.
@@ -147,7 +148,7 @@ class MapPicturesDialog(QDialog):
         layout.addWidget(self.status)
         layout.addWidget(self.buttons)
         self._sync()
-        self.resize(720, 680)
+        size_to_screen(self, 0.5, 0.8, at_least=QSize(720, 680))
 
     def _sync(self, *_args) -> None:
         wanted = [row for row in self.rows if row.wanted()]

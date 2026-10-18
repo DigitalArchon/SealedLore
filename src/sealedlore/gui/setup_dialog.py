@@ -37,6 +37,7 @@ from sealedlore.gui.composer import (
     WORLD_ACTIVITY_TIPS,
 )
 from sealedlore.gui.fields import line_edit, set_field_text
+from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.gui.start_presence import StartPresence
 from sealedlore.gui.style_panel import StylePanel
 from sealedlore.models.character import Character
@@ -77,6 +78,7 @@ class SetupDialog(QDialog):
         self.setWindowTitle("Story setup")
         self.texts = texts
         self.setMinimumSize(640, 560)
+        size_to_screen(self, 0.5, 0.82)
         self.story = story
         self.cast = list(cast)
         self.first_message = first_message
@@ -143,11 +145,10 @@ class SetupDialog(QDialog):
         self.private_mode.addItem("The story's full rules", "full")
         self.private_mode.addItem("My own rules", "custom")
         self.private_mode.setCurrentIndex(max(self.private_mode.findData(prompt.mode), 0))
-        self.private_notes = QPlainTextEdit(prompt.notes)
+        self.private_notes = GrowingText(prompt.notes, lines=3, most=10)
         self.private_notes.setPlaceholderText(
             "Added to the rules in any mode, e.g. 'slow pacing, mostly dialogue, fade to black'."
         )
-        self.private_notes.setMaximumHeight(90)
         self.private_custom = QPlainTextEdit(prompt.custom)
         self.private_custom.setPlaceholderText("Your rules, in place of the story's.")
         start = QPushButton("Start from the compact rules")
@@ -219,11 +220,10 @@ class SetupDialog(QDialog):
             )
         )
         layout.addWidget(QLabel("Tail"))
-        self.chat_tail = QPlainTextEdit(self.story.chat_tail)
+        self.chat_tail = GrowingText(self.story.chat_tail, lines=3, most=10)
         self.chat_tail.setPlaceholderText(
             "e.g. Reply in British English, in two short paragraphs at most."
         )
-        self.chat_tail.setMaximumHeight(110)
         layout.addWidget(self.chat_tail)
         layout.addWidget(
             _hint(
@@ -420,8 +420,7 @@ class SetupDialog(QDialog):
         form = QFormLayout()
         self.location = line_edit(start.location or "")
         self.time_of_day = line_edit(start.time_of_day or "")
-        self.situation = QPlainTextEdit(start.situation or "")
-        self.situation.setMaximumHeight(72)
+        self.situation = GrowingText(start.situation or "", lines=2, most=8)
         form.addRow("Location", self.location)
         form.addRow("Time", self.time_of_day)
         form.addRow("Situation", self.situation)

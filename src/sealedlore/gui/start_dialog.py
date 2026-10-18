@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.gui.sizing import size_to_screen
 from sealedlore.gui.start_presence import StartPresence
 from sealedlore.models.character import Character
 from sealedlore.models.lore import LoreEntry
@@ -50,6 +51,7 @@ class StartDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(f"Start — {story.title}")
         self.setMinimumWidth(460)
+        size_to_screen(self, 0.4, 0.7)
         self._choose_one_of = list(story.setup.choose_one_of)
 
         self.play_as = QComboBox()

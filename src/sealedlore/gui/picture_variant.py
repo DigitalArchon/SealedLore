@@ -26,7 +26,6 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QLabel,
     QLineEdit,
-    QPlainTextEdit,
     QProgressBar,
     QVBoxLayout,
     QWidget,
@@ -38,6 +37,7 @@ from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.model_picker import ModelField
 from sealedlore.gui.portraits_dialog import card_name
 from sealedlore.gui.ref_images import image_of, thumbnail_of
+from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.character import Character
 from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS, recommended_model
@@ -153,6 +153,7 @@ class PictureVariantDialog(QDialog):
         else:
             self.setWindowTitle(f"Edit a picture of {name}" if edit else f"Draw {name} again")
         self.setMinimumWidth(620)
+        size_to_screen(self, 0.45, 0.8)
 
         picture = QLabel()
         picture.setAlignment(Qt.AlignCenter)
@@ -194,8 +195,7 @@ class PictureVariantDialog(QDialog):
             examples = "at night, in a storm · burned out and abandoned · in high summer"
         self.change.setPlaceholderText(examples)
         self.change.textChanged.connect(self._compose)
-        self.prompt = QPlainTextEdit()
-        self.prompt.setMinimumHeight(130)
+        self.prompt = GrowingText(lines=6, most=30, fill=True)
         self.prompt.setPlaceholderText("This text is sent exactly as it is here.")
         self.prompt.textChanged.connect(self._on_prompt_edited)
         self.model = ModelField(

@@ -38,7 +38,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
-    QPlainTextEdit,
     QProgressBar,
     QPushButton,
     QTreeWidget,
@@ -52,6 +51,7 @@ from sealedlore.engine.videos import VideoRequest
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.model_picker import ModelField, _Row
 from sealedlore.gui.ref_images import PICTURE_FILTER, store_reference, thumbnail_of
+from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.gui.video_jobs import VideoCatalog
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.image import RefUse
@@ -88,6 +88,7 @@ class VideoDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Generate video")
         self.setMinimumWidth(760)
+        size_to_screen(self, 0.55, 0.88)
         self.session = session
         self.catalog = catalog
         self._browse = browse
@@ -180,9 +181,8 @@ class VideoDialog(QDialog):
         self.frames_note.setObjectName("hintLabel")
         self.frames_note.setWordWrap(True)
 
-        self.direction = QPlainTextEdit()
+        self.direction = GrowingText(lines=3, most=8)
         self.direction.setPlaceholderText(DIRECTION_HINT)
-        self.direction.setFixedHeight(76)
         self.write_button = QPushButton("Write prompt")
         self.write_button.clicked.connect(self._write)
         self.writer = ModelField(self.session.config.image_prompt_model or "", self._browse)
@@ -202,11 +202,10 @@ class VideoDialog(QDialog):
         self.status.setObjectName("hintLabel")
         self.status.setWordWrap(True)
         self.status.hide()
-        self.prompt = QPlainTextEdit()
+        self.prompt = GrowingText(lines=7, most=30, fill=True)
         self.prompt.setPlaceholderText(
             "Press Write prompt, or write your own. This text is sent exactly as it is here."
         )
-        self.prompt.setMinimumHeight(140)
         self.prompt.textChanged.connect(self._sync)
 
         self.price = QLabel("")

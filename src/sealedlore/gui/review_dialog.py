@@ -40,6 +40,7 @@ from sealedlore.engine.authoring import (
 )
 from sealedlore.engine.session import ReviewSizes
 from sealedlore.gui.model_picker import Browse, ModelField
+from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.gui.winprivacy import copy_text
 from sealedlore.models.authoring import SettingsChange, SettingsReview
 from sealedlore.models.config import ModelPrice
@@ -78,6 +79,7 @@ class ReviewRequestDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Review settings")
         self.setMinimumWidth(560)
+        size_to_screen(self, 0.5, 0.8)
         self._sizes = sizes
         self._default_model = default_model
         self._context_for = context_for
@@ -94,9 +96,8 @@ class ReviewRequestDialog(QDialog):
         )
         intro.setWordWrap(True)
 
-        self.complaint = QPlainTextEdit()
+        self.complaint = GrowingText(lines=6, most=24, fill=True)
         self.complaint.setPlaceholderText(COMPLAINT_EXAMPLE)
-        self.complaint.setMinimumHeight(120)
         if last_complaint:
             # The last complaint, ready to send again or refine: a second
             # review is usually a second go at the same problem.
@@ -308,6 +309,7 @@ class ReviewResultDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Proposed changes" if not read_only else "Last review")
         self.setMinimumSize(680, 520)
+        size_to_screen(self, 0.55, 0.86)
         self._boxes: list[tuple[QCheckBox, SettingsChange]] = []
         self._read_only = read_only
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -42,6 +42,7 @@ from sealedlore.engine.prompt_edits import (
     unknown_keys,
 )
 from sealedlore.engine.prompt_texts import GROUPS, TEXTS
+from sealedlore.gui.sizing import size_to_screen
 from sealedlore.models.config import Config
 from sealedlore.models.prompt_edit import PromptEdit
 from sealedlore.models.story import Story
@@ -72,7 +73,7 @@ class PromptEditorDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Prompts (advanced)")
-        self.resize(1100, 720)
+        size_to_screen(self, 0.7, 0.86, at_least=QSize(1100, 720))
         self.story = story
         self.root = root
         # The working copies; the config and the story change only on Save.

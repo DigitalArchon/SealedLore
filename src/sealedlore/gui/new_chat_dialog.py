@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.gui.attest_check import AttestationButton
 from sealedlore.gui.model_picker import Browse, BrowseRoute, ModelField
+from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.models.config import Config, ProviderConfig, split_model
 from sealedlore.providers.tee import is_private_mode, is_tee
 
@@ -78,6 +79,7 @@ class NewChatDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("New simple chat")
         self.setMinimumWidth(560)
+        size_to_screen(self, 0.42, 0.75)
         self._config = config
         intro = QLabel(
             "A plain conversation with the model: your system prompt and your messages, "
@@ -103,11 +105,10 @@ class NewChatDialog(QDialog):
         )
         prompt_hint.setObjectName("hintLabel")
         prompt_hint.setWordWrap(True)
-        self.tail = QPlainTextEdit()
+        self.tail = GrowingText(lines=3, most=10)
         self.tail.setPlaceholderText(
             "e.g. Reply in British English, in two short paragraphs at most."
         )
-        self.tail.setMaximumHeight(110)
         tail_hint = QLabel(
             "Added after your message at the end of every request, where a model weighs it "
             "most. Never saved into the conversation, and changing it later (Story → Setup) "

@@ -32,6 +32,7 @@ from sealedlore.engine.rules import (
     without_length_line,
 )
 from sealedlore.gui.fields import FormScroll, set_field_text
+from sealedlore.gui.sizing import GrowingText
 from sealedlore.models.story import StyleDirectives
 
 STYLE_HEADING = "# STYLE\n\n"
@@ -121,15 +122,13 @@ class StylePanel(QWidget):
         self.rating = _editable_combo(RATING_STOPS)
         self.limits = QLineEdit()
         self.limits.setPlaceholderText("e.g. 'no graphic gore; fade to black'")
-        self.forbidden = QPlainTextEdit()
+        self.forbidden = GrowingText(lines=3, most=10)
         self.forbidden.setPlaceholderText("One per line — words or clichés to avoid")
-        self.forbidden.setMaximumHeight(70)
-        self.notes = QPlainTextEdit()
+        self.notes = GrowingText(lines=3, most=12)
         self.notes.setPlaceholderText(
             "Anything else, in plain words — e.g. 'let the narration show what other "
             "characters are thinking'"
         )
-        self.notes.setMaximumHeight(90)
 
         self.length.currentIndexChanged.connect(self._apply_form)
         self.perspective.currentIndexChanged.connect(self._apply_form)

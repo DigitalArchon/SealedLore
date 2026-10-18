@@ -20,13 +20,12 @@ import weakref
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
-from PySide6.QtCore import QObject, Qt, QThread, Signal
+from PySide6.QtCore import QObject, QSize, Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QLineEdit,
     QMenu,
@@ -42,6 +41,7 @@ from sealedlore.engine.catalog import ModelInfo, chat_models, matches, short_cou
 from sealedlore.engine.routing import describe, routable, route_body
 from sealedlore.gui.fields import line_edit, set_field_text
 from sealedlore.gui.route_dialog import RouteDialog
+from sealedlore.gui.sizing import adjustable_columns, size_to_screen
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.config import ProviderConfig, RecommendedModel, split_model
 from sealedlore.models.route import ModelRoute
@@ -255,7 +255,7 @@ class ModelPickerDialog(QDialog):
         # Only the models this choice may move to (a TEE chat's), and why.
         self.allowed = allowed
         self.allowed_note = allowed_note
-        self.resize(1120, 600)
+        size_to_screen(self, 0.68, 0.78, at_least=QSize(1120, 600))
         self.catalog = catalog
         self.source = source
         self.current = current.strip()
@@ -277,17 +277,10 @@ class ModelPickerDialog(QDialog):
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setSortingEnabled(True)
         self.table.sortByColumn(0, Qt.AscendingOrder)
-        header = self.table.header()
         # Ids are what matter and run long ("anthropic/claude-sonnet-4.6:thinking"):
-        # a wide, adjustable column for them, the endpoint's name as wide as
-        # it is, the rest of the width to the name.
-        header.setStretchLastSection(False)
-        header.setSectionResizeMode(_COL["Model"], QHeaderView.Interactive)
-        header.resizeSection(_COL["Model"], 330)
-        header.setSectionResizeMode(_COL["Name"], QHeaderView.Stretch)
-        for column in range(len(COLUMNS)):
-            if column not in (_COL["Model"], _COL["Name"]):
-                header.setSectionResizeMode(column, QHeaderView.ResizeToContents)
+        # every column as wide as it needs and draggable (gui/sizing.py),
+        # the rest of the width to the name.
+        adjustable_columns(self.table, stretch=_COL["Name"], widest=420)
         self.table.itemDoubleClicked.connect(lambda *_: self._accept())
         self.table.currentItemChanged.connect(self._sync_buttons)
 

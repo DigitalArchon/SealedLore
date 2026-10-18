@@ -197,7 +197,10 @@ class LayoutWindow:
             maximized=self.isMaximized(),
             stories_width=before.stories_width,
             inspector_width=before.inspector_width,
+            composer_height=before.composer_height,
         )
+        if self._composer_dragged and self.composer.isVisible():
+            layout.composer_height = self.composer.height()
         if self._docks_dragged:
             layout.stories_width = self.stories_dock.width()
             layout.inspector_width = self.inspector_dock.width()

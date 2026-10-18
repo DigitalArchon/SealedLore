@@ -341,7 +341,10 @@ class Composer(QWidget):
         self.input.setObjectName("input")
         self.input.setPlaceholderText(TURN_PLACEHOLDER)
         self.input.submitted.connect(self.send_requested)
-        self.input.setMaximumHeight(140)
+        # As tall as the composer is made: the divider above it is dragged
+        # (main_window.story_split; the author, Oct 18 2026: the box to type
+        # in should be resizable up and down). It was capped at 140px.
+        self.input.setMinimumHeight(64)
 
         self.send_button = QPushButton("Send")
         self.send_button.setObjectName("sendButton")
@@ -380,7 +383,7 @@ class Composer(QWidget):
         layout.setSpacing(10)
         layout.addWidget(self.controls_host)
         layout.addWidget(self.ooc)
-        layout.addLayout(entry)
+        layout.addLayout(entry, 1)
 
         self.speaker.currentIndexChanged.connect(self._sync_question_mode)
         self.speaker.currentIndexChanged.connect(self._sync_dice)

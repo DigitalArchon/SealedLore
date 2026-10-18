@@ -77,7 +77,7 @@ class BranchBar(QWidget):
         `pending`: a branch named before its first turn (the review's)."""
         self._branches = list(branches)
         current = next((b for b in branches if b.is_current), None)
-        self.button.setText((current.name if current else "—") + "  ▾")
+        self.button.setText(current.name if current else "—")
         self.button.setEnabled(bool(branches))
         self.map_button.setEnabled(bool(branches))
         if pending:

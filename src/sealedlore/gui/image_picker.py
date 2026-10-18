@@ -9,12 +9,11 @@ again on the catalog's thread, never the dialog's.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
     QDialogButtonBox,
-    QHeaderView,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -26,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.model_picker import _Row
+from sealedlore.gui.sizing import adjustable_columns, size_to_screen
 from sealedlore.providers.images import ImageModelInfo
 
 COLUMNS = ("Model", "Name", "References", "Sizes", "$ / picture", "At once")
@@ -53,7 +53,7 @@ class ImagePickerDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Choose an image model")
-        self.resize(1000, 560)
+        size_to_screen(self, 0.68, 0.78, at_least=QSize(1000, 560))
         self.catalog = catalog
         self.current = current.strip()
 
@@ -72,15 +72,8 @@ class ImagePickerDialog(QDialog):
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setSortingEnabled(True)
         self.table.sortByColumn(0, Qt.AscendingOrder)
-        header = self.table.header()
-        header.setStretchLastSection(False)
-        header.setSectionResizeMode(0, QHeaderView.Interactive)
-        header.resizeSection(0, 300)
-        header.setSectionResizeMode(1, QHeaderView.Stretch)
-        for column in (REFERENCES, PRICE, AT_ONCE):
-            header.setSectionResizeMode(column, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(SIZES, QHeaderView.Interactive)
-        header.resizeSection(SIZES, 170)
+        # Every column as wide as it needs and draggable (gui/sizing.py).
+        adjustable_columns(self.table, stretch=1, widest=360)
         self.table.itemDoubleClicked.connect(lambda *_: self._accept())
         self.table.currentItemChanged.connect(self._sync_buttons)
 

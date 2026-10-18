@@ -24,7 +24,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPlainTextEdit,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
@@ -32,6 +31,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.response_style import PRESET_ORDER, PRESETS
+from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.models.character import Character
 from sealedlore.models.story import DEFAULT_RESPONSE_STYLE, Story
 from sealedlore.storage.repository import StoryBundle
@@ -54,21 +54,26 @@ def _hint(text: str) -> QLabel:
     return label
 
 
-def _page() -> tuple[QWidget, QFormLayout]:
-    """A step: its form at the top, the spare height below it."""
+def _page(*, fill: bool = False) -> tuple[QWidget, QFormLayout]:
+    """A step: its form at the top. With `fill`, a field of the form takes
+    the spare height (a text box that grows with the window); else it is
+    left below the form."""
     page = QWidget()
     outer = QVBoxLayout(page)
     form = QFormLayout()
-    outer.addLayout(form)
-    outer.addStretch(1)
+    outer.addLayout(form, 1 if fill else 0)
+    if not fill:
+        outer.addStretch(1)
     return page, form
 
 
-def _text(placeholder: str, height: int = 90) -> QPlainTextEdit:
-    edit = QPlainTextEdit()
+def _text(placeholder: str, *, lines: int = 3, fill: bool = False) -> GrowingText:
+    """A box that grows with what is written, and with `fill` with the window
+    too (the author: a world written in a box that only grew wider felt
+    cramped)."""
+    edit = GrowingText(lines=lines, fill=fill)
     edit.setPlaceholderText(placeholder)
     edit.setTabChangesFocus(True)
-    edit.setFixedHeight(height)
     return edit
 
 
@@ -120,18 +125,20 @@ class NewStoryGuide(QDialog):
         layout.addLayout(buttons)
         self.title.textChanged.connect(self._sync)
         self._go(0)
+        size_to_screen(self, 0.42, 0.66)
 
     # --- the steps ----------------------------------------------------------
 
     def _story_page(self) -> QWidget:
-        page, form = _page()
+        page, form = _page(fill=True)
         self.title = QLineEdit()
         self.title.setPlaceholderText("The Long Night")
         form.addRow("Title", self.title)
         self.world = _text(
             "Where and when the story is set, how its world works, what tone it has. "
             "A few sentences is enough.",
-            140,
+            lines=6,
+            fill=True,
         )
         form.addRow("The world", self.world)
         form.addRow(
@@ -150,7 +157,7 @@ class NewStoryGuide(QDialog):
         return page
 
     def _player_page(self) -> QWidget:
-        page, form = _page()
+        page, form = _page(fill=True)
         form.addRow(
             _hint(
                 "The character you play. The storyteller never speaks or acts for them. "
@@ -160,7 +167,9 @@ class NewStoryGuide(QDialog):
         self.player_name = QLineEdit()
         self.player_name.setPlaceholderText("Name")
         form.addRow("You play", self.player_name)
-        self.player_about = _text("Who they are: age, looks, what they can do, what they want.")
+        self.player_about = _text(
+            "Who they are: age, looks, what they can do, what they want.", lines=4, fill=True
+        )
         form.addRow("Who they are", self.player_about)
         form.addRow(_hint("Anyone else to start with (optional; the Cast page adds more):"))
         self.others: list[tuple[QLineEdit, QLineEdit]] = []
@@ -177,13 +186,14 @@ class NewStoryGuide(QDialog):
         return page
 
     def _opening_page(self) -> QWidget:
-        page, form = _page()
+        page, form = _page(fill=True)
         self.location = QLineEdit()
         self.location.setPlaceholderText("A farmhouse in a snowstorm, the bridge of a ship…")
         form.addRow("Where it begins", self.location)
         self.opening = _text(
             "What is happening as the story opens, and anything the first passage should show.",
-            140,
+            lines=6,
+            fill=True,
         )
         form.addRow("What happens first", self.opening)
         form.addRow(

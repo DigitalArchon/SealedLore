@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QProgressDialog,
+    QSplitter,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -390,8 +391,21 @@ class MainWindow(
         self.start_page = StartChooser()
         self.start_page.chosen.connect(self._start_choice)
         self.centre_stack.addWidget(self.start_page)
-        centre_layout.addWidget(self.centre_stack, 1)
-        centre_layout.addWidget(self.composer)
+        # The story above, the composer below, a divider between them the
+        # author drags to make the box they type in taller or shorter; the
+        # composer keeps its height as the window changes (and is kept for
+        # next time, `Config.window.composer_height`).
+        self.story_split = QSplitter(Qt.Vertical)
+        self.story_split.setObjectName("storySplit")
+        self.story_split.setChildrenCollapsible(False)
+        self.story_split.setHandleWidth(10)
+        self.story_split.addWidget(self.centre_stack)
+        self.story_split.addWidget(self.composer)
+        self.story_split.setStretchFactor(0, 1)
+        self.story_split.setStretchFactor(1, 0)
+        self.story_split.splitterMoved.connect(self._composer_resized)
+        self._composer_dragged = False
+        centre_layout.addWidget(self.story_split, 1)
 
         centre = QWidget()
         centre.setObjectName("centre")
@@ -864,6 +878,18 @@ class MainWindow(
                 about = "The chapter summaries that stand in for older messages"
             title = f"{name}  ·  {about}" if about else name
         self.inspector_dock.setWindowTitle(title)
+
+    def _composer_resized(self, *_args) -> None:
+        self._composer_dragged = True
+
+    def _apply_composer_height(self) -> None:
+        """The composer as tall as the author last left it."""
+        saved = self.config.window.composer_height if self.config.window else 0
+        if saved <= 0:
+            return
+        total = sum(self.story_split.sizes())
+        height = max(self.composer.minimumSizeHint().height(), min(saved, total - 200))
+        self.story_split.setSizes([total - height, height])
 
     def _keep_composer_more(self, on: bool) -> None:
         """More, open or put away: kept for every story (saved on close)."""
@@ -4144,6 +4170,8 @@ class MainWindow(
         super().showEvent(event)
         self._fit_centre_width()
         if not self._tokenizer_warming:
+            # Once, at the first show, when the splitter has its height.
+            QTimer.singleShot(0, self, self._apply_composer_height)
             self._tokenizer_warming = True
             QTimer.singleShot(WARM_UP_DELAY_MS, self, self._warm_tokenizer)
             QTimer.singleShot(WARM_UP_DELAY_MS, self, self._move_keys_to_keychain)

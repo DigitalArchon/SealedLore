@@ -32,7 +32,6 @@ from PySide6.QtCore import QCoreApplication, QObject, Qt, QThread, Signal, Slot
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
-    QHeaderView,
     QLabel,
     QPushButton,
     QTableWidget,
@@ -49,6 +48,7 @@ from sealedlore.engine.speed_test import (
     provider_for,
     run_speed_test,
 )
+from sealedlore.gui.sizing import adjustable_columns, size_to_screen
 from sealedlore.models.config import ModelPrice, ProviderConfig
 from sealedlore.providers.base import ChatProvider
 
@@ -296,6 +296,7 @@ class SpeedTestDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Model speed test")
         self.setMinimumSize(860, 360)
+        size_to_screen(self, 0.5, 0.55)
         self.targets = list(targets)
         self.results: dict[int, SpeedResult] = {}
 
@@ -317,13 +318,7 @@ class SpeedTestDialog(QDialog):
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.verticalHeader().hide()
         self.table.setWordWrap(True)
-        header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(NOTES, QHeaderView.Stretch)
+        adjustable_columns(self.table, stretch=NOTES)
         for row, target in enumerate(self.targets):
             self._set(row, 0, target.label)
             self._set(row, 1, ", ".join(target.roles))

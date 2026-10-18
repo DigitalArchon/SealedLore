@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.picture_shapes import FREE, ORIGINAL, PictureShape, picture_shapes
 from sealedlore.gui.ref_images import _encoded, load_image, picture_bytes, picture_bytes_of
+from sealedlore.gui.sizing import size_to_screen
 from sealedlore.models.config import Config
 
 Rect = tuple[float, float, float, float]
@@ -384,7 +385,7 @@ class CropDialog(QDialog):
         index = self.shape.findData(initial)
         self.shape.setCurrentIndex(max(index, 0))
         self._on_shape()
-        self.resize(960, 760)
+        size_to_screen(self, 0.55, 0.85, at_least=QSize(960, 760))
 
     def shape_key(self) -> str:
         return str(self.shape.currentData())

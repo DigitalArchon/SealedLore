@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 
-from PySide6.QtCore import Qt, QThread
+from PySide6.QtCore import QSize, Qt, QThread
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -22,7 +22,6 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QPlainTextEdit,
     QProgressBar,
     QScrollArea,
     QVBoxLayout,
@@ -34,6 +33,7 @@ from sealedlore.engine.portraits import Card, card_size
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.model_picker import ModelField
 from sealedlore.gui.ref_images import thumbnail_of
+from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.character import Character
 from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS, recommended_model
@@ -59,9 +59,8 @@ class _Row(QFrame):
         self.character = card  # the portraits' name for it
         self.tick = QCheckBox(card_name(card))
         self.tick.setChecked(True)
-        self.prompt = QPlainTextEdit(WRITING)
+        self.prompt = GrowingText(WRITING, lines=4, most=12)
         self.prompt.setEnabled(False)
-        self.prompt.setFixedHeight(96)
         picture = QLabel()
         picture.setFixedSize(THUMB_SIDE, THUMB_SIDE)
         picture.setAlignment(Qt.AlignCenter)
@@ -217,7 +216,7 @@ class PortraitsDialog(QDialog):
             catalog.ensure()
         self._write()
         self._sync()
-        self.resize(720, 760)
+        size_to_screen(self, 0.5, 0.88, at_least=QSize(720, 760))
 
     # --- writing the prompts ---------------------------------------------------------
 

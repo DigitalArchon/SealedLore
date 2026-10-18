@@ -20,7 +20,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from PySide6.QtCore import QElapsedTimer, QPoint, QPointF, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QElapsedTimer, QPoint, QPointF, QRectF, QSizeF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPixmap, QTransform
 from PySide6.QtWidgets import (
     QGraphicsItem,
@@ -691,7 +691,7 @@ class AreaView(QWidget):
         # of things taken on the map): put down, or handed to someone in reach.
         self.carry_button = QToolButton()
         self.carry_button.setObjectName("viewToggleButton")
-        self.carry_button.setText("Carrying ▾")
+        self.carry_button.setText("Carrying")
         self.carry_button.setToolTip(
             "What your character carries, as the map records it: drop a thing where you "
             "stand, or give it to someone beside you. The turn goes in the composer."
@@ -741,7 +741,7 @@ class AreaView(QWidget):
         # with its model and price, then the paintings there are, newest first.
         self.paintings_button = QToolButton()
         self.paintings_button.setObjectName("viewToggleButton")
-        self.paintings_button.setText("Paintings ▾")
+        self.paintings_button.setText("Paintings")
         self.paintings_button.setToolTip(
             "A painting of this place as it is now, by an image model, from the map and "
             "everyone on it (you choose when, and see the price first); and the paintings "
@@ -831,6 +831,9 @@ class AreaView(QWidget):
         self.places: dict[str, _PlaceItem] = {}
         self._tags: dict[str, _Tag] = {}
         self._background: QGraphicsPixmapItem | None = None
+        # The background is the last picture of this area, shown while a new
+        # one paints (`set_area`).
+        self._stale = False
         # With no picture yet: the word over the plain map.
         self._note: QGraphicsSimpleTextItem | None = None
         self._hover: QGraphicsRectItem | None = None
@@ -884,6 +887,7 @@ class AreaView(QWidget):
         self._stop_walking()
         self.scene.clear()
         self.people, self._tags, self._background, self._hover = {}, {}, None, None
+        self._stale = False
         self._note = None
         self._pins = []
         self._shade, self._shade_from, self._shade_mask = None, None, None
@@ -927,7 +931,7 @@ class AreaView(QWidget):
             key != self._key
             or self.area is None
             or self.area.id != area.id
-            or (image is not None and self._background is None)
+            or (image is not None and (self._background is None or self._stale))
         )
         self.area, self.walkers = area, walkers
         self.title.setText(area.title)  # "The farmhouse · Upper floor" on a level
@@ -936,6 +940,21 @@ class AreaView(QWidget):
         if rebuild:
             centre = self.view.mapToScene(self.view.viewport().rect().center())
             same_place = self._fitted_for == area.id
+            bounds = QRectF(0, 0, area.width * px, area.height * px)
+            # The same area painted again (new art came in while the map is
+            # drawn): its last picture stays until the new one is ready. A
+            # dark stand-in each time made the map flash black as it drew
+            # (the author, Oct 18 2026).
+            last = (
+                self._background.pixmap()
+                if image is None
+                and self._background is not None
+                and self.area is not None
+                and self.area.id == area.id
+                else None
+            )
+            if last is not None and QSizeF(last.size()) != bounds.size():
+                last = None
             self.scene.clear()
             self.people, self._tags, self._hover = {}, {}, None
             self.places = {}
@@ -945,10 +964,14 @@ class AreaView(QWidget):
             self._tint = None
             self._weather = None
             self._key = key
-            bounds = QRectF(0, 0, area.width * px, area.height * px)
+            self._stale = False
             if image is not None:
                 self._background = self.scene.addPixmap(QPixmap.fromImage(image))
                 self._background.setZValue(0)
+            elif last is not None:
+                self._background = self.scene.addPixmap(last)
+                self._background.setZValue(0)
+                self._stale = True
             else:
                 self._background = None
                 rect = self.scene.addRect(bounds, QPen(Qt.NoPen), QColor(24, 26, 32))
@@ -1479,7 +1502,7 @@ class AreaView(QWidget):
     def set_edge(self, side: str | None) -> None:
         """The author's character stands on this side's edge (None: not on one)."""
         self._edge = side
-        self.edge_button.setText(f"Leave {side} ▾" if side else "")
+        self.edge_button.setText(f"Leave {side}" if side else "")
         self.edge_button.setVisible(side is not None)
 
     def set_edge_choices(self, side: str, choices: list[tuple[str, str]]) -> None:

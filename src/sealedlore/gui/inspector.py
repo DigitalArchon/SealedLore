@@ -14,7 +14,6 @@ from html import escape
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QPlainTextEdit,
     QPushButton,
@@ -26,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.prompt import AssembledPrompt
+from sealedlore.gui.sizing import adjustable_columns
 from sealedlore.gui.winprivacy import copy_text
 from sealedlore.messages import PromptMessage
 from sealedlore.models.generation import GenerationParams
@@ -103,7 +103,7 @@ class ContextInspector(QWidget):
         self.sections = QTreeWidget()
         self.sections.setColumnCount(3)
         self.sections.setHeaderLabels(["Section", "Tokens", "Cache"])
-        self.sections.header().setSectionResizeMode(0, QHeaderView.Stretch)
+        adjustable_columns(self.sections, stretch=0)
         self.sections.setRootIsDecorated(False)
         self.sections.setAlternatingRowColors(True)
         splitter.addWidget(self.sections)

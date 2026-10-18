@@ -104,7 +104,7 @@ class AvatarView(QWidget):
         )
         self.words_button.clicked.connect(self.draw_with_words_requested)
         self.choose_button = QToolButton()
-        self.choose_button.setText("Choose a drawn avatar ▾")
+        self.choose_button.setText("Choose a drawn avatar")
         self.choose_button.setToolTip("The avatars drawn or chosen for them so far: pick one")
         self.choose_button.setPopupMode(QToolButton.InstantPopup)
         self.choose_menu = QMenu(self.choose_button)

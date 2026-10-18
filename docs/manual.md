@@ -495,6 +495,11 @@ archiving, rebuilding summaries.
   closed as you leave it, opens by itself while a private scene, a roll or an
   OOC note is in use, and names an outcome or voices you chose beside it
   while closed.
+- **Make room to read and write.** Drag the line between the story and the
+  composer to make the box you type in taller or shorter; it stays as you
+  leave it. Text boxes grow with what you write in them, the columns of
+  every table can be dragged wider or narrower, and dialogs open at a size
+  that suits your screen.
 - **The status bar** says how full the storyteller's context is ("Context 4%
   used"), how much of the last prompt the endpoint's cache reused, and what
   the session and the whole story have cost; hover over any of them for the

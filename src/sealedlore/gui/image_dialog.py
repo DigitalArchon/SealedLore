@@ -56,6 +56,7 @@ from sealedlore.gui.ref_images import (
     store_reference,
     thumbnail_of,
 )
+from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, RefUse
@@ -103,6 +104,7 @@ class ImageDialog(QDialog):
         self.setWindowTitle(title)
         self._browse = browse
         self.setMinimumWidth(720)
+        size_to_screen(self, 0.55, 0.88)
         self.session = session
         self.anchor_id = anchor_id or session.story.active_leaf_id
         self.request: ImageRequest | None = None
@@ -184,9 +186,8 @@ class ImageDialog(QDialog):
             )
         self.private_warning.setVisible(self.session.in_private or tee_chat)
 
-        self.direction = QPlainTextEdit()
+        self.direction = GrowingText(lines=3, most=8)
         self.direction.setPlaceholderText(DIRECTION_HINT)
-        self.direction.setFixedHeight(84)
         self.write_button = QPushButton("Write prompt")
         self.write_button.clicked.connect(self._write)
         # Who writes the prompt: blank is the story model. Playtesting: the
@@ -213,11 +214,10 @@ class ImageDialog(QDialog):
         self.status.setWordWrap(True)
         self.status.hide()
 
-        self.prompt = QPlainTextEdit()
+        self.prompt = GrowingText(lines=8, most=30, fill=True)
         self.prompt.setPlaceholderText(
             "Press Write prompt, or write your own. This text is sent exactly as it is here."
         )
-        self.prompt.setMinimumHeight(170)
         self.prompt.textChanged.connect(self._sync)
 
         self.refs = QListWidget()

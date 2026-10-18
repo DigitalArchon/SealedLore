@@ -28,7 +28,9 @@ def _default_look():
 def test_every_theme_has_every_colour_and_no_other():
     """A colour added to the stylesheet or to one theme must be added to all."""
     code_drawn = set(theme.DARK) - NAMES
-    assert NAMES - {"font_mono"} <= set(theme.DARK)
+    # The marks (`ICONS`) are named like colours, and drawn in the theme's.
+    assert NAMES - {"font_mono"} - set(theme.ICONS) <= set(theme.DARK)
+    assert all(colour in theme.DARK for _shape, colour in theme.ICONS.values())
     for choice in theme.THEMES.values():
         assert set(choice.colours) == set(theme.DARK), choice.key
         assert all(re.fullmatch(r"#[0-9a-f]{6}", v) for v in choice.colours.values())

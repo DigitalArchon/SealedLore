@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMessageBox,
-    QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -35,6 +34,7 @@ from sealedlore.engine.tile_sets import TEXTURES
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.image_codec import image_from_data
 from sealedlore.gui.ref_images import PICTURE_FILTER
+from sealedlore.gui.sizing import GrowingText, size_to_screen
 
 ICON = 48
 PREVIEW = 256
@@ -50,7 +50,7 @@ class TileSetEditor(QDialog):
         super().__init__(parent)
         self.session = session
         self.setWindowTitle("Edit the tile set")
-        self.resize(900, 640)
+        size_to_screen(self, 0.55, 0.8, at_least=QSize(900, 640))
         art = session.map_art_copy()
         name = session.tile_set_name(art)
         titles = dict(session.tile_set_choices())
@@ -74,9 +74,8 @@ class TileSetEditor(QDialog):
         self.label.setObjectName("emptyTitle")
         self.source = QLabel()
         self.source.setObjectName("hintLabel")
-        self.words = QPlainTextEdit()
+        self.words = GrowingText(lines=3, most=10)
         self.words.setPlaceholderText("What it shows, in a few words")
-        self.words.setMaximumHeight(90)
         self.redraw_button = QPushButton("Draw it again…")
         self.redraw_button.setToolTip(
             "Draw this one again from the words above: asked first, with the model and price"

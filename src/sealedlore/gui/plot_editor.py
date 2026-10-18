@@ -75,6 +75,7 @@ from sealedlore.gui.plot_editor_pages import (
     WorldPage,
 )
 from sealedlore.gui.plot_pictures import copy_pictures, copy_sidecar
+from sealedlore.gui.sizing import size_to_screen
 from sealedlore.models.plot_file import (
     CharacterDoc,
     EntryDoc,
@@ -117,6 +118,7 @@ class PlotEditorWindow(QMainWindow):
         super().__init__(parent)
         self.setWindowFlag(Qt.Window)
         self.setMinimumSize(960, 640)
+        size_to_screen(self, 0.75, 0.88)
         self.document = PlotDocument()
         self.path: Path | None = None
         self.modified = False
