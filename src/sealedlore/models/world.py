@@ -299,6 +299,45 @@ class TerrainPatch(BaseModel):
     ground: str = ""
     model: str = ""
     made_at: str = ""
+    # Laid out by the world designer (engine/regions.py): a region of open
+    # country at walking scale, under fog on the maps until explored.
+    designed: bool = False
+
+
+class DesignedPerson(BaseModel):
+    """Someone (or something) the world designer put in a region: a wandering
+    zombie, a scavenger. On the map under their label ("Unknown 101") with
+    their description, standing at (`x`, `y`) metres until the story moves
+    them."""
+
+    label: str
+    who: str
+    doing: str = ""
+    x: float
+    y: float
+
+
+class DesignedRegion(BaseModel):
+    """A region of open country the world designer laid out ahead of the
+    player (the author, Oct 18 2026: "the AI acts as a real designer,
+    intelligently building the world as the player goes"): a cell of the
+    region grid (`key`, its rectangle), its land (a `TerrainPatch` with
+    `designed`), its own place (kind "region") and the places, things and
+    people in it. World, not story: the same on every branch, as if it had
+    always been there (engine/regions.py)."""
+
+    key: str
+    west: float
+    north: float
+    side: float
+    place_id: str
+    places: list[WorldPlace] = Field(default_factory=list)
+    things: list[WorldThing] = Field(default_factory=list)
+    # Where each thing lies, by its id: (x, y) metres.
+    thing_spots: dict[str, list[float]] = Field(default_factory=dict)
+    people: list[DesignedPerson] = Field(default_factory=list)
+    model: str = ""
+    made_at: str = ""
 
 
 class OwnTileSet(BaseModel):
@@ -358,6 +397,12 @@ class WorldArt(BaseModel):
     # state: a barn blown up on one branch and standing on another has both.
     layouts: dict[str, dict[str, PlaceLayout]] = Field(default_factory=dict)
     terrain: list[TerrainPatch] = Field(default_factory=list)
+    # The world designer's regions, by grid cell ("2:-1"), the grid's
+    # north-west corner in metres (set from where the story starts), and the
+    # cells the author's character has been in (the rest stay under fog).
+    regions: dict[str, DesignedRegion] = Field(default_factory=dict)
+    region_origin: list[float] | None = None
+    explored: list[str] = Field(default_factory=list)
     # Jobs that failed, by key, and how often: one that keeps failing is let be.
     failures: dict[str, int] = Field(default_factory=dict)
     pictures: list[MapPicture] = Field(default_factory=list)

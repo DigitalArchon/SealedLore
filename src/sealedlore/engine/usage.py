@@ -50,6 +50,7 @@ KIND_LABELS: dict[str, str] = {
     "map_furnish_response": "Map furnishing",
     "map_tileset_response": "Map tile sets",
     "map_tileset_pick_response": "Map tile sets",
+    "map_region_response": "Map regions",
     "isometric_prompt_response": "Isometric view prompts",
     "video_prompt_response": "Video prompts",
     # What the endpoint charged for the video (NanoGPT: on accepting it).

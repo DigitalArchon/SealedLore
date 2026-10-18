@@ -190,7 +190,13 @@ class WorldRuntime:
         less what the plot is keeping hidden at that point (`whole`: with
         it, for placing new places clear of what is hidden)."""
         hidden = self.hidden_ids(path) if self.story.plot is not None and not whole else ()
-        return world_at(path, self.story.world_base, start=self.story.world_start, hidden=hidden)
+        return world_at(
+            path,
+            self.story.world_base,
+            start=self.story.world_start,
+            hidden=hidden,
+            designed=self.designed_delta(),
+        )
 
     def map_context(self, path, held_id: str | None, *, turn_node_id: str | None = None) -> str:
         """The local map for the storyteller at the end of `path`, whenever
@@ -211,7 +217,10 @@ class WorldRuntime:
             established(shown, base),
             self.map_held_name(held_id),
             self.texts,
-            fixed={p.id for p in base.places} if base is not None else (),
+            # Where the file or the world designer put a place is where it is:
+            # told with its distance (engine/regions.py).
+            fixed=({p.id for p in base.places} if base is not None else set())
+            | self.designed_place_ids(),
             mark_fixed=stays,
         )
         # Map-first: where everyone stands, exactly (engine/session_area.py),

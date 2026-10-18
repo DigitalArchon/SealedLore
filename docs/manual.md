@@ -558,6 +558,7 @@ set them to one it lists (Browse…).
 | Lore model ★ | Settings → Models | picking lore for a large lorebook | the scene model |
 | Map model | Settings → Models | reading each passage for the map: places, who is where, things | the scene model |
 | Map art model | Settings → Models | the map's plans and land, and furnishing its buildings | the map model |
+| World designer model | Settings → Models | designing the country ahead of the player, a region at a time | the story model |
 | Image prompt writer | Settings → Models, or the Image dialog | writing the picture's prompt | the story model |
 | Jev model ★ | `config.json` only | "Jev before each turn" | — |
 | Image model ★ | Settings → Images | pictures of the story | starts as Seedream 5.0 Pro |

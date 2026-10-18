@@ -871,6 +871,8 @@ class Config(BaseModel):
     # Claude Opus 5.5 on NanoGPT (the author's ruling, Oct 16 2026), else the
     # map art model. Chosen in the designer (Look ▾ → Tile sets…).
     tileset_model: str | None = None
+    # The world designer's model (engine/regions.py): blank, the story model.
+    region_model: str | None = None
 
     # Pictures (engine/image_prompt.py, providers/images.py). The image model
     # takes reference pictures: Seedream 5.0 Pro was the author's pick for

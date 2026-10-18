@@ -302,8 +302,9 @@ class WorldArtRuntime:
             limit=limit,
             sprites=not self.map_pictures_on,
             # Map-first: where the character stands, for the window of open
-            # country under them and the ones its edges lead to.
-            point=self.held_point(world=world) if self.map_first else None,
+            # country under them and the ones its edges lead to; none once the
+            # world designer lays open country out (engine/regions.py).
+            point=self.held_point(world=world) if self.map_first and not self.regions_on else None,
         )
 
     def map_setting(self) -> str:
@@ -772,6 +773,9 @@ class WorldArtRuntime:
         pictures = self._start_map_pictures()
         # Map-first play's furnishing and sprites (engine/session_area.py).
         pictures = self._start_tile_art() or pictures
+        # The world designer's regions round the author's character
+        # (engine/session_regions.py), on their own thread.
+        pictures = self._start_region_design() or pictures
         if self.map_art_running:
             return pictures
         jobs = self.map_art_jobs()
@@ -843,6 +847,7 @@ class WorldArtRuntime:
             except Exception:  # noqa: BLE001 - stopping must never fail
                 pass
         tile_clients = [
+            *(getattr(self, "_region_clients", None) or []),
             getattr(self, "_tile_client", None),
             getattr(self, "_tile_text", None),
             getattr(self, "_own_set_client", None),
@@ -859,6 +864,7 @@ class WorldArtRuntime:
             self._picture_thread,
             self._isometric_thread,
             getattr(self, "_tile_thread", None),
+            getattr(self, "_region_thread", None),
             getattr(self, "_own_set_thread", None),
             getattr(self, "_asset_thread", None),
         )

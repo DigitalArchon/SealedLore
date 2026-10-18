@@ -853,6 +853,15 @@ class SettingsDialog(QDialog):
             "of the free models."
         )
         form.addRow("Map art model", self.map_art_model)
+        self.region_model = self._routed_field(self.config.region_model or "")
+        self.region_model.setPlaceholderText("same as the story's model")
+        self.region_model.setToolTip(
+            "Designs the world ahead of the player in stories played on their map: the "
+            "country round them, a region at a time, with its places, things and whoever is "
+            "about, to fit the story. One call a region, about nine when a story begins and "
+            "a few more as the player moves on. Blank uses the story's model."
+        )
+        form.addRow("World designer model", self.region_model)
         self.map_art = QCheckBox("Draw the map")
         self.map_art.setChecked(self.config.map_art)
         self.map_art.setToolTip(
@@ -1936,6 +1945,7 @@ class SettingsDialog(QDialog):
         self.config.plot_model = self._role_model(self.plot_model) or None
         self.config.map_model = self._role_model(self.map_model) or None
         self.config.map_art_model = self._role_model(self.map_art_model) or None
+        self.config.region_model = self._role_model(self.region_model) or None
         self.config.map_art = self.map_art.isChecked()
         self.config.cache_control_mode = self.cache_mode.currentText()  # type: ignore[assignment]
         self.config.cache_ttl = self.cache_ttl.currentData()

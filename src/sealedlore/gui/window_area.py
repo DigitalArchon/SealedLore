@@ -512,7 +512,16 @@ class AreaWindow:
                     self._sync_progress()
         if pending is not None:
             self._fill_turn(*pending)
+        self._design_ahead()
         self.refresh_area()
+
+    def _design_ahead(self) -> None:
+        """Walked into another region: those round it still to design are
+        designed now, ahead of the player (engine/session_regions.py)."""
+        session = self.session
+        if session is not None and not session.in_private and session.regions_missing():
+            session.start_map_art()
+            self._sync_progress()
 
     def _area_action(self, verb: str, name: str, target_id: str) -> None:
         session = self.session
@@ -654,6 +663,7 @@ class AreaWindow:
                 self.refresh_area()
                 self.statusBar().showMessage(f"You walk on, {side}.", 4000)
                 session.start_tile_art()
+                self._design_ahead()
                 self._sync_progress()
             else:
                 self.statusBar().showMessage(f"The way {side} is barred here.", 4000)

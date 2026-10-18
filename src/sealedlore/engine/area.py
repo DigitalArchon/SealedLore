@@ -47,6 +47,8 @@ from sealedlore.engine.world import key
 from sealedlore.engine.world_art import (
     FILLS,
     GROUND,
+    REGION_GRID_SIDE,
+    REGION_GRID_TILES,
     TERRAIN_TILES,
     TILES,
     decked,
@@ -1580,11 +1582,16 @@ def build_window(
     rect = (west, north, side, side)
     patch = patch_at(art, west, north, side)
     repairs: list[str] = []
+    # On the region grid (a story with designed regions): played at the
+    # designed size whatever lies there until its design comes in.
+    region_cell = bool(art.region_origin) and abs(side - REGION_GRID_SIDE) < 1.0
+    if patch is not None and region_cell and not patch.designed:
+        patch = None  # the coarser land under it, resampled to the region's tiles
     if patch is not None and patch.rows:
         rows = [r.ljust(len(patch.rows[0])) for r in patch.rows]
         ground = patch.ground
     else:
-        columns = rows_count = TERRAIN_TILES
+        columns = rows_count = REGION_GRID_TILES if region_cell else TERRAIN_TILES
         under = patch_under(art, west + side / 2, north - side / 2)
         if under is not None and under.rows:
             rows = _resampled(under.rows, (under.x, under.y, under.side), rect, columns, rows_count)

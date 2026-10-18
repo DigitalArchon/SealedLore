@@ -81,6 +81,7 @@ from sealedlore.engine.marks import (
     nearest_place,
     place_at,
 )
+from sealedlore.engine.regions import designed_point, designed_spot
 from sealedlore.engine.session_world_art import _today, job_words
 from sealedlore.engine.takeable import fixed_thing, same_thing, the, thing_class
 from sealedlore.engine.tile_draw import (
@@ -586,6 +587,9 @@ class AreaRuntime:
             if area_of(world, art, t.at) != area.id or _twin(area, t.name, world) is not None:
                 continue  # elsewhere, or drawn here already (a plan's object of its name)
             near = anchor_of(area, world, t.at) or self._way_in(area)
+            lies = designed_spot(art, t.id) if area.window else None
+            if lies is not None:
+                near = point_tile(world, area, *lies) or near  # where the designer put it
             x, y = thing_tile(area, near, taken)
             taken.add((x, y))
             broken = BROKEN.search(t.state.lower()) is not None
@@ -832,6 +836,8 @@ class AreaRuntime:
             # Where they stand on the map, for the window of open country
             # there: their tile's point; with the author's character, theirs.
             point = self._spot_point(spot, world, art)
+            if point is None and spot is None:
+                point = designed_point(art, name)  # where the world designer put them
             mine = spots.get(held or "")
             if point is None and name != held and place_id == where.get(held or ""):
                 point = self._spot_point(mine, world, art)
@@ -1173,6 +1179,7 @@ class AreaRuntime:
             leaf_id=self.story.active_leaf_id, held=self.held_name(), state=state
         )
         self.save()
+        self.mark_explored(state)  # a region walked into is out of the fog
 
     def here_place(self) -> str | None:
         """The place the author's character stands in now: the live spot's

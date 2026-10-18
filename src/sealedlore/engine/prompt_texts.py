@@ -2383,6 +2383,103 @@ _text(
 )
 
 
+# Not measured: the world designer (engine/regions.py; the author, Oct 18
+# 2026: "like a procedurally generated game, but ... the AI acts as a real
+# designer, intelligently building the world as the player goes"). A region
+# of open country at a time, ahead of the player, from the story's world and
+# what has happened, continuing the regions beside it.
+_text(
+    "map.region.design",
+    MAP,
+    "World designer: a region",
+    "The system prompt for designing one region of the world ahead of the player: its land, "
+    "the places and things in it and who is about, to fit the story's world and the regions "
+    "beside it.",
+    """\
+You are the level designer of a story game whose world is built as the player explores it. \
+You design one region of it: a square of country {side} metres across, seen from directly \
+above, north at the top, on a grid {grid} tiles wide (x 0-{last}, west to east) and {grid} tall \
+(y 0-{last}, north to south). One tile is {tile} metres. You describe the region as shapes and \
+the program draws it; the player walks it at that scale.
+
+Design it as a good designer would: it belongs to this world and this story, as if it had \
+always been there, and it is worth walking into. Give it a character of its own (dead \
+farmland, a frozen creek and its willows, the edge of a burned town) and one or two things to \
+find or face: a building to search, something useful left behind, someone or something about. \
+Keep to what the world would hold here, near what the story has shown; nothing that would \
+contradict the story so far, and no characters the story has named.
+
+Reply with JSON and nothing else:
+{
+  "name": "what the region is called, as people there would call it",
+  "what": "two or three sentences: what it is like, what is here",
+  "ground": "snow | grass | dirt | sand | rock",
+  "features": [
+    {"kind": "area", "fill": "water | ice | rock | trees | brush | rubble | ground", \
+"shape": "rect | ellipse", "x": 0, "y": 0, "w": 10, "h": 6},
+    {"kind": "road", "points": [[x, y], [x, y]], "width": 2},
+    {"kind": "fence", "points": [[x, y], [x, y]], "gaps": [[x, y]]}
+  ],
+  "places": [
+    {"name": "the Hollis barn", "kind": "building | landmark | settlement", "what": "one \
+sentence", "x": 0, "y": 0, "w": 4, "h": 3}
+  ],
+  "things": [{"name": "a rusted fuel can", "x": 0, "y": 0}],
+  "people": [{"who": "a zombie in a torn parka", "doing": "stumbling along the fence line", \
+"x": 0, "y": 0}]
+}
+
+Features are drawn in order, later over earlier; roads are straight runs between their points. \
+A building is a house, a barn, a shop: it can be entered, and its inside is drawn later. A \
+landmark is a spot with a name (a wrecked car, a well, a grave) drawn with your shapes. A \
+settlement is a village or a town; give it room, and it gets a plan of its own. At most \
+{max_places} places, {max_things} things and {max_people} people; fewer is often better. \
+Carry on the roads, rivers and woods that the regions beside it run into it along their \
+edges, keep the country passable from edge to edge, keep the story's own places you are \
+given clear, and put nothing on water or rock that should stand on ground.""",
+    (
+        ("side", "The region's width in metres"),
+        ("grid", "Tiles across (and down)"),
+        ("last", "The last tile's index"),
+        ("tile", "Metres a tile"),
+        ("max_places", "Places at most"),
+        ("max_things", "Things at most"),
+        ("max_people", "People at most"),
+    ),
+)
+
+_text(
+    "map.region.ask",
+    MAP,
+    "World designer: which region",
+    "Asks for one region: the world, the story so far, where the region lies, the story's "
+    "places on and near it, and what the regions beside it run into it along their edges.",
+    """\
+The world:
+{setting}
+
+What the story has shown so far:
+{story}
+
+The region to design: {where}
+
+The story's own places on or near it (keep those on it clear, where they are):
+{places}
+
+The regions beside it, and what crosses into this one along each edge:
+{edges}
+
+{ground}""",
+    (
+        ("setting", "The world as the story describes it, and its lore"),
+        ("story", "The story so far: where it stands and what happened lately"),
+        ("where", "Where the region lies, from where the player is"),
+        ("places", "The map's places on or near the region, a line each, with tiles"),
+        ("edges", "The designed regions beside it and what crosses each edge"),
+        ("ground", "The ground of the land around, to keep one country"),
+    ),
+)
+
 # Map pictures from an image model (engine/world_pictures.py), under the
 # standing approval of Settings → Images → Draw map pictures. Measured in
 # SealedLoreDocs design/map.md ("The look"): on a plain white background,

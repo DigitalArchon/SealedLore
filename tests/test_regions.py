@@ -1,0 +1,244 @@
+"""The world designer (engine/regions.py, engine/session_regions.py): the
+author (Oct 18 2026) wants the world built as the player goes, "like a
+procedurally generated game, but ... the AI acts as a real designer": regions
+round the player designed ahead of them, at walking scale, with places,
+things and people, joined into one map that grows as it is explored."""
+
+from __future__ import annotations
+
+import json
+import math
+
+import pytest
+
+from sealedlore.engine.regions import (
+    DESIGN_GRID,
+    LABEL_FROM,
+    REGION_SIDE,
+    REGION_TILES,
+    WALKABLE_LAND,
+    build_region,
+    cell_key,
+    cell_of,
+    cell_rect,
+    designed_delta,
+    edge_lines,
+    origin_of,
+    parse_region,
+    waves,
+)
+from sealedlore.engine.world import world_at
+from sealedlore.engine.world_art import window_rect
+from sealedlore.models.world import WorldArt, WorldMap, WorldPlace
+from sealedlore.providers.mock import MockChatProvider
+from tests.test_open_country import open_session, turn
+
+DESIGN = {
+    "name": "The Kessler fields",
+    "what": "Dead farmland under snow, a fence line and the Kessler barn.",
+    "ground": "snow",
+    "features": [
+        {"kind": "area", "fill": "trees", "x": 0, "y": 0, "w": 20, "h": 12},
+        {"kind": "area", "fill": "water", "x": 0, "y": 40, "w": 80, "h": 3},
+        {"kind": "road", "points": [[40, 0], [40, 79]], "width": 2},
+        {"kind": "fence", "points": [[50, 20], [70, 20]]},
+        {"kind": "building", "x": 5, "y": 5, "w": 4, "h": 4},
+    ],
+    "places": [
+        {"name": "the Kessler barn", "kind": "building", "what": "A sagging red barn.",
+         "x": 55, "y": 25, "w": 6, "h": 5},
+        {"name": "a burned-out pickup", "kind": "landmark", "what": "Rusted through.",
+         "x": 20, "y": 60, "w": 2, "h": 1},
+    ],
+    "things": [{"name": "a rusted fuel can", "x": 57, "y": 30},
+               {"name": "a bundle of fence wire", "x": 10, "y": 70}],
+    "people": [{"who": "a zombie in a torn parka", "doing": "stumbling along the fence",
+                "x": 60, "y": 22}],
+}  # fmt: skip
+
+
+def designed(world: WorldMap | None = None, art: WorldArt | None = None, cell=(0, 0)):
+    world = world or WorldMap()
+    art = art or WorldArt()
+    origin = origin_of(world, art)
+    art.region_origin = list(origin)
+    region, patch = build_region(
+        parse_region(json.dumps(DESIGN)),
+        key=cell_key(*cell),
+        rect=cell_rect(origin, *cell),
+        holder_id=None,
+        labels_from=LABEL_FROM,
+    )
+    art.regions[region.key] = region
+    art.terrain.append(patch)
+    return world, art, region, patch
+
+
+def test_the_grid_is_laid_round_where_the_story_starts_and_designed_in_waves():
+    world = WorldMap(
+        places={"farm": WorldPlace(id="farm", name="The farm", kind="site", x=100.0, y=-50.0)},
+        start="farm",
+    )
+    origin = origin_of(world, WorldArt())
+    assert origin == (100.0 - REGION_SIDE / 2, -50.0 + REGION_SIDE / 2)
+    assert cell_of(origin, 100.0, -50.0) == (0, 0)  # the start is the middle of its region
+    assert cell_of(origin, 100.0 + REGION_SIDE, -50.0) == (1, 0)
+    assert cell_of(origin, 100.0, -50.0 - REGION_SIDE) == (0, 1)  # rows run south
+    west, north, side = cell_rect(origin, 1, 0)
+    assert (west, north, side) == (origin[0] + REGION_SIDE, origin[1], REGION_SIDE)
+    first, sides, corners = waves(origin, (100.0, -50.0))
+    assert first == [(0, 0)]
+    assert sorted(sides) == [(-1, 0), (0, -1), (0, 1), (1, 0)]
+    assert len(corners) == 4 and all(abs(i) == abs(j) == 1 for i, j in corners)
+
+
+def test_a_reply_is_read_and_held_to_the_grid():
+    design = parse_region(json.dumps(DESIGN))
+    assert design.name == "The Kessler fields" and design.ground == "snow"
+    assert [f["kind"] for f in design.features] == ["area", "area", "road", "fence"]  # no building
+    assert [p["kind"] for p in design.places] == ["building", "area"]
+    odd = dict(DESIGN, ground="lava", places=[{"name": "x", "kind": "castle", "x": 900, "y": -4}])
+    read = parse_region(json.dumps(odd))
+    assert read.ground == "dirt" and read.places[0]["kind"] == "area"
+    assert read.places[0]["x"] == DESIGN_GRID - 1 and read.places[0]["y"] == 0
+    with pytest.raises(ValueError):
+        parse_region(json.dumps({"what": "no name"}))
+
+
+def test_a_design_is_land_at_walking_scale_that_never_shuts_the_player_in():
+    _world, _art, region, patch = designed()
+    assert len(patch.rows) == REGION_TILES and len(patch.rows[0]) == REGION_TILES
+    assert REGION_SIDE / REGION_TILES <= 3.0  # walking scale
+    assert patch.designed and patch.ground == "snow"
+    # The river across the whole region is bridged on the way to each edge.
+    mid = REGION_TILES // 2
+    reached = {(mid, mid)}
+    todo = [(mid, mid)]
+    while todo:
+        x, y = todo.pop()
+        for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if 0 <= nx < REGION_TILES and 0 <= ny < REGION_TILES and (nx, ny) not in reached:
+                if patch.rows[ny][nx] in WALKABLE_LAND:
+                    reached.add((nx, ny))
+                    todo.append((nx, ny))
+    for edge in ((mid, 0), (mid, REGION_TILES - 1), (0, mid), (REGION_TILES - 1, mid)):
+        assert edge in reached
+    assert any("b" in row for row in patch.rows)  # a bridge over the river
+    places = {p.name: p for p in region.places}
+    assert places["The Kessler fields"].kind == "region"
+    barn = places["the Kessler barn"]
+    assert barn.kind == "building" and barn.inside == region.place_id
+    assert region.west < barn.x < region.west + REGION_SIDE
+    assert region.north - REGION_SIDE < barn.y < region.north
+    can = next(t for t in region.things if "fuel" in t.name)
+    wire = next(t for t in region.things if "wire" in t.name)
+    assert can.at == barn.id and wire.at == region.place_id  # beside the barn, or in the open
+    assert [p.label for p in region.people] == [f"Unknown {LABEL_FROM}"]
+
+
+def test_the_regions_are_world_on_every_branch_and_under_fog_until_explored():
+    world, art, region, _patch = designed()
+    delta = designed_delta(art)
+    folded = world_at([], None, designed=delta)
+    assert region.place_id in folded.places and "the Kessler barn" in {
+        p.name for p in folded.places.values()
+    }
+    label = region.people[0].label
+    assert folded.where[label] == region.place_id
+    assert folded.unknowns[label] == "a zombie in a torn parka"
+    assert not set(folded.seen) & {p.id for p in region.places}
+    art.explored.append(region.key)
+    seen = world_at([], None, designed=designed_delta(art)).seen
+    assert {p.id for p in region.places} <= set(seen)
+
+
+def test_a_region_beside_one_tells_its_designer_what_crosses_the_edge():
+    world, art, _region, _patch = designed()
+    origin = (art.region_origin[0], art.region_origin[1])
+    lines = edge_lines(art, origin, 0, 1)  # the region south of it
+    assert "north: The Kessler fields" in lines
+    assert "a road at x 40-41" in lines  # the road runs on south across the edge
+    assert edge_lines(art, origin, 5, 5) == "- none designed yet"
+
+
+def _with_region(session):
+    world = session.world()
+    art = session.world_art
+    _w, _a, region, _patch = designed(world, art, cell=cell_of(origin_of(world, art), 800.0, 800.0))
+    session._area_cache = None
+    session._designed_cache = None
+    return region
+
+
+def test_open_country_on_a_designed_region_is_its_land_with_its_places_things_and_people(
+    tmp_path, story, cast
+):
+    session = open_session(tmp_path, story, cast)
+    region = _with_region(session)
+    world, art = session.world(), session.map_art_copy()
+    west, north, side = window_rect(art, 800.0, 800.0)
+    assert (west, north, side) == (region.west, region.north, region.side)
+    area = session.area(f"window:{west:.0f}:{north:.0f}:{side:.0f}")
+    assert area.tile_m == REGION_SIDE / REGION_TILES and area.place_id == region.place_id
+    barn = next(p for p in world.places.values() if p.name == "the Kessler barn")
+    # Boxed with a door; walked into once its inside is drawn, as any building.
+    x0, y0, x1, y1 = area.buildings[barn.id]
+    walls = [area.rows[y][x] for y in range(y0, y1 + 1) for x in (x0, x1)]
+    walls += [area.rows[y][x] for x in range(x0, x1 + 1) for y in (y0, y1)]
+    assert "+" in walls
+    assert any("fence wire" in p.name for p in area.placements)
+    label = region.people[0].label
+    state = session.area_state()
+    spot = state.spots[label]
+    assert spot.area == area.id
+    x, y = region.people[0].x, region.people[0].y
+    tx = (x - west) / area.tile_m
+    ty = (north - y) / area.tile_m
+    assert math.hypot(spot.x - tx, spot.y - ty) <= 3  # where the designer put them
+
+
+def test_the_storyteller_is_told_the_region_and_its_places_with_their_distances(
+    tmp_path, story, cast
+):
+    session = open_session(tmp_path, story, cast, ["Snow.", "{}"])
+    region = _with_region(session)
+    session.story.world_base.where["Serrik Vaun"] = region.place_id
+    session._designed_cache = None
+    list(session.send(turn("I look along the fence.")))
+    sent = session.provider.requests[0].messages[-1].text
+    assert "The Kessler fields" in sent and "the Kessler barn" in sent
+    assert " m " in sent[sent.find("the Kessler barn") - 80 : sent.find("the Kessler barn") + 80]
+
+
+class _Designer(MockChatProvider):
+    """A provider whose background clients answer every design with DESIGN."""
+
+    made: list[MockChatProvider] = []
+
+    def detached(self):
+        client = MockChatProvider([json.dumps(DESIGN)] * 4)
+        self.made.append(client)
+        return client
+
+
+def test_the_regions_round_the_player_are_designed_ahead_on_the_story_model(
+    tmp_path, story, cast, monkeypatch
+):
+    session = open_session(tmp_path, story, cast, ["Snow.", "{}"])
+    session.config.map_art = True
+    list(session.send(turn("I set out across the erg.")))
+    designer = _Designer([])
+    monkeypatch.setattr(session, "provider", designer)
+    assert session._start_region_design()
+    session._region_thread.join(30)
+    art = session.world_art
+    assert len(art.regions) == 9
+    origin = (art.region_origin[0], art.region_origin[1])
+    here = cell_key(*cell_of(origin, *session.held_point()))
+    assert here in art.regions and here in art.explored
+    labels = [p.label for r in art.regions.values() for p in r.people]
+    assert len(labels) == len(set(labels)) == 9  # one each, never the same
+    sent = [c.requests[0] for c in designer.made if c.requests]
+    assert sent and all(r.model == session.model for r in sent)  # the story model
+    assert "The region to design" in sent[0].messages[-1].text
+    assert not session._start_region_design()  # nothing left to design here

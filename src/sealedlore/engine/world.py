@@ -1508,6 +1508,7 @@ def world_at(
     *,
     start: str | None = None,
     hidden: Collection[str] = (),
+    designed: WorldDelta | None = None,
 ) -> WorldMap:
     """The map at the end of `path`: an imported map (`base`) if the story
     has one, then every passage's delta, in order. A place linked to a plot
@@ -1517,6 +1518,10 @@ def world_at(
     world = WorldMap()
     if base is not None:
         world = applied(world, base, base=True)
+    if designed is not None:
+        # The world designer's regions (engine/regions.py): world, not story,
+        # under every branch's passages, as if always there.
+        world = applied(world, designed, base=True, in_place=True)
     world.start = start if start in world.places else None
     if world.start is not None and world.start not in world.seen:
         world.seen.append(world.start)  # where the story begins is never under fog

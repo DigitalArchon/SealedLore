@@ -1,0 +1,589 @@
+"""The world designer (the author, Oct 18 2026: "like a procedurally generated
+game, but instead of preprogrammed procedures to generate predictable new
+spaces, the AI acts as a real designer, intelligently building the world as
+the player goes").
+
+Open country is a grid of regions about the size of a farm, REGION_SIDE
+metres square, laid from where the story starts. Each is designed by a model
+ahead of the player, the one they stand in and those round it: its land, at
+the play view's walking scale, and the places, things and people in it, to
+fit the story's world, what has happened, and the regions beside it (their
+roads, rivers and woods run on across the edges). Designed once and kept, as
+world and not story: every branch has it, as if it had always been there,
+and it stays under fog on the maps until the player has been there.
+
+Pure: the grid, the designer's messages, its reply read and held to the
+grid, a design made into land, places, things and people, and the regions as
+the map folds them in. The session runs it (engine/session_regions.py).
+"""
+
+from __future__ import annotations
+
+import math
+from collections import deque
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from typing import Any
+
+from sealedlore.engine.jsonreply import extract_json
+from sealedlore.engine.prompt_texts import PromptTexts
+from sealedlore.engine.world_art import REGION_GRID_SIDE, REGION_GRID_TILES, rasterise
+from sealedlore.engine.world_layout import position, size_of
+from sealedlore.ids import new_id
+from sealedlore.messages import ContentPart, PromptMessage
+from sealedlore.models.world import (
+    DesignedPerson,
+    DesignedRegion,
+    TerrainPatch,
+    WorldArt,
+    WorldDelta,
+    WorldMap,
+    WorldPlace,
+    WorldThing,
+)
+
+# A region: about the size of a farm (the author's choice), walked at the
+# play view's scale: the designer's 80 tiles of 5 m, drawn as 160 of 2.5 m.
+REGION_SIDE = REGION_GRID_SIDE
+DESIGN_GRID = 80
+DESIGN_SCALE = REGION_GRID_TILES // DESIGN_GRID
+REGION_TILES = DESIGN_GRID * DESIGN_SCALE
+# A design is a long JSON reply.
+REGION_MAX_TOKENS = 8000
+MAX_PLACES, MAX_THINGS, MAX_PEOPLE = 5, 8, 3
+MAX_FEATURES = 120
+# A thing this close to a place's walls is that place's.
+BESIDE = 10.0
+# Designed people's labels start here, clear of the story's own unknowns.
+LABEL_FROM = 101
+# The rings of regions designed round the player's: theirs, then the ring.
+RING = 1
+# The designer's kinds, as the map has them: a building is entered (its
+# inside is drawn later); a landmark is a spot with a name, drawn with the
+# region's shapes; a settlement gets a plan of its own.
+KINDS = {"building": "building", "landmark": "area", "settlement": "settlement"}
+GROUNDS = ("snow", "grass", "dirt", "sand", "rock")
+# Shapes the designer may lay (buildings and objects are the program's).
+SHAPES = frozenset({"area", "road", "fence", "wall"})
+# What a region's land may hold, walked on or not, as the play view reads it.
+WALKABLE_LAND = frozenset("._,=sb:")
+# What runs on across an edge, worth telling the region beside it.
+CROSSING = {"=": "a road", "~": "water", "T": "woods", "^": "rock", "%": "a fence"}
+
+
+# --- the grid -------------------------------------------------------------------
+
+
+def origin_of(world: WorldMap, art: WorldArt) -> tuple[float, float]:
+    """The grid's north-west corner: kept once set, else the region where
+    the story starts centred on it (its first place, else the map's middle)."""
+    if art.region_origin and len(art.region_origin) == 2:
+        return float(art.region_origin[0]), float(art.region_origin[1])
+    start = position(world, world.start) if world.start else None
+    cx, cy = start if start is not None else (0.0, 0.0)
+    return cx - REGION_SIDE / 2, cy + REGION_SIDE / 2
+
+
+def cell_of(origin: tuple[float, float], x: float, y: float) -> tuple[int, int]:
+    """(column, row) of the region holding a point; rows run south."""
+    ox, oy = origin
+    return math.floor((x - ox) / REGION_SIDE), math.floor((oy - y) / REGION_SIDE)
+
+
+def cell_rect(origin: tuple[float, float], i: int, j: int) -> tuple[float, float, float]:
+    """(west, north, side) of a region."""
+    ox, oy = origin
+    return ox + i * REGION_SIDE, oy - j * REGION_SIDE, REGION_SIDE
+
+
+def cell_key(i: int, j: int) -> str:
+    return f"{i}:{j}"
+
+
+def parse_key(key: str) -> tuple[int, int] | None:
+    try:
+        i, j = (int(v) for v in key.split(":"))
+    except ValueError:
+        return None
+    return i, j
+
+
+def region_at(art: WorldArt, origin: tuple[float, float], x: float, y: float):
+    """The designed region holding a point, or None."""
+    return art.regions.get(cell_key(*cell_of(origin, x, y)))
+
+
+def waves(origin: tuple[float, float], point: tuple[float, float], ring: int = RING):
+    """The regions round a point in the order they are designed, as waves
+    that border nothing else in their own wave: the one it is in, then the
+    four beside it, then the corners (so each sees its neighbours' edges)."""
+    ci, cj = cell_of(origin, *point)
+    centre: list[tuple[int, int]] = [(ci, cj)]
+    sides: list[tuple[int, int]] = []
+    corners: list[tuple[int, int]] = []
+    for dj in range(-ring, ring + 1):
+        for di in range(-ring, ring + 1):
+            if (di, dj) == (0, 0):
+                continue
+            (sides if di == 0 or dj == 0 else corners).append((ci + di, cj + dj))
+    return [centre, sides, corners]
+
+
+# --- what the designer is told ----------------------------------------------------
+
+
+def _bearing(dx: float, dy: float) -> str:
+    names = ("north", "north-east", "east", "south-east", "south", "south-west", "west")
+    names = (*names, "north-west")
+    angle = (math.degrees(math.atan2(dx, dy)) + 360) % 360
+    return names[round(angle / 45) % 8]
+
+
+def _metres(d: float) -> str:
+    return f"{d / 1000:.1f} km" if d >= 1000 else f"{round(d / 10) * 10:.0f} m"
+
+
+def where_words(
+    world: WorldMap,
+    rect: tuple[float, float, float],
+    player: tuple[float, float] | None,
+) -> str:
+    """Where a region lies: from the player, and from the nearest known place."""
+    west, north, side = rect
+    cx, cy = west + side / 2, north - side / 2
+    parts = []
+    if player is not None:
+        d = math.hypot(cx - player[0], cy - player[1])
+        if d < side / 2:
+            parts.append("the region the player is in")
+        else:
+            parts.append(
+                f"the region {_bearing(cx - player[0], cy - player[1])} of the one the player is in"
+            )
+    nearest = None
+    for place in world.places.values():
+        if place.x is None or place.y is None or place.kind in ("region", "route"):
+            continue
+        d = math.hypot(place.x - cx, place.y - cy)
+        if nearest is None or d < nearest[0]:
+            nearest = (d, place)
+    if nearest is not None:
+        d, place = nearest
+        if d < side / 2:
+            parts.append(f"{place.name} is on it")
+        else:
+            parts.append(
+                f"its middle is {_metres(d)} {_bearing(cx - place.x, cy - place.y)} of {place.name}"
+            )
+    return "; ".join(parts) or "open country"
+
+
+def place_lines(
+    world: WorldMap, rect: tuple[float, float, float], *, reach: float = REGION_SIDE
+) -> str:
+    """The map's places on the region (with its tiles, kept clear) and near
+    it (with distance and bearing from its middle), a line each."""
+    west, north, side = rect
+    tile = side / DESIGN_GRID
+    cx, cy = west + side / 2, north - side / 2
+    on, near = [], []
+    for place in world.places.values():
+        if place.x is None or place.y is None or place.kind in ("region", "route"):
+            continue
+        half = size_of(place) / 2
+        what = f": {place.what}" if place.what else ""
+        if (
+            place.x + half > west
+            and place.x - half < west + side
+            and place.y - half < north
+            and place.y + half > north - side
+        ):
+            x0 = max(0, int((place.x - half - west) / tile))
+            x1 = min(DESIGN_GRID - 1, int((place.x + half - west) / tile))
+            y0 = max(0, int((north - (place.y + half)) / tile))
+            y1 = min(DESIGN_GRID - 1, int((north - (place.y - half)) / tile))
+            on.append(f"- {place.name} ({place.kind or 'place'}), x {x0}-{x1}, y {y0}-{y1}{what}")
+            continue
+        d = math.hypot(place.x - cx, place.y - cy) - half
+        if d <= reach + side / 2:
+            near.append(
+                (
+                    d,
+                    f"- {place.name} ({place.kind or 'place'}), {_metres(max(d, 0))} "
+                    f"{_bearing(place.x - cx, place.y - cy)} of its middle{what}",
+                )
+            )
+    near.sort(key=lambda pair: pair[0])
+    lines = on + [line for _d, line in near[:10]]
+    return "\n".join(lines) or "- none"
+
+
+def _runs(cells: Sequence[str]) -> list[tuple[str, int, int]]:
+    """(tile, first, last) for each run of a crossing tile along an edge."""
+    out: list[tuple[str, int, int]] = []
+    for i, ch in enumerate(cells):
+        if ch not in CROSSING:
+            continue
+        if out and out[-1][0] == ch and out[-1][2] == i - 1:
+            out[-1] = (ch, out[-1][1], i)
+        else:
+            out.append((ch, i, i))
+    return out
+
+
+def edge_lines(art: WorldArt, origin: tuple[float, float], i: int, j: int) -> str:
+    """The designed regions beside one, a line each: their name, what they
+    are, and what crosses into this one along the shared edge, in this
+    region's tiles (a road at y 38-41 along the west edge)."""
+    sides = {
+        "north": ((i, j - 1), lambda rows: rows[-1], "x"),
+        "south": ((i, j + 1), lambda rows: rows[0], "x"),
+        "west": ((i - 1, j), lambda rows: [r[-1] for r in rows], "y"),
+        "east": ((i + 1, j), lambda rows: [r[0] for r in rows], "y"),
+    }
+    lines = []
+    for side, (cell, strip, axis) in sides.items():
+        region = art.regions.get(cell_key(*cell))
+        if region is None:
+            continue
+        patch = next((p for p in art.terrain if p.designed and p.place_id == region.place_id), None)
+        name = next((p.name for p in region.places if p.id == region.place_id), "a region")
+        what = next((p.what for p in region.places if p.id == region.place_id), "")
+        crossing = ""
+        if patch is not None and patch.rows:
+            edge = list(strip(patch.rows))
+            scale = max(1, len(edge) // DESIGN_GRID)
+            coarse = [edge[k] for k in range(0, len(edge), scale)][:DESIGN_GRID]
+            runs = [f"{CROSSING[ch]} at {axis} {a}-{b}" for ch, a, b in _runs(coarse)]
+            crossing = ("; along your " + side + " edge: " + ", ".join(runs)) if runs else ""
+        lines.append(f"- {side}: {name}, {what}{crossing}".rstrip(", "))
+    return "\n".join(lines) or "- none designed yet"
+
+
+def region_messages(
+    texts: PromptTexts,
+    *,
+    setting: str,
+    story: str,
+    where: str,
+    places: str,
+    edges: str,
+    ground: str,
+) -> list[PromptMessage]:
+    system = texts.fill(
+        "map.region.design",
+        side=f"{REGION_SIDE:.0f}",
+        grid=str(DESIGN_GRID),
+        last=str(DESIGN_GRID - 1),
+        tile=f"{REGION_SIDE / DESIGN_GRID:g}",
+        max_places=str(MAX_PLACES),
+        max_things=str(MAX_THINGS),
+        max_people=str(MAX_PEOPLE),
+    )
+    user = texts.fill(
+        "map.region.ask",
+        setting=setting,
+        story=story,
+        where=where,
+        places=places,
+        edges=edges,
+        ground=ground,
+    )
+    return [
+        PromptMessage(role="system", parts=(ContentPart(text=system),)),
+        PromptMessage(role="user", parts=(ContentPart(text=user),)),
+    ]
+
+
+# --- the reply ----------------------------------------------------------------------
+
+
+@dataclass
+class RegionDesign:
+    """A designer's reply, read and held to the grid."""
+
+    name: str
+    what: str
+    ground: str
+    features: list[dict[str, Any]] = field(default_factory=list)
+    places: list[dict[str, Any]] = field(default_factory=list)
+    things: list[dict[str, Any]] = field(default_factory=list)
+    people: list[dict[str, Any]] = field(default_factory=list)
+
+
+def _cell(value: Any) -> int:
+    try:
+        return max(0, min(DESIGN_GRID - 1, int(round(float(value)))))
+    except (TypeError, ValueError, OverflowError):
+        return DESIGN_GRID // 2
+
+
+def _span(value: Any, default: int = 3) -> int:
+    """A width or height in the designer's tiles, at least one."""
+    try:
+        return max(1, min(DESIGN_GRID, int(round(float(value)))))
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
+def _text(value: Any, most: int) -> str:
+    return " ".join(str(value or "").split())[:most]
+
+
+def parse_region(text: str) -> RegionDesign:
+    """The designer's reply as a design; ValueError for one with no name or
+    no land."""
+    data = extract_json(text, dict, "region")
+    name = _text(data.get("name"), 80)
+    if not name:
+        raise ValueError("the region has no name")
+    features = [
+        f
+        for f in (data.get("features") if isinstance(data.get("features"), list) else [])
+        if isinstance(f, dict) and f.get("kind") in SHAPES
+    ][:MAX_FEATURES]
+    ground = _text(data.get("ground"), 12).lower()
+    places = []
+    for p in data.get("places") if isinstance(data.get("places"), list) else []:
+        if not isinstance(p, dict) or not _text(p.get("name"), 80):
+            continue
+        places.append(
+            {
+                "name": _text(p.get("name"), 80),
+                "kind": KINDS.get(_text(p.get("kind"), 20).lower(), "area"),
+                "what": _text(p.get("what"), 300),
+                "x": _cell(p.get("x")),
+                "y": _cell(p.get("y")),
+                "w": _span(p.get("w")),
+                "h": _span(p.get("h")),
+            }
+        )
+    things = [
+        {"name": _text(t.get("name"), 80), "x": _cell(t.get("x")), "y": _cell(t.get("y"))}
+        for t in (data.get("things") if isinstance(data.get("things"), list) else [])
+        if isinstance(t, dict) and _text(t.get("name"), 80)
+    ]
+    people = [
+        {
+            "who": _text(p.get("who"), 120),
+            "doing": _text(p.get("doing"), 160),
+            "x": _cell(p.get("x")),
+            "y": _cell(p.get("y")),
+        }
+        for p in (data.get("people") if isinstance(data.get("people"), list) else [])
+        if isinstance(p, dict) and _text(p.get("who"), 120)
+    ]
+    return RegionDesign(
+        name=name,
+        what=_text(data.get("what"), 600),
+        ground=ground if ground in GROUNDS else "dirt",
+        features=features,
+        places=places[:MAX_PLACES],
+        things=things[:MAX_THINGS],
+        people=people[:MAX_PEOPLE],
+    )
+
+
+# --- the design made into land, places, things and people ---------------------------
+
+
+def _passable(rows: list[list[str]]) -> None:
+    """Every edge's middle reached from the region's middle: where it isn't,
+    a way is cut straight to it (a bridge over water, a path through the
+    rest), so no region shuts the player in or out."""
+    n = len(rows)
+    mid = n // 2
+
+    def reached() -> set[tuple[int, int]]:
+        start = (mid, mid)
+        if rows[mid][mid] not in WALKABLE_LAND:
+            rows[mid][mid] = "="
+        seen = {start}
+        todo = deque([start])
+        while todo:
+            x, y = todo.popleft()
+            for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if 0 <= nx < n and 0 <= ny < n and (nx, ny) not in seen:
+                    if rows[ny][nx] in WALKABLE_LAND:
+                        seen.add((nx, ny))
+                        todo.append((nx, ny))
+        return seen
+
+    got = reached()
+    for ex, ey in ((mid, 0), (mid, n - 1), (0, mid), (n - 1, mid)):
+        if (ex, ey) in got:
+            continue
+        steps = max(abs(ex - mid), abs(ey - mid))
+        for k in range(steps + 1):
+            x = round(mid + (ex - mid) * k / steps)
+            y = round(mid + (ey - mid) * k / steps)
+            if rows[y][x] not in WALKABLE_LAND:
+                rows[y][x] = "b" if rows[y][x] == "~" else "="
+        got = reached()
+
+
+def build_region(
+    design: RegionDesign,
+    *,
+    key: str,
+    rect: tuple[float, float, float],
+    holder_id: str | None,
+    labels_from: int,
+    model: str = "",
+    made_at: str = "",
+) -> tuple[DesignedRegion, TerrainPatch]:
+    """A design as the region the map keeps and its land: the shapes drawn
+    on the designer's grid and each tile drawn DESIGN_SCALE times over, at
+    walking scale; its own place (kind "region", holding the rest) and the
+    places, things (each where it lies) and people (labelled from
+    `labels_from`) in it."""
+    west, north, side = rect
+    tile = side / DESIGN_GRID
+    # Rock is the look of the open ground, walked on; the rock the designer
+    # lays as shapes is rock.
+    spec = {
+        "ground": "dirt" if design.ground == "rock" else design.ground,
+        "features": design.features,
+    }
+    rows, _objects, _labels = rasterise(spec, DESIGN_GRID, DESIGN_GRID)
+    grid = [list(row) for row in rows]
+    _passable(grid)
+    play = ["".join(ch * DESIGN_SCALE for ch in row) for row in grid for _ in range(DESIGN_SCALE)]
+
+    def at(gx: float, gy: float) -> tuple[float, float]:
+        return west + (gx + 0.5) * tile, north - (gy + 0.5) * tile
+
+    region = WorldPlace(
+        id=new_id(),
+        name=design.name,
+        kind="region",
+        what=design.what,
+        inside=holder_id,
+        x=west + side / 2,
+        y=north - side / 2,
+        size=side,
+    )
+    places = [region]
+    for p in design.places:
+        w = min(p["w"], DESIGN_GRID - p["x"])
+        h = min(p["h"], DESIGN_GRID - p["y"])
+        x, y = at(p["x"] + (w - 1) / 2, p["y"] + (h - 1) / 2)
+        size = max(w, h) * tile
+        if p["kind"] == "settlement":
+            size = max(size, 60.0)
+        places.append(
+            WorldPlace(
+                name=p["name"],
+                kind=p["kind"],
+                what=p["what"],
+                inside=region.id,
+                x=x,
+                y=y,
+                size=max(size, 4.0),
+            )
+        )
+    things: list[WorldThing] = []
+    spots: dict[str, list[float]] = {}
+    for t in design.things:
+        x, y = at(t["x"], t["y"])
+        near = min(
+            (p for p in places[1:]),
+            key=lambda p: math.hypot((p.x or 0) - x, (p.y or 0) - y),
+            default=None,
+        )
+        # Beside a place (within BESIDE metres of its walls) it is that
+        # place's; in the open, the region's.
+        holder = (
+            near.id
+            if near is not None
+            and math.hypot((near.x or 0) - x, (near.y or 0) - y) <= size_of(near) / 2 + BESIDE
+            else region.id
+        )
+        thing = WorldThing(name=t["name"], at=holder)
+        things.append(thing)
+        spots[thing.id] = [x, y]
+    people = []
+    for n, p in enumerate(design.people):
+        x, y = at(p["x"], p["y"])
+        people.append(
+            DesignedPerson(
+                label=f"Unknown {labels_from + n}", who=p["who"], doing=p["doing"], x=x, y=y
+            )
+        )
+    designed = DesignedRegion(
+        key=key,
+        west=west,
+        north=north,
+        side=side,
+        place_id=region.id,
+        places=places,
+        things=things,
+        thing_spots=spots,
+        people=people,
+        model=model,
+        made_at=made_at,
+    )
+    patch = TerrainPatch(
+        place_id=region.id,
+        x=west + side / 2,
+        y=north - side / 2,
+        side=side,
+        rows=play,
+        ground=design.ground,
+        model=model,
+        made_at=made_at,
+        designed=True,
+    )
+    return designed, patch
+
+
+def next_label(art: WorldArt) -> int:
+    """The number the next designed person's label starts from."""
+    used = [
+        int(p.label.rsplit(" ", 1)[-1])
+        for r in art.regions.values()
+        for p in r.people
+        if p.label.rsplit(" ", 1)[-1].isdigit()
+    ]
+    return max([LABEL_FROM - 1, *used]) + 1
+
+
+# --- the regions on the map ---------------------------------------------------------
+
+
+def designed_delta(art: WorldArt) -> WorldDelta | None:
+    """The designer's regions as the map folds them in, under the story
+    (`world.world_at`): their places, things and people, the places seen
+    once the region has been explored."""
+    if not art.regions:
+        return None
+    delta = WorldDelta()
+    explored = set(art.explored)
+    for key in sorted(art.regions):
+        region = art.regions[key]
+        delta.places += [p.model_copy() for p in region.places]
+        delta.things += [t.model_copy() for t in region.things]
+        for person in region.people:
+            delta.where[person.label] = region.place_id
+            delta.unknowns[person.label] = person.who
+        if key in explored:
+            delta.seen += [p.id for p in region.places]
+    return delta
+
+
+def designed_point(art: WorldArt, name: str) -> tuple[float, float] | None:
+    """Where the designer put someone, in metres, or None."""
+    for region in art.regions.values():
+        for person in region.people:
+            if person.label == name:
+                return person.x, person.y
+    return None
+
+
+def designed_spot(art: WorldArt, thing_id: str) -> tuple[float, float] | None:
+    """Where the designer put a thing, in metres, or None."""
+    for region in art.regions.values():
+        spot = region.thing_spots.get(thing_id)
+        if spot is not None and len(spot) == 2:
+            return float(spot[0]), float(spot[1])
+    return None

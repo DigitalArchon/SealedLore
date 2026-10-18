@@ -174,6 +174,10 @@ WAY_PATCH_SIDE = 1_600.0
 WINDOW_SIDE = WAY_PATCH_SIDE
 WINDOW_LEVELS = (1, 2, 4)
 WINDOW_PATCHES = 3
+# The world designer's regions (engine/regions.py REGION_SIDE, kept equal):
+# open country on their grid once a story has one, played at REGION_TILES.
+REGION_GRID_SIDE = 400.0
+REGION_GRID_TILES = 160
 # A way longer than this many patches gets none: it isn't country the player
 # has walked, and a link read in light-years ("Bajor, five light-years away")
 # planned 3e13 patches and hung the thread that asked (the review, Oct 15
@@ -688,8 +692,9 @@ OPEN_GROUND = frozenset({"snow", "grass", "dirt", "sand"})
 
 
 def patch_under(art: WorldArt, x: float, y: float) -> TerrainPatch | None:
-    """The finest land drawn under a point, or None."""
-    for patch in sorted(art.terrain, key=lambda p: p.side):
+    """The finest land drawn under a point, or None; a designed region's
+    before other land as wide (engine/regions.py)."""
+    for patch in sorted(art.terrain, key=lambda p: (p.side, not p.designed)):
         half = patch.side / 2
         if abs(x - patch.x) <= half and abs(y - patch.y) <= half:
             return patch
@@ -853,6 +858,14 @@ def window_rect(art: WorldArt, x: float, y: float) -> tuple[float, float, float]
     rows at its own tile), else the grid cell there (`window_cell`), whose
     rows are the coarser land's under it resampled, or plain ground until
     its patch is drawn."""
+    if art.region_origin and len(art.region_origin) == 2:
+        # A story with designed regions plays open country on the region grid
+        # (engine/regions.py), designed or not yet, so a spot stays where it is
+        # when its region's design comes in.
+        side = REGION_GRID_SIDE
+        ox, oy = art.region_origin
+        i, j = math.floor((x - ox) / side), math.floor((oy - y) / side)
+        return ox + i * side, oy - j * side, side
     patch = patch_under(art, x, y)
     if patch is not None and patch.side <= WINDOW_SIDE + 1.0:
         return patch.x - patch.side / 2, patch.y + patch.side / 2, patch.side
@@ -887,8 +900,9 @@ def parse_window(area_id: str | None) -> tuple[float, float, float] | None:
 
 
 def patch_at(art: WorldArt, west: float, north: float, side: float) -> TerrainPatch | None:
-    """The land patch drawn exactly at this rectangle (within a metre), or None."""
-    for patch in art.terrain:
+    """The land patch drawn exactly at this rectangle (within a metre), or
+    None; a designed region's before any other there."""
+    for patch in sorted(art.terrain, key=lambda p: not p.designed):
         if (
             abs(patch.side - side) < 1.0
             and abs(patch.x - patch.side / 2 - west) < 1.0

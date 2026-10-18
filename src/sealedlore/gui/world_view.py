@@ -1487,8 +1487,11 @@ class WorldView(QWidget):
         # Coarse land first, finer on top: a town's six kilometres under the
         # road's patches. Each fades out at its edge (`land_pixmap`).
         colours = self._colours()
+        # The world designer's regions stay in the fog until explored: the map
+        # grows as the player goes (engine/regions.py).
+        explored = {r.place_id for k, r in self.art.regions.items() if k in self.art.explored}
         for patch in sorted(self.art.terrain, key=lambda p: -p.side):
-            if not patch.rows:
+            if not patch.rows or (patch.designed and patch.place_id not in explored):
                 continue
             item = QGraphicsPixmapItem(land_pixmap(tuple(patch.rows), patch.ground, colours))
             item.setTransformationMode(Qt.FastTransformation)
