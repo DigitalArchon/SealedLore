@@ -105,6 +105,10 @@ class CorrectionWindow:
             if ok and name.strip():
                 done = session.correct_put_thing(name, area.id, x, y) is not None
                 self._after_correction(done, f"{name.strip()} put here")
+        elif action == "place_object":
+            name, x, y = args
+            done = session.place_object(name, area.id, x, y) is not None
+            self._after_correction(done, f"{name[:1].upper() + name[1:]} placed")
         elif action == "put_person":
             x, y = args
             people = session.people_to_put()

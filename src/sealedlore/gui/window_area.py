@@ -153,9 +153,28 @@ class AreaWindow:
             return
         art = session.map_art_copy()
         walkers = [
-            Walker(name, spot.x, spot.y, self._walker_image(name, art), held=name == held)
+            Walker(
+                name,
+                spot.x,
+                spot.y,
+                self._walker_image(name, art),
+                held=name == held,
+                carded=name == held or session.has_card(name),
+            )
             for name, spot in state.spots.items()
             if spot.area == me.area
+        ]
+        # Whoever is at a door from outside, shown at it (seen through it).
+        walkers += [
+            Walker(
+                name,
+                bx,
+                by,
+                self._walker_image(name, art),
+                door=(dx, dy),
+                carded=session.has_card(name),
+            )
+            for name, bx, by, dx, dy in session.at_the_door()
         ]
         places = self._place_marks(area, session, art)
         key = self._area_key(area, session, art)
@@ -180,6 +199,8 @@ class AreaWindow:
         self.area_view.set_edge(session.edge_here())
         self.area_view.set_carrying(session.carried_things(), session.people_in_reach())
         self.area_view.set_offer(session.tile_set_offer(art))
+        self.area_view.set_setup_offer(session.objects_offer_line())
+        self._sync_objects_panel()
         self._sync_marks()
         self.cast_panel.refresh_carrying()
 

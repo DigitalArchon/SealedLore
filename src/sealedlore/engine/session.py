@@ -149,6 +149,7 @@ from sealedlore.engine.session_corrections import CorrectionRuntime
 from sealedlore.engine.session_images import ImageRuntime
 from sealedlore.engine.session_map_approval import MapApprovalRuntime
 from sealedlore.engine.session_merge import MergeRuntime, _close
+from sealedlore.engine.session_objects import ObjectsRuntime
 from sealedlore.engine.session_plot import PlotRuntime, SessionNotice
 from sealedlore.engine.session_portraits import PortraitRuntime
 from sealedlore.engine.session_private import PrivateRuntime
@@ -346,6 +347,11 @@ class GenerationResult:
     stopped_early: bool
 
 
+def _as(suggestion: CharacterSuggestion) -> Character:
+    """A suggestion as a card, to match names against (`same_person`)."""
+    return Character(id="", name=suggestion.name, aliases=list(suggestion.aliases))
+
+
 def cut_off_notice(max_tokens: int | None, completed: StreamCompleted) -> str:
     """What to tell the author when a passage stopped at the token limit.
 
@@ -429,6 +435,7 @@ class StorySession(
     MapApprovalRuntime,
     AreaRuntime,
     CorrectionRuntime,
+    ObjectsRuntime,
     MergeRuntime,
     ArchivalRuntime,
     RebuildRuntime,
@@ -3038,6 +3045,57 @@ class StorySession(
         self.character_suggestions.remove(suggestion)
         self.save()
         return card
+
+    def has_card(self, name: str) -> bool:
+        """Whether a cast or supporting card answers to this name."""
+        return any(same_person(name, c) for c in (*self.cast, *self.supporting))
+
+    def card_for(self, name: str, *, to_cast: bool = False) -> tuple[Character, bool]:
+        """A card for someone the story has by name alone (the scene's "also
+        here", someone on the map with no card): written from what the story
+        says of them by the scan for new characters, else the name alone; a
+        supporting card, or one of the cast (`to_cast`: the author may play
+        them). (The card, whether the story filled it in.) AfterDark (Oct 18
+        2026): Suzuka, named in the opening, had no card, so no avatar of
+        her own to see or change, and nothing offered to make one; the Cast
+        page's Scan was the way, and nothing pointed to it."""
+        self._refuse_in_private("Making a card")
+        name = " ".join(name.split())
+        found = next((c for c in (*self.cast, *self.supporting) if same_person(name, c)), None)
+        if found is not None:
+            return found, True
+        supporting = self.bundle.supporting
+        # Asked for by name: no longer one the author said not to suggest.
+        person = Character(id="", name=name)
+        supporting.dismissed = [d for d in supporting.dismissed if not same_person(d, person)]
+        path = self.path()
+        named = [node for node in path if mentions(node.content, person)]
+        nodes = (named[:1] + named[1:][-11:]) if named else path[-8:]
+        suggestion = next(
+            (s for s in self.character_suggestions if same_person(name, _as(s))), None
+        )
+        if suggestion is None and nodes:
+            try:
+                found_now = self.scan_for_characters(nodes)
+            except (ProviderError, ValueError):
+                found_now = []
+            suggestion = next((s for s in found_now if same_person(name, _as(s))), None)
+        if suggestion is not None:
+            card = card_from_suggestion(suggestion)
+            self.character_suggestions.remove(suggestion)
+            if card.name != name:
+                # The name the story and the map use; the scan's as an alias.
+                if card.name.lower() not in name.lower():
+                    card.aliases = [card.name, *card.aliases]
+                card.name = name
+        else:
+            card = Character(name=name, origin="author")
+        (self.cast if to_cast else self.supporting).append(card)
+        if to_cast:
+            for scene in self._all_scenes():
+                move_into_cast(scene, card)
+        self.save()
+        return card, suggestion is not None
 
     def dismiss_suggestion(self, suggestion_id: str) -> None:
         suggestion = self._suggestion(suggestion_id)

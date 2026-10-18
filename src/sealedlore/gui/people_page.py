@@ -61,6 +61,16 @@ NOT_BEGUN = (
     "opening places everyone."
 )
 CARD_TIP = "Click to open {name}'s profile. Right-click for more."
+ALSO_HERE_HEADING = "Also here, with no card yet"
+MAKE_CARD_LABEL = "Make a card"
+
+
+def card_choices(name: str) -> list[tuple[str, bool]]:
+    """Make a card's choices for someone with none: (words, into the cast)."""
+    return [
+        (f"Make a card for {name} (a supporting character)", False),
+        (f"Make a card for {name} in the cast (you can play them)", True),
+    ]
 
 
 @dataclass(frozen=True)
@@ -340,6 +350,8 @@ class PeoplePage(QScrollArea):
     settings_requested = Signal()
     scene_requested = Signal()
     add_requested = Signal()
+    # Make a card for someone here with none: their name, into the cast.
+    card_requested = Signal(str, bool)
 
     def __init__(self, pictures: Callable[[], object]) -> None:
         super().__init__()
@@ -391,6 +403,7 @@ class PeoplePage(QScrollArea):
         self.cards = {}
         self.tip = None
         self.tip_buttons = {}
+        self.make_card_buttons: dict[str, QToolButton] = {}
 
         if view.location or view.situation:
             heading = QLabel(view.location or "Where the story is")
@@ -440,10 +453,7 @@ class PeoplePage(QScrollArea):
         else:
             self._grid(layout, HERE_HEADING, view.here, here_columns, HERE_MAX_HEIGHT)
             if view.also_here:
-                also = QLabel("Also here: " + ", ".join(view.also_here))
-                also.setObjectName("peopleSituation")
-                also.setWordWrap(True)
-                layout.addWidget(also)
+                self._also_here(layout, view.also_here)
             if not view.here and not view.also_here:
                 nobody = QLabel("Nobody the story knows is here.")
                 nobody.setObjectName("hintLabel")
@@ -453,6 +463,42 @@ class PeoplePage(QScrollArea):
         layout.addStretch(1)
         self.setWidget(page)
         self._show_pictures()
+
+    def _also_here(self, layout: QVBoxLayout, names: Sequence[str]) -> None:
+        """Those here with no card, each with Make a card (AfterDark, Oct 18
+        2026: Suzuka, named in the opening, was only a name here, with no
+        way to give her a card, a portrait or an avatar of her own)."""
+        heading = QLabel(ALSO_HERE_HEADING)
+        heading.setObjectName("peopleSituation")
+        heading.setWordWrap(True)
+        layout.addWidget(heading)
+        self.make_card_buttons = {}
+        for name in names:
+            row = QHBoxLayout()
+            row.setSpacing(10)
+            face = QLabel()
+            face.setPixmap(_placeholder(name, QSize(48, 64)))
+            label = QLabel(name)
+            label.setWordWrap(True)
+            button = QToolButton()
+            button.setText(MAKE_CARD_LABEL)
+            button.setToolTip(
+                f"Give {name} a card of their own, written from what the story says of them: "
+                "a profile, a portrait and an avatar on the map"
+            )
+            button.setPopupMode(QToolButton.InstantPopup)
+            menu = QMenu(button)
+            for words, to_cast in card_choices(name):
+                menu.addAction(words).triggered.connect(
+                    lambda _c=False, n=name, c=to_cast: self.card_requested.emit(n, c)
+                )
+            button.setMenu(menu)
+            self.make_card_buttons[name] = button
+            row.addWidget(face, 0)
+            row.addWidget(label, 0)
+            row.addWidget(button, 0)
+            row.addStretch(1)
+            layout.addLayout(row)
 
     def _grid(
         self,

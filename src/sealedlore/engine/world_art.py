@@ -587,6 +587,32 @@ def local_area(world: WorldMap, place_id: str | None) -> WorldPlace | None:
     return best
 
 
+# The parts of a building that are outside it, by their name: whoever is
+# there stands at its door on the ground round it, and its own plan (its
+# inside) has no place for them. AfterDark (Oct 18 2026): the read put "The
+# porch overhang" inside the farmhouse, its label stood in the house's
+# middle, and Suzuka on it stood in the far hall.
+_OUTSIDE_PART = re.compile(
+    r"\b(porch|veranda|verandah|stoop|doorstep|steps|overhang|yard|backyard|garden|"
+    r"driveway|forecourt|exterior|outside)\b",
+    re.IGNORECASE,
+)
+_HOLDS_INSIDE = frozenset({"building", "room"})
+
+
+def outside_part(world: WorldMap, place: WorldPlace | None) -> bool:
+    """A place inside a building (or room) whose name says it is outside
+    it: a porch, the steps, the yard."""
+    if place is None or not place.inside:
+        return False
+    parent = world.places.get(place.inside)
+    return (
+        parent is not None
+        and parent.kind in _HOLDS_INSIDE
+        and bool(_OUTSIDE_PART.search(place.name))
+    )
+
+
 def fixed_in_plan(world: WorldMap, place: WorldPlace) -> list[dict[str, Any]]:
     """What the map already puts in a place's plan, where it stays: each
     place inside it with a spot of its own, as a tile box. A building is
@@ -603,7 +629,7 @@ def fixed_in_plan(world: WorldMap, place: WorldPlace) -> list[dict[str, Any]]:
     for child in world.places.values():
         if child.inside != place.id or child.x is None or child.y is None:
             continue
-        if moves(world.places, child):
+        if moves(world.places, child) or outside_part(world, child):
             continue
         size = size_of(child)
         w = min(max(MIN_BUILDING_TILES, round(size / tile)), columns)
@@ -1003,7 +1029,10 @@ def layout_messages(
     inside = [
         p
         for p in world.places.values()
-        if p.inside == place.id and not moves(world.places, p) and p.id not in fixed_ids
+        if p.inside == place.id
+        and not moves(world.places, p)
+        and p.id not in fixed_ids
+        and not outside_part(world, p)
     ]
     if inside:
         parts.append("In it: " + "; ".join(_what(p) for p in inside[:12]))

@@ -118,6 +118,7 @@ from sealedlore.gui.window_corrections import CorrectionWindow
 from sealedlore.gui.window_find import FindWindow
 from sealedlore.gui.window_images import ImagesWindow
 from sealedlore.gui.window_layout import LayoutWindow, StoriesDock
+from sealedlore.gui.window_objects import ObjectsWindow
 from sealedlore.gui.window_private import PrivateWindow
 from sealedlore.gui.window_text import TextSizeWindow
 from sealedlore.gui.window_videos import VideosWindow
@@ -221,6 +222,7 @@ class MainWindow(
     WorldWindow,
     AreaWindow,
     CorrectionWindow,
+    ObjectsWindow,
     ImagesWindow,
     VideosWindow,
     PrivateWindow,
@@ -466,6 +468,7 @@ class MainWindow(
         self.people_page = PeoplePage(self._story_pictures)
         self._people_dirty = True
         self._wire_people()
+        self._wire_objects()
         # The pages a job locks read-only rather than greys out.
         self._busy_locks = [
             BusyLock(page)
@@ -1298,6 +1301,7 @@ class MainWindow(
             self.session.save()
         self.session = None
         self._close_area()
+        self._close_objects()
         # Nothing of the story's map stays for the next: a memory chat's
         # card, postcard and decoded views (the review, Oct 15 2026).
         self.world_view.picture_reader = None
@@ -2916,6 +2920,8 @@ class MainWindow(
         self._offer_pending_scene()
         self._sync_private_ui()
         self._offer_private_summary()
+        # What the job's starter wanted done once it is in (Make a card).
+        self._run_after_job()
         if self._queued is not None:
             # After the thread has let go of the job, not inside its signal.
             QTimer.singleShot(0, self._run_queued)

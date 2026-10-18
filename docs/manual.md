@@ -969,6 +969,16 @@ Who is here is the scene's (below), so the faces show at a glance who the
 storyteller thinks is in the room; **Correct the scene…** goes to the Scene
 page to put it right.
 
+Someone the story has here who has no card (named in the opening or by a
+passage, never given one) is listed under **Also here, with no card yet**,
+with **Make a card**: as a supporting character, or in the cast so you can
+play them. The card is written from what the story says of them (a short
+call to the summarisation model; with nothing to go on it has their name
+alone, for you to fill in) and opens on the Cast page, where you can draw
+their portrait. On a map, they then get an avatar of their own instead of
+one of the tile set's figures. Right-clicking them on the map offers the
+same.
+
 ## The scene, and who can walk into it
 
 The **Scene** tab holds where the story is — location, time, what's going on —
@@ -1314,6 +1324,20 @@ story or a walk takes them in.
   keeps its own and the next passage is read from the corrected map; the
   last one can be undone (**Undo** in the same menus) until the story
   moves on.
+- **Objects…** (above Local) makes things and puts them where you want
+  them, mainly to set a place up before you play, though it works at any
+  time. Type what you want, separated by commas ("an armchair, a small side
+  table, a worn rug"), and press **Make**: the panel says how many pictures
+  that draws and what each costs, and each is drawn in the tile set's style
+  (one the tile set already has isn't drawn again). Until its picture is in,
+  an object shows as the tile set's nearest thing. Then choose an object,
+  yours or any of the tile set's, and click on Local to put it there; it
+  stays chosen, so you can put down several (Esc stops). **Remove things**
+  takes anything you click off the map, the furniture that came with the
+  place too. Placing and removing are corrections like those above: no time
+  passes, the storyteller is told the room as it now is, and Undo puts the
+  last one back. While a story's first place is being set up, a line on
+  Local offers Objects… until your first turn.
 - **The clock** (Day 1, 08:00, beside the place's name) moves with walking
   and travel, with the time the passages tell, and with a Direction or
   Narration that says time goes by ("Three weeks pass"). In a story with a
@@ -1324,7 +1348,9 @@ story or a walk takes them in.
 - **Who can see whom.** Walls and rock stop sight; windows, fences and
   doorways don't, and a few trees deep do. What you can't see from where you
   stand is the fog of war: indoors it is shaded, and anyone out of your sight
-  isn't shown at all until you can see them. The storyteller is told where
+  isn't shown at all until you can see them. Someone outside at a door of
+  the building you are in (knocking, say) shows at that door, beyond its
+  wall, whenever you can see the door. The storyteller is told where
   everyone is, and who is in sight of you and within earshot.
 - Nobody else moves on their own: people stand where the story last put
   them until a passage moves them.

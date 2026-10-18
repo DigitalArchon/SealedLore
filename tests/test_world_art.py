@@ -385,10 +385,13 @@ def test_land_on_land_already_drawn_is_dropped():
 
 def farm_world() -> WorldMap:
     farm = WorldPlace(id="farm", name="Farmhouse", kind="building")
-    yard = WorldPlace(id="yard", name="Yard", kind="area", inside="farm")
+    yard = WorldPlace(id="yard", name="Back room", kind="area", inside="farm")
+    # A read's porch or yard put inside the building is outside it: never in
+    # its plan (AfterDark, Oct 18 2026).
+    porch = WorldPlace(id="porch", name="The porch", kind="area", inside="farm")
     hills = WorldPlace(id="hills", name="The hills", kind="region")
     truck = WorldThing(id="truck", name="Pickup truck", at="farm", state="rusty")
-    delta = WorldDelta(places=[farm, yard, hills], things=[truck], where={"Jane": "farm"})
+    delta = WorldDelta(places=[farm, yard, porch, hills], things=[truck], where={"Jane": "farm"})
     place_delta(WorldMap(), delta, "Jane")
     return applied(WorldMap(), delta)
 
@@ -405,7 +408,8 @@ def test_the_story_s_places_get_land_and_a_layout_and_sprites_nearest_first():
     assert "Draw the land around: Farmhouse, a building" in ask and "a frozen winter" in ask
     layout = jobs[1].messages
     assert "One tile is about" in layout[0].text
-    assert "- Yard (area): x " in layout[1].text  # placed, so told where it stays
+    assert "- Back room (area): x " in layout[1].text  # placed, so told where it stays
+    assert "porch" not in layout[1].text
     assert "Pickup truck (rusty)" in layout[1].text
 
 

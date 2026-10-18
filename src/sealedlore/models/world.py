@@ -379,6 +379,10 @@ class WorldArt(BaseModel):
     # "walker/Jane Doe") to the file drawn or chosen for it; "" goes back to
     # the set's own, past anything drawn for the story.
     tile_overrides: dict[str, str] = Field(default_factory=dict)
+    # The objects the author made for the map (Objects…, engine/objects.py),
+    # by name as typed, oldest first: drawn as things of the set's
+    # ("items/<slug>" in `tile_overrides`) and offered for placing.
+    objects: list[str] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod

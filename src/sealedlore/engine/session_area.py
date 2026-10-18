@@ -120,9 +120,12 @@ from sealedlore.engine.world import (
 from sealedlore.engine.world_art import (
     ground_of,
     is_window,
+    outside_part,
     parse_window,
     patch_at,
     patch_under,
+    window_id,
+    window_rect,
 )
 from sealedlore.engine.world_layout import (
     CHILD_SHARE,
@@ -165,6 +168,9 @@ BESIDE = 3
 # How far from a building's door someone "at" it may stand before they are
 # stood at it again.
 AT_A_PLACE = 8
+# Tiles from a door's front, outside, that count as at the door (shown at it
+# from inside: `at_the_door`).
+AT_THE_DOOR = 2.5
 MAX_READ_MINUTES = 7 * 24 * 60
 # Where the clock starts when the opening's read gives no time it can use:
 # morning, not the midnight a count from nothing meant.
@@ -786,13 +792,17 @@ class AreaRuntime:
             if point is None and name != held and place_id == where.get(held or ""):
                 point = self._spot_point(mine, world, art)
             target = area_of(world, art, place_id, point)
-            if name in world.outside and target == place_id:
+            # Where they are stood: their place, or, outside a building, the
+            # building (its door's front on the ground round it).
+            stand_at = place_id
+            outside = False
+            if name in world.outside or outside_part(world, world.places.get(place_id)):
                 # At a building but outside it (its door, porch, yard): on the
                 # ground round it, at its door (`_stand` finds its front).
-                parent = world.places[place_id].inside if place_id in world.places else None
-                around = area_of(world, art, parent, point) if parent else None
-                if around is not None and around != place_id:
-                    target = around
+                around = self._outside_of(world, art, place_id, target, spot, point)
+                if around is not None:
+                    target, stand_at = around
+                    outside = True
             # Stood on the land only until their place had a plan: there now.
             arrived = (
                 spot is not None
@@ -816,11 +826,15 @@ class AreaRuntime:
                 continue
             # On the land for a place that is no area of its own yet (no
             # plan): they go into it once it has one (`Spot.for_place`).
-            waiting = place_id if area.window and place_id not in (area.place_id, area.id) else ""
+            waiting = (
+                place_id
+                if area.window and not outside and place_id not in (area.place_id, area.id)
+                else ""
+            )
             if (
                 spot is not None
                 and spot.area == target
-                and (name == held or self._still_at(area, world, spot, place_id))
+                and (name == held or self._still_at(area, world, spot, stand_at))
             ):
                 spots[name] = (
                     spot
@@ -846,13 +860,15 @@ class AreaRuntime:
                 world,
                 art,
                 target,
-                place_id,
+                stand_at,
                 name,
                 spots,
                 mine if near_me else None,
                 point=point if area.window else None,
             )
             if new is not None:
+                if outside and new.for_place:
+                    new = new.model_copy(update={"for_place": ""})
                 spots[name] = new
         # Nobody stands in fire or a wall a redrawn plan put under them
         # (kept there, every walk was refused; the second review).
@@ -865,6 +881,98 @@ class AreaRuntime:
             spots[name] = Spot(area=spot.area, x=x, y=y)
         state.spots = spots
         return state
+
+    def _outside_of(
+        self,
+        world: WorldMap,
+        art: WorldArt,
+        place_id: str,
+        target: str | None,
+        spot: Spot | None,
+        point: tuple[float, float] | None,
+    ) -> tuple[str, str] | None:
+        """For someone the map has outside `place_id`: the area round the
+        building they are outside of, and that building, when `target` is
+        the building's own inside (the place itself, or a porch or doorway
+        the read put inside it). Its parent's ground when it stands in one,
+        else the window of open country it stands in (AfterDark, Oct 18
+        2026: Suzuka knocking at a farmhouse alone on the land was stood
+        inside it, and at its "porch overhang", which the read had put
+        inside the farmhouse, in the far hall out of John's sight). None
+        when they are not at a building's inside."""
+        building_id = place_of_area(target)
+        if building_id is None or building_id not in world.places:
+            return None
+        chain, at = [], world.places.get(place_id)
+        while at is not None and at.id not in chain:
+            chain.append(at.id)
+            at = world.places.get(at.inside) if at.inside else None
+        if building_id not in chain:
+            return None
+        building = world.places[building_id]
+        # Their own point, if they stand on the ground already; the
+        # building's spot when they stood inside it.
+        if spot is None or place_of_area(spot.area) == building_id:
+            point = position(world, building_id)
+        if building.inside:
+            around = area_of(world, art, building.inside, point)
+        elif point is not None:
+            around = window_id(*window_rect(art, *point))
+        else:
+            around = None
+        if around is None or place_of_area(around) == building_id:
+            return None
+        return around, building_id
+
+    def at_the_door(self) -> list[tuple[str, int, int, int, int]]:
+        """Who stands at a door of the building the author's character is
+        inside, from outside: (name, the tile just beyond the door's wall,
+        the door tile), in that building's area, so the play view shows them
+        at the door as seen through it (AfterDark, Oct 18 2026: Suzuka
+        knocking at the farmhouse door, John inside, was on no view at all:
+        the play view shows one area, and she stood in the one round it)."""
+        if not self.map_first or self.in_private:
+            return []
+        state = self.area_state()
+        held = self.held_name()
+        me = state.spots.get(held or "")
+        area = self.area(me.area) if me is not None else None
+        if area is None or not area.indoor or area.level or not area.exits:
+            return []
+        building = place_of_area(area.id)
+        world = self.world()
+        steps = {"north": (0, -1), "south": (0, 1), "west": (-1, 0), "east": (1, 0)}
+        out: list[tuple[str, int, int, int, int]] = []
+        used: dict[tuple[int, int], int] = {}
+        for name, spot in state.spots.items():
+            if name == held or spot.area == area.id:
+                continue
+            around = self.area(spot.area, world)
+            if around is None or building not in around.buildings:
+                continue
+            box = around.buildings[building]
+            doors = [e for e in around.entrances if e.place_id == building]
+            near = [
+                (math.hypot(spot.x - fx, spot.y - fy), door)
+                for door in doors
+                for fx, fy in (_front(door, box),)
+            ]
+            if not near:
+                continue
+            distance, door = min(near, key=lambda pair: pair[0])
+            if distance > AT_THE_DOOR:
+                continue
+            side = door.side if door.side in steps else "south"
+            exits = [e for e in area.exits if exit_side(area, *e) == side] or list(area.exits)
+            ex, ey = exits[0]
+            dx, dy = steps[side]
+            k = used.get((ex, ey), 0)
+            used[(ex, ey)] = k + 1
+            # Side by side along the wall, the second to the right of the first.
+            shift = (k + 1) // 2 * (1 if k % 2 else -1)
+            bx, by = ex + dx + (shift if dy else 0), ey + dy + (shift if dx else 0)
+            out.append((name, bx, by, ex, ey))
+        return out
 
     def _present_names(self) -> list[str]:
         """The people the scene has here, by the names the map uses."""
@@ -2700,9 +2808,16 @@ class AreaRuntime:
             + roofs
             + jobs
         )
-        drawing = self.tile_asset_drawing  # the author's own draw of the same figure
+        # The author's own draws of the same thing or figure, being drawn or
+        # waiting their turn (Objects… queues several).
+        running = self._asset_thread is not None and self._asset_thread.is_alive()
+        asked = {role for role, _words in self._asset_queue} if running else set()
+        drawing = self.tile_asset_drawing
         if drawing is not None:
-            jobs = [j for j in jobs if j.key != _asset_key(drawing)]
+            asked.add(drawing)
+        if asked:
+            keys = {_asset_key(role) for role in asked}
+            jobs = [j for j in jobs if j.key not in keys]
         return furnish, jobs[: min(RUN_LIMIT, room)]
 
     def _start_tile_art(self) -> bool:

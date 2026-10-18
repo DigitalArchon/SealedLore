@@ -56,6 +56,7 @@ from sealedlore.engine.world_art import (
     holding_place,
     is_deck,  # noqa: F401  (moved to world_art; still imported from here by tests)
     land_under,
+    outside_part,
     parse_window,
     patch_at,
     patch_under,
@@ -1061,6 +1062,7 @@ def build_area(
         tile_m = plan_tile(place) / k
         exits = []
         rows, entrances, buildings = _fix_buildings(world, art, rows, big, fixed, repairs)
+    labels = _inside_labels(world, place, labels)
     # Objects named for people are people.
     for digit, name in list(objects.items()):
         if key(name) in people_keys:
@@ -1120,6 +1122,23 @@ def _stairs_entrances(links: LevelLinks, index: int, place_id: str) -> list[Entr
     ]
 
 
+def _inside_labels(
+    world: WorldMap, place: WorldPlace, labels: dict[str, tuple[int, int]]
+) -> dict[str, tuple[int, int]]:
+    """A building's labels without its porch, steps or yard: a read put them
+    inside it, and a plan drawn then labelled them in its middle (AfterDark,
+    Oct 18 2026: "The porch overhang" between the farmhouse's two halls).
+    They are outside it (`world_art.outside_part`)."""
+    outside = {
+        key(p.name)
+        for p in world.places.values()
+        if p.inside == place.id and outside_part(world, p)
+    }
+    if not outside:
+        return labels
+    return {name: spot for name, spot in labels.items() if key(name) not in outside}
+
+
 def build_level(
     world: WorldMap,
     art: WorldArt,
@@ -1161,6 +1180,7 @@ def build_level(
     rows = _open_sealed(rows, stairs, repairs)
     objects = dict(drawn.objects)  # type: ignore[union-attr]
     labels = {k: (int(v[0]), int(v[1])) for k, v in drawn.labels.items() if len(v) >= 2}  # type: ignore[union-attr]
+    labels = _inside_labels(world, place, labels)
     people_keys = {key(n) for n in people}
     for digit, name in list(objects.items()):
         if key(name) in people_keys:
