@@ -260,7 +260,7 @@ Windows offers weaker privacy on the machine itself (see
    through your API key. Until an endpoint, key and story model are set, the
    window's start screen walks through these steps.
 
-2. **Check the story model** on the Models tab. It starts as Claude Sonnet
+2. **Check the story model** on the Models page. It starts as Claude Sonnet
    4.6, which with Opus 5.5 measured best as a storyteller; GLM 5.3 is a good
    cheap one. Browse… lists what the endpoint offers. On NanoGPT the small
    calls made on every turn (the scene, the plot, picking lore) start on

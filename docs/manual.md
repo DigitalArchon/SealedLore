@@ -318,6 +318,15 @@ directory, `--story <id>` opens one on start, and `--version` prints the
 version (Help → About SealedLore shows it too, with the data folder). Until an endpoint is set, anything that would call a model says so
 and does nothing.
 
+**Settings** (File → Settings…, Ctrl+,) lists its pages down the left in
+groups: **Connection** (Endpoints, Models), **Writing** (Generation, Context,
+Lore), **Pictures** (Images, Video) and **Privacy** (Private). Each page says
+at its top what it is for. Options most people never change are put away
+under a heading that opens them, such as **Sampling (advanced)** under
+Generation, **Prompt caching (advanced)** under Endpoints, **Chapters and
+recall (advanced)** under Context, and, under Images, the picture endpoint
+for pictures drawn somewhere other than the chat endpoint.
+
 **Several endpoints.** Settings → Endpoints lists every endpoint you have
 set up, each with its own address, protocol (**Speaks**) and API key; **Add**
 makes another, **Remove** takes one out (its key with it, when you Save), and
@@ -434,7 +443,8 @@ archiving, rebuilding summaries.
   more than one branch, **Branch** names the branch you are reading: its menu
   switches to another, renames or deletes it, and **Branches** shows every
   branch at once.
-- **Right dock**, "Inspector", its pages as two rows of buttons: **Map**
+- **Right dock**, beside the story, its pages as two rows of buttons, its
+  title naming the page shown and what it is for: **Map**
   (for a story that keeps one, and the page it opens on), **People** (who is
   in the story, by their faces; the page a story without a map opens on: see
   "The People page"), **Scene** (who is here and where the story is, to
@@ -1126,8 +1136,8 @@ map marked; right-click another there for **Show this painting on the
 map**. While you play on an area, its own painting isn't shown over it; zoom
 the Region in on another area to see that one's.
 
-A story that keeps a map makes it part of the window: the Inspector, beside
-the story, takes half the window with **Map** as its first page. **Map**,
+A story that keeps a map makes it part of the window: the panel beside the
+story takes half the window with **Map** as its first page. **Map**,
 above the transcript, goes to it.
 
 A station or a ship in space is laid out by SealedLore itself: the map art

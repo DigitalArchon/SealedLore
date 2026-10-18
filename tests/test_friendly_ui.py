@@ -15,7 +15,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QPoint, QRect  # noqa: E402
+from PySide6.QtCore import QPoint, QRect, Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication, QPushButton, QToolButton, QWidget  # noqa: E402
 
 from sealedlore.engine.budget import BudgetReport  # noqa: E402
@@ -382,3 +382,83 @@ def test_a_story_not_begun_has_its_start_button_in_the_transcript(app, tmp_path,
         assert not window.people_page.view().begun
     finally:
         window.close()
+
+
+# --- Settings, a page at a time (Oct 18 2026) ----------------------------------------
+
+
+def test_settings_pages_are_grouped_and_say_what_each_is_for(app, window):
+    from sealedlore.gui.settings_dialog import PAGE_ABOUT, SettingsDialog
+
+    dialog = SettingsDialog(window.config, window.session.story, window)
+    tabs = dialog.tabs
+    # The page names are kept: the manual's "Settings → Images" still finds its page.
+    names = [tabs.tabText(i) for i in range(tabs.count())]
+    assert names == list(PAGE_ABOUT)
+    rows = [tabs.list.item(i).text() for i in range(tabs.list.count())]
+    assert rows[0] == "CONNECTION" and rows.index("WRITING") < rows.index("Generation")
+    tabs.setCurrentIndex(names.index("Context"))
+    assert tabs.heading.text() == "Context" and tabs.about.text() == PAGE_ABOUT["Context"]
+    # A click on a group heading is no page.
+    heading = tabs.list.item(rows.index("PICTURES"))
+    assert not heading.flags() & Qt.ItemIsSelectable
+    dialog.deleteLater()
+
+
+def test_what_most_never_change_is_put_away_under_a_heading(app, window):
+    from sealedlore.gui.settings_dialog import SettingsDialog
+
+    dialog = SettingsDialog(window.config, window.session.story, window)
+    dialog.resize(900, 680)
+    dialog.show()
+    dialog.tabs.setCurrentIndex(2)  # Generation
+    settle(app)
+    assert dialog.reasoning_story.isVisible() and dialog.max_tokens.isVisible()
+    assert not dialog.temperature.isVisible()
+    fold = next(
+        b for b in dialog.tabs.currentWidget().findChildren(QToolButton) if "Sampling" in b.text()
+    )
+    fold.click()
+    settle(app)
+    assert dialog.temperature.isVisible() and "▾" in fold.text()
+    # Semantic lore retrieval opens its endpoint's fields.
+    dialog.tabs.setCurrentIndex(4)
+    dialog.embeddings_enabled.setChecked(False)
+    dialog.embeddings_fold.set_open(False)
+    dialog.embeddings_enabled.setChecked(True)
+    settle(app)
+    assert dialog.embeddings_fold.is_open() and dialog.embed_base_url.isVisible()
+    dialog.close()
+    dialog.deleteLater()
+
+
+def test_settings_opens_on_the_page_asked_for(app, window, monkeypatch):
+    from sealedlore.gui import main_window
+    from sealedlore.gui.settings_dialog import SettingsDialog
+
+    seen = []
+
+    class Looked(SettingsDialog):
+        def exec(self) -> int:
+            seen.append(self.tabs.tabText(self.tabs.currentIndex()))
+            return 0
+
+    monkeypatch.setattr(main_window, "SettingsDialog", Looked)
+    window.open_settings("Images")
+    assert seen == ["Images"]
+
+
+# --- the panel beside the story --------------------------------------------------------
+
+
+def test_the_panel_beside_the_story_is_titled_with_its_page(app, window):
+    from sealedlore.gui.main_window import NO_STORY_TITLE, PAGE_ABOUT
+
+    dock = window.inspector_dock
+    assert dock.windowTitle() == f"People  ·  {PAGE_ABOUT['People']}"
+    window.right_tabs.setCurrentWidget(window.cast_panel)
+    assert dock.windowTitle().startswith("Cast  ·  ")
+    assert "Inspector" not in dock.windowTitle()
+    window._close_story()
+    settle(app)
+    assert dock.windowTitle() == NO_STORY_TITLE

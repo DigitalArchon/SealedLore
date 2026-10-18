@@ -139,7 +139,9 @@ def test_settings_keeps_each_roles_route(app, tmp_path, story, cast):
     assert dialog.plot_model.route == ModelRoute(priority="price"), "loaded"
     dialog.scene_model.set_route(ModelRoute(priority="latency"))
     dialog.plot_model.set_route(None)
-    assert dialog.minimumSizeHint().width() <= 660, "the route labels widened Settings"
+    # The page beside Settings' list of pages (gui/settings_pages.py).
+    assert dialog.tabs.stack.minimumSizeHint().width() <= 500, "the route labels widened Settings"
+    assert dialog.minimumSizeHint().width() <= dialog.minimumWidth()
     # The speed test measures each role on its route: GLM twice.
     targets = {t.label: t.roles for t in dialog.speed_targets()}
     assert targets[GLM] == ("Story", "Summarisation", "Authoring", "Image prompt writer")

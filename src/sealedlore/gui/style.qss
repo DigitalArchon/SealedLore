@@ -382,6 +382,54 @@ QDockWidget::title {
   border-top-right-radius: 7px;
 }
 
+/* --- Settings' pages (gui/settings_pages.py) --------------------------- */
+
+#settingsNav {
+  background: @panel;
+  border: 1px solid @border;
+  border-radius: 6px;
+  padding: 6px 0px;
+}
+
+#settingsNav::item {
+  padding: 6px 12px;
+  color: @text;
+}
+
+#settingsNav::item:selected {
+  background: @selection;
+  color: @text_selected;
+}
+
+#settingsNav::item:disabled {
+  color: @text_hint;
+  font-size: 11px;
+  padding: 12px 12px 2px 12px;
+}
+
+#settingsHeading {
+  color: @text_heading;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+#settingsAbout {
+  color: @text_soft;
+}
+
+/* A heading that opens the rows under it: Advanced and the like. */
+#foldButton {
+  background: transparent;
+  border: none;
+  color: @accent;
+  padding: 8px 0px 4px 0px;
+  font-weight: 600;
+}
+
+#foldButton:hover {
+  color: @text_accent;
+}
+
 /* --- the People page (gui/people_page.py) ----------------------------- */
 
 #peoplePage, #peopleColumn {

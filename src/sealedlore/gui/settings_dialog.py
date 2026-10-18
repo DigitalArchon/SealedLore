@@ -27,7 +27,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSpinBox,
-    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -56,6 +55,7 @@ from sealedlore.gui.model_picker import (
     pick_model,
     pick_model_and_route,
 )
+from sealedlore.gui.settings_pages import Fold, SettingsPages
 from sealedlore.gui.speed_test import SpeedTestDialog, speed_tests
 from sealedlore.gui.video_jobs import VideoCatalog
 from sealedlore.models.config import (
@@ -131,6 +131,19 @@ def _scrolled(page: QWidget) -> QScrollArea:
     return FormScroll(page)
 
 
+# What each page is for, under its name.
+PAGE_ABOUT = {
+    "Endpoints": "Where your models are: each service's address, and your key for it.",
+    "Models": "Which model does each job: the story itself, and the small calls around it.",
+    "Generation": "How the story model writes: how much it reasons, and how long a reply may run.",
+    "Context": "How much of the story the storyteller is sent each turn, and how older "
+    "parts are summarised into chapters.",
+    "Lore": "How lore entries are chosen for each turn.",
+    "Images": "Pictures of the story, portraits of its characters, and the map's pictures.",
+    "Video": "Short videos of the story. Off until video has a key of its own.",
+    "Private": "Private scenes: played on a model of their own, and kept out of the story's model.",
+}
+
 # Settings → Context → Recall earlier detail (engine/recall.py): what is
 # recalled and where, as "Config.recall|Config.recall_in" (a combo's data is
 # a string: PySide6 returns None from currentData() for a tuple).
@@ -173,11 +186,11 @@ class SettingsDialog(QDialog):
         self.video_catalog = video_catalog
         self._fetch_models = fetch_models
         self.setWindowTitle("Settings")
-        # Wide enough for all eight tabs in view, and tall enough for most
-        # pages without scrolling (they scroll now, so the dialog no longer
-        # grows to its tallest page).
-        self.setMinimumWidth(680)
-        self.resize(700, 640)
+        # The page list beside a page as wide as the tabs had, and tall
+        # enough for most pages without scrolling (they scroll, so the
+        # dialog no longer grows to its tallest page).
+        self.setMinimumWidth(860)
+        self.resize(900, 680)
         self.config = config
         self.story = story
         self._catalog = catalog
@@ -190,18 +203,29 @@ class SettingsDialog(QDialog):
 
         # Every page scrolls: the Lore page was taller than the dialog, and
         # its last rows were drawn over. Every text model is on Models, by
-        # what it does; the rest of each tab is that feature's own options.
-        self.tabs = QTabWidget()
-        self.tabs.addTab(_scrolled(self._endpoint_tab()), "Endpoints")
-        self.tabs.addTab(_scrolled(self._models_tab()), "Models")
-        self.tabs.addTab(_scrolled(self._generation_tab()), "Generation")
-        # Always: most of it is app-wide, and it used to be reachable (and
-        # saved) only while a story was open.
-        self.tabs.addTab(_scrolled(self._context_tab()), "Context")
-        self.tabs.addTab(_scrolled(self._lore_tab()), "Lore")
-        self.tabs.addTab(_scrolled(self._images_tab()), "Images")
-        self.tabs.addTab(_scrolled(self._video_tab()), "Video")
-        self.tabs.addTab(_scrolled(self._private_tab()), "Private")
+        # what it does; the rest of each page is that feature's own options.
+        # The pages are a list in groups, each headed by what it is for
+        # (gui/settings_pages.py); eight tabs in a row said none of it.
+        self.tabs = SettingsPages()
+        pages = (
+            ("Connection", (("Endpoints", self._endpoint_tab), ("Models", self._models_tab))),
+            (
+                "Writing",
+                (
+                    ("Generation", self._generation_tab),
+                    # Always: most of it is app-wide, and it used to be
+                    # reachable (and saved) only while a story was open.
+                    ("Context", self._context_tab),
+                    ("Lore", self._lore_tab),
+                ),
+            ),
+            ("Pictures", (("Images", self._images_tab), ("Video", self._video_tab))),
+            ("Privacy", (("Private", self._private_tab),)),
+        )
+        for group, members in pages:
+            self.tabs.add_group(group)
+            for name, build in members:
+                self.tabs.addTab(_scrolled(build()), name, PAGE_ABOUT[name])
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._save)
@@ -598,18 +622,25 @@ class SettingsDialog(QDialog):
         form.addRow(self.api_note)
         form.addRow("Keep API keys in", self.key_storage)
         form.addRow(self._key_note())
-        form.addRow("Prompt caching", self.cache_mode)
-        form.addRow("Cache lifetime", self.cache_ttl)
-
         hint = QLabel(
             "Any OpenAI-compatible /chat/completions endpoint, or Anthropic's own API "
-            "(https://api.anthropic.com with an Anthropic key). Caching on 'auto' "
-            "applies cache_control blocks only to Anthropic models, on every endpoint. "
-            "Which models run where is on the Models tab."
+            "(https://api.anthropic.com with an Anthropic key). Which models run where is "
+            "on the Models page."
         )
         hint.setObjectName("hintLabel")
         hint.setWordWrap(True)
         form.addRow(hint)
+        caching = Fold(form, "Prompt caching (advanced)")
+        caching.add_row("Prompt caching", self.cache_mode)
+        caching.add_row("Cache lifetime", self.cache_ttl)
+        caching_hint = QLabel(
+            "On 'auto', cache_control blocks go only to Anthropic models, on every "
+            "endpoint, so a long story's unchanging start is read from the cache each turn "
+            "instead of paid for again."
+        )
+        caching_hint.setObjectName("hintLabel")
+        caching_hint.setWordWrap(True)
+        caching.add_row(caching_hint)
         self._load_endpoint_fields()
         self._refresh_endpoint_rows()
         return widget
@@ -1019,27 +1050,34 @@ class SettingsDialog(QDialog):
         self.reasoning_side.currentIndexChanged.connect(self._show_reasoning)
         self.model.textChanged.connect(self._show_reasoning)
 
-        sampling = QLabel("For the story model's passages and questions, in every story:")
-        sampling.setObjectName("hintLabel")
-        sampling.setWordWrap(True)
-        form.addRow(sampling)
-        form.addRow("Temperature", self.temperature)
-        form.addRow("Top p", self.top_p)
-        form.addRow("Max tokens", self.max_tokens)
-        form.addRow("Presence penalty", self.presence_penalty)
-        form.addRow("Frequency penalty", self.frequency_penalty)
-        form.addRow("Seed", self.seed)
-        form.addRow("Stop sequences", self.stop)
-        hint = QLabel("Negative values mean 'leave unset' — the field is then omitted.")
-        hint.setObjectName("hintLabel")
-        hint.setWordWrap(True)
-        form.addRow(hint)
-
+        # How much the models reason first: it is what decides how long a
+        # turn waits. The sampling numbers most people never touch.
         form.addRow("Story model reasoning", self.reasoning_story)
         form.addRow(self.reasoning_story_note)
         form.addRow("Other calls' reasoning", self.reasoning_side)
         form.addRow(self.reasoning_side_note)
         form.addRow(self.reasoning_caught)
+        self.max_tokens.setToolTip(
+            "The longest a reply may run, reasoning included. The passage's length is "
+            "set by Length in the composer and the Style page, not this."
+        )
+        form.addRow("Max tokens", self.max_tokens)
+
+        sampling = Fold(form, "Sampling (advanced)")
+        intro = QLabel("For the story model's passages and questions, in every story:")
+        intro.setObjectName("hintLabel")
+        intro.setWordWrap(True)
+        sampling.add_row(intro)
+        sampling.add_row("Temperature", self.temperature)
+        sampling.add_row("Top p", self.top_p)
+        sampling.add_row("Presence penalty", self.presence_penalty)
+        sampling.add_row("Frequency penalty", self.frequency_penalty)
+        sampling.add_row("Seed", self.seed)
+        sampling.add_row("Stop sequences", self.stop)
+        hint = QLabel("Negative values mean 'leave unset' — the field is then omitted.")
+        hint.setObjectName("hintLabel")
+        hint.setWordWrap(True)
+        sampling.add_row(hint)
         self._show_reasoning()
         return widget
 
@@ -1204,13 +1242,14 @@ class SettingsDialog(QDialog):
         form.addRow(scope)
         form.addRow("Context budget", self.budget)
         form.addRow(self.auto_archive)
-        form.addRow(self.story_ledger)
-        form.addRow(self.plot_chapter_days)
-        form.addRow("Turns per chapter", self.chunk_turns)
-        form.addRow("Archive down to", self.archive_target)
-        form.addRow("Summary length (words)", self.summary_words)
-        form.addRow("Recall earlier detail", self.recall)
-        form.addRow("Keep a Question's recall for", self.recall_carry)
+        chapters = Fold(form, "Chapters and recall (advanced)")
+        chapters.add_row(self.story_ledger)
+        chapters.add_row(self.plot_chapter_days)
+        chapters.add_row("Turns per chapter", self.chunk_turns)
+        chapters.add_row("Archive down to", self.archive_target)
+        chapters.add_row("Summary length (words)", self.summary_words)
+        chapters.add_row("Recall earlier detail", self.recall)
+        chapters.add_row("Keep a Question's recall for", self.recall_carry)
 
         hint = QLabel(
             "Archival summarises the oldest whole chunk of the story rather than "
@@ -1391,10 +1430,7 @@ class SettingsDialog(QDialog):
         self.image_url, self.image_key, self.image_api = self._media_fields(endpoint)
         self.image_url.setPlaceholderText("same as the chat endpoint")
         self.image_key.setPlaceholderText("same as the chat key (same host only)")
-        form.addRow("Address", self.image_url)
-        form.addRow("API key", self.image_key)
-        form.addRow(self._key_note())
-        form.addRow("Service", self.image_api)
+        form.addRow(QLabel("<b>Pictures of the story</b>"))
         self._image_models = parse_image_models({"data": self.config.image_models})
         # Typed, or chosen with Browse… from a searchable table, as the text
         # models are (gui/image_picker.py).
@@ -1430,6 +1466,14 @@ class SettingsDialog(QDialog):
         form.addRow(hint)
         self._portrait_rows(form)
         self._map_pictures_rows(form)
+        # Where pictures are drawn: the chat endpoint unless set. Most never
+        # set it, so it is put away, open when it has been.
+        where = Fold(form, "Picture endpoint (if not the chat endpoint's)")
+        where.add_row("Address", self.image_url)
+        where.add_row("API key", self.image_key)
+        where.add_row(self._key_note())
+        where.add_row("Service", self.image_api)
+        where.set_open(bool(endpoint.base_url.strip() or endpoint.api_key))
         return widget
 
     def _portrait_rows(self, form: QFormLayout) -> None:
@@ -1704,26 +1748,37 @@ class SettingsDialog(QDialog):
         )
         form.addRow("Large lorebooks", self.lore_selector)
         form.addRow(self.embeddings_enabled)
-        form.addRow("Base URL", self.embed_base_url)
-        form.addRow("API key", self.embed_api_key)
-        form.addRow(self._key_note())
-        form.addRow("Model", self.embed_model)
-        form.addRow("Dimensions", self.embed_dimensions)
-        form.addRow("Query prefix", self.query_prefix)
-        form.addRow("Document prefix", self.document_prefix)
-        form.addRow("Entries per turn", self.retrieval_k)
-        form.addRow("Similarity threshold", self.similarity)
-        form.addRow("Turns in the query", self.query_turns)
-        form.addRow("Lore token cap", self.lore_cap)
-
         hint = QLabel(
             "Keyword matching always runs, and is the whole story when this is off "
-            "or the endpoint fails. Prefixes are only for models that want the query "
-            "and the document marked differently."
+            "or the endpoint fails. A small lorebook is sent whole and needs neither."
         )
         hint.setObjectName("hintLabel")
         hint.setWordWrap(True)
         form.addRow(hint)
+        # The embeddings endpoint, opened when semantic retrieval is ticked.
+        self.embeddings_fold = Fold(form, "Embeddings endpoint")
+        self.embeddings_fold.add_row("Base URL", self.embed_base_url)
+        self.embeddings_fold.add_row("API key", self.embed_api_key)
+        self.embeddings_fold.add_row(self._key_note())
+        self.embeddings_fold.add_row("Model", self.embed_model)
+        self.embeddings_fold.add_row("Dimensions", self.embed_dimensions)
+        self.embeddings_fold.add_row("Query prefix", self.query_prefix)
+        self.embeddings_fold.add_row("Document prefix", self.document_prefix)
+        prefixes = QLabel(
+            "Prefixes are only for models that want the query and the document marked differently."
+        )
+        prefixes.setObjectName("hintLabel")
+        prefixes.setWordWrap(True)
+        self.embeddings_fold.add_row(prefixes)
+        self.embeddings_fold.set_open(self.embeddings_enabled.isChecked())
+        self.embeddings_enabled.toggled.connect(
+            lambda on: on and self.embeddings_fold.set_open(True)
+        )
+        tuning = Fold(form, "Retrieval (advanced)")
+        tuning.add_row("Entries per turn", self.retrieval_k)
+        tuning.add_row("Similarity threshold", self.similarity)
+        tuning.add_row("Turns in the query", self.query_turns)
+        tuning.add_row("Lore token cap", self.lore_cap)
 
         self._lore_fields = [
             self.embed_base_url,

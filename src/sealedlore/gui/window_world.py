@@ -104,6 +104,7 @@ class WorldWindow:
 
     def _on_page_changed(self, _index: int) -> None:
         self._sync_world_button()
+        self._sync_dock_title()
         if self.right_tabs.currentWidget() is self.people_page and self._people_dirty:
             self._build_people()
         if self.right_tabs.currentWidget() is self.images_panel:

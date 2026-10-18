@@ -175,6 +175,22 @@ from sealedlore.storage.scenario import (
 from sealedlore.storage.world_art import carried_art, carried_story_art, load_sidecar
 from sealedlore.tree import path_to
 
+# The panel beside the story: its title with no story open, and what each
+# of its pages shows, after the page's name (`_sync_dock_title`).
+NO_STORY_TITLE = "Open a story to see its pages here"
+PAGE_ABOUT = {
+    "Map": "Where the story is; click to walk, right-click to mark a spot",
+    "People": "Who is in the story, by their faces",
+    "Scene": "Who is here, where and when, as the story has it",
+    "Cast": "Each character's sheet, portrait and skills",
+    "Plot": "The story's clock, facts and events",
+    "Lore": "What the storyteller knows of the world, entry by entry",
+    "Style": "How the passages read",
+    "Story so far": "The chapter summaries that stand in for older passages",
+    "Media": "Every picture and video the story has made",
+    "Prompt": "Exactly what the storyteller was sent last",
+}
+
 # How long after the window shows the tokenizer's warm-up starts: past the
 # first paint, well before anyone has chosen a story.
 WARM_UP_DELAY_MS = 300
@@ -474,7 +490,9 @@ class MainWindow(
             self.right_tabs.indexOf(self.inspector), self.config.prompt_page
         )
         self.right_tabs.set_empty(self._no_story_page())
-        right = QDockWidget("Inspector", self)
+        # Titled with the page it shows and what that page is for
+        # (`_sync_dock_title`): "Inspector" said nothing to a new player.
+        right = QDockWidget(NO_STORY_TITLE, self)
         right.setObjectName("inspectorDock")
         right.setWidget(self.right_tabs)
         right.setAllowedAreas(Qt.RightDockWidgetArea | Qt.LeftDockWidgetArea)
@@ -832,6 +850,20 @@ class MainWindow(
             self._show_first_page()
         if self.prompt_page_action.isChecked() != bool(on):
             self.prompt_page_action.setChecked(bool(on))
+
+    def _sync_dock_title(self) -> None:
+        """The panel beside the story is titled with its page and what the
+        page shows (Oct 18 2026; it was "Inspector")."""
+        if self.session is None or self.right_tabs.is_empty_shown():
+            title = NO_STORY_TITLE
+        else:
+            page = self.right_tabs.currentWidget()
+            name = self.right_tabs.tabText(self.right_tabs.currentIndex())
+            about = PAGE_ABOUT.get(name, "")
+            if page is self.summaries_panel and self.session.story.chat:
+                about = "The chapter summaries that stand in for older messages"
+            title = f"{name}  ·  {about}" if about else name
+        self.inspector_dock.setWindowTitle(title)
 
     def _keep_composer_more(self, on: bool) -> None:
         """More, open or put away: kept for every story (saved on close)."""
@@ -4049,6 +4081,7 @@ class MainWindow(
         # With no story the inspector shows its empty page, not greyed forms
         # that look usable and answer nothing (their scrollbars included).
         self.right_tabs.show_empty(not has_story)
+        self._sync_dock_title()
         self.cast_panel.setEnabled(has_story)
         self.scene_panel.setEnabled(has_story)
         self.plot_panel.setEnabled(has_story)
