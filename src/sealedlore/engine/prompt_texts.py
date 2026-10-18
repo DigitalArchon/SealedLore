@@ -4446,7 +4446,10 @@ _text(
 # church, the reeve's house), and the storyteller, told only the map's
 # places, invented others beside them: live (Oct 18 2026) the plan had "The
 # Tarred Eel Inn" and "Reeve's House" and the story sent Ines to "The Marre
-# Arms" and "Reeve's hall". Unmeasured.
+# Arms" and "Reeve's hall". Measured (Oct 19 2026, the playtests' two map
+# stories retaken, Sonnet 4.6 and GLM 5.3, two blind Claude judges): without
+# it the storyteller invented an inn where the plan has the Tarred Eel three
+# times in 22 drawn-line turns a model, with it never; no error it caused.
 _text(
     "map.drawn",
     MAP,
