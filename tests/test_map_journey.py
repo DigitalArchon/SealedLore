@@ -691,3 +691,31 @@ def test_a_building_in_a_quarter_of_a_town_is_drawn_on_the_town_s_plan():
     world = WorldMap(places={p.id: p for p in (town, quarter, shop, back)})
     boxed = {f["place_id"]: f["kind"] for f in fixed_in_plan(world, town)}
     assert boxed == {"q": "place", "s": "building"}  # never what is inside a building
+
+
+def test_a_part_of_the_bridge_stands_on_the_crossing(tmp_path, story, cast):
+    """The replay (Oct 18 2026): "the middle arch" of the toll bridge went to
+    the bank a hundred metres off, and "the downstream parapet" further."""
+    from sealedlore.engine.area import crossing_middle
+
+    session = make_session(tmp_path, story, cast)
+    farm = session.world_art.layouts["farm"][""]
+    farm.spec = {
+        "ground": "grass",
+        "features": [
+            {"kind": "area", "fill": "water", "shape": "rect", "x": 0, "y": 9, "w": 40, "h": 6},
+            {"kind": "road", "points": [[19, 23], [19, 0]], "width": 1},
+        ],
+    }
+    session._area_cache = None
+    world = session.world()
+    area = session.area("farm", world, session.map_art_copy())
+    middle = crossing_middle(area)
+    assert middle is not None and area.rows[middle[1]][middle[0]] in "=b"
+    assert "~" in area.rows[middle[1]]  # over the river, not on a bank
+    arch = WorldPlace(name="the middle arch", kind="area", inside="farm")
+    lane = WorldPlace(name="the back lane", kind="area", inside="farm")
+    delta = WorldDelta(places=[arch, lane], added=[arch.id, lane.id])
+    session._where_drawn(world, delta)
+    assert (arch.x, arch.y) == pytest.approx(tile_point(world, area, *middle))
+    assert lane.x is None  # nothing of a bridge in its name

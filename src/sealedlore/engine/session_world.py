@@ -22,7 +22,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from sealedlore.engine.area import tile_point
+from sealedlore.engine.area import BRIDGE_PART, crossing_middle, tile_point
 from sealedlore.engine.chronicle import introduced, variant_named
 from sealedlore.engine.marks import footprint, place_at
 from sealedlore.engine.scene_state import scene_at
@@ -160,6 +160,11 @@ class WorldRuntime:
                 spot = next(
                     (xy for n, xy in area.labels.items() if _label_words(n) == wanted), None
                 )
+                if spot is None and BRIDGE_PART.search(place.name):
+                    # Part of the bridge (its middle arch, a parapet): on the
+                    # crossing. Live (Oct 18 2026) "the middle arch" went to
+                    # the bank, a hundred metres from the river.
+                    spot = crossing_middle(area)
                 point = tile_point(world, area, *spot) if spot is not None else None
                 if point is not None:
                     place.x, place.y = point

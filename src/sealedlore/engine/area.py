@@ -2718,6 +2718,42 @@ def fills_word(ch: str) -> str:
 # the map's places are.
 
 
+# What a place's name calls part of a bridge (`crossing_middle`).
+BRIDGE_PART = re.compile(
+    r"\b(arch(es)?|span|parapets?|piers?|deck|keystone|cutwater|middle of the bridge)\b",
+    re.IGNORECASE,
+)
+# How far water may be from a crossing's tile, on each side.
+CROSSING_REACH = 4
+
+
+def crossing_middle(area: Area) -> tuple[int, int] | None:
+    """The middle of where a way crosses water in an area (a bridge's deck,
+    a causeway through a river): walkable tiles with water within
+    CROSSING_REACH on both sides, east and west or north and south; the one
+    nearest their middle, or None where nothing crosses."""
+    rows = area.rows
+
+    def water(x: int, y: int) -> bool:
+        return 0 <= y < len(rows) and 0 <= x < len(rows[y]) and rows[y][x] == "~"
+
+    found = []
+    for y, row in enumerate(rows):
+        for x, ch in enumerate(row):
+            if ch not in "=b":
+                continue
+            reach = range(1, CROSSING_REACH + 1)
+            across = any(water(x - d, y) for d in reach) and any(water(x + d, y) for d in reach)
+            along = any(water(x, y - d) for d in reach) and any(water(x, y + d) for d in reach)
+            if across or along:
+                found.append((x, y))
+    if not found:
+        return None
+    cx = sum(x for x, _ in found) / len(found)
+    cy = sum(y for _, y in found) / len(found)
+    return min(found, key=lambda t: (t[0] - cx) ** 2 + (t[1] - cy) ** 2)
+
+
 def area_rect(world: WorldMap, area: Area) -> tuple[float, float, float, float] | None:
     """(west, north, width, height) in metres of the area on the map."""
     if area.rect is not None:
