@@ -153,3 +153,62 @@ def test_a_place_is_renamed_and_moved_from_the_region_map(app, window, monkeypat
     # Esc cancels a Move… that hasn't been placed.
     world._start_moving_place("farm", "The old farm")
     assert world.escape() and world._moving_place is None
+
+
+def test_a_thing_moved_or_put_down_moves_its_sprite_and_paints_nothing(app, window, monkeypatch):
+    """The author (Oct 18 2026): things drawn on their own layer, not painted
+    into the area's picture. A thing put down or moved adds or moves its
+    sprite at once; only a light moved paints the ground again."""
+    from sealedlore.gui.area_render import px_for, thing_light
+
+    window.show()
+    begun(app, window)
+    stand(window, {"Serrik Vaun": ("house", 26, 5)})
+    window._join_paint_threads(10)
+    pump(app)
+    area_view = window.area_view
+    px = px_for(area_view.area)
+    painted: list[object] = []
+    real = window._paint
+    monkeypatch.setattr(window, "_paint", lambda *a: painted.append(a[1]) or real(*a))
+    taken = {(s.x, s.y) for s in window.session.area_state().spots.values()}
+
+    def free(*but: tuple[int, int]) -> tuple[int, int]:
+        area = area_view.area
+        return next(
+            (x, y)
+            for y in range(1, area.height - 1)
+            for x in range(1, area.width - 1)
+            if area.walkable(x, y)
+            and area.placement_at(x, y) is None
+            and (x, y) not in taken
+            and (x, y) not in but
+        )
+
+    monkeypatch.setattr(QInputDialog, "getText", lambda *_a, **_k: ("a coil of rope", True))
+    first = free()
+    area_view.correction_requested.emit("put_thing", first)
+    pump(app)
+    rope = next(p for p in area_view.area.placements if "rope" in p.name)
+    sprite = area_view.things[rope.id]
+    assert (sprite.pos().x(), sprite.pos().y()) == ((first[0] + 0.5) * px, (first[1] + 1) * px)
+    second = free(first)
+    area_view.correction_requested.emit("move_thing", (rope.id, *second))
+    pump(app)
+    assert area_view.things[rope.id] is sprite  # the same sprite, moved
+    # Dragged, it follows the pointer before it is let go.
+    from PySide6.QtCore import QPointF as Point
+
+    third = free(first, second)
+    area_view._item_dragging(
+        ("thing", rope.id, "rope"), Point((third[0] + 0.5) * px, (third[1] + 0.5) * px)
+    )
+    assert (sprite.pos().x(), sprite.pos().y()) == ((third[0] + 0.5) * px, (third[1] + 1) * px)
+    area_view.correction_requested.emit("refresh", ())
+    pump(app)
+    assert (sprite.pos().x(), sprite.pos().y()) == ((second[0] + 0.5) * px, (second[1] + 1) * px)
+    assert painted == []  # the ground stood as it was
+    stove = next(p for p in area_view.area.placements if thing_light(p, px, indoor=True))
+    area_view.correction_requested.emit("move_thing", (stove.id, *first))
+    pump(app)
+    assert painted  # its light moved with it: the ground is painted again

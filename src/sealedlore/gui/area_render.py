@@ -19,8 +19,9 @@ are drawn by the view over it, as they move.
 from __future__ import annotations
 
 import zlib
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from typing import Any
 
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPolygonF, QTransform
@@ -472,12 +473,179 @@ def _room_masks(area: Area, px: int, height: int, width: int):
     return mask_at
 
 
-def _vignette(img, strength: float, start: float):
+def _vignette_factor(h: int, w: int, strength: float, start: float):
+    """How much a picture `h` by `w` is darkened towards its corners."""
     np = _np()
-    h, w = img.shape[:2]
     vy = np.linspace(-1, 1, h)[:, None]
     vx = np.linspace(-1, 1, w)[None, :]
-    return img * (1 - strength * np.clip(vx**2 + vy**2 - start, 0, 1))[..., None]
+    return (1 - strength * np.clip(vx**2 + vy**2 - start, 0, 1)).astype(np.float32)
+
+
+def _coarse(a, cell: int):
+    """Block means of an (h, w) or (h, w, 3) array, `cell` pixels a block;
+    the edge blocks padded with their edge."""
+    np = _np()
+    h, w = a.shape[:2]
+    ph, pw = -(-h // cell) * cell, -(-w // cell) * cell
+    pad = ((0, ph - h), (0, pw - w)) + (((0, 0),) if a.ndim == 3 else ())
+    a = np.pad(a, pad, mode="edge")
+    shape = (ph // cell, cell, pw // cell, cell) + a.shape[2:]
+    return a.reshape(shape).mean(axis=(1, 3))
+
+
+def _sampled(grid, ys, xs):
+    """`grid` (rows, cols, 3) at fractional rows `ys` and columns `xs`,
+    bilinear, clamped at its edges: (len(ys), len(xs), 3)."""
+    np = _np()
+    gh, gw = grid.shape[:2]
+    y0 = np.clip(np.floor(ys).astype(int), 0, gh - 1)
+    x0 = np.clip(np.floor(xs).astype(int), 0, gw - 1)
+    y1, x1 = np.clip(y0 + 1, 0, gh - 1), np.clip(x0 + 1, 0, gw - 1)
+    fy = np.clip(ys - np.floor(ys), 0, 1)[:, None, None]
+    fx = np.clip(xs - np.floor(xs), 0, 1)[None, :, None]
+    g = grid.astype(np.float32)
+    upper = g[y0][:, x0] * (1 - fx) + g[y0][:, x1] * fx
+    lower = g[y1][:, x0] * (1 - fx) + g[y1][:, x1] * fx
+    return upper * (1 - fy) + lower * fy
+
+
+# The light map's step: a quarter of a tile (the light changes over tiles;
+# kept at pixels it would be as large as the picture three times over).
+LIGHT_CELLS_PER_TILE = 4
+
+
+@dataclass
+class LightMap:
+    """How an area's ground was lit, kept so that what stands on it (its
+    things; sprites over the ground, gui/area_view.py) is lit the same: a
+    pixel's colour times `mul`, plus `add`, each RGB, at `cell` pixels a
+    step and bilinear between. The lamps, a deck's colours, the world's
+    grade, the exposure and the vignette are all in it. A thing drawn so
+    over the ground is the picture it made painted in before the light, to
+    rounding (the author, Oct 18 2026: things on their own layer)."""
+
+    mul: Any  # numpy (rows, cols, 3)
+    add: Any
+    cell: int
+
+    def apply(self, image: QImage, left: int, top: int) -> QImage:
+        """`image` as lit standing with its top-left at (`left`, `top`) in
+        the area's pixels; its transparency as it was."""
+        np = _np()
+        src = image.convertToFormat(QImage.Format_ARGB32)
+        h, w = src.height(), src.width()
+        if not h or not w:
+            return src
+        raw = np.frombuffer(src.constBits(), np.uint8).reshape(h, src.bytesPerLine())
+        a = raw[:, : w * 4].reshape(h, w, 4).astype(np.float32)
+        ys = (np.arange(h) + top + 0.5) / self.cell - 0.5
+        xs = (np.arange(w) + left + 0.5) / self.cell - 0.5
+        rgb = a[..., [2, 1, 0]]  # stored B, G, R, A
+        lit = np.clip(rgb * _sampled(self.mul, ys, xs) + _sampled(self.add, ys, xs), 0, 255)
+        a[..., [2, 1, 0]] = lit
+        out = np.ascontiguousarray(a.astype(np.uint8))
+        return QImage(out.data, w, h, w * 4, QImage.Format_ARGB32).copy()
+
+
+@dataclass
+class Ground:
+    """An area's picture with nothing standing on it (its things are
+    sprites over it: `thing_picture`), and how it was lit."""
+
+    image: QImage
+    light: LightMap | None = None
+
+
+@dataclass
+class ThingPicture:
+    """A thing as it stands on the play view, on its own: its sprite (a
+    plain crate until it is drawn), broken when it is, its shadow at its
+    foot. (`dx`, `dy`): its top-left from the middle of its foot, the
+    sprite's origin, in the area's pixels."""
+
+    image: QImage
+    dx: int
+    dy: int
+
+
+def foot_of(f: Placement, px: int) -> tuple[float, float]:
+    """The middle of a thing's foot, in the area's pixels: where it stands."""
+    return (f.x + f.w / 2) * px, (f.y + f.h) * px
+
+
+def thing_picture(source: TileSource, f: Placement, px: int, *, indoor: bool) -> ThingPicture:
+    """`f` drawn on its own, exactly as the area's picture drew it."""
+    sprite = _placement_sprite(source, f, px, indoor=indoor)
+    sw, sh = (sprite.width(), sprite.height()) if sprite is not None else (0, 0)
+    width = int(max(sw, f.w * px) + 2 * px)
+    height = int(max(sh, f.h * px) + px)
+    ox, oy = width // 2, height - px // 2
+    canvas = QImage(width, height, QImage.Format_ARGB32_Premultiplied)
+    canvas.fill(Qt.transparent)
+    p = QPainter(canvas)
+    p.setRenderHint(QPainter.SmoothPixmapTransform, True)
+    p.setRenderHint(QPainter.Antialiasing, True)
+    cx, foot = foot_of(f, px)
+    p.translate(ox - cx, oy - foot)
+    _draw_placement(p, source, f, px, sprite=sprite)
+    p.end()
+    return ThingPicture(canvas, -ox, -oy)
+
+
+# The exposure is read from every LUM_STEP-th pixel each way: a mean.
+LUM_STEP = 3
+
+
+def _things_counted(
+    image: QImage, things: Sequence[Placement], source: TileSource, px: int, *, indoor: bool
+):
+    """`image` (the ground before its light) with `things` drawn on it, as
+    an array every LUM_STEP-th pixel: what the exposure is read from, so
+    that a room full of things is lit as it was when they were painted in
+    (read from the ground alone, a dark world came out a seventh brighter)."""
+    copy = image.copy()
+    p = QPainter(copy)
+    p.setRenderHint(QPainter.SmoothPixmapTransform, True)
+    p.setRenderHint(QPainter.Antialiasing, True)
+    for f in sorted(things, key=lambda f: f.y + f.h):
+        if f.piece not in DRAWN_PIECES:
+            sprite = _placement_sprite(source, f, px, indoor=indoor)
+            _draw_placement(p, source, f, px, sprite=sprite)
+    p.end()
+    return _arr(copy)[::LUM_STEP, ::LUM_STEP]
+
+
+def thing_light(f: Placement, px: int, *, indoor: bool) -> tuple[float, float, float] | None:
+    """The light a thing gives where it stands (a lamp, a stove, a brazier),
+    by its footprint, not its picture: so moving anything else leaves the
+    ground's light as it was. A broken one gives none."""
+    if f.broken or not any(word in f.name.lower() for word in LIGHT_WORDS):
+        return None
+    if f.kind == "furniture":
+        height = px * (f.h + 1.0)
+    else:
+        height = px * (2.2 if indoor else 3.2)
+    cx, foot = foot_of(f, px)
+    return cx, foot - height * 0.5, px * (4.0 if indoor else 6.0)
+
+
+def compose_things(ground: Ground, area: Area, source: TileSource) -> QImage:
+    """The ground with its things drawn on it, back to front, each lit as
+    the ground was: the area's whole picture (a painting of the place is
+    made from it, `map_render.area_scene_image`)."""
+    px = px_for(area)
+    image = ground.image.convertToFormat(QImage.Format_RGB32)
+    p = QPainter(image)
+    for f in sorted(area.placements, key=lambda f: f.y + f.h):
+        if f.piece in DRAWN_PIECES:
+            continue  # the ground's own (a reactor, a lift shaft)
+        picture = thing_picture(source, f, px, indoor=area.indoor)
+        cx, foot = foot_of(f, px)
+        left, top = int(round(cx + picture.dx)), int(round(foot + picture.dy))
+        lit = ground.light.apply(picture.image, left, top) if ground.light else picture.image
+        p.drawImage(left, top, lit)
+    p.end()
+    return image
 
 
 def px_for(area: Area) -> int:
@@ -485,9 +653,27 @@ def px_for(area: Area) -> int:
 
 
 def render_area(area: Area, source: TileSource, *, dress: bool = True) -> QImage:
-    """The area drawn in the tile set, `px_for(area)` pixels a tile."""
+    """The area drawn in the tile set, `px_for(area)` pixels a tile, its
+    things on it: the whole picture."""
+    return compose_things(render_ground(area, source, dress=dress), area, source)
+
+
+def render_ground(
+    area: Area,
+    source: TileSource,
+    *,
+    dress: bool = True,
+    avoid: Sequence[Placement] | None = None,
+) -> Ground:
+    """The area's ground (floor, walls, what grows and what is built), with
+    no thing on it: they are sprites over it (`thing_picture`), so moving
+    or adding one paints nothing. Lit by the things that give light where
+    they stand. `avoid`: the footprints a room's dressing (a rug, what
+    stands along the walls) keeps clear of: the things as the plan put them,
+    so the ground stays as it is while they are moved (default: as they are
+    now)."""
     if area.indoor:
-        return _render_indoor(area, source, dress=dress)
+        return _render_indoor(area, source, dress=dress, avoid=avoid)
     return _render_outdoor(area, source)
 
 
@@ -534,7 +720,9 @@ def _hull_brushes(source: TileSource, px: int, seed: int) -> tuple[QBrush, QBrus
     return plate, rock
 
 
-def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
+def _render_indoor(
+    area: Area, source: TileSource, *, dress: bool, avoid: Sequence[Placement] | None = None
+) -> Ground:
     np = _np()
     info = source.info
     rows = area.rows
@@ -643,7 +831,7 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
     for d in area.doorways:
         near_door[max(0, d.y0 - 2) : d.y1 + 3, max(0, d.x0 - 2) : d.x1 + 3] = True
     taken = np.isin(grid, list("*:~"))
-    for f in area.placements:
+    for f in area.placements if avoid is None else avoid:
         taken[max(0, f.y - 1) : f.y + f.h + 1, max(0, f.x - 1) : f.x + f.w + 1] = True
     decor = [source.image(f"decor{i}") for i in range(3)]
     decor_lit = list(info.decor_lights) + [False] * 3
@@ -785,13 +973,14 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
                 p.fillRect(QRectF(d.x0 * px, Y - face_h * 0.35, px, j), jamb)
     for sprite, X, Y in late:
         p.drawImage(X, Y, sprite)
-    # 8. furniture and things, each over its footprint, its foot on its
-    # last row, back to front; the flames over everything
+    # 8. a deck's set pieces the program draws (a reactor, a lift shaft):
+    # the ground's; every other thing stands on it as a sprite of its own
+    # (`thing_picture`), giving its light here. The flames over the rest.
     for f in sorted(area.placements, key=lambda f: f.y + f.h):
         if f.piece in DRAWN_PIECES:
             deck_look.piece(p, f, px)
-        else:
-            _draw_placement(p, source, f, px, lights, indoor=True)
+        elif (light := thing_light(f, px, indoor=True)) is not None:
+            lights.append(light)
     for sprite, X, Y in flames:
         p.drawImage(X, Y, sprite)
     # ceiling lamps in the larger rooms
@@ -802,30 +991,54 @@ def _render_indoor(area: Area, source: TileSource, *, dress: bool) -> QImage:
     # 9. light: a glow from each source, kept to its room, the world's
     # grade, a vignette
     img = _arr(out)
+    things = area.placements if avoid is None else avoid
+    counted = _things_counted(out, things, source, px, indoor=True)
     masks = _room_masks(area, px, HX, W)
     lc = np.array(info.light, np.float32) / 255
+    cell = max(1, px // LIGHT_CELLS_PER_TILE)
     if zoned:
         # A deck: darker between its lamps, each lamp its room's colour.
         coloured = [(x, y, r, tuple(int(c * 255) for c in lc)) for x, y, r in lights]
         coloured += deck_look.lights(area, px, zones)
         glow3 = deck_look.light_rgb(coloured, HX, W, masks)
         img = img * (deck_look.AMBIENT + 0.6 * glow3) + glow3 * 26
+        few = glow3[::LUM_STEP, ::LUM_STEP]
+        counted = counted * (deck_look.AMBIENT + 0.6 * few) + few * 26
+        coarse = _coarse(glow3, cell)
+        mul, add = deck_look.AMBIENT + 0.6 * coarse, coarse * 26
     else:
         glow = _light(lights, HX, W, masks)
         img = img * (0.78 + 0.32 * glow[..., None] * lc) + glow[..., None] * lc * 18
-    img *= np.array(info.grade, np.float32)
-    if inside.any():
-        lum = float(img[inside].mean())
+        few = glow[::LUM_STEP, ::LUM_STEP, None]
+        counted = counted * (0.78 + 0.32 * few * lc) + few * lc * 18
+        coarse = _coarse(glow, cell)[..., None]
+        mul, add = 0.78 + 0.32 * coarse * lc, coarse * lc * 18
+    grade = np.array(info.grade, np.float32)
+    img *= grade
+    counted *= grade
+    scale, shift = grade, np.zeros(3, np.float32)
+    seen = inside[::LUM_STEP, ::LUM_STEP]
+    if seen.any():
+        lum = float(counted[seen].mean())
         floor_lum = 78 if zoned else 95
         if lum < floor_lum:
-            img = img * (floor_lum / max(lum, 1.0)) ** 0.7
+            k = (floor_lum / max(lum, 1.0)) ** 0.7
+            img = img * k
+            scale = scale * k
         elif lum > 135:  # a pale world loses its depth: pulled down, with contrast
-            mean = img[inside].mean(0)
+            mean = counted[seen].mean(0)
             img = (img - mean) * 1.25 + mean * (135 / lum)
-    final = _qimg(_vignette(img, 0.18, 0.3))
+            scale, shift = scale * 1.25, mean * (135 / lum - 1.25)
+    shade = _vignette_factor(HX, W, 0.18, 0.3)
+    final = _qimg(img * shade[..., None])
     if zoned:
         deck_look.glows(final, area, px)
-    return final
+    light = LightMap(
+        (mul * scale) * _coarse(shade, cell)[..., None],
+        (add * scale + shift) * _coarse(shade, cell)[..., None],
+        cell,
+    )
+    return Ground(final, light)
 
 
 def _stairs(p: QPainter, x: int, y: int, px: int, *, deck: bool = False) -> None:
@@ -894,17 +1107,27 @@ def _burning(
         )
 
 
-def _draw_placement(
-    p: QPainter,
-    source: TileSource,
-    f: Placement,
-    px: int,
-    lights: list[tuple[float, float, float]],
-    *,
-    indoor: bool,
-) -> None:
+def _placement_sprite(source: TileSource, f: Placement, px: int, *, indoor: bool) -> QImage | None:
+    """A thing's sprite at the size it stands at, None until it is drawn."""
     sprite = source.item(f.name)
-    cx, foot = (f.x + f.w / 2) * px, (f.y + f.h) * px
+    if sprite is None:
+        return None
+    if f.kind == "furniture" or indoor:
+        height = int(px * (f.h + 1.0)) if f.kind == "furniture" else int(px * 2.2)
+        sprite = _scaled(sprite, height)
+        if sprite is not None and sprite.width() > f.w * px * 1.15 and f.kind == "furniture":
+            sprite = sprite.scaledToWidth(int(f.w * px * 1.15), Qt.SmoothTransformation)
+        return sprite
+    return _scaled(sprite, int(px * 3.2))
+
+
+def _draw_placement(
+    p: QPainter, source: TileSource, f: Placement, px: int, *, sprite: QImage | None
+) -> None:
+    """A thing over its footprint, its foot on its last row: its sprite
+    (`_placement_sprite`) with its shadow, broken when it is; a plain crate
+    while it has none."""
+    cx, foot = foot_of(f, px)
     if sprite is None:
         # Not drawn yet: a plain crate of the thing's footprint, so it is
         # seen to be there (its sprite comes in the background).
@@ -916,15 +1139,6 @@ def _draw_placement(
             _cracks(p, box, px)
             _rubble_at(p, source, cx, foot, px)
         return
-    if f.kind == "furniture" or indoor:
-        height = int(px * (f.h + 1.0)) if f.kind == "furniture" else int(px * 2.2)
-        sprite = _scaled(sprite, height)
-        if sprite is not None and sprite.width() > f.w * px * 1.15 and f.kind == "furniture":
-            sprite = sprite.scaledToWidth(int(f.w * px * 1.15), Qt.SmoothTransformation)
-    else:
-        sprite = _scaled(sprite, int(px * 3.2))
-    if sprite is None:
-        return
     if f.broken:
         sprite = broken_sprite(sprite)
     p.setPen(Qt.NoPen)
@@ -935,9 +1149,6 @@ def _draw_placement(
     if f.broken:
         _cracks(p, QRectF(left, top, sprite.width(), sprite.height()), px)
         _rubble_at(p, source, cx, foot, px)
-        return  # a broken lamp gives no light
-    if any(word in f.name.lower() for word in LIGHT_WORDS):
-        lights.append((cx, foot - sprite.height() * 0.5, px * (4.0 if indoor else 6.0)))
 
 
 def broken_sprite(sprite: QImage) -> QImage:
@@ -1060,7 +1271,7 @@ def _bridges(p: QPainter, area: Area, source: TileSource, px: int) -> None:
             p.fillRect(X + px - t, Y, t, px, rail)
 
 
-def _render_outdoor(area: Area, source: TileSource) -> QImage:
+def _render_outdoor(area: Area, source: TileSource) -> Ground:
     np = _np()
     info = source.info
     rows = area.rows
@@ -1143,7 +1354,11 @@ def _render_outdoor(area: Area, source: TileSource) -> QImage:
     _bridges(p, area, source, px)
     # 3. everything that stands, back to front by its foot
     stand: list[tuple[float, str, object]] = []
-    placed = {(f.x, f.y): f for f in area.placements}
+    # Things are sprites over the ground (`thing_picture`): here only their
+    # light, and their tiles keep what the ground has under them.
+    for f in area.placements:
+        if (light := thing_light(f, px, indoor=False)) is not None:
+            lights.append(light)
     for y in range(h):
         for x in range(w):
             c = rows[y][x]
@@ -1158,8 +1373,6 @@ def _render_outdoor(area: Area, source: TileSource) -> QImage:
                 stand.append(((y + 1) * px, "rubble", (x, y)))
             elif c == "%":
                 stand.append(((y + 1) * px, "fence", (x, y)))
-            elif (x, y) in placed:
-                stand.append(((y + 1) * px + 1, "obj", placed[(x, y)]))
             elif c in "#W+" and not roofed[y, x]:
                 stand.append(((y + 1) * px, "wall", (x, y)))
             elif c == "*":
@@ -1239,8 +1452,6 @@ def _render_outdoor(area: Area, source: TileSource) -> QImage:
             else:
                 post = sprite.copy(0, 0, max(2, sprite.width() // 6), sprite.height())
                 p.drawImage(int((x + 0.5) * px - post.width() / 2), int(foot - post.height()), post)
-        elif kind == "obj":
-            _draw_placement(p, source, data, px, lights, indoor=False)  # type: ignore[arg-type]
         elif kind == "fire":
             # The ground is scorched already (the terrain); embers and the
             # flames stand on it, drawn over everything once the rest is in.
@@ -1313,13 +1524,23 @@ def _render_outdoor(area: Area, source: TileSource) -> QImage:
     # it made an area's edge look like the end of the world, and Leave ▾
     # carries on past it (indoors it stays).
     img = _arr(out)
+    counted = _things_counted(out, area.placements, source, px, indoor=False)
     glow = _light(lights, H, W)
     if info.lava and (g == "~").any():
         glow = glow + _blur(_soft(g == "~", 5, px), px, 3) * 1.1
     lc = np.array(info.light, np.float32) / 255
     img = img * (0.92 + 0.25 * glow[..., None] * lc) + glow[..., None] * lc * 22
-    img *= np.array(info.grade, np.float32)
-    lum = float(img.mean())
+    few = glow[::LUM_STEP, ::LUM_STEP, None]
+    counted = counted * (0.92 + 0.25 * few * lc) + few * lc * 22
+    grade = np.array(info.grade, np.float32)
+    img *= grade
+    scale = grade
+    lum = float((counted * grade).mean())
     if lum < 85:  # a dark world lifted, as indoors
-        img = img * (85 / max(lum, 1.0)) ** 0.75
-    return _qimg(img)
+        k = (85 / max(lum, 1.0)) ** 0.75
+        img = img * k
+        scale = scale * k
+    cell = max(1, px // LIGHT_CELLS_PER_TILE)
+    coarse = _coarse(glow, cell)[..., None]
+    light = LightMap((0.92 + 0.25 * coarse * lc) * scale, coarse * lc * 22 * scale, cell)
+    return Ground(_qimg(img), light)

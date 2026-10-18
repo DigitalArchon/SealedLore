@@ -22,13 +22,23 @@ from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QDialog, QFileDialog, QInputDialog, QMessageBox
 
-from sealedlore.engine.area import Area, point_tile, tile_point
+from sealedlore.engine.area import Area, Placement, point_tile, tile_point
+from sealedlore.engine.deck_plan import DRAWN_PIECES
 from sealedlore.engine.marks import mark_token, marks_in
 from sealedlore.engine.picture_shapes import FREE
 from sealedlore.engine.tile_sets import head_noun
 from sealedlore.engine.world import key
 from sealedlore.engine.world_pictures import views_of
-from sealedlore.gui.area_render import TileSource, render_area, sprite_image
+from sealedlore.gui.area_render import (
+    Ground,
+    ThingPicture,
+    TileSource,
+    px_for,
+    render_ground,
+    sprite_image,
+    thing_light,
+    thing_picture,
+)
 from sealedlore.gui.area_view import AreaView, PlaceMark, Walker
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.isometric_view import IsometricDialog, made_when
@@ -43,6 +53,8 @@ from sealedlore.storage.repository import save_config
 
 # Areas kept painted, most recent first.
 PAINTED_KEPT = 6
+# Things' pictures kept, before the oldest are let go.
+THING_PICTURES_KEPT = 600
 # Verbs done standing beside the person or thing.
 WALK_UP = ("talk", "attack", "use", "take", "eat", "destroy")
 # How long the window waits for the painting threads as it closes.
@@ -104,7 +116,11 @@ class AreaWindow:
         self.area_view.painting_chosen.connect(self._area_show_painting)
         self._painted = _Painted()
         self._painted.done.connect(self._area_painted)
-        self._area_images: dict[object, QImage] = {}
+        self._area_images: dict[object, Ground] = {}
+        # The things' pictures, kept per tile set (`_thing_pictures`).
+        self._thing_source: TileSource | None = None
+        self._thing_source_key: tuple | None = None
+        self._thing_images: dict[tuple, ThingPicture] = {}
         self._area_painting: set[object] = set()
         # Keys whose painting failed: the plain map stands in for them until
         # what they are painted from changes (they were painted again on
@@ -140,6 +156,7 @@ class AreaWindow:
         if self._area_story != session.story.id:
             self._area_story = session.story.id
             self._area_images.clear()
+            self._thing_source_key = None
             self._area_failed.clear()
             self._walker_images.clear()
             self._place_images.clear()
@@ -184,17 +201,21 @@ class AreaWindow:
                 for name, bx, by, dx, dy in session.at_the_door()
             ]
         places = self._place_marks(area, session, art)
-        key = self._area_key(area, session, art)
-        image = self._area_images.get(key)
+        # The ground keeps its dressing off the things as the plan put them
+        # (no record of what became of them), so it stays as they move.
+        built = session.built_area(area.id)
+        avoid = list(built.placements) if built is not None else list(area.placements)
+        key = self._area_key(area, session, art, avoid)
+        ground = self._area_images.get(key)
         failed = key in self._area_failed
-        if image is None and not failed:
-            self._paint(area, key)
+        if ground is None and not failed:
+            self._paint(area, key, avoid)
         clock = session.map_clock()
         clock_text = f"Day {clock[0]}, {clock[1] // 60:02d}:{clock[1] % 60:02d}" if clock else ""
         self.area_view.set_locked(self._busy)
         self.area_view.set_area(
             area,
-            image,
+            ground,
             walkers,
             key=key,
             clock=clock_text,
@@ -202,6 +223,7 @@ class AreaWindow:
             failed=failed,
             places=places,
             weather=session.world().weather,
+            things=self._thing_pictures(area, session, art),
         )
         self.area_view.set_edge(session.edge_here())
         self.area_view.set_carrying(session.carried_things(), session.people_in_reach())
@@ -222,6 +244,8 @@ class AreaWindow:
         self.area_view.set_message("No area here yet.")
         self._paint_waiting = None  # the next story's map paints nothing of this one
         self._area_images.clear()
+        self._thing_source, self._thing_source_key = None, None
+        self._thing_images.clear()
         self._area_failed.clear()
         self._walker_images.clear()
         self._place_images.clear()
@@ -249,24 +273,76 @@ class AreaWindow:
             "Region and World show where you are."
         )
 
-    def _area_key(self, area: Area, session, art) -> object:
-        items = tuple(sorted(p.id for p in art.pictures if p.subject == "item"))
-        rows = zlib.crc32("".join(area.rows).encode())
-        things = tuple((p.name, p.x, p.y, p.w, p.h, p.broken) for p in area.placements)
+    def _set_key(self, session, art) -> tuple:
+        """What the tile set's pictures are: its name, its own assets, the
+        author's changes, the items drawn for the story."""
         name = session.tile_set_name(art)
         own = art.own_set_for(name)
         return (
-            area.id,
-            rows,
-            things,
             name,
-            items,
             tuple(sorted(own[1].assets.items())) if own is not None else (),
             tuple(sorted(art.tile_overrides.items())),
+            tuple(sorted(p.id for p in art.pictures if p.subject == "item")),
+        )
+
+    def _area_key(self, area: Area, session, art, avoid: list[Placement]) -> object:
+        """What the area's ground is painted from: its tiles, the tile set,
+        and of its things only what the ground shows (the light a lamp gives,
+        a deck's set pieces the program draws, the footprints the plan's own
+        things keep its dressing off): a thing moved, taken or added paints
+        nothing (its sprite moves: gui/area_sprites.py)."""
+        set_name, own, overrides, _items = self._set_key(session, art)
+        px = px_for(area)
+        lights = tuple(
+            (p.id, p.x, p.y)
+            for p in area.placements
+            if thing_light(p, px, indoor=area.indoor) is not None
+        )
+        pieces = tuple(
+            (p.id, p.piece, p.x, p.y, p.w, p.h, p.broken)
+            for p in area.placements
+            if p.piece in DRAWN_PIECES
+        )
+        # A plan's numbered object stands on floor the ground draws as any
+        # other: taken or moved, its number goes from the rows, nothing else.
+        floor = ("_" if area.indoor else ".") * 10
+        rows = "".join(area.rows).translate(str.maketrans("0123456789", floor))
+        return (
+            area.id,
+            zlib.crc32(rows.encode()),
+            lights,
+            pieces,
+            tuple((p.x, p.y, p.w, p.h) for p in avoid),
+            set_name,
+            own,
+            overrides,
             session.story.defaults.map_density,
         )
 
-    def _paint(self, area: Area, key: object) -> None:
+    def _thing_pictures(self, area: Area, session, art) -> list[tuple[Placement, ThingPicture]]:
+        """Each thing in the area with its picture, drawn once and kept for
+        as long as the tile set's pictures are the same."""
+        set_key = self._set_key(session, art)
+        if self._thing_source_key != set_key:
+            self._thing_source_key = set_key
+            self._thing_source = TileSource(*session.tile_set(art))
+            self._thing_images.clear()
+        px = px_for(area)
+        out = []
+        for f in area.placements:
+            if f.piece in DRAWN_PIECES:
+                continue  # the ground's own
+            look = (f.name, f.w, f.h, f.kind, f.broken, px, area.indoor)
+            picture = self._thing_images.get(look)
+            if picture is None:
+                picture = thing_picture(self._thing_source, f, px, indoor=area.indoor)
+                if len(self._thing_images) > THING_PICTURES_KEPT:
+                    self._thing_images.clear()
+                self._thing_images[look] = picture
+            out.append((f, picture))
+        return out
+
+    def _paint(self, area: Area, key: object, avoid: list[Placement]) -> None:
         if key in self._area_painting or key in self._area_failed:
             return
         session = self.session
@@ -278,23 +354,23 @@ class AreaWindow:
 
         def paint() -> None:
             try:
-                image = render_area(area, source, dress=dress)
+                ground = render_ground(area, source, dress=dress, avoid=avoid)
             except Exception:  # noqa: BLE001 - a picture that fails is drawn plainly
                 log.exception("The area %r couldn't be painted; a plain map stands in", area.name)
-                image = QImage()
-            signal.done.emit(key, image)
+                ground = None
+            signal.done.emit(key, ground)
 
         thread = threading.Thread(target=paint, name="area-paint", daemon=True)
         self._paint_threads = [t for t in self._paint_threads if t.is_alive()] + [thread]
         thread.start()
 
-    def _area_painted(self, key: object, image: QImage) -> None:
+    def _area_painted(self, key: object, ground: Ground | None) -> None:
         self._area_painting.discard(key)
-        if image.isNull():
+        if ground is None or ground.image.isNull():
             self._area_failed.add(key)
             self.refresh_area()  # the plain map, said to be standing in
             return
-        self._area_images[key] = image
+        self._area_images[key] = ground
         while len(self._area_images) > PAINTED_KEPT:
             self._area_images.pop(next(iter(self._area_images)))
         self.refresh_area()

@@ -40,7 +40,8 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.area import Area, Placement, _line, sees
 from sealedlore.gui import text_size
-from sealedlore.gui.area_render import px_for
+from sealedlore.gui.area_render import Ground, ThingPicture, px_for
+from sealedlore.gui.area_sprites import Frames, PersonSprite, ThingSprite
 from sealedlore.gui.avatar_view import pixel_scaled
 from sealedlore.gui.map_art import FOG
 from sealedlore.gui.map_edit_bar import EDIT_LABEL, TILE_COLOURS, EditBar
@@ -68,6 +69,9 @@ PAD_AROUND = 1
 # Indoors, what the author's character can't see is dimmed this much (of
 # 255): by room, feathered at the edges, never a hard black checker.
 SHADE_ALPHA = 110
+# Over every sprite (things in a room out of sight dim with its floor;
+# anyone out of sight isn't shown), under the light of the hour.
+SHADE_Z = 80
 # The shade's mask is drawn at this many pixels a tile and scaled smoothly
 # to the tiles, so its edges are soft.
 FEATHER = 8
@@ -398,89 +402,20 @@ class _Graphics(QGraphicsView):
         super().mouseReleaseEvent(event)
 
 
-class _Person(QGraphicsItem):
-    """A person on the map: their sprite, standing on their tile, their name
-    over them. The sprite is kept whole and drawn into the height it stands
-    at, so every zoom resamples it from the source (pre-scaled and scaled
-    again by the view, pixel art came out blurred); one smaller than that
-    height is scaled up by whole pixels first."""
-
-    def __init__(self, walker: Walker, px: int, indoor: bool) -> None:
-        super().__init__()
-        self.walker = walker
-        self.px = px
-        self.height = int(px * PERSON_TILES[indoor])
-        image = walker.image
-        self.pixmap: QPixmap | None = None
-        if image is not None and not image.isNull():
-            if image.height() < self.height:
-                image = pixel_scaled(image, self.height)
-            self.pixmap = QPixmap.fromImage(image)
-        self.width = (
-            self.height * self.pixmap.width() / self.pixmap.height()
-            if self.pixmap is not None and self.pixmap.height()
-            else self.height * 0.6
-        )
-        # Facing west (the sprite mirrored), and a step's bob, while walking.
-        self.mirrored = False
-        self.bob = 0.0
-        self.setZValue(10 + walker.y)
-        self.setAcceptHoverEvents(False)
-        self.place_at(walker.x, walker.y)
-
-    def place_at(self, x: float, y: float) -> None:
-        self.setPos((x + 0.5) * self.px, (y + 1.0) * self.px)
-        self.setZValue(10 + y)
-
-    def set_mirrored(self, mirrored: bool) -> None:
-        if mirrored != self.mirrored:
-            self.mirrored = mirrored
-            self.update()
-
-    def set_bob(self, bob: float) -> None:
-        if bob != self.bob:
-            self.bob = bob
-            self.update()
-
-    def _ring(self) -> tuple[QPointF, float, float, float]:
-        """The held character's ring: centre, radii, pen width."""
-        centre = QPointF(0, -self.px * 0.08)
-        return centre, self.width * 0.55, self.px * 0.32, max(2, self.px * 0.08)
-
-    def boundingRect(self) -> QRectF:  # noqa: N802 - Qt's name
-        # Wide enough for the ring and its pen (it painted outside and
-        # smeared while walking), and for the bob.
-        centre, rx, ry, pen = self._ring()
-        half = max(self.width / 2 + 2, rx + pen + 1)
-        bottom = max(4.0, centre.y() + ry + pen + 1)
-        top = -self.height - 4 - 1
-        return QRectF(-half, top, 2 * half, bottom - top)
-
-    def paint(self, painter: QPainter, _option, _widget=None) -> None:
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor(0, 0, 0, 80))
-        painter.drawEllipse(QPointF(0, -self.px * 0.08), self.width * 0.4, self.px * 0.22)
-        if self.walker.held:
-            centre, rx, ry, pen = self._ring()
-            painter.setPen(QPen(GOLD, pen))
-            painter.setBrush(Qt.NoBrush)
-            painter.drawEllipse(centre, rx, ry)
-        if self.pixmap is not None:
-            target = QRectF(-self.width / 2, -self.height - self.bob, self.width, self.height)
-            source = QRectF(self.pixmap.rect())
-            if self.mirrored:
-                painter.save()
-                painter.scale(-1, 1)
-                painter.drawPixmap(target, self.pixmap, source)
-                painter.restore()
-            else:
-                painter.drawPixmap(target, self.pixmap, source)
-        else:
-            painter.setPen(QColor(20, 20, 26))
-            painter.setBrush(QColor(90, 110, 170))
-            painter.drawRoundedRect(
-                QRectF(-self.width / 2, -self.height - self.bob, self.width, self.height), 6, 6
-            )
+def _person(walker: Walker, px: int, indoor: bool) -> PersonSprite:
+    """A person's sprite: their picture (one, today: `Frames.single`) kept
+    whole and drawn into the height they stand at, so every zoom resamples
+    it from the source (pre-scaled and scaled again by the view, pixel art
+    came out blurred); one smaller than that height is scaled up by whole
+    pixels first."""
+    height = int(px * PERSON_TILES[indoor])
+    image = walker.image
+    pixmap = None
+    if image is not None and not image.isNull():
+        if image.height() < height:
+            image = pixel_scaled(image, height)
+        pixmap = QPixmap.fromImage(image)
+    return PersonSprite(walker, px, height, Frames.single(pixmap))
 
 
 class _PlaceItem(QGraphicsItem):
@@ -951,7 +886,12 @@ class AreaView(QWidget):
         layout.addWidget(self.view, 1)
         self.area: Area | None = None
         self.walkers: list[Walker] = []
-        self.people: dict[str, _Person] = {}
+        self.people: dict[str, PersonSprite] = {}
+        # The area's things, each a sprite of its own over the ground (by
+        # placement id), the last list given, and the ground's light.
+        self.things: dict[str, ThingSprite] = {}
+        self._thing_list: list[tuple[Placement, ThingPicture]] = []
+        self._light = None
         self.places: dict[str, _PlaceItem] = {}
         self._tags: dict[str, _Tag] = {}
         self._background: QGraphicsPixmapItem | None = None
@@ -1025,6 +965,7 @@ class AreaView(QWidget):
         self._stop_walking()
         self.scene.clear()
         self.people, self._tags, self._background, self._hover = {}, {}, None, None
+        self.things, self._thing_list, self._light = {}, [], None
         self._stale = False
         self._note = None
         self._pins = []
@@ -1041,7 +982,7 @@ class AreaView(QWidget):
     def set_area(
         self,
         area: Area,
-        image: QImage | None,
+        image: Ground | QImage | None,
         walkers: list[Walker],
         *,
         key: object,
@@ -1051,6 +992,7 @@ class AreaView(QWidget):
         failed: bool = False,
         places: list[PlaceMark] | None = None,
         weather: str = "",
+        things: list[tuple[Placement, ThingPicture]] | None = None,
     ) -> None:
         """Show this area with these people (the window calls it whenever the
         session's state changes, and again once the picture is drawn), and
@@ -1059,7 +1001,13 @@ class AreaView(QWidget):
         area (None: daylight). `weather`: the story's words for the weather
         (`WorldMap.weather`), drawn over an outdoor area (`weather_look`).
         `failed`: the picture couldn't be painted, so the plain map stands in
-        for good."""
+        for good. `image`: the area's ground (`area_render.render_ground`),
+        and `things` what stands on it, each a sprite lit as the ground is
+        (None: as last given), so a thing moved or added paints nothing."""
+        ground = image if isinstance(image, Ground) else Ground(image) if image else None
+        image = ground.image if ground is not None else None
+        if things is not None:
+            self._thing_list = things
         if self._timer.isActive():
             if self.area is not None and self.area.id == area.id:
                 return  # mid-walk: the walk's end refreshes it
@@ -1109,6 +1057,7 @@ class AreaView(QWidget):
             self._stroke_items, self._stroke_tiles, self._band = [], {}, None
             self.people, self._tags, self._hover = {}, {}, None
             self.places = {}
+            self.things = {}
             self._note = None
             self._pins = []
             self._shade, self._shade_from, self._shade_mask = None, None, None
@@ -1119,12 +1068,15 @@ class AreaView(QWidget):
             if image is not None:
                 self._background = self.scene.addPixmap(QPixmap.fromImage(image))
                 self._background.setZValue(0)
+                self._light = ground.light
             elif last is not None:
+                # Its things lit as the last picture was, until the new one.
                 self._background = self.scene.addPixmap(last)
                 self._background.setZValue(0)
                 self._stale = True
             else:
                 self._background = None
+                self._light = None
                 rect = self.scene.addRect(bounds, QPen(Qt.NoPen), QColor(24, 26, 32))
                 rect.setZValue(0)
                 self._note = self.scene.addSimpleText("")
@@ -1161,8 +1113,28 @@ class AreaView(QWidget):
         self._sync_tint(minute)
         self._sync_weather(area, weather)
         self._place_places(places or [], px)
+        self._place_things(px)
         self._place_people(area, walkers, px)
         self._place_pins()
+
+    def _place_things(self, px: int) -> None:
+        """The area's things as sprites over the ground: kept while the
+        same, moved where they now stand, lit as the ground under them."""
+        wanted = {f.id: (f, picture) for f, picture in self._thing_list}
+        for ident in list(self.things):
+            if ident not in wanted:
+                self.scene.removeItem(self.things.pop(ident))
+        for ident, (f, picture) in wanted.items():
+            sprite = self.things.get(ident)
+            if sprite is None or sprite.picture is not picture or sprite.px != px:
+                if sprite is not None:
+                    self.scene.removeItem(sprite)
+                sprite = ThingSprite(f, picture, px)
+                self.scene.addItem(sprite)
+                self.things[ident] = sprite
+            sprite.placement = f
+            sprite.stand_at(f.x, f.y)
+            sprite.set_light(self._light)
 
     def _place_places(self, marks: list[PlaceMark], px: int) -> None:
         """The map's places in the area, each at its tile with its name (a
@@ -1292,7 +1264,7 @@ class AreaView(QWidget):
                 if person is not None:
                     self.scene.removeItem(person)
                     self.scene.removeItem(self._tags.pop(walker.name))
-                person = _Person(walker, px, area.indoor)
+                person = _person(walker, px, area.indoor)
                 self.scene.addItem(person)
                 self.people[walker.name] = person
                 tag = _Tag(walker.name, walker.held)
@@ -1341,7 +1313,7 @@ class AreaView(QWidget):
         pixmap = QPixmap.fromImage(soft)
         if self._shade is None:
             self._shade = self.scene.addPixmap(pixmap)
-            self._shade.setZValue(5)
+            self._shade.setZValue(SHADE_Z)
             self._shade.setTransformationMode(Qt.SmoothTransformation)
             self._shade.setScale(px_for(area) / FEATHER)
         else:
@@ -1510,6 +1482,10 @@ class AreaView(QWidget):
             if person is not None:
                 person.place_at(*tile)
                 self._tag_at(ident, *tile)
+            return
+        sprite = self.things.get(ident)
+        if sprite is not None:
+            sprite.stand_at(*tile)  # the thing itself follows, lit where it goes
             return
         thing = next((p for p in self.area.placements if p.id == ident), None)
         if thing is None:
@@ -1832,16 +1808,17 @@ class AreaView(QWidget):
         self._begin_segment()
 
     def _begin_segment(self) -> None:
-        """Facing the way the next tile lies, and a step's bob (one pixel
-        up on every other tile)."""
+        """Facing the way the next tile lies, walking (a figure with no
+        walking pictures bobs a pixel up on every other tile)."""
         held = self.held()
         person = self.people.get(held.name) if held is not None else None
         if person is None or not self._steps:
             return
-        nx, _ny = self._steps[0]
-        if nx != held.x:
-            person.set_mirrored(nx < held.x)
-        person.set_bob(1.0 if len(self._walked) % 2 else 0.0)
+        nx, ny = self._steps[0]
+        person.face(nx - held.x, ny - held.y)
+        person.set_pose("walk", len(self._walked))
+        if not person.frames.has("walk"):
+            person.set_bob(1.0 if len(self._walked) % 2 else 0.0)
 
     def _show_at(self, held: Walker, x: float, y: float) -> None:
         """The author's character's figure and name at this spot (between
@@ -1860,6 +1837,7 @@ class AreaView(QWidget):
             person = self.people.get(held.name)
             if person is not None:
                 person.set_bob(0.0)
+                person.set_pose("stand")
             self._show_at(held, held.x, held.y)  # on its tile, not between two
         walked, self._walked, self._steps = self._walked, [], []
         self._progress = 0.0
@@ -2012,7 +1990,7 @@ class AreaView(QWidget):
     def person_at(self, point: QPointF) -> Walker | None:
         """Whoever is shown at this point: someone out of sight is nobody."""
         for item in self.scene.items(point):
-            if isinstance(item, _Person) and item.isVisible():
+            if isinstance(item, PersonSprite) and item.isVisible():
                 return item.walker
         if self.area is None:
             return None

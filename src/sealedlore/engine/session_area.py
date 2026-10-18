@@ -595,6 +595,11 @@ class AreaRuntime:
         state = live if live is not None else self._snapshot_on(self.path())
         return state.things if state is not None else {}
 
+    def built_area(self, area_id: str | None) -> Area | None:
+        """The area as its plan and the author's own tiles make it, before
+        anything became of its things: their places as the plan put them."""
+        return self._built_area(area_id)
+
     def _built_area(
         self, area_id: str | None, world: WorldMap | None = None, art: WorldArt | None = None
     ) -> Area | None:

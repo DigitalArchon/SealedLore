@@ -924,7 +924,7 @@ def test_a_failed_painting_is_logged_once_and_the_plain_map_stands_in(
     view = window.area_view
     window._join_paint_threads(5)  # the story's own first painting, done
     pump(app)
-    monkeypatch.setattr(window_area, "render_area", boom)
+    monkeypatch.setattr(window_area, "render_ground", boom)
     # Something the area is painted from changes: a new key, painted anew.
     window.session.story.defaults.map_density = "sparse"
     assert not window._area_painting
@@ -1368,8 +1368,10 @@ def test_a_broken_thing_is_drawn_broken(app):
     whole_lum = sum(whole.pixelColor(x, y).lightness() for x, y in box) / len(box)
     after_lum = sum(after.pixelColor(x, y).lightness() for x, y in box) / len(box)
     assert after_lum < whole_lum  # darker
-    # Elsewhere the picture is the same.
-    assert whole.pixelColor(5 * px, 10 * px) == after.pixelColor(5 * px, 10 * px)
+    # Elsewhere the picture is the same but for the stove's light, gone with
+    # it (a lamp or a stove gives light by where it stands, drawn or not).
+    far, near = whole.pixelColor(5 * px, 10 * px), after.pixelColor(5 * px, 10 * px)
+    assert abs(far.red() - near.red()) <= 2 and abs(far.green() - near.green()) <= 2
     # With a sprite: the broken copy is darker and loses its top.
     from sealedlore.gui.area_render import broken_sprite
 
