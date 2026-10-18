@@ -542,3 +542,20 @@ def test_a_place_the_read_adds_that_its_parent_s_plan_draws_stands_where_it_is_d
     delta = WorldDelta(places=[other], added=[other.id])
     session._where_drawn(world, delta)
     assert other.x is None
+
+
+def test_outside_a_house_with_no_plan_of_its_own_they_stand_on_the_ground_round_it(
+    tmp_path, story, cast
+):
+    """The replay (Oct 18 2026): Wren knocked at the toll house, which had no
+    plan of its own; the toll bridge, a site, was taken for the building she
+    was outside of, and she was stood outside the whole bridge, in open
+    country."""
+    session = make_session(tmp_path, story, cast)
+    world, art = session.world(), session.map_art_copy()
+    shed = WorldPlace(id="shed", name="The shed", kind="building", inside="farm", x=-60.0, y=40.0)
+    world.places["shed"] = shed
+    world.where["Serrik Vaun"] = "shed"
+    world.outside = ["Serrik Vaun"]
+    state = session.settle(session.area_state(), world, art, walked=False)
+    assert state.spots["Serrik Vaun"].area == "farm"

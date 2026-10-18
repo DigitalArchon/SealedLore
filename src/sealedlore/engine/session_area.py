@@ -970,6 +970,12 @@ class AreaRuntime:
         if building_id not in chain:
             return None
         building = world.places[building_id]
+        if building.kind not in ("building", "room", "vehicle"):
+            # The area is the ground round it (a toll bridge's, for a toll
+            # house with no plan of its own yet): they stand on it, at the
+            # house. Live (Oct 18 2026) Wren, at the toll house door, was
+            # stood outside the whole bridge, out in open country.
+            return None
         # Their own point, if they stand on the ground already; the
         # building's spot when they stood inside it.
         if spot is None or place_of_area(spot.area) == building_id:
