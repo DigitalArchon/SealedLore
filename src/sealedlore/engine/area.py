@@ -1557,6 +1557,104 @@ def _resampled(
     return out
 
 
+# What a way cut to an edge may go through (trees, rock, water, brush, a
+# fence: a path or a bridge where it crossed), never a building's walls,
+# door, window or the dark inside its box.
+CARVABLE = frozenset("T^~%*,:")
+
+
+def edges_open(rows: list[str], repairs: list[str]) -> list[str]:
+    """Rows where every edge is reached from the largest stretch of ground
+    one can walk: where an edge isn't, the fewest tiles of trees, rock,
+    water or fence on the way to it are cut (a path, a bridge), going round
+    buildings. A region of open country is a world one walks on through,
+    and the farmhouse stamped in the middle of John's cut its road east
+    (the live test of the world designer, Oct 18 2026)."""
+    h, w = len(rows), len(rows[0]) if rows else 0
+    if not h or not w:
+        return rows
+    grid = [list(r) for r in rows]
+
+    def walkable(x: int, y: int) -> bool:
+        return grid[y][x] in WALKABLE
+
+    seen: set[tuple[int, int]] = set()
+    best: set[tuple[int, int]] = set()
+    for sy in range(h):
+        for sx in range(w):
+            if (sx, sy) in seen or not walkable(sx, sy):
+                continue
+            part = {(sx, sy)}
+            todo = [(sx, sy)]
+            while todo:
+                x, y = todo.pop()
+                for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                    if 0 <= nx < w and 0 <= ny < h and (nx, ny) not in part and walkable(nx, ny):
+                        part.add((nx, ny))
+                        todo.append((nx, ny))
+            seen |= part
+            if len(part) > len(best):
+                best = part
+    if not best:
+        return rows
+    edges = {
+        "north": {(x, 0) for x in range(w)},
+        "south": {(x, h - 1) for x in range(w)},
+        "west": {(0, y) for y in range(h)},
+        "east": {(w - 1, y) for y in range(h)},
+    }
+    for side, tiles in edges.items():
+        if tiles & best:
+            continue
+        # The fewest cuttable tiles from the walked ground to this edge.
+        dist = {cell: 0 for cell in best}
+        back: dict[tuple[int, int], tuple[int, int]] = {}
+        todo = deque(best)
+        found = None
+        while todo:
+            cell = todo.popleft()
+            if cell in tiles:
+                found = cell
+                break
+            x, y = cell
+            for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if not (0 <= nx < w and 0 <= ny < h):
+                    continue
+                ch = grid[ny][nx]
+                if ch in WALKABLE:
+                    cost = 0
+                elif ch in CARVABLE:
+                    cost = 1
+                else:
+                    continue
+                step = dist[cell] + cost
+                if step < dist.get((nx, ny), 1 << 30):
+                    dist[(nx, ny)] = step
+                    back[(nx, ny)] = cell
+                    (todo.appendleft if cost == 0 else todo.append)((nx, ny))
+        if found is None:
+            continue
+        cut = 0
+        cell = found
+        while cell in back:
+            x, y = cell
+            if grid[y][x] in CARVABLE:
+                grid[y][x] = BRIDGE if grid[y][x] == "~" else "="
+                cut += 1
+            cell = back[cell]
+        if cut:
+            repairs.append(f"cut a way to the {side} edge through {cut} tiles")
+        # What the cut joined to the walked ground, and nothing else.
+        grown = list(best)
+        while grown:
+            x, y = grown.pop()
+            for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+                if 0 <= nx < w and 0 <= ny < h and (nx, ny) not in best and walkable(nx, ny):
+                    best.add((nx, ny))
+                    grown.append((nx, ny))
+    return ["".join(r) for r in grid]
+
+
 def build_window(
     world: WorldMap,
     art: WorldArt,
@@ -1619,6 +1717,8 @@ def build_window(
     for f in fixed:
         labels[f["name"][:60]] = (f["x"] + f["w"] // 2, f["y"] + f["h"] // 2)
     rows, entrances, buildings = _fix_buildings(world, art, rows, big, fixed, repairs)
+    if region_cell:
+        rows = edges_open(rows, repairs)
     objects: dict[str, str] = {}
     holder = holding_place(world, west, north, side)
     area = Area(

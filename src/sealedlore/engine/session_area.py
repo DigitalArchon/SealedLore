@@ -830,6 +830,9 @@ class AreaRuntime:
                     where[name] = where[held]
         spots: dict[str, Spot] = {}
         order = ([held] if held in where else []) + [n for n in where if n != held]
+        # The world designer's regions (engine/regions.py): a whole region is
+        # no one's company, and those it put there are no one's companions.
+        designed_regions = {r.place_id for r in art.regions.values()}
         for name in order:
             place_id = where[name]
             spot = state.spots.get(name)
@@ -839,12 +842,18 @@ class AreaRuntime:
             if point is None and spot is None:
                 point = designed_point(art, name)  # where the world designer put them
             mine = spots.get(held or "")
-            if point is None and name != held and place_id == where.get(held or ""):
+            # Being in the same region of open country as the author's
+            # character is not being in their company: a zombie at the far
+            # fence stays where it is (the live test of the world designer,
+            # Oct 18 2026, stood two beside John).
+            wide = place_id in designed_regions or designed_point(art, name) is not None
+            if point is None and name != held and place_id == where.get(held or "") and not wide:
                 point = self._spot_point(mine, world, art)
             elif (
                 name != held
                 and mine is not None
                 and place_id == where.get(held or "")
+                and not wide
                 and spot is not None
                 and spot.area != mine.area
                 and (here := self.area(mine.area, world, art)) is not None
@@ -928,6 +937,7 @@ class AreaRuntime:
                 and mine is not None
                 and mine.area == target
                 and place_id == where.get(held or "")
+                and not wide
             )
             # On a window, where they stand on the map; but someone moved to
             # a place there with a spot of its own (not a road or a region)

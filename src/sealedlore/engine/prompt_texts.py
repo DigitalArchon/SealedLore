@@ -2469,6 +2469,9 @@ The story's own places on or near it (keep those on it clear, where they are):
 The regions beside it, and what crosses into this one along each edge:
 {edges}
 
+Already made elsewhere in the world (give this region a character of its own; reuse none of \
+these names): {taken}
+
 {ground}""",
     (
         ("setting", "The world as the story describes it, and its lore"),
@@ -2476,6 +2479,7 @@ The regions beside it, and what crosses into this one along each edge:
         ("where", "Where the region lies, from where the player is"),
         ("places", "The map's places on or near the region, a line each, with tiles"),
         ("edges", "The designed regions beside it and what crosses each edge"),
+        ("taken", "The names already used in the regions designed so far"),
         ("ground", "The ground of the land around, to keep one country"),
     ),
 )

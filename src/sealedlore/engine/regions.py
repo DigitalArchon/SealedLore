@@ -54,6 +54,9 @@ MAX_PLACES, MAX_THINGS, MAX_PEOPLE = 5, 8, 3
 MAX_FEATURES = 120
 # A thing this close to a place's walls is that place's.
 BESIDE = 10.0
+# Nobody the designer puts in the player's own region stands this close to
+# them: they would be simply there (the arrival rule).
+CLEAR_OF_PLAYER = 120.0
 # Designed people's labels start here, clear of the story's own unknowns.
 LABEL_FROM = 101
 # The rings of regions designed round the player's: theirs, then the ring.
@@ -154,8 +157,14 @@ def where_words(
     parts = []
     if player is not None:
         d = math.hypot(cx - player[0], cy - player[1])
-        if d < side / 2:
-            parts.append("the region the player is in")
+        if abs(cx - player[0]) < side / 2 and abs(cy - player[1]) < side / 2:
+            tile = side / DESIGN_GRID
+            gx = int((player[0] - west) / tile)
+            gy = int((north - player[1]) / tile)
+            parts.append(
+                f"the region the player is in, standing at x {gx}, y {gy}: put no one within "
+                f"{int(CLEAR_OF_PLAYER / tile)} tiles of them, out of their sight"
+            )
         else:
             parts.append(
                 f"the region {_bearing(cx - player[0], cy - player[1])} of the one the player is in"
@@ -179,16 +188,24 @@ def where_words(
 
 
 def place_lines(
-    world: WorldMap, rect: tuple[float, float, float], *, reach: float = REGION_SIDE
+    world: WorldMap,
+    rect: tuple[float, float, float],
+    *,
+    designed: set[str] = frozenset(),  # type: ignore[assignment]
+    reach: float = REGION_SIDE,
 ) -> str:
-    """The map's places on the region (with its tiles, kept clear) and near
-    it (with distance and bearing from its middle), a line each."""
+    """The story's places on the region (with its tiles, kept clear) and
+    near it (with distance and bearing from its middle), a line each; not
+    the `designed` ones (the regions beside it are told as such: given as
+    the story's, a design copied its neighbour's pickup and grave)."""
     west, north, side = rect
     tile = side / DESIGN_GRID
     cx, cy = west + side / 2, north - side / 2
     on, near = [], []
     for place in world.places.values():
         if place.x is None or place.y is None or place.kind in ("region", "route"):
+            continue
+        if place.id in designed:
             continue
         half = size_of(place) / 2
         what = f": {place.what}" if place.what else ""
@@ -260,6 +277,20 @@ def edge_lines(art: WorldArt, origin: tuple[float, float], i: int, j: int) -> st
     return "\n".join(lines) or "- none designed yet"
 
 
+def taken_lines(art: WorldArt, most: int = 60) -> str:
+    """What the designer has made elsewhere already: each region's name and
+    the names of its places and things, for the next to be its own (in one
+    wave, two regions were both "the Hollis back forty", and a child's boot
+    lay in four)."""
+    names: list[str] = []
+    for key in sorted(art.regions):
+        region = art.regions[key]
+        names += [p.name for p in region.places]
+        names += [t.name for t in region.things]
+    names = list(dict.fromkeys(names))[:most]
+    return "; ".join(names) or "nothing yet"
+
+
 def region_messages(
     texts: PromptTexts,
     *,
@@ -269,6 +300,7 @@ def region_messages(
     places: str,
     edges: str,
     ground: str,
+    taken: str = "nothing yet",
 ) -> list[PromptMessage]:
     system = texts.fill(
         "map.region.design",
@@ -288,6 +320,7 @@ def region_messages(
         places=places,
         edges=edges,
         ground=ground,
+        taken=taken,
     )
     return [
         PromptMessage(role="system", parts=(ContentPart(text=system),)),
@@ -316,6 +349,11 @@ def _cell(value: Any) -> int:
         return max(0, min(DESIGN_GRID - 1, int(round(float(value)))))
     except (TypeError, ValueError, OverflowError):
         return DESIGN_GRID // 2
+
+
+def _plain(name: str) -> str:
+    words = " ".join(name.lower().split())
+    return words[4:] if words.startswith("the ") else words
 
 
 def _span(value: Any, default: int = 3) -> int:
@@ -431,6 +469,8 @@ def build_region(
     labels_from: int,
     model: str = "",
     made_at: str = "",
+    story: Sequence[WorldPlace] = (),
+    player: tuple[float, float] | None = None,
 ) -> tuple[DesignedRegion, TerrainPatch]:
     """A design as the region the map keeps and its land: the shapes drawn
     on the designer's grid and each tile drawn DESIGN_SCALE times over, at
@@ -464,11 +504,21 @@ def build_region(
         size=side,
     )
     places = [region]
+    own = {_plain(n) for s in story for n in (s.name, *s.aliases)}
     for p in design.places:
         w = min(p["w"], DESIGN_GRID - p["x"])
         h = min(p["h"], DESIGN_GRID - p["y"])
         x, y = at(p["x"] + (w - 1) / 2, p["y"] + (h - 1) / 2)
         size = max(w, h) * tile
+        if _plain(p["name"]) in own or any(
+            s.x is not None
+            and s.y is not None
+            and s.kind not in ("region", "route")
+            and abs(s.x - x) < (size_of(s) + size) / 2
+            and abs(s.y - y) < (size_of(s) + size) / 2
+            for s in story
+        ):
+            continue  # the story's own place, drawn again (a second farmhouse)
         if p["kind"] == "settlement":
             size = max(size, 60.0)
         places.append(
@@ -503,8 +553,11 @@ def build_region(
         things.append(thing)
         spots[thing.id] = [x, y]
     people = []
-    for n, p in enumerate(design.people):
+    for p in design.people:
         x, y = at(p["x"], p["y"])
+        if player is not None and math.hypot(x - player[0], y - player[1]) < CLEAR_OF_PLAYER:
+            continue  # simply there, beside the player: never
+        n = len(people)
         people.append(
             DesignedPerson(
                 label=f"Unknown {labels_from + n}", who=p["who"], doing=p["doing"], x=x, y=y

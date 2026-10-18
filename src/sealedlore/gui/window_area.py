@@ -28,6 +28,7 @@ from sealedlore.engine.marks import mark_token, marks_in
 from sealedlore.engine.picture_shapes import FREE
 from sealedlore.engine.tile_sets import head_noun
 from sealedlore.engine.world import key
+from sealedlore.engine.world_art import window_id, window_rect
 from sealedlore.engine.world_pictures import views_of
 from sealedlore.gui.area_render import (
     Ground,
@@ -53,6 +54,8 @@ from sealedlore.storage.repository import save_config
 
 # Areas kept painted, most recent first.
 PAINTED_KEPT = 6
+# This near an edge of open country, the country across it is painted.
+PAINT_AHEAD_TILES = 24
 # Things' pictures kept, before the oldest are let go.
 THING_PICTURES_KEPT = 600
 # Verbs done standing beside the person or thing.
@@ -210,6 +213,8 @@ class AreaWindow:
         failed = key in self._area_failed
         if ground is None and not failed:
             self._paint(area, key, avoid)
+        elif area.window and me.area == area.id:
+            self._paint_ahead(area, me, session, art)
         clock = session.map_clock()
         clock_text = f"Day {clock[0]}, {clock[1] // 60:02d}:{clock[1] % 60:02d}" if clock else ""
         self.area_view.set_locked(self._busy)
@@ -318,6 +323,38 @@ class AreaWindow:
             overrides,
             session.story.defaults.map_density,
         )
+
+    def _paint_ahead(self, area: Area, me, session, art) -> None:
+        """Near an edge of open country: the country across it painted now,
+        so walking on shows it at once (a region's picture took seconds, a
+        dark stand-in meanwhile; the world designer's regions are there
+        before the player is, engine/regions.py)."""
+        if area.rect is None:
+            return
+        west, north, width, height = area.rect
+        steps = []
+        if me.x < PAINT_AHEAD_TILES:
+            steps.append((-1, 0))
+        if me.x >= area.width - PAINT_AHEAD_TILES:
+            steps.append((1, 0))
+        if me.y < PAINT_AHEAD_TILES:
+            steps.append((0, 1))
+        if me.y >= area.height - PAINT_AHEAD_TILES:
+            steps.append((0, -1))
+        for dx, dy in steps:
+            x = west + width / 2 + dx * width
+            y = north - height / 2 + dy * height
+            other_id = window_id(*window_rect(art, x, y))
+            if other_id == area.id:
+                continue
+            other = session.area(other_id)
+            if other is None:
+                continue
+            built = session.built_area(other_id)
+            avoid = list(built.placements) if built is not None else list(other.placements)
+            key = self._area_key(other, session, art, avoid)
+            if key not in self._area_images and key not in self._area_failed:
+                self._paint(other, key, avoid)
 
     def _thing_pictures(self, area: Area, session, art) -> list[tuple[Placement, ThingPicture]]:
         """Each thing in the area with its picture, drawn once and kept for

@@ -242,3 +242,97 @@ def test_the_regions_round_the_player_are_designed_ahead_on_the_story_model(
     assert sent and all(r.model == session.model for r in sent)  # the story model
     assert "The region to design" in sent[0].messages[-1].text
     assert not session._start_region_design()  # nothing left to design here
+
+
+def test_nobody_is_designed_within_sight_of_the_player_nor_the_story_s_places_twice():
+    """The live test (Oct 18 2026): the region John stood in was designed
+    with a scavenger at the tree line beside him (simply there), and a
+    second farmhouse beside the story's own."""
+    world = WorldMap(start=None)
+    origin = origin_of(world, WorldArt())
+    rect = cell_rect(origin, 0, 0)
+    west, north, _side = rect
+    tile = REGION_SIDE / DESIGN_GRID
+    # The zombie at the fence (60, 22) is 70-odd m from a player at (50, 20).
+    player = (west + 50.5 * tile, north - 20.5 * tile)
+    barn_at = (west + 58 * tile, north - 27.5 * tile)
+    story = [WorldPlace(id="h", name="The Kessler Barn", kind="building", x=0.0, y=0.0, size=20.0)]
+    region, _patch = build_region(
+        parse_region(json.dumps(DESIGN)),
+        key="0:0",
+        rect=rect,
+        holder_id=None,
+        labels_from=LABEL_FROM,
+        story=story,
+        player=player,
+    )
+    assert region.people == []
+    assert "the Kessler barn" not in {p.name for p in region.places}  # the story's, by name
+    can = next(t for t in region.things if "fuel" in t.name)
+    assert can.at == region.place_id  # its barn left out: lying in the open
+    on_it = [WorldPlace(id="s", name="The old shed", kind="building", x=barn_at[0], y=barn_at[1])]
+    again, _patch = build_region(
+        parse_region(json.dumps(DESIGN)),
+        key="0:0",
+        rect=rect,
+        holder_id=None,
+        labels_from=LABEL_FROM,
+        story=on_it,
+    )
+    assert "the Kessler barn" not in {p.name for p in again.places}  # where a story place stands
+
+
+def test_a_region_is_told_the_others_names_and_not_their_places_as_the_story_s():
+    from sealedlore.engine.regions import place_lines, taken_lines
+
+    world, art, region, _patch = designed()
+    folded = world_at([], None, designed=designed_delta(art))
+    origin = (art.region_origin[0], art.region_origin[1])
+    beside = cell_rect(origin, 1, 0)
+    ids = {p.id for p in region.places}
+    assert "Kessler barn" in place_lines(folded, beside)
+    assert "Kessler barn" not in place_lines(folded, beside, designed=ids)
+    taken = taken_lines(art)
+    assert "The Kessler fields" in taken and "the Kessler barn" in taken and "fuel can" in taken
+
+
+def test_someone_in_the_player_s_region_is_not_pulled_beside_them_as_company(tmp_path, story, cast):
+    """The live test: the read put John "at the North Woodlot", a region,
+    and two of its people were stood beside him as if in his company."""
+    session = open_session(tmp_path, story, cast)
+    region = _with_region(session)
+    session.story.world_base.where["Serrik Vaun"] = region.place_id
+    session._designed_cache = None
+    label = region.people[0].label
+    state = session.area_state()
+    me, them = state.spots["Serrik Vaun"], state.spots[label]
+    session._set_live(state)
+    again = session.area_state().spots[label]
+    assert (again.area, again.x, again.y) == (them.area, them.x, them.y)
+    assert math.hypot(them.x - me.x, them.y - me.y) > 5
+
+
+def test_every_edge_of_a_region_is_reached_after_its_buildings_are_stamped():
+    """The live test (Oct 18 2026): the region's land kept a way from its
+    middle to each edge, then the story's farmhouse was stamped in the
+    middle and cut the road east."""
+    from sealedlore.engine.area import CARVABLE, WALKABLE, edges_open
+
+    rows = [
+        "TTTTTTTTTT",
+        "T........T",
+        "T..####..T",
+        "T..#  #..T",
+        "T..####..T",
+        "T........T",
+        "TTTTTTTTTT",
+    ]
+    repairs: list[str] = []
+    opened = edges_open(rows, repairs)
+    assert len(repairs) == 4  # a way cut to each edge
+    for edge in ([opened[0]], [opened[-1]], [[r[0] for r in opened]], [[r[-1] for r in opened]]):
+        assert any(ch in WALKABLE for ch in edge[0])
+    assert opened[2][3:7] == "####" and opened[3][3:7] == "#  #"  # never through a building
+    assert sum(ch not in CARVABLE for row in opened for ch in row) > sum(
+        ch not in CARVABLE for row in rows for ch in row
+    )

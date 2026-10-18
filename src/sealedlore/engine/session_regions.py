@@ -22,6 +22,7 @@ from sealedlore.engine.regions import (
     parse_region,
     place_lines,
     region_messages,
+    taken_lines,
     waves,
     where_words,
 )
@@ -238,9 +239,10 @@ class RegionRuntime:
             setting=self._region_setting(),
             story=self._region_story(),
             where=where_words(world, rect, self.held_point(world=world)),
-            places=place_lines(world, rect),
+            places=place_lines(world, rect, designed=self.designed_place_ids()),
             edges=edge_lines(art, origin, *cell),
             ground=ground,
+            taken=taken_lines(art),
         )
         return ChatRequest(
             model=model,
@@ -280,6 +282,8 @@ class RegionRuntime:
             return
         if self._map_closed or self._closed:
             return
+        # Where the player stands, before the lock (it reads the map's art).
+        player = self.held_point(world=world)
         art = self.world_art
         with self._lock():
             if key in art.regions or not art.region_origin:
@@ -297,6 +301,8 @@ class RegionRuntime:
                 labels_from=next_label(art),
                 model=model,
                 made_at=utc_now_iso(),
+                story=[p for p in world.places.values() if p.id not in designed_ids],
+                player=player,
             )
             art.regions[key] = region
             art.terrain.append(patch)
