@@ -874,7 +874,9 @@ class AreaRuntime:
             # plan): they go into it once it has one (`Spot.for_place`).
             waiting = (
                 place_id
-                if area.window and not outside and place_id not in (area.place_id, area.id)
+                if (area.window or _has_an_inside(world, place_id))
+                and not outside
+                and place_id not in (area.place_id, area.id)
                 else ""
             )
             if (
@@ -1095,7 +1097,10 @@ class AreaRuntime:
         if near is None:
             near = self._way_in(area)
         x, y = stand_near(area, near, taken, seed=name, reach=0 if area.window else 2)
-        waiting = area.window and place_id not in (area.place_id, area.id)
+        waiting = (area.window or _has_an_inside(world, place_id)) and place_id not in (
+            area.place_id,
+            area.id,
+        )
         return Spot(area=area_id, x=x, y=y, for_place=place_id if waiting else "")
 
     @staticmethod
@@ -4041,6 +4046,15 @@ def _asset_key(role: str) -> str:
     if role.startswith("items/"):
         return f"item:{role[6:]}"
     return role
+
+
+def _has_an_inside(world: WorldMap, place_id: str) -> bool:
+    """A building, room or vehicle: stood on the ground round it until its
+    inside is drawn, then inside (`Spot.for_place`). Live (Oct 18 2026)
+    Wren went into Cade's shop before its inside was drawn and stayed on the
+    town's ground at its door, with Cade inside, once it was."""
+    place = world.places.get(place_id)
+    return place is not None and place.kind in ("building", "room", "vehicle")
 
 
 def _close_quietly(client: ChatProvider | None) -> None:

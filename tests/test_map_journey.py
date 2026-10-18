@@ -644,3 +644,35 @@ def test_a_place_named_for_a_side_of_its_parent_is_at_that_edge():
     assert gate.y >= town.y + 250 and abs(gate.x - town.x) < 200  # its north edge
     assert quarter.x > town.x + 300
     assert abs(square.x - town.x) < 300 and abs(square.y - town.y) < 300  # nothing said: the middle
+
+
+def test_someone_in_a_building_whose_inside_isn_t_drawn_yet_goes_in_once_it_is(
+    tmp_path, story, cast
+):
+    """The replay (Oct 18 2026): Wren went into Cade's shop before its inside
+    was drawn; she stayed on the town's ground at its door, and Cade, placed
+    once it was, stood inside alone."""
+    session = make_session(tmp_path, story, cast)
+    world, art = session.world(), session.map_art_copy()
+    shed = WorldPlace(id="shed", name="The shed", kind="building", inside="farm", x=-60.0, y=40.0)
+    world.places["shed"] = shed
+    world.where["Serrik Vaun"] = "shed"
+    state = session.settle(session.area_state(), world, art, walked=False)
+    me = state.spots["Serrik Vaun"]
+    assert me.area == "farm" and me.for_place == "shed"
+    rows, objects, labels = rasterise({"ground": "floor", "features": []}, 40, 24)
+    art.layouts["shed"] = {
+        "": PlaceLayout(
+            place_id="shed",
+            spec={
+                "ground": "floor",
+                "features": [{"kind": "building", "x": 0, "y": 0, "w": 40, "h": 24}],
+            },
+            rows=rows,
+            objects=objects,
+            labels=labels,
+            made_at="2",
+        )
+    }
+    state = session.settle(state, world, art, walked=False)
+    assert state.spots["Serrik Vaun"].area == "shed"
