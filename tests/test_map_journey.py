@@ -582,3 +582,49 @@ def test_a_town_down_a_new_road_is_placed_by_way_of_the_road():
     assert road.y < bridge.y  # south of the bridge
     assert town.y < road.y - 10_000 and abs(town.x) < 3_000  # three hours on, southward
     assert town.y - 750 <= gate.y <= town.y + 750  # in the town
+
+
+def test_the_author_s_character_goes_with_the_company_when_the_read_forgets_them(
+    tmp_path, story, cast
+):
+    """The replay (Oct 18 2026): Wren and Tobias walked three hours to
+    Saltmarsh's north gate; the map read moved Tobias there and left Wren in
+    the toll house. The scene read had them both at the gate."""
+    passage = "They walked the road to Hellsville and stopped inside its north gate."
+    scene = {"location": "Just inside Hellsville's north gate", "arrived": [], "left": []}
+    read = {
+        "places": [
+            {"name": "the north gate", "kind": "site", "inside": "Hellsville", "quote": passage}
+        ],
+        "where": [{"who": "Maela Orr", "place": "the north gate", "quote": passage}],
+    }
+    story.scene.present_character_ids = ["char-serrik", "char-maela"]
+    session = make_session(tmp_path, story, cast, [passage, json.dumps(scene), json.dumps(read)])
+    session.config.scene_reads = "every_turn"
+    session.story.world_base.where.update({"Serrik Vaun": "house", "Maela Orr": "house"})
+    sent = list(session.send(turn("We set off for Hellsville together.")))
+    notices = [n.text for n in sent if isinstance(n, SessionNotice)]
+    after = session.world()
+    gate = next(p.id for p in after.places.values() if p.name == "the north gate")
+    assert after.where.get("Maela Orr") == gate
+    assert after.where.get("Serrik Vaun") == gate
+    assert "Map: with the others, to the north gate." in notices
+    spots = session.path()[-1].meta.area.spots
+    assert spots["Serrik Vaun"].area == spots["Maela Orr"].area
+
+
+def test_the_author_s_character_stays_when_only_the_other_goes(tmp_path, story, cast):
+    passage = "Maela went out to the north gate to watch the road."
+    scene = {"left": [{"name": "Maela Orr", "how": "went out to the north gate"}]}
+    read = {
+        "places": [
+            {"name": "the north gate", "kind": "site", "inside": "Hellsville", "quote": passage}
+        ],
+        "where": [{"who": "Maela Orr", "place": "the north gate", "quote": passage}],
+    }
+    story.scene.present_character_ids = ["char-serrik", "char-maela"]
+    session = make_session(tmp_path, story, cast, [passage, json.dumps(scene), json.dumps(read)])
+    session.config.scene_reads = "every_turn"
+    session.story.world_base.where.update({"Serrik Vaun": "house", "Maela Orr": "house"})
+    list(session.send(turn("Go and watch the road, Maela.")))
+    assert session.world().where.get("Serrik Vaun") == "house"

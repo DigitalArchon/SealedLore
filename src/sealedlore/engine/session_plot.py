@@ -255,6 +255,9 @@ class PlotRuntime:
         joined = self.join_named_newcomer()
         if joined:
             yield SessionNotice(f"Map: the newcomer is {joined}.")
+        followed = self.follow_company()
+        if followed:
+            yield SessionNotice(f"Map: with the others, to {followed}.")
         passage = self.last_result.node if self.last_result is not None else None
         for note in self.reasoning_notices(passage):
             yield SessionNotice(note)

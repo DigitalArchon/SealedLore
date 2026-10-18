@@ -495,6 +495,61 @@ class WorldRuntime:
         self.save()
         return name
 
+    def follow_company(self) -> str | None:
+        """After all of a passage's reads: the author's character goes where
+        the company they were with went, when the map read moved the others
+        and forgot them (its prompt says always to give them, and live it
+        didn't): someone at their place before the passage was moved to a
+        new place, the scene read has both of them still in the scene, the
+        scene's location changed, and its words name that place. Live (Oct
+        18 2026) Wren and Tobias walked three hours to Saltmarsh's north
+        gate; the map moved Tobias there and left Wren in the toll house.
+        The place's name, or None."""
+        if not self.map_first or self.in_private or self.story.chat:
+            return None
+        result = self.last_result
+        node = result.node if result is not None else None
+        delta = node.meta.world if node is not None else None
+        held = self.map_held_name(node.meta.controlled_character_id) if node else None
+        if node is None or delta is None or held is None or held in delta.where:
+            return None
+        path = self._path_to(node.id)
+        before = self._world_on(path[:-1])
+        was = before.where.get(held)
+        scene_before = scene_at(path[:-1], self.story.setup.starting_scene)
+        scene_after = scene_at(path, self.story.setup.starting_scene)
+        moved_on = (scene_after.location or "").strip().lower()
+        if was is None or not moved_on or moved_on == (scene_before.location or "").strip().lower():
+            return None
+        together = set(self._present_on_map(scene_after))
+        if held not in together:
+            return None
+        after = self._world_on(path)
+        for name, place_id in delta.where.items():
+            place = after.places.get(place_id)
+            if (
+                name == held
+                or name not in together
+                or before.where.get(name) != was
+                or place is None
+                or place_id == was
+                or _label_words(place.name) not in moved_on
+            ):
+                continue
+            delta.where[held] = place_id
+            if name in delta.outside:
+                delta.outside[held] = delta.outside[name]
+            if node.meta.area is not None:
+                node.meta.area = self.settle(
+                    node.meta.area.model_copy(deep=True),
+                    self._world_on(path),
+                    self.map_art_copy(),
+                    walked=False,
+                )
+            self.save()
+            return place.name
+        return None
+
     def _card_words(self, name: str) -> str:
         """What a character's card says of them, for telling their sex."""
         for card in [*self.cast, *self.supporting]:
