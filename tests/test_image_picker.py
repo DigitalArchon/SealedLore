@@ -135,7 +135,7 @@ def test_recommended_models_are_offered_beside_the_field_with_their_notes(app):
     # Paintings of a place (the author, Oct 17 2026): FLUX.3 Klein, as for
     # the sprites, with Seedream and Nano Banana enhanced; each named as the
     # model, its edit version sent for it (the author, Oct 18 2026).
-    assert choices[0].id == Config().map_isometric_model == Config().map_sprite_model
+    assert choices[0].id == Config().map_isometric_model == Config().map_picture_model
     assert choices[0].id == "blackforestlabs/flux-3/klein/text-to-image"
     assert [c.id for c in choices if c.tag == "enhanced"] == [
         "bytedance/seedream-v5.0-pro",

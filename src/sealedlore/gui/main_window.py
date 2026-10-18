@@ -83,7 +83,7 @@ from sealedlore.gui.model_trouble import (
     TroubleRole,
 )
 from sealedlore.gui.new_story_guide import NewStoryGuide
-from sealedlore.gui.people_page import PeoplePage, people_view
+from sealedlore.gui.people_page import NOT_NAMED_SUFFIX, PeoplePage, people_view
 from sealedlore.gui.plot_editor import PlotEditorWindow
 from sealedlore.gui.plot_panel import ClockDialog, PlotPanel
 from sealedlore.gui.prompt_editor import PromptEditorDialog
@@ -812,17 +812,32 @@ class MainWindow(
             return
         hidden = set() if self.config.show_plot_spoilers else session.hidden_ids()
         missing, _lore = session.without_pictures()
+        scene, unnamed = session.story.scene, []
+        if session.map_first and session.nodes:
+            # On a map, who is here is the map's, as the storyteller is told:
+            # whoever is in sight or earshot, named or not.
+            mapped = session.map_scene(session.path(), session.story.held_character_id)
+            if mapped is not None:
+                mapped.location = scene.location
+                unknowns = session.world().unknowns
+                unnamed = [
+                    (label, unknowns[label])
+                    for label in sorted(unknowns)
+                    if f"{unknowns[label]}{NOT_NAMED_SUFFIX}" in mapped.present_others
+                ]
+                scene = mapped
         self.people_page.set_view(
             people_view(
                 [c for c in session.cast if c.id not in hidden],
                 [c for c in session.supporting if c.id not in hidden],
-                session.story.scene,
+                scene,
                 session.story.held_character_id,
                 story_id=session.story.id,
                 begun=bool(session.nodes),
                 missing=[c.name for c in missing],
                 pictures_ready=session.config.images() is not None,
                 background=bool(session.story.background_image),
+                unnamed=unnamed,
             )
         )
 
@@ -4118,6 +4133,7 @@ class MainWindow(
         # With no story the inspector shows its empty page, not greyed forms
         # that look usable and answer nothing (their scrollbars included).
         self.right_tabs.show_empty(not has_story)
+        self._sync_inspector_dock(has_story)
         self._sync_dock_title()
         self.cast_panel.setEnabled(has_story)
         self.scene_panel.setEnabled(has_story)

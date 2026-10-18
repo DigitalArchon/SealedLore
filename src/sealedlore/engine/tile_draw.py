@@ -167,7 +167,9 @@ def roof_jobs(
                     name=f"{material} roof",
                     prompt=texts.fill(
                         "map.tile.texture",
-                        what=f"a {material} roof, its {material} seen from directly above",
+                        # The material, not "a roof": a roof is a building's
+                        # (judged blind, 11 of 12 were the material, against 10).
+                        what=f"{material} roofing",
                         world=world,
                         view="from directly overhead",
                         style=style,
@@ -234,13 +236,17 @@ def walker_jobs(
     *,
     style: str = DEFAULT_STYLE,
     failed: Callable[[str], bool] = lambda _k: False,
+    portraits: bool = True,
 ) -> list[PictureJob]:
     """A walking sprite for each person (name, portrait file or None, how
     their card describes them) who has none. Each records what it is drawn
     from (`from_picture`: the portrait's file, "" for the words), so one
-    drawn before a portrait came is known to be drawn again."""
+    drawn before a portrait came is known to be drawn again. `portraits`
+    False: the model takes no picture, so every one is drawn from words."""
     out: list[PictureJob] = []
     for name, portrait, looks in people:
+        if not portraits:
+            portrait = None
         key = f"walker:{name}"
         if has_walker(name) or failed(key):
             continue

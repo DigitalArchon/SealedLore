@@ -538,7 +538,9 @@ def test_with_no_story_open_the_window_says_so_and_offers_a_start(app, tmp_path:
         assert window.composer.input.placeholderText() == NO_STORY_PLACEHOLDER
         assert not window.story_menu.menuAction().isVisible()
         assert not window.close_story_action.isVisible()
-        empty_width = tabs.width()
+        # The side panel is the open story's: away with none open (its empty
+        # page only said to open one), so the start page has the room.
+        assert window.inspector_dock.isHidden()
 
         # The list kept beside the story, so only the forms could move the dock.
         window.config.stories_list = True
@@ -551,11 +553,11 @@ def test_with_no_story_open_the_window_says_so_and_offers_a_start(app, tmp_path:
         assert window.composer.input.placeholderText() != NO_STORY_PLACEHOLDER
         assert window.story_menu.menuAction().isVisible()
         assert window.close_story_action.isVisible()
-        assert tabs.width() == empty_width, "opening a story doesn't move the dock"
+        assert not window.inspector_dock.isHidden()
 
         window._close_story()
         settle(app)
-        assert tabs.is_empty_shown()
+        assert tabs.is_empty_shown() and window.inspector_dock.isHidden()
         assert window.centre_stack.currentWidget() is window.start_page
     finally:
         window.close()

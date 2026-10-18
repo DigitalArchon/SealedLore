@@ -99,7 +99,7 @@ def test_ground_the_set_has_none_of_is_drawn_once_in_its_style():
     assert [(j.key, j.subject, j.subject_id) for j in jobs] == [
         ("texture:out-ground-grass", "texture", "out-ground-grass")
     ]
-    assert "short grass" in jobs[0].prompt and "snowbound farm" in jobs[0].prompt
+    assert "short grass" in jobs[0].prompt and "snowbound farm" not in jobs[0].prompt
     assert "bleak" in jobs[0].prompt
     assert ground_jobs([farm], SNOW, lambda role: True, "x") == []  # already drawn
     grassy = TileSetInfo(name="g", grounds=["grass"])

@@ -86,3 +86,34 @@ def test_a_turn_at_the_door_keeps_them_outside_the_building(tmp_path, story, cas
     list(session.send(turn("I wait.")))
     world = session.world()
     assert world.where["Serrik Vaun"] == "house" and "Serrik Vaun" in world.outside
+
+
+def test_a_read_that_leaves_the_flag_off_keeps_them_outside_unless_they_go_in():
+    """Once in six openings of Doomsville with a map the read put John at the
+    farmhouse with no "outside" for "The porch boards creaked under new
+    weight, and from inside came…", and he was stood inside (Oct 18 2026)."""
+    world, _art = world_and_art()
+    farm = next(p.id for p in world.places.values() if p.name == "The farm")
+
+    def placed(world, quote, outside=None):
+        delta, refused = resolve_reply(world, at_house(outside, quote), source=quote, people=[])
+        assert refused == []
+        return delta.outside["Serrik Vaun"]
+
+    porch = (
+        "The porch boards creaked under new weight, and from inside came the double click "
+        "of a shotgun being racked."
+    )
+    # Placed for the first time: the porch, the steps or the yard is outside.
+    assert placed(world, porch) is True
+    assert placed(world, "Serrik sits by the stove in the kitchen.") is False
+    assert placed(world, "Serrik is at the house.") is False
+    # From elsewhere: in only when the passage takes them in.
+    world.where["Serrik Vaun"] = farm
+    assert placed(world, "Serrik stands watching the house's dark windows.") is True
+    assert placed(world, "Serrik steps inside and shuts the door.") is False
+    assert placed(world, "Serrik shoulders through the door.") is False
+    assert placed(world, "Serrik goes in.") is False
+    # The read's own word stands, either way.
+    assert placed(world, "Serrik stands watching the house.", outside=False) is False
+    assert placed(world, "Serrik climbs onto the porch.", outside=True) is True

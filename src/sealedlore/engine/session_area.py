@@ -2804,7 +2804,15 @@ class AreaRuntime:
             failed=failed,
         )
         jobs = (
-            walker_jobs(people, has_walker, words, self.texts, style=style, failed=failed)
+            walker_jobs(
+                people,
+                has_walker,
+                words,
+                self.texts,
+                style=style,
+                failed=failed,
+                portraits=self.map_portraits_go(),
+            )
             + grounds
             + roofs
             + jobs
@@ -2906,9 +2914,7 @@ class AreaRuntime:
             for job in pictures:
                 if self._art_stop:
                     return
-                model = (
-                    self.config.map_sprite_model if job.reference else self.config.map_tile_model
-                )
+                model = self.config.map_picture_model
                 self._doing("tile", f"{job_words(job)}, by {self.model_name(model)}")
                 self._tile_job(
                     job.key,
@@ -3158,7 +3164,7 @@ class AreaRuntime:
         """(pictures a whole set is, the listed price for them, why a set
         can't be designed or drawn now)."""
         count = len(TEXTURES) + 1 + 3 + len(OUTDOOR_SPRITES)
-        model = self._listed_image_model(self.config.map_tile_model)
+        model = self._listed_image_model(self.config.map_picture_model)
         texture = model.price(TEXTURE_SIZE) if model is not None else None
         sprite = model.price(SPRITE_SIZE) if model is not None else None
         total = (
@@ -3183,7 +3189,7 @@ class AreaRuntime:
         """(the pictures a design is, their price together at the tile
         model's listed prices, or None when it lists none)."""
         jobs = tile_jobs(words, self.texts)
-        info = self._listed_image_model(self.config.map_tile_model)
+        info = self._listed_image_model(self.config.map_picture_model)
         price = tile_set_price(jobs, info.price if info is not None else lambda _s: None)
         return len(jobs), price
 
@@ -3295,7 +3301,7 @@ class AreaRuntime:
             self._own_set_total = len(jobs)
             self._own_set_done = 0
             assets: dict[str, str] = {}
-            model = self.config.map_tile_model
+            model = self.config.map_picture_model
             info = self._listed_image_model(model)
             for role, prompt, size in jobs:
                 if self._art_stop:
@@ -3478,7 +3484,7 @@ class AreaRuntime:
             prompt = self.texts.fill(
                 "map.tile.texture", what=what, world=world, view=view, style=style
             )
-            return prompt, TEXTURE_SIZE, self.config.map_tile_model, None, ""
+            return prompt, TEXTURE_SIZE, self.config.map_picture_model, None, ""
         if role == "rug":
             prompt = self.texts.fill("map.tile.rug", what=what, world=world, style=style)
         elif role in OUTDOOR_SPRITES:
@@ -3493,7 +3499,11 @@ class AreaRuntime:
             looks = looks_of(card.summary, card.full_description) if card else ""
             # No words of the author's own: the card's, and so the portrait.
             what = " ".join(words.split()) or looks
-            data = self.pictures.read(portrait) if portrait and what == looks else None
+            data = (
+                self.pictures.read(portrait)
+                if portrait and what == looks and self.map_portraits_go()
+                else None
+            )
             if data is not None:
                 try:
                     data = strip_metadata(data)
@@ -3501,12 +3511,21 @@ class AreaRuntime:
                     data = None  # never sent unstripped: drawn from the words
             if data is not None and portrait:
                 prompt = self.texts.fill("map.tile.portrait", style=style)
-                return prompt, SPRITE_SIZE, self.config.map_sprite_model, data, portrait
+                return prompt, SPRITE_SIZE, self.config.map_picture_model, data, portrait
             who = f"{name}, {what}" if what else name
             prompt = self.texts.fill("map.tile.person", what=who, world=world, style=style)
         else:
             prompt = self.texts.fill("map.tile.sprite", what=what, world=world, style=style)
-        return prompt, SPRITE_SIZE, self.config.map_tile_model, None, ""
+        return prompt, SPRITE_SIZE, self.config.map_picture_model, None, ""
+
+    def map_portraits_go(self) -> bool:
+        """Avatars are drawn from the portrait: unless the listing says the map
+        picture model takes no picture, when they are drawn from the card's
+        words (a portrait sent to such a model would be dropped, or refused).
+        A model the listing doesn't know is taken as taking one (FLUX.3
+        Klein, the default, before the listing is read)."""
+        family = self.image_family(self.config.map_picture_model)
+        return family is None or family.takes_pictures
 
     def tile_asset_offer(self, role: str, words: str) -> tuple[str, float | None, str | None]:
         """(the model it would be drawn by, its listed price, why it can't be

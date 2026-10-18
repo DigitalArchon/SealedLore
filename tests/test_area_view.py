@@ -600,7 +600,7 @@ def test_the_designer_shows_the_words_and_every_prompt_with_the_price_before_dra
     assert session.tile_style() in dialog.description.toPlainText()
     assert dialog.designer.placeholderText() == session.tileset_designer
     assert dialog.designer.recommended_button is not None
-    assert session.config.map_tile_model in dialog.drawn_by.text()
+    assert session.model_name(session.config.map_picture_model) in dialog.drawn_by.text()
     assert not dialog.draw_button.isEnabled() and dialog.scroll.isHidden()
     dialog.name.setText("Neon alleys")
     dialog.designer.setText("z-ai/glm-5.3-flash")
@@ -621,7 +621,10 @@ def test_the_designer_shows_the_words_and_every_prompt_with_the_price_before_dra
     assert dialog.style_edit.text() == NEON_DESIGN["style"]
     count, _price = session.tile_set_price(dialog.design())
     assert count == len(rows)
-    assert f"{count} pictures by {session.config.map_tile_model}" in dialog.price.text()
+    assert (
+        f"{count} pictures by {session.model_name(session.config.map_picture_model)}"
+        in dialog.price.text()
+    )
     # Changed words re-render a template prompt; a designed prompt, or one
     # the author rewrote, is left as it is.
     rows["cap"].words.setText("a brass wall top")

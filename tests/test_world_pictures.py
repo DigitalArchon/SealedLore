@@ -605,7 +605,7 @@ def test_the_default_painting_model_and_an_older_config_s_both_paint(session):
     }
     session.config.map_pictures_mode = "off"
     default = Config().map_isometric_model
-    assert default == "blackforestlabs/flux-3/klein/text-to-image" == Config().map_sprite_model
+    assert default == "blackforestlabs/flux-3/klein/text-to-image" == Config().map_picture_model
     session.config.image_models = [listed(default), listed("flux-2-klein-9b")]
     session.config.map_isometric_model = default
     assert session.isometric_offer()[0] == default and session.isometric_offer()[2] is None

@@ -133,6 +133,10 @@ class LayoutWindow:
         self.stories_dock.may_close = lambda: getattr(self, "session", None) is not None
         self.stories_dock.closed.connect(lambda: self._choose_stories_list(False))
         self.stories_dock.visibilityChanged.connect(lambda _shown: self._sync_stories_button())
+        # The first story made, or the last deleted, with none open.
+        self.stories.refreshed.connect(
+            lambda: self._sync_stories_list() if getattr(self, "session", None) is None else None
+        )
         self._sync_stories_list()
 
     def _choose_stories_list(self, shown: bool) -> None:
@@ -149,10 +153,27 @@ class LayoutWindow:
 
     def _sync_stories_list(self) -> None:
         """The list as it should be now: shown with no story open, else as
-        the author last chose (put away unless they brought it back)."""
-        shown = getattr(self, "session", None) is None or self.config.stories_list
+        the author last chose (put away unless they brought it back). With no
+        stories at all it is empty, and the start page is the way in: away
+        (Oct 18 2026: a new player's first screen sat between an empty list
+        and an empty side panel)."""
+        if getattr(self, "session", None) is None:
+            shown = self.stories.has_stories()
+        else:
+            shown = self.config.stories_list
         self.stories_dock.setVisible(shown)
         self._sync_stories_button()
+        self._reshare_docks()
+
+    def _sync_inspector_dock(self, has_story: bool) -> None:
+        """The panel beside the story is the open story's: away with none
+        open (its empty page only said to open one), back when one opens.
+        Changed only as a story opens or closes, so the author's own closing
+        of it stands."""
+        if getattr(self, "_inspector_for", None) == has_story:
+            return
+        self._inspector_for = has_story
+        self.inspector_dock.setVisible(has_story)
         self._reshare_docks()
 
     def _sync_stories_button(self) -> None:
@@ -238,8 +259,6 @@ class LayoutWindow:
         )
         if not placed or stories.isFloating() or inspector.isFloating():
             return  # moved by the author: theirs to size
-        if not inspector.isVisible():
-            return
         if self._docks_dragged:
             # The author's widths, from the drag on: opening or closing a
             # story reshared them away (a drag to 300/560 came back 288/462).
@@ -251,6 +270,17 @@ class LayoutWindow:
         on_map = getattr(self, "map_layout", False)
         saved = self.config.window
         by_hand = self._docks_set_by_hand and saved is not None and saved.inspector_width
+        if not inspector.isVisible():
+            # No story open (the panel is the open story's): the list alone,
+            # at the width the author left it or its share.
+            if stories.isVisible():
+                want_s = (
+                    saved.stories_width
+                    if self._docks_set_by_hand and saved is not None and saved.stories_width
+                    else _clamp(width * STORIES_SHARE, STORIES_WIDTHS)
+                )
+                self.resizeDocks([stories], [want_s], Qt.Horizontal)
+            return
         if not stories.isVisible():
             if on_map:
                 want_i = max(round(width * MAP_SHARE), INSPECTOR_WIDTHS[0])

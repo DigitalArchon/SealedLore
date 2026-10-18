@@ -93,7 +93,7 @@ class MapApprovalRuntime:
         """A job with the model, size and price it would be drawn at: as
         `_tile_run` and `_picture_all` send it."""
         if run == "tile":
-            model = self.config.map_sprite_model if job.reference else self.config.map_tile_model
+            model = self.config.map_picture_model
             size = TEXTURE_SIZE if job.subject == "texture" else SPRITE_SIZE
             info = self._listed_image_model(model)
         else:

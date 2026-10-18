@@ -1591,8 +1591,10 @@ class SettingsDialog(QDialog):
         price = f"up to ${each:.3f} a picture listed" if each is not None else "price not listed"
         limit = self.map_picture_limit.value()
         self.map_picture_note.setText(
-            "Drawn without asking each time: each prompt is kept in the story's log with "
-            f"what it cost. {model or 'No model'}: {price}, so at most "
+            "The map picture model draws every picture the map wants: the avatars (from "
+            "the portraits), the things, roofs and ground of the play view, and the "
+            "Region map's pictures. Drawn without asking each time: each prompt is kept in "
+            f"the story's log with what it cost. {model or 'No model'}: {price}, so at most "
             + (f"${each * limit:.2f}" if each else f"{limit} pictures")
             + " a day for a story (less on a subscription that includes the model)."
         )

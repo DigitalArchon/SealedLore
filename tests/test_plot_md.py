@@ -304,3 +304,39 @@ The dark under the piers.
 """
     problems = [p.message for p in parse_plot_markdown(text).problems]
     assert any("answers to “Undercroft”" in m and "The Undercroft" in m for m in problems)
+
+
+def test_prose_wrapped_in_the_file_reads_as_markdown_does():
+    """The samples are wrapped at 80 columns, and the Cast page showed every
+    card with its file's line breaks (Oct 18 2026)."""
+    from sealedlore.engine.plot_md import _prose
+
+    lines = [
+        "A ranger of the Silverwood, an elf who looks thirty and is a hundred and",
+        "ninety. She watches the forest's borders.",
+        "",
+        "She carries:",
+        "- a heartwood longbow that",
+        "  was her mother's",
+        "- a green cloak",
+        "# Not a heading here, but kept on its line",
+        "First line of a poem,  ",
+        "and the second, kept apart.",
+    ]
+    text = _prose(list(enumerate(lines)))
+    assert text.split("\n") == [
+        "A ranger of the Silverwood, an elf who looks thirty and is a hundred and ninety. "
+        "She watches the forest's borders.",
+        "",
+        "She carries:",
+        "- a heartwood longbow that was her mother's",
+        "- a green cloak",
+        "# Not a heading here, but kept on its line",
+        "First line of a poem,",
+        "and the second, kept apart.",
+    ]
+    parsed = parse_plot_markdown(
+        (Path(__file__).resolve().parents[1] / "SampleStories" / "The Silverwood.md").read_text()
+    )
+    elowen = next(c for c in parsed.scenario.cast if c.name == "Elowen Thistledown")
+    assert "\n" not in elowen.full_description

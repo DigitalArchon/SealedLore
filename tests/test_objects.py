@@ -294,6 +294,35 @@ def test_the_people_page_offers_a_card_for_someone_with_none(app):
     page.deleteLater()
 
 
+def test_the_people_page_lists_someone_the_map_has_not_named_yet(app):
+    """On a map, the woman at the rail was on no list until she gave her
+    name (Oct 18 2026): the map's scene has her, and the page says so."""
+    from sealedlore.gui.people_page import PeoplePage, people_view
+    from sealedlore.models.character import Character
+    from sealedlore.models.scene import SceneState
+
+    page = PeoplePage(lambda: None)
+    scene = SceneState(
+        present_character_ids=["a"],
+        present_others=["the woman at the rail (not named yet)"],
+    )
+    view = people_view(
+        [Character(id="a", name="John")],
+        [],
+        scene,
+        "a",
+        unnamed=[("Unknown 1", "the woman at the rail")],
+    )
+    assert view.also_here == [], "listed once, as unnamed, not as a name"
+    page.set_view(view)
+    assert list(page.name_buttons) == ["Unknown 1"] and page.make_card_buttons == {}
+    asked = []
+    page.name_requested.connect(asked.append)
+    page.name_buttons["Unknown 1"].click()
+    assert asked == ["Unknown 1"]
+    page.deleteLater()
+
+
 def test_the_objects_panel_makes_and_hands_out_the_choice(app):
     from sealedlore.engine.session_objects import ObjectChoice
     from sealedlore.gui.objects_panel import ObjectsPanel

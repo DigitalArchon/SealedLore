@@ -844,8 +844,15 @@ class Config(BaseModel):
     # is left unread. Story pictures still ask each time. The limit is per
     # story and day; the subscription allows ~100.
     map_pictures_mode: Literal["auto", "ask", "off"] = "auto"
-    # FLUX.3 Klein from words, as the map's sprites (the author, Oct 17 2026:
-    # Klein, not Qwen; Qwen's paintings drew roofs as black-and-white noise).
+    # Every map picture: the play view's things, textures, roofs and the
+    # avatars (from the portrait, by the model's editing version: engine/
+    # image_variants.py), a story's own tile set, and the Region map's
+    # pictures and postcards. FLUX.3 Klein, open weights, ~1¢ a picture (the
+    # author, Oct 17 2026: Klein, not Qwen; Qwen's paintings drew roofs as
+    # black-and-white noise). Until Oct 18 2026 the play view's pictures had
+    # two models of their own, map_tile_model and map_sprite_model, in
+    # config.json alone, so this field (the only one in Settings) changed
+    # none of them; a saved config's are left unread.
     map_picture_model: str = "blackforestlabs/flux-3/klein/text-to-image"
     map_picture_daily_limit: int = 40
     # Paintings of a place (Paintings on the map, Paint this place… on the
@@ -858,15 +865,6 @@ class Config(BaseModel):
     # whose config still names "flux-2-klein-9b" keeps painting with it. The
     # field keeps its old name so saved configs read as before.
     map_isometric_model: str = "blackforestlabs/flux-3/klein/text-to-image"
-    # Map-first play's sprites (engine/tile_draw.py), under the same standing
-    # approval and daily limit as map pictures: things by text to image, a
-    # character from their portrait by an edit of it, and a story's own tile
-    # set when the author asks for one. FLUX.3 Klein, open weights, ~1¢ a
-    # picture (SealedLoreDocs design/map.md, "Tiles v2"; the author chose the
-    # look, Oct 16 2026). The sprite model is named as the model: given the
-    # portrait, its edit version is sent (engine/image_variants.py).
-    map_tile_model: str = "blackforestlabs/flux-3/klein/text-to-image"
-    map_sprite_model: str = "blackforestlabs/flux-3/klein/text-to-image"
     # The model that designs a story's own tile set from the author's
     # description (engine/tile_draw.py: the set's words and a prompt for every
     # picture, shown with the price before anything is drawn). Blank means

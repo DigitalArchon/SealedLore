@@ -4701,13 +4701,16 @@ _text(
     MAP,
     "Map-first: a texture",
     "Draws one of a tile set's textures (a floor, a wall, the ground, a roof) by text to "
-    "image. Made to wrap by the program.",
+    'image. Made to wrap by the program. The world is left out (Oct 18 2026): with "in the '
+    'Silverwood, an enchanted elven forest and its village" Klein drew a village of huts '
+    "for a thatch roof. On 15 roofs and grounds in three worlds, judged blind, 7 of 15 were "
+    "scenes or part-scenes with it and none of 15 without; the style still carries the look.",
     f"{_PIXEL}, a seamless tileable texture filling the whole square frame edge to edge: "
-    "{what}, in {world}. Seen {view}, flat even light with no shadows, no vignette and no "
-    "perspective; the pattern continues off every edge.",
+    "{what}, a close-up of the surface alone. Seen {view}, flat even light with no shadows, "
+    "no vignette and no perspective; the pattern continues off every edge.",
     (
         ("what", "what the texture is"),
-        ("world", "the world, in a few words"),
+        ("world", "the world, in a few words (not in the default: it drew scenes)"),
         ("view", "from directly overhead, or straight from the front"),
         _STYLE,
     ),

@@ -358,7 +358,11 @@ def test_a_story_s_own_tile_set_is_drawn_from_words_written_for_its_world():
     jobs = tile_jobs(parsed)
     roles = [role for role, _prompt, _size in jobs]
     assert roles[:3] == ["floor", "cap", "face"] and "out-door" in roles
-    assert all("a drowned city" in prompt for _role, prompt, _size in jobs)
+    # Things name the world; a texture doesn't (the world drew scenes for it).
+    from sealedlore.engine.tile_sets import TEXTURES
+
+    assert all("a drowned city" in prompt for role, prompt, _size in jobs if role not in TEXTURES)
+    assert not any("a drowned city" in prompt for role, prompt, _size in jobs if role in TEXTURES)
     with pytest.raises(ValueError):
         parse_tile_words(json.dumps({"world": "x"}))
     # The designer's own prompt for a picture is kept with the words and
@@ -386,7 +390,8 @@ def test_a_story_s_own_tile_set_is_drawn_from_words_written_for_its_world():
     sent = {role: prompt for role, prompt, _size in tile_jobs(parsed)}
     assert sent["floor"] == parsed["prompt:floor"]
     assert sent["out-door"] == parsed["prompt:out-door"]
-    assert "wet planks" not in sent["cap"] and "slate, in a drowned city" in sent["cap"]
+    assert "wet planks" not in sent["cap"]
+    assert "slate, a close-up of the surface alone" in sent["cap"]
     # The whole set's price is each picture at its size, never a guess.
     prices = {"1024x1024": 0.01, "768x768": 0.005}
     jobs = tile_jobs(parsed)
@@ -691,7 +696,7 @@ def test_one_asset_of_the_tile_set_is_changed_drawn_again_or_put_back(
     assert session.tile_asset_bytes("floor") == shipped_floor
     # Drawn again from the author's words: the map takes it once it is in.
     model, _price, problem = session.tile_asset_offer("out-road", "wet cobbles")
-    assert problem is None and model == session.config.map_tile_model
+    assert problem is None and model == session.config.map_picture_model
     assert session.redraw_tile_asset("out-road", "wet cobbles")
     session._asset_thread.join(5)
     sent = FakeImages.sent[-1]
@@ -972,7 +977,19 @@ def test_a_card_s_avatar_is_drawn_from_the_portrait_in_the_set_s_style_and_a_cho
     prompt, _size, model, reference, drawn_from = session._asset_job("walker/Serrik Vaun", "")
     assert reference is not None and "image 1" in prompt and info.words["style"] in prompt
     assert drawn_from == "images/refs/serrik.png"
-    assert model == session.config.map_sprite_model
+    assert model == session.config.map_picture_model
+    # A map picture model that takes no picture draws the avatar from the
+    # card's words: the portrait would be dropped or refused.
+    words_only = "z-image-turbo"
+    session.config.map_picture_model = words_only
+    session.config.image_models = [{"id": words_only, "supported_parameters": {}}]
+    assert not session.map_portraits_go()
+    prompt, _size, model, reference, drawn_from = session._asset_job("walker/Serrik Vaun", "")
+    assert model == words_only and reference is None and drawn_from == ""
+    assert "Serrik Vaun" in prompt
+    session.config.map_picture_model = Config().map_picture_model
+    session.config.image_models = []
+    assert session.map_portraits_go(), "a model the listing doesn't know takes the portrait"
     assert session.redraw_tile_asset("walker/Serrik Vaun", "")
     session._asset_thread.join(5)
     data, source = session.walker_asset("Serrik Vaun")

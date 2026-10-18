@@ -457,7 +457,8 @@ archiving, rebuilding summaries.
   Delete). It is put away while a story or chat is open, to give the story
   the room; **Stories**, above the transcript, or View → Stories list brings
   it back, and it then stays until you put it away again. With nothing open
-  it is always there.
+  it is always there, once you have a story (before that the start page is
+  the way in).
 - The docks share the window's width as it changes size, until you drag the
   line between a dock and the story; from then on their widths are yours.
   The window's size and those widths are kept for the next launch.
@@ -472,8 +473,8 @@ archiving, rebuilding summaries.
   more than one branch, **Branch** names the branch you are reading: its menu
   switches to another, renames or deletes it, and **Branches** shows every
   branch at once.
-- **Right dock**, beside the story, its pages as two rows of buttons, its
-  title naming the page shown and what it is for: **Map**
+- **Right dock**, beside the story (away while no story is open), its pages
+  as two rows of buttons, its title naming the page shown and what it is for: **Map**
   (for a story that keeps one, and the page it opens on), **People** (who is
   in the story, by their faces; the page a story without a map opens on: see
   "The People page"), **Scene** (who is here and where the story is, to
@@ -540,7 +541,7 @@ archiving, rebuilding summaries.
 
 ## Models
 
-Twenty-one settings name a model; the text models are together on Settings →
+Nineteen settings name a model; the text models are together on Settings →
 Models, the picture models on Settings → Images. Blank ones fall back as
 shown; the defaults marked ★ are NanoGPT model ids, so on another endpoint
 set them to one it lists (Browse…).
@@ -560,8 +561,7 @@ set them to one it lists (Browse…).
 | Jev model ★ | `config.json` only | "Jev before each turn" | — |
 | Image model ★ | Settings → Images | pictures of the story | starts as Seedream 5.0 Pro |
 | Portrait model ★ | Settings → Images | portraits and the cards' pictures | starts as FLUX.3 Klein |
-| Map picture model ★ | Settings → Images | the postcards, and the pictures of places and things on the Region map | starts as FLUX.3 Klein |
-| Map tile and sprite models ★ | `config.json` only (`map_tile_model`, `map_sprite_model`) | the play view's things, roofs and ground (tile), and the avatars drawn from portraits (sprite) | start as FLUX.3 Klein |
+| Map picture model ★ | Settings → Images | every picture the map wants: avatars (from the portraits), things, roofs and ground, a tile set of your own, postcards and the Region map's pictures | starts as FLUX.3 Klein |
 | Painting model ★ | Settings → Images | paintings of a place on the map | starts as FLUX.3 Klein |
 | Video model ★ | Settings → Video | videos | starts as Seedance 2.5 |
 | Tile set designer | **Designed by** in the tile set designer (Look → Tile sets… → Draw a new set…) | designing a tile set for your world | Claude Opus 5.5 on NanoGPT, else the map art model |
@@ -1012,6 +1012,12 @@ Who is here is the scene's (below), so the faces show at a glance who the
 storyteller thinks is in the room; **Correct the scene…** goes to the Scene
 page to put it right.
 
+In a story played on its map, who is here is the map's: whoever it has in
+sight or within earshot of you, as the storyteller is told. Someone there the
+story hasn't named yet ("the woman at the rail", Unknown 1 on the map) is
+listed under **Also here, with no card yet** with **Name…**: say who they
+are, one of the cards or a name, as the map's own correction does.
+
 Someone the story has here who has no card (named in the opening or by a
 passage, never given one) is listed under **Also here, with no card yet**,
 with **Make a card**: as a supporting character, or in the cast so you can
@@ -1139,10 +1145,11 @@ the menus and the storyteller call them as the story described them ("the
 teenage girl"). A thing the tile set has no picture of borrows the set's
 nearest one of the same kind until its own is drawn.
 
-**Draw map pictures** (under Settings → Images) has an image model, FLUX.3
-Klein, draw the map's people, buildings and things instead (it needs **Draw
-the map** on; **Map picture model** there chooses the model for the postcards
-and the Region map's pictures): everyone's avatar from their portrait
+**Draw map pictures** (under Settings → Images) has an image model (the
+**Map picture model** there, FLUX.3 Klein unless you choose another) draw the
+map's people, buildings and things instead (it needs **Draw the map** on). A
+character's avatar is drawn from their portrait by the model's editing
+version; a model that takes no picture draws it from what their card says: everyone's avatar from their portrait
 or what their card says of them (you first, then whoever is with you), roofs
 of what each building is made of, the things in each room, and each building
 standing on the ground where the story put it. **Automatically** (the

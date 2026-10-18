@@ -247,7 +247,10 @@ class TileSetDesigner(QDialog):
             session.config.tileset_model or "", browse, recommended=DESIGNER_MODELS
         )
         self.designer.setPlaceholderText(session.tileset_designer)
-        self.drawn_by = QLabel(f"Drawn by {session.config.map_tile_model}, the map tile model")
+        self.drawn_by = QLabel(
+            f"Drawn by {session.model_name(session.config.map_picture_model)}, the map picture "
+            "model (Settings → Images)"
+        )
         self.drawn_by.setObjectName("hintLabel")
         self.write_button = QPushButton("Write the design")
         self.write_button.clicked.connect(self._write)
@@ -419,7 +422,7 @@ class TileSetDesigner(QDialog):
 
     def _sync_price(self) -> None:
         count, price = self.session.tile_set_price(self.design())
-        model = self.session.config.map_tile_model
+        model = self.session.model_name(self.session.config.map_picture_model)
         if count == 0:
             self.price.setText("Nothing to draw: give at least the floor, walls and ground words.")
             self.draw_button.setEnabled(False)
@@ -435,10 +438,11 @@ class TileSetDesigner(QDialog):
             return
         title = " ".join(self.name.text().split()) or design.get("world", "")
         cost = f"about ${price:.2f}" if price is not None else "at the model's listed price"
+        model = self.session.model_name(self.session.config.map_picture_model)
         answer = QMessageBox.question(
             self,
             "Draw the set?",
-            f"{count} pictures are drawn by {self.session.config.map_tile_model}, {cost}, each "
+            f"{count} pictures are drawn by {model}, {cost}, each "
             f"from its prompt exactly as shown. The map is drawn in {title or 'the new set'} "
             "once all of it is in; the set it has now stays until then.",
         )

@@ -77,7 +77,7 @@ def test_a_building_s_roof_follows_its_words_and_is_drawn_on_the_fly_when_missin
     assert [(j.key, j.subject, j.subject_id) for j in jobs] == [
         ("texture:out-roof-stone", "texture", "out-roof-stone")
     ]
-    assert "stone roof" in jobs[0].prompt and "snowbound farm" in jobs[0].prompt
+    assert "stone roofing" in jobs[0].prompt and "snowbound farm" not in jobs[0].prompt
     assert roof_jobs([farm], lambda role: True, "x") == []  # the set or the story has one
     # Until it is drawn the set's roof stands in, tinted towards stone.
     roof = QImage(8, 8, QImage.Format_RGB32)

@@ -747,6 +747,10 @@ def resolve_reply(
         canonical = person_name(
             who, people, [*named_people, *(n for n in delta.where if not is_unknown(n))]
         )
+        if "outside" not in entry and _left_outside(
+            world, delta, canonical, place, quoted(entry) or ""
+        ):
+            outside = True
         delta.where[canonical] = place
         delta.outside[canonical] = outside
     for entry in _entries(reply, "named"):
@@ -965,6 +969,46 @@ _NOT_ONE = re.compile(
     re.IGNORECASE,
 )
 _ARTICLE = re.compile(r"^(the|a|an)\s+", re.IGNORECASE)
+
+# Going in, or being in a room: "steps inside", "went into the house",
+# "through the door", "in the kitchen". Not "from inside came…", which is a
+# sound from within heard by someone outside.
+_GOING_IN = re.compile(
+    r"\b(enter\w*|threshold|indoors|through the (?:front |back |kitchen )?door)\b"
+    r"|(?<!from )\binside\b"
+    r"|\b(?:step|steps|stepped|stepping|went|goes|go|came|comes|come|walk\w*|slip\w*|duck\w*"
+    r"|push\w*|mov\w*|head\w*|hurr\w*|stumbl\w*|limp\w*|ran|runs?|let)\b"
+    r"(?:\W+\w+){0,4}?\W+(?:in|into)\b"
+    r"|\b(kitchen|parlou?r|hallway|hall|cellar|attic|bedroom|upstairs|downstairs|stairs)\b",
+    re.IGNORECASE,
+)
+# Outside a building: on its porch or steps, in its yard, coming up to it.
+_AT_THE_DOOR = re.compile(
+    r"\b(porch|veranda|verandah|stoop|doorstep|steps|yard|woodpile|outside|approach\w*"
+    r"|towards?)\b",
+    re.IGNORECASE,
+)
+
+
+def _left_outside(world: WorldMap, delta: WorldDelta, who: str, place: str, quote: str) -> bool:
+    """The read gave no "outside" for someone it put at a building: whether
+    the passage leaves them outside it all the same. The read writes the flag
+    only when someone is outside (`map_read.outside`), and once in six
+    openings of Doomsville with a map it left it off for John on the porch
+    ("The porch boards creaked under new weight, and from inside came…"),
+    who was then stood inside a house he had not entered. Someone who was
+    elsewhere, or at its door, goes in only when the quote shows them going in;
+    someone placed for the first time is outside when the quote puts them at
+    its porch, steps or yard."""
+    found = world.places.get(place) or next((p for p in delta.places if p.id == place), None)
+    if found is None or found.kind not in ("building", "room"):
+        return False
+    if _GOING_IN.search(quote):
+        return False
+    before = world.where.get(who)
+    if before is not None:
+        return before != place or who in world.outside
+    return _AT_THE_DOOR.search(quote) is not None
 
 
 def is_unknown(name: str) -> bool:

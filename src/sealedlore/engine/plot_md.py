@@ -225,8 +225,34 @@ def _slug(title: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_") or "event"
 
 
+# A line that starts its own line in Markdown: a list item, a heading, a
+# quote, a table row or a fence.
+_OWN_LINE = re.compile(r"\s*(?:[-*+]\s|\d+[.)]\s|#|>|\||```|~~~)")
+
+
 def _prose(lines: list[tuple[int, str]]) -> str:
-    text = "\n".join(text.rstrip() for _, text in lines)
+    """The prose as Markdown reads it: a line wrapped in the file joins the
+    line before it, and a blank line starts a paragraph. Kept as wrapped,
+    the samples' cards showed their file's line breaks in the Cast page's
+    fields (Oct 18 2026). A list item, a heading or a quote keeps its line,
+    and so does a line after one ending in two spaces (a hard break)."""
+    out: list[str] = []
+    broken = False  # the line before ended in a hard break
+    for _, raw in lines:
+        line = raw.rstrip()
+        if (
+            line
+            and out
+            and out[-1]
+            and not broken
+            and not _OWN_LINE.match(line)
+            and not out[-1].lstrip().startswith("#")
+        ):
+            out[-1] = f"{out[-1]} {line.strip()}"
+        else:
+            out.append(line)
+        broken = raw.endswith("  ")
+    text = "\n".join(out)
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 

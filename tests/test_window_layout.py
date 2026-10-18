@@ -15,6 +15,7 @@ from sealedlore.gui.main_window import CENTRE_MARGIN, MainWindow
 from sealedlore.gui.window_layout import INSPECTOR_ALONE_SHARE, INSPECTOR_WIDTHS, share_width
 from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.models.config import WindowLayout
+from sealedlore.models.story import Story
 from sealedlore.storage.repository import (
     StoryBundle,
     load_config,
@@ -214,6 +215,9 @@ def test_a_press_a_widget_passed_on_is_not_a_drag(app, window: MainWindow):
 
 
 def test_the_layout_is_kept_for_the_next_launch(app, tmp_path: Path, window: MainWindow):
+    # A story to list: with none the list is away (the start page is the way in).
+    save_story_bundle(StoryBundle(story=Story(title="Kept")), root=tmp_path)
+    window.stories.refresh()
     window.resize(1500, 900)
     settle(app)
     window._docks_dragged = True  # as a separator press sets it

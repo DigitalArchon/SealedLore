@@ -50,6 +50,8 @@ class StoryListPanel(QWidget):
     duplicate_story_requested = Signal(str)
     delete_requested = Signal(str)
     open_folder_requested = Signal(str)
+    # The list was read again (a story made, deleted, played).
+    refreshed = Signal()
 
     def __init__(self, root: Path | None = None) -> None:
         super().__init__()
@@ -92,6 +94,16 @@ class StoryListPanel(QWidget):
         """
         self.list.clear()
         self._played.clear()
+        try:
+            self._fill(selected_id)
+        finally:
+            self.refreshed.emit()
+
+    def has_stories(self) -> bool:
+        """Any story at all, readable or not."""
+        return self.list.count() > 0
+
+    def _fill(self, selected_id: str | None) -> None:
         directory = stories_dir(self.root)
         if not directory.exists():
             return

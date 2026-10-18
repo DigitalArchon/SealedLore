@@ -21,6 +21,14 @@ class ObjectsWindow:
         self.area_view.tool_stopped.connect(self._objects_tool_stopped)
         self.area_view.card_requested.connect(self.make_card)
         self.people_page.card_requested.connect(self.make_card)
+        self.people_page.name_requested.connect(self._people_name)
+
+    def _people_name(self, label: str) -> None:
+        """Name… on the People page: the map's correction, as on the map."""
+        if self.session is None or self._correction_blocked():
+            return
+        self._correct_name(label)
+        self._refresh_people()
 
     # --- the panel ---------------------------------------------------------------
 
