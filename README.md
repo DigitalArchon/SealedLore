@@ -17,8 +17,9 @@ works as intended. Bug reports and pull requests are welcome; see
 
 - **Play on a map.** A story can be played on a map drawn in pixel art to
   suit its world: walk where you like, click people and things for what you
-  can do, and the storyteller is told exactly where everyone stands. Edit
-  Mode changes anything on it by hand. See [Play on a map](#play-on-a-map)
+  can do, and the storyteller is told exactly where everyone stands. The
+  country beyond is designed by the AI as you explore it. Edit Mode changes
+  anything on it by hand. See [Play on a map](#play-on-a-map)
   below.
 - **Every character with a face.** A portrait for each character, drawn from
   their card when you start, and on the map a little avatar drawn from it. A
@@ -55,6 +56,14 @@ with whoever took it, something smashed lies broken. Buildings can have
 floors and cellars, stations and ships have decks, and the weather and the
 hour show over the ground. Zoom out to the region to decide where to go next,
 with the country you haven't found yet under fog.
+
+Walk out past the places the story has, and the country ahead of you is
+already being designed, a region about the size of a farm at a time: the AI
+lays out its land, places to go into, things to find and people or creatures,
+to fit the world and what has happened so far, with the roads, rivers and
+woods of the regions beside it carried on across the edges. A snowbound farm
+after the end of the world has dead fields, a collapsed barn and a zombie at
+the fence line round it, and further off the town you left.
 
 Every building is furnished, as sparsely or as fully as you like, and every
 character gets a pixel-art avatar drawn from their portrait. Everything is

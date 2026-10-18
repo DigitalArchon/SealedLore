@@ -51,7 +51,8 @@ part of the window, and what each feature does. The README's
 - **The map**: a story can be played on a map drawn in pixel art for its
   world. Walk anywhere, click people and things for what you can do, travel
   between places; the storyteller is told where everyone stands and who can
-  see whom. Places stay where the story put them, what happens shows (a barn
+  see whom. The open country is designed by the AI ahead of you, region by
+  region, as you explore. Places stay where the story put them, what happens shows (a barn
   burning, a thing carried off), floors, decks, weather and the hour show,
   and Edit Mode changes anything by hand: walls, doors, floors, rooms,
   buildings, places and things. A place can be painted by an image model. Tile sets come with the samples, and a new one can be designed for
@@ -507,6 +508,13 @@ archiving, rebuilding summaries.
 - **Each message** has Edit and a ⋯ menu: Regenerate this passage, Take back
   this turn (your turns), Reroll the dice, Use as evidence in a review,
   Illustrate this passage…, New branch from here…, and Delete from here….
+- **Markdown in a message is shown as it reads**, in stories, simple chats,
+  Questions and chapter summaries alike: **bold**, *italics*, headings,
+  lists, quotes, code, tables and rules, with each line break kept where it
+  was written. HTML in a message is shown as text, a picture by its
+  description, and a link as its words with the address after them; nothing
+  in a message opens or loads anything. Edit shows the text as written, and
+  Find searches the text as you see it.
 - **Text size**: View → Text size → Larger (Ctrl++) and Smaller (Ctrl+-)
   change every piece of text in the window, the story, the panels, the menus
   and the map, from 90% to 200%; the same menu lists the sizes, and Normal
@@ -1335,16 +1343,28 @@ story or a walk takes them in.
   rock at the far edge do), or to set off for the places that lie that way.
   Where no place adjoins, **Walk on into open country** does.
 - **Open country.** Between places, in a region, a desert or a forest, or
-  in no place the map names, you stand on the land itself: a stretch of it
-  (1.6 km across, 40 m a tile) drawn by the map art model as you go, the
-  stretch under you and the ones your edges lead to, three at most after
-  each passage, with plain ground of the nearest land to stand on until a
-  stretch is drawn. Places the map has there stand where they are, a
-  settlement or a building entered by its door, and the storyteller is told
-  you are "in open country, 3.2 km north-east of Hellsville, in the Great
-  Erg". The world has no edge: the map grows as far as you walk, at the
-  cost of the land's drawings. A city too wide to walk tile by tile (up to
-  8 km) gets a plan at a coarser grain.
+  in no place the map names, you stand on the land itself, laid out as a
+  grid of regions about the size of a farm (400 m across, walked at 2.5 m a
+  tile, as the farm is) starting where the story begins. **The world
+  designer** designs them ahead of you, the one you stand in and the eight
+  around it, and the next ring as you walk on: each region's land, up to
+  five places (buildings you can enter, landmarks, a settlement), things to
+  find and people or creatures, to fit the world, what has happened in the
+  story, and the regions beside it, whose roads, rivers and woods carry on
+  across the edges. It runs on the story model unless Settings → Models →
+  World designer model names another, a ring of nine taking about half a
+  minute, and only while **Draw the map** is on. A region is kept once
+  designed, on every branch, and stays under fog on the Region and World
+  maps until you have been there; the next one is painted as you near its
+  edge, so it shows the moment you cross. Nobody is designed close by you,
+  and nothing the story already has is designed again. The map read is
+  shown only the region you stand in, and never moves anyone into another
+  region unless the passage names the place. Places the story has stand
+  where they are, a settlement or a building entered by its door, and the
+  storyteller is told what is near you with its distance. The world has no
+  edge: the map grows as far as you walk, at the cost of the designs and
+  drawings. A city too wide to walk tile by tile (up to 8 km) gets a plan
+  at a coarser grain.
 - **Changing the map by Direction.** A Direction or Narration states what
   is so, on the map too. Besides adding a place (at a marked spot, or by
   its distance and bearing from one) and changing what state a place is in
