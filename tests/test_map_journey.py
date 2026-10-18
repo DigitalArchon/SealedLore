@@ -530,6 +530,13 @@ def test_a_place_the_read_adds_that_its_parent_s_plan_draws_stands_where_it_is_d
     delta.added = [delta.places[0].id]
     session._where_drawn(world, delta)
     assert (delta.places[0].x, delta.places[0].y) == pytest.approx(drawn)
+    # Given no parent: found in the plan where the author's character is,
+    # which is then its parent.
+    world.where["Serrik Vaun"] = "farm"
+    loose = WorldPlace(name="Toll House", kind="building")
+    delta = WorldDelta(places=[loose], added=[loose.id])
+    session._where_drawn(world, delta, "Serrik Vaun")
+    assert (loose.x, loose.y) == pytest.approx(drawn) and loose.inside == "farm"
     # Nothing drawn of that name: left for the layout as before.
     other = WorldPlace(name="the mill", kind="building", inside="farm")
     delta = WorldDelta(places=[other], added=[other.id])

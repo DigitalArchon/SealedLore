@@ -126,32 +126,45 @@ class WorldRuntime:
         listed = self.texts.fill("map_read.unknowns.listed", people=people) if people else ""
         return self.texts.fill("map_read.unknowns", listed=listed)
 
-    def _where_drawn(self, world: WorldMap, delta: WorldDelta) -> None:
-        """A new place the read adds inside a place whose plan already draws
-        it (a label of its name) stands where the plan draws it. Live (Oct 18
-        2026) the toll bridge's plan drew its toll house by the road; the
-        read added "the toll house" when Wren knocked at it, the map put it at
-        the bridge's middle, on the river, its box was drawn there instead,
-        and Wren, at its door, was stood out in open country."""
+    def _where_drawn(self, world: WorldMap, delta: WorldDelta, held: str | None = None) -> None:
+        """A new place the read adds that a plan already draws (a label of its
+        name) stands where the plan draws it: its parent's plan, or, when the
+        read gave it none, the plan of where the author's character is or a
+        place round it, which is then its parent. Live (Oct 18 2026) the toll
+        bridge's plan drew its toll house by the road; the read added "the
+        toll house" when Wren knocked at it, the map put it on the river at
+        the bridge's middle (and, given no parent, beside Wren just off the
+        bridge's plan), and Wren, at its door, was stood out in open country."""
         made = set(delta.added or [])
+        # Where the author's character is, then each place round it.
+        around: list[str] = []
+        here = world.where.get(held or "")
+        while here and here not in around and here in world.places:
+            around.append(here)
+            here = world.places[here].inside
         art = None
         for place in delta.places:
-            if place.id not in made or place.x is not None or not place.inside:
+            if place.id not in made or place.x is not None:
                 continue
-            parent = world.places.get(place.inside)
-            if parent is None or parent.x is None:
-                continue
-            art = art or self.map_art_copy()
-            if art.layout_shown(parent.id, parent.state) is None:
-                continue
-            area = self.area(parent.id, world, art)
-            if area is None or area.indoor:
-                continue
-            wanted = _label_words(place.name)
-            spot = next((xy for n, xy in area.labels.items() if _label_words(n) == wanted), None)
-            point = tile_point(world, area, *spot) if spot is not None else None
-            if point is not None:
-                place.x, place.y = point
+            for parent_id in [place.inside] if place.inside else around:
+                parent = world.places.get(parent_id or "")
+                if parent is None or parent.x is None:
+                    continue
+                art = art or self.map_art_copy()
+                if art.layout_shown(parent.id, parent.state) is None:
+                    continue
+                area = self.area(parent.id, world, art)
+                if area is None or area.indoor:
+                    continue
+                wanted = _label_words(place.name)
+                spot = next(
+                    (xy for n, xy in area.labels.items() if _label_words(n) == wanted), None
+                )
+                point = tile_point(world, area, *spot) if spot is not None else None
+                if point is not None:
+                    place.x, place.y = point
+                    place.inside = parent.id
+                    break
 
     @property
     def map_model(self) -> str:
@@ -376,7 +389,7 @@ class WorldRuntime:
         # Placed clear of the plot's hidden places too (revealed, one shared
         # a spot with a place the read put beside the character).
         whole = self._world_on(path[:-1], whole=True) if self.story.plot is not None else None
-        self._where_drawn(pending.before, delta)
+        self._where_drawn(pending.before, delta, held_name)
         place_delta(whole if whole is not None else pending.before, delta, held_name, near)
         # Someone sent to a marked spot, once every new place has its spot.
         self.apply_marks_at(pending.before, delta, reply, author)
