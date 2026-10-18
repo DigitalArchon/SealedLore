@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 from sealedlore.engine.dice import chip_text
 from sealedlore.engine.reasoning import caught_note
 from sealedlore.gui import theme
+from sealedlore.gui.markdown_text import markdown_html, shown_text
 from sealedlore.gui.picture_words import EDIT_LABEL
 from sealedlore.gui.ref_images import pixmap_of, pixmap_within
 from sealedlore.gui.video_view import PendingVideoWidget, VideoItem, VideoMessageWidget
@@ -169,10 +170,24 @@ class TextBody(QLabel):
     def __init__(self, text: str = "") -> None:
         super().__init__(text)
         self._heights: dict[int, int] = {}
+        self._source: str | None = None
 
     def setText(self, text: str) -> None:  # noqa: N802 - Qt naming
         self._heights.clear()
         super().setText(text)
+
+    def set_markdown(self, text: str) -> None:
+        """Show the text as Markdown reads, never as HTML (gui/markdown_text.py):
+        plain, exactly as written, when Markdown would change nothing."""
+        self._source = text
+        rich = markdown_html(text)
+        self.setTextFormat(Qt.PlainText if rich is None else Qt.RichText)
+        self.setText(text if rich is None else rich)
+
+    @property
+    def source(self) -> str:
+        """The text as written (a Markdown label holds its rich text)."""
+        return self._source if self._source is not None else self.text()
 
     def heightForWidth(self, width: int) -> int:  # noqa: N802 - Qt naming
         height = self._heights.get(width)
@@ -289,9 +304,9 @@ class MessageWidget(QFrame):
             self.branch_label.setTextFormat(Qt.PlainText)
             layout.addWidget(self.branch_label)
 
-        self.body = TextBody(text)
-        # Model prose, names and imported text: never interpreted as HTML.
-        self.body.setTextFormat(Qt.PlainText)
+        self.body = TextBody()
+        # Model prose, names and imported text: Markdown, never HTML.
+        self.body.set_markdown(text)
         self.body.setObjectName("messageBody")
         self.body.setWordWrap(True)
         self.body.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -448,7 +463,7 @@ class MessageWidget(QFrame):
         row.addWidget(self.more_button)
 
     def set_text(self, text: str) -> None:
-        self.body.setText(text)
+        self.body.set_markdown(text)
 
     # --- inline editing (§5.3, §10) ---------------------------------------
 
@@ -462,7 +477,7 @@ class MessageWidget(QFrame):
             return
         self._rewriting = rewrite
 
-        editor = QPlainTextEdit(self.body.text())
+        editor = QPlainTextEdit(self.body.source)
         editor.setObjectName("messageEditor")
         editor.setMinimumHeight(120)
 
@@ -573,8 +588,8 @@ class AsideWidget(QFrame):
         self.question.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout.addWidget(self.question)
 
-        self.body = TextBody(answer)
-        self.body.setTextFormat(Qt.PlainText)
+        self.body = TextBody()
+        self.body.set_markdown(answer)
         self.body.setObjectName("messageBody")
         self.body.setWordWrap(True)
         self.body.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -582,7 +597,7 @@ class AsideWidget(QFrame):
         layout.addWidget(self.body)
 
     def set_text(self, text: str) -> None:
-        self.body.setText(text)
+        self.body.set_markdown(text)
 
 
 class PictureView(QWidget):
@@ -829,8 +844,8 @@ class SummaryCardWidget(QFrame):
         header.setTextFormat(Qt.PlainText)
         header.setObjectName("messageHeader")
         layout.addWidget(header)
-        self.body = TextBody(text)
-        self.body.setTextFormat(Qt.PlainText)
+        self.body = TextBody()
+        self.body.set_markdown(text)
         self.body.setObjectName("messageBody")
         self.body.setWordWrap(True)
         self.body.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -904,12 +919,15 @@ _Unit = tuple["str | None", Callable[[], None]]
 
 
 def _line_top(label: QLabel, position: int) -> int:
-    """How far down a word-wrapped plain-text label the line holding
-    `position` starts, laid out as the label lays it out."""
+    """How far down a word-wrapped label the line holding `position`
+    starts, laid out as the label lays it out."""
     document = QTextDocument()
     document.setDefaultFont(label.font())
     document.setDocumentMargin(0)
-    document.setPlainText(label.text())
+    if label.textFormat() == Qt.RichText:
+        document.setHtml(label.text())
+    else:
+        document.setPlainText(label.text())
     document.setTextWidth(label.contentsRect().width())
     block = document.findBlock(position)
     top = document.documentLayout().blockBoundingRect(block).top()
@@ -1724,7 +1742,7 @@ class TranscriptView(QScrollArea):
         if self._streaming is None:
             self.begin_streaming()
         assert self._streaming is not None
-        self._streaming.set_text(self._streaming.body.text() + text)
+        self._streaming.set_text(self._streaming.body.source + text)
         self.scroll_to_end()
 
     def end_streaming(self) -> None:
@@ -1805,8 +1823,9 @@ class TranscriptView(QScrollArea):
 
     @property
     def searchable_texts(self) -> list[tuple[str, str]]:
-        """(message id, text) for each message shown, in story order."""
-        return list(self._texts)
+        """(message id, text) for each message shown, in story order, as the
+        reader sees it (Markdown's marks gone): Find selects at its offsets."""
+        return [(node_id, shown_text(text)) for node_id, text in self._texts]
 
     def show_match(self, node_id: str, start: int, length: int) -> bool:
         """Build back to a message if need be, select the match in it and
