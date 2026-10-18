@@ -50,6 +50,7 @@ from sealedlore.gui.ref_images import PICTURE_FILTER, image_of
 from sealedlore.gui.tile_set_editor import TileSetEditor
 from sealedlore.gui.tile_set_gallery import TileSetDesigner, TileSetGallery
 from sealedlore.models.character import Character
+from sealedlore.storage.paths import story_dir
 from sealedlore.storage.repository import save_config
 
 # Areas kept painted, most recent first.
@@ -145,6 +146,14 @@ class AreaWindow:
         held = session.held_name()
         me = session.area_state().spots.get(held or "")
         return me is not None and session.area(me.area) is not None
+
+    def _cut_dir(self) -> Path | None:
+        """Where the story keeps its pictures' cut-outs between launches
+        (`TileSource.cut_dir`); nothing for a chat kept in memory."""
+        session = self.session
+        if session is None or session.memory_only:
+            return None
+        return story_dir(session.story.id, self.root) / "cache" / "cut"
 
     def refresh_area(self) -> None:
         """The area the author's character stands in, as the session has it."""
@@ -362,7 +371,7 @@ class AreaWindow:
         set_key = self._set_key(session, art)
         if self._thing_source_key != set_key:
             self._thing_source_key = set_key
-            self._thing_source = TileSource(*session.tile_set(art))
+            self._thing_source = TileSource(*session.tile_set(art), cut_dir=self._cut_dir())
             self._thing_images.clear()
         px = px_for(area)
         out = []
@@ -384,7 +393,7 @@ class AreaWindow:
             return
         session = self.session
         info, read = session.tile_set()
-        source = TileSource(info, read)
+        source = TileSource(info, read, cut_dir=self._cut_dir())
         dress = session.story.defaults.map_density != "sparse"
         self._area_painting.add(key)
         signal = self._painted
@@ -806,7 +815,7 @@ class AreaWindow:
             return
         self._paint_waiting = None
         info, read = session.tile_set()
-        source = TileSource(info, read)
+        source = TileSource(info, read, cut_dir=self._cut_dir())
         dress = session.story.defaults.map_density != "sparse"
         walkers = list(self.area_view.walkers)
         places = [item.mark for item in self.area_view.places.values()]

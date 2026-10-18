@@ -1225,6 +1225,7 @@ def test_the_land_fades_at_its_edge_over_one_ground_in_the_set_s_colours(app):
     view = WorldView()
     view.resize(800, 600)
     view.set_world(world, WorldArt(terrain=land), "Jane", keep_view=False)
+    view.wait_for_land()  # rendered in the background, laid in as it comes
     # A patch's corner is faded out, its middle solid.
     patch = view._land[0].pixmap().toImage()
     assert patch.pixelColor(1, 1).alpha() < 40 and patch.pixelColor(320, 320).alpha() == 255

@@ -23,11 +23,12 @@ The rules, held whoever proposes a change (design §2):
 from __future__ import annotations
 
 import copy
+import hashlib
 import math
 import re
 import zlib
 from collections import deque
-from collections.abc import Callable, Collection, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -1655,12 +1656,35 @@ def edges_open(rows: list[str], repairs: list[str]) -> list[str]:
     return ["".join(r) for r in grid]
 
 
+def edges_open_memo(
+    rows: list[str],
+    repairs: list[str],
+    memo: MutableMapping[str, tuple[list[str], list[str]]] | None,
+) -> list[str]:
+    """`edges_open`, with its answer kept in `memo` by the rows it was asked
+    for (a story keeps the memo on disk, storage/area_cache.py): the search
+    cost 20 ms a window, 24 windows the first settle of a story (Oct 19 2026)."""
+    if memo is None:
+        return edges_open(rows, repairs)
+    key = hashlib.blake2b("\n".join(rows).encode(), digest_size=16).hexdigest()
+    kept = memo.get(key)
+    if kept is not None:
+        repairs.extend(kept[1])
+        return list(kept[0])
+    added: list[str] = []
+    out = edges_open(rows, added)
+    repairs.extend(added)
+    memo[key] = (out, added)
+    return out
+
+
 def build_window(
     world: WorldMap,
     art: WorldArt,
     area_id: str,
     *,
     people: Collection[str] = (),
+    edge_memo: MutableMapping[str, tuple[list[str], list[str]]] | None = None,
 ) -> Area | None:
     """The area of a window of open country (`area_of` names one by its
     rectangle): the land patch drawn there, its rows at its own tile (side
@@ -1718,7 +1742,7 @@ def build_window(
         labels[f["name"][:60]] = (f["x"] + f["w"] // 2, f["y"] + f["h"] // 2)
     rows, entrances, buildings = _fix_buildings(world, art, rows, big, fixed, repairs)
     if region_cell:
-        rows = edges_open(rows, repairs)
+        rows = edges_open_memo(rows, repairs, edge_memo)
     objects: dict[str, str] = {}
     holder = holding_place(world, west, north, side)
     area = Area(

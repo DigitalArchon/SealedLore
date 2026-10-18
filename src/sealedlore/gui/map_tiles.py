@@ -1060,13 +1060,38 @@ def faded_edges(image: QImage, fade: int) -> QImage:
 
 
 @lru_cache(maxsize=48)
+def land_image(
+    rows: tuple[str, ...], ground: str = "", colours: LookColours | None = None
+) -> QImage:
+    """A patch of land for the region: `render_tiles`, fading out over
+    LAND_FADE_TILES at its edge, kept. A QImage, so it can be rendered off
+    the GUI thread (the Region map's land took 1.2 s of a 4 s open,
+    Oct 19 2026; `WorldView` renders it in the background and lays it in
+    as it comes)."""
+    image = render_tiles(rows, ground, colours=colours)
+    return faded_edges(image, LAND_FADE_TILES * TILE)
+
+
+def land_ready(rows: tuple[str, ...], ground: str = "", colours: LookColours | None = None) -> bool:
+    """Whether `land_image` has this patch already (no render needed)."""
+    return _land_key(rows, ground, colours) in _LAND_SEEN
+
+
+_LAND_SEEN: set[tuple] = set()
+
+
+def _land_key(rows: tuple[str, ...], ground: str, colours: LookColours | None) -> tuple:
+    return (hash(rows), ground, colours)
+
+
+@lru_cache(maxsize=48)
 def land_pixmap(
     rows: tuple[str, ...], ground: str = "", colours: LookColours | None = None
 ) -> QPixmap:
-    """A patch of land for the region: `render_tiles`, fading out over
-    LAND_FADE_TILES at its edge, kept."""
-    image = render_tiles(rows, ground, colours=colours)
-    return QPixmap.fromImage(faded_edges(image, LAND_FADE_TILES * TILE))
+    """`land_image` as a pixmap, kept; GUI thread only."""
+    image = land_image(rows, ground, colours)
+    _LAND_SEEN.add(_land_key(rows, ground, colours))
+    return QPixmap.fromImage(image)
 
 
 @lru_cache(maxsize=8)

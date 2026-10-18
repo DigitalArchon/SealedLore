@@ -1642,3 +1642,43 @@ def test_a_change_indoors_keeps_the_last_picture_until_the_new_one_is_painted(ap
     other = replace(area, place_id=area.place_id + "-next-door")
     view.set_area(other, None, view.walkers, key=("another area",))
     assert view._background is None  # another area: nothing of the last one
+
+
+def test_a_story_picture_s_cut_out_is_kept_between_launches(tmp_path):
+    """`TileSource.cut_dir`: a picture drawn for the story is cut out of its
+    white ground once and kept; the next source reads the cut-out."""
+    from PySide6.QtGui import QColor, QImage, QPainter
+
+    from sealedlore.engine.tile_sets import TileSetInfo
+    from sealedlore.gui.area_render import TileSource
+    from sealedlore.gui.image_codec import encoded
+
+    picture = QImage(120, 120, QImage.Format_RGB32)
+    picture.fill(QColor(255, 255, 255))
+    painter = QPainter(picture)
+    painter.setBrush(QColor(90, 40, 20))
+    painter.drawRect(30, 30, 60, 60)
+    painter.end()
+    data = encoded(picture, "PNG")
+
+    def reader(role: str) -> bytes | None:
+        return data if role == "items/a-chest" else None
+
+    reader.from_story = lambda role: True  # type: ignore[attr-defined]
+    source = TileSource(TileSetInfo(name="village"), reader, cut_dir=tmp_path / "cut")
+    cut = source.image("items/a-chest")
+    assert cut is not None and cut.hasAlphaChannel() and (cut.width(), cut.height()) == (61, 61)
+    kept = list((tmp_path / "cut").glob("items-a-chest-*.png"))
+    assert len(kept) == 1
+    # A second source (a new launch) takes the kept cut-out, not a new cut.
+    calls = []
+    import sealedlore.gui.area_render as module
+
+    real = module.sprite_image
+    module.sprite_image = lambda d: calls.append(1) or real(d)
+    try:
+        again = TileSource(TileSetInfo(name="village"), reader, cut_dir=tmp_path / "cut")
+        found = again.image("items/a-chest")
+    finally:
+        module.sprite_image = real
+    assert found is not None and (found.width(), found.height()) == (61, 61) and calls == []

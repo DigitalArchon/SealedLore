@@ -31,10 +31,12 @@ Everything here is read from the session; the view never changes the story.
 from __future__ import annotations
 
 import math
+import threading
+import time
 from collections.abc import Callable, Sequence
 from html import escape
 
-from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QObject, QPoint, QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -96,7 +98,9 @@ from sealedlore.gui.map_tiles import (
     LookColours,
     building_boxes,
     ground_pixmap,
+    land_image,
     land_pixmap,
+    land_ready,
     person_sprite,
     prop_sprite,
     texture_colours,
@@ -104,7 +108,14 @@ from sealedlore.gui.map_tiles import (
 )
 from sealedlore.gui.ref_images import image_of
 from sealedlore.gui.wrap_row import WrapRow
-from sealedlore.models.world import MapPicture, PlaceLayout, WorldArt, WorldMap, WorldPlace
+from sealedlore.models.world import (
+    MapPicture,
+    PlaceLayout,
+    TerrainPatch,
+    WorldArt,
+    WorldMap,
+    WorldPlace,
+)
 from sealedlore.storage.tile_sets import read_asset, shipped_sets
 
 LEVELS = ("local", "region", "world")
@@ -590,6 +601,13 @@ class _PlanItem(QGraphicsPixmapItem):
             (x1 - x0 + 1) * tile,
             (y1 - y0 + 1) * tile,
         )
+
+
+class _LandSignal(QObject):
+    """A patch of land rendered on the land thread; delivered on the GUI
+    thread (queued): the generation it was asked for, and the patch."""
+
+    ready = Signal(int, object)
 
 
 class _WorldGraphics(QGraphicsView):
@@ -1115,6 +1133,12 @@ class WorldView(QWidget):
         self._boxes: dict[str, tuple[str, tuple[int, int, int, int]]] = {}
         self._links: list[QGraphicsLineItem] = []
         self._land: list[QGraphicsPixmapItem] = []
+        # Where each patch of land lies (scene rect), known before its
+        # picture is: the ground and the veil are sized from these.
+        self._land_rects: list[QRectF] = []
+        self._land_gen = 0
+        self._land_signal = _LandSignal()
+        self._land_signal.ready.connect(self._land_arrived)
         self._ground: QGraphicsPixmapItem | None = None
         self._veil: _VeilItem | None = None
         self.people: list[_PersonItem] = []
@@ -1301,6 +1325,7 @@ class WorldView(QWidget):
         self._plans = {}
         self._links = []
         self._land = []
+        self._land_rects = []
         self._ground = None
         self._isos = {}
         self._badges = {}
@@ -1467,7 +1492,9 @@ class WorldView(QWidget):
         known = QPainterPath()
         known.setFillRule(Qt.WindingFill)
         ground = [self._ground] if self._ground is not None else []
-        for item in [*ground, *self._land, *self._plans.values(), *self._isos.values()]:
+        for land in self._land_rects:
+            known.addRect(land)
+        for item in [*ground, *self._plans.values(), *self._isos.values()]:
             known.addRect(item.sceneBoundingRect())
         self._veil = _VeilItem(known.simplified(), sight)
         self.scene.addItem(self._veil)
@@ -1490,24 +1517,76 @@ class WorldView(QWidget):
         # The world designer's regions stay in the fog until explored: the map
         # grows as the player goes (engine/regions.py).
         explored = {r.place_id for k, r in self.art.regions.items() if k in self.art.explored}
+        self._land_gen += 1
+        gen = self._land_gen
+        later: list[tuple[tuple[str, ...], str, LookColours | None, TerrainPatch]] = []
         for patch in sorted(self.art.terrain, key=lambda p: -p.side):
             if not patch.rows or (patch.designed and patch.place_id not in explored):
                 continue
-            item = QGraphicsPixmapItem(land_pixmap(tuple(patch.rows), patch.ground, colours))
-            item.setTransformationMode(Qt.FastTransformation)
-            item.setShapeMode(QGraphicsPixmapItem.BoundingRectShape)
-            item.setScale(patch.side / (max(len(patch.rows[0]), 1) * TILE))
-            item.setPos(patch.x - patch.side / 2, -(patch.y + patch.side / 2))
-            item.setZValue(0)
-            self.scene.addItem(item)
-            self._land.append(item)
+            self._land_rects.append(
+                QRectF(
+                    patch.x - patch.side / 2, -(patch.y + patch.side / 2), patch.side, patch.side
+                )
+            )
+            rows = tuple(patch.rows)
+            if land_ready(rows, patch.ground, colours):
+                self._lay_land(patch, land_pixmap(rows, patch.ground, colours))
+            else:
+                later.append((rows, patch.ground, colours, patch))
+        if later:
+            # Rendered off the GUI thread and laid in as each comes (a
+            # queued signal): the land took 1.2 s of a 4 s open, during
+            # which nothing else drew (Oct 19 2026).
+            signal = self._land_signal
+            self._land_pending = {id(p) for *_r, p in later}
+
+            def render() -> None:
+                for rows, ground, colours_, patch in later:
+                    land_image(rows, ground, colours_)
+                    signal.ready.emit(gen, patch)
+
+            threading.Thread(target=render, name="region-land", daemon=True).start()
+
+    def _lay_land(self, patch: TerrainPatch, pixmap: QPixmap) -> None:
+        item = QGraphicsPixmapItem(pixmap)
+        item.setTransformationMode(Qt.FastTransformation)
+        item.setShapeMode(QGraphicsPixmapItem.BoundingRectShape)
+        item.setScale(patch.side / (max(len(patch.rows[0]), 1) * TILE))
+        item.setPos(patch.x - patch.side / 2, -(patch.y + patch.side / 2))
+        item.setZValue(0)
+        self.scene.addItem(item)
+        self._land.append(item)
+
+    def _land_arrived(self, gen: int, patch: TerrainPatch) -> None:
+        """A patch rendered in the background: laid in, if the map is still
+        the one it was asked for."""
+        if gen != self._land_gen:
+            return
+        self._lay_land(patch, land_pixmap(tuple(patch.rows), patch.ground, self._colours()))
+        pending = getattr(self, "_land_pending", set())
+        pending.discard(id(patch))
+
+    def land_pending(self) -> bool:
+        """Whether any of the map's land is still being rendered."""
+        return bool(getattr(self, "_land_pending", None))
+
+    def wait_for_land(self, timeout: float = 10.0) -> None:
+        """For tests: pump events until the land is in."""
+        from PySide6.QtWidgets import QApplication
+
+        end = time.monotonic() + timeout
+        while self.land_pending() and time.monotonic() < end:
+            QApplication.processEvents()
+            time.sleep(0.01)
 
     def _build_ground(self) -> None:
         """One flat ground, in the land's base colour, under the patches and
         the ways between them, fading into the fog at its edge; nothing
         with no land and no ways."""
         rect = QRectF()
-        for item in [*self._land, *self._links]:
+        for land in self._land_rects:
+            rect = rect.united(land)
+        for item in self._links:
             rect = rect.united(item.sceneBoundingRect())
         if rect.isEmpty():
             return

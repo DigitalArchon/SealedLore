@@ -18,9 +18,12 @@ are drawn by the view over it, as they move.
 
 from __future__ import annotations
 
+import hashlib
+import re
 import zlib
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QPointF, QRectF, Qt
@@ -46,7 +49,7 @@ from sealedlore.engine.tile_sets import (
     roof_role,
 )
 from sealedlore.gui import deck_look
-from sealedlore.gui.image_codec import image_from_data
+from sealedlore.gui.image_codec import encoded, image_from_data
 
 # Pixels a tile, indoors and out: the view scales the picture to the zoom.
 # Outdoors 24: at 16 the default fit on a 1080p screen scaled the art up 1.2x
@@ -83,6 +86,30 @@ CUT_AT = 320
 SPRITE_KEPT = 256
 
 
+def _flooded(reach, background):
+    """`reach` grown through `background` from where it starts: whole runs
+    of background along each row and column at once (a run with one reached
+    pixel is all reached), a pass per turn of the boundary rather than one
+    per pixel of the way in (the one-pixel growth took 26 ms a sprite,
+    eighty sprites an open, Oct 19 2026)."""
+    np = _np()
+    reach = reach & background
+    while True:
+        before = reach
+        for axis in (0, 1):
+            bg = np.moveaxis(background, axis, 0)
+            got = np.moveaxis(reach, axis, 0)
+            n, m = bg.shape
+            # Runs of background along the axis: a new id at every break.
+            run = np.cumsum(~bg, axis=0)
+            key = run + np.arange(m)[None, :] * (n + 1)
+            hit = np.bincount(key[got].ravel(), minlength=(n + 1) * m) > 0
+            grown = bg & hit[key]
+            reach = np.moveaxis(grown | got, 0, axis) if axis else grown | got
+        if (reach == before).all():
+            return reach
+
+
 def cut_out(image: QImage) -> QImage | None:
     """A sprite out of its plain background: near-white or the corner's
     colour, flooded in from the edges (numpy: the app's per-pixel
@@ -107,16 +134,7 @@ def cut_out(image: QImage) -> QImage | None:
         background[:, 0],
         background[:, -1],
     )
-    while True:
-        grown = reach.copy()
-        grown[1:] |= reach[:-1]
-        grown[:-1] |= reach[1:]
-        grown[:, 1:] |= reach[:, :-1]
-        grown[:, :-1] |= reach[:, 1:]
-        grown &= background
-        if (grown == reach).all():
-            break
-        reach = grown
+    reach = _flooded(reach, background)
     out = a.astype(np.uint8).copy()
     out[reach, 3] = 0
     ys, xs = np.nonzero(~reach)
@@ -190,6 +208,10 @@ class TileSource:
     # Reads an asset's bytes by role ("floor", "decor0", "items/<slug>"),
     # None when there is none.
     read: Callable[[str], bytes | None]
+    # Where a story picture's cut-out is kept between launches (the story's
+    # cache folder); None keeps nothing. Cutting a picture out of its white
+    # ground cost 15-25 ms, eighty things an open (Oct 19 2026).
+    cut_dir: Path | None = None
     _images: dict[str, QImage | None] = field(default_factory=dict)
     _stand_ins: dict[str, str | None] = field(default_factory=dict)
 
@@ -206,9 +228,31 @@ class TileSource:
                     image = tileable(image)
                 found = None if image.isNull() else image
             else:
-                found = sprite_image(data)
+                found = self._sprite(role, data)
             self._images[role] = found
         return self._images[role]
+
+    def _sprite(self, role: str, data: bytes | None) -> QImage | None:
+        """`sprite_image`, with a story picture's cut-out kept in `cut_dir`
+        under the picture's own hash (a replaced picture is cut afresh)."""
+        if not data or self.cut_dir is None or not self.from_story(role):
+            return sprite_image(data)
+        name = re.sub(r"[^a-z0-9]+", "-", role.lower()).strip("-")[:48]
+        path = self.cut_dir / f"{name}-{hashlib.blake2b(data, digest_size=6).hexdigest()}.png"
+        if path.is_file():
+            kept = image_from_data(path.read_bytes())
+            if not kept.isNull():
+                return kept
+        found = sprite_image(data)
+        if found is not None and found.hasAlphaChannel():
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                tmp = path.with_suffix(".tmp")
+                tmp.write_bytes(encoded(found, "PNG"))
+                tmp.replace(path)
+            except OSError:
+                pass  # a cache: the sprite is the same without it
+        return found
 
     def from_story(self, role: str) -> bool:
         """Whether an asset was drawn or chosen for the story rather than

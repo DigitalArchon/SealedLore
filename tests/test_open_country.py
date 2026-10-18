@@ -723,3 +723,21 @@ def test_where_everyone_stands_is_settled_once_until_something_changes(
     session._save_art(session.world_art)  # new art: settled again
     session.area_state()
     assert len(calls) == 3
+
+
+def test_a_window_s_edge_paths_are_kept_and_reused(tmp_path):
+    """`edges_open_memo`: the ways cut to a window's edges are kept by the
+    rows they were cut for, and a kept answer skips the search."""
+    from sealedlore.engine.area import edges_open, edges_open_memo
+    from sealedlore.storage.area_cache import load_edge_cache, save_edge_cache
+
+    rows = ["T" * 20] + ["T" + "." * 18 + "T" for _ in range(18)] + ["T" * 20]
+    memo: dict = {}
+    first: list[str] = []
+    out = edges_open_memo(rows, first, memo)
+    assert out == edges_open(rows, []) and len(memo) == 1 and first
+    again: list[str] = []
+    assert edges_open_memo(rows, again, memo) == out and again == first
+    save_edge_cache("story-1", memo, tmp_path)
+    assert load_edge_cache("story-1", tmp_path) == {k: (v[0], v[1]) for k, v in memo.items()}
+    assert load_edge_cache("nobody", tmp_path) == {}

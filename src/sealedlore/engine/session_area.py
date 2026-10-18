@@ -172,6 +172,7 @@ from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError
 from sealedlore.providers.images import ImageClient, build_image_payload, data_url, loggable_payload
 from sealedlore.providers.wire import without_pictures
 from sealedlore.storage import tile_sets as shipped
+from sealedlore.storage.area_cache import load_edge_cache, save_edge_cache
 from sealedlore.storage.image_meta import MetadataError, picture_kind, strip_metadata
 from sealedlore.storage.images import MEDIA_TYPES
 
@@ -371,6 +372,8 @@ def _doors_of(area: Area) -> set[tuple[int, int]]:
 
 class AreaRuntime:
     _area_cache: dict | None = None
+    _people_kept: tuple[tuple, list[str]] | None = None
+    _edge_memo: dict[str, tuple[list[str], list[str]]] | None = None
     # The settled state last computed, with what it was computed from
     # (`area_state`): the window asks where everyone stands on every refresh
     # (133 times opening Brasshaven, Oct 19 2026, 44 s of a 63 s open), and
@@ -417,7 +420,22 @@ class AreaRuntime:
         return self.map_on
 
     def area_people(self) -> list[str]:
-        return [c.name for c in self.map_people()]
+        """Who may stand on the map, by name: kept while the leaf, the cards
+        and what the plot hides are the same (asked 387 times an open,
+        2 ms each, Oct 19 2026)."""
+        key = (
+            self.story.active_leaf_id,
+            self.story.chat,
+            tuple((c.id, c.name) for c in self.cast),
+            tuple((c.id, c.name) for c in self.supporting),
+            tuple(sorted(self.hidden_ids())) if self.story.plot is not None else (),
+        )
+        kept = self._people_kept
+        if kept is not None and kept[0] == key:
+            return list(kept[1])
+        names = [c.name for c in self.map_people()]
+        self._people_kept = (key, names)
+        return list(names)
 
     def tile_set_name(self, art: WorldArt | None = None) -> str:
         """The tile set the map is drawn in (`engine.tile_sets.choose_set`):
@@ -828,11 +846,30 @@ class AreaRuntime:
             self._area_cache = {}
         found = self._area_cache.get(cache_key)
         if found is None:
-            found = build_window(world, art, area_id, people=self.area_people())
+            memo = self._edge_cache()
+            before = len(memo) if memo is not None else 0
+            found = build_window(world, art, area_id, people=self.area_people(), edge_memo=memo)
+            if memo is not None and len(memo) > before:
+                self._save_edge_cache(memo)
             if len(self._area_cache) > 160:  # one per window of open country round a long walk
                 self._area_cache.clear()
             self._area_cache[cache_key] = found
         return found
+
+    def _edge_cache(self) -> dict[str, tuple[list[str], list[str]]] | None:
+        """The story's kept edge paths (storage/area_cache.py), read once;
+        kept in memory only for a memory-only chat."""
+        if self._edge_memo is None:
+            self._edge_memo = {} if self.memory_only else load_edge_cache(self.story.id, self.root)
+        return self._edge_memo
+
+    def _save_edge_cache(self, memo: dict[str, tuple[list[str], list[str]]]) -> None:
+        if self.memory_only or not self.pictures.alive():
+            return
+        try:
+            save_edge_cache(self.story.id, memo, self.root)
+        except OSError:
+            pass  # a cache: the map is the same without it
 
     # --- where everyone stands -------------------------------------------------
 
