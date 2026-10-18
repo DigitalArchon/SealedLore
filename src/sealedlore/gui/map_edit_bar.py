@@ -97,6 +97,7 @@ class EditBar(QWidget):
     objects_requested = Signal()
     undo_requested = Signal()
     back_requested = Signal()
+    outside_requested = Signal()
     done_requested = Signal()
 
     def __init__(self) -> None:
@@ -132,6 +133,11 @@ class EditBar(QWidget):
         self.back_button = QPushButton()
         self.back_button.clicked.connect(self.back_requested.emit)
         self.back_button.hide()
+        # Indoors: the ground round the building, to edit it too.
+        self.outside_button = QPushButton()
+        self.outside_button.setToolTip("Edit the ground round this building, without walking out")
+        self.outside_button.clicked.connect(self.outside_requested.emit)
+        self.outside_button.hide()
         self.done_button = QPushButton(DONE_LABEL)
         self.done_button.setObjectName("sendButton")
         self.done_button.setToolTip("Back to playing: the map is as you left it")
@@ -140,7 +146,9 @@ class EditBar(QWidget):
         row.add_group([self.heading])
         row.add_group([self.buttons[name] for name, _l, _w in TOOLS[:2]] + [self.tile])
         row.add_group([self.buttons[name] for name, _l, _w in TOOLS[2:]])
-        row.add_group([self.objects_button, self.undo_button, self.back_button])
+        row.add_group(
+            [self.objects_button, self.undo_button, self.outside_button, self.back_button]
+        )
         row.add_group([self.done_button])
         self.words = QLabel()
         self.words.setObjectName("hintLabel")
@@ -178,6 +186,15 @@ class EditBar(QWidget):
         """Editing another area than the one you stand in: the way back."""
         self.back_button.setVisible(bool(name))
         self.back_button.setText(f"Back to {name}" if name else "")
+
+    def set_outside(self, name: str | None) -> None:
+        """Indoors: the area round it, to edit from here (None: none)."""
+        self.outside_button.setVisible(bool(name))
+        self.outside_button.setText(f"Go outside: {name}" if name else "")
+
+    def say(self, words: str) -> None:
+        """A line in place of the tool's (Edit Mode opening at the start)."""
+        self.words.setText(words)
 
     def set_outdoor(self, outdoor: bool) -> None:
         """The building tools are for the ground outside; a room is any area's."""

@@ -25,6 +25,7 @@ part of the window, and what each feature does. The README's
 - [The scene, and who can walk into it](#the-scene-and-who-can-walk-into-it)
 - [The map](#the-map)
   - [Playing on the map](#playing-on-the-map)
+  - [Edit Mode](#edit-mode)
 - [Branches, takes and export](#branches-takes-and-export)
 - [Outcomes and dice](#outcomes-and-dice)
 - [Response length and style](#response-length-and-style)
@@ -52,8 +53,8 @@ part of the window, and what each feature does. The README's
   between places; the storyteller is told where everyone stands and who can
   see whom. Places stay where the story put them, what happens shows (a barn
   burning, a thing carried off), floors, decks, weather and the hour show,
-  and you can make objects, put anything right by hand, or have a place
-  painted. Tile sets come with the samples, and a new one can be designed for
+  and Edit Mode changes anything by hand: walls, doors, floors, rooms,
+  buildings, places and things. A place can be painted by an image model. Tile sets come with the samples, and a new one can be designed for
   your world.
 - **Faces**: a portrait for every character and a picture for every lore
   entry, drawn from their cards; an avatar on the map from the portrait; the
@@ -1382,7 +1383,10 @@ story or a walk takes them in.
   place…** (its old name stays as another name for it), **Move this
   place…** (then click where it stands; what is inside it goes too), **Put
   it inside…**, **Merge into…** (a duplicate: its people, things and places
-  go to the other) and **Remove from the map**. Someone moved into or out
+  go to the other) and **Remove from the map**; and on any spot, **Add a
+  place here…** (its name, what kind of place, how wide, and what it is like):
+  it is on the map from then on, told to the storyteller, and drawn when the
+  story goes there. Someone moved into or out
   of your character's company is put on or taken off the scene card's
   roster too. A correction belongs to the latest message, so each branch
   keeps its own and the next passage is read from the corrected map; the
@@ -1400,8 +1404,7 @@ story or a walk takes them in.
   takes anything you click off the map, the furniture that came with the
   place too. Placing and removing are corrections like those above: no time
   passes, the storyteller is told the room as it now is, and Undo puts the
-  last one back. While a story's first place is being set up, a line on
-  Local offers Objects… until your first turn.
+  last one back. Objects… is in Edit Mode's bar too (see "Edit Mode" below).
 
   ![The Objects panel: a herb drying rack, a cauldron and a spinning wheel typed in, the line saying it draws three pictures with FLUX.3 Image Klein at $0.008 each, and the tile set's things to choose from](screenshots/objects-panel.png)
 - **The clock** (Day 1, 08:00, beside the place's name) moves with walking
@@ -1500,6 +1503,61 @@ there, so a place you go back to is as the story left it. A map from a plot
 file is told in the file's own words, with how far and which way each of its
 places lies. That costs some words on every turn; untick **Keep a map of the
 story** to save them.
+
+### Edit Mode
+
+![Edit Mode inside the inn of a story drafted from an idea: the bar with Move, Paint and the tile it lays, Room, Fence, Building, Remove building, Go inside, Objects…, Undo, Go outside and Done, over the inn's rooms](screenshots/map-edit.webp)
+
+**✎ Edit map**, on Local, changes the map by hand, so you don't have to ask
+for a change in a Direction and hope it is read the way you meant. Nothing is
+asked of a model, and no time passes in the story. While the map is being
+edited nobody walks; **Done** goes back to playing, and so does sending a
+turn.
+
+A story whose map it grows (drafted from an idea, written from scratch, a
+simple chat) **opens in Edit Mode** once its first place is drawn, after the
+opening and before your first turn, so you can make it as you want it before
+you play. The samples and other plot files bring maps made by hand, so they
+don't; a line on Local offers it instead, until your first turn.
+
+The bar says what the tool in hand does:
+
+- **Move**: drag a person or a thing to where they belong; click one for its
+  menu (its corrections: rename, remove, broken…). The ground pans the view.
+- **Paint**: click, or drag across tiles, to lay the tile chosen beside it:
+  floor, wall, door, window, ground, grass, path, sand, trees, rock, water,
+  fence, rubble, or nothing. A door painted into a building's wall leads in;
+  one painted over doesn't any more. Painting a tile back to what the plan
+  had takes your change off. What stood on a tile you make a wall or water is
+  gone.
+- **Room**: drag from one corner to the other: walls round it with a door
+  onto the open floor beside it. Outdoors it makes a walled yard.
+- **Fence**: the same with a fence, and a gap for a gate.
+- **Building** (outdoors): drag from corner to corner and name it (and, if
+  you like, say what it is like). It goes on the map where you drew it, with
+  walls and a door; the storyteller is told of it from then on, and its
+  inside is drawn as any building's is, by the map art model. Its roof is
+  made of what its words say.
+- **Remove building** (outdoors): click a building to take it off. One the
+  map knows comes off the map, and whoever and whatever was in it go to the
+  place round it; one only the plan drew is painted over. Its ground is open
+  again. You are asked first.
+- **Go inside** (outdoors): click a building to edit its rooms, walls and
+  doors without walking there. **Go outside** edits the ground round the
+  building you are in, and **Back to…** returns to where your character is.
+- **Objects…** makes things and places them (see Objects… above).
+- **Undo** puts back the last change, then the one before, a building added
+  or taken off included.
+
+![Adding a building in Edit Mode: open country by the sea, the inn and, beside it, the net shed just drawn there, roofed in dark timber](screenshots/map-edit-building.webp)
+
+What you paint is kept with the map's art, beside the plan it changes: it is
+the same on every branch, as the plan is. Buildings and places you add or
+take off are corrections, so they belong to the message the story is at, and
+each branch keeps its own. **Redraw plan…** draws a place's plan afresh,
+and your painting on the old plan goes with it. The rules the map holds a
+drawn plan to (every room can be reached, every building has a door) aren't
+held against your own tiles: a room you wall up stays walled up.
 
 ## Branches, takes and export
 

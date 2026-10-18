@@ -17,8 +17,9 @@ works as intended. Bug reports and pull requests are welcome; see
 
 - **Play on a map.** A story can be played on a map drawn in pixel art to
   suit its world: walk where you like, click people and things for what you
-  can do, and the storyteller is told exactly where everyone stands. See
-  [Play on a map](#play-on-a-map) below.
+  can do, and the storyteller is told exactly where everyone stands. Edit
+  Mode changes anything on it by hand. See [Play on a map](#play-on-a-map)
+  below.
 - **Every character with a face.** A portrait for each character, drawn from
   their card when you start, and on the map a little avatar drawn from it. A
   story without a map shows who is here by their faces.
@@ -59,10 +60,15 @@ Every building is furnished, as sparsely or as fully as you like, and every
 character gets a pixel-art avatar drawn from their portrait. Everything is
 drawn in a tile set whose style suits the world rather than any one game's
 (a bleak snowbound farm, a whimsical elven forest, a brass-and-soot
-steampunk city…), and a new one can be designed for your own world. To set a
-place up before you play, **Objects…** draws whatever you name and lets you
-put it where you want it. If the story's reading of the map gets something
-wrong, drag it to where it belongs. And when you want a picture of the
+steampunk city…), and a new one can be designed for your own world.
+
+**Edit Mode** changes the map by hand rather than asking the storyteller and
+hoping: paint walls, doors, windows, floors and ground, draw rooms and
+fences, add a building where you want it (or take one off), go inside one
+to change its rooms, add places on the region, and make and place things.
+A story whose map it grows opens in Edit Mode once its first place is
+drawn, so you can set it up before you play; it is a button away any time
+after. And when you want a picture of the
 moment, **Paint this place…** has an image model paint the place as it
 stands. The samples with a map come ready to play. Whatever new the story
 brings in is drawn as it is needed, at about a cent a picture, up to a daily

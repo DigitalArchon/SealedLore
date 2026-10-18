@@ -302,6 +302,28 @@ def test_edit_mode_adds_takes_off_and_goes_inside_buildings(app, window, monkeyp
     assert view.area.id == "farm" and window._edit_area_id is None
 
 
+def test_go_outside_and_back_in_from_where_you_stand(app, window):
+    from PySide6.QtCore import QPoint, QPointF
+
+    from sealedlore.gui.area_render import px_for
+
+    view = _editing(app, window, ("house", 26, 5))
+    assert "The farm" in view.edit_bar.outside_button.text()
+    view.edit_bar.outside_button.click()
+    pump(app)
+    assert view.area.id == "farm" and window._edit_area_id == "farm"
+    assert view.edit_bar.back_button.text() == "Back to The house"
+    assert view.edit_bar.outside_button.isHidden(), "the ground has no outside"
+    # Into the house again, which is where the author's character is: home.
+    box = view.area.buildings["house"]
+    px = px_for(view.area)
+    view.edit_bar.set_tool("inside")
+    view._clicked(QPointF((box[0] + 1.5) * px, (box[1] + 1.5) * px), QPoint())
+    pump(app)
+    assert view.area.id == "house" and window._edit_area_id is None
+    assert view.edit_bar.back_button.isHidden()
+
+
 def test_a_grown_map_opens_in_edit_mode_and_a_turn_leaves_it(app, window):
     window.show()
     _send(app, window, "I look around.", ["Quiet.", "{}"])

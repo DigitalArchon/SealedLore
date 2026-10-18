@@ -15,6 +15,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from sealedlore.engine.area import tile_point
+from sealedlore.engine.levels import place_of_area
 from sealedlore.engine.map_edit import building_at, cleared, edit_key
 from sealedlore.models.world import TileEdits, WorldPlace
 
@@ -169,6 +170,18 @@ class MapEditRuntime:
         self._forget_areas()
         self.save()
         return True
+
+    def outside_area(self, area_id: str) -> str | None:
+        """The area round a building's inside (or a level of it): its
+        parent's ground, else the window of open country it stands on (an inn
+        the story put on the map on its own); None for an area that isn't a
+        building's inside."""
+        place_id = place_of_area(area_id)
+        world = self.world()
+        if place_id is None or place_id not in world.places:
+            return None
+        found = self._outside_of(world, self.map_art_copy(), place_id, place_id, None, None)
+        return found[0] if found is not None else None
 
     # --- buildings and places --------------------------------------------------------
 

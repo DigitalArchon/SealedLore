@@ -32,6 +32,7 @@ class MapEditWindow:
         view.edit_done.connect(self.leave_map_edit)
         view.edit_undo.connect(self._edit_undo)
         view.edit_back.connect(self._edit_back)
+        view.edit_outside.connect(self._edit_outside)
         view.tiles_painted.connect(self._edit_paint)
         view.box_drawn.connect(self._edit_box)
         view.building_clicked.connect(self._edit_building)
@@ -65,11 +66,13 @@ class MapEditWindow:
         self._sync_edit_undo()
         self.refresh_area()
         if at_start:
-            self.statusBar().showMessage(
-                "The map opens in Edit Mode: change anything you like before you play, then "
-                "press Done.",
-                12000,
+            words = (
+                "Your map is drawn. Before you play, change anything you like: paint walls, "
+                "doors and floors, draw rooms, add or take off buildings, place things. Press "
+                "Done when it is as you want it; ✎ Edit map brings this back any time."
             )
+            self.area_view.edit_bar.say(words)
+            self.statusBar().showMessage("The map opens in Edit Mode.", 8000)
 
     def leave_map_edit(self) -> None:
         if not self._map_editing:
@@ -82,6 +85,36 @@ class MapEditWindow:
         if hasattr(self, "refresh_area") and self.session is not None:
             self.refresh_area()
 
+    def _edit_outside(self) -> None:
+        """Indoors: edit the ground round the building, without walking out."""
+        area = self.area_view.area
+        session = self.session
+        around = session.outside_area(area.id) if area is not None and area.indoor else None
+        if around is None or session.area(around) is None:
+            self._after_edit("Its outside isn't drawn yet: the map draws it as the story goes.")
+            return
+        self._edit_area_id = around
+        held = session.held_name()
+        me = session.area_state().spots.get(held or "")
+        if me is not None and me.area != around:
+            here = session.area(me.area)
+            self.area_view.edit_bar.set_back(here.title if here is not None else "where you are")
+        else:
+            self.area_view.edit_bar.set_back(None)
+            self._edit_area_id = None
+        self.refresh_area()
+
+    def _sync_edit_places(self) -> None:
+        """The bar's ways about: outside a building being edited."""
+        area = self.area_view.area
+        session = self.session
+        outside = None
+        if self._map_editing and area is not None and area.indoor and session is not None:
+            around = session.outside_area(area.id)
+            ground = session.area(around) if around is not None else None
+            outside = ground.title if ground is not None else None
+        self.area_view.edit_bar.set_outside(outside)
+
     def _sync_map_edit(self) -> None:
         """After the play view is shown again: Edit Mode left when it no
         longer can be (a private scene), and opened when a story's grown map
@@ -91,6 +124,7 @@ class MapEditWindow:
             return
         problem = session.map_edit_problem()
         self.area_view.edit_button.setEnabled(problem is None)
+        self._sync_edit_places()
         if self._map_editing and problem is not None:
             self.leave_map_edit()
             return
@@ -243,11 +277,18 @@ class MapEditWindow:
                 )
                 self._sync_world()
                 return
-            self._edit_area_id = place_id
             held = session.held_name()
             me = session.area_state().spots.get(held or "")
-            here = session.area(me.area) if me is not None else None
-            self.area_view.edit_bar.set_back(here.title if here is not None else "where you are")
+            if me is not None and me.area == place_id:
+                # Inside the building the author's character stands in: home.
+                self._edit_area_id = None
+                self.area_view.edit_bar.set_back(None)
+            else:
+                self._edit_area_id = place_id
+                here = session.area(me.area) if me is not None else None
+                self.area_view.edit_bar.set_back(
+                    here.title if here is not None else "where you are"
+                )
             self.refresh_area()
 
     def _edit_back(self) -> None:
