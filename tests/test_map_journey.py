@@ -8,7 +8,7 @@ import json
 
 import pytest
 
-from sealedlore.engine.area import BRIDGE, build_area
+from sealedlore.engine.area import BRIDGE, build_area, tile_point
 from sealedlore.engine.session import SessionNotice
 from sealedlore.engine.takeable import the
 from sealedlore.engine.tile_sets import closest_item
@@ -502,3 +502,36 @@ def test_an_avatar_waits_for_a_portrait_that_has_landed_but_is_not_on_its_card_y
     assert session.portraits_landed() == {"char-maela"}
     session.story.card_pictures_taken.append("p1")
     assert session.portraits_landed() == set()
+
+
+def test_a_place_the_read_adds_that_its_parent_s_plan_draws_stands_where_it_is_drawn(
+    tmp_path, story, cast
+):
+    """The replay (Oct 18 2026): the toll bridge's plan drew its toll house
+    by the road; the read added "the toll house" when Wren knocked, the map
+    put it at the bridge's middle, on the river, its box was drawn there,
+    and Wren, at its door, was stood out in open country."""
+    session = make_session(tmp_path, story, cast)
+    farm = session.world_art.layouts["farm"][""]
+    farm.spec = {
+        **farm.spec,
+        "features": [
+            *farm.spec["features"],
+            {"kind": "building", "name": "toll house", "x": 4, "y": 4, "w": 4, "h": 4},
+        ],
+    }
+    session._area_cache = None
+    world = session.world()
+    area = session.area("farm", world, session.map_art_copy())
+    drawn = tile_point(world, area, *area.labels["toll house"])
+    delta = WorldDelta(
+        places=[WorldPlace(name="the toll house", kind="building", inside="farm")], added=[]
+    )
+    delta.added = [delta.places[0].id]
+    session._where_drawn(world, delta)
+    assert (delta.places[0].x, delta.places[0].y) == pytest.approx(drawn)
+    # Nothing drawn of that name: left for the layout as before.
+    other = WorldPlace(name="the mill", kind="building", inside="farm")
+    delta = WorldDelta(places=[other], added=[other.id])
+    session._where_drawn(world, delta)
+    assert other.x is None

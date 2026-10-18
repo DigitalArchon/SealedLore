@@ -22,6 +22,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from sealedlore.engine.area import tile_point
 from sealedlore.engine.chronicle import introduced, variant_named
 from sealedlore.engine.marks import footprint, place_at
 from sealedlore.engine.scene_state import scene_at
@@ -67,6 +68,12 @@ OPENS_IN_PLACE = re.compile(
     r"portcullis(?:es)?|drawbridges?|lids?)\b",
     re.IGNORECASE,
 )
+
+
+def _label_words(name: str) -> str:
+    """A place's name as a plan's label gives it: no case, no "the", nothing
+    in brackets ("the toll house" is the plan's "toll house")."""
+    return key(name.split("(")[0])
 
 
 @dataclass
@@ -118,6 +125,33 @@ class WorldRuntime:
         people = ", ".join(f"{label} ({said})" for label, said in world.unknowns.items())
         listed = self.texts.fill("map_read.unknowns.listed", people=people) if people else ""
         return self.texts.fill("map_read.unknowns", listed=listed)
+
+    def _where_drawn(self, world: WorldMap, delta: WorldDelta) -> None:
+        """A new place the read adds inside a place whose plan already draws
+        it (a label of its name) stands where the plan draws it. Live (Oct 18
+        2026) the toll bridge's plan drew its toll house by the road; the
+        read added "the toll house" when Wren knocked at it, the map put it at
+        the bridge's middle, on the river, its box was drawn there instead,
+        and Wren, at its door, was stood out in open country."""
+        made = set(delta.added or [])
+        art = None
+        for place in delta.places:
+            if place.id not in made or place.x is not None or not place.inside:
+                continue
+            parent = world.places.get(place.inside)
+            if parent is None or parent.x is None:
+                continue
+            art = art or self.map_art_copy()
+            if art.layout_shown(parent.id, parent.state) is None:
+                continue
+            area = self.area(parent.id, world, art)
+            if area is None or area.indoor:
+                continue
+            wanted = _label_words(place.name)
+            spot = next((xy for n, xy in area.labels.items() if _label_words(n) == wanted), None)
+            point = tile_point(world, area, *spot) if spot is not None else None
+            if point is not None:
+                place.x, place.y = point
 
     @property
     def map_model(self) -> str:
@@ -342,6 +376,7 @@ class WorldRuntime:
         # Placed clear of the plot's hidden places too (revealed, one shared
         # a spot with a place the read put beside the character).
         whole = self._world_on(path[:-1], whole=True) if self.story.plot is not None else None
+        self._where_drawn(pending.before, delta)
         place_delta(whole if whole is not None else pending.before, delta, held_name, near)
         # Someone sent to a marked spot, once every new place has its spot.
         self.apply_marks_at(pending.before, delta, reply, author)
