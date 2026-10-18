@@ -655,10 +655,11 @@ def test_a_first_run_is_welcomed_with_how_to_set_up(app, tmp_path: Path):
         assert "doesn't discount what SealedLore itself uses" in text
         assert "Still missing" not in text  # nothing is set: the steps say it all
         assert buttons == {"Open Settings…", "Import…"}
-        # It opens at its heading, not followed to its last steps. (With the
-        # composer put away it fits 768px high; it scrolls on a shorter one.)
+        # It opens at its heading, not followed to its last steps. The view is
+        # made shorter than the page can be in any font (on the CI runner's
+        # fonts the page fit a 500 px window, and there was nothing to scroll).
         assert not window.composer.isVisible() and _top_row_hidden(window)
-        window.resize(1366, 500)
+        window.transcript.setFixedHeight(200)
         settle(app)
         bar = window.transcript.verticalScrollBar()
         assert bar.maximum() > 0 and bar.value() == 0
