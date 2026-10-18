@@ -405,6 +405,11 @@ def place_one(
         angle = bearing(link.direction)
         if angle is not None and link.b != place.id:
             angle = (angle + 180) % 360  # the link runs from this place to the other
+        if angle is None:
+            # No way said ("down", "beside"): the side its name gives, from
+            # the other place. Live (Oct 18 2026) "the south bank of the
+            # Corren", down from the toll bridge, was put north of it.
+            angle = _side_named(place.name)
         gap = (size + size_of(other)) / 2
         stated = metres(link.distance)
         close = is_close(link.direction)

@@ -719,3 +719,18 @@ def test_a_part_of_the_bridge_stands_on_the_crossing(tmp_path, story, cast):
     session._where_drawn(world, delta)
     assert (arch.x, arch.y) == pytest.approx(tile_point(world, area, *middle))
     assert lane.x is None  # nothing of a bridge in its name
+
+
+def test_a_place_linked_with_no_way_said_goes_the_side_its_name_gives():
+    """The replay (Oct 18 2026): "the south bank of the Corren", down from
+    the toll bridge, was put north of it."""
+    from sealedlore.engine.world_layout import place_new
+    from sealedlore.models.world import WorldLink
+
+    bridge = WorldPlace(
+        id="b", name="the old toll bridge", kind="site", x=0.0, y=-5000.0, size=300.0
+    )
+    world = WorldMap(places={"b": bridge}, seen=["b"])
+    bank = WorldPlace(id="s", name="the south bank of the Corren", kind="area", size=120.0)
+    place_new(world, [bank], [WorldLink(a="b", b="s", direction="down")], "b", None)
+    assert bank.y < bridge.y - 150 and abs(bank.x - bridge.x) < 100
