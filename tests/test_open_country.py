@@ -695,3 +695,31 @@ def test_a_thing_is_not_laid_on_land_too_coarse_to_draw_it_at_its_size(tmp_path,
     assert land.tile_m > 5 and not any("bottle" in p.name for p in land.placements)
     wreck = session.area("wreck")
     assert wreck.tile_m <= 5 and any("crate" in p.name for p in wreck.placements)
+
+
+def test_where_everyone_stands_is_settled_once_until_something_changes(
+    tmp_path, story, cast, monkeypatch
+):
+    """The window asks `area_state()` on every refresh (133 times opening a
+    story with 27 designed regions, Oct 19 2026): the answer is kept until
+    the leaf, the walking, the scene's roster, the map or its art changes."""
+    session = open_session(tmp_path, story, cast, ["Sand. Nothing but sand.", "{}"])
+    calls = []
+    real = session.settle
+
+    def counting(*args, **kwargs):
+        calls.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(session, "settle", counting)
+    first = session.area_state()
+    for _ in range(5):
+        again = session.area_state()
+    assert again.spots == first.spots and len(calls) == 1
+    again.spots.clear()  # a caller's copy, not the kept state
+    assert session.area_state().spots == first.spots and len(calls) == 1
+    session.story.scene.present_character_ids = ["char-serrik", "char-maela"]
+    assert "Maela Orr" in session.area_state().spots and len(calls) == 2
+    session._save_art(session.world_art)  # new art: settled again
+    session.area_state()
+    assert len(calls) == 3

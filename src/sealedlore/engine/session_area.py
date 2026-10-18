@@ -349,6 +349,19 @@ AFLOAT = re.compile(
 )
 
 
+def _world_key(world: WorldMap) -> tuple:
+    """What settling reads of the map, as a key: who is where (and outside),
+    each place's spot, size, parent and state, each thing's whereabouts.
+    Dumping the whole map as JSON took 25 ms a call, 133 calls an open."""
+    return (
+        tuple(sorted(world.where.items())),
+        tuple(sorted(world.outside)),
+        world.start,
+        tuple((p.id, p.x, p.y, p.size, p.inside, p.kind, p.state) for p in world.places.values()),
+        tuple((t.id, t.at, t.carried_by, t.state) for t in world.things.values()),
+    )
+
+
 def _doors_of(area: Area) -> set[tuple[int, int]]:
     """The tiles people must not be stood on: the area's exits, its
     buildings' doors and the doorways between its rooms."""
@@ -360,6 +373,12 @@ def _doors_of(area: Area) -> set[tuple[int, int]]:
 
 class AreaRuntime:
     _area_cache: dict | None = None
+    # The settled state last computed, with what it was computed from
+    # (`area_state`): the window asks where everyone stands on every refresh
+    # (133 times opening Brasshaven, Oct 19 2026, 44 s of a 63 s open), and
+    # the answer only changes when the leaf, the walking, the map or its art
+    # does.
+    _settled: tuple[tuple, AreaState] | None = None
     _asset_thread: threading.Thread | None = None
     _asset_client: ImageClient | None = None
     _asset_role: str | None = None
@@ -405,7 +424,7 @@ class AreaRuntime:
     def tile_set_name(self, art: WorldArt | None = None) -> str:
         """The tile set the map is drawn in (`engine.tile_sets.choose_set`):
         a shipped set's name or "own:<key>"."""
-        art = art or self.map_art_copy()
+        art = art or self._art_read()
         sets = {name: info for name, (info, _folder) in shipped.shipped_sets().items()}
         looks = [
             ground_of(layout.spec) for states in art.layouts.values() for layout in states.values()
@@ -429,7 +448,7 @@ class AreaRuntime:
         """(the set's manifest, a reader of its assets by role): the story's
         own drawings first (an item drawn for this story, its own set), then
         the shipped set's files."""
-        art = art or self.map_art_copy()
+        art = art or self._art_read()
         name = self.tile_set_name(art)
         sets = shipped.shipped_sets()
         info, folder = sets.get(name, (None, None))
@@ -512,7 +531,7 @@ class AreaRuntime:
 
     def walker_file(self, name: str, art: WorldArt | None = None) -> str | None:
         """The file of a person's walking sprite, if one is drawn."""
-        art = art or self.map_art_copy()
+        art = art or self._art_read()
         changed = art.tile_overrides.get(f"walker/{name}")
         if changed is not None:
             return changed or None  # "": the set's generic people
@@ -533,13 +552,13 @@ class AreaRuntime:
             None,
         )
         portrait = card.reference_images[0].file if card and card.reference_images else None
-        return not _avatar_stands(self.map_art_copy(), name, portrait)
+        return not _avatar_stands(self._art_read(), name, portrait)
 
     def walker_asset(self, name: str) -> tuple[bytes | None, str]:
         """A person's avatar on the map as the Cast page shows it: its file,
         or None when a stand-in walks for them, and where it came from (as
         `TileAsset.source`; "" for none)."""
-        art = self.map_art_copy()
+        art = self._art_read()
         file = self.walker_file(name, art)
         data = self.pictures.read(file) if file else None
         if data is None:
@@ -550,7 +569,7 @@ class AreaRuntime:
     def tile_style(self, art: WorldArt | None = None) -> str:
         """The pixel art's style in a few words, for every picture drawn for
         the map: the tile set's own (`tile_draw.style_words`)."""
-        art = art or self.map_art_copy()
+        art = art or self._art_read()
         info, _read = self.tile_set(art)
         return style_words(self._set_words(art, info))
 
@@ -575,7 +594,7 @@ class AreaRuntime:
         of its things laid over it (`apply_things`: `things`, the records of
         the state in hand, else those live or at the leaf)."""
         world = world if world is not None else self.world()
-        art = art if art is not None else self.map_art_copy()
+        art = art if art is not None else self._art_read()
         built = self._built_area(area_id, world, art)
         if built is None:
             return None
@@ -707,7 +726,7 @@ class AreaRuntime:
     ) -> Area | None:
         """The area as built from its plan, with the author's own tiles laid
         over it (Edit Mode, engine/map_edit.py), kept while the same."""
-        art = art if art is not None else self.map_art_copy()
+        art = art if art is not None else self._art_read()
         base = self._base_area(area_id, world, art)
         edits = art.tile_edits.get(area_id or "")
         if base is None or edits is None or not edits.tiles:
@@ -729,7 +748,7 @@ class AreaRuntime:
         if area_id is None:
             return None
         world = world if world is not None else self.world()
-        art = art if art is not None else self.map_art_copy()
+        art = art if art is not None else self._art_read()
         if is_window(area_id):
             return self._window(area_id, world, art)
         parsed = parse_level(area_id)
@@ -885,13 +904,38 @@ class AreaRuntime:
 
     def area_state(self) -> AreaState:
         """Where everyone stands now: the walking since the last turn, else
-        the snapshot at the leaf, settled onto the map as it stands."""
+        the snapshot at the leaf, settled onto the map as it stands. Kept
+        between calls while nothing it is settled from has changed: the
+        leaf, who is held, the live walking or the snapshot, the map as
+        folded, and the art (its version, bumped on every save)."""
         live = self._live()
         state = live if live is not None else self._snapshot_on(self.path())
+        world = self.world()
+        art = self.world_art
+        key = (
+            self.story.active_leaf_id,
+            self.held_name(),
+            live is None,
+            state.model_dump_json() if state is not None else "",
+            _world_key(world),
+            self._art_version,
+            len(art.layouts),
+            len(art.terrain),
+            len(art.regions),
+            # Whoever the scene has here stands with the author's character.
+            tuple(self._present_on_map()),
+            tuple(self.area_people()),
+            self.story.defaults.map_density,
+        )
+        kept = self._settled
+        if kept is not None and kept[0] == key:
+            return kept[1].model_copy(deep=True)
         state = state.model_copy(deep=True) if state is not None else AreaState()
         if live is None:
             state.walked, state.walked_from, state.walked_words, state.action = 0, "", "", None
-        return self.settle(state, self.world(), self.map_art_copy())
+        settled = self.settle(state, world, self._art_read())
+        self._settled = (key, settled)
+        return settled.model_copy(deep=True)
 
     def held_name(self) -> str | None:
         return self.map_held_name(self.story.held_character_id)
@@ -1401,7 +1445,7 @@ class AreaRuntime:
             return "open country" if is_window(area_id) else area_id
         if parsed is None:
             return place.name
-        layout = self.map_art_copy().layout_shown(place.id, place.state)
+        layout = self._art_read().layout_shown(place.id, place.state)
         return f"{place.name}, {level_name(layout, parsed[1]).lower()}"
 
     def go_through(self) -> AreaState | None:
@@ -1414,7 +1458,7 @@ class AreaRuntime:
         state = self.area_state()
         held = self.held_name()
         me = state.spots[held]
-        world, art = self.world(), self.map_art_copy()
+        world, art = self.world(), self._art_read()
         here = self.area(me.area, world, art)
         there = self.area(door[0], world, art)
         if here is None or there is None:
@@ -1460,7 +1504,7 @@ class AreaRuntime:
         author's character could set off for: the areas the map has drawn,
         and the known places with a spot of their own, nearest first."""
         world = self.world()
-        art = self.map_art_copy()
+        art = self._art_read()
         state = self.area_state()
         me = state.spots.get(self.held_name() or "")
         here = me.area if me is not None else world.where.get(self.held_name() or "")
@@ -1515,7 +1559,7 @@ class AreaRuntime:
         way in, and the clock moved on by the way's length on foot. The
         turn's text for the composer (the author's ruling: the menu fills
         the composer)."""
-        world, art = self.world(), self.map_art_copy()
+        world, art = self.world(), self._art_read()
         place = world.places.get(place_id)
         if place is None:
             return ""
@@ -1743,7 +1787,7 @@ class AreaRuntime:
             if skip is not None and skip[0] > now:
                 state.seconds += (skip[0] - now) * 60
         # The spots the turn marks, resolved on the map it was written on.
-        state.marks = self.resolve_marks(user_node.content, world, self.map_art_copy(), state)
+        state.marks = self.resolve_marks(user_node.content, world, self._art_read(), state)
         # What the turn does to a thing (Take, Destroy, Eat, Drop, Give).
         self._record_action(state, user_node, world)
         spot = state.spots.get(held or "")
@@ -1824,7 +1868,7 @@ class AreaRuntime:
                     x, y = stand_near(inside, door, taken, seed=held, reach=2)
                     state.spots[held] = Spot(area=inside.id, x=x, y=y)
         if held is not None and to is not None and world.where.get(held) != to:
-            area = area_of(world, self.map_art_copy(), world.where.get(held))
+            area = area_of(world, self._art_read(), world.where.get(held))
             if area != to or to not in world.places:
                 delta = user_node.meta.world or WorldDelta()
                 delta.where[held] = to
@@ -1874,7 +1918,7 @@ class AreaRuntime:
         marks = list(state.marks)
         state.walked, state.walked_from, state.walked_words, state.action = 0, "", "", None
         state.marks = []
-        world, art = self._world_on(path), self.map_art_copy()
+        world, art = self._world_on(path), self._art_read()
         held = self.held_name()
         # The read placed the author's character (with a quote): the place
         # it names wins over where they stand, and they are stood at its
@@ -2388,7 +2432,7 @@ class AreaRuntime:
         if state is None:
             return ""
         world = self._world_on([*nodes, turn] if turn is not None else nodes)
-        art = self.map_art_copy()
+        art = self._art_read()
         me = state.spots.get(held)
         area = self.area(me.area if me else None, world, art, things=state.things)
         # The time of day (never the day) and the weather the story stated.
@@ -2468,7 +2512,7 @@ class AreaRuntime:
         if state is None or me is None:
             return None
         world = self._world_on([*nodes, turn] if turn is not None else nodes)
-        area = self.area(me.area, world, self.map_art_copy(), things=state.things)
+        area = self.area(me.area, world, self._art_read(), things=state.things)
         if area is None:
             return None
         mine = (me.x, me.y)
@@ -2564,7 +2608,7 @@ class AreaRuntime:
         world = self._world_on([*nodes, turn] if turn is not None else nodes)
         names: list[str] = []
         me = state.spots.get(held) if state is not None else None
-        area = self.area(me.area, world, self.map_art_copy(), things=state.things) if me else None
+        area = self.area(me.area, world, self._art_read(), things=state.things) if me else None
         if me is not None and area is not None:
             nearest = sorted(
                 area.placements,
@@ -2659,7 +2703,7 @@ class AreaRuntime:
         how far it is: a place's plan within EDGE_REACH metres (across a
         gap of open country, as before windows), else the window of open
         country just past the edge (the author: the world is limitless)."""
-        world, art = self.world(), self.map_art_copy()
+        world, art = self.world(), self._art_read()
         state = self.area_state()
         me = state.spots.get(self.held_name() or "")
         area = self.area(me.area if me else None, world, art)
@@ -2712,7 +2756,7 @@ class AreaRuntime:
         out: list[tuple[str, str, int]] = []
         beyond = self._beyond(side)
         world = self.world()
-        art = self.map_art_copy()
+        art = self._art_read()
         if beyond is not None:
             spot, metres = beyond
             there = self.area(spot.area, world, art)
@@ -2746,7 +2790,7 @@ class AreaRuntime:
         if beyond is None:
             return None
         spot, metres = beyond
-        world, art = self.world(), self.map_art_copy()
+        world, art = self.world(), self._art_read()
         state = self.area_state()
         held = self.held_name()
         here = self.area(state.spots[held].area, world, art)
@@ -2776,7 +2820,7 @@ class AreaRuntime:
         held now) stands, in metres (east, north): their tile on the map,
         else their place's spot."""
         world = world if world is not None else self.world()
-        art = art if art is not None else self.map_art_copy()
+        art = art if art is not None else self._art_read()
         held = held or self.held_name()
         if state is None:
             state = self.area_state() if self.map_first else AreaState()
@@ -2880,7 +2924,7 @@ class AreaRuntime:
         if not marks:
             return
         new = {key(p.name): p for p in delta.places if p.x is None and p.id not in before.places}
-        art = self.map_art_copy()
+        art = self._art_read()
         for entry in reply.get("places") or []:
             if not isinstance(entry, dict):
                 continue
@@ -2954,7 +2998,7 @@ class AreaRuntime:
         at = reply.get("at") if isinstance(reply.get("at"), dict) else {}
         if not marks or not at:
             return
-        art = self.map_art_copy()
+        art = self._art_read()
         after = applied(before, delta)
         for name, value in at.items():
             mark = self._mark_of(marks, value)
@@ -2976,13 +3020,13 @@ class AreaRuntime:
     def spot_of_point(self, x: float, y: float) -> Spot | None:
         """The tile a point on the map lies on: in the innermost place there
         with an area (a building's inside, not its roof)."""
-        return self._mark_spot(Mark(token="", x=x, y=y), self.world(), self.map_art_copy())
+        return self._mark_spot(Mark(token="", x=x, y=y), self.world(), self._art_read())
 
     def go_to_point(self, x: float, y: float) -> str:
         """Set off for a spot on the map: the author's character stands on it
         (on the nearest tile they can, in the area it lies in), and the clock
         moves on by the way's length on foot. The turn's text."""
-        world, art = self.world(), self.map_art_copy()
+        world, art = self.world(), self._art_read()
         place_id = place_at(world, art, x, y)
         held = self.held_name()
         if held is None:
@@ -3063,7 +3107,7 @@ class AreaRuntime:
         map pictures (the standing approval and its daily limit)."""
         if not self.map_first or not self.config.map_art or self.open_span is not None:
             return [], []
-        world, art = self.world(), self.map_art_copy()
+        world, art = self.world(), self._art_read()
         areas = self._near_areas(world, art)
         furnish = [
             a
@@ -3345,7 +3389,7 @@ class AreaRuntime:
         """(name, title) of every set the map may be drawn in: the shipped
         ones, and each of this story's own ("own:<key>")."""
         out = [(name, info.title or name) for name, (info, _f) in shipped.shipped_sets().items()]
-        art = art or self.map_art_copy()
+        art = art or self._art_read()
         for set_key, found in art.tile_sets.items():
             if found.assets:
                 out.append((own_set_name(set_key), found.title or "This story's own"))
@@ -3354,7 +3398,7 @@ class AreaRuntime:
     def tile_set_cards(self) -> list[TileSetCard]:
         """Every set as the gallery shows it: the shipped sets, then this
         story's own, each with a reader of its assets by role."""
-        art = self.map_art_copy()
+        art = self._art_read()
         in_use = self.tile_set_name(art)
         out: list[TileSetCard] = []
         for name, (info, folder) in shipped.shipped_sets().items():
@@ -3462,7 +3506,7 @@ class AreaRuntime:
             return False
         if getattr(self, "_pick_tried", False) and not again:
             return False
-        art = self.map_art_copy()
+        art = self._art_read()
         if art.tile_set and not art.tile_set_auto:
             return False
         sets = {name: info for name, (info, _folder) in shipped.shipped_sets().items()}
@@ -3557,7 +3601,7 @@ class AreaRuntime:
         map, or its map has its set already (a sample's, or the author's)."""
         if not self.map_first or self.in_private:
             return []
-        art = self.map_art_copy()
+        art = self._art_read()
         if art.tile_set and not art.tile_set_auto:
             return []
         return self.tile_set_choices(art)
@@ -3570,7 +3614,7 @@ class AreaRuntime:
         has others; None once answered, or once a set is chosen."""
         if self.story.tile_set_offered or self.story.chat:
             return None
-        art = art or self.map_art_copy()
+        art = art or self._art_read()
         if art.tile_set and not art.tile_set_auto:
             return None
         if self.tile_set_picking:
@@ -3875,7 +3919,7 @@ class AreaRuntime:
         set's ground, walls and decoration, every thing it or the story has
         a sprite for (and every thing in the areas near the story), and
         every character's walking sprite."""
-        art = self.map_art_copy()
+        art = self._art_read()
         info, read = self.tile_set(art)
         name = self.tile_set_name(art)
         found = shipped.shipped_sets().get(name)
@@ -3946,7 +3990,7 @@ class AreaRuntime:
     def _asset_job(self, role: str, words: str) -> tuple[str, str, str, bytes | None, str]:
         """(prompt, size, model, the picture it is drawn from, that
         picture's file or "") for redrawing one asset from these words."""
-        art = self.map_art_copy()
+        art = self._art_read()
         info, _read = self.tile_set(art)
         world = world_words(self._set_words(art, info), self.map_setting())
         style = style_words(self._set_words(art, info))
@@ -4017,7 +4061,7 @@ class AreaRuntime:
         media = self.config.images()
         if media is None or not media.api_key:
             return model, price, "Pictures have no endpoint or key (Settings → Images)."
-        if self.map_pictures_left_today(self.map_art_copy()) <= 0:
+        if self.map_pictures_left_today(self._art_read()) <= 0:
             return model, price, "Today's map pictures are all drawn (Settings → Images)."
         run = self._tile_thread
         if run is not None and run.is_alive() and _asset_key(role) in self._tile_keys:
@@ -4158,7 +4202,7 @@ class AreaRuntime:
     def walker_pictures(self, name: str) -> list[MapPicture]:
         """Every avatar drawn or chosen for a person, newest first (the one
         in use is `walker_file`)."""
-        art = self.map_art_copy()
+        art = self._art_read()
         found = [p for p in art.pictures if p.subject == "walker" and p.subject_id == name]
         return sorted(found, key=lambda p: p.made_at, reverse=True)
 

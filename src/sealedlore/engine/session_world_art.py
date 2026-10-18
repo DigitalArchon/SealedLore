@@ -96,6 +96,8 @@ def job_words(job: PictureJob) -> str:
 
 
 class WorldArtRuntime:
+    _art_version: int = 0
+    _art_kept: tuple[tuple, WorldArt] | None = None
     _art: WorldArt | None = None
     _art_lock: threading.Lock | None = None
     _art_thread: threading.Thread | None = None
@@ -152,6 +154,34 @@ class WorldArtRuntime:
         art = self.world_art
         with self._lock():
             return art.model_copy(deep=True)
+
+    def _art_read(self) -> WorldArt:
+        """The art as it stands, for reading only: one copy per version of
+        it (`_save_art` bumps it), shared by every read until the art
+        changes. Every change is made on `world_art` under the lock, never
+        on a copy; a copy of 27 designed regions cost 40 ms, and opening a
+        story took 219 of them (Oct 19 2026). Writers take `map_art_copy`."""
+        art = self.world_art
+        # The version, and the shape of the art beside it: a layout, patch,
+        # region, picture or set added or replaced is seen even when nobody
+        # saved (tests poke the art directly; the app saves every change).
+        mark = (
+            self._art_version,
+            tuple((k, id(v)) for k, v in art.layouts.items()),
+            tuple(id(p) for p in art.terrain),
+            tuple((k, id(v)) for k, v in art.regions.items()),
+            len(art.pictures),
+            tuple((k, id(v)) for k, v in art.furnishings.items()),
+            tuple((k, id(v)) for k, v in art.tile_sets.items()),
+            tuple(sorted(art.tile_overrides.items())),
+            art.tile_set,
+        )
+        kept = self._art_kept
+        if kept is not None and kept[0] == mark:
+            return kept[1]
+        copy = self.map_art_copy()
+        self._art_kept = (mark, copy)
+        return copy
 
     def backup_files(self) -> dict[str, bytes]:
         """Everything a backup carries beside the bundle: the pictures and
@@ -940,6 +970,9 @@ class WorldArtRuntime:
             callback()
 
     def _save_art(self, art: WorldArt) -> None:
+        # Every change to the art comes through here: the settled area state
+        # (`AreaRuntime.area_state`) is kept until it does.
+        self._art_version += 1
         # Never into a story deleted meanwhile: the write made its folder
         # again, an unreadable ghost in the list. Nor once the story is
         # closed (`StorySession.close`), under its lock: a painting still out
