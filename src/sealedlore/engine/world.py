@@ -141,16 +141,33 @@ def known_road(
     return found[0] if len(set(found)) == 1 else None
 
 
-def _find_thing(world: WorldMap, name: str) -> WorldThing | None:
+def _find_thing(
+    world: WorldMap, name: str, near: Collection[str] | None = None
+) -> WorldThing | None:
     """The map's thing of this name; else the one thing whose name it
     shortens or lengthens (`same_thing`: "heavy iron anvil" for the "heavy
-    iron anvil block on a timber stand"), when only one does."""
+    iron anvil block on a timber stand"), when only one does, and, given
+    `near` (place ids), only one lying in those places or carried: live (Oct
+    18 2026) "the bell" on a sandbar in the delta was taken for a cattle bell
+    the world designer had hung on a fence post in a marsh a kilometre off."""
     wanted = key(name)
     found = next((t for t in world.things.values() if key(t.name) == wanted), None)
     if found is not None or not name:
         return found
-    like = [t for t in world.things.values() if same_thing(name, t.name)]
+    like = [
+        t
+        for t in world.things.values()
+        if same_thing(name, t.name) and (near is None or t.at is None or t.at in near)
+    ]
     return like[0] if len(like) == 1 else None
+
+
+def _near_places(world: WorldMap, delta: WorldDelta, people: Sequence[Character]) -> set[str]:
+    """The places this reply's people are in, with everything round them."""
+    ids = set(delta.where.values()) | {
+        pid for name, pid in world.where.items() if any(same_person(name, c) for c in people)
+    }
+    return {p.id for pid in ids for p in _chain(world, pid)}
 
 
 # --- Rendering, for the read -------------------------------------------------
@@ -327,9 +344,17 @@ def _far(distance: float) -> str:
     return far
 
 
-def _around(world: WorldMap, here: str | None, place: WorldPlace, fixed: Collection[str]) -> str:
+def _around(
+    world: WorldMap,
+    here: str | None,
+    place: WorldPlace,
+    fixed: Collection[str],
+    brief: bool = False,
+) -> str:
     where = _how_far(world, here, place.id, fixed)
     head = f"{place.name} ({place.kind or 'place'}" + (f", {where}" if where else "") + ")"
+    if brief:
+        return head
     what = " ".join(place.what.split())
     if place.state:  # what the story did to it, else the map says a barn stands burnt
         what = (what + " " if what else "") + f"Now: {' '.join(place.state.split())}."
@@ -343,6 +368,8 @@ def render_map_context(
     *,
     fixed: Collection[str] = (),
     mark_fixed: bool = False,
+    left_out: Collection[str] = (),
+    brief: Collection[str] = (),
 ) -> str:
     """The local map for the storyteller's tail: where the author's character
     is (the start before any read), what is inside it, what else is around
@@ -350,7 +377,10 @@ def render_map_context(
     is `established`; `fixed` are the places a plot file put, whose distance
     and bearing are given, from the nearest of them the character is in.
     `mark_fixed`: a thing that can't be taken is marked so, on a turn that
-    may not move it. Empty without a place."""
+    may not move it. `left_out`: places never listed (the world designer's
+    regions beyond the next, whose descriptions filled the tail: the author,
+    Oct 18 2026); `brief`: listed by name, kind and distance only (the
+    neighbouring regions). Empty without a place."""
     here_id = world.where.get(held or "") or world.start
     chain = _chain(world, here_id)
     if not chain:
@@ -369,20 +399,33 @@ def render_map_context(
         if here.state:
             said = (said + " " if said else "") + f"Now: {' '.join(here.state.split())}."
         lines.append("  " + said)
-    inside = [p for p in world.places.values() if p.inside == here.id][:MAP_LIST_LIMIT]
+    left = set(left_out) - {p.id for p in chain}
+    short = set(brief) - {p.id for p in chain}
+    inside = [p for p in world.places.values() if p.inside == here.id and p.id not in left][
+        :MAP_LIST_LIMIT
+    ]
     if inside:
-        lines.append("Inside it: " + "; ".join(_around(world, origin, p, fixed) for p in inside))
+        lines.append(
+            "Inside it: "
+            + "; ".join(_around(world, origin, p, fixed, p.id in short) for p in inside)
+        )
     shown = {p.id for p in chain} | {p.id for p in inside}
     for level, outer in enumerate([*chain[1:], None]):
         parent = outer.id if outer is not None else None
         around = [
             p
             for p in world.places.values()
-            if p.inside == parent and p.id != chain[level].id and p.id not in shown
+            if p.inside == parent
+            and p.id != chain[level].id
+            and p.id not in shown
+            and p.id not in left
         ][:MAP_LIST_LIMIT]
         if around:
             label = f"Also in {outer.name}" if outer is not None else "Elsewhere on the map"
-            lines.append(f"{label}: " + "; ".join(_around(world, origin, p, fixed) for p in around))
+            lines.append(
+                f"{label}: "
+                + "; ".join(_around(world, origin, p, fixed, p.id in short) for p in around)
+            )
             shown |= {p.id for p in around}
     ways = [
         f"- from {place_name(world, k.a)} to {place_name(world, k.b)}"
@@ -994,13 +1037,16 @@ def resolve_reply(
             delta.where.setdefault(canonical, delta.where.pop(label))
         if label in delta.outside:
             delta.outside.setdefault(canonical, delta.outside.pop(label))
+    near_people = _near_places(world, delta, people)
     for entry in _entries(reply, "things"):
         name = _text(entry.get("name"))
         if not name or quoted(entry) is None:
             refused.append(f"thing {name or '(unnamed)'}: no quote found")
             continue
         at = _text(entry.get("at"))
-        existing = _find_thing(world, name)
+        at_place = find_place(world, at, delta.places) if at else None
+        near = near_people | {p.id for p in _chain(world, at_place)} if at_place else near_people
+        existing = _find_thing(world, name, near)
         thing = existing.model_copy(deep=True) if existing is not None else WorldThing(name=name)
         if at.lower().startswith("carried by"):
             holder = at[len("carried by") :].strip()

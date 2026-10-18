@@ -397,14 +397,18 @@ class StatusStrip(QWidget):
             self.cost_label.setToolTip("")
             return
         about = "~" if self._session_estimated else ""
-        session = f"{about}${self._session_cost:.4f}" if self._cost_reported else "not known yet"
+        session = f"{about}${self._session_cost:.4f}" if self._cost_reported else "unpriced"
         text = f"This session {session}"
         tip = "Spend since this story was opened."
         if not self._cost_reported:
-            tip += " Unknown: no call has reported a cost or had a listed price yet."
+            tip += (
+                " Unpriced: no call has reported a cost or had a listed price yet (an "
+                "endpoint such as Anthropic's lists no prices)."
+            )
         if self._story_cost is not None and self._story_unpriced >= self._story_calls:
-            # Nothing priced at all: a total would read "≥ $0.0000".
-            text += "  ·  Story not known"
+            # Nothing priced at all: a total would read "≥ $0.0000" (the
+            # author, Oct 18 2026: say unpriced).
+            text += f"  ·  Story unpriced ({self._story_calls} calls)"
             tip += (
                 f" Story: none of its {self._story_calls} call(s) reported a cost or had a "
                 "listed price (Story → Usage and cost…)."

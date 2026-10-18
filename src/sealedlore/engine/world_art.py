@@ -713,10 +713,21 @@ def land_under(world: WorldMap, art: WorldArt, place: WorldPlace) -> str:
 # --- Whose plan someone stands on, and the windows of open country ------------
 
 
+# A vehicle no wider than this (a skiff, a cart, a rowing boat) has no inside
+# to play on: its riders stand at its spot (the author, Oct 18 2026: a rowing
+# skiff was drawn as a 40-tile boathouse with a workbench).
+SMALL_VEHICLE_M = 12.0
+
+
+def small_vehicle(place: WorldPlace) -> bool:
+    return place.kind == "vehicle" and size_of(place) <= SMALL_VEHICLE_M
+
+
 def has_inside(art: WorldArt, place: WorldPlace) -> bool:
     """A building (or room) with a plan of its own: its inside is an area."""
     return (
         place.kind in ("building", "room", "vehicle")
+        and not small_vehicle(place)
         and art.layout_shown(place.id, place.state) is not None
     )
 
@@ -1616,7 +1627,7 @@ def plan_art(
             area = None  # a feature on a plan already drawn round it
         if area is not None and area.kind in LAYOUT_KINDS and size_of(area) <= PLAN_MAX_SIZE:
             wanted[area.id] = area
-        if place.kind in ("building", "vehicle"):
+        if place.kind in ("building", "vehicle") and not small_vehicle(place):
             wanted[pid] = place  # a ship's plan is its decks, drawn once aboard
     # The buildings standing in the area the character is in: a Director's
     # watchtower at a mark could not be walked into until a read had put

@@ -13,7 +13,12 @@
  ],
  "lava": false,
  "deck": false,
- "grounds": ["grass", "rock", "dirt", "snow"],
+ "grounds": [
+  "grass",
+  "rock",
+  "dirt",
+  "snow"
+ ],
  "decor_lights": [
   true,
   false,
@@ -27,15 +32,9 @@
   "fairy",
   "druid",
   "enchanted",
-  "medieval",
-  "fantasy",
-  "village",
-  "kingdom",
   "magic",
   "wizard",
-  "dragon",
-  "knight",
-  "inn"
+  "dragon"
  ],
  "words": {
   "world": "the Silverwood, an enchanted elven forest and its village",

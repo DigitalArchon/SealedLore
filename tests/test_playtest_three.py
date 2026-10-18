@@ -104,3 +104,76 @@ def test_laying_a_thing_on_a_wide_window_looks_only_nearby():
         assert abs(x - 80) <= 24 and abs(y - 80) <= 24
         taken.add((x, y))
     assert time.perf_counter() - t0 < 2.0
+
+
+def test_the_next_morning_moves_the_clock_to_the_next_day():
+    from sealedlore.engine.chronicle_read import stated_skip
+
+    now = 16 * 60 + 35  # day 1, 16:35
+    moved = stated_skip("The next morning, with the tide low, the skiff carries them out.", now)
+    assert moved is not None and moved[0] == 24 * 60 + 7 * 60
+    assert stated_skip("She hopes the next morning will bring news.", now) is None
+
+
+def test_a_shortened_thing_name_matches_only_near_the_reply_s_people():
+    from sealedlore.engine.world import _find_thing
+    from sealedlore.models.world import WorldThing
+
+    marsh = WorldPlace(name="the Cull Marsh", kind="region", x=500.0, y=0.0, size=400.0)
+    bar = WorldPlace(name="the sandbar", kind="area", x=900.0, y=-1400.0, size=120.0)
+    cattle = WorldThing(name="a cattle bell, iron, its clapper missing", at=marsh.id)
+    world = WorldMap(places={marsh.id: marsh, bar.id: bar}, things={cattle.id: cattle})
+    assert _find_thing(world, "the bell") is cattle  # as before, with no places to go by
+    assert _find_thing(world, "the bell", {bar.id}) is None
+    assert _find_thing(world, "the bell", {marsh.id}) is cattle
+
+
+def test_a_small_vehicle_has_no_inside_and_a_moored_one_is_laid_at_its_dock():
+    from sealedlore.engine.area import LaidThing, lay_things
+    from sealedlore.engine.world_art import small_vehicle
+
+    skiff = WorldPlace(name="Maret's skiff", kind="vehicle", size=6.0)
+    barge = WorldPlace(name="Dav's barge", kind="vehicle", size=25.0)
+    assert small_vehicle(skiff) and not small_vehicle(barge)
+    rows = ["." * 20 for _ in range(12)]
+    area = Area(
+        place_id="q",
+        name="quay",
+        indoor=False,
+        look="grass",
+        rows=rows,
+        tile_m=9.0,
+        objects={},
+        labels={},
+    )
+    laid = lay_things(
+        area, [LaidThing(id="b", name="Dav's barge", x=4, y=5, w=3, h=1, labelled=True)]
+    )
+    assert [(p.name, p.w, p.h) for p in laid.placements] == [("Dav's barge", 3, 1)]
+    assert laid.labels["Dav's barge"] == (5, 6)
+
+
+def test_regions_beyond_the_next_leave_the_storyteller_s_tail():
+    from sealedlore.engine.world import render_map_context
+
+    town = WorldPlace(name="Marrowgate", kind="settlement", x=0.0, y=0.0, size=1500.0)
+    near = WorldPlace(
+        name="the Cull Marsh",
+        kind="region",
+        what="A broad wedge of marsh.",
+        x=600.0,
+        y=0.0,
+        size=400.0,
+    )
+    far = WorldPlace(
+        name="the Holt Ground",
+        kind="region",
+        what="Old common ground.",
+        x=-1000.0,
+        y=1000.0,
+        size=400.0,
+    )
+    world = WorldMap(places={town.id: town, near.id: near, far.id: far}, where={"Ines": town.id})
+    text = render_map_context(world, "Ines", left_out={far.id}, brief={near.id})
+    assert "Holt Ground" not in text
+    assert "the Cull Marsh (region" in text and "broad wedge" not in text

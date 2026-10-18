@@ -592,6 +592,8 @@ class AreaRuntime:
             return kept
         out: list[LaidThing] = []
         taken: set[tuple[int, int]] = set()
+        if not area.indoor:
+            out += self._moored(area, world, art, taken)
         for t in found:
             if area_of(world, art, t.at) != area.id or _twin(area, t.name, world) is not None:
                 continue  # elsewhere, or drawn here already (a plan's object of its name)
@@ -606,6 +608,31 @@ class AreaRuntime:
         if len(cache) > LAID_KEPT:
             cache.clear()
         cache[cache_key] = out
+        return out
+
+    def _moored(
+        self, area: Area, world: WorldMap, art: WorldArt, taken: set[tuple[int, int]]
+    ) -> list[LaidThing]:
+        """The vehicles the map has docked in this area (a barge made fast at
+        the quay, a cart in the yard), laid where they dock, as wide as they
+        are, their names marking the spot so whoever is aboard stands by
+        them (the author, Oct 18 2026: a moored vehicle is drawn where it
+        docks; the bargeman and his barge were invisible on the quay)."""
+        out: list[LaidThing] = []
+        for v in sorted(world.places.values(), key=lambda p: p.id):
+            if v.kind != "vehicle" or not v.inside or v.inside not in world.places:
+                continue
+            if area_of(world, art, v.inside) != area.id:
+                continue
+            near = anchor_of(area, world, v.inside) or self._spot_in(world, area, v.inside)
+            if near is None:
+                near = self._way_in(area)
+            tiles = max(1, round(size_of(v) / max(area.tile_m, 0.1)))
+            w = min(max(tiles, 1), 6)
+            h = min(max(tiles // 2, 1), 3)
+            x, y = thing_tile(area, near, taken, w=w, h=h)
+            taken |= {(x + dx, y + dy) for dx in range(w) for dy in range(h)}
+            out.append(LaidThing(id=v.id, name=v.name, x=x, y=y, w=w, h=h, labelled=True))
         return out
 
     def _things_now(self) -> Mapping[str, ThingRecord]:

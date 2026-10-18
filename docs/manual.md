@@ -1509,8 +1509,9 @@ and **Draw it again…** (the model and price are shown first), **Use a
 picture of your own…**, or go **Back to the set's own**; a change is for
 this story only. Everything drawn for a map is pixel art in a style that
 suits the world rather than any one game's look: each shipped set names its
-own (bleak and quiet for the snowbound farm, whimsical storybook for the
-elven forest), and a set drawn for your story takes the style from your
+own (bleak and quiet for the snowbound farm and the abandoned town, whimsical
+storybook for the elven forest, warm and earthy for the market town), and a
+set drawn for your story takes the style from your
 description (gritty and dark, bright and cheerful, whimsical…), which you
 can see and change with the set's other words before it is drawn.
 

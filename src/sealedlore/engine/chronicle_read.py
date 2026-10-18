@@ -232,6 +232,20 @@ _NAMED_DAY = re.compile(
     rf"(?:^|\b(?:by|on|of|is|now)\s+|,\s*)day\s+(?:number\s+)?(\d+|{_COUNT})(?![\w-])",
     re.IGNORECASE,
 )
+_TIME_OF_DAY = {
+    "dawn": 6 * 60,
+    "morning": 7 * 60,
+    "day": 9 * 60,
+    "noon": 12 * 60,
+    "afternoon": 14 * 60,
+    "evening": 18 * 60,
+    "dusk": 18 * 60,
+    "night": 21 * 60,
+}
+_NEXT_TIME = re.compile(
+    r"\b(?:the\s+)?(?:next|following)\s+(dawn|morning|day|noon|afternoon|evening|dusk|night)\b",
+    re.IGNORECASE,
+)
 _FUTURE = re.compile(
     r"\b(?:will|would|must|should|shall|plans?|planned|expect(?:s|ed)?|scheduled|due|"
     r"until|before|deadline|hopes?|intends?|aims?|going to)\b",
@@ -269,6 +283,15 @@ def stated_skip(text: str, now: int) -> tuple[int, str] | None:
         sentence = _sentence_around(text, match)
         if _PASSING.search(sentence):
             return now + _span_minutes(match), sentence
+    # "The next morning", "the following evening": the next day, at that
+    # time of day (the three playtests, Oct 18 2026: the map's own clock
+    # stood at 16:35 through two nights told this way).
+    for match in _NEXT_TIME.finditer(text):
+        sentence = _sentence_around(text, match)
+        if _FUTURE.search(sentence):
+            continue
+        hour = _TIME_OF_DAY[match.group(1).lower()]
+        return (today) * MINUTES_PER_DAY + hour, sentence
     return None
 
 

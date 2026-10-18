@@ -25,7 +25,7 @@ from typing import Any
 from sealedlore.engine.area import BRIDGE_PART, crossing_middle, tile_point
 from sealedlore.engine.chronicle import introduced, variant_named
 from sealedlore.engine.marks import footprint, place_at
-from sealedlore.engine.regions import for_the_read
+from sealedlore.engine.regions import cell_of, for_the_read, parse_key
 from sealedlore.engine.scene_state import scene_at
 from sealedlore.engine.session_area import is_opening
 from sealedlore.engine.session_plot import SessionNotice
@@ -216,6 +216,7 @@ class WorldRuntime:
         turn = self._turn_node(path, turn_node_id)
         shown = self._world_on([*path, turn]) if turn is not None else self._world_on(path)
         stays = self.fixed_stays(turn)
+        left_out, brief = self.regions_told(shown, self.map_held_name(held_id))
         text = render_map_context(
             established(shown, base),
             self.map_held_name(held_id),
@@ -225,6 +226,8 @@ class WorldRuntime:
             fixed=({p.id for p in base.places} if base is not None else set())
             | self.designed_place_ids(),
             mark_fixed=stays,
+            left_out=left_out,
+            brief=brief,
         )
         drawn = self.drawn_context(shown, self.map_held_name(held_id))
         if text and drawn:
@@ -248,6 +251,35 @@ class WorldRuntime:
         parts = [text, positions, self.marks_context(path, turn_node_id=turn_node_id)]
         # Someone not named yet by their description, never "Unknown 1".
         return unknown_words("\n\n".join(p for p in parts if p), shown)
+
+    def regions_told(self, world: WorldMap, held: str | None) -> tuple[set[str], set[str]]:
+        """Of the world designer's regions, which the storyteller is not told
+        and which by name only: the one the author's character stands in is
+        told in full, its eight neighbours by name, kind and distance, the
+        rest not at all (the author, Oct 18 2026: every region's description
+        went in every tail, ~1.5k tokens of country the story wasn't in; a
+        way for the storyteller to look one up is for later, with an A/B)."""
+        art = self.world_art
+        if not art.regions or not art.region_origin:
+            return set(), set()
+        origin = (float(art.region_origin[0]), float(art.region_origin[1]))
+        point = self.held_point(world=world, held=held)
+        here = cell_of(origin, *point) if point is not None else None
+        left_out: set[str] = set()
+        brief: set[str] = set()
+        for key_, region in art.regions.items():
+            cell = parse_key(key_)
+            if here is not None and cell is not None and cell == here:
+                continue
+            if (
+                here is not None
+                and cell is not None
+                and max(abs(cell[0] - here[0]), abs(cell[1] - here[1])) <= 1
+            ):
+                brief.add(region.place_id)
+            else:
+                left_out.add(region.place_id)
+        return left_out, brief
 
     def drawn_context(self, world: WorldMap, held: str | None) -> str:
         """`map.drawn`: the buildings the plan of the place the author's

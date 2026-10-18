@@ -74,12 +74,12 @@ def test_the_cost_strip_says_unknown_rather_than_a_zero_lower_bound(app):
 
     strip = StatusStrip()
     strip.set_story_cost(0.0, unpriced=3, calls=3)
-    assert "Story not known" in strip.cost_label.text()
+    assert "Story unpriced" in strip.cost_label.text()
     assert "≥" not in strip.cost_label.text()
     strip.set_story_cost(0.12, unpriced=1, calls=3)
     assert "Story ≥ $0.1200" in strip.cost_label.text()
     # A reported zero (a subscription's included model) is a cost, not unknown.
-    assert "This session not known yet" in strip.cost_label.text()
+    assert "This session unpriced" in strip.cost_label.text()
     strip.add_cost(Usage(cost=0.0, cost_reported=True))
     assert "This session $0.0000" in strip.cost_label.text()
 

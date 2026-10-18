@@ -2094,6 +2094,9 @@ class LaidThing:
     x: int
     y: int
     broken: bool = False
+    w: int = 1
+    h: int = 1
+    labelled: bool = False  # a moored vehicle: its name marks the spot, for its riders
 
 
 def lay_things(area: Area, laid: Sequence[LaidThing]) -> Area:
@@ -2104,6 +2107,7 @@ def lay_things(area: Area, laid: Sequence[LaidThing]) -> Area:
     if not laid:
         return area
     placements = list(area.placements)
+    labels = dict(area.labels)
     for t in laid:
         room = area.room_at(t.x, t.y)
         placed = Placement(
@@ -2111,14 +2115,16 @@ def lay_things(area: Area, laid: Sequence[LaidThing]) -> Area:
             name=t.name,
             x=t.x,
             y=t.y,
-            w=1,
-            h=1,
+            w=t.w,
+            h=t.h,
             verbs=item_verbs(t.name),
             kind="object",
             room=room.index if room else None,
         )
         placements.append(_broken(placed) if t.broken else placed)
-    return replace(area, placements=placements)
+        if t.labelled:
+            labels[t.name[:60]] = (t.x + t.w // 2, t.y + t.h)
+    return replace(area, placements=placements, labels=labels)
 
 
 def carried_by(records: Mapping[str, ThingRecord], who: str) -> list[str]:
