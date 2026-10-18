@@ -170,7 +170,7 @@ class PrivateWindow:
         private = self.in_private
         # Pictures stay: the private model writes their prompts, and the image
         # dialog warns that the picture itself is neither private nor unsaved.
-        for action in (self.review_action, self.restart_action):
+        for action in (self.review_action, self.restart_action, self.without_map_action):
             action.setEnabled(action.isEnabled() and not private)
         # Settings stays clickable and says why it's paused (_settings_paused).
         # Switching story or branch would leave the scene behind half-open.

@@ -158,6 +158,7 @@ from sealedlore.storage.paths import data_home, samples_dir, story_dir
 from sealedlore.storage.repository import (
     StoryBundle,
     copy_story,
+    copy_without_map,
     load_config_or_recover,
     load_story_bundle,
     read_api_log,
@@ -633,6 +634,14 @@ class MainWindow(
         self.restart_action = QAction("&Restart as new playthrough…", self)
         self.restart_action.triggered.connect(lambda: self.restart_story(review=True))
         story_menu.addAction(self.restart_action)
+        # The author (Oct 19 2026): someone enjoying a story who no longer
+        # wants to pay for the map goes on from where they are without it.
+        self.without_map_action = QAction("Continue &without the map…", self)
+        self.without_map_action.setStatusTip(
+            "A copy of this story, from where it is, played on without the map"
+        )
+        self.without_map_action.triggered.connect(self.continue_without_map)
+        story_menu.addAction(self.without_map_action)
         # Pictures before the rarer things: they are what play reaches for.
         self._image_actions(story_menu)
         self._video_menu_actions(story_menu)
@@ -1230,6 +1239,45 @@ class MainWindow(
         self.stories.refresh(selected_id=copy.story.id)
         self.open_story(copy.story.id)
         self.statusBar().showMessage(f"Created “{copy.story.title}”, a complete copy", 8000)
+
+    def continue_without_map(self) -> None:
+        """A copy of the open story, from where it is, played on without the
+        map (`copy_without_map`): the same characters, plot, world, lore,
+        branches and story so far; the scene card as the map had it. The
+        map story stays as it was; the copy is opened."""
+        session = self.session
+        if session is None or not session.map_on or self._busy or session.in_private:
+            return
+        if self.memory_chat:
+            return  # nothing of a memory-only chat is written to disk
+        title = f"{session.story.title} (without the map)"
+        answer = QMessageBox.question(
+            self,
+            "Continue without the map",
+            f"Make a copy of “{session.story.title}” that goes on from where it is now, "
+            "without the map?\n\n"
+            "The copy keeps every character, the plot, the world and lore, every branch "
+            "and the story so far, and starts with everyone where the map has them. "
+            "Nothing is read, drawn or painted for a map any more, and the storyteller "
+            "is no longer sent it: each turn costs less.\n\n"
+            f"This story stays as it is, map and all. The copy is called “{title}”.",
+            QMessageBox.Ok | QMessageBox.Cancel,
+            QMessageBox.Ok,
+        )
+        if answer != QMessageBox.Ok:
+            return
+        scene = None if session.story.chat else session.scene_without_map()
+        session.save()
+        try:
+            copy = copy_without_map(session.story.id, title=title, scene=scene, root=self.root)
+        except OSError as exc:
+            self._warn_plain("Could not make the copy", str(exc))
+            return
+        self.stories.refresh(selected_id=copy.story.id)
+        self.open_story(copy.story.id)
+        self.statusBar().showMessage(
+            f"Created “{copy.story.title}”: the story so far, going on without the map", 8000
+        )
 
     def delete_story(self, story_id: str) -> None:
         if self._busy:
@@ -4193,6 +4241,11 @@ class MainWindow(
             self.usage_action,
         ):
             action.setEnabled(has_story and not busy)
+        # Only for a story or chat that keeps a map, and never one kept in
+        # memory alone: the copy is written to disk.
+        keeps_map = has_story and self.session.map_on
+        self.without_map_action.setVisible(keeps_map)
+        self.without_map_action.setEnabled(keeps_map and not busy and not self.memory_chat)
         unstarted = has_story and not (self.session and self.session.nodes)
         self.start_action.setEnabled(unstarted and not busy)
         # Once the story has begun it can only restart: greyed for good, it

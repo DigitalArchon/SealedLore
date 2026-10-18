@@ -282,7 +282,9 @@ class SetupDialog(QDialog):
                 "click people and things for what you can do, and travel between places. "
                 "After each passage a small model notes the places the story goes to and "
                 "who is where, and the map grows with the story. One more small call after "
-                "every passage; the map's pictures are drawn in the background."
+                "every passage; the map's pictures are drawn in the background. To go on "
+                "without it from where the story is, keeping this one as it is: Story → "
+                "Continue without the map…"
             )
         )
         self.map_density = QComboBox()

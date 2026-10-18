@@ -25,6 +25,9 @@ from sealedlore.engine.scene_state import same_person
 from sealedlore.models.character import Character
 from sealedlore.models.scene import OffstageCharacter, SceneState
 
+# How the card notes someone the map has elsewhere.
+MAP_HAS_THEM = "the map has them at "
+
 
 def reconcile_scene(
     scene: SceneState,
@@ -60,7 +63,7 @@ def reconcile_scene(
             continue
         if card.id in present:
             present.remove(card.id)
-        notes[card.id] = f"the map has them at {where}"
+        notes[card.id] = MAP_HAS_THEM + where
     out.present_character_ids = present
     out.offstage_but_nearby = [
         OffstageCharacter(character_id=cid, note=note)

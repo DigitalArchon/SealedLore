@@ -1544,6 +1544,16 @@ file is told in the file's own words, with how far and which way each of its
 places lies. That costs some words on every turn; untick **Keep a map of the
 story** to save them.
 
+**Story → Continue without the map…** goes on from where a map story is,
+without the map, as a story of its own: a copy with every character, the
+plot, the world and lore, every branch and the story so far, and, on the
+branch you are on, the scene as the map had it (where you are, who is with
+you, who is elsewhere and where, what each of you carries). Nothing is read, drawn or painted for a map
+in the copy, and the storyteller is no longer sent it, so each turn costs
+less. The map story stays as it was, to go back to. Like **Duplicate entire
+story**, the copy's cost history includes the original's. Not for a chat kept
+in memory only.
+
 ### Edit Mode
 
 ![Edit Mode inside the inn of a story drafted from an idea: the bar with Move, Paint and the tile it lays, Room, Fence, Building, Remove building, Go inside, Objects…, Undo, Go outside and Done, over the inn's rooms](screenshots/map-edit.webp)

@@ -45,6 +45,7 @@ from sealedlore.engine.area import (
     build_area,
     build_level,
     build_window,
+    carried_by,
     clamped_tile,
     exit_side,
     front_of,
@@ -73,7 +74,7 @@ from sealedlore.engine.furnish import FURNISH_MAX_TOKENS, furnish_messages, pars
 from sealedlore.engine.image_variants import fitting_model
 from sealedlore.engine.levels import level_name, parse_level, place_of_area
 from sealedlore.engine.map_edit import apply_tile_edits
-from sealedlore.engine.map_presence import reconcile_scene
+from sealedlore.engine.map_presence import MAP_HAS_THEM, reconcile_scene
 from sealedlore.engine.marks import (
     chain_words,
     compass,
@@ -119,7 +120,9 @@ from sealedlore.engine.tile_sets import (
 from sealedlore.engine.validators import locate_quote
 from sealedlore.engine.world import (
     _NOTHING_SAID,
+    _chain,
     _find_thing,
+    _names_place,
     applied,
     find_place,
     key,
@@ -2495,6 +2498,50 @@ class AreaRuntime:
             unknowns=world.unknowns,
             held_id=held_id if held_id is not None else self.story.held_character_id,
         )
+
+    def scene_without_map(self) -> SceneState:
+        """The scene card for this story played on without its map (the
+        author, Oct 19 2026: someone enjoying a story who no longer wants
+        to pay for the map goes on "from where they are ... just as a normal
+        story"): the card the storyteller is sent now (`map_scene`, with the
+        walking since the last turn), its Location the map's places where
+        the author's character is, anyone elsewhere noted where the map has
+        them, and who carries what in the situation, since nothing else
+        will say so. The story's own card when the map places nobody."""
+        path = self.path()
+        held_id = self.story.held_character_id
+        scene = self.map_scene(path, held_id) if path else None
+        if scene is None:
+            return self.story.scene.model_copy(deep=True)
+        world = self.world()
+        held = self.map_held_name(held_id)
+        where = world.where.get(held or "") or world.start
+        now = self.here_place()
+        if now is not None and now != where and now not in {p.id for p in _chain(world, where)}:
+            where = now  # walked on since the last turn
+        places = _chain(world, where)
+        own = self.story.scene.location or ""
+        if places and own and _names_place(own, places[0]):
+            # The card's own words name the place and are often finer ("the
+            # dining room inside Ashcombe Hall", where the map has the Hall).
+            scene.location = own
+        elif places:
+            outside = held in world.outside and where == world.where.get(held or "")
+            chain = ", in ".join(p.name for p in places[:3])
+            scene.location = ("Just outside " if outside else "") + chain
+        for entry in scene.offstage_but_nearby:
+            if entry.note and entry.note.startswith(MAP_HAS_THEM):
+                entry.note = "at " + entry.note[len(MAP_HAS_THEM) :]
+        state = self.area_state()
+        names = [held or "", *(c.name for c in self.visible_cast()), *state.spots]
+        carries = [
+            self.texts.fill("map.carries", name=name, things=", ".join(things))
+            for name in dict.fromkeys(n for n in names if n)
+            if (things := carried_by(state.things, name))
+        ]
+        if carries:
+            scene.situation = " ".join([scene.situation or "", *carries]).strip()
+        return scene
 
     def fixed_here(
         self, nodes: Sequence[Node], held_id: str | None, *, turn_node_id: str | None = None
