@@ -542,6 +542,9 @@ def _sex_of(text: str) -> set[str]:
 
 # Words a place's name shares with any passage, never enough to name it.
 _PLACE_NOISE = _ROAD_NOISE | frozenset("old new place area land lands".split())
+# Places someone walks about inside, whatever grid cells they span; a region
+# or a wide area is open country, the grid's to judge (`_elsewhere`).
+_REACHES_ACROSS = frozenset({"settlement", "site", "building", "room"})
 
 
 def _names_place(text: str, place: WorldPlace) -> bool:
@@ -577,7 +580,14 @@ def _elsewhere(
     # in a town three cells wide) is not elsewhere: the grid is for open
     # country. Live (Oct 18 2026) Ines walked across Marrowgate to the
     # reeve's hall and the read's move was refused as another region's.
+    # Only a town, a site or a building counts, and the walk stops at the
+    # first wide place: the designed regions lie inside the story's region
+    # (a forest, a desert, the delta), which reaches every cell, and
+    # counting it let "The fields were empty." take John to the North
+    # Woodlot again.
     for outer in _chain(world, place.inside)[:8]:
+        if outer.kind not in _REACHES_ACROSS:
+            break
         around = position_any(world, delta, outer.id)
         if around is not None and meets(around, size_of(outer) / 2, region):
             return False
@@ -699,6 +709,7 @@ def resolve_reply(
     marked: Mapping[str, tuple[float, float]] | None = None,
     moves_fixed: bool | None = None,
     standing_in: Mapping[str, tuple[float, float, float]] | None = None,
+    together: Collection[str] = (),
 ) -> tuple[WorldDelta, list[str]]:
     """What the reply changes, as a delta on `world`, and what was refused
     and why (for the log and the panel). `source` is the author's turn and
@@ -729,7 +740,12 @@ def resolve_reply(
     passage names it, in the quote's sentence or the one before: live (Oct
     18 2026), John went out onto his own fields, the read took "The fields
     were empty." for the North Woodlot, the designed region next door whose
-    words said dead farmland, and the map had him there."""
+    words said dead farmland, and the map had him there.
+
+    `together`: by the map's names, who was in the author's character's
+    scene before this passage. A place one of them is put in, within reach
+    of where they stand, is within reach of the others going there with
+    them; never of anyone else."""
     # `added` is always a list from here: a delta that changes known places
     # and makes none must still skip their copies on a fold without them.
     delta = WorldDelta(added=[])
@@ -934,18 +950,29 @@ def resolve_reply(
         delta.links = [k for k in delta.links if {k.a, k.b} != {a, b}]
         delta.links.append(WorldLink(a=a, b=b, direction=direction, distance=distance))
     named_people = [n for n in world.where if not is_unknown(n)]
-    # A place someone standing within reach of it is put in this reply is
-    # within reach of whoever goes there with them: the company moves
-    # together (live, Oct 18 2026: a Narration took Adelaide and Silas up
-    # the rail to the Skyport; the read moved Silas and forgot Adelaide, and
-    # on the next passage her move into their carriage was refused as
-    # another region's, her own spot being three kilometres behind).
+
+    # A place someone in the company standing within reach of it is put in
+    # this reply is within reach of the rest of the company going there with
+    # them (live, Oct 18 2026: a Narration took Adelaide and Silas up the
+    # rail to the Skyport; the read moved Silas and forgot Adelaide, and on
+    # the next passage her move into their carriage was refused as another
+    # region's, her own spot being three kilometres behind). The company
+    # only: anyone standing in the next region, restated where they are,
+    # would otherwise open it to every misread. By the map's names, as
+    # `standing_in` is kept ("Silas" is "Silas Brack").
+    def map_name(who: str) -> str:
+        if any(same_person(who, c) for c in people):
+            return person_name(who, people, named_people)
+        return unknown_for(who, world, delta) or person_name(who, people, named_people)
+
+    company = set(together)
     shared: set[str] = set()
-    if standing_in:
+    if standing_in and company:
         for entry in _entries(reply, "where"):
             who = _text(entry.get("who"))
+            name = map_name(who) if who else None
             place = find_place(world, entry.get("place"), delta.places)
-            region = standing_in.get(who) if who else None
+            region = standing_in.get(name) if name in company else None
             if place is not None and region is not None and quoted(entry) is not None:
                 if not _elsewhere(world, delta, place, region, source, entry):
                     shared.add(place)
@@ -987,7 +1014,7 @@ def resolve_reply(
         region = (standing_in or {}).get(label or canonical or "")
         if (
             region is not None
-            and place not in shared
+            and not (place in shared and (label or canonical) in company)
             and _elsewhere(world, delta, place, region, source, entry)
         ):
             refused.append(

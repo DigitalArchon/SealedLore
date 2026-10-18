@@ -34,6 +34,7 @@ from sealedlore.engine.validators import mentions
 from sealedlore.engine.world import (
     MAP_LIST_LIMIT,
     _chain,
+    _names_place,
     _other_sex,
     build_world_read_messages,
     describe_delta,
@@ -69,6 +70,20 @@ CHAT_MAP_NAME = "You"
 OPENS_IN_PLACE = re.compile(
     r"\b(?:doors?|gates?|gateways?|hatch(?:es)?|trapdoors?|windows?|shutters?|"
     r"portcullis(?:es)?|drawbridges?|lids?)\b",
+    re.IGNORECASE,
+)
+
+
+# How someone left, as the scene read put it, that takes them out of the
+# building (`leave_with_scene_read`), and that keeps them in it.
+_WENT_OUT = re.compile(
+    r"\b(?:out|outside|away|off|home|ashore|left|leaves?|leaving|depart\w*|exit\w*|"
+    r"took (?:his|her|their) leave|took leave)\b",
+    re.IGNORECASE,
+)
+_WENT_IN = re.compile(
+    r"\b(?:upstairs|downstairs|inside|indoors|further in|deeper in|back room|cellar|"
+    r"loft|attic)\b",
     re.IGNORECASE,
 )
 
@@ -229,7 +244,14 @@ class WorldRuntime:
             left_out=left_out,
             brief=brief,
         )
-        drawn = self.drawn_context(shown, self.map_held_name(held_id))
+        # Where everyone stands as the turn is written, as the positions
+        # below have it: a retake's leaf is elsewhere in the story.
+        if turn is not None and turn.meta.area is not None:
+            standing = turn.meta.area
+        else:
+            live = self._live() if self.map_first else None
+            standing = live if live is not None else self._snapshot_on(path)
+        drawn = self.drawn_context(shown, self.map_held_name(held_id), standing)
         if text and drawn:
             text += "\n" + drawn
         # Map-first: where everyone stands, exactly (engine/session_area.py),
@@ -281,14 +303,17 @@ class WorldRuntime:
                 left_out.add(region.place_id)
         return left_out, brief
 
-    def drawn_context(self, world: WorldMap, held: str | None) -> str:
+    def drawn_context(self, world: WorldMap, held: str | None, state=None) -> str:
         """`map.drawn`: the buildings the plan of the place the author's
         character is in labels that the map has no place for yet, so the
         story uses their names rather than inventing others beside them.
+        `state`: where everyone stands as the turn is written (else now).
         "" indoors, on open country, or with nothing drawn and unnamed."""
         if not self.map_first or self.in_private or held is None:
             return ""
-        state = self.area_state()
+        state = state if state is not None else self.area_state()
+        if state is None:
+            return ""
         spot = state.spots.get(held)
         area = self.area(spot.area, world) if spot is not None else None
         if area is None or area.indoor or area.window or not area.labels:
@@ -467,6 +492,10 @@ class WorldRuntime:
             standing_in=self.standing_regions(self._snapshot_on(path[:-1]), pending.before)
             if self.map_first
             else None,
+            # The company, who may go together where one of them may go.
+            together=self._present_on_map(scene_at(path[:-1], self.story.setup.starting_scene))
+            if self.map_first
+            else (),
         )
         # Map-first: what the author marked is put exactly there, and what
         # has nothing else to go on goes beside where they stand (the turn's
@@ -589,50 +618,68 @@ class WorldRuntime:
         """After all of a passage's reads: the author's character goes where
         the company they were with went, when the map read moved the others
         and forgot them (its prompt says always to give them, and live it
-        didn't): someone at their place before the passage was moved to a
-        new place, the scene read has both of them still in the scene, the
-        scene's location changed, and its words name that place. Live (Oct
-        18 2026) Wren and Tobias walked three hours to Saltmarsh's north
-        gate; the map moved Tobias there and left Wren in the toll house.
-        The place's name, or None."""
+        didn't): someone with them before the passage was moved to a new
+        place, the scene read has both of them still in the scene, the
+        scene's location changed this passage, and its words name that
+        place. Live (Oct 18 2026) Wren and Tobias walked three hours to
+        Saltmarsh's north gate; the map moved Tobias there and left Wren in
+        the toll house. Also someone the passage before moved away from
+        them, the author's character left behind since: a Narration took
+        Adelaide and Silas up the rail to the Skyport, the read moved Silas,
+        and the scene's location named the platform only on the next
+        passage. A walk on the author's own turn counts from where it took
+        them: only who was there with them is their company, so nobody
+        standing elsewhere pulls them back off it. The place's name, or
+        None."""
         if not self.map_first or self.in_private or self.story.chat:
             return None
         result = self.last_result
         node = result.node if result is not None else None
         delta = node.meta.world if node is not None else None
         held = self.map_held_name(node.meta.controlled_character_id) if node else None
-        if node is None or delta is None or held is None or held in delta.where:
+        if node is None or held is None or (delta is not None and held in delta.where):
             return None
+        # A read that changed nothing left no delta: the company may still
+        # have gone on the passage before.
+        delta = delta if delta is not None else WorldDelta()
         path = self._path_to(node.id)
         before = self._world_on(path[:-1])
         was = before.where.get(held)
+        scene_before = scene_at(path[:-1], self.story.setup.starting_scene)
         scene_after = scene_at(path, self.story.setup.starting_scene)
         moved_on = (scene_after.location or "").strip().lower()
-        if was is None or not moved_on:
+        if was is None or not moved_on or moved_on == (scene_before.location or "").strip().lower():
             return None
         together = set(self._present_on_map(scene_after))
         if held not in together:
             return None
         after = self._world_on(path)
-        # The company's places: those the read moved this passage first, then
-        # where it already had them (live, Oct 18 2026: a Narration took
-        # Adelaide and Silas up the rail to the Skyport, the read moved
-        # Silas, and the scene's location named the platform only on the
-        # next passage, by which time nothing had "moved").
-        company = [(n, after.where[n]) for n in delta.where if n in after.where] + [
+        # Who was with them: at their place before this passage, or before
+        # the one before it with the author's character not moved since.
+        company = {n for n, pid in before.where.items() if pid == was}
+        previous = [i for i, n in enumerate(path[:-1]) if n.kind == "assistant"]
+        if previous:
+            earlier = self._world_on(path[: previous[-1]])
+            if earlier.where.get(held) == was:
+                company |= {n for n, pid in earlier.where.items() if pid == was}
+        # The places the read moved them to this passage first, then where
+        # it already had them.
+        moves = [(n, after.where[n]) for n in delta.where if n in after.where] + [
             (n, pid) for n, pid in after.where.items() if n not in delta.where
         ]
-        for name, place_id in company:
+        for name, place_id in moves:
             place = after.places.get(place_id)
             if (
                 name == held
                 or name not in together
+                or name not in company
                 or place is None
                 or place.kind == "region"
                 or place_id == was
                 or _label_words(place.name) not in moved_on
             ):
                 continue
+            node.meta.world = delta
             delta.where[held] = place_id
             if name in delta.outside:
                 delta.outside[held] = delta.outside[name]
@@ -648,60 +695,76 @@ class WorldRuntime:
         return None
 
     def leave_with_scene_read(self) -> list[str]:
-        """After all of a passage's reads: whoever the scene read saw leave
-        the scene, whom the map read left standing with the author's
-        character inside a building, is put outside it (at its door, as
-        `settle` stands anyone the map has outside). Live (Oct 18 2026) the
-        inspector took his leave of the workshop, the scene read dropped him,
-        the map read said nothing, and for four passages the storyteller was
-        told he stood 10 m away, within earshot. Who was moved."""
+        """After all of a passage's reads: whoever the scene read says went
+        out (a departure with how they went: "took his leave", "out into the
+        Row"), whom the map read left standing in the building with the
+        author's character, is put outside it, at its door (as `settle`
+        stands anyone the map has outside). Live (Oct 18 2026) the inspector
+        took his leave of the workshop, the scene read dropped him, the map
+        read said nothing, and for four passages the storyteller was told he
+        stood 10 m away, within earshot.
+
+        The map wins over the scene card, so only a departure the read
+        states counts: dropped from the roster without a word of how (a
+        card reseeded, someone forgotten) moves nobody, nor going further in
+        (upstairs, to another of its rooms). Made as the author's
+        corrections are (`world_fixes` on the passage), so the map's Undo
+        takes it back; the author's character stays where they stand. Who
+        was moved."""
         if not self.map_first or self.in_private or self.story.chat:
             return []
         result = self.last_result
         node = result.node if result is not None else None
-        if node is None:
+        scene = node.meta.scene if node is not None else None
+        if node is None or scene is None or not node.meta.scene_read:
+            return []
+        if scene.set_at_node_id != node.id or self.correction_problem() is not None:
+            return []
+        path = self.path()
+        if not path or path[-1].id != node.id:
             return []
         held = self.map_held_name(node.meta.controlled_character_id)
-        if held is None:
+        if held is None or held not in set(self._present_on_map(scene)):
             return []
-        path = self._path_to(node.id)
-        scene_before = scene_at(path[:-1], self.story.setup.starting_scene)
-        scene_after = scene_at(path, self.story.setup.starting_scene)
-        gone = set(self._present_on_map(scene_before)) - set(self._present_on_map(scene_after))
-        gone.discard(held)
-        if not gone or held not in set(self._present_on_map(scene_after)):
+        after = self.world()
+        mine = after.places.get(after.where.get(held) or "")
+        if mine is None:
             return []
-        after = self._world_on(path)
-        mine = after.where.get(held)
-        if mine is None or after.places.get(mine) is None:
-            return []
-        if after.places[mine].kind not in ("building", "room", "vehicle"):
+        # The building they are in: out of a room of it is out of it.
+        indoors = []
+        for place in _chain(after, mine.id):
+            if place.kind not in ("building", "room", "vehicle"):
+                break
+            indoors.append(place)
+        if not indoors:
             return []  # out of doors, where they went is anyone's guess
+        building = indoors[-1]
+        within = within_ids(after, building.id) | {building.id}
+        rooms = [after.places[pid] for pid in within if pid in after.places]
         delta = node.meta.world
         moved: list[str] = []
-        for name in sorted(gone):
+        for change in scene.changes:
+            how = change.detail or ""
+            if change.kind != "left" or not _WENT_OUT.search(how) or _WENT_IN.search(how):
+                continue
+            if any(_names_place(how, room) for room in rooms if room.id != building.id):
+                continue  # to another of its rooms
+            name = self._map_person(change.name, after) or change.name
+            if name == held or name in moved:
+                continue
             if delta is not None and (name in delta.where or name in delta.left):
                 continue  # the map read placed them itself
-            theirs = after.where.get(name)
-            if theirs is None or name in after.outside:
-                continue
-            if theirs != mine and mine not in {p.id for p in _chain(after, theirs)}:
-                continue  # not with the author's character
-            if delta is None:
-                delta = node.meta.world = WorldDelta()
-            delta.where[name] = mine
-            delta.outside[name] = True
+            if after.where.get(name) not in within or name in after.outside:
+                continue  # not in there with the author's character
             moved.append(name)
         if not moved:
             return []
-        if node.meta.area is not None:
-            node.meta.area = self.settle(
-                node.meta.area.model_copy(deep=True),
-                self._world_on(path),
-                self.map_art_copy(),
-                walked=False,
-            )
-        self.save()
+        self._begin_correction(", ".join(moved) + " put outside")
+        fix = self._fix()
+        for name in moved:
+            fix.where[name] = building.id
+            fix.outside[name] = True
+        self._done(self.settle(self._state(), self.world(), self.map_art_copy(), walked=True))
         return moved
 
     def _card_words(self, name: str) -> str:

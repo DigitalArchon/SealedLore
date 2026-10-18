@@ -41,12 +41,11 @@ from collections.abc import Sequence
 from sealedlore.engine.chronicle_read import COUNT_PATTERN, count_of
 from sealedlore.models.world import WorldLink, WorldMap, WorldPlace
 
-# How wide a place of each kind is drawn and kept apart from its neighbours,
-# in metres. A plausible footprint, not a measurement.
 # A new place this many times wider than the place the story is at, with no
 # way said, lies round it rather than beside it.
 WIDE_AROUND = 4.0
-
+# How wide a place of each kind is drawn and kept apart from its neighbours,
+# in metres. A plausible footprint, not a measurement.
 KIND_SIZE: dict[str | None, float] = {
     "region": 40_000.0,
     "settlement": 1_500.0,

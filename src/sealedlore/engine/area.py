@@ -110,7 +110,7 @@ class Placement:
     w: int
     h: int
     verbs: tuple[str, ...]
-    kind: str  # "furniture" or "object"
+    kind: str  # "furniture", "object" or "vehicle" (moored, drawn to its footprint)
     room: int | None = None
     # The author's character destroyed it (a record on the turn's snapshot,
     # `apply_things`): still here, drawn broken, no longer to be destroyed.
@@ -2096,18 +2096,25 @@ class LaidThing:
     broken: bool = False
     w: int = 1
     h: int = 1
-    labelled: bool = False  # a moored vehicle: its name marks the spot, for its riders
+    # A moored vehicle (`session_area._moored`): drawn to its footprint, its
+    # name on the tile beside it (`label_at`) so whoever is aboard stands
+    # there, and, with an inside of its own (`boards`), a way aboard there.
+    vehicle: bool = False
+    label_at: tuple[int, int] | None = None
+    boards: bool = False
 
 
 def lay_things(area: Area, laid: Sequence[LaidThing]) -> Area:
     """The area with the map's things (what a read or a plot file put at a
     place) standing on it, each over its own tile, a thing to see and use
     like any other (the author, Oct 17 2026: things the story adds must show
-    on the play view)."""
+    on the play view); a moored vehicle with its name beside it, and its
+    gangway when it can be boarded."""
     if not laid:
         return area
     placements = list(area.placements)
     labels = dict(area.labels)
+    entrances = list(area.entrances)
     for t in laid:
         room = area.room_at(t.x, t.y)
         placed = Placement(
@@ -2118,13 +2125,73 @@ def lay_things(area: Area, laid: Sequence[LaidThing]) -> Area:
             w=t.w,
             h=t.h,
             verbs=item_verbs(t.name),
-            kind="object",
+            kind="vehicle" if t.vehicle else "object",
             room=room.index if room else None,
         )
         placements.append(_broken(placed) if t.broken else placed)
-        if t.labelled:
-            labels[t.name[:60]] = (t.x + t.w // 2, t.y + t.h)
-    return replace(area, placements=placements, labels=labels)
+        if not t.vehicle:
+            continue
+        lx, ly = t.label_at if t.label_at is not None else (t.x + t.w // 2, t.y + t.h)
+        lx = min(max(lx, 0), max(area.width - 1, 0))
+        ly = min(max(ly, 0), max(area.height - 1, 0))
+        labels[t.name[:60]] = (lx, ly)
+        if t.boards and t.label_at is not None and area.entrance_at(lx, ly) is None:
+            entrances.append(Entrance(lx, ly, t.id, _side_of((t.x, t.y, t.w, t.h), lx, ly)))
+    return replace(area, placements=placements, labels=labels, entrances=entrances)
+
+
+def _side_of(box: tuple[int, int, int, int], x: int, y: int) -> str:
+    """Which side of a footprint (x, y, w, h) a tile beside it is on."""
+    bx, by, w, h = box
+    if y < by:
+        return "north"
+    if y >= by + h:
+        return "south"
+    return "west" if x < bx else "east"
+
+
+def berth(
+    area: Area,
+    near: tuple[int, int],
+    w: int,
+    h: int,
+    taken: Collection[tuple[int, int]] = (),
+    reach: int = 30,
+) -> tuple[int, int] | None:
+    """Where a boat of w by h tiles lies afloat nearest `near`: on water
+    (`~`) alone, with ground to step onto beside it; None with no such
+    water within `reach`."""
+    blocked = set(taken) | area.blocked()
+    best: tuple[float, int, int] | None = None
+    for y in range(max(0, near[1] - reach), min(area.height - h, near[1] + reach) + 1):
+        for x in range(max(0, near[0] - reach), min(area.width - w, near[0] + reach) + 1):
+            d = math.hypot(x + w / 2 - near[0], y + h / 2 - near[1])
+            if best is not None and d >= best[0]:
+                continue
+            fp = [(x + dx, y + dy) for dy in range(h) for dx in range(w)]
+            if any(area.at(fx, fy) != "~" or (fx, fy) in blocked for fx, fy in fp):
+                continue
+            if beside_box(area, (x, y, w, h), near, blocked) is None:
+                continue
+            best = (d, x, y)
+    return (best[1], best[2]) if best is not None else None
+
+
+def beside_box(
+    area: Area,
+    box: tuple[int, int, int, int],
+    near: tuple[int, int],
+    taken: Collection[tuple[int, int]] = (),
+) -> tuple[int, int] | None:
+    """The tile to stand on beside a footprint (x, y, w, h) nearest `near`:
+    walkable, free and on the grid; None when there is none."""
+    x, y, w, h = box
+    ring = [(x + dx, y - 1) for dx in range(w)] + [(x + dx, y + h) for dx in range(w)]
+    ring += [(x - 1, y + dy) for dy in range(h)] + [(x + w, y + dy) for dy in range(h)]
+    free = [t for t in ring if area.walkable(t[0], t[1], taken)]
+    if not free:
+        return None
+    return min(free, key=lambda t: (math.hypot(t[0] - near[0], t[1] - near[1]), t[1], t[0]))
 
 
 def carried_by(records: Mapping[str, ThingRecord], who: str) -> list[str]:
@@ -2449,6 +2516,9 @@ def front_of(area: Area, place_id: str, side: str | None = None) -> tuple[int, i
     doors = [e for e in area.entrances if e.place_id == place_id]
     if not doors:
         return None
+    if place_id not in area.buildings:
+        # A moored vehicle's gangway (`lay_things`): on the shore already.
+        return doors[0].x, doors[0].y
     x0, y0, x1, y1 = area.buildings[place_id]
     # No door on that side: the one nearest that wall (the inside's way out
     # and the outside's door are drawn by different plans).

@@ -2944,6 +2944,11 @@ class MainWindow(
             # speakers the composer offers follow who is present.
             self._refresh_scene_panel()
             self._refresh_composer()
+            # What the map's Undo puts back now: a correction made on an
+            # earlier message no longer, one the reads made on this one
+            # (`leave_with_scene_read`).
+            self.area_view.set_undo(self.session.correction_undo)
+            self.world_view.set_undo(self.session.correction_undo)
         if self._asking:
             if self.session is not None and len(self.session.bundle.asides) > self._asides_before:
                 self.status_strip.add_usage(self.session.bundle.asides[-1].usage)

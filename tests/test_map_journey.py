@@ -734,3 +734,105 @@ def test_a_place_linked_with_no_way_said_goes_the_side_its_name_gives():
     bank = WorldPlace(id="s", name="the south bank of the Corren", kind="area", size=120.0)
     place_new(world, [bank], [WorldLink(a="b", b="s", direction="down")], "b", None)
     assert bank.y < bridge.y - 150 and abs(bank.x - bridge.x) < 100
+
+
+def _going_to_the_gate(tmp_path, story, cast, scene_first, read_second):
+    first = "They saddled up and rode north together."
+    second = "Hellsville's north gate stood open before them."
+    read = {
+        "places": [
+            {"name": "the north gate", "kind": "site", "inside": "Hellsville", "quote": first}
+        ],
+        "where": [{"who": "Maela", "place": "the north gate", "quote": first}],
+    }
+    scene_second = {"location": "Just inside Hellsville's north gate", "arrived": [], "left": []}
+    story.scene.present_character_ids = ["char-serrik", "char-maela"]
+    story.scene.location = "The house"
+    replies = [first, json.dumps(scene_first), json.dumps(read)]
+    replies += [second, json.dumps(scene_second), json.dumps(read_second)]
+    session = make_session(tmp_path, story, cast, replies)
+    session.config.scene_reads = "every_turn"
+    session.story.world_base.where.update({"Serrik Vaun": "house", "Maela Orr": "house"})
+    return session
+
+
+def test_the_company_is_followed_once_the_scene_names_where_they_went(tmp_path, story, cast):
+    """The playtest (Oct 18 2026): a Narration took Adelaide and Silas up the
+    rail; the read moved Silas and forgot Adelaide, and the scene's location
+    named the platform only on the next passage."""
+    unchanged = {"arrived": [], "left": []}
+    session = _going_to_the_gate(tmp_path, story, cast, unchanged, {})
+    list(session.send(turn("We ride for Hellsville.")))
+    assert session.world().where.get("Serrik Vaun") == "house"  # the scene hasn't moved yet
+    sent = list(session.send(turn("I look about.")))
+    after = session.world()
+    gate = next(p.id for p in after.places.values() if p.name == "the north gate")
+    assert after.where.get("Serrik Vaun") == gate
+    assert "Map: with the others, to the north gate." in [
+        n.text for n in sent if isinstance(n, SessionNotice)
+    ]
+
+
+def test_the_company_is_not_followed_when_the_scene_s_location_stays(tmp_path, story, cast):
+    """A location that already named where a companion stands, unchanged this
+    passage, moves nobody (Silas out in the Row, the location still saying
+    the Row, Adelaide at her bench in the workshop)."""
+    passage = "Serrik turned the ledger's pages. Maela kept watch at the north gate."
+    scene = {"arrived": [], "left": []}
+    read = {"where": [{"who": "Maela", "place": "the north gate", "quote": "kept watch"}]}
+    story.scene.present_character_ids = ["char-serrik", "char-maela"]
+    story.scene.location = "Just inside Hellsville's north gate"
+    session = make_session(tmp_path, story, cast, [passage, json.dumps(scene), json.dumps(read)])
+    session.config.scene_reads = "every_turn"
+    gate = WorldPlace(id="gate", name="the north gate", kind="site", inside="town", x=0.0, y=8700.0)
+    session.story.world_base.places.append(gate)
+    session.story.world_base.where.update({"Serrik Vaun": "house", "Maela Orr": "gate"})
+    list(session.send(turn("I read the ledger.")))
+    assert session.world().where.get("Serrik Vaun") == "house"
+
+
+def _leaving(tmp_path, story, cast, left):
+    passage = "Maela set down her cup. Serrik watched the stove."
+    scene = {"arrived": [], "left": left}
+    story.scene.present_character_ids = ["char-serrik", "char-maela"]
+    session = make_session(tmp_path, story, cast, [passage, json.dumps(scene), "{}"])
+    session.config.scene_reads = "every_turn"
+    session.story.world_base.where.update({"Serrik Vaun": "house", "Maela Orr": "house"})
+    before = session.area_state().spots["Serrik Vaun"]
+    sent = list(session.send(turn("I watch the stove.")))
+    return session, before, [n.text for n in sent if isinstance(n, SessionNotice)]
+
+
+def test_someone_the_scene_read_saw_go_out_is_put_outside_and_undo_takes_it_back(
+    tmp_path, story, cast
+):
+    """The playtest (Oct 18 2026): the inspector took his leave of the
+    workshop, the map read said nothing, and for four passages he stood
+    10 m away, within earshot."""
+    left = [{"name": "Maela Orr", "how": "took her leave and went out into the yard"}]
+    session, before, notices = _leaving(tmp_path, story, cast, left)
+    world = session.world()
+    assert world.where["Maela Orr"] == "house" and "Maela Orr" in world.outside
+    spots = session.area_state().spots
+    assert spots["Maela Orr"].area != "house"  # on the ground round it, at its door
+    me = spots["Serrik Vaun"]
+    assert (me.area, me.x, me.y) == (before.area, before.x, before.y)  # stays where he stood
+    assert any("Maela Orr put outside" in n for n in notices)
+    assert session.correction_undo == "Maela Orr put outside"
+    assert session.undo_correction()
+    assert "Maela Orr" not in session.world().outside
+    assert session.area_state().spots["Maela Orr"].area == "house"
+
+
+@pytest.mark.parametrize(
+    "left",
+    [
+        ["Maela Orr"],  # dropped, with no word of how
+        [{"name": "Maela Orr", "how": "went upstairs to bed"}],
+    ],
+)
+def test_nobody_is_put_outside_without_the_read_saying_they_went_out(tmp_path, story, cast, left):
+    session, _before, notices = _leaving(tmp_path, story, cast, left)
+    assert "Maela Orr" not in session.world().outside
+    assert not any("put outside" in n for n in notices)
+    assert session.correction_undo is None

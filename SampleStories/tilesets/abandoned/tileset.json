@@ -73,5 +73,6 @@
   "roof-shingle": "a wooden shingle roof, grey and weathered, under patchy snow",
   "world": "an abandoned small town and its derelict farms after the end of the world, in a cold winter",
   "style": "bleak and quiet, cold muted greys and rust browns against grimy snow, thin winter light"
- }
+ },
+ "items_from": "doomsville"
 }

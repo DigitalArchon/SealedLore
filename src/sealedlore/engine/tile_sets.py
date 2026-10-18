@@ -97,6 +97,10 @@ class TileSetInfo(BaseModel):
     grounds: list[str] = Field(default_factory=list)
     # The words each asset was drawn from, by role (for redrawing one).
     words: dict[str, str] = Field(default_factory=dict)
+    # Another shipped set, by name, whose things this set has too, after its
+    # own (`storage/tile_sets.py`): the abandoned town keeps Doomsville's
+    # 194 sprites without a second copy of each.
+    items_from: str = ""
 
 
 def slug(name: str) -> str:

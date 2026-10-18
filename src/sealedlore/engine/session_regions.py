@@ -276,7 +276,7 @@ class RegionRuntime:
             setting=self._region_setting(),
             story=self._region_story(),
             where=where_words(world, rect, self.held_point(world=world)),
-            places=place_lines(world, rect, designed=self.designed_place_ids()),
+            places=place_lines(world, rect, designed=designed),
             edges=edge_lines(art, origin, *cell),
             ground=ground,
             taken=taken_lines(

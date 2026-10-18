@@ -1112,6 +1112,13 @@ def _placement_sprite(source: TileSource, f: Placement, px: int, *, indoor: bool
     sprite = source.item(f.name)
     if sprite is None:
         return None
+    if f.kind == "vehicle":
+        # Moored: as long as its footprint, never taller than its beam allows.
+        sprite = sprite.scaledToWidth(max(int(f.w * px), 1), Qt.SmoothTransformation)
+        most = int(px * (f.h + 2.0))
+        if sprite.height() > most:
+            sprite = sprite.scaledToHeight(most, Qt.SmoothTransformation)
+        return sprite
     if f.kind == "furniture" or indoor:
         height = int(px * (f.h + 1.0)) if f.kind == "furniture" else int(px * 2.2)
         sprite = _scaled(sprite, height)

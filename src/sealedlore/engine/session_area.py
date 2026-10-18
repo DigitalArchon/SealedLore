@@ -40,6 +40,8 @@ from sealedlore.engine.area import (
     area_of,
     area_rect,
     bare,
+    berth,
+    beside_box,
     build_area,
     build_level,
     build_window,
@@ -125,6 +127,7 @@ from sealedlore.engine.world import (
 )
 from sealedlore.engine.world_art import (
     ground_of,
+    has_inside,
     is_window,
     outside_part,
     parse_window,
@@ -156,7 +159,14 @@ from sealedlore.models.area import (
 from sealedlore.models.config import on_nanogpt
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID, Node, Usage
 from sealedlore.models.scene import SceneState
-from sealedlore.models.world import MapPicture, OwnTileSet, WorldArt, WorldDelta, WorldMap
+from sealedlore.models.world import (
+    MapPicture,
+    OwnTileSet,
+    WorldArt,
+    WorldDelta,
+    WorldMap,
+    WorldPlace,
+)
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError
 from sealedlore.providers.images import ImageClient, build_image_payload, data_url, loggable_payload
 from sealedlore.providers.wire import without_pictures
@@ -324,6 +334,16 @@ LAID_KEPT = 32
 THING_TILE_MAX_M = 5.0
 # The play view's things the map read is told of, the nearest first.
 THINGS_TOLD = 30
+# A moored vehicle's length on the play view at most, in tiles (drawn to its
+# footprint: a ship at a quay's walking scale is still a big boat, its
+# sprite not stretched past what it was drawn at), and its beam a third of
+# that. It lies afloat when its words say it floats.
+MOORED_MAX_TILES = 16
+AFLOAT = re.compile(
+    r"\b(?:boat|ship|skiff|barge|canoe|raft|ferry|galleon|sloop|schooner|brig|yacht|"
+    r"dinghy|punt|junk|dhow|vessel|steamer|launch|lighter|keelboat|cog|longship|trawler)s?\b",
+    re.IGNORECASE,
+)
 
 
 def _doors_of(area: Area) -> set[tuple[int, int]]:
@@ -570,30 +590,31 @@ class AreaRuntime:
         things the story adds must show on the play view; they were on the
         map's list only, and never drawn). Kept while the same."""
         found = []
-        if area.tile_m > THING_TILE_MAX_M:
-            return found
         for t in sorted(world.things.values(), key=lambda t: t.id):
+            if area.tile_m > THING_TILE_MAX_M:
+                break  # a vehicle is drawn to its size; a thing would tower
             if t.carried_by or not t.at or GONE.search(t.state.lower()):
                 continue
             record = records.get(t.id)
             if record is not None and (record.state in ("taken", "gone") or record.spot):
                 continue  # where its record says (`apply_things`)
             found.append(t)
-        if not found:
+        # The vehicles docked here, laid first, whatever else there is.
+        docked = [] if area.indoor else self._docked(area, world, art)
+        if not found and not docked:
             return []
         cache_key = (
             area.id,
             id(area),
             tuple((t.id, t.name, t.at, t.state) for t in found),
+            tuple((v.id, v.name, v.inside, v.size, has_inside(art, v)) for v in docked),
         )
         cache = self.__dict__.setdefault("_laid_cache", {})
         kept = cache.get(cache_key)
         if kept is not None:
             return kept
-        out: list[LaidThing] = []
         taken: set[tuple[int, int]] = set()
-        if not area.indoor:
-            out += self._moored(area, world, art, taken)
+        out: list[LaidThing] = self._moored(area, world, art, docked, taken)
         for t in found:
             if area_of(world, art, t.at) != area.id or _twin(area, t.name, world) is not None:
                 continue  # elsewhere, or drawn here already (a plan's object of its name)
@@ -610,29 +631,60 @@ class AreaRuntime:
         cache[cache_key] = out
         return out
 
+    def _docked(self, area: Area, world: WorldMap, art: WorldArt) -> list[WorldPlace]:
+        """The vehicles the map has docked at a place in this area."""
+        return [
+            v
+            for v in sorted(world.places.values(), key=lambda p: p.id)
+            if v.kind == "vehicle"
+            and v.inside in world.places
+            and area_of(world, art, v.inside) == area.id
+        ]
+
     def _moored(
-        self, area: Area, world: WorldMap, art: WorldArt, taken: set[tuple[int, int]]
+        self,
+        area: Area,
+        world: WorldMap,
+        art: WorldArt,
+        docked: list[WorldPlace],
+        taken: set[tuple[int, int]],
     ) -> list[LaidThing]:
-        """The vehicles the map has docked in this area (a barge made fast at
-        the quay, a cart in the yard), laid where they dock, as wide as they
-        are, their names marking the spot so whoever is aboard stands by
-        them (the author, Oct 18 2026: a moored vehicle is drawn where it
-        docks; the bargeman and his barge were invisible on the quay)."""
+        """The vehicles docked in this area (a barge made fast at the quay, a
+        cart in the yard), laid where they dock: a boat afloat by the shore
+        (`berth`), else on the ground; as long as they are, up to
+        `MOORED_MAX_TILES`, a third as wide; their names on the tile beside
+        them nearest where they dock, so whoever is aboard stands there, and
+        one with an inside of its own boarded there (the author, Oct 18 2026:
+        a moored vehicle is drawn where it docks; the bargeman and his barge
+        were invisible on the quay)."""
         out: list[LaidThing] = []
-        for v in sorted(world.places.values(), key=lambda p: p.id):
-            if v.kind != "vehicle" or not v.inside or v.inside not in world.places:
-                continue
-            if area_of(world, art, v.inside) != area.id:
-                continue
+        for v in docked:
             near = anchor_of(area, world, v.inside) or self._spot_in(world, area, v.inside)
             if near is None:
                 near = self._way_in(area)
-            tiles = max(1, round(size_of(v) / max(area.tile_m, 0.1)))
-            w = min(max(tiles, 1), 6)
-            h = min(max(tiles // 2, 1), 3)
-            x, y = thing_tile(area, near, taken, w=w, h=h)
+            tiles = round(size_of(v) / max(area.tile_m, 0.1))
+            w = max(1, min(tiles, MOORED_MAX_TILES, area.width // 2))
+            h = max(1, min(round(w / 3), area.height // 3))
+            afloat = AFLOAT.search(f"{v.name} {v.what}") is not None
+            spot = berth(area, near, w, h, taken) if afloat else None
+            if spot is None:
+                spot = thing_tile(area, near, taken, w=w, h=h)
+            x, y = spot
             taken |= {(x + dx, y + dy) for dx in range(w) for dy in range(h)}
-            out.append(LaidThing(id=v.id, name=v.name, x=x, y=y, w=w, h=h, labelled=True))
+            beside = beside_box(area, (x, y, w, h), near, taken | area.blocked())
+            out.append(
+                LaidThing(
+                    id=v.id,
+                    name=v.name,
+                    x=x,
+                    y=y,
+                    w=w,
+                    h=h,
+                    vehicle=True,
+                    label_at=beside,
+                    boards=has_inside(art, v),
+                )
+            )
         return out
 
     def _things_now(self) -> Mapping[str, ThingRecord]:
@@ -1382,7 +1434,7 @@ class AreaRuntime:
             spot = inside_door(there, entrance.side if entrance else None) or self._way_in(there)
         else:
             side = exit_side(here, me.x, me.y)
-            spot = front_of(there, here.place_id, side)
+            spot = front_of(there, here.place_id, side)  # a moored vehicle's gangway too
             if spot is None:
                 # The outside plan has no box for this building (a plan kept
                 # as rows alone): outside it where the map has it, not at
@@ -1684,7 +1736,7 @@ class AreaRuntime:
             # "Three weeks pass": the author's own statement moves the
             # map's clock, as `_author_skip` moves the plot's.
             now = state.seconds // 60
-            skip = stated_skip(user_node.content, now)
+            skip = stated_skip(user_node.content, now, next_time=True)
             if skip is not None and skip[0] > now:
                 state.seconds += (skip[0] - now) * 60
         # The spots the turn marks, resolved on the map it was written on.

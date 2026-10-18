@@ -281,16 +281,18 @@ def edge_lines(art: WorldArt, origin: tuple[float, float], i: int, j: int) -> st
 
 def taken_lines(art: WorldArt, most: int = 60, story: Sequence[str] = ()) -> str:
     """What the designer has made elsewhere already: each region's name and
-    the names of its places and things, and the story's own place names
-    (`story`), for the next to be its own (in one
+    the names of its places and things, for the next to be its own (in one
     wave, two regions were both "the Hollis back forty", and a child's boot
-    lay in four)."""
-    names: list[str] = list(story)
+    lay in four); then the story's own place names (`story`), as many
+    again at most, so a story with many places never crowds the designer's
+    own out (the story's places on and near the cell are given beside)."""
+    names: list[str] = []
     for key in sorted(art.regions):
         region = art.regions[key]
         names += [p.name for p in region.places]
         names += [t.name for t in region.things]
     names = list(dict.fromkeys(names))[:most]
+    names += [n for n in dict.fromkeys(story) if n not in names][:most]
     return "; ".join(names) or "nothing yet"
 
 

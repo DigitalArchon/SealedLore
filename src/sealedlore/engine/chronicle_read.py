@@ -246,6 +246,16 @@ _NEXT_TIME = re.compile(
     r"\b(?:the\s+)?(?:next|following)\s+(dawn|morning|day|noon|afternoon|evening|dusk|night)\b",
     re.IGNORECASE,
 )
+# Told as what had happened before ("she had left the next morning, years
+# ago"), not what happens now: "had" with a past participle, not "had
+# breakfast" or "had to"; "ago"; "used to".
+_BACKSTORY = re.compile(
+    r"\b(?:had\s+(?!(?:a|an|the|some|no|nothing|to|his|her|their|its|my|our|your|"
+    r"breakfast|lunch|dinner|supper|tea|coffee|words)\b)\w+|ago|used\s+to)\b",
+    re.IGNORECASE,
+)
+# Before this hour, the night isn't over: "the next morning" is this day's.
+_NIGHT_ENDS = 5 * 60
 _FUTURE = re.compile(
     r"\b(?:will|would|must|should|shall|plans?|planned|expect(?:s|ed)?|scheduled|due|"
     r"until|before|deadline|hopes?|intends?|aims?|going to)\b",
@@ -253,11 +263,13 @@ _FUTURE = re.compile(
 )
 
 
-def stated_skip(text: str, now: int) -> tuple[int, str] | None:
+def stated_skip(text: str, now: int, *, next_time: bool = False) -> tuple[int, str] | None:
     """Where a Director or Narration turn moves the clock to, before anything
     is written: the latest day it names as now, ahead of now ("By day 81"),
     else the first stretch it says goes by ("Three weeks pass."), and the
-    sentence.
+    sentence. `next_time`: also "the next morning", "the following evening"
+    (the map's own clock in a story with no plot; the plot's clock keeps
+    what was measured for it, and its read after the passage).
 
     Moved before the director runs, a skip's events are known to the passage
     that tells the skip, rather than fitted in a turn later against prose
@@ -286,12 +298,13 @@ def stated_skip(text: str, now: int) -> tuple[int, str] | None:
     # "The next morning", "the following evening": the next day, at that
     # time of day (the three playtests, Oct 18 2026: the map's own clock
     # stood at 16:35 through two nights told this way).
-    for match in _NEXT_TIME.finditer(text):
+    for match in _NEXT_TIME.finditer(text) if next_time else ():
         sentence = _sentence_around(text, match)
-        if _FUTURE.search(sentence):
+        if _FUTURE.search(sentence) or _BACKSTORY.search(sentence):
             continue
         hour = _TIME_OF_DAY[match.group(1).lower()]
-        return (today) * MINUTES_PER_DAY + hour, sentence
+        day = today - 1 if now % MINUTES_PER_DAY < _NIGHT_ENDS else today
+        return day * MINUTES_PER_DAY + hour, sentence
     return None
 
 

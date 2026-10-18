@@ -1265,7 +1265,10 @@ story or a walk takes them in.
   step); the tile under the pointer shows gold where you can stand and red
   where you can't, and a click while you are still walking goes on from
   where you are. Walking costs no model call and moves the clock a little;
-  walk into a door to go through it, into a building or back out. Drag the
+  walk into a door to go through it, into a building or back out. A boat or
+  a cart the story docks somewhere lies there at its own size (a boat on
+  the water by the shore), its name on the ground beside it; one with an
+  inside of its own is boarded there, and left there. Drag the
   ground, or hold the middle mouse button and move, to look around (the
   middle button pans the Region and World maps too); the wheel zooms; **−** and **+** zoom, up to twice the art's
   own pixels. The hour tints the area (blue at night, amber at dawn and

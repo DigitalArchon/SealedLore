@@ -260,7 +260,11 @@ class PlotRuntime:
             yield SessionNotice(f"Map: with the others, to {followed}.")
         gone = self.leave_with_scene_read()
         if gone:
-            yield SessionNotice("Map: " + ", ".join(gone) + " outside.")
+            yield SessionNotice(
+                "Map: "
+                + ", ".join(gone)
+                + " put outside, as the scene read saw them go (Undo is in the map's menu)."
+            )
         passage = self.last_result.node if self.last_result is not None else None
         for note in self.reasoning_notices(passage):
             yield SessionNotice(note)

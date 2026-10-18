@@ -57,7 +57,9 @@ DESIGN = {
 }  # fmt: skip
 
 
-def designed(world: WorldMap | None = None, art: WorldArt | None = None, cell=(0, 0)):
+def designed(
+    world: WorldMap | None = None, art: WorldArt | None = None, cell=(0, 0), holder_id=None
+):
     world = world or WorldMap()
     art = art or WorldArt()
     origin = origin_of(world, art)
@@ -66,7 +68,7 @@ def designed(world: WorldMap | None = None, art: WorldArt | None = None, cell=(0
         parse_region(json.dumps(DESIGN)),
         key=cell_key(*cell),
         rect=cell_rect(origin, *cell),
-        holder_id=None,
+        holder_id=holder_id,
         labels_from=LABEL_FROM,
     )
     art.regions[region.key] = region
@@ -161,10 +163,11 @@ def test_a_region_beside_one_tells_its_designer_what_crosses_the_edge():
     assert edge_lines(art, origin, 5, 5) == "- none designed yet"
 
 
-def _with_region(session):
+def _with_region(session, holder_id=None):
     world = session.world()
     art = session.world_art
-    _w, _a, region, _patch = designed(world, art, cell=cell_of(origin_of(world, art), 800.0, 800.0))
+    cell = cell_of(origin_of(world, art), 800.0, 800.0)
+    _w, _a, region, _patch = designed(world, art, cell=cell, holder_id=holder_id)
     session._area_cache = None
     session._designed_cache = None
     return region
@@ -338,7 +341,7 @@ def test_every_edge_of_a_region_is_reached_after_its_buildings_are_stamped():
     )
 
 
-def _region_north(session, name: str = "The North Woodlot"):
+def _region_north(session, name: str = "The North Woodlot", holder_id=None):
     """A second designed region, north of the first (`_with_region`)."""
     from sealedlore.engine.regions import next_label
 
@@ -350,7 +353,7 @@ def _region_north(session, name: str = "The North Woodlot"):
         parse_region(json.dumps(design)),
         key=cell_key(i, j - 1),
         rect=cell_rect(origin, i, j - 1),
-        holder_id=None,
+        holder_id=holder_id,
         labels_from=next_label(art),
     )
     art.regions[region.key] = region
@@ -360,16 +363,21 @@ def _region_north(session, name: str = "The North Woodlot"):
     return region
 
 
+@pytest.mark.parametrize("holder", [None, "erg"])
 def test_the_read_never_puts_someone_in_another_region_unless_the_passage_names_it(
-    tmp_path, story, cast
+    tmp_path, story, cast, holder
 ):
     """The live test (Oct 18 2026): John went out to check his fields, the
     read was shown every designed region and took "The fields were empty."
-    for the North Woodlot next door, and the map had him there."""
+    for the North Woodlot next door, and the map had him there. Also with
+    the regions inside the story's own region (the Great Erg here; the
+    Silverwood, a delta), which reaches every cell: counting it as a town
+    the person walks about in let the misread through again."""
     misread = {"where": [{"who": "Serrik", "place": "The North Woodlot", "quote": "were empty"}]}
     session = open_session(tmp_path, story, cast, ["The fields were empty.", json.dumps(misread)])
-    here = _with_region(session)
-    north = _region_north(session)
+    here = _with_region(session, holder_id=holder)
+    north = _region_north(session, holder_id=holder)
+    assert session.world().places[north.place_id].inside == holder
     list(session.send(turn("I go out to check the fields.")))
     asked = session.provider.requests[-1].messages[-1].text
     # Shown only the region they stand in, with what is in it.
@@ -381,13 +389,14 @@ def test_the_read_never_puts_someone_in_another_region_unless_the_passage_names_
     assert session.area(me.area).place_id == here.place_id
 
 
-def test_a_passage_that_names_the_next_region_takes_them_into_it(tmp_path, story, cast):
+@pytest.mark.parametrize("holder", [None, "erg"])
+def test_a_passage_that_names_the_next_region_takes_them_into_it(tmp_path, story, cast, holder):
     read = {"where": [{"who": "Serrik", "place": "The North Woodlot", "quote": "the woodlot"}]}
     session = open_session(
         tmp_path, story, cast, ["He walked north into the woodlot.", json.dumps(read)]
     )
-    _with_region(session)
-    north = _region_north(session)
+    _with_region(session, holder_id=holder)
+    north = _region_north(session, holder_id=holder)
     list(session.send(turn("I walk north to the woodlot.")))
     assert session.world().where["Serrik Vaun"] == north.place_id
     me = session.path()[-1].meta.area.spots["Serrik Vaun"]
