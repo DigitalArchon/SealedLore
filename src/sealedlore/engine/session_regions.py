@@ -95,11 +95,27 @@ class RegionRuntime:
         if point is None:
             return False
         origin = (art.region_origin[0], art.region_origin[1])
+        world = self.world()
         return any(
-            cell_key(*cell) not in art.regions
-            and art.failures.get(f"region:{cell_key(*cell)}", 0) < MAX_FAILURES
+            self._cell_wanted(world, art, origin, cell)
             for wave in waves(origin, point)
             for cell in wave
+        )
+
+    def _cell_wanted(self, world: WorldMap, art: WorldArt, origin, cell: tuple[int, int]) -> bool:
+        """Whether a cell of the grid is still to be designed: not designed,
+        not failed too often, and not lying wholly inside one of the story's
+        own settlements or sites (the town's plan is what is there; live,
+        Oct 18 2026, the designer made a second "Marrowgate" inside the town)."""
+        key = cell_key(*cell)
+        if key in art.regions or art.failures.get(f"region:{key}", 0) >= MAX_FAILURES:
+            return False
+        designed_ids = {r.place_id for r in art.regions.values()}
+        holder = holding_place(world, *cell_rect(origin, *cell))
+        return not (
+            holder is not None
+            and holder.id not in designed_ids
+            and holder.kind in ("settlement", "site")
         )
 
     def designed_place_ids(self) -> set[str]:
@@ -165,12 +181,7 @@ class RegionRuntime:
         self.mark_explored()
         origin = (art.region_origin[0], art.region_origin[1])
         wanted = [
-            [
-                cell
-                for cell in wave
-                if cell_key(*cell) not in art.regions
-                and art.failures.get(f"region:{cell_key(*cell)}", 0) < MAX_FAILURES
-            ]
+            [cell for cell in wave if self._cell_wanted(world, art, origin, cell)]
             for wave in waves(origin, point)
         ]
         wanted = [wave for wave in wanted if wave]
@@ -259,6 +270,7 @@ class RegionRuntime:
             cx, cy = west + side / 2, north - side / 2
             nearest = min(drawn, key=lambda p: (p.x - cx) ** 2 + (p.y - cy) ** 2)
             ground = self.texts.fill("map.terrain.nearby", ground=nearest.ground) + "."
+        designed = self.designed_place_ids()
         messages = region_messages(
             self.texts,
             setting=self._region_setting(),
@@ -267,7 +279,9 @@ class RegionRuntime:
             places=place_lines(world, rect, designed=self.designed_place_ids()),
             edges=edge_lines(art, origin, *cell),
             ground=ground,
-            taken=taken_lines(art),
+            taken=taken_lines(
+                art, story=[p.name for p in world.places.values() if p.id not in designed]
+            ),
         )
         return ChatRequest(
             model=model,

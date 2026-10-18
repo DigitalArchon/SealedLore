@@ -78,10 +78,18 @@ def find_place(world: WorldMap, name: str | None, pending: Sequence[WorldPlace] 
     wanted = key(name)
     if not wanted:
         return None
-    for place in [*world.places.values(), *pending]:
-        if wanted in {key(place.name), *(key(a) for a in place.aliases)}:
-            return place.id
-    return None
+    found = [
+        place
+        for place in [*world.places.values(), *pending]
+        if wanted in {key(place.name), *(key(a) for a in place.aliases)}
+    ]
+    if not found:
+        return None
+    # A region named for a place in it (the world designer's 400 m cell
+    # called "Marrowgate", inside the 1500 m town: live, Oct 18 2026) is
+    # not what "inside: Marrowgate" means: the town is. The new reeve's
+    # house went into the region, and Ines was stood on open country.
+    return next((p.id for p in found if p.kind != "region"), found[0].id)
 
 
 # A road's name, as compared with another's for the same road: the words
@@ -522,6 +530,14 @@ def _elsewhere(
         return False
     if meets(centre, size_of(place) / 2, region):
         return False
+    # A place in something that reaches the region they stand in (a house
+    # in a town three cells wide) is not elsewhere: the grid is for open
+    # country. Live (Oct 18 2026) Ines walked across Marrowgate to the
+    # reeve's hall and the read's move was refused as another region's.
+    for outer in _chain(world, place.inside)[:8]:
+        around = position_any(world, delta, outer.id)
+        if around is not None and meets(around, size_of(outer) / 2, region):
+            return False
     quote = _text(entry.get("quote"))
     span = locate_quote(source, quote) if quote else None
     around = _sentences_to(source, span[1]) if span is not None else quote
@@ -875,6 +891,21 @@ def resolve_reply(
         delta.links = [k for k in delta.links if {k.a, k.b} != {a, b}]
         delta.links.append(WorldLink(a=a, b=b, direction=direction, distance=distance))
     named_people = [n for n in world.where if not is_unknown(n)]
+    # A place someone standing within reach of it is put in this reply is
+    # within reach of whoever goes there with them: the company moves
+    # together (live, Oct 18 2026: a Narration took Adelaide and Silas up
+    # the rail to the Skyport; the read moved Silas and forgot Adelaide, and
+    # on the next passage her move into their carriage was refused as
+    # another region's, her own spot being three kilometres behind).
+    shared: set[str] = set()
+    if standing_in:
+        for entry in _entries(reply, "where"):
+            who = _text(entry.get("who"))
+            place = find_place(world, entry.get("place"), delta.places)
+            region = standing_in.get(who) if who else None
+            if place is not None and region is not None and quoted(entry) is not None:
+                if not _elsewhere(world, delta, place, region, source, entry):
+                    shared.add(place)
     for entry in _entries(reply, "where"):
         who = _text(entry.get("who"))
         # A name starts with a capital; a description ("the woman") doesn't.
@@ -911,7 +942,11 @@ def resolve_reply(
         )
         # Someone new has no region yet; the rest stand where they stand.
         region = (standing_in or {}).get(label or canonical or "")
-        if region is not None and _elsewhere(world, delta, place, region, source, entry):
+        if (
+            region is not None
+            and place not in shared
+            and _elsewhere(world, delta, place, region, source, entry)
+        ):
             refused.append(
                 f"where {who} @ {_text(entry.get('place'))}: in another region than they "
                 "stand in, and the passage doesn't name it"
@@ -1252,6 +1287,11 @@ def _left_outside(world: WorldMap, delta: WorldDelta, who: str, place: str, quot
         return _AT_THE_DOOR.search(quote) is not None
     before = world.where.get(who)
     if before is not None:
+        if place in {p.id for p in _chain(world, before)[1:]}:
+            # From a room of the building to the building: inside it all
+            # along (live, Oct 18 2026: Silas came through the back-room
+            # curtain into the workshop and was stood outside in the Row).
+            return False
         return before != place or who in world.outside
     return _AT_THE_DOOR.search(quote) is not None
 

@@ -326,6 +326,15 @@ THING_TILE_MAX_M = 5.0
 THINGS_TOLD = 30
 
 
+def _doors_of(area: Area) -> set[tuple[int, int]]:
+    """The tiles people must not be stood on: the area's exits, its
+    buildings' doors and the doorways between its rooms."""
+    doors = set(area.exits) | {(e.x, e.y) for e in area.entrances}
+    for d in area.doorways:
+        doors |= set(d.tiles())
+    return doors
+
+
 class AreaRuntime:
     _area_cache: dict | None = None
     _asset_thread: threading.Thread | None = None
@@ -693,7 +702,7 @@ class AreaRuntime:
                 density=self.story.defaults.map_density,
                 people=self.area_people(),
             )
-            if len(self._area_cache) > 24:
+            if len(self._area_cache) > 160:  # one per window of open country round a long walk
                 self._area_cache.clear()
             self._area_cache[cache_key] = found
         return found
@@ -741,7 +750,7 @@ class AreaRuntime:
         found = self._area_cache.get(cache_key)
         if found is None:
             found = build_window(world, art, area_id, people=self.area_people())
-            if len(self._area_cache) > 24:
+            if len(self._area_cache) > 160:  # one per window of open country round a long walk
                 self._area_cache.clear()
             self._area_cache[cache_key] = found
         return found
@@ -969,13 +978,21 @@ class AreaRuntime:
                 spots[name] = new
         # Nobody stands in fire or a wall a redrawn plan put under them
         # (kept there, every walk was refused; the second review).
+        # Nor in a doorway: a walk into a door ends short of whoever stands
+        # in it (live, Oct 18 2026: the reeve's clerk in the door, Ines
+        # could not leave the hall).
         for name, spot in list(spots.items()):
             area = self.area(spot.area, world, art, things=state.things)
-            if area is None or area.walkable(spot.x, spot.y):
+            if area is None:
                 continue
-            taken = {(s.x, s.y) for n, s in spots.items() if n != name and s.area == spot.area}
+            doors = _doors_of(area) if name != held else set()
+            if area.walkable(spot.x, spot.y) and (spot.x, spot.y) not in doors:
+                continue
+            taken = {
+                (s.x, s.y) for n, s in spots.items() if n != name and s.area == spot.area
+            } | doors
             x, y = stand_near(area, (spot.x, spot.y), taken, seed=name)
-            spots[name] = Spot(area=spot.area, x=x, y=y)
+            spots[name] = Spot(area=spot.area, x=x, y=y, for_place=spot.for_place)
         state.spots = spots
         return state
 
@@ -1116,7 +1133,7 @@ class AreaRuntime:
         area = self.area(area_id, world, art)
         if area is None:
             return None
-        taken = {(s.x, s.y) for s in spots.values() if s.area == area_id}
+        taken = {(s.x, s.y) for s in spots.values() if s.area == area_id} | _doors_of(area)
         if beside is not None:
             near = (beside.x, beside.y)
             x, y = stand_near(area, near, taken | {near}, seed=name, reach=BESIDE)

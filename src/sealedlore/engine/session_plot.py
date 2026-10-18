@@ -258,6 +258,9 @@ class PlotRuntime:
         followed = self.follow_company()
         if followed:
             yield SessionNotice(f"Map: with the others, to {followed}.")
+        gone = self.leave_with_scene_read()
+        if gone:
+            yield SessionNotice("Map: " + ", ".join(gone) + " outside.")
         passage = self.last_result.node if self.last_result is not None else None
         for note in self.reasoning_notices(passage):
             yield SessionNotice(note)

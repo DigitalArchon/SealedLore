@@ -4442,6 +4442,22 @@ _text(
     (("name", "who"), ("things", "what they carry, by name")),
 )
 
+# The layout model names the buildings it draws on a plan (a town's inn, its
+# church, the reeve's house), and the storyteller, told only the map's
+# places, invented others beside them: live (Oct 18 2026) the plan had "The
+# Tarred Eel Inn" and "Reeve's House" and the story sent Ines to "The Marre
+# Arms" and "Reeve's hall". Unmeasured.
+_text(
+    "map.drawn",
+    MAP,
+    "Map-first: buildings drawn on the plan but not yet in the story",
+    "One line after the local map, in a story played on the map, when the plan of the "
+    "place the author's character is in draws buildings the story has not named yet.",
+    "Also drawn on the map of {place}, not yet in the story: {names}. When the story "
+    "goes to such a place, it is one of these, by that name.",
+    (("place", "the place whose plan it is"), ("names", "the buildings' names, comma-separated")),
+)
+
 # What can't be taken stays where it is unless the author moves it (the
 # author's ruling, Oct 17 2026: only Direction, Narration or a turn under
 # Fiat move it; the map read refuses any other move, engine/world.py

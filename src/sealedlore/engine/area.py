@@ -27,7 +27,7 @@ import math
 import re
 import zlib
 from collections import deque
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -1999,18 +1999,22 @@ def thing_tile(
     doors |= {(e.x, e.y) for e in area.entrances} | set(area.exits)
     keep = {(x + dx, y + dy) for x, y in doors for dx in (-1, 0, 1) for dy in (-1, 0, 1)}
     start = (min(max(near[0], 0), max(width - 1, 0)), min(max(near[1], 0), max(height - 1, 0)))
+    # Only the tiles within reach are looked at, and the whole area's free
+    # ground is gathered only for the full flood (live, Oct 18 2026: every
+    # candidate tile of every designed thing on every 160-tile window went
+    # through the whole grid, and the GUI thread was held for minutes).
+    reach = 24
     order = sorted(
         (math.hypot(x - start[0], y - start[1]), x, y)
-        for y in range(height)
-        for x in range(width)
-        if math.hypot(x - start[0], y - start[1]) <= 24
+        for y in range(max(0, start[1] - reach), min(height, start[1] + reach + 1))
+        for x in range(max(0, start[0] - reach), min(width, start[0] + reach + 1))
+        if math.hypot(x - start[0], y - start[1]) <= reach
     )
-    free = {
-        (x, y)
-        for y in range(height)
-        for x in range(width)
-        if area.walkable(x, y) and (x, y) not in blocked
-    }
+
+    def is_free(t: tuple[int, int]) -> bool:
+        return 0 <= t[0] < width and 0 <= t[1] < height and area.walkable(t[0], t[1], blocked)
+
+    free: set[tuple[int, int]] | None = None
     ins = [d.middle for d in area.doorways] + list(area.exits)
     ins += [(e.x, e.y + 1) for e in area.entrances] + [start]
     before: set[tuple[int, int]] | None = None
@@ -2018,7 +2022,7 @@ def thing_tile(
     tried = 0
     for _d, x, y in order:
         fp = [(x + dx, y + dy) for dy in range(h) for dx in range(w)]
-        if not all(t in free for t in fp):
+        if not all(is_free(t) for t in fp):
             continue
         if fallback is None:
             fallback = (x, y)
@@ -2026,6 +2030,13 @@ def thing_tile(
                 return x, y
         if any(t in keep for t in fp):
             continue
+        # Cutting no ground off: the footprint's free neighbours still reach
+        # each other round it (a flood a few tiles wide; in open ground
+        # nearly always), else the whole area is flooded to be sure.
+        if _joined_around(is_free, fp):
+            return x, y
+        if free is None:
+            free = {(fx, fy) for fy in range(height) for fx in range(width) if is_free((fx, fy))}
         if before is None:
             before = _reach(free, ins)
         after = _reach(free - set(fp), ins)
@@ -2035,6 +2046,42 @@ def thing_tile(
         if tried >= 24:
             break
     return fallback if fallback is not None else start
+
+
+def _joined_around(
+    is_free: Callable[[tuple[int, int]], bool], fp: Sequence[tuple[int, int]], reach: int = 6
+) -> bool:
+    """Whether the free tiles next to a footprint all reach each other
+    through the free ground within `reach` tiles of it, the footprint taken
+    out: then laying something on it cuts nothing off."""
+    taken = set(fp)
+    around = {
+        n
+        for x, y in fp
+        for n in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1))
+        if n not in taken and is_free(n)
+    }
+    if len(around) <= 1:
+        return True
+    xs = [x for x, _y in fp]
+    ys = [y for _x, y in fp]
+    x0, x1, y0, y1 = min(xs) - reach, max(xs) + reach, min(ys) - reach, max(ys) + reach
+    start = next(iter(around))
+    seen = {start}
+    todo = [start]
+    while todo:
+        x, y = todo.pop()
+        for n in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if (
+                n not in taken
+                and n not in seen
+                and x0 <= n[0] <= x1
+                and y0 <= n[1] <= y1
+                and is_free(n)
+            ):
+                seen.add(n)
+                todo.append(n)
+    return around <= seen
 
 
 @dataclass(frozen=True)

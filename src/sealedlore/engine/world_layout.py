@@ -43,6 +43,10 @@ from sealedlore.models.world import WorldLink, WorldMap, WorldPlace
 
 # How wide a place of each kind is drawn and kept apart from its neighbours,
 # in metres. A plausible footprint, not a measurement.
+# A new place this many times wider than the place the story is at, with no
+# way said, lies round it rather than beside it.
+WIDE_AROUND = 4.0
+
 KIND_SIZE: dict[str | None, float] = {
     "region": 40_000.0,
     "settlement": 1_500.0,
@@ -503,6 +507,15 @@ def place_one(
         top = anchor
         while top.inside in places and places[top.inside].x is not None:
             top = places[top.inside]
+        if size >= WIDE_AROUND * size_of(top):
+            # Far wider than the place the story is at, with no way said: the
+            # country round it, not a neighbour. Live (Oct 18 2026) "the
+            # delta", a region of the default 40 km, was put 29 km from the
+            # town it surrounds, the sandbar in it 9 km out, and the world
+            # designer went to work out there.
+            cx, cy = near_point if near_point is not None else (top.x, top.y)
+            place.x, place.y = float(cx), float(cy)
+            return
         distance = (size + size_of(top)) / 2 * 1.5
         place.x, place.y = _spot(
             (top.x, top.y),

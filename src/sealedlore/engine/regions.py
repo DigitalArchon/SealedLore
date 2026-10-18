@@ -279,12 +279,13 @@ def edge_lines(art: WorldArt, origin: tuple[float, float], i: int, j: int) -> st
     return "\n".join(lines) or "- none designed yet"
 
 
-def taken_lines(art: WorldArt, most: int = 60) -> str:
+def taken_lines(art: WorldArt, most: int = 60, story: Sequence[str] = ()) -> str:
     """What the designer has made elsewhere already: each region's name and
-    the names of its places and things, for the next to be its own (in one
+    the names of its places and things, and the story's own place names
+    (`story`), for the next to be its own (in one
     wave, two regions were both "the Hollis back forty", and a child's boot
     lay in four)."""
-    names: list[str] = []
+    names: list[str] = list(story)
     for key in sorted(art.regions):
         region = art.regions[key]
         names += [p.name for p in region.places]
@@ -495,9 +496,17 @@ def build_region(
     def at(gx: float, gy: float) -> tuple[float, float]:
         return west + (gx + 0.5) * tile, north - (gy + 0.5) * tile
 
+    own = {_plain(n) for s in story for n in (s.name, *s.aliases)}
+    # A region named for the story's own place (the designer called the cell
+    # inside the 1500 m town "Marrowgate"; live, Oct 18 2026): the read's
+    # "inside: Marrowgate" then found the region first, and a new house in
+    # the town went into it, its visitor stood out on open country.
+    name = design.name
+    if _plain(name) in own:
+        name = f"the outskirts of {design.name}"
     region = WorldPlace(
         id=new_id(),
-        name=design.name,
+        name=name,
         kind="region",
         what=design.what,
         inside=holder_id,
@@ -506,7 +515,6 @@ def build_region(
         size=side,
     )
     places = [region]
-    own = {_plain(n) for s in story for n in (s.name, *s.aliases)}
     for p in design.places:
         w = min(p["w"], DESIGN_GRID - p["x"])
         h = min(p["h"], DESIGN_GRID - p["y"])
