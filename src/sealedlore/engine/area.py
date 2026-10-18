@@ -2723,8 +2723,9 @@ BRIDGE_PART = re.compile(
     r"\b(arch(es)?|span|parapets?|piers?|deck|keystone|cutwater|middle of the bridge)\b",
     re.IGNORECASE,
 )
-# How far water may be from a crossing's tile, on each side.
-CROSSING_REACH = 4
+# How far water may be from a crossing's tile, on each side: a causeway runs
+# through a stone bank (the toll bridge's was 15 tiles of rock in the river).
+CROSSING_REACH = 10
 
 
 def crossing_middle(area: Area) -> tuple[int, int] | None:
