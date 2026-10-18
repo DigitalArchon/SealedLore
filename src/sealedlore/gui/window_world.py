@@ -19,6 +19,7 @@ from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox, QToolButton
 
 from sealedlore.engine.picture_shapes import ISOMETRIC
+from sealedlore.engine.session_area import world_key
 from sealedlore.engine.world_pictures import shown_view, view_current, views_of
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.isometric_view import CHOICE_THUMB, ChooseViewDialog, ViewChoice
@@ -41,6 +42,8 @@ class _ArtSignal(QObject):
 
 
 class WorldWindow:
+    _world_drawn: tuple | None = None  # what the Region map was last built from
+
     def _build_world(self) -> None:
         """Called from `__init__` before the centre is laid out."""
         self.world_view = WorldView()
@@ -141,9 +144,32 @@ class WorldWindow:
         # so the plan and the play view show one farmhouse.
         info, read = session.tile_set()
         self.world_view.look_colours = texture_colours(info.name, read) if info.name else None
-        self.world_view.set_world(
-            session.world(), session.map_art_copy(), held, keep_view=keep_view
+        # Built again only when something it draws from has changed: opening
+        # a story asked for the map four times over (the controls, the
+        # layout, the open itself), each a full build of the Region map
+        # (Oct 19 2026, 7 s of a 7 s open with 27 designed regions).
+        world = session.world()
+        key = (
+            session.story.id,
+            session.story.active_leaf_id,
+            world_key(world),
+            id(session._art_read()),
+            held,
+            session.here_place(),
+            session.in_private,
+            self.config.map_art,
+            session.map_art_running,
+            session.isometric_offer(),
+            session.isometric_painting,
+            info.name,
+            self._play_area_id,
         )
+        if key == self._world_drawn and self.world_view._built:
+            if not keep_view:
+                self.world_view.go_local()
+        else:
+            self.world_view.set_world(world, session.map_art_copy(), held, keep_view=keep_view)
+            self._world_drawn = key
         # Map-first play: the area to walk on (gui/window_area.py).
         self.refresh_area()
 

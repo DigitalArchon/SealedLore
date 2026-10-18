@@ -181,6 +181,19 @@ _PICTURE_SPRITES: OrderedDict[tuple[str, int], QImage] = OrderedDict()
 _PICTURE_SPRITES_MAX = 256
 
 
+def _hard_edged(image: QImage) -> QImage:
+    """The image with its alpha made all or nothing (no half-clear fringe
+    on the map's art). In numpy: pixel by pixel it took 0.2 s a picture,
+    sixteen pictures an open (Oct 19 2026)."""
+    import numpy as np
+
+    out = image.convertToFormat(QImage.Format_ARGB32)
+    pixels = np.frombuffer(out.bits(), dtype=np.uint8).reshape(out.height(), out.bytesPerLine())
+    alpha = pixels[:, 3 : out.width() * 4 : 4]
+    alpha[:] = np.where(alpha > 128, 255, 0).astype(np.uint8)
+    return out
+
+
 def picture_sprite(key: str, height: int, read: Callable[[], bytes | None]) -> QImage | None:
     """A map picture cut out of its background and shrunk to `height` pixels
     of the map's art, its edge hard (no half-clear fringe). `key` is the
@@ -194,17 +207,14 @@ def picture_sprite(key: str, height: int, read: Callable[[], bytes | None]) -> Q
     image = image_from_data(data)
     if image.isNull():
         return None
+    from sealedlore.gui.area_render import cut_out  # numpy; the per-pixel cut took 0.2 s a picture
+
     work = image.scaled(256, 256, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-    cut = _cut_out(work)
+    cut = cut_out(work)
     if cut is None:
         return None
     small = cut.scaledToHeight(max(4, height), Qt.SmoothTransformation)
-    small = small.convertToFormat(QImage.Format_ARGB32)
-    for y in range(small.height()):
-        for x in range(small.width()):
-            colour = small.pixelColor(x, y)
-            colour.setAlpha(255 if colour.alpha() > 128 else 0)
-            small.setPixelColor(x, y, colour)
+    small = _hard_edged(small)
     _PICTURE_SPRITES[(key, height)] = small
     while len(_PICTURE_SPRITES) > _PICTURE_SPRITES_MAX:
         _PICTURE_SPRITES.popitem(last=False)

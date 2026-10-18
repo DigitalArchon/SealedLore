@@ -134,8 +134,6 @@ from sealedlore.engine.world_art import (
     is_window,
     outside_part,
     parse_window,
-    patch_at,
-    patch_under,
     window_id,
     window_rect,
 )
@@ -349,7 +347,7 @@ AFLOAT = re.compile(
 )
 
 
-def _world_key(world: WorldMap) -> tuple:
+def world_key(world: WorldMap) -> tuple:
     """What settling reads of the map, as a key: who is where (and outside),
     each place's spot, size, parent and state, each thing's whereabouts.
     Dumping the whole map as JSON took 25 ms a call, 133 calls an open."""
@@ -814,36 +812,16 @@ class AreaRuntime:
         parsed = parse_window(area_id)
         if parsed is None:
             return None
-        west, north, side = parsed
-        patch = patch_at(art, west, north, side) or patch_under(
-            art, west + side / 2, north - side / 2
-        )
-        inside = tuple(
-            sorted(
-                (
-                    p.id,
-                    p.x,
-                    p.y,
-                    p.size,
-                    p.kind,
-                    p.state,
-                    p.inside,
-                    art.layout_shown(p.id, p.state) is not None,
-                )
-                for p in world.places.values()
-                if p.x is not None
-                and p.y is not None
-                and abs(p.x - (west + side / 2)) <= side
-                and abs(p.y - (north - side / 2)) <= side
-            )
-        )
+        # What a window is built from, as a key: the land (every patch, as
+        # drawn), the map's places and the people. Looking the patch up and
+        # scanning the places for every lookup cost 8 ms, 217 lookups a
+        # settle with 39 people on 27 regions (Oct 19 2026).
         cache_key = (
             area_id,
-            patch.id if patch is not None else "",
-            patch.made_at if patch is not None else "",
-            len(patch.rows) if patch is not None else 0,
-            tuple(sorted((p.id, p.ground) for p in art.terrain)),
-            inside,
+            tuple((p.id, p.made_at, len(p.rows), p.ground) for p in art.terrain),
+            self._art_version,
+            world_key(world),
+            tuple(sorted(art.layouts)),
             tuple(self.area_people()),
         )
         if self._area_cache is None:
@@ -917,7 +895,7 @@ class AreaRuntime:
             self.held_name(),
             live is None,
             state.model_dump_json() if state is not None else "",
-            _world_key(world),
+            world_key(world),
             self._art_version,
             len(art.layouts),
             len(art.terrain),
