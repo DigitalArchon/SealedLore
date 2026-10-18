@@ -309,7 +309,7 @@ class WorldArtRuntime:
             people=people,
             held=self.map_held_name(self.story.held_character_id),
             setting=self.map_setting(),
-            edits=info is not None and info.accepts_images,
+            edits=info is not None and self.takes_pictures(info.id),
             texts=self.texts,
             limit=min(limit, room),
             style=self.tile_style(art),
@@ -354,7 +354,7 @@ class WorldArtRuntime:
         media = self.config.images()
         if media is None or not media.api_key:
             return model, price, "Set up an image endpoint in Settings → Images first."
-        if info is not None and not info.accepts_images:
+        if info is not None and not self.takes_pictures(model):
             return model, price, f"{model} can't be given the map to paint from."
         if self.map_pictures_left_today() <= 0:
             return model, price, "Today's map pictures for this story are used up."

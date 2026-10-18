@@ -1715,12 +1715,16 @@ own (**Sent with the prompt:**):
 The small pictures under the large one offer **Same prompt again…** and
 **Change this picture…** too.
 
-Some image models come in two versions, one drawing from words and one
-changing a picture (FLUX.3 Klein's text-to-image and edit). You choose the
-model, and the version is chosen for you: with a picture going with the
-prompt the edit version is sent, with none the text version (an edit version
-given no picture fails). A model that takes pictures itself, as Seedream does,
-is sent as it is. The dialog names the version it sends.
+Many image models come in two versions, one drawing from words and one
+changing a picture (FLUX.3 Klein, Seedream 5.0 Pro, Nano Banana Pro…). You
+only ever choose the model: **Browse…** lists each model once, its
+**Pictures** column saying how many pictures it can be given ("none" for a
+model that draws from words alone, "needs one" for one that only changes a
+picture), and beside every image model field a few words say the same
+(**takes pictures**, **words only**, **edits a picture only**; the tooltip
+says more). When a picture goes with the prompt its edit version is sent,
+with none its text version (an edit version given no picture fails), and the
+dialog names the version it sends.
 
 A new picture is added to the card's pictures; the original stays. **Make
 portrait** (**Show first** on a lore entry) puts the one you like first, and
@@ -1733,16 +1737,16 @@ beside it lists the models measured for portraits, with what each is good at:
   klein on five of six characters for two blind judges, and its edit version
   changes a picture best of those tried while keeping the face. Its portraits
   are square.
-- **FLUX.3 Klein Base** (best, about $0.027): the judges' first choice on most
-  characters, truer to age, scars and clothes, at three times the price.
+- **Seedream 5.0 Pro** (best, about $0.09, or $0.045 at 1k): the best pictures
+  of those offered, tall portraits, up to ten pictures.
 - **FLUX.2 klein 9B** (the earlier default, about $0.01): tall portraits, but
   last on five of six characters against FLUX.3 Klein.
 - **Z Image Turbo** (about $0.012) and **Recraft V4.1 Flash** (about $0.008):
   as good or better for a single portrait, Recraft's the most striking, but
   neither can be given reference pictures, so they can't keep a character the
   same from one picture to the next.
-- **Seedream 5.0 Flash** (premium, about $0.027): the most finished, with up to
-  ten reference pictures, at nearly three times the default's price.
+- **Seedream 5.0 Flash** (about $0.027): very finished, with up to ten
+  reference pictures, between FLUX.3 Klein and Seedream 5.0 Pro in price.
 
 ## Videos
 

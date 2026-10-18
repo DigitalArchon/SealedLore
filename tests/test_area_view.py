@@ -1485,7 +1485,7 @@ def test_paint_this_place_paints_the_area_stood_in_and_media_lists_the_painting(
     assert view.area.place_id == "house"
     window._area_paintings_menu()
     actions = [a for a in view.paintings_menu.actions() if not a.isSeparator()]
-    klein = "blackforestlabs/flux-3/klein/edit-image"
+    klein = "blackforestlabs/flux-3/klein/text-to-image"
     assert actions[0].text().startswith(f"Paint this place… ({klein}")
     assert actions[0].isEnabled() and actions[1].text() == "No painting of The house yet"
     actions[0].trigger()

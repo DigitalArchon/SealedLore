@@ -70,24 +70,27 @@ class RecommendedModel(BaseModel):
 RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
     "portrait_model": (
         # Six characters (three Doomsville, AfterDark's Suzuka, Brasshaven's
-        # automaton, the Silverwood's dwarf) on three models, two blind Claude
-        # judges (SealedLoreDocs design/images.md, Oct 18 2026): FLUX.3 Klein
-        # Base first on 4-5 of 6, FLUX.3 Klein second nearly everywhere,
-        # FLUX.2 klein 9B last on 5 of 6. FLUX.3 Klein draws squares only.
+        # automaton, the Silverwood's dwarf), two blind Claude judges
+        # (SealedLoreDocs design/images.md, Oct 18 2026): FLUX.3 Klein ahead
+        # of FLUX.2 klein 9B on five of six. The author: FLUX.3 Klein (not its
+        # Base, made for another purpose) the default, Seedream 5.0 Pro the
+        # best. Each id is the model's own: a picture sent goes to its edit
+        # version (engine/image_variants.py).
         RecommendedModel(
             id="blackforestlabs/flux-3/klein/text-to-image",
             tag="default",
             label="FLUX.3 Klein",
             note="Ahead of FLUX.2 klein on five of six characters for both blind judges, at "
-            "about $0.009 a portrait and in 4-7 seconds. Square portraits. Given a "
-            "character's earlier pictures, its edit version is used for you.",
+            "about $0.009 a portrait and in 4-7 seconds. Square portraits. Takes up to ten "
+            "pictures (its edit version is sent for you when one goes).",
         ),
         RecommendedModel(
-            id="blackforestlabs/flux-3/klein/base/text-to-image",
+            id="bytedance/seedream-v5.0-pro",
             tag="best",
-            label="FLUX.3 Klein Base",
-            note="The judges' first choice on four or five of six characters (truer to age, "
-            "scars and clothing), at about $0.027 a portrait: three times FLUX.3 Klein.",
+            label="Seedream 5.0 Pro",
+            note="The best pictures of those offered, tall portraits and up to ten pictures "
+            "(its edit version is sent for you when one goes), at about $0.09 a portrait "
+            "($0.045 at 1k): ten times FLUX.3 Klein.",
         ),
         RecommendedModel(
             id="flux-2-klein-9b",
@@ -112,9 +115,8 @@ RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
         RecommendedModel(
             id="bytedance/seedream-v5.0-flash",
             label="Seedream 5.0 Flash",
-            tag="premium",
-            note="The most finished portraits of those tried, and up to ten reference "
-            "pictures, at about $0.027 a portrait: nearly three times the default.",
+            note="Very finished portraits and up to ten reference pictures, at about $0.027 a "
+            "portrait: between FLUX.3 Klein and Seedream 5.0 Pro.",
         ),
     ),
     # Editing a card's picture (Edit…): given John's portrait and a scar,
@@ -125,12 +127,19 @@ RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
         # two blind judges ranked FLUX.3 Klein Edit first on all three, and
         # FLUX.2 klein last (it changed his face twice); Oct 18 2026.
         RecommendedModel(
-            id="blackforestlabs/flux-3/klein/edit-image",
-            label="FLUX.3 Klein Edit",
+            id="blackforestlabs/flux-3/klein/text-to-image",
+            label="FLUX.3 Klein",
             tag="default",
-            note="First on all three edits tried (a scar, twenty years older, a suit at "
-            "dinner) for both blind judges, keeping the face and everything else, at about "
-            "$0.009 with the picture.",
+            note="Its edit version (sent for you, since the picture goes) was first on all "
+            "three edits tried (a scar, twenty years older, a suit at dinner) for both blind "
+            "judges, keeping the face and everything else, at about $0.009.",
+        ),
+        RecommendedModel(
+            id="bytedance/seedream-v5.0-pro",
+            label="Seedream 5.0 Pro",
+            tag="best",
+            note="The best pictures of those offered, at about $0.09 (its edit version is sent "
+            "for you); not measured on these three edits.",
         ),
         RecommendedModel(
             id="qwen-image",
@@ -139,9 +148,10 @@ RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
             "subscription's daily allowance); the suit came out as a wider shot.",
         ),
         RecommendedModel(
-            id="bytedance/seedream-v5.0-flash/edit",
-            label="Seedream 5.0 Flash Edit",
-            note="Made all three, the subtlest scar and the most finished suit, about $0.027.",
+            id="bytedance/seedream-v5.0-flash",
+            label="Seedream 5.0 Flash",
+            note="Made all three, the subtlest scar and the most finished suit, about $0.027 "
+            "(its edit version, sent for you).",
         ),
         RecommendedModel(
             id="flux-2-klein-9b",
@@ -159,7 +169,7 @@ RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
     # picture is not yet measured.
     "map_isometric_model": (
         RecommendedModel(
-            id="blackforestlabs/flux-3/klein/edit-image",
+            id="blackforestlabs/flux-3/klein/text-to-image",
             tag="default",
             label="FLUX.3 Klein",
             note="The sprites' model, given the picture of the place to paint from, at about a "
@@ -167,14 +177,14 @@ RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
             "render.",
         ),
         RecommendedModel(
-            id="bytedance/seedream-v5.0-pro/edit",
+            id="bytedance/seedream-v5.0-pro",
             label="Seedream 5.0 Pro",
             tag="enhanced",
             note="The most faithful of those tried (3.5, the building count exact) and among "
             "the best looking, at about $0.09 a painting.",
         ),
         RecommendedModel(
-            id="nano-banana-pro-edit",
+            id="nano-banana-pro",
             label="Nano Banana Pro",
             tag="enhanced",
             note="Kept the layout and showed the story's changes (the barn on fire) with the "
@@ -840,21 +850,23 @@ class Config(BaseModel):
     map_picture_daily_limit: int = 40
     # Paintings of a place (Paintings on the map, Paint this place… on the
     # play view), painted from the program's own picture of the area as it
-    # is now when the author asks, never on its own. FLUX.3 Klein's edit
-    # model, as for the sprites (the author's call, Oct 17 2026); Qwen Image
+    # is now when the author asks, never on its own. FLUX.3 Klein (its edit
+    # version is sent, since the area's picture goes: engine/image_variants.py),
+    # as for the sprites (the author's call, Oct 17 2026); Qwen Image
     # the free alternative, Seedream 5.0 Pro and Nano Banana Pro the enhanced
     # ones (RECOMMENDED_IMAGE_MODELS, SealedLoreDocs design/map.md). A story
     # whose config still names "flux-2-klein-9b" keeps painting with it. The
     # field keeps its old name so saved configs read as before.
-    map_isometric_model: str = "blackforestlabs/flux-3/klein/edit-image"
+    map_isometric_model: str = "blackforestlabs/flux-3/klein/text-to-image"
     # Map-first play's sprites (engine/tile_draw.py), under the same standing
     # approval and daily limit as map pictures: things by text to image, a
     # character from their portrait by an edit of it, and a story's own tile
     # set when the author asks for one. FLUX.3 Klein, open weights, ~1¢ a
     # picture (SealedLoreDocs design/map.md, "Tiles v2"; the author chose the
-    # look, Oct 16 2026).
+    # look, Oct 16 2026). The sprite model is named as the model: given the
+    # portrait, its edit version is sent (engine/image_variants.py).
     map_tile_model: str = "blackforestlabs/flux-3/klein/text-to-image"
-    map_sprite_model: str = "blackforestlabs/flux-3/klein/edit-image"
+    map_sprite_model: str = "blackforestlabs/flux-3/klein/text-to-image"
     # The model that designs a story's own tile set from the author's
     # description (engine/tile_draw.py: the set's words and a prompt for every
     # picture, shown with the price before anything is drawn). Blank means

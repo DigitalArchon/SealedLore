@@ -7,7 +7,11 @@ from __future__ import annotations
 from sealedlore.engine.image_variants import (
     edit_only,
     edit_versions,
+    families,
+    family_id,
     fitting_model,
+    picture_support,
+    takes_pictures,
     text_versions,
 )
 from sealedlore.models.image import ImageRef
@@ -48,10 +52,12 @@ def test_no_picture_goes_to_the_text_version_and_a_picture_to_the_edit_version()
     assert fitting_model("bria/fibo-edit-1.5/edit", 0, listed("bria/fibo-edit-1.5/edit")) == (
         "bria/fibo-edit-1.5/edit"
     )
-    # A plain id that takes pictures edits as itself (Seedream, chosen for
-    # keeping characters); one that takes none goes to its edit version.
+    # Any model with an edit version listed (the author: "auto select the edit
+    # version if an image is included"), Seedream too; one that takes none
+    # goes to its edit version as well.
     pro = "bytedance/seedream-v5.0-pro"
-    assert fitting_model(pro, 1, listed(pro, f"{pro}/edit")) == pro
+    assert fitting_model(pro, 1, listed(pro, f"{pro}/edit")) == f"{pro}/edit"
+    assert fitting_model(pro, 0, listed(pro, f"{pro}/edit")) == pro
     turbo = listed("z-image-turbo", takes=0) + listed("z-image-turbo-image-to-image")
     assert fitting_model("z-image-turbo", 1, turbo) == "z-image-turbo-image-to-image"
     # None listed: as chosen (FLUX.2 klein 9B takes pictures itself).
@@ -75,3 +81,32 @@ def test_a_card_s_request_goes_to_the_version_its_pictures_call_for(tmp_path):
     )
     assert edited.model == K3E and len(edited.references) == 1
     assert edited.listed_price is None or edited.listed_price >= 0
+
+
+def test_each_model_is_one_whatever_versions_are_listed():
+    """The author: "just select the model and the UI should show if it
+    supports adding an image or not"."""
+    listing = (
+        listed(K3, K3E)
+        + listed("bytedance/seedream-v5.0-pro", "bytedance/seedream-v5.0-pro/edit")
+        + listed("z-image-turbo", takes=0)
+        + listed("gemini-flash-edit", "flux-2-klein-9b")
+    )
+    found = {f.id: f for f in families(listing)}
+    assert set(found) == {
+        K3,
+        "bytedance/seedream-v5.0-pro",
+        "z-image-turbo",
+        "gemini-flash-edit",
+        "flux-2-klein-9b",
+    }
+    assert found[K3].edit.id == K3E and found[K3].ids == (K3, K3E)
+    assert family_id(K3E, listing) == K3, "a saved edit version is its model"
+    assert family_id("unknown/model", listing) == "unknown/model"
+    assert picture_support(K3, listing)[0] == "takes pictures"
+    assert K3E in picture_support(K3, listing)[1]
+    assert picture_support("z-image-turbo", listing)[0] == "words only"
+    assert picture_support("gemini-flash-edit", listing)[0] == "edits a picture only"
+    assert picture_support("flux-2-klein-9b", listing)[0] == "takes pictures"
+    assert picture_support("unknown/model", listing) == ("", "")
+    assert takes_pictures(K3E, listing) and not takes_pictures("z-image-turbo", listing)

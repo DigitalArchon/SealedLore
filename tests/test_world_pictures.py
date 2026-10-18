@@ -594,9 +594,9 @@ def test_a_painting_s_prompt_names_the_hour_the_weather_the_people_and_the_thing
 
 
 def test_the_default_painting_model_and_an_older_config_s_both_paint(session):
-    """FLUX.3 Klein's edit model (the sprites') is the default painting
-    model; a config still naming FLUX.2 klein 9B (the default before Oct 17
-    2026) keeps painting with it."""
+    """FLUX.3 Klein (the sprites' model, its edit version sent for it) is the
+    default painting model; a config still naming FLUX.2 klein 9B (the
+    default before Oct 17 2026) keeps painting with it."""
     from sealedlore.models.config import Config
 
     listed = lambda model: {  # noqa: E731 - a one-line stand-in for the listing
@@ -605,7 +605,7 @@ def test_the_default_painting_model_and_an_older_config_s_both_paint(session):
     }
     session.config.map_pictures_mode = "off"
     default = Config().map_isometric_model
-    assert default == "blackforestlabs/flux-3/klein/edit-image" == Config().map_sprite_model
+    assert default == "blackforestlabs/flux-3/klein/text-to-image" == Config().map_sprite_model
     session.config.image_models = [listed(default), listed("flux-2-klein-9b")]
     session.config.map_isometric_model = default
     assert session.isometric_offer()[0] == default and session.isometric_offer()[2] is None

@@ -22,7 +22,7 @@ from sealedlore.engine.image_prompt import (
     parse_image_prompt,
     ref_choices,
 )
-from sealedlore.engine.image_variants import fitting_model
+from sealedlore.engine.image_variants import ImageFamily, family_of, fitting_model
 from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.portraits import edit_prompt
 from sealedlore.engine.prompt import assemble_chat, assemble_question
@@ -336,6 +336,16 @@ class ImageRuntime:
     def image_listing(self) -> list[ImageModelInfo]:
         """The picture models the endpoint lists, as last fetched."""
         return parse_image_models({"data": self.config.image_models})
+
+    def image_family(self, model: str) -> ImageFamily | None:
+        """The model as the author chose it, both its versions
+        (engine/image_variants.py), or None for one the listing doesn't know."""
+        return family_of(model, self.image_listing())
+
+    def takes_pictures(self, model: str) -> bool:
+        """The model (either version) can be given a picture."""
+        family = self.image_family(model)
+        return family is not None and family.takes_pictures
 
     def fitting_image_model(
         self, model: str, pictures: int, info: ImageModelInfo | None = None

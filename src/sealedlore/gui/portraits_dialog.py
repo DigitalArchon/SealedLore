@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.image_variants import family_id, picture_support
 from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.portraits import Card, card_size
 from sealedlore.gui.image_jobs import ImageCatalog
@@ -143,9 +144,10 @@ class PortraitsDialog(QDialog):
         )
         intro.setWordWrap(True)
         self.model = ModelField(
-            session.config.portrait_model,
+            family_id(session.config.portrait_model, catalog.models if catalog is not None else []),
             browse,
             recommended=RECOMMENDED_IMAGE_MODELS["portrait_model"],
+            pictures=self._picture_support,
         )
         self.model_note = QLabel()
         self.model_note.setObjectName("hintLabel")
@@ -265,7 +267,11 @@ class PortraitsDialog(QDialog):
         model = self.model.text().strip()
         return next((m for m in self._catalog.models if m.id == model), None)
 
+    def _picture_support(self, model: str) -> tuple[str, str]:
+        return picture_support(model, self._catalog.models if self._catalog is not None else [])
+
     def _sync(self, *_args) -> None:
+        self.model.show_pictures()
         model = self.model.text().strip()
         info = self.model_info()
         wanted = [row for row in self.rows if row.wanted()]

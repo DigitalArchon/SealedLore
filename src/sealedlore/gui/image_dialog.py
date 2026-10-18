@@ -41,7 +41,13 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.image_prompt import ImagePromptDraft, mentioned_numbers
-from sealedlore.engine.image_variants import fitting_model, version_words
+from sealedlore.engine.image_variants import (
+    family_id,
+    family_of,
+    fitting_model,
+    picture_support,
+    version_words,
+)
 from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.session_images import DEFAULT_MAX_REFS
@@ -263,7 +269,9 @@ class ImageDialog(QDialog):
         # Typed, or chosen with Browse… from a searchable table, as a text
         # model is (gui/image_picker.py).
         self.model = ModelField(
-            "", self._browse_image_models if self._catalog is not None else None
+            "",
+            self._browse_image_models if self._catalog is not None else None,
+            pictures=self._picture_support,
         )
         self.model.setMinimumWidth(260)
         self.model.textChanged.connect(self._on_model_changed)
@@ -361,7 +369,12 @@ class ImageDialog(QDialog):
         wanted = self.sent_model()
         return next((info for info in self._models if info.id == wanted), None)
 
+    def _picture_support(self, model: str) -> tuple[str, str]:
+        return picture_support(model, self._models)
+
     def _fill_models(self, selected: str) -> None:
+        # The model, never one of its versions (they are chosen for what is sent).
+        selected = family_id(selected, self._models)
         self.model.blockSignals(True)
         self.model.setText(selected)
         self.model.blockSignals(False)
@@ -411,12 +424,14 @@ class ImageDialog(QDialog):
             return
         self._models = self._catalog.models
         self._fill_models(self.model.text().strip() or self.session.config.image_model)
+        self.model.show_pictures()
 
     # --- references ---------------------------------------------------------
 
     def _max_refs(self) -> int:
-        info = self._info()
-        return info.max_inputs if info is not None else DEFAULT_MAX_REFS
+        # The model as a whole: its edit version takes them when they go.
+        family = family_of(self.model.text().strip(), self._models)
+        return family.max_pictures if family is not None else DEFAULT_MAX_REFS
 
     def _set_refs(self, refs: list[RefUse]) -> None:
         self._refs = refs

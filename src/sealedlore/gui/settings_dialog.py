@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.image_variants import family_id, picture_support, takes_pictures
 from sealedlore.engine.portraits import portrait_size
 from sealedlore.engine.reasoning import (
     LEVEL_LABELS,
@@ -1436,8 +1437,9 @@ class SettingsDialog(QDialog):
         # Typed, or chosen with Browse… from a searchable table, as the text
         # models are (gui/image_picker.py).
         self.image_model = ModelField(
-            self.config.image_model,
+            family_id(self.config.image_model, self._image_models),
             self._browse_image_models if self.image_catalog is not None else None,
+            pictures=self._picture_support,
         )
         self.image_model.setToolTip(
             "The model that draws. Seedream 5.0 Pro takes up to ten reference pictures "
@@ -1482,8 +1484,9 @@ class SettingsDialog(QDialog):
         page, and the offer when a story starts)."""
         form.addRow(QLabel("<b>Portraits</b>"))
         self.portrait_model = ModelField(
-            self.config.portrait_model,
+            family_id(self.config.portrait_model, self._image_models),
             self._browse_image_models if self.image_catalog is not None else None,
+            pictures=self._picture_support,
             recommended=RECOMMENDED_IMAGE_MODELS["portrait_model"],
         )
         form.addRow("Portrait model", self.portrait_model)
@@ -1526,8 +1529,9 @@ class SettingsDialog(QDialog):
         )
         form.addRow("Draw map pictures", self.map_pictures)
         self.map_picture_model = ModelField(
-            self.config.map_picture_model,
+            family_id(self.config.map_picture_model, self._image_models),
             self._browse_image_models if self.image_catalog is not None else None,
+            pictures=self._picture_support,
         )
         form.addRow("Map picture model", self.map_picture_model)
         self.map_picture_limit = QSpinBox()
@@ -1545,8 +1549,9 @@ class SettingsDialog(QDialog):
         # Paintings of a place (Paintings on the map, Paint this place… on
         # the play view): painted only when asked.
         self.map_isometric_model = ModelField(
-            self.config.map_isometric_model,
+            family_id(self.config.map_isometric_model, self._image_models),
             self._browse_image_models if self.image_catalog is not None else None,
+            pictures=self._picture_support,
             recommended=RECOMMENDED_IMAGE_MODELS["map_isometric_model"],
         )
         form.addRow("Painting model", self.map_isometric_model)
@@ -1564,7 +1569,7 @@ class SettingsDialog(QDialog):
         price = f"${each:.2f} a painting listed" if each is not None else "price not listed"
         takes = (
             " It can't be given the map to paint from: choose one that takes pictures."
-            if info is not None and not info.accepts_images
+            if info is not None and not takes_pictures(model, self._image_models)
             else ""
         )
         known = recommended_model("map_isometric_model", model)
@@ -1670,7 +1675,18 @@ class SettingsDialog(QDialog):
         chosen = pick_image_model(self.image_catalog, current, self)
         # A Refresh may have brought new models (and their sizes).
         self._image_models = self.image_catalog.models
+        for field in (
+            self.image_model,
+            self.portrait_model,
+            self.map_picture_model,
+            self.map_isometric_model,
+        ):
+            field.show_pictures()
         return chosen
+
+    def _picture_support(self, model: str) -> tuple[str, str]:
+        """Beside an image model: whether it can be given a picture."""
+        return picture_support(model, self._image_models)
 
     def _fill_image_sizes(self, *_args) -> None:
         wanted = self.image_model.text().strip()

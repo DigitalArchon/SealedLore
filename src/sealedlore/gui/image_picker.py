@@ -5,6 +5,11 @@ The author (Sept 2026): the image model was chosen from a plain combo box,
 "far more basic than the text model, and search is limited". The listing is
 the window's `ImageCatalog` (kept in config for a day); Refresh fetches it
 again on the catalog's thread, never the dialog's.
+
+One row a model (the author, Oct 18 2026: "the user doesn't have to select
+between Edit or Normal mode for any of them"): a model's edit version is
+folded into it (engine/image_variants.py `families`) and sent for it when a
+picture goes with the prompt; the Pictures column says what it can be given.
 """
 
 from __future__ import annotations
@@ -23,19 +28,36 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.image_variants import ImageFamily, families, family_id, picture_support
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.model_picker import _Row
 from sealedlore.gui.sizing import adjustable_columns, size_to_screen
 from sealedlore.providers.images import ImageModelInfo
 
-COLUMNS = ("Model", "Name", "References", "Sizes", "$ / picture", "At once")
+COLUMNS = ("Model", "Name", "Pictures", "Sizes", "$ / picture", "At once")
 REFERENCES, SIZES, PRICE, AT_ONCE = 2, 3, 4, 5
 
 
-def matches(info: ImageModelInfo, query: str) -> bool:
-    """Every word of the query appears in the id, name, description or sizes."""
-    haystack = f"{info.id} {info.name} {info.description} {' '.join(info.resolutions)}".lower()
+def matches(info: ImageModelInfo | ImageFamily, query: str) -> bool:
+    """Every word of the query appears in the id, name, description or sizes
+    (of either version of a model)."""
+    versions = (info.info, info.edit) if isinstance(info, ImageFamily) else (info,)
+    haystack = " ".join(
+        f"{v.id} {v.name} {v.description} {' '.join(v.resolutions)}"
+        for v in versions
+        if v is not None
+    ).lower()
     return all(word in haystack for word in query.lower().split())
+
+
+def pictures_cell(family: ImageFamily) -> str:
+    """What the Pictures column says of a model."""
+    count = family.max_pictures
+    if family.needs_picture:
+        return f"needs one (up to {count})" if count else "needs one"
+    if not family.takes_pictures:
+        return "none"
+    return f"up to {count}" if count else "yes"
 
 
 def price_range(info: ImageModelInfo) -> tuple[float | None, str]:
@@ -113,8 +135,9 @@ class ImagePickerDialog(QDialog):
             pass
         super().done(result)
 
-    def _models(self) -> dict[str, ImageModelInfo]:
-        return {info.id: info for info in self.catalog.models}
+    def _models(self) -> dict[str, ImageFamily]:
+        """The listing as the author chooses from it: one entry a model."""
+        return {family.id: family for family in families(self.catalog.models)}
 
     def _populate(self) -> None:
         self.table.setSortingEnabled(False)
@@ -126,36 +149,36 @@ class ImagePickerDialog(QDialog):
         self._filter()
         self._select_current()
 
-    def _row(self, info: ImageModelInfo) -> QTreeWidgetItem:
+    def _row(self, family: ImageFamily) -> QTreeWidgetItem:
+        info = family.info
         low, prices = price_range(info)
         row = _Row(
             [
                 info.id,
                 info.name,
-                str(info.max_inputs) if info.max_inputs else "none",
+                pictures_cell(family),
                 ", ".join(info.resolutions),
                 prices,
                 str(info.max_outputs),
             ]
         )
         row.setData(0, Qt.UserRole + 1, info.id)
-        row.setData(REFERENCES, Qt.UserRole, info.max_inputs)
+        row.setData(REFERENCES, Qt.UserRole, family.max_pictures if family.takes_pictures else 0)
         row.setData(PRICE, Qt.UserRole, low)
         row.setData(AT_ONCE, Qt.UserRole, info.max_outputs)
         for column in (REFERENCES, PRICE, AT_ONCE):
             row.setTextAlignment(column, Qt.AlignRight | Qt.AlignVCenter)
-        tip = self._describe(info)
+        tip = self._describe(family)
         for column in range(len(COLUMNS)):
             row.setToolTip(column, tip)
         return row
 
     @staticmethod
-    def _describe(info: ImageModelInfo) -> str:
-        takes = (
-            f"Takes up to {info.max_inputs} reference pictures."
-            if info.max_inputs
-            else "Takes no reference pictures."
-        )
+    def _describe(family: ImageFamily | ImageModelInfo) -> str:
+        if isinstance(family, ImageModelInfo):
+            family = ImageFamily(family)  # one version, described as it is
+        info = family.info
+        takes = picture_support(info.id, [family.info, *([family.edit] if family.edit else [])])[1]
         sizes = ", ".join(
             f"{size} ${price:.3f}" if (price := info.per_image.get(size)) is not None else size
             for size in info.resolutions
@@ -203,9 +226,11 @@ class ImagePickerDialog(QDialog):
     def _select_current(self) -> None:
         if not self.current:
             return
+        # A saved edit version is its model's row.
+        current = family_id(self.current, self.catalog.models)
         for index in range(self.table.topLevelItemCount()):
             row = self.table.topLevelItem(index)
-            if row.data(0, Qt.UserRole + 1) == self.current and not row.isHidden():
+            if row.data(0, Qt.UserRole + 1) == current and not row.isHidden():
                 self.table.setCurrentItem(row)
                 self.table.scrollToItem(row, QAbstractItemView.PositionAtCenter)
                 return

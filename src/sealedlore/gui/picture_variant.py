@@ -32,7 +32,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from sealedlore.engine.image_variants import fitting_model, version_words
+from sealedlore.engine.image_variants import (
+    family_of,
+    fitting_model,
+    picture_support,
+    version_words,
+)
 from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.portraits import Card, card_size, size_like
 from sealedlore.gui.image_jobs import ImageCatalog
@@ -213,6 +218,7 @@ class PictureVariantDialog(QDialog):
             self._first_model(),
             browse,
             recommended=RECOMMENDED_IMAGE_MODELS["picture_edit" if edit else "portrait_model"],
+            pictures=self._picture_support,
         )
         self.model.textChanged.connect(self._sync)
         self.note = QLabel()
@@ -265,11 +271,12 @@ class PictureVariantDialog(QDialog):
         config = self.session.config
         own = self.subject.model or config.portrait_model
         if not self.edit:
-            return own
+            family = self._family(own)
+            return family.id if family is not None else own
         for model in (self.subject.model, config.portrait_model):
-            info = self._info(model)
-            if model and info is not None and info.accepts_images:
-                return model
+            family = self._family(model)
+            if model and family is not None and family.takes_pictures:
+                return family.id  # the model, never one of its versions
         return RECOMMENDED_IMAGE_MODELS["picture_edit"][0].id
 
     # --- the prompt ------------------------------------------------------------------
@@ -350,6 +357,14 @@ class PictureVariantDialog(QDialog):
         listing = self._catalog.models if self._catalog is not None else []
         return fitting_model(self.model.text().strip(), self.pictures_sent(), listing)
 
+    def _picture_support(self, model: str) -> tuple[str, str]:
+        listing = self._catalog.models if self._catalog is not None else []
+        return picture_support(model, listing)
+
+    def _family(self, model: str):
+        listing = self._catalog.models if self._catalog is not None else []
+        return family_of(model, listing)
+
     def model_info(self) -> ImageModelInfo | None:
         return self._info(self.sent_model())
 
@@ -362,6 +377,7 @@ class PictureVariantDialog(QDialog):
         return size_like(info, *self._shape)
 
     def _sync(self, *_args) -> None:
+        self.model.show_pictures()
         model = self.sent_model()
         info = self.model_info()
         size = self.size()

@@ -612,6 +612,7 @@ class ModelField(QWidget):
         hosts_of: Callable[[str], tuple[str, ...] | None] | None = None,
         recommended: tuple[RecommendedModel, ...] = (),
         qualify_recommended: Qualify | None = None,
+        pictures: Callable[[str], tuple[str, str]] | None = None,
     ) -> None:
         """`route_endpoint` (held weakly) gives the field a route: NanoGPT's
         host for its model, chosen from the label beside it; `browse_route`
@@ -620,13 +621,17 @@ class ModelField(QWidget):
         unknown; a model with fewer than two has no route. `recommended`:
         offered under Recommended beside the field, each with its note;
         `qualify_recommended` (held weakly) names the NanoGPT endpoint on a
-        chosen id when that endpoint isn't the default."""
+        chosen id when that endpoint isn't the default. `pictures` (held
+        weakly): for an image model, a few words beside it on whether it can
+        be given a picture, and the whole of it for the tooltip
+        (engine/image_variants.py `picture_support`)."""
         super().__init__()
         self.route: ModelRoute | None = None
         self._route_endpoint = _weak(route_endpoint) if route_endpoint else None
         self._hosts_of = _weak(hosts_of) if hosts_of else None
         self._browse_route = _weak(browse_route) if browse_route else None
         self._qualify = _weak(qualify_recommended) if qualify_recommended else None
+        self._pictures = _weak(pictures) if pictures else None
         self.edit = line_edit(text)
         self.edit.textChanged.connect(self.textChanged)
         self.button = QToolButton()
@@ -643,6 +648,11 @@ class ModelField(QWidget):
         # only TEE; the tooltip says what each protects.
         self.privacy = QLabel()
         self.privacy.setObjectName("hintLabel")
+        # An image model: whether it can be given a picture (the author, Oct
+        # 18 2026: "the UI should show if it supports adding an image or not").
+        self.picture_note = QLabel()
+        self.picture_note.setObjectName("hintLabel")
+        self.picture_note.hide()
         # Which of NanoGPT's hosts serves the model: short here, whole in
         # the tooltip; a click opens the route dialog.
         self.route_button = QToolButton()
@@ -655,15 +665,18 @@ class ModelField(QWidget):
         layout.addWidget(self.edit, 1)
         layout.addWidget(self.endpoint_label)
         layout.addWidget(self.privacy)
+        layout.addWidget(self.picture_note)
         layout.addWidget(self.route_button)
         if self.recommended_button is not None:
             layout.addWidget(self.recommended_button)
         layout.addWidget(self.button)
         self.edit.textChanged.connect(self._show_privacy)
+        self.edit.textChanged.connect(lambda _text: self.show_pictures())
         self.edit.textChanged.connect(self._show_endpoint)
         self.edit.textChanged.connect(lambda _text: self._show_route())
         self._show_privacy(text)
         self._show_endpoint(text)
+        self.show_pictures()
         self._show_route()
 
     def _choose_recommended(self, model: str) -> None:
@@ -706,6 +719,17 @@ class ModelField(QWidget):
         self.privacy.setText("🔐 E2EE" if label.startswith("🔐") else label)
         self.privacy.setToolTip(note)
         self.privacy.setVisible(bool(label))
+
+    def show_pictures(self) -> None:
+        """Whether the model can be given a picture, beside it (again once
+        the listing is in)."""
+        pictures = self._pictures() if self._pictures is not None else None
+        if pictures is None:
+            return
+        short, whole = pictures(self.edit.text().strip())
+        self.picture_note.setText(f"· {short}" if short else "")
+        self.picture_note.setToolTip(whole)
+        self.picture_note.setVisible(bool(short))
 
     def _open(self) -> None:
         current = self.edit.text().strip() or self.edit.placeholderText()
