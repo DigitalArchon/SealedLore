@@ -486,7 +486,8 @@ def place_new(
     near_point: tuple[float, float] | None = None,
 ) -> None:
     """Position every place in `places` that has none yet, on top of `world`.
-    Parents before children, and in the order the story named them."""
+    Parents before children, a place by way of the place it is linked to
+    before it, and otherwise in the order the story named them."""
     known = {p.id: p for p in world.places.values()}
     for place in places:
         known[place.id] = place
@@ -497,6 +498,31 @@ def place_new(
     for vehicle in places:
         if vehicle.kind == "vehicle" and vehicle.size is None:
             vehicle.size = KIND_SIZE["vehicle"]
+
+    def placed(place_id: str) -> bool:
+        other = known.get(place_id)
+        return other is not None and other.x is not None and other.y is not None
+
+    def stated(link: WorldLink) -> bool:
+        return (
+            bearing(link.direction) is not None
+            or metres(link.distance) is not None
+            or is_close(link.direction)
+        )
+
+    def by_way_of_another(place: WorldPlace) -> bool:
+        """Linked to nothing with a spot, but to a place still waiting: that
+        one first. Live (Oct 18 2026) the toll bridge led by "the south road"
+        to Saltmarsh, three hours on; the town was placed first, beside the
+        story (1.3 km west of the bridge), and the road three hours north of
+        it."""
+        ends = [
+            link.b if link.a == place.id else link.a
+            for link in all_links
+            if place.id in (link.a, link.b) and stated(link)
+        ]
+        return not any(placed(e) for e in ends) and any(e in {w.id for w in waiting} for e in ends)
+
     for _round in range(len(waiting) + 1):
         if not waiting:
             break
@@ -506,11 +532,15 @@ def place_new(
             if parent is not None and parent.x is None and parent in waiting:
                 still.append(place)  # its parent first
                 continue
+            if by_way_of_another(place):
+                still.append(place)
+                continue
             place_one(known, all_links, place, near, near_point)
         if len(still) == len(waiting):
-            for place in still:  # a parent that can't be placed first: place anyway
-                place_one(known, all_links, place, near, near_point)
-            break
+            # Nothing to go by first (a ring of new places): the first placed
+            # as it may be, and the rest by way of it.
+            place_one(known, all_links, still[0], near, near_point)
+            still = still[1:]
         waiting = still
 
 

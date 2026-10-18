@@ -559,3 +559,26 @@ def test_outside_a_house_with_no_plan_of_its_own_they_stand_on_the_ground_round_
     world.outside = ["Serrik Vaun"]
     state = session.settle(session.area_state(), world, art, walked=False)
     assert state.spots["Serrik Vaun"].area == "farm"
+
+
+def test_a_town_down_a_new_road_is_placed_by_way_of_the_road():
+    """The replay (Oct 18 2026): the toll bridge led by "the south road" to
+    Saltmarsh, three hours on. The town was placed first, beside the story,
+    1.3 km west of the bridge, and the road three hours north of it."""
+    from sealedlore.engine.world_layout import place_new
+    from sealedlore.models.world import WorldLink
+
+    bridge = WorldPlace(id="b", name="the old toll bridge", kind="site", x=0.0, y=-5000.0)
+    world = WorldMap(places={"b": bridge}, seen=["b"], where={"Wren Halloway": "b"})
+    town = WorldPlace(id="t", name="Saltmarsh", kind="settlement", size=1500.0)
+    road = WorldPlace(id="r", name="the south road", kind="route")
+    gate = WorldPlace(id="g", name="Saltmarsh's north gate", kind="site", inside="t")
+    links = [
+        WorldLink(a="r", b="t", direction="south", distance="three hours' walk"),
+        WorldLink(a="r", b="g", direction="south"),
+        WorldLink(a="b", b="r", direction="south"),
+    ]
+    place_new(world, [town, road, gate], links, "b", (0.0, -5000.0))
+    assert road.y < bridge.y  # south of the bridge
+    assert town.y < road.y - 10_000 and abs(town.x) < 3_000  # three hours on, southward
+    assert town.y - 750 <= gate.y <= town.y + 750  # in the town
