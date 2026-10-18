@@ -876,11 +876,14 @@ class AreaRuntime:
             if area is None:
                 continue
             # On the land for a place that is no area of its own yet (no
-            # plan): they go into it once it has one (`Spot.for_place`).
+            # plan): they go into it once it has one (`Spot.for_place`); and
+            # someone outside a building stood on the land because the place
+            # round it has no plan yet goes onto that plan once it has (the
+            # lab test, Oct 18 2026: Maren, at an inn's stable yard before the
+            # village was drawn, stayed on the open country after).
             waiting = (
                 place_id
-                if (area.window or _has_an_inside(world, place_id))
-                and not outside
+                if (area.window or (_has_an_inside(world, place_id) and not outside))
                 and place_id not in (area.place_id, area.id)
                 else ""
             )
@@ -934,8 +937,8 @@ class AreaRuntime:
                 point=point if area.window and not moved_here else None,
             )
             if new is not None:
-                if outside and new.for_place:
-                    new = new.model_copy(update={"for_place": ""})
+                if outside and new.for_place != waiting:
+                    new = new.model_copy(update={"for_place": waiting})
                 spots[name] = new
         # Nobody stands in fire or a wall a redrawn plan put under them
         # (kept there, every walk was refused; the second review).
@@ -1620,9 +1623,19 @@ class AreaRuntime:
         to = to or self.place_of_spot(spot, world)
         # Before any read has placed them, where the story starts (as `settle`).
         here = world.where.get(held or "", world.start)
+        # The building they are outside of: the place itself, or the one its
+        # doorstep, porch or yard belongs to (`outside_part`).
+        here_place = world.places.get(here) if here else None
+        part = here_place is not None and outside_part(world, here_place)
+        building = here_place.inside if part else here
+        at_door = held in world.outside or building != here
+        inside_it = (
+            spot is not None and building is not None and place_of_area(spot.area) == building
+        )
         if (
             held in world.outside
             and spot is not None
+            and not inside_it
             and here in world.places
             and world.places[here].inside == to
         ):
@@ -1655,13 +1668,18 @@ class AreaRuntime:
                 delta.outside[held] = True
                 user_node.meta.world = delta
                 to = here
-        if held is not None and held in world.outside and to == world.where.get(held):
-            # Walked in from its door: in it now.
-            if spot is not None and place_of_area(spot.area) == to:
-                delta = user_node.meta.world or WorldDelta()
-                delta.outside[held] = False
-                user_node.meta.world = delta
-            elif user_node.speaker_id == self.story.held_character_id and _GOES_IN.search(
+        if held is not None and at_door and inside_it:
+            # Walked in from its door, or from its doorstep, porch or yard: in
+            # it now (the lab test, Oct 18 2026: Maren, read on her doorstep,
+            # walked in and was put back outside on the next turn).
+            delta = user_node.meta.world or WorldDelta()
+            delta.outside[held] = False
+            if building != here:
+                delta.where[held] = building
+                to = building
+            user_node.meta.world = delta
+        elif held is not None and held in world.outside and to == world.where.get(held):
+            if user_node.speaker_id == self.story.held_character_id and _GOES_IN.search(
                 user_node.content
             ):
                 # The turn takes them in ("I step inside"): in it, just

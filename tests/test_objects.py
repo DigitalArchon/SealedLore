@@ -82,7 +82,12 @@ def test_someone_outside_a_building_alone_on_the_land_stands_at_its_door(
     land = session.area(ruth.area)
     door = next(e for e in land.entrances if e.place_id == "house")
     assert abs(ruth.x - door.x) + abs(ruth.y - door.y) <= 3
-    assert not ruth.for_place, "outside by the story's word: never moved in once it has a plan"
+    # Outside by the story's word: never moved in, though the house has a plan
+    # (she waits only for a plan of the ground round it, which open country
+    # has none of).
+    session._set_live(state)
+    again = session.area_state().spots["Ruth"]
+    assert again.area == ruth.area and (again.x, again.y) == (ruth.x, ruth.y)
     # From inside, shown at the door, beyond its wall.
     at = session.at_the_door()
     assert [a[0] for a in at] == ["Ruth"]

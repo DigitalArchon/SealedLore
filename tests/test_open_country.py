@@ -29,6 +29,7 @@ from sealedlore.engine.area import (
 from sealedlore.engine.prompt import TurnRequest
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
+from sealedlore.engine.world import resolve_reply
 from sealedlore.engine.world_art import (
     PLAN_MAX_SIZE,
     TERRAIN_TILES,
@@ -566,3 +567,112 @@ def test_a_vehicle_drawn_sealed_gets_a_door_but_not_a_deck_in_space():
         spec = {"ground": look} if look else {}
         art.layouts["v"] = {"": PlaceLayout(place_id="v", spec=spec, rows=rows, made_at="1")}
         assert len(build_area(world, art, "v").exits) == doors, (kind, look)
+
+
+def _the_village(session, *, where: str) -> None:
+    """A village on the erg (no plan of its own yet), an inn in it with its
+    stable yard and front room, and someone at `where`, outside."""
+    places = [
+        WorldPlace(
+            id="village", name="Carrow End", kind="settlement", inside="erg",
+            x=2400.0, y=1200.0, size=600.0,
+        ),
+        WorldPlace(
+            id="inn", name="The inn", kind="building", inside="village",
+            x=2400.0, y=1200.0, size=15.0,
+        ),
+        WorldPlace(
+            id="yard", name="the stable yard", kind="area", inside="inn",
+            x=2410.0, y=1190.0, size=10.0,
+        ),
+        WorldPlace(
+            id="front", name="the front room", kind="room", inside="inn",
+            x=2400.0, y=1200.0, size=6.0,
+        ),
+    ]  # fmt: skip
+    base = session.story.world_base
+    base.places += places
+    base.seen += [p.id for p in places]
+    base.where["Serrik Vaun"] = where
+    base.outside["Serrik Vaun"] = True
+    session.world_art.layouts["inn"] = {
+        "": PlaceLayout(place_id="inn", spec={}, rows=COTTAGE_ROWS, made_at="1")
+    }
+    session._area_cache = None
+
+
+def test_walking_in_from_a_doorstep_keeps_them_inside_on_the_next_turn(tmp_path, story, cast):
+    """The lab test (Oct 18 2026): Maren, read on her doorstep (outside her
+    cottage), walked in by the door, and the next turn put her back outside:
+    the doorstep belongs to the cottage, so standing in it read as still at
+    its door."""
+    session = open_session(tmp_path, story, cast, ["He comes in, dripping.", "{}"])
+    cottage = WorldPlace(
+        id="cottage", name="The cottage", kind="building", inside="erg",
+        x=2400.0, y=1200.0, size=15.0,
+    )  # fmt: skip
+    step = WorldPlace(
+        id="step", name="the doorstep", kind="area", inside="cottage",
+        x=2400.0, y=1190.0, size=3.0,
+    )  # fmt: skip
+    base = session.story.world_base
+    base.places += [cottage, step]
+    base.seen += ["cottage", "step"]
+    base.where["Serrik Vaun"] = "step"
+    base.outside["Serrik Vaun"] = True
+    session.world_art.layouts["cottage"] = {
+        "": PlaceLayout(place_id="cottage", spec={}, rows=COTTAGE_ROWS, made_at="1")
+    }
+    session._area_cache = None
+    me = session.area_state().spots["Serrik Vaun"]
+    assert me.area.startswith("window:")  # on the doorstep, outside
+    land = session.area(me.area)
+    door = next(e for e in land.entrances if e.place_id == "cottage")
+    session.walked(session.walk_route(door.x, door.y))
+    session.go_through()
+    assert session.area_state().spots["Serrik Vaun"].area == "cottage"
+    list(session.send(turn("I let him in out of the rain.")))
+    world = session.world()
+    assert world.where["Serrik Vaun"] == "cottage" and "Serrik Vaun" not in world.outside
+    assert session.area_state().spots["Serrik Vaun"].area == "cottage"
+
+
+def test_someone_outside_on_the_land_goes_onto_the_village_s_plan_once_it_is_drawn(
+    tmp_path, story, cast
+):
+    """The lab test (Oct 18 2026): Maren travelled to a village not drawn yet
+    and was read at its inn's stable yard; stood on the open country, she
+    stayed there once the village's plan came, the stable boy on it."""
+    session = open_session(tmp_path, story, cast)
+    _the_village(session, where="yard")
+    state = session.area_state()
+    assert state.spots["Serrik Vaun"].area.startswith("window:")
+    assert state.spots["Serrik Vaun"].for_place == "yard"  # waiting for the plan round it
+    session._set_live(state)
+    rows, objects, labels = rasterise({"ground": "dirt", "features": []}, 40, 24)
+    session.world_art.layouts["village"] = {
+        "": PlaceLayout(place_id="village", spec={}, rows=rows, objects=objects, made_at="1")
+    }
+    session._area_cache = None
+    me = session.area_state().spots["Serrik Vaun"]
+    assert me.area == "village"  # on the village's plan, at the inn
+    assert "inn" in session.area("village").buildings
+
+
+def test_a_read_that_puts_someone_in_a_room_has_them_inside_unless_at_its_door(
+    tmp_path, story, cast
+):
+    """The lab test (Oct 18 2026): Maren, outside at the stable yard, read in
+    the inn's front room as the passage had her, was kept out in the street:
+    from elsewhere, the read's placing needed the quote to say she went in."""
+    session = open_session(tmp_path, story, cast)
+    _the_village(session, where="yard")
+    world = session.world()
+
+    def outside_after(quote: str) -> bool:
+        reply = {"where": [{"who": "Serrik Vaun", "place": "the front room", "quote": quote}]}
+        delta, _refused = resolve_reply(world, reply, source=quote, people=[])
+        return delta.outside["Serrik Vaun"]
+
+    assert outside_after("The front room was low-ceilinged and almost empty.") is False
+    assert outside_after("Serrik waits on the steps outside the front room.") is True

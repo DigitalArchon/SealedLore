@@ -1177,12 +1177,17 @@ def _left_outside(world: WorldMap, delta: WorldDelta, who: str, place: str, quot
     who was then stood inside a house he had not entered. Someone who was
     elsewhere, or at its door, goes in only when the quote shows them going in;
     someone placed for the first time is outside when the quote puts them at
-    its porch, steps or yard."""
+    its porch, steps or yard. A room is inside its building: someone the read
+    puts in one is in it unless the quote has them at its door (the lab test,
+    Oct 18 2026: Maren, outside at the inn's stable yard, was read in its
+    front room as the passage had her, and was kept out in the street)."""
     found = world.places.get(place) or next((p for p in delta.places if p.id == place), None)
     if found is None or found.kind not in ("building", "room"):
         return False
     if _GOING_IN.search(quote):
         return False
+    if found.kind == "room":
+        return _AT_THE_DOOR.search(quote) is not None
     before = world.where.get(who)
     if before is not None:
         return before != place or who in world.outside
