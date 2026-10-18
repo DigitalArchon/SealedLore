@@ -179,12 +179,15 @@ def closest_item(name: str, slugs: Iterable[str]) -> str | None:
         shared = len(mine & theirs)
         if not shared:
             continue
-        # The same kind of thing first; else the most words in common ("a
-        # wall bunk bed" sleeps in the set's bunks).
-        score = (head in theirs, shared, -len(theirs), found)
-        if best is None or score[:3] > best[:3]:
+        # The same kind of thing first (its own head noun: "stone" in "a
+        # large stone hearth" says what it is made of, and a boundary stone
+        # stood in as a hearth); then one that has the word; else the most
+        # words in common ("a wall bunk bed" sleeps in the set's bunks).
+        same = head_noun(found.replace("-", " ")) == head
+        score = (same, head in theirs, shared, -len(theirs), found)
+        if best is None or score[:4] > best[:4]:
             best = score
-    return best[3] if best is not None else None
+    return best[4] if best is not None else None
 
 
 # A building's roof by what it is made of, from its own words: the set's

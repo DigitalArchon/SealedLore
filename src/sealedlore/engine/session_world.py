@@ -17,17 +17,20 @@ makes (session_plot.py `_read_after_turn`).
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+import re
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from sealedlore.engine.chronicle import introduced, variant_named
 from sealedlore.engine.marks import footprint, place_at
+from sealedlore.engine.scene_state import scene_at
 from sealedlore.engine.session_area import is_opening
 from sealedlore.engine.session_plot import SessionNotice
-from sealedlore.engine.takeable import FIXED_MARK, named_in
+from sealedlore.engine.takeable import FIXED_MARK, named_in, the
 from sealedlore.engine.validators import mentions
 from sealedlore.engine.world import (
+    _other_sex,
     build_world_read_messages,
     describe_delta,
     established,
@@ -54,6 +57,16 @@ MAX_FIXED_NAMED = 3
 WORLD_MAX_TOKENS = 4000
 # A chat's user on the map when the chat names nobody.
 CHAT_MAP_NAME = "You"
+
+
+# What opens where it stands: fixed, but opening it moves nothing, and "if
+# anyone tries to move one, the attempt fails" on REMEMBER read as the toll
+# gate not opening when the author walked up to it (Oct 18 2026).
+OPENS_IN_PLACE = re.compile(
+    r"\b(?:doors?|gates?|gateways?|hatch(?:es)?|trapdoors?|windows?|shutters?|"
+    r"portcullis(?:es)?|drawbridges?|lids?)\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -204,6 +217,10 @@ class WorldRuntime:
             name = speaker.name if speaker is not None else (held or "")
             label = f"The author's turn, as {name}"
         people = [c.name for c in self.map_people(path)]
+        begins = self.read_begins_at(path[:-1])
+        # Its words count as a quote: the read quoted the location, or (live)
+        # the whole line saying it.
+        begins_at = self.texts.fill("map_read.begins_at", location=begins) if begins else ""
         model = self.map_model
         request = ChatRequest(
             model=model,
@@ -223,6 +240,7 @@ class WorldRuntime:
                         self.read_spots(path[:-1], held),
                         self.read_things_here(path[:-1], held),
                         self.read_minutes(author, opening=is_opening(path[:-1])),
+                        begins_at,
                         self.read_marks(author),
                         self.read_unknowns(before),
                         direction,
@@ -241,10 +259,18 @@ class WorldRuntime:
         return _WorldRead(
             node=node,
             before=before,
-            source=f"{author_text}\n\n{node.content}",
+            # The setup's words count as a quote on the opening's read.
+            source=f"{author_text}\n\n{node.content}" + (f"\n\n{begins_at}" if begins else ""),
             request=request,
             log_ref=log_ref,
         )
+
+    def read_begins_at(self, before: Sequence[Node]) -> str:
+        """Where Setup says the story begins, for the read of the opening of
+        a story that grows its map (`map_read.begins_at`); "" otherwise."""
+        if self.story.chat or self.story.world_base is not None or not is_opening(before):
+            return ""
+        return " ".join((self.story.setup.starting_scene.location or "").split())
 
     def update_world_after_turn(
         self, pending: _WorldRead | None = None, fetched: dict[str, object] | None = None
@@ -378,6 +404,58 @@ class WorldRuntime:
         if label in delta.outside:
             delta.outside[name] = delta.outside.pop(label)
 
+    def join_named_newcomer(self) -> str | None:
+        """After all of a passage's reads: the one person the map read put in
+        the author's character's place unnamed, and the one the scene read
+        brought into the scene by name whom the map hasn't placed, are one
+        person, named (the map's `named`, and the label's spot kept under the
+        name). Live (Oct 18 2026) the map shop's dealer stepped out "a woman,
+        perhaps forty": the map kept her as Unknown 3, the scene read knew her
+        for Sable Cours, and both stood in the shop. Her name, or None."""
+        if not self.map_first or self.in_private or self.story.chat:
+            return None
+        result = self.last_result
+        node = result.node if result is not None else None
+        delta = node.meta.world if node is not None else None
+        if node is None or delta is None or not delta.unknowns:
+            return None
+        path = self._path_to(node.id)
+        before = self._world_on(path[:-1])
+        new = [label for label in delta.unknowns if label not in before.unknowns]
+        held = self.map_held_name(node.meta.controlled_character_id)
+        if len(new) != 1 or held is None:
+            return None
+        label = new[0]
+        after = self._world_on(path)
+        if after.where.get(label) is None or after.where.get(label) != after.where.get(held):
+            return None
+        scene_before = scene_at(path[:-1], self.story.setup.starting_scene)
+        came = set(self._present_on_map()) - set(self._present_on_map(scene_before))
+        unplaced = [n for n in came if n != held and n not in after.where]
+        if len(unplaced) != 1 or _other_sex(delta.unknowns[label], self._card_words(unplaced[0])):
+            return None
+        name = unplaced[0]
+        delta.unknowns.pop(label)
+        delta.named.pop(label, None)
+        if label in delta.where:
+            delta.where[name] = delta.where.pop(label)
+        if label in delta.outside:
+            delta.outside[name] = delta.outside.pop(label)
+        state = node.meta.area
+        if state is not None and label in state.spots:
+            state.spots[name] = state.spots.pop(label)
+        self.save()
+        return name
+
+    def _card_words(self, name: str) -> str:
+        """What a character's card says of them, for telling their sex."""
+        for card in [*self.cast, *self.supporting]:
+            if card.name == name:
+                return " ".join(
+                    getattr(card, field, "") or "" for field in ("summary", "full_description")
+                )
+        return ""
+
     # --- the author's Direction and the map -----------------------------------------
 
     @staticmethod
@@ -402,6 +480,7 @@ class WorldRuntime:
         scored = [
             (named_in(name, text), name)
             for name in self.fixed_here(path, held_id, turn_node_id=turn_node_id)
+            if not OPENS_IN_PLACE.search(name)
         ]
         best = max((score for score, _name in scored), default=0)
         if not best:
@@ -409,7 +488,7 @@ class WorldRuntime:
         # The ones the turn names best: "the heavy wooden shelf unit" over
         # every other shelf in the house (live).
         named = [name for score, name in scored if score == best][:MAX_FIXED_NAMED]
-        things = ", ".join(f"the {name}" for name in named)
+        things = ", ".join(the(name) for name in named)
         return self.texts.fill("turn.remember.fixed", things=things)
 
     def fixed_stays(self, turn: Node | None) -> bool:

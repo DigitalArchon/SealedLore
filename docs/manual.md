@@ -1525,9 +1525,10 @@ The bar says what the tool in hand does:
 - **Move**: drag a person or a thing to where they belong; click one for its
   menu (its corrections: rename, remove, broken…). The ground pans the view.
 - **Paint**: click, or drag across tiles, to lay the tile chosen beside it:
-  floor, wall, door, window, ground, grass, path, sand, trees, rock, water,
-  fence, rubble, or nothing. A door painted into a building's wall leads in;
-  one painted over doesn't any more. Painting a tile back to what the plan
+  floor, wall, door, window, ground, grass, path, bridge, sand, trees, rock,
+  water, fence, rubble, or nothing. A door painted into a building's wall
+  leads in; one painted over doesn't any more. A bridge is walked on over
+  water (a road the map drew across a river is one already). Painting a tile back to what the plan
   had takes your change off. What stood on a tile you make a wall or water is
   gone.
 - **Room**: drag from one corner to the other: walls round it with a door

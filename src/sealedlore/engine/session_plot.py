@@ -252,6 +252,9 @@ class PlotRuntime:
         """The reads after a passage (`_read_after_turn`), then a note for any
         model they caught reasoning though asked for nothing."""
         yield from self._read_after_turn()
+        joined = self.join_named_newcomer()
+        if joined:
+            yield SessionNotice(f"Map: the newcomer is {joined}.")
         passage = self.last_result.node if self.last_result is not None else None
         for note in self.reasoning_notices(passage):
             yield SessionNotice(note)

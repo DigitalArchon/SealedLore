@@ -230,6 +230,20 @@ class PortraitRuntime:
         """The direction for a picture of one character as they are now."""
         return self.texts.fill("pictures.scene_of", name=character.name)
 
+    def portraits_landed(self) -> set[str]:
+        """The cards with a portrait drawn and not yet taken onto them: it
+        comes back while the worker owns the story, and is taken once the
+        job is done (live, Oct 18 2026: the map drew those cards' avatars
+        from their words in between, and again from the portraits)."""
+        if self.story.chat:
+            return set()
+        taken = set(self.story.card_pictures_taken)
+        return {
+            image.card_id
+            for image in self.generated_images()
+            if image.card_id and image.card_first and image.id not in taken
+        }
+
     def take_card_pictures(self) -> list[str]:
         """Put each picture drawn for this story's cards and not yet taken
         onto its card; the names of the cards that changed. Each is taken

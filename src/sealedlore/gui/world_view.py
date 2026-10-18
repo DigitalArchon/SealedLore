@@ -1934,7 +1934,9 @@ class WorldView(QWidget):
             names.sort(key=lambda n: n != self.held)
             for i, name in enumerate(names):
                 offset = (i - (len(names) - 1) / 2) * PERSON_STEP
-                avatar = self._picture_image("person", name, None, AVATAR_HEIGHT)
+                avatar = self._picture_image(
+                    "person", name, None, AVATAR_HEIGHT
+                ) or self._picture_image("walker", name, None, AVATAR_HEIGHT)
                 figure = _PersonItem(name, avatar or person_sprite(name), held=name == self.held)
                 figure.setParentItem(plan)
                 figure.setPos(x + offset, y)

@@ -38,6 +38,7 @@ from sealedlore.engine.area import (
     anchors_near,
     apply_things,
     area_of,
+    area_rect,
     bare,
     build_area,
     build_level,
@@ -81,7 +82,7 @@ from sealedlore.engine.marks import (
     place_at,
 )
 from sealedlore.engine.session_world_art import _today, job_words
-from sealedlore.engine.takeable import fixed_thing, same_thing, thing_class
+from sealedlore.engine.takeable import fixed_thing, same_thing, the, thing_class
 from sealedlore.engine.tile_draw import (
     DESIGNER_MODEL,
     RUN_LIMIT,
@@ -800,7 +801,7 @@ class AreaRuntime:
             # author's character (live, Brasshaven's Silas stood in the
             # workshop's doorway and the map read never named him: he was
             # nowhere on the map, told to nobody, and Talk couldn't find him).
-            for name in self._present_names():
+            for name in self._present_on_map():
                 if name != held and name not in where:
                     where[name] = where[held]
         spots: dict[str, Spot] = {}
@@ -857,7 +858,11 @@ class AreaRuntime:
             if (
                 spot is not None
                 and spot.area == target
-                and (name == held or self._still_at(area, world, spot, stand_at))
+                # The author's character stays where they walked; a read that
+                # moved them (`walked` off) moves them like anyone (live, Oct
+                # 18 2026: read at the north gate, Wren stayed at the counting
+                # house's door across the town).
+                and ((name == held and walked) or self._still_at(area, world, spot, stand_at))
             ):
                 spots[name] = (
                     spot
@@ -879,6 +884,16 @@ class AreaRuntime:
                 and mine.area == target
                 and place_id == where.get(held or "")
             )
+            # On a window, where they stand on the map; but someone moved to
+            # a place there with a spot of its own (not a road or a region)
+            # goes to that spot: kept at their own point, Wren read outside
+            # the map shop stayed 700 m off on the land (Oct 18 2026).
+            moved_here = (
+                spot is not None
+                and spot.area == target
+                and world.places.get(stand_at) is not None
+                and world.places[stand_at].kind not in ("route", "region")
+            )
             new = self._stand(
                 world,
                 art,
@@ -887,7 +902,7 @@ class AreaRuntime:
                 name,
                 spots,
                 mine if near_me else None,
-                point=point if area.window else None,
+                point=point if area.window and not moved_here else None,
             )
             if new is not None:
                 if outside and new.for_place:
@@ -997,11 +1012,12 @@ class AreaRuntime:
             out.append((name, bx, by, ex, ey))
         return out
 
-    def _present_names(self) -> list[str]:
-        """The people the scene has here, by the names the map uses."""
+    def _present_on_map(self, scene: SceneState | None = None) -> list[str]:
+        """The people the scene (the story's now, unless given) has here, by
+        the names the map uses."""
         if self.story.chat:
             return []
-        scene = self.story.scene
+        scene = scene if scene is not None else self.story.scene
         names = [c.name for c in self.visible_cast() if c.id in scene.present_character_ids]
         for other in scene.present_others:
             person = self._map_person(other)
@@ -1010,6 +1026,8 @@ class AreaRuntime:
 
     def _still_at(self, area: Area, world: WorldMap, spot: Spot, place_id: str) -> bool:
         anchor = anchor_of(area, world, place_id)
+        if anchor is None and not area.indoor and place_id not in (area.place_id, area.id):
+            anchor = self._spot_in(world, area, place_id)
         if anchor is None:
             return True
         return math.hypot(spot.x - anchor[0], spot.y - anchor[1]) <= AT_A_PLACE
@@ -1042,11 +1060,27 @@ class AreaRuntime:
         if near is None and area.window:
             at = point if point is not None else position(world, place_id)
             near = clamped_tile(world, area, *at) if at is not None else None
+        if near is None and not area.indoor and place_id not in (area.place_id, area.id):
+            # A place the plan doesn't mark but whose spot it covers (a cairn
+            # standing on the plan drawn round a boundary stone): there.
+            near = self._spot_in(world, area, place_id)
         if near is None:
             near = self._way_in(area)
         x, y = stand_near(area, near, taken, seed=name, reach=0 if area.window else 2)
         waiting = area.window and place_id not in (area.place_id, area.id)
         return Spot(area=area_id, x=x, y=y, for_place=place_id if waiting else "")
+
+    @staticmethod
+    def _spot_in(world: WorldMap, area: Area, place_id: str) -> tuple[int, int] | None:
+        """The tile at a place's spot on the map, when the area covers it."""
+        at = position(world, place_id)
+        rect = area_rect(world, area)
+        if at is None or rect is None:
+            return None
+        west, north, width, height = rect
+        if not (west <= at[0] <= west + width and north - height <= at[1] <= north):
+            return None
+        return clamped_tile(world, area, *at)
 
     def _spot_point(
         self, spot: Spot | None, world: WorldMap, art: WorldArt
@@ -2037,7 +2071,7 @@ class AreaRuntime:
             counts.setdefault(bare(p.name), []).append(d)
         ordered = sorted(counts.items(), key=lambda item: min(item[1]))[:THINGS_TOLD]
         things = "; ".join(
-            f"the {name}" + (f" ({len(ds)})" if len(ds) > 1 else "") for name, ds in ordered
+            the(name) + (f" ({len(ds)})" if len(ds) > 1 else "") for name, ds in ordered
         )
         return self.texts.fill("map_read.things_here", things=things)
 
@@ -2793,9 +2827,10 @@ class AreaRuntime:
         # avatars were drawn from the cards' words while Setup and Start were
         # still open, then again from the portraits.
         begun = bool(self.path())
+        coming = self.portraits_coming | (self.portraits_landed() if begun else set())
         for card in (*self.visible_cast(), *self.visible_supporting()) if begun else ():
-            if card.id in self.portraits_coming:
-                continue  # drawn from the portrait once it lands
+            if card.id in coming:
+                continue  # drawn from the portrait once it lands and is taken
             portrait = card.reference_images[0].file if card.reference_images else None
             people.append((card.name, portrait, looks_of(card.summary, card.full_description)))
         people.sort(key=lambda p: p[0] not in here)

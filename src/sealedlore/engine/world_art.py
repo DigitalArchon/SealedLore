@@ -136,6 +136,11 @@ PLAN_ASPECT = LAYOUT_HEIGHT / LAYOUT_WIDTH
 WIDE_PLAN_FROM = 800.0
 # A plan's tile is its place's width over the grid, never finer than this.
 MIN_PLAN_TILE = 0.5
+# Out of doors, a plan's tile is at least a stride: a boundary stone (3 m)
+# was drawn on a 20 m plan at half a metre a tile, its people a quarter of
+# the size they were at the toll bridge beside it (Oct 18 2026). Now its plan
+# is the 60 m of scrub round it, at the play view's walking scale.
+MIN_OUTDOOR_TILE = 1.5
 # The local map at a place is the plan of the outermost place it is in that
 # is at most this wide: the farm for its farmhouse, the town for its diner,
 # the caves and not the hills they are in. Wider places are country.
@@ -507,8 +512,11 @@ def plan_grid(place: WorldPlace) -> tuple[int, int]:
 
 
 def plan_tile(place: WorldPlace) -> float:
-    """Metres a tile of the place's plan covers."""
-    return max(size_of(place) / plan_grid(place)[0], MIN_PLAN_TILE)
+    """Metres a tile of the place's plan covers: at least walking scale out
+    of doors (MIN_OUTDOOR_TILE), so a small place's plan is the ground round
+    it."""
+    least = MIN_PLAN_TILE if place.kind in ("building", "room", "vehicle") else MIN_OUTDOOR_TILE
+    return max(size_of(place) / plan_grid(place)[0], least)
 
 
 def plan_rect(world: WorldMap, place: WorldPlace) -> tuple[float, float, float, float] | None:
@@ -717,6 +725,43 @@ def _chain(world: WorldMap, place_id: str | None) -> list[WorldPlace]:
     return out
 
 
+# An outdoor place no wider than this is a feature on the ground (a stone, a
+# cairn, a well, a shrine): where a plan already covers its spot it stands
+# on that plan, marked, and gets none of its own (`covering_plan`).
+FEATURE_MAX_SIZE = 10.0
+
+
+def covering_plan(world: WorldMap, art: WorldArt, place: WorldPlace) -> WorldPlace | None:
+    """For a small outdoor place with no plan of its own (`FEATURE_MAX_SIZE`)
+    and nothing round it with one: the place whose drawn outdoor plan covers
+    its spot, the smallest such. Live (Oct 18 2026) a boundary stone, a marker
+    post and a cairn within eight metres of each other each got a plan, and
+    the same ground was drawn three times over, three ways."""
+    if place.kind in ("building", "room", "vehicle") or size_of(place) > FEATURE_MAX_SIZE:
+        return None
+    if art.layout_shown(place.id, place.state) is not None:
+        return None
+    spot = position(world, place.id)
+    if spot is None:
+        return None
+    best: tuple[float, WorldPlace] | None = None
+    for other in world.places.values():
+        if other.id == place.id or other.kind in ("building", "room", "vehicle", "route"):
+            continue
+        if other.kind not in LAYOUT_KINDS or local_area(world, other.id) is not other:
+            continue
+        if art.layout_shown(other.id, other.state) is None:
+            continue
+        rect = plan_rect(world, other)
+        if rect is None:
+            continue
+        west, north, width, height = rect
+        if west <= spot[0] <= west + width and north - height <= spot[1] <= north:
+            if best is None or width < best[0]:
+                best = (width, other)
+    return best[1] if best is not None else None
+
+
 def plan_place(world: WorldMap, art: WorldArt, place_id: str | None) -> WorldPlace | None:
     """The place whose plan someone at `place_id` stands on: the innermost
     building round them with an inside of its own, else the local area's
@@ -734,6 +779,10 @@ def plan_place(world: WorldMap, art: WorldArt, place_id: str | None) -> WorldPla
     local = local_area(world, place_id)
     if local is not None and art.layout_shown(local.id, local.state) is not None:
         return local
+    if local is not None:
+        covering = covering_plan(world, art, local)
+        if covering is not None:
+            return covering
     for place in chain:
         if (
             place.kind in LAYOUT_KINDS
@@ -837,7 +886,7 @@ def patch_at(art: WorldArt, west: float, north: float, side: float) -> TerrainPa
 DECK_GAP = 2
 # Where someone may stand in a plan: not space, a wall, a window, water,
 # trees, rock, a fence or fire.
-WALKABLE = frozenset("._=+,:s&")
+WALKABLE = frozenset("._=+,:s&b")  # "b": the play view's bridge (engine/area.py)
 # The tile a deck's blank is filled with (TILES["_"]).
 FLOOR = "_"
 
@@ -1531,6 +1580,8 @@ def plan_art(
         if place is None:
             continue
         area = local_area(world, pid)
+        if area is not None and covering_plan(world, art, area) is not None:
+            area = None  # a feature on a plan already drawn round it
         if area is not None and area.kind in LAYOUT_KINDS and size_of(area) <= PLAN_MAX_SIZE:
             wanted[area.id] = area
         if place.kind in ("building", "vehicle"):

@@ -31,6 +31,7 @@ from datetime import UTC, datetime
 
 from sealedlore.engine.area import now_words
 from sealedlore.engine.image_variants import fitting_model
+from sealedlore.engine.takeable import the
 from sealedlore.engine.world_art import (
     LAYOUT_MAX_TOKENS,
     MAX_FAILURES,
@@ -82,7 +83,7 @@ ART_WORKERS = 2
 def job_words(job: PictureJob) -> str:
     """What a map picture is of, in a few words for the Map page."""
     if job.subject == "item":
-        return f"the {job.name}"
+        return the(job.name)
     if job.subject == "walker":
         return f"{job.name}'s avatar"
     if job.subject == "postcard":
@@ -340,10 +341,12 @@ class WorldArtRuntime:
             return []
         info = self._picture_model()
         # A chat's user has no card to draw an avatar from: the map's own
-        # figure stands for them.
+        # figure stands for them. Played on the map, everyone has an avatar
+        # (the tile run's walkers), and the plan shows that: a picture of
+        # each person besides was a second one, paid twice (Oct 18 2026).
         people = (
             []
-            if self.story.chat
+            if self.story.chat or self.map_first
             else [
                 Person(c.name, looks_of(c.summary, c.full_description))
                 for c in (*self.visible_cast(), *self.visible_supporting())

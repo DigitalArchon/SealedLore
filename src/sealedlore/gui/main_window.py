@@ -2905,9 +2905,12 @@ class MainWindow(
             QTimer.singleShot(0, lambda: self.transcript.scroll_to_node(focus))
         self.refresh_summaries()
         self.refresh_retrieval()
-        self._sync_world()
-        # Card pictures that came back while the worker owned the story.
+        # Card pictures that came back while the worker owned the story,
+        # before the map's art starts: after it, the avatars were drawn from
+        # the cards' words and again from the portraits (Oct 18 2026: a
+        # drafted story's six avatars, paid twice).
         self._take_card_pictures()
+        self._sync_world()
         if self._streaming_job:
             # The kept prompt is exactly what was sent, so show that.
             self.refresh_inspector()

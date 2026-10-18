@@ -26,6 +26,7 @@ from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.scene_state import same_person
 from sealedlore.engine.takeable import FIXED_MARK, can_be_taken, fixed_thing, is_vehicle, same_thing
+from sealedlore.engine.tile_sets import head_noun
 from sealedlore.engine.validators import locate_quote
 from sealedlore.engine.world_layout import (
     bearing,
@@ -480,6 +481,65 @@ def _parents_first(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+# What a person stands at, not in: a read that lists one inside a building as
+# a place is folded into the building (`_furniture_folded`).
+FURNITURE = frozenset(
+    "table desk chair armchair stool bed bunk cot bench workbench shelf shelves bookshelf "
+    "bookcase cabinet cupboard wardrobe dresser chest trunk sofa couch settee counter stove "
+    "hearth fireplace mantel mantelpiece lectern easel sideboard rack loom".split()
+)
+_HOLDS_FURNITURE = frozenset({"building", "room", "vehicle"})
+
+
+def _furniture_folded(world: WorldMap, reply: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """The reply with each new place that is a piece of furniture inside a
+    building or room (the read's prompt says furniture is neither a place
+    nor a thing) taken out, and every mention of it standing for the place
+    it is in: whoever is "at the drafting table" is in the map shop. Live
+    (Oct 18 2026) a drafted story's opening put "drafting table" and "Aldous's
+    desk" on the map as places, and the storyteller was told of them so."""
+    entries = _entries(reply, "places")
+    kinds = {key(_text(e.get("name"))): _text(e.get("kind")).lower() for e in entries}
+    folded: dict[str, str] = {}
+    for entry in entries:
+        name = _text(entry.get("name"))
+        parent = _text(entry.get("inside"))
+        if not name or not parent or find_place(world, name) is not None:
+            continue
+        if head_noun(name) not in FURNITURE:
+            continue
+        known = find_place(world, parent)
+        kind = world.places[known].kind if known is not None else kinds.get(key(parent))
+        if kind in _HOLDS_FURNITURE:
+            folded[key(name)] = parent
+    if not folded:
+        return reply, []
+
+    def instead(name: Any) -> Any:
+        return folded.get(key(_text(name)), name) if isinstance(name, str) else name
+
+    out = dict(reply)
+    out["places"] = [
+        {**e, "inside": instead(e.get("inside"))}
+        for e in entries
+        if key(_text(e.get("name"))) not in folded
+    ]
+    links = []
+    for link in _entries(reply, "links"):
+        a, b = instead(link.get("from")), instead(link.get("to"))
+        if key(_text(a)) != key(_text(b)):
+            links.append({**link, "from": a, "to": b})
+    out["links"] = links
+    out["where"] = [{**e, "place": instead(e.get("place"))} for e in _entries(reply, "where")]
+    out["things"] = [{**e, "at": instead(e.get("at"))} for e in _entries(reply, "things")]
+    return out, [
+        f"place {name}: furniture, not a place (in {parent})"
+        for name, parent in (
+            (n, folded[key(n)]) for n in (_text(e.get("name")) for e in entries) if key(n) in folded
+        )
+    ]
+
+
 def resolve_reply(
     world: WorldMap,
     reply: dict[str, Any],
@@ -515,7 +575,7 @@ def resolve_reply(
     # `added` is always a list from here: a delta that changes known places
     # and makes none must still skip their copies on a fold without them.
     delta = WorldDelta(added=[])
-    refused: list[str] = []
+    reply, refused = _furniture_folded(world, reply)
     marked = marked or {}
     if moves_fixed is None:
         moves_fixed = author_says
@@ -832,7 +892,46 @@ def resolve_reply(
             refused.append(f"weather {words}: no quote found")
         else:
             delta.weather = words
+    refused += _drop_named_only(delta, marked)
     return delta, refused
+
+
+# Kinds too wide to put beside the story on a guess (`_drop_named_only`).
+_FAR_KINDS = frozenset({"settlement", "region"})
+
+
+def _drop_named_only(delta: WorldDelta, marked: Mapping[str, tuple[float, float]]) -> list[str]:
+    """Each new town or region the delta only names taken out of it: nobody
+    is there, nothing is in it or at it, and no link (as resolved: a
+    direction its quote doesn't carry is gone) says which way or how far.
+    The read's prompt says a name only mentioned in passing is not yet a
+    place; given anyway, it was put beside the story, and places never move
+    (live, Oct 18 2026: "Road goes to Saltmarsh" set the town 1.2 km west of
+    the toll bridge, a few hours south in the story). It comes onto the map
+    when the story says where it is, or goes there. What was refused, said."""
+    made = set(delta.added or [])
+    held = set(delta.where.values()) | {t.at for t in delta.things if t.at}
+    held |= {p.inside for p in delta.places if p.inside}
+    for link in delta.links:
+        if bearing(link.direction) is not None or metres(link.distance) is not None:
+            held |= {link.a, link.b}
+    gone = [
+        p
+        for p in delta.places
+        if p.id in made
+        and p.kind in _FAR_KINDS
+        and p.inside is None
+        and p.id not in held
+        and key(p.name) not in {key(n) for n in marked}
+    ]
+    if not gone:
+        return []
+    ids = {p.id for p in gone}
+    delta.places = [p for p in delta.places if p.id not in ids]
+    delta.added = [i for i in delta.added or [] if i not in ids]
+    delta.seen = [i for i in delta.seen if i not in ids]
+    delta.links = [k for k in delta.links if k.a not in ids and k.b not in ids]
+    return [f"place {p.name}: only named, nothing says where it is yet" for p in gone]
 
 
 def _weather_entry(reply: dict[str, Any]) -> dict[str, Any] | None:

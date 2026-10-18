@@ -195,7 +195,7 @@ def test_the_read_s_sense_of_scale_is_kept_within_reason():
                 },
                 {"name": "A hut", "kind": "building", "size": "5 m", "quote": "Jane heads north"},
                 {"name": "Nowhere", "kind": "site", "size": -3, "quote": "Jane heads north"},
-                {"name": "Everywhere", "kind": "region", "size": 1e9, "quote": "Jane heads north"},
+                {"name": "Everywhere", "kind": "site", "size": 1e9, "quote": "Jane heads north"},
                 {"name": "A barn", "kind": "building", "size": True, "quote": "Jane heads north"},
             ]
         },

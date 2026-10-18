@@ -314,6 +314,13 @@ def test_go_outside_and_back_in_from_where_you_stand(app, window):
     assert view.area.id == "farm" and window._edit_area_id == "farm"
     assert view.edit_bar.back_button.text() == "Back to The house"
     assert view.edit_bar.outside_button.isHidden(), "the ground has no outside"
+    # Looking at the house just left, at its door (live, Oct 18 2026: the
+    # town's far corner, all forest).
+    door = next(e for e in view.area.entrances if e.place_id == "house")
+    assert view.focus == (door.x, door.y)
+    middle = view.view.mapToScene(view.view.viewport().rect().center())
+    px = px_for(view.area)
+    assert abs(middle.x() / px - door.x) < 8 and abs(middle.y() / px - door.y) < 8
     # Into the house again, which is where the author's character is: home.
     box = view.area.buildings["house"]
     px = px_for(view.area)

@@ -41,7 +41,7 @@ from sealedlore.engine.levels import (
 )
 from sealedlore.engine.marks import footprint
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
-from sealedlore.engine.takeable import FIXED_MARK, fixed_thing, item_verbs, named_in
+from sealedlore.engine.takeable import FIXED_MARK, fixed_thing, item_verbs, named_in, the
 from sealedlore.engine.tile_sets import LIGHT_WORDS, roof_material
 from sealedlore.engine.world import key
 from sealedlore.engine.world_art import (
@@ -84,8 +84,10 @@ WALK_M_PER_S = 1.4
 # The density dial: furnishing counts times this (measured: the farmhouse
 # 9 / 49 / 86 pieces).
 DENSITY = {"sparse": 0.5, "normal": 1.0, "full": 1.7}
+# A road's deck over water: the play view's own tile, never a plan's.
+BRIDGE = "b"
 # Where someone may stand, and what a piece of furniture may stand on.
-WALKABLE = frozenset("._=+,:s&")
+WALKABLE = frozenset("._=+,:s&" + BRIDGE)
 FLOOR_TILES = frozenset("_+")
 WALLS = frozenset("#W")
 
@@ -407,6 +409,11 @@ def _roads_on_open_ground(rows: list[str], roads: Sequence[dict[str, Any]]) -> l
                     if math.hypot(x - (ax + t * dx), y - (ay + t * dy)) <= radius:
                         if grid[y][x] in ".,s":
                             grid[y][x] = "="
+                        elif grid[y][x] == "~":
+                            # Over water a road is a bridge: live (Oct 18 2026)
+                            # the toll bridge's road stopped at both banks, its
+                            # arches stood in the river, and nobody could cross.
+                            grid[y][x] = BRIDGE
                         elif grid[y][x] == "#" and (
                             # Across the wall, never along it.
                             (abs(dy) > abs(dx) and _wall_run(grid, x, y, 1, 0) > TOWN_WALL_RUN)
@@ -415,6 +422,87 @@ def _roads_on_open_ground(rows: list[str], roads: Sequence[dict[str, Any]]) -> l
                             gates.add((x, y))
     for x, y in gates:
         grid[y][x] = "+"
+    return ["".join(r) for r in grid]
+
+
+# What a bridge is built of: drawn as its deck, not as things in the river.
+BRIDGE_PART = re.compile(
+    r"\b(?:(?:foot)?bridges?|arch(?:es|way)?|piers?|spans?|pilings?|piles|trestles?|"
+    r"abutments?|stepping stones?|causeway|planks?)\b",
+    re.IGNORECASE,
+)
+
+
+def _bridge_parts(rows: list[str], objects: dict[str, str]) -> list[str]:
+    """A plan's arches, piers and spans in the water are its bridge: each
+    beside a bridge's deck (or between two of them) is deck too, and one in
+    open water is water; neither stands as a thing. Live (Oct 18 2026) the
+    toll bridge's "three stone arches" were four crates in the river."""
+    parts = {digit: name for digit, name in objects.items() if BRIDGE_PART.search(name)}
+    if not parts:
+        return rows
+    grid = [list(r) for r in rows]
+    h, w = len(grid), len(grid[0]) if grid else 0
+
+    def around(x: int, y: int) -> list[str]:
+        return [
+            grid[ny][nx]
+            for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1))
+            if 0 <= nx < w and 0 <= ny < h
+        ]
+
+    for _round in range(2):  # an arch beside an arch beside the deck
+        for y in range(h):
+            for x in range(w):
+                digit = grid[y][x]
+                if digit not in parts:
+                    continue
+                near = around(x, y)
+                if BRIDGE in near:
+                    grid[y][x] = BRIDGE
+                elif _round and "~" in near:
+                    grid[y][x] = "~"
+                else:
+                    continue
+                objects.pop(digit, None)
+    return ["".join(r) for r in grid]
+
+
+# A plan's object that is a way in or a window: a tile of the wall, not a thing.
+_DOORISH = re.compile(
+    r"\b(?:doors?|doorways?|gates?|gateways?|entrances?|hatch(?:es)?|trapdoors?|windows?)\b",
+    re.IGNORECASE,
+)
+
+
+def _doors_in_walls(rows: list[str], objects: dict[str, str]) -> list[str]:
+    """A plan's object named for a door, gate or window and drawn in a wall
+    (wall on both sides of it) is that door or window: live (Oct 18 2026)
+    the map shop's "door to the lane" stood in its south wall as a thing,
+    drawn with a picture of its own, and the storyteller was told it was
+    fixed in place when the author locked it."""
+    if not any(_DOORISH.search(name) for name in objects.values()):
+        return rows
+    grid = [list(r) for r in rows]
+    h, w = len(grid), len(grid[0]) if grid else 0
+    wall = WALLS | {"+"}
+
+    def at(x: int, y: int) -> str:
+        return grid[y][x] if 0 <= x < w and 0 <= y < h else ""
+
+    for digit, name in list(objects.items()):
+        if not _DOORISH.search(name):
+            continue
+        spot = next(((x, y) for y in range(h) for x in range(w) if grid[y][x] == digit), None)
+        if spot is None:
+            continue
+        x, y = spot
+        across = at(x - 1, y) in wall and at(x + 1, y) in wall
+        along = at(x, y - 1) in wall and at(x, y + 1) in wall
+        if across or along:
+            window = re.search(r"\bwindows?\b", name, re.IGNORECASE) is not None
+            grid[y][x] = "W" if window else "+"
+            objects.pop(digit)
     return ["".join(r) for r in grid]
 
 
@@ -1001,6 +1089,7 @@ def build_area(
         if not generated and (look == "space" or place.kind not in ("building", "room")):
             rows = list(decked(rows))  # a deck laid out by the program has its courtyards
         objects = dict(layout.objects)
+        rows = _doors_in_walls(rows, objects)
         labels = {k: (int(v[0]), int(v[1])) for k, v in layout.labels.items() if len(v) >= 2}
         # The map's own scale (the plan's rectangle over its tiles): the
         # positions, earshot, walking and the marks used to disagree by up
@@ -1040,6 +1129,8 @@ def build_area(
         if big.get("features"):
             rows, objects, raw_labels = rasterise(rest, columns * k, grid_rows * k)
             rows = _roads_on_open_ground(rows, roads)
+            rows = _bridge_parts(rows, objects)
+            rows = _doors_in_walls(rows, objects)
         else:  # a plan with no shapes kept: its tiles, each k times over
             rows = ["".join(ch * k for ch in row) for row in layout.rows for _ in range(k)]
             objects, raw_labels = (
@@ -1179,6 +1270,7 @@ def build_level(
     stairs = [t for t in links.links.get(index, {})]
     rows = _open_sealed(rows, stairs, repairs)
     objects = dict(drawn.objects)  # type: ignore[union-attr]
+    rows = _doors_in_walls(rows, objects)
     labels = {k: (int(v[0]), int(v[1])) for k, v in drawn.labels.items() if len(v) >= 2}  # type: ignore[union-attr]
     labels = _inside_labels(world, place, labels)
     people_keys = {key(n) for n in people}
@@ -2174,8 +2266,12 @@ def inside_door(area: Area, side: str | None = None) -> tuple[int, int] | None:
     toward = {"north": lambda e: e[1], "south": lambda e: h - 1 - e[1]}
     toward |= {"west": lambda e: e[0], "east": lambda e: w - 1 - e[0]}
     chosen = next((e for e in area.exits if side_of(*e) == side), None)
+    if chosen is None and side in toward:
+        chosen = min(area.exits, key=toward[side])
     if chosen is None:
-        chosen = min(area.exits, key=toward[side]) if side in toward else area.exits[0]
+        # A door before a gap in the wall: live (Oct 18 2026) the map shop's
+        # keeper stood in a gap of its north wall, its door in the south.
+        chosen = next((e for e in area.exits if area.at(*e) == "+"), area.exits[0])
     x, y = chosen
     for dx, dy in ((0, -1), (0, 1), (1, 0), (-1, 0)):
         n = (x + dx, y + dy)
@@ -2395,7 +2491,7 @@ def render_positions(
             if mark_fixed and fixed_thing(p.name):
                 fixed.add(label)
     close = [
-        f"the {name} ({'at hand' if m < 1.5 else metres_words(m)}"
+        f"{the(name)} ({'at hand' if m < 1.5 else metres_words(m)}"
         + (f"; {n - 1} more near" if n > 1 else "")
         + (f"; {FIXED_MARK})" if name in fixed else ")")
         for name, (m, n) in nearest.items()
@@ -2487,7 +2583,7 @@ def anchors_near(area: Area, x: int, y: int, limit: int = 12) -> list[str]:
     found: list[tuple[float, str]] = []
     for p in area.placements:
         d = math.hypot(p.centre[0] - x, p.centre[1] - y)
-        found.append((d, f"the {_bare(p.name)}"))
+        found.append((d, the(p.name)))
     for room in area.rooms:
         found.append((math.hypot(room.cx - x, room.cy - y) + 0.5, room_words(area, room)))
     for name, (dx, dy) in doorway_spots(area, x, y):

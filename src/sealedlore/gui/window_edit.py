@@ -79,6 +79,7 @@ class MapEditWindow:
             return
         self._map_editing = False
         self._edit_area_id = None
+        self.area_view.focus = None
         self.area_view.set_placing(None)
         self.area_view.set_removing(False)
         self.area_view.set_editing(False)
@@ -94,6 +95,20 @@ class MapEditWindow:
             self._after_edit("Its outside isn't drawn yet: the map draws it as the story goes.")
             return
         self._edit_area_id = around
+        # Looking at the building just left, at its door.
+        ground = session.area(around)
+        door = next(
+            (e for e in ground.entrances if e.place_id == area.place_id),
+            None,
+        )
+        box = ground.buildings.get(area.place_id or "")
+        self.area_view.focus = (
+            (door.x, door.y)
+            if door is not None
+            else ((box[0] + box[2]) // 2, (box[1] + box[3]) // 2)
+            if box is not None
+            else None
+        )
         held = session.held_name()
         me = session.area_state().spots.get(held or "")
         if me is not None and me.area != around:
@@ -293,6 +308,7 @@ class MapEditWindow:
 
     def _edit_back(self) -> None:
         self._edit_area_id = None
+        self.area_view.focus = None
         self.area_view.edit_bar.set_back(None)
         self.refresh_area()
 

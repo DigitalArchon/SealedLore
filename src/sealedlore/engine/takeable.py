@@ -218,6 +218,17 @@ VEHICLES = re.compile(
 )
 
 
+_OWNED = re.compile(r"^(?:\S+['’]s?|my|his|her|its|our|your|their)\s", re.IGNORECASE)
+
+
+def the(name: str) -> str:
+    """A thing's name as the storyteller and the Map page say it: "the" before
+    it, but not before an owner's ("Aldous's coffee cup", not "the Aldous's
+    coffee cup"), nor twice."""
+    bare = re.sub(r"^(?:the|a|an)\s+", "", " ".join(name.split()), flags=re.IGNORECASE)
+    return bare if _OWNED.match(bare) else f"the {bare}"
+
+
 def _matches(words: Sequence[str], lowered: str) -> bool:
     return any(re.search(rf"\b{w}", lowered) for w in words)
 

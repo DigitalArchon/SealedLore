@@ -964,6 +964,9 @@ class AreaView(QWidget):
         self._timer.timeout.connect(self._tick)
         self._clock = QElapsedTimer()
         self._fitted_for: str | None = None
+        # Where to look in an area the author's character isn't in (Edit
+        # Mode's Go outside: the door of the building left).
+        self.focus: tuple[int, int] | None = None
         # The map's point (metres east, north) at a tile of the area shown,
         # or None (the window sets it).
         self.point_of: Callable[[int, int], tuple[float, float] | None] = lambda _x, _y: None
@@ -1405,6 +1408,10 @@ class AreaView(QWidget):
         held = self.held()
         if held is not None:
             self.view.centerOn((held.x + 0.5) * px, (held.y + 0.5) * px)
+        elif self.focus is not None:
+            # Live (Oct 18 2026) Go outside from a shop showed the town's far
+            # corner, all forest.
+            self.view.centerOn((self.focus[0] + 0.5) * px, (self.focus[1] + 0.5) * px)
         self._lift_tags()
 
     def _zoomed(self) -> None:

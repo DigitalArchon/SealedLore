@@ -103,10 +103,22 @@ _AMOUNT = re.compile(
     r"(?:'s|s')?(\s+and\s+a\s+half)?\b",
     re.IGNORECASE,
 )
-_HALF_UNIT = re.compile(rf"\bhalf\s+an?\s+({_UNIT_WORDS})\b", re.IGNORECASE)
+# A share of a unit: "half a mile", "a quarter-mile", "three-quarters of a
+# mile", "a third of a day". "A quarter-mile" was nothing and "quarter of a
+# mile" a whole mile: a boundary stone a quarter-mile off was put 115 m away
+# (Oct 18 2026).
+_FRACTIONS = {"quarter": 0.25, "third": 1 / 3, "half": 0.5, "three": 0.75, "two": 2 / 3}
+_FRACTION_UNIT = re.compile(
+    r"\b(?:an?\s+|one\s+)?(three[\s-]+quarters?|two[\s-]+thirds?|quarter|third|half)"
+    rf"(?:\s+of)?(?:\s+an?)?[\s-]+({_UNIT_WORDS})\b",
+    re.IGNORECASE,
+)
 _CLOSE = re.compile(
     r"\b(next door|across the (street|road|square|yard|hall|corridor|way)|around (the )?back|"
-    r"behind|beside|next to|adjoining|out back|through the door|outside|nearby|a few steps)",
+    r"behind|beside|next to|adjoining|out back|through the door|outside|nearby|a few steps)"
+    # "out" alone: the way out of the shop is the lane, at its door (live,
+    # Oct 18 2026, the lane was put a hundred metres off).
+    r"|^\s*out\s*$",
     re.IGNORECASE,
 )
 
@@ -171,10 +183,11 @@ def _metres(distance: str | None) -> float | None:
         return None
     amount: float | None = None
     unit = ""
-    half = _HALF_UNIT.search(text)
+    share = _FRACTION_UNIT.search(text)
     match = _AMOUNT.search(text)
-    if half and (match is None or half.start() <= match.start()):
-        amount, unit = 0.5, half.group(1).lower()
+    if share and (match is None or share.start() <= match.start()):
+        amount = _FRACTIONS[share.group(1).lower().split()[0].split("-")[0]]
+        unit = share.group(2).lower()
     elif match:
         phrase = match.group(1)
         try:

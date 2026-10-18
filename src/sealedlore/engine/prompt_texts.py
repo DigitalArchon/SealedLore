@@ -4633,6 +4633,21 @@ _text(
 )
 
 _text(
+    "map_read.begins_at",
+    MAP,
+    "Map read: where the story's setup says it begins",
+    "Added to the map read of a story's first passage when the story grows its map (no plot "
+    "file's map) and its Setup names where it begins. Live (Oct 18 2026), a drafted story "
+    'opened in a map shop "in Copperbrook", which only the setup named: the shop stood '
+    "alone on the map, its lane a hundred metres off, and the village came later, a "
+    "kilometre away, with nothing in it. Not measured.",
+    " The story's setup says it begins at: {location}. If those words name a larger place "
+    "the passage's places are in (a village, a town, a city, a ship, a station, a forest), list "
+    "it as a place too, with those places inside it and these words as its quote: {location}",
+    (("location", "the starting scene's location, as Setup has it"),),
+)
+
+_text(
     "map_read.starts_at.hint",
     MAP,
     "Map-first: Setup's starting time, for the opening's read",

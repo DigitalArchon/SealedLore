@@ -197,8 +197,10 @@ def test_pictures_are_drawn_kept_stripped_and_logged_within_the_daily_limit(sess
     art = session.map_art_copy()
     assert len(art.pictures) == 2 and len(FakeImages.sent) == 2  # the limit, not every job
     first = art.pictures[0]
-    assert (first.subject, first.subject_id) == ("person", "Jane")
-    assert "heavy coat" in first.prompt
+    # Played on the map, everyone's avatar is the tile run's walker: no
+    # picture of each person besides (Oct 18 2026, paid twice).
+    assert all(p.subject != "person" for p in art.pictures)
+    assert (first.subject, first.subject_id) == ("postcard", "barn")
     data = session.pictures.read(first.file)
     assert data is not None and b"secret camera" not in data  # stripped like any picture
     assert session.map_pictures_left_today() == 0

@@ -612,7 +612,9 @@ def _variant(x: int, y: int, seed: int, count: int = 8) -> int:
     return (x * 73856093 ^ y * 19349663 ^ seed * 83492791) % count
 
 
-def _buildings(grid: _Grid) -> list[set[tuple[int, int]]]:
+def _buildings(
+    grid: _Grid, most: tuple[int, int] = (MAX_ROOF_TILES, MAX_ROOF_TILES)
+) -> list[set[tuple[int, int]]]:
     """Each building: a run of walls, doors and windows (touching, corners
     too) that rings something, taken as the whole of its extent. A path the
     plan drew in through a wall doesn't stop it being a building."""
@@ -664,7 +666,7 @@ def _buildings(grid: _Grid) -> list[set[tuple[int, int]]]:
     for x0, x1, y0, y1, walls in boxes:
         if x1 - x0 < 2 or y1 - y0 < 2:
             continue  # a lone wall, not a building
-        if x1 - x0 > MAX_ROOF_TILES or y1 - y0 > MAX_ROOF_TILES:
+        if x1 - x0 > most[0] or y1 - y0 > most[1]:
             continue  # a town's wall or barricade rings the town: no roof over that
         if walls < 2 * (x1 - x0 + y1 - y0) * 0.6:
             continue  # too little of the ring stands: ruins, drawn as a plan
@@ -1077,9 +1079,13 @@ def ground_pixmap(width: int, height: int, colour: str, fade: int) -> QPixmap:
     return QPixmap.fromImage(faded_edges(image, fade))
 
 
-def building_boxes(rows: Sequence[str]) -> list[tuple[int, int, int, int]]:
-    """Each building's (x0, x1, y0, y1) in tiles, as `render_tiles` roofs them."""
-    return [_box(house) for house in _buildings(_Grid(rows))]
+def building_boxes(
+    rows: Sequence[str], most: tuple[int, int] = (MAX_ROOF_TILES, MAX_ROOF_TILES)
+) -> list[tuple[int, int, int, int]]:
+    """Each building's (x0, x1, y0, y1) in tiles, as `render_tiles` roofs them.
+    `most`: the widest and tallest ring (in tiles past the first) that is a
+    building, not a town's wall: the play view's tiles are finer than a plan's."""
+    return [_box(house) for house in _buildings(_Grid(rows), most)]
 
 
 _SKIN = ("#f1c7a0", "#d9a27a", "#a8704a", "#7a4c30")

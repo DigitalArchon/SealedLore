@@ -42,6 +42,7 @@ EDIT_TILES: dict[str, str] = {
     ".": "Ground",
     ",": "Grass or brush",
     "=": "Path or road",
+    "b": "Bridge",
     "s": "Sand",
     "T": "Trees",
     "^": "Rock",

@@ -25,8 +25,9 @@ from dataclasses import dataclass, field
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPolygonF, QTransform
 
-from sealedlore.engine.area import Area, Placement
+from sealedlore.engine.area import BRIDGE, Area, Placement
 from sealedlore.engine.deck_plan import DRAWN_PIECES
+from sealedlore.engine.takeable import TREES
 from sealedlore.engine.tile_sets import (
     DECK_FLOOR_ROLE,
     DECK_TEXTURES,
@@ -39,6 +40,7 @@ from sealedlore.engine.tile_sets import (
     deck_floor_wanted,
     ground_role,
     ground_wanted,
+    head_noun,
     item_slugs,
     roof_role,
 )
@@ -166,6 +168,17 @@ def sprite_image(data: bytes | None) -> QImage | None:
     return cut_out(image)
 
 
+# A thing that is a stone, a tree or a bush, with no picture of its own nor
+# a thing of the set like it: the set's own rock, tree or bush stands in,
+# not a plain box (Oct 18 2026: a boundary stone and its scrub oaks were
+# crates while the day's map pictures were spent).
+NATURE_STAND_INS: dict[str, str] = {
+    **{w: "out-rock" for w in "stone rock boulder cairn menhir monolith outcrop".split()},
+    **{w: "out-tree0" for w in ("tree", *TREES)},
+    **{w: "out-bush" for w in "bush shrub scrub hedge bramble thicket".split()},
+}
+
+
 @dataclass
 class TileSource:
     """A tile set's pictures, read on demand and kept: textures already made
@@ -215,9 +228,14 @@ class TileSource:
             if name not in self._stand_ins:
                 self._stand_ins[name] = closest_item(name, listing())
             found = self._stand_ins[name]
-            if found is not None:
+            nature = NATURE_STAND_INS.get(head_noun(name))
+            # A stone is the set's rock unless the set has a stone of its own.
+            if found is not None and not (
+                nature and head_noun(found.replace("-", " ")) != head_noun(name)
+            ):
                 return self.image(f"items/{found}")
-        return None
+        nature = NATURE_STAND_INS.get(head_noun(name))
+        return self.image(nature) if nature else None
 
     def roof(self, material: str, scale_px: float) -> QBrush:
         """A roof of `material`: the set's (or the story's) own texture of it,
@@ -1003,11 +1021,43 @@ def _building_boxes(area: Area) -> list[tuple[int, int, int, int]]:
     from sealedlore.gui.map_tiles import building_boxes
 
     boxes = []
-    for x0, x1, y0, y1 in building_boxes(area.rows):
-        if x1 - x0 + 1 > 40 or y1 - y0 + 1 > 30:
-            continue  # a town's wall, not a building
+    # A town's wall is wider than 40 tiles or taller than 30: not a building.
+    # The plan's own limit (16) is for its coarser tiles: at a lane's 1.5 m a
+    # tile, a 27 m shop was drawn roofless, grass inside (Oct 18 2026).
+    for x0, x1, y0, y1 in building_boxes(area.rows, most=(39, 29)):
         boxes.append((x0, y0, x1, y1))
     return boxes
+
+
+def _bridges(p: QPainter, area: Area, source: TileSource, px: int) -> None:
+    """A bridge's deck over the water (engine/area.py `BRIDGE`): the set's
+    paving, a parapet along each side over water, its shadow on the water
+    south of it."""
+    rows = area.rows
+    tiles = [(x, y) for y, row in enumerate(rows) for x, ch in enumerate(row) if ch == BRIDGE]
+    if not tiles:
+        return
+    deck = _texture_brush(source, "out-pave", px * 12)
+    rail, shade = QColor(88, 80, 70), QColor(0, 0, 0, 70)
+    t = max(2, round(px * 0.16))
+
+    def water(x: int, y: int) -> bool:
+        return 0 <= y < len(rows) and 0 <= x < len(rows[y]) and rows[y][x] == "~"
+
+    for x, y in tiles:
+        X, Y = x * px, y * px
+        if water(x, y + 1):
+            p.fillRect(X, Y + px, px, t * 2, shade)
+        p.fillRect(X, Y, px, px, deck)
+        p.fillRect(X, Y, px, px, QColor(255, 255, 255, 18))
+        if water(x, y - 1):
+            p.fillRect(X, Y, px, t, rail)
+        if water(x, y + 1):
+            p.fillRect(X, Y + px - t, px, t, rail)
+        if water(x - 1, y):
+            p.fillRect(X, Y, t, px, rail)
+        if water(x + 1, y):
+            p.fillRect(X + px - t, Y, t, px, rail)
 
 
 def _render_outdoor(area: Area, source: TileSource) -> QImage:
@@ -1039,7 +1089,7 @@ def _render_outdoor(area: Area, source: TileSource) -> QImage:
         ("out-pave", np.isin(g, list("_+")) & ~roofed, 0.2, px * 12, False),
         ("out-canopy", np.isin(g, ["^"]), 0.45, px * 16, False),
         ("out-canopy", trees_mask if not info.lava else np.zeros_like(roofed), 0.4, px * 16, True),
-        ("out-water", g == "~", 0.3, px * 16, False),
+        ("out-water", np.isin(g, ["~", BRIDGE]), 0.3, px * 16, False),
         ("out-road", g == "=", 0.15, px * 18, False),
     ]
     water_px = None
@@ -1090,6 +1140,7 @@ def _render_outdoor(area: Area, source: TileSource) -> QImage:
         for x in range(w):
             if rows[y][x] == "&":
                 _stairs(p, x, y, px)
+    _bridges(p, area, source, px)
     # 3. everything that stands, back to front by its foot
     stand: list[tuple[float, str, object]] = []
     placed = {(f.x, f.y): f for f in area.placements}
