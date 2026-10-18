@@ -68,6 +68,36 @@ def test_a_road_over_water_is_a_bridge_and_its_arches_are_its_deck():
     assert all(area.walkable(x, y) for x in range(x0, x1 + 1))
 
 
+def test_rock_ground_out_of_doors_is_walked_on_and_a_road_is_cut_through_rock():
+    """The replay (Oct 18 2026): the toll bridge's plan came with "ground":
+    "rock" (every tile solid, nobody could take a step) and its stone bridge
+    as a rock fill over the river, laid after the road: no way across."""
+    spec = {
+        "ground": "rock",
+        "features": [
+            {"kind": "area", "fill": "water", "shape": "rect", "x": 0, "y": 9, "w": 40, "h": 7},
+            {"kind": "road", "points": [[19, 23], [19, 1]], "width": 1},
+            {"kind": "area", "fill": "rock", "shape": "rect", "x": 17, "y": 9, "w": 5, "h": 8},
+        ],
+    }
+    bridge = WorldPlace(id="b", name="the old toll bridge", kind="site", x=0.0, y=0.0, size=60.0)
+    world, art = laid_out(spec, bridge)
+    area = build_area(world, art, "b")
+    assert area.look == "rock"
+    counts = {ch: sum(row.count(ch) for row in area.rows) for ch in "^.="}
+    assert counts["."] > counts["^"]  # rocky ground to walk on; the fill stays rock
+    road = [x for x, ch in enumerate(area.rows[area.height // 2]) if ch == "="]
+    assert road  # the road runs through the rock in the river
+    north, south = (road[0], 1), (road[0], area.height - 2)
+    assert area.walkable(*north) and area.walkable(*south)
+    # Under the ground, rock is solid and only a passage goes through.
+    cave = WorldPlace(id="c", name="the Hidden Caves", kind="site", x=0.0, y=0.0, size=60.0)
+    passage = {"kind": "passage", "points": [[0, 12], [39, 12]], "width": 2}
+    world, art = laid_out({"ground": "rock", "features": [passage]}, cave)
+    rows = build_area(world, art, "c").rows
+    assert "." not in "".join(rows) and "^" in rows[0] and "_" in rows[len(rows) // 2]
+
+
 def test_a_door_or_window_drawn_as_a_thing_in_a_wall_is_that_door_or_window():
     """The map shop's "door to the lane" stood in its south wall as a thing,
     drawn with a picture of its own, and the storyteller was told it was

@@ -375,6 +375,15 @@ def _wall_run(grid: list[list[str]], x: int, y: int, dx: int, dy: int) -> int:
     return count
 
 
+# A place that is under the ground, whose rock ground is solid rock
+# (`build_area`): a cave, a mine, a tunnel.
+_UNDERGROUND = re.compile(
+    r"\b(caves?|caverns?|mines?|shafts?|tunnels?|grottos?|grottoes|underground|burrows?|"
+    r"catacombs?|crypts?|dungeons?|warrens?|sewers?|deep levels?|undercroft)\b",
+    re.IGNORECASE,
+)
+
+
 def _roads_on_open_ground(rows: list[str], roads: Sequence[dict[str, Any]]) -> list[str]:
     """Roads by distance from their line, on open ground only: a road never
     runs through a building (the rule), and a diagonal is a line, not the
@@ -408,6 +417,13 @@ def _roads_on_open_ground(rows: list[str], roads: Sequence[dict[str, Any]]) -> l
                     t = min(1.0, max(0.0, ((x - ax) * dx + (y - ay) * dy) / length))
                     if math.hypot(x - (ax + t * dx), y - (ay + t * dy)) <= radius:
                         if grid[y][x] in ".,s":
+                            grid[y][x] = "="
+                        elif grid[y][x] in "^T":
+                            # A road the plan lays is cut through rock and
+                            # trees: live (Oct 18 2026) the toll bridge's
+                            # plan drew its stone bridge as a rock fill over
+                            # the river, laid after the road, and nobody
+                            # could cross.
                             grid[y][x] = "="
                         elif grid[y][x] == "~":
                             # Over water a road is a bridge: live (Oct 18 2026)
@@ -1126,6 +1142,12 @@ def build_area(
                 if not (isinstance(f, dict) and f.get("kind") == "road")
             ],
         }
+        if look == "rock" and not _UNDERGROUND.search(f"{place.name} {place.what}"):
+            # Rock ground out of doors is rocky ground to walk on, drawn in
+            # the rock look; only underground is it solid, with passages cut
+            # through it. Live (Oct 18 2026) a toll bridge's plan came with
+            # "ground": "rock" and nobody could take a step.
+            rest["ground"] = "rocky ground"
         if big.get("features"):
             rows, objects, raw_labels = rasterise(rest, columns * k, grid_rows * k)
             rows = _roads_on_open_ground(rows, roads)
