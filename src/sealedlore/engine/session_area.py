@@ -316,6 +316,11 @@ MOVE_MIN_M = 1.5
 # The things laid on built areas, kept while what they are laid from is the
 # same (`_laid_things`).
 LAID_KEPT = 32
+# The widest tile a thing is laid on: drawn about three tiles tall, a thing
+# on land at 10-40 m a tile stood as tall as a church (AfterDark, Oct 18
+# 2026: a bottle in the fields outside the farmhouse). Coarser than this, it
+# shows once its place has a plan of its own.
+THING_TILE_MAX_M = 5.0
 # The play view's things the map read is told of, the nearest first.
 THINGS_TOLD = 30
 
@@ -555,6 +560,8 @@ class AreaRuntime:
         things the story adds must show on the play view; they were on the
         map's list only, and never drawn). Kept while the same."""
         found = []
+        if area.tile_m > THING_TILE_MAX_M:
+            return found
         for t in sorted(world.things.values(), key=lambda t: t.id):
             if t.carried_by or not t.at or GONE.search(t.state.lower()):
                 continue

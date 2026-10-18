@@ -676,3 +676,22 @@ def test_a_read_that_puts_someone_in_a_room_has_them_inside_unless_at_its_door(
 
     assert outside_after("The front room was low-ceilinged and almost empty.") is False
     assert outside_after("Serrik waits on the steps outside the front room.") is True
+
+
+def test_a_thing_is_not_laid_on_land_too_coarse_to_draw_it_at_its_size(tmp_path, story, cast):
+    """AfterDark (Oct 18 2026): a bottle the story left in the fields stood
+    outside the farmhouse as tall as a church, laid on land at 10 m a tile.
+    On a plan at walking scale, a thing is laid as before."""
+    from sealedlore.models.world import WorldThing
+
+    session = open_session(tmp_path, story, cast)
+    base = session.story.world_base
+    base.things = [
+        WorldThing(id="bottle", name="an empty bottle", at="erg"),
+        WorldThing(id="crate", name="a supply crate", at="wreck"),
+    ]
+    session._area_cache = None
+    land = session.area(HERE)
+    assert land.tile_m > 5 and not any("bottle" in p.name for p in land.placements)
+    wreck = session.area("wreck")
+    assert wreck.tile_m <= 5 and any("crate" in p.name for p in wreck.placements)
