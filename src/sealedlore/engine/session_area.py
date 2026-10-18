@@ -1630,6 +1630,23 @@ class AreaRuntime:
                 delta = user_node.meta.world or WorldDelta()
                 delta.outside[held] = False
                 user_node.meta.world = delta
+            elif user_node.speaker_id == self.story.held_character_id and _GOES_IN.search(
+                user_node.content
+            ):
+                # The turn takes them in ("I step inside"): in it, just
+                # inside its door when its inside is drawn. Live (Oct 18
+                # 2026) the map read gave no move (Wren was at the toll
+                # house already, at its door), so she stayed outside talking
+                # to Birch while Tobias, in the doorway, stood inside.
+                delta = user_node.meta.world or WorldDelta()
+                delta.outside[held] = False
+                user_node.meta.world = delta
+                inside = self.area(to, world) if to else None
+                door = inside_door(inside) if inside is not None and inside.indoor else None
+                if door is not None:
+                    taken = {(s.x, s.y) for n, s in state.spots.items() if s.area == inside.id}
+                    x, y = stand_near(inside, door, taken, seed=held, reach=2)
+                    state.spots[held] = Spot(area=inside.id, x=x, y=y)
         if held is not None and to is not None and world.where.get(held) != to:
             area = area_of(world, self.map_art_copy(), world.where.get(held))
             if area != to or to not in world.places:
@@ -4046,6 +4063,17 @@ def _asset_key(role: str) -> str:
     if role.startswith("items/"):
         return f"item:{role[6:]}"
     return role
+
+
+# An in-character turn that takes the author's character in through the
+# door they stand at (`stamp_turn`).
+_GOES_IN = re.compile(
+    # "I", then a few words of the same clause (never another subject: a
+    # name, "him", "to" before the verb), then the way in.
+    r"\b(?:I|[Ww]e)\b(?:\s+(?!to\b|him\b|her\b|them\b)[a-z']+){0,6}?\s+"
+    r"(?:(?:step|go|walk|come|duck|slip|head|move|get|climb|edge)(?:s|ed)?\s+(?:back\s+)?"
+    r"(?:in|inside|indoors)\b(?!\s+front)|enter(?:s|ed)?\b|went\s+in\b)",
+)
 
 
 def _has_an_inside(world: WorldMap, place_id: str) -> bool:

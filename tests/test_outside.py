@@ -117,3 +117,21 @@ def test_a_read_that_leaves_the_flag_off_keeps_them_outside_unless_they_go_in():
     # The read's own word stands, either way.
     assert placed(world, "Serrik stands watching the house.", outside=False) is False
     assert placed(world, "Serrik climbs onto the porch.", outside=True) is True
+
+
+def test_a_turn_that_says_they_go_in_takes_them_in_when_the_read_gives_no_move(
+    tmp_path, story, cast
+):
+    """The replay (Oct 18 2026): Wren, at the toll house door, said "I step
+    inside and crouch"; the read gave no move (she was at the toll house
+    already), so she stayed outside talking to Birch while Tobias, in the
+    doorway, stood inside."""
+    session = make_session(
+        tmp_path, story, cast, [KNOCK, json.dumps(at_house(True)), "Warm in here.", "{}"]
+    )
+    session.config.scene_reads = "manual"
+    list(session.send(turn("I knock.")))
+    assert "Serrik Vaun" in session.world().outside
+    list(session.send(turn("I push the door open and step inside.")))
+    assert "Serrik Vaun" not in session.world().outside
+    assert session.path()[-1].meta.area.spots["Serrik Vaun"].area == "house"
