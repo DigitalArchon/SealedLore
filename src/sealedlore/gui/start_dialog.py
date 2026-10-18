@@ -21,7 +21,6 @@ from sealedlore.models.character import Character
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.story import Story
 
-
 # The Map tiles row's first and last choices.
 AI_CHOOSES = "The AI chooses the closest set"
 DESIGN_ONE = "Design a new set for this world…"

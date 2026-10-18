@@ -150,6 +150,45 @@ def test_a_town_only_named_waits_until_the_story_says_where_it_is():
     assert [p.name for p in delta.places] == ["Saltmarsh"]
 
 
+def test_any_place_only_named_waits_and_one_stood_in_or_beside_another_is_placed():
+    """The replay (Oct 18 2026): "whether the weir pool was running deep",
+    asked in the map shop, set the pool 500 m from it, when the story has it
+    half an hour past the toll bridge, and places never move. Not only towns
+    wait now; a bare link (no way, no distance) says nothing of where."""
+    shop = WorldPlace(id="shop", name="map shop", kind="building", x=0.0, y=0.0)
+    world = WorldMap(places={"shop": shop}, where={"Wren Halloway": "shop"}, seen=["shop"])
+    said = '"He asked whether the weir pool was running deep, down by the landing."'
+    reply = {
+        "places": [
+            {"name": "the weir pool", "kind": "area", "quote": "the weir pool"},
+            {"name": "the landing", "kind": "area", "quote": "the landing"},
+        ],
+        "links": [{"from": "the landing", "to": "the weir pool", "quote": "down by the landing"}],
+    }
+    delta, refused = resolve_reply(world, reply, source=said, people=[WREN])
+    assert delta.places == [] and delta.links == []
+    assert sorted(refused) == [
+        "place the landing: only named, nothing says where it is yet",
+        "place the weir pool: only named, nothing says where it is yet",
+    ]
+    # Beside a place ("behind the shop"), up a stair from one, or with
+    # someone there: where it is.
+    for link in ({"direction": "behind"}, {"direction": "down"}):
+        said = "The weir pool lay behind the shop, down the steps."
+        reply = {
+            "places": [{"name": "the weir pool", "kind": "area", "quote": said}],
+            "links": [{"from": "map shop", "to": "the weir pool", "quote": said, **link}],
+        }
+        assert [p.name for p in resolve_reply(world, reply, source=said, people=[])[0].places] == [
+            "the weir pool"
+        ], link
+    # The author's Direction adds a place where it is said, as ever.
+    said = "There is a mill on the hill."
+    reply = {"places": [{"name": "the mill", "kind": "building", "quote": said}]}
+    delta, _ = resolve_reply(world, reply, source=said, people=[], author_says=True)
+    assert [p.name for p in delta.places] == ["the mill"]
+
+
 def test_another_name_for_a_road_the_map_has_is_that_road():
     """The walk out of the village made "river road south"; the walk back,
     "the river road" beside it: two routes for one road."""
@@ -186,14 +225,13 @@ def test_another_name_for_a_road_the_map_has_is_that_road():
         said = f"They took {name} at dawn."
         entry = {"places": [{"name": name, "kind": "route", "quote": said}]}
         delta, _ = resolve_reply(world, entry, source=said, people=[])
-        assert (delta.added == [] and delta.places[0].id == found) or (
-            found is None and len(delta.added) == 1
-        ), name
+        merged = [p.id for p in delta.places if p.id in ("r", "s")]
+        assert merged == ([found] if found else []), name
     # Never into a place that isn't a route, nor for one that isn't.
     world = WorldMap(places={"r": road})
     said = "The river road inn stood by the ford."
     entry = {"places": [{"name": "the river road inn", "kind": "building", "quote": said}]}
-    assert len(resolve_reply(world, entry, source=said, people=[])[0].added) == 1
+    assert [p.id for p in resolve_reply(world, entry, source=said, people=[])[0].places] != ["r"]
 
 
 @pytest.mark.parametrize(

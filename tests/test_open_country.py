@@ -424,3 +424,20 @@ def test_stood_on_the_land_until_their_place_had_a_plan_they_go_into_it_once_it_
     assert session.area_state().spots["Serrik Vaun"].area == "wreck"
     list(session.send(turn("I look around.")))
     assert session.path()[-1].meta.area.spots["Serrik Vaun"].area == "wreck"
+
+
+def test_a_companion_at_the_same_place_stands_on_the_author_s_window_beside_them(
+    tmp_path, story, cast
+):
+    """The replay (Oct 18 2026): Tobias, walking the river road with Wren,
+    was stood on the next window over, by his own last spot: the road's spot
+    lay on the line between two windows, and he wasn't beside her."""
+    session = open_session(tmp_path, story, cast)
+    world, art = session.world(), session.map_art_copy()
+    world.where["Maela"] = "erg"
+    state = session.area_state()
+    state.spots["Maela"] = Spot(area="window:1600:1600:1600", x=0, y=20)
+    settled = session.settle(state, world, art, walked=False)
+    me, her = settled.spots["Serrik Vaun"], settled.spots["Maela"]
+    assert her.area == me.area == HERE
+    assert abs(her.x - me.x) <= 3 and abs(her.y - me.y) <= 3

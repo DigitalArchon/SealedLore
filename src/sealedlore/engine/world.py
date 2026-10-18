@@ -32,6 +32,7 @@ from sealedlore.engine.world_layout import (
     bearing,
     describe_metres,
     geometry_conflicts,
+    is_close,
     metres,
     moves,
     place_new,
@@ -951,34 +952,53 @@ def resolve_reply(
             refused.append(f"weather {words}: no quote found")
         else:
             delta.weather = words
-    refused += _drop_named_only(delta, marked)
+    refused += _drop_named_only(delta, marked, author_says=author_says)
     return delta, refused
 
 
 # Kinds too wide to put beside the story on a guess (`_drop_named_only`).
+# A link straight up or down ("climbed up into the yard" from the cellar) is
+# a stair or a ladder away: no bearing, but where it is all the same.
+_VERTICAL = re.compile(
+    r"^\s*(up|down|upstairs|downstairs|above|below|beneath|under(neath)?)\b", re.IGNORECASE
+)
+# On the author's Direction or Narration a place named is one they add,
+# beside their character as ever ("There is a mill on the hill"): only a
+# town or region named with nothing to say where waits.
 _FAR_KINDS = frozenset({"settlement", "region"})
 
 
-def _drop_named_only(delta: WorldDelta, marked: Mapping[str, tuple[float, float]]) -> list[str]:
-    """Each new town or region the delta only names taken out of it: nobody
-    is there, nothing is in it or at it, and no link (as resolved: a
-    direction its quote doesn't carry is gone) says which way or how far.
-    The read's prompt says a name only mentioned in passing is not yet a
-    place; given anyway, it was put beside the story, and places never move
-    (live, Oct 18 2026: "Road goes to Saltmarsh" set the town 1.2 km west of
-    the toll bridge, a few hours south in the story). It comes onto the map
-    when the story says where it is, or goes there. What was refused, said."""
+def _drop_named_only(
+    delta: WorldDelta, marked: Mapping[str, tuple[float, float]], *, author_says: bool = False
+) -> list[str]:
+    """Each new place the delta only names taken out of it: in nothing,
+    nobody is there, nothing is in it or at it, and no link (as resolved: a
+    direction its quote doesn't carry is gone) says which way, how far or
+    that it is beside another. The read's prompt says a name only mentioned
+    in passing is not yet a place; given anyway, it was put beside the
+    story, and places never move (live, Oct 18 2026: "Road goes to
+    Saltmarsh" set the town 1.2 km west of the toll bridge, a few hours
+    south in the story; "whether the weir pool was running deep", said in
+    the map shop, set the pool 500 m from it, half an hour past the bridge
+    in the story). It comes onto the map when the story says where it is,
+    or goes there. A vehicle has no spot of its own to get wrong. What was
+    refused, said."""
     made = set(delta.added or [])
     held = set(delta.where.values()) | {t.at for t in delta.things if t.at}
     held |= {p.inside for p in delta.places if p.inside}
     for link in delta.links:
-        if bearing(link.direction) is not None or metres(link.distance) is not None:
+        if (
+            bearing(link.direction) is not None
+            or metres(link.distance) is not None
+            or is_close(link.direction)
+            or _VERTICAL.search(link.direction or "")
+        ):
             held |= {link.a, link.b}
     gone = [
         p
         for p in delta.places
         if p.id in made
-        and p.kind in _FAR_KINDS
+        and (p.kind in _FAR_KINDS if author_says else p.kind != "vehicle")
         and p.inside is None
         and p.id not in held
         and key(p.name) not in {key(n) for n in marked}

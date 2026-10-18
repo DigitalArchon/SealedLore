@@ -135,9 +135,7 @@ def _pick_session(tmp_path, story, cast, picks, responses=("Rain.", "{}")):
     return session
 
 
-def test_the_ai_chooses_the_closest_set_once_the_story_begins_and_says_why(
-    tmp_path, story, cast
-):
+def test_the_ai_chooses_the_closest_set_once_the_story_begins_and_says_why(tmp_path, story, cast):
     names = sorted(name for name in shipped_sets())
     chosen = next(n for n in names if n != "silverwood")
     why = "Timbered houses and a stone bridge in autumn."

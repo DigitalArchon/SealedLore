@@ -823,6 +823,20 @@ class AreaRuntime:
             mine = spots.get(held or "")
             if point is None and name != held and place_id == where.get(held or ""):
                 point = self._spot_point(mine, world, art)
+            elif (
+                name != held
+                and mine is not None
+                and place_id == where.get(held or "")
+                and spot is not None
+                and spot.area != mine.area
+                and (here := self.area(mine.area, world, art)) is not None
+                and here.window
+            ):
+                # With the author's character at a place in open country: on
+                # their window, beside them, not by their own last spot (live,
+                # Oct 18 2026: Tobias, walking the river road with Wren, stood
+                # on the next window over, the road's spot on the line between).
+                point = self._spot_point(mine, world, art)
             target = area_of(world, art, place_id, point)
             # Where they are stood: their place, or, outside a building, the
             # building (its door's front on the ground round it).

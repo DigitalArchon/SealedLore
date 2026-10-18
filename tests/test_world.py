@@ -28,7 +28,7 @@ from sealedlore.engine.world import (
 )
 from sealedlore.models.character import Character
 from sealedlore.models.config import Config, ProviderConfig
-from sealedlore.models.world import WorldMap
+from sealedlore.models.world import WorldMap, WorldPlace
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage.repository import (
     StoryBundle,
@@ -84,7 +84,8 @@ def test_an_entry_stands_only_on_a_quote_found_in_the_turn_or_passage():
                 {"name": "The diner", "quote": "Marcus Webb waited at the diner"},
                 {"name": "The lighthouse", "quote": "A lighthouse stood on the cliff."},
                 {"name": "The church"},
-            ]
+            ],
+            "where": [{"who": "Marcus Webb", "place": "The diner", "quote": "waited at the diner"}],
         },
     )
     assert [p.name for p in delta.places] == ["The diner"]
@@ -145,6 +146,10 @@ def test_a_direction_its_own_quote_does_not_carry_is_dropped():
                 {"name": "The diner", "quote": "Marcus Webb waited at the diner"},
                 {"name": "The porch", "quote": "A woman watched from the porch"},
             ],
+            "where": [
+                {"who": "Marcus Webb", "place": "The diner", "quote": "waited at the diner"},
+                {"who": "a woman", "place": "The porch", "quote": "watched from the porch"},
+            ],
             "links": [
                 {
                     "from": "The diner",
@@ -193,10 +198,34 @@ def test_the_read_s_sense_of_scale_is_kept_within_reason():
                     "size": 200,
                     "quote": "Jane heads north",
                 },
-                {"name": "A hut", "kind": "building", "size": "5 m", "quote": "Jane heads north"},
-                {"name": "Nowhere", "kind": "site", "size": -3, "quote": "Jane heads north"},
-                {"name": "Everywhere", "kind": "site", "size": 1e9, "quote": "Jane heads north"},
-                {"name": "A barn", "kind": "building", "size": True, "quote": "Jane heads north"},
+                {
+                    "name": "A hut",
+                    "kind": "building",
+                    "inside": "Hellsville",
+                    "size": "5 m",
+                    "quote": "Jane heads north",
+                },
+                {
+                    "name": "Nowhere",
+                    "kind": "site",
+                    "inside": "Hellsville",
+                    "size": -3,
+                    "quote": "Jane heads north",
+                },
+                {
+                    "name": "Everywhere",
+                    "kind": "site",
+                    "inside": "Hellsville",
+                    "size": 1e9,
+                    "quote": "Jane heads north",
+                },
+                {
+                    "name": "A barn",
+                    "kind": "building",
+                    "inside": "Hellsville",
+                    "size": True,
+                    "quote": "Jane heads north",
+                },
             ]
         },
     )
@@ -650,15 +679,15 @@ def test_a_new_playthrough_keeps_the_map_on(story, cast):
 
 
 def test_a_way_the_passage_gave_no_words_for_has_none():
-    from sealedlore.engine.world import applied, resolve_reply, world_at
+    from sealedlore.engine.world import applied, resolve_reply
 
-    world = world_at([])
+    world = WorldMap(
+        places={"fh": WorldPlace(id="fh", name="farmhouse", kind="building", x=0.0, y=0.0)}
+    )
     source = "She crossed the frozen yard to the farmhouse."
     reply = {
-        "places": [
-            {"name": "frozen yard", "quote": "the frozen yard"},
-            {"name": "farmhouse", "quote": "the farmhouse"},
-        ],
+        "places": [{"name": "frozen yard", "quote": "the frozen yard"}],
+        "where": [{"who": "Jane", "place": "frozen yard", "quote": "crossed the frozen yard"}],
         "links": [
             {
                 "from": "frozen yard",

@@ -122,6 +122,13 @@ _CLOSE = re.compile(
     re.IGNORECASE,
 )
 
+
+def is_close(direction: str | None) -> bool:
+    """Whether a link's words put the places side by side ("next door",
+    "outside", "behind"): no bearing, but where it is all the same."""
+    return bool(_CLOSE.search(direction or ""))
+
+
 # Bearings in degrees clockwise from north.
 _COMPASS: dict[str, float] = {
     "north": 0,
@@ -369,7 +376,7 @@ def place_one(
             angle = (angle + 180) % 360  # the link runs from this place to the other
         gap = (size + size_of(other)) / 2
         stated = metres(link.distance)
-        close = bool(_CLOSE.search(link.direction or ""))
+        close = is_close(link.direction)
         distance = max(stated, gap) if stated is not None else gap * (1.0 if close else 1.5)
         x, y = _spot(
             (other.x, other.y), distance, angle, size, others, place.name, angle is not None
