@@ -1542,8 +1542,13 @@ class WorldView(QWidget):
 
             def render() -> None:
                 for rows, ground, colours_, patch in later:
+                    if gen != self._land_gen:
+                        return  # the map was rebuilt meanwhile: nobody wants these
                     land_image(rows, ground, colours_)
-                    signal.ready.emit(gen, patch)
+                    try:
+                        signal.ready.emit(gen, patch)
+                    except RuntimeError:
+                        return  # the view is gone (a window closed, a test torn down)
 
             threading.Thread(target=render, name="region-land", daemon=True).start()
 
