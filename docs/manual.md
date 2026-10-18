@@ -1076,8 +1076,12 @@ picture of each place and thing. Each is drawn once and kept. When the story
 changes something (a barn blown up, a truck burnt out), it is drawn again as
 it now is, as an edit of how it looked, so it is still the same barn, and
 the local map shows it as it is now. A station or ship is drawn as its decks.
-While it draws, the map says how far it has got ("Drawing the map: 3 of 12"),
-and says when it is done. A piece the model got wrong twice is given up on
+While it draws, the map says how far it has got, what it is drawing and with
+which model ("Drawing the map: 3 of 12 · the gun cabinet, by FLUX.3 Image
+Klein"), and says when it is done. A room's furniture is chosen first and
+its pieces drawn straight after; until a piece has its own picture it shows
+as the tile set's nearest look-alike, so the room looks much the same when
+the pictures land. A piece the model got wrong twice is given up on
 and named there ("The map is drawn, but not The dark rift"), with **Try
 again** beside it. A branch shows the map as it stands on that branch.
 
@@ -1121,7 +1125,8 @@ Pro at about $0.09 and Nano Banana Pro at about $0.14). On the play view, **Pain
 is for the place you stand in: **Paint this place…** shows the model and its
 price first (it counts with the day's map pictures) and paints the area as
 the play view shows it at that moment, everyone and everything where they
-stand, in the hour's light and the weather; under it the menu lists the
+stand, in the hour's light and the weather (pressed while the map is still
+drawing the place's pieces, it waits for them and starts by itself); under it the menu lists the
 place's paintings, newest first, each opening on its own to zoom into. The
 model is given the program's own picture of the area (the tiles, with the
 people and things on them) and asked to keep every building, wall, road and

@@ -133,7 +133,7 @@ class WorldWindow:
         self.world_view.drawing = session.map_art_running
         self.world_view.isometric_offer = session.isometric_offer()
         self.world_view.isometric_painting = session.isometric_painting
-        self.world_view.set_progress(*session.map_art_progress())
+        self.world_view.set_progress(*session.map_art_progress(), now=session.map_art_now())
         # Map-first: the ring and the fog follow where the character stands.
         self.world_view.me_place = session.here_place
         self.world_view.play_area = self._play_area_id
@@ -216,16 +216,20 @@ class WorldWindow:
         reading = session.map_reading
         activity = f"Reading the passage for the map with {reading}…" if reading else ""
         failed = session.map_art_failed() if not total and not activity else []
-        self.world_view.set_progress(done, total, activity, failed)
+        self.world_view.set_progress(done, total, activity, failed, session.map_art_now())
         self._sync_waiting_pictures(drawing=bool(total))
+        # A painting waiting for the place's pieces starts once they are in.
+        self._paint_when_drawn()
         painting = session.isometric_painting
         if painting != self.world_view.isometric_painting:
             self.world_view.isometric_painting = painting
             self.world_view.isometric_offer = session.isometric_offer()
             self.world_view.sync_isometric()
-        if (total or activity) and not self._progress_timer.isActive():
+        # Ticking too while a painting waits for the pieces, or it never starts.
+        waiting = getattr(self, "_paint_waiting", None) is not None
+        if (total or activity or waiting) and not self._progress_timer.isActive():
             self._progress_timer.start()
-        elif not total and not activity:
+        elif not total and not activity and not waiting:
             self._progress_timer.stop()
 
     # --- map pictures that wait for the author (Ask before drawing) ----------------

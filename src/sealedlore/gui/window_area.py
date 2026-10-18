@@ -212,6 +212,7 @@ class AreaWindow:
         self.area_view.drop_walk()
         self.area_view.set_offer(None)
         self.area_view.set_message("No area here yet.")
+        self._paint_waiting = None  # the next story's map paints nothing of this one
         self._area_images.clear()
         self._area_failed.clear()
         self._walker_images.clear()
@@ -654,6 +655,22 @@ class AreaWindow:
         area = self.area_view.area
         if session is None or area is None or area.window:
             return
+        if session.tile_art_running and session.map_pictures_on:
+            # Painted from the play view as it stands: while its pieces are
+            # still being drawn that is the tile set's stand-ins (AfterDark's
+            # new playthrough, Oct 18 2026). It starts once they are in.
+            self._paint_waiting = area.place_id
+            self.area_view.hint.setText(
+                f"{area.name} will be painted as soon as the map has drawn its pieces."
+            )
+            self.statusBar().showMessage(
+                "The map is still drawing this place's pieces: the painting starts once "
+                "they are in.",
+                8000,
+            )
+            self._sync_progress()
+            return
+        self._paint_waiting = None
         info, read = session.tile_set()
         source = TileSource(info, read)
         dress = session.story.defaults.map_density != "sparse"
@@ -672,6 +689,18 @@ class AreaWindow:
         self.world_view.isometric_offer = session.isometric_offer()
         self.world_view.sync_isometric()
         self._sync_progress()
+
+    def _paint_when_drawn(self) -> None:
+        """A painting asked for while the place's pieces were drawn: started
+        once they are in, if the play view still shows that place."""
+        waiting = getattr(self, "_paint_waiting", None)
+        session = self.session
+        if waiting is None or session is None or session.tile_art_running:
+            return
+        self._paint_waiting = None
+        area = self.area_view.area
+        if area is not None and area.place_id == waiting and not session.in_private:
+            self._area_paint_place()
 
     def _area_show_painting(self, picture_id: str) -> None:
         """One of the place's paintings, from Paintings ▾, seen whole."""

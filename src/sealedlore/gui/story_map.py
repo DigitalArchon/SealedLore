@@ -229,7 +229,11 @@ class _MapView(QGraphicsView):
 
     def wheelEvent(self, event) -> None:  # noqa: N802 - Qt naming
         if event.modifiers() & Qt.ControlModifier:
-            self.zoom_by(1.15 if event.angleDelta().y() > 0 else 1 / 1.15, under_mouse=True)
+            # By how far the wheel turned (a notch is 120; smooth wheels send
+            # it in pieces), not a whole step for every event.
+            steps = event.angleDelta().y() / 120
+            if steps:
+                self.zoom_by(1.15**steps, under_mouse=True)
             event.accept()
             return
         super().wheelEvent(event)

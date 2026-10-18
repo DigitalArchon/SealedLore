@@ -886,12 +886,15 @@ class WorldView(QWidget):
         # neither that it was under way nor that it was done).
         self.progress_label = QLabel()
         self.progress_label.setObjectName("hintLabel")
+        # It says what is being drawn too: wrapped, never widening the panel.
+        self.progress_label.setWordWrap(True)
         self.progress = QProgressBar()
         self.progress.setTextVisible(False)
         self.progress.setMaximumWidth(220)
+        self.progress.setMinimumWidth(80)
         progress_row = QHBoxLayout()
         progress_row.setContentsMargins(0, 0, 0, 0)
-        progress_row.addWidget(self.progress_label)
+        progress_row.addWidget(self.progress_label, 2)
         progress_row.addWidget(self.progress, 1)
         self.retry_button = QPushButton("Try again")
         self.retry_button.setObjectName("smallButton")
@@ -2299,18 +2302,26 @@ class WorldView(QWidget):
         self.waiting.show()
 
     def set_progress(
-        self, done: int, total: int, activity: str = "", failed: Sequence[str] = ()
+        self,
+        done: int,
+        total: int,
+        activity: str = "",
+        failed: Sequence[str] = (),
+        now: str = "",
     ) -> None:
         """The drawing under way: `done` of `total` pieces (art and
         pictures); nothing under way when `total` is 0, said as drawn once a
         run has finished. `activity`: what is happening before any drawing
         (the passage being read for the map), with a busy bar (the author:
         a minute passed with no sign anything was happening). Cheap: nothing
-        is redrawn."""
+        is redrawn. `now`: what is being drawn, and by which model ("the gun
+        cabinet, by FLUX.3 Image Klein")."""
         drawing = total > 0
         if drawing:
             self._drew = True
-            self.progress_label.setText(f"Drawing the map: {done} of {total}")
+            self.progress_label.setText(
+                f"Drawing the map: {done} of {total}" + (f" · {now}" if now else "")
+            )
             self.progress.setRange(0, total)
             self.progress.setValue(done)
         elif activity:

@@ -79,7 +79,7 @@ from sealedlore.engine.marks import (
     nearest_place,
     place_at,
 )
-from sealedlore.engine.session_world_art import _today
+from sealedlore.engine.session_world_art import _today, job_words
 from sealedlore.engine.takeable import fixed_thing, same_thing, thing_class
 from sealedlore.engine.tile_draw import (
     DESIGNER_MODEL,
@@ -2865,6 +2865,13 @@ class AreaRuntime:
         thread.start()
         return True
 
+    @property
+    def tile_art_running(self) -> bool:
+        """The play view's pieces are being furnished or drawn, or a run to
+        draw them is due next (`_tile_again`)."""
+        thread = self._tile_thread
+        return (thread is not None and thread.is_alive()) or self._tile_again
+
     def start_tile_art(self) -> bool:
         """What the play view needs now (a building walked into), drawn in
         the background."""
@@ -2883,8 +2890,17 @@ class AreaRuntime:
                 if self._art_stop:
                     return
                 if text is not None:
+                    self._doing("tile", f"furnishing {area.name}, by {self.map_art_model}")
                     self._tile_job(f"furnish:{area.id}", self._furnish_one, area, text)
                 self._tile_done += 1
+            if furnish:
+                # What was furnished now has pieces with no picture: they are
+                # drawn by the next run, which the window starts as soon as
+                # this one ends (`map_art_wanted_again`). Before, they waited
+                # for whatever next started a run (AfterDark, Oct 18 2026: the
+                # pantry's, bedroom's and workshop's pieces were drawn four
+                # minutes later, when Settings was saved).
+                self._tile_again = True
             if client is None:
                 return
             for job in pictures:
@@ -2893,6 +2909,7 @@ class AreaRuntime:
                 model = (
                     self.config.map_sprite_model if job.reference else self.config.map_tile_model
                 )
+                self._doing("tile", f"{job_words(job)}, by {self.model_name(model)}")
                 self._tile_job(
                     job.key,
                     self._picture_one,
@@ -2905,6 +2922,7 @@ class AreaRuntime:
                 )
                 self._tile_done += 1
         finally:
+            self._doing("tile", None)
             if client is not None:
                 client.close()
             _close_quietly(text)

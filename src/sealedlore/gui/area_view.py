@@ -288,9 +288,11 @@ class _Graphics(QGraphicsView):
     resized = Signal()
 
     def zoom_by(self, factor: float) -> None:
-        scale = self.transform().m11() * factor
-        if ZOOM_MIN <= scale <= ZOOM_MAX:
-            self.scale(factor, factor)
+        """Zoom by `factor`, stopping at the least and most zoom."""
+        scale = self.transform().m11()
+        target = max(ZOOM_MIN, min(scale * factor, ZOOM_MAX))
+        if abs(target - scale) > 1e-9:
+            self.scale(target / scale, target / scale)
             self.zoomed.emit()
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt's name
@@ -302,7 +304,15 @@ class _Graphics(QGraphicsView):
         super().leaveEvent(event)
 
     def wheelEvent(self, event) -> None:  # noqa: N802 - Qt's name
-        self.zoom_by(ZOOM_STEP if event.angleDelta().y() > 0 else 1 / ZOOM_STEP)
+        # By how far the wheel turned, as the Region map does: a notch is 120,
+        # and a smooth or high-resolution wheel (or a touchpad) sends it in
+        # many small events. One step a event made a notch zoom 1.25^8, about
+        # six times (the author, Oct 18 2026: "one click of my mousewheel goes
+        # from very zoomed in, to the whole room taking only a fraction").
+        steps = event.angleDelta().y() / 120
+        if steps:
+            self.zoom_by(ZOOM_STEP**steps)
+        event.accept()
 
     def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt's name
         if self._pan.press(event):

@@ -79,6 +79,21 @@ from sealedlore.storage.world_art import load_world_art, save_world_art
 ART_WORKERS = 2
 
 
+def job_words(job: PictureJob) -> str:
+    """What a map picture is of, in a few words for the Map page."""
+    if job.subject == "item":
+        return f"the {job.name}"
+    if job.subject == "walker":
+        return f"{job.name}'s avatar"
+    if job.subject == "postcard":
+        return f"a picture of {job.name}"
+    if job.subject == "texture":
+        return "a ground or roof texture"
+    if job.subject == "isometric":
+        return f"painting {job.name}"
+    return job.name
+
+
 class WorldArtRuntime:
     _art: WorldArt | None = None
     _art_lock: threading.Lock | None = None
@@ -185,6 +200,37 @@ class WorldArtRuntime:
         if getattr(self, "tile_asset_drawing", None) is not None:
             total += 1
         return min(done, total), total
+
+    def _doing(self, run: str, words: str | None) -> None:
+        """What a run is drawing now, for the Map page (None: nothing)."""
+        now = self.__dict__.setdefault("_now", {})
+        if words:
+            now[run] = words
+        else:
+            now.pop(run, None)
+
+    def model_name(self, model: str) -> str:
+        """A picture model as the listing names it, else its id."""
+        info = self._listed_image_model(model)
+        return info.name if info is not None and info.name else model
+
+    def map_art_now(self) -> str:
+        """What the map's runs are drawing now, and with what (the author,
+        Oct 18 2026: ten pictures by FLUX.3 Klein appeared while a painting
+        by Seedream was asked for, and nothing said they were the room's
+        furniture): "the gun cabinet, by FLUX.3 Image Klein; painting the
+        farmhouse, by Seedream 5.0 Pro"; "" when nothing is drawing."""
+        now = dict(self.__dict__.get("_now", {}))
+        alive = {
+            "tile": getattr(self, "_tile_thread", None),
+            "pictures": self._picture_thread,
+            "painting": self._isometric_thread,
+        }
+        return "; ".join(
+            words
+            for run, words in now.items()
+            if alive.get(run) is not None and alive[run].is_alive()
+        )
 
     @property
     def map_art_wanted_again(self) -> bool:
@@ -420,6 +466,7 @@ class WorldArtRuntime:
     ) -> None:
         try:
             model = self.config.map_isometric_model
+            self._doing("painting", f"painting {job.name}, by {self.model_name(model)}")
             info = self._listed_image_model(model)
             if info is None:  # not in the config's listing: ask the endpoint once
                 listing = list_image_models(client.base_url, api=client.api)
@@ -433,6 +480,7 @@ class WorldArtRuntime:
                 return
             self._picture_one(job, client, size, model=model, info=info, plan=plan)
         finally:
+            self._doing("painting", None)
             client.close()
             self._isometric_client = None
             callback = self.on_map_art
@@ -580,9 +628,14 @@ class WorldArtRuntime:
             for job in jobs:
                 if self._art_stop:
                     return
+                self._doing(
+                    "pictures",
+                    f"{job_words(job)}, by {self.model_name(self.config.map_picture_model)}",
+                )
                 self._picture_one(job, client, sizes[job.subject == "postcard"])
                 self._picture_done += 1
         finally:
+            self._doing("pictures", None)
             client.close()
 
     def _picture_one(
