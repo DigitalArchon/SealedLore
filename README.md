@@ -1,9 +1,10 @@
 # SealedLore
 
 A Linux and Windows application for AI-driven roleplay with many characters
-in an open world, with a number of particularly useful features.
+in an open world, played on a map if you like, with a number of particularly
+useful features.
 
-![The main window: a video of the story in place after its passage, ready to play, and the Media page listing the story's videos and pictures](docs/screenshots/main-window.png)
+![The start page: six sample stories, each with its picture and a line on what it is, and below them the ways to start a story of your own](docs/screenshots/start-page.webp)
 
 *Beta.* This application has been tested extensively both through
 automation and manually by the developer. It is however still in early
@@ -11,6 +12,62 @@ public testing, so expect bugs, and there are no guarantees that everything
 works as intended. Bug reports and pull requests are welcome; see
 [CONTRIBUTING.md](CONTRIBUTING.md). Free software under the AGPL (see
 [Licence](#licence)).
+
+### New in version 2
+
+- **Play on a map.** A story can be played on a map drawn in pixel art to
+  suit its world: walk where you like, click people and things for what you
+  can do, and the storyteller is told exactly where everyone stands. See
+  [Play on a map](#play-on-a-map) below.
+- **Every character with a face.** A portrait for each character, drawn from
+  their card when you start, and on the map a little avatar drawn from it. A
+  story without a map shows who is here by their faces.
+- **New sample stories to start from**, each with a plot, a background and a
+  picture of everyone: The Ashen Reach (grimdark science fiction), The
+  Silverwood (fantasy), Brasshaven (steampunk) and The Ninth Furnace (a
+  hellscape), all with their maps drawn up and furnished, and Doomsville with
+  a map.
+- **A friendlier window.** A start page that shows every way to begin, the
+  pages beside the story titled with what they are for, Settings in groups,
+  plain names throughout, and room to read.
+- **Anthropic's own API**, and several endpoints at once, each with its own
+  key.
+- **Image models chosen once.** Pick a model, and SealedLore sends its
+  editing version whenever a picture goes with the prompt.
+
+### Play on a map
+
+![Playing The Silverwood on its map: the story on the left, and on the right the village of Fernhollow in pixel art, with the ranger, the sellsword, the herbwife and the wounded woodcutter standing where the story put them](docs/screenshots/map-play.webp)
+
+A story can keep a map (Story → Setup → About), and then it is played on it.
+You walk where you like in each place, tile by tile, with no model call.
+Click someone to talk to them, watch them unseen or attack; click a thing to
+use, take, eat or destroy it; and travel between places, the way's length
+moving the story's clock. Right-click a spot to put its coordinate in your
+turn and say what happens there: a rift opening, a camp being pitched.
+
+The map is exact, so the storyteller is told exactly where everyone stands,
+who can see whom and what is within reach. It grows as the story goes: a
+place the story names is put where the story says, and stays there. What
+happens shows on it: a barn blown up is drawn burning, something taken goes
+with whoever took it, something smashed lies broken. Buildings can have
+floors and cellars, stations and ships have decks, and the weather and the
+hour show over the ground. Zoom out to the region to decide where to go next,
+with the country you haven't found yet under fog.
+
+Every building is furnished, as sparsely or as fully as you like, and every
+character gets a pixel-art avatar drawn from their portrait. Everything is
+drawn in a tile set whose style suits the world rather than any one game's
+(a bleak snowbound farm, a whimsical elven forest, a brass-and-soot
+steampunk city…), and a new one can be designed for your own world. To set a
+place up before you play, **Objects…** draws whatever you name and lets you
+put it where you want it. If the story's reading of the map gets something
+wrong, drag it to where it belongs. And when you want a picture of the
+moment, **Paint this place…** has an image model paint the place as it
+stands. The samples with a map come ready to play. Whatever new the story
+brings in is drawn as it is needed, at about a cent a picture, up to a daily
+limit you set (Settings → Images, where you can also have each one asked
+first, or none drawn).
 
 ### Privacy
 
@@ -78,27 +135,20 @@ and by prompts that testing has shown do a good job of avoiding it without
 breaking the story's flow. And the model never speaks or acts for your
 character.
 
-### Play on a map
+### Pictures and video
 
-A story can keep a map (Story → Setup → About), and then it is played on it:
-you walk where you like in each place, tile by tile, with no model call;
-click someone to talk to them, watch them unseen or attack, click a thing to
-use, take, eat or destroy it, and travel between places, the way's length
-moving the story's clock. Right-click a spot to put its coordinate in your
-turn and say what happens there. The map is drawn in an AI-drawn tile set and is
-exact, so the storyteller is told exactly where everyone stands and what is
-within reach. Every building is furnished, as sparsely or as fully as you
-like, and every character gets a little pixel-art avatar drawn from their
-portrait, in a style chosen to suit the world rather than any one game's.
-The samples with a map come ready to play.
+Every character can have a portrait, and every lore entry a picture, drawn
+from what their cards say: the Start dialog offers them when a story begins,
+and you see and can change every prompt first. A portrait can then be drawn
+again, changed (older, a scar, other clothes) or shown in the scene as the
+story stands, keeping the same face. FLUX.3 Klein draws them by default for
+about a cent each; Seedream 5.0 Pro draws the best.
 
-### General
-
-It also has the usual features, like integrated image generation. You can
-give people, places and objects reference pictures, then have the AI write
-the prompt for a picture of the current scene, using them as references.
-You see the whole request before anything is sent. I recommend Seedream 5.0
-Pro for this, which is the default.
+You can also have a picture of the current scene: the AI that has read the
+story writes the prompt, using those portraits and any other reference
+pictures you give people, places and objects. You see the whole request
+before anything is sent. I recommend Seedream 5.0 Pro for this, which is the
+default. Every picture and video the story has made is on its Media page.
 
 It can make short videos of the story too (Seedance 2.5 by default), played
 in place in the story, from a prompt written for video and, if you like,
@@ -107,6 +157,8 @@ pictures, so it is off until you give it an API key of its own (Settings →
 Video), and every video shows its price and waits for you to accept it.
 Pictures and video can each use a different service from chat (NanoGPT,
 OpenRouter, WaveSpeed, or anything OpenAI-compatible).
+
+### Simple chat
 
 You can also have a basic chat without the storytelling features, but still
 with summarising, end-to-end encrypted models, image generation, a map that
@@ -127,6 +179,9 @@ Have fun!
 - **Playing**: you write as a character you can switch at any time, as
   narration, or as direction to the model; you can also ask it questions out
   of character.
+- **People by their faces**: beside a story without a map, who is here now,
+  the rest of the cast and the supporting characters, each with their
+  portrait; someone the story brings in without a card gets one in a click.
 - **The world and the cast**: a world bible, cast sheets with skills,
   supporting characters the story introduces, and a lorebook whose entries
   can wait, unseen by any model, until you mention them, so what hasn't

@@ -4,6 +4,8 @@ Everything the [README](../README.md) leaves out: installing in detail, every
 part of the window, and what each feature does. The README's
 [First five minutes](../README.md#first-five-minutes) is the quickest way in.
 
+![Playing The Silverwood on its map: the story on the left, the village of Fernhollow on the right with everyone standing where the story put them](screenshots/map-play.webp)
+
 ## Contents
 
 - [Features at a glance](#features-at-a-glance)
@@ -21,11 +23,16 @@ part of the window, and what each feature does. The README's
 - [Perspective and supporting characters](#perspective-and-supporting-characters)
 - [The People page](#the-people-page)
 - [The scene, and who can walk into it](#the-scene-and-who-can-walk-into-it)
+- [The map](#the-map)
+  - [Playing on the map](#playing-on-the-map)
 - [Branches, takes and export](#branches-takes-and-export)
 - [Outcomes and dice](#outcomes-and-dice)
 - [Response length and style](#response-length-and-style)
 - [Lore retrieval](#lore-retrieval)
+  - [Lore that hasn't happened yet](#lore-that-hasnt-happened-yet)
 - [Pictures](#pictures)
+  - [Pictures of your own](#pictures-of-your-own)
+  - [Pictures for the cards](#pictures-for-the-cards)
 - [Videos](#videos)
 - [Private scenes](#private-scenes)
 - [Simple chat](#simple-chat)
@@ -40,6 +47,20 @@ part of the window, and what each feature does. The README's
   at any time; the model never writes your character, and nobody walks into a
   scene by shortcut. Speaking as a character, as narration or as direction;
   OOC notes; questions to the model out of character.
+- **The map**: a story can be played on a map drawn in pixel art for its
+  world. Walk anywhere, click people and things for what you can do, travel
+  between places; the storyteller is told where everyone stands and who can
+  see whom. Places stay where the story put them, what happens shows (a barn
+  burning, a thing carried off), floors, decks, weather and the hour show,
+  and you can make objects, put anything right by hand, or have a place
+  painted. Tile sets come with the samples, and a new one can be designed for
+  your world.
+- **Faces**: a portrait for every character and a picture for every lore
+  entry, drawn from their cards; an avatar on the map from the portrait; the
+  People page shows who is here by their faces.
+- **Sample stories**: Doomsville, with or without a map, and four other
+  worlds, each with a plot, a map drawn up and furnished, a background and a
+  picture of everyone, all on the start page.
 - **The world and the cast**: world bible, cast sheets with skills, supporting
   characters the story introduces (suggested, never added by themselves), a
   lorebook sent whole when small and selected per turn when large.
@@ -64,7 +85,9 @@ part of the window, and what each feature does. The README's
   rewrite any earlier message as a named branch, take a turn back into the
   composer; every take is kept.
 - **Pictures**: a prompt written from the story on the story's cached prefix,
-  approved before anything is sent, with the cast's reference pictures.
+  approved before anything is sent, with the cast's reference pictures. Every
+  picture and video in one place, the Media page. An image model is chosen
+  once: its editing version is sent whenever a picture goes with the prompt.
 - **Videos**: a few seconds of the story, from a prompt written for video,
   optionally starting or ending on a picture; its price shown and accepted
   before it is sent, on a key of its own; played in place.
@@ -75,6 +98,8 @@ part of the window, and what each feature does. The README's
   that proposes typed changes you tick.
 - **Costs**: per passage, per session and per story, from the endpoint's own
   figures or the model's listed prices.
+- **Endpoints**: any OpenAI-compatible endpoint, Anthropic's own API, and
+  several at once, each with its own key.
 - **Packaging**: a single-file AppImage; a terminal client for the engine.
 
 ## Installing
@@ -327,6 +352,8 @@ Generation, **Prompt caching (advanced)** under Endpoints, **Chapters and
 recall (advanced)** under Context, and, under Images, the picture endpoint
 for pictures drawn somewhere other than the chat endpoint.
 
+![Settings, open on Models: the pages down the left in their groups, and every model by the job it does, with Route…, Recommended and Browse… beside each](screenshots/settings.png)
+
 **Several endpoints.** Settings → Endpoints lists every endpoint you have
 set up, each with its own address, protocol (**Speaks**) and API key; **Add**
 makes another, **Remove** takes one out (its key with it, when you Save), and
@@ -402,6 +429,8 @@ stories, each with its picture. **File → New…** (Ctrl+N), and **New…** und
 the Stories list, show the same choices. A story saves itself as you go
 (Ctrl+S saves at once).
 
+![The start page with no stories yet: the sample stories first, each with its picture and a line on what it is, then the ways to start your own](screenshots/start-page.webp)
+
 **Managing stories.** Right-click a story in the Stories list:
 - **Open folder** shows the story's files in your file manager (also for a
   story that can't be read).
@@ -453,7 +482,7 @@ archiving, rebuilding summaries.
   **Style**, **Story so far** (the chapter summaries: edit, rebuild, archive
   now; double-click one to go to it in the story) and **Media** (every
   picture and video the story has made, its background and the map's
-  views). **View → Prompt page (advanced)** adds **Prompt**: exactly what the
+  paintings and avatars). **View → Prompt page (advanced)** adds **Prompt**: exactly what the
   storyteller was sent last turn, for checking the model's work; **Copy
   prompt** copies it as readable text, **Copy request JSON** as the exact
   request body.
@@ -511,9 +540,10 @@ archiving, rebuilding summaries.
 
 ## Models
 
-Twelve settings name a model; the text models are together on Settings →
-Models. Blank ones fall back as shown; the defaults marked ★ are NanoGPT
-model ids, so on another endpoint set them to one it lists (Browse…).
+Twenty-one settings name a model; the text models are together on Settings →
+Models, the picture models on Settings → Images. Blank ones fall back as
+shown; the defaults marked ★ are NanoGPT model ids, so on another endpoint
+set them to one it lists (Browse…).
 
 | Setting | Where | Used for | Blank means |
 |---|---|---|---|
@@ -524,9 +554,17 @@ model ids, so on another endpoint set them to one it lists (Browse…).
 | Plot model | Settings → Models | the plot's director (the clock and facts are read by the scene model) | the scene model |
 | Authoring model | Settings → Models | drafting from a premise, settings reviews | the story model |
 | Lore model ★ | Settings → Models | picking lore for a large lorebook | the scene model |
+| Map model | Settings → Models | reading each passage for the map: places, who is where, things | the scene model |
+| Map art model | Settings → Models | the map's plans and land, and furnishing its buildings | the map model |
 | Image prompt writer | Settings → Models, or the Image dialog | writing the picture's prompt | the story model |
 | Jev model ★ | `config.json` only | "Jev before each turn" | — |
-| Image model ★ | Settings → Images | pictures | — |
+| Image model ★ | Settings → Images | pictures of the story | starts as Seedream 5.0 Pro |
+| Portrait model ★ | Settings → Images | portraits and the cards' pictures | starts as FLUX.3 Klein |
+| Map picture model ★ | Settings → Images | the postcards, and the pictures of places and things on the Region map | starts as FLUX.3 Klein |
+| Map tile and sprite models ★ | `config.json` only (`map_tile_model`, `map_sprite_model`) | the play view's things, roofs and ground (tile), and the avatars drawn from portraits (sprite) | start as FLUX.3 Klein |
+| Painting model ★ | Settings → Images | paintings of a place on the map | starts as FLUX.3 Klein |
+| Video model ★ | Settings → Video | videos | starts as Seedance 2.5 |
+| Tile set designer | **Designed by** in the tile set designer (Look → Tile sets… → Draw a new set…) | designing a tile set for your world | Claude Opus 5.5 on NanoGPT, else the map art model |
 | Private model | Settings → Private | private scenes | — |
 | Embeddings model | Settings → Lore | lore vectors | `BAAI/bge-m3` |
 
@@ -908,6 +946,8 @@ Pictures → Pictures for the cards). Click the portrait to see it whole. Each
 name in the list has its portrait beside it, small. A lore entry's first
 picture is shown the same way on the Lore page.
 
+![The Cast page: the list of characters, each with a small portrait, and below it the selected character's portrait at the left with the buttons that draw or change it, and the fields of their sheet at the right](screenshots/cast-page.webp)
+
 In a story played on its map, **On the map** under the portrait shows the
 character's avatar, the little pixel-art figure that walks for them, and
 says where it came from. Click it to see it whole, pixel for pixel. **Draw
@@ -957,6 +997,8 @@ the Cast page; right-click it to draw a portrait, choose a picture of your
 own, or play as that character. A card with no portrait has **Draw a
 portrait…** and **Choose a picture…** on it.
 
+![The People page in The Silverwood: where the story is and what is happening, then the ranger, the sellsword and the herbwife under Here now, by their portraits, and the queen under Not here](screenshots/people-page.webp)
+
 Until the story has them, a panel at the top offers **Draw portraits…** for
 everyone who has none (you see and can change every prompt first, as in
 Story → Draw pictures for the cards…) and a background behind the story
@@ -979,6 +1021,8 @@ alone, for you to fill in) and opens on the Cast page, where you can draw
 their portrait. On a map, they then get an avatar of their own instead of
 one of the tile set's figures. Right-clicking them on the map offers the
 same.
+
+![The People page in Doomsville: the player's character under Here now, and March, whom the story brought in, under Also here, with no card yet, with Make a card beside her name](screenshots/people-no-card.png)
 
 ## The scene, and who can walk into it
 
@@ -1095,9 +1139,10 @@ the menus and the storyteller call them as the story described them ("the
 teenage girl"). A thing the tile set has no picture of borrows the set's
 nearest one of the same kind until its own is drawn.
 
-**Draw map pictures** (under Settings → Images) has an image model,
-FLUX.3 Klein unless you choose another, draw the map's people, buildings and
-things instead (it needs **Draw the map** on): everyone's avatar from their portrait
+**Draw map pictures** (under Settings → Images) has an image model, FLUX.3
+Klein, draw the map's people, buildings and things instead (it needs **Draw
+the map** on; **Map picture model** there chooses the model for the postcards
+and the Region map's pictures): everyone's avatar from their portrait
 or what their card says of them (you first, then whoever is with you), roofs
 of what each building is made of, the things in each room, and each building
 standing on the ground where the story put it. **Automatically** (the
@@ -1157,6 +1202,8 @@ map marked; right-click another there for **Show this painting on the
 map**. While you play on an area, its own painting isn't shown over it; zoom
 the Region in on another area to see that one's.
 
+![A painting of Fernhollow from The Silverwood sample: the village's thatched cottages, the green with its old oak and well, the mill on the stream and the forest around, painted from the map](../SampleStories/pictures/map/silverwood-fernhollow-isometric.jpg)
+
 A story that keeps a map makes it part of the window: the panel beside the
 story takes half the window with **Map** as its first page. **Map**,
 above the transcript, goes to it.
@@ -1195,6 +1242,8 @@ within reach, the doorways out. Someone a passage leaves at a building's
 door, on its porch or in its yard stands outside it, at its door, until the
 story or a walk takes them in.
 
+![Inside the farmhouse in Doomsville with a map: its rooms lit by lamplight and furnished, John in the front room and the two people the story brought in, not named yet, shown as Unknown 1 and Unknown 2](screenshots/map-indoors.webp)
+
 - **Walking.** Click anywhere to walk there (the arrow keys or WASD take a
   step); the tile under the pointer shows gold where you can stand and red
   where you can't, and a click while you are still walking goes on from
@@ -1213,6 +1262,8 @@ story or a walk takes them in.
   react as themselves: someone who knows you notices you and says hello,
   someone hostile may not), **Look** (you stay out of sight and watch what
   they are doing) or **Attack**.
+
+  ![The menu for Brannoc Hale on the village green: Talk, Look (stay out of sight and watch), Attack, Walk over, and the corrections Move…, Is really… and Not here](screenshots/map-person-menu.webp)
 - **Things.** Click a thing for what can be done with it: **Use**, and
   **Take**, **Eat** or **Destroy** where they fit. You walk up to it first.
   What the choice does is recorded by the program when the turn is sent,
@@ -1344,6 +1395,8 @@ story or a walk takes them in.
   passes, the storyteller is told the room as it now is, and Undo puts the
   last one back. While a story's first place is being set up, a line on
   Local offers Objects… until your first turn.
+
+  ![The Objects panel: a herb drying rack, a cauldron and a spinning wheel typed in, the line saying it draws three pictures with FLUX.3 Image Klein at $0.008 each, and the tile set's things to choose from](screenshots/objects-panel.png)
 - **The clock** (Day 1, 08:00, beside the place's name) moves with walking
   and travel, with the time the passages tell, and with a Direction or
   Narration that says time goes by ("Three weeks pass"). In a story with a
@@ -1396,6 +1449,8 @@ all of it is in; the set it had stays until then. A story may keep several
 sets of its own and swap between them under Look, and they travel with
 Restart, Duplicate settings and scenario files.
 
+![The tile set gallery: a card for each set with a strip of its textures and things, its style in words and the settings it suits, and Use this set; Draw a new set… and Edit the tile set… at the bottom](screenshots/tile-sets.png)
+
 Things and people the set doesn't have are drawn as the story needs them,
 with **Draw map pictures** on (Settings → Images; FLUX.3 Klein, about a
 cent each): each kind of thing once, each character from their portrait,
@@ -1430,6 +1485,8 @@ named large and the small places hidden. Scroll to zoom (places inside others
 appear as you zoom in), drag to move; double-click a place to go to it. Esc
 goes out from Local to the region.
 
+![The Region view of The Silverwood: the forest, the road north from Fernhollow to Sylvaranth and the mountains beyond, under the grey haze of country known but not here, with Fernhollow ringed in gold where the ranger is](screenshots/map-region.png)
+
 The map is the storyteller's too: each turn it is told where you are on it,
 what is around and inside that place, the ways between them and the things
 there, so a place you go back to is as the story left it. A map from a plot
@@ -1439,7 +1496,7 @@ story** to save them.
 
 ## Branches, takes and export
 
-![The branch map: Main and a named branch as lanes running down the page](screenshots/story-map.png)
+![The Branches diagram: Main running down the page, and the branch called The barn leaving it at message 5, each with its length and the opening words of its first message](screenshots/story-map.png)
 
 Every Regenerate keeps the old take: `‹ 2 / 3 ›` on a passage switches
 between takes, in place. A take is another version of that one passage, so the
@@ -1619,6 +1676,8 @@ marks it "held back" or "mentioned".
 
 ## Pictures
 
+![The picture dialog: a direction, the prompt the story's model wrote from it naming the herbwife and the ranger as image 1 and image 2, their portraits and the village as the reference pictures, and the model, size and price, with Generate](screenshots/picture-dialog.png)
+
 **Story → Draw a picture…** (Ctrl+Shift+I), the **Picture…** button beside the
 composer, or **Illustrate this passage…** in a passage's ⋯ menu asks the
 story's model to write an image prompt from where the story is, choosing
@@ -1652,6 +1711,8 @@ A story picture's menu (here, or its ⋯ in the story) has **Change this
 picture…** too: the changed copy goes after the same passage. **Save all…** copies everything
 there into a folder you choose, the cards' pictures named by card; each
 picture's ⋯ menu saves one.
+
+![The Media page of The Silverwood: the cast's portraits, the lore's pictures, the background behind the story, and the map's paintings and avatars](screenshots/media-page.webp)
 
 Pictures go to the chat endpoint unless **Settings → Images** names another:
 an address, a key, and the service it is (NanoGPT, OpenRouter, WaveSpeed, or
@@ -1973,7 +2034,7 @@ story is (Settings → Context), with a plain summariser.
 
 ## The context budget and archiving
 
-![What the storyteller sees: a chapter summary standing in for archived prose, then the recent passages word for word](screenshots/as-sent-view.png)
+![What the storyteller sees: a chapter summary standing in for archived prose, then the recent passages word for word](screenshots/as-sent-view.webp)
 
 The **Context budget** (File → Settings → Context, with a story open) is how
 many tokens the storyteller's whole prompt may use each turn: the rules,
