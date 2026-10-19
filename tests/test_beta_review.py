@@ -317,6 +317,30 @@ def test_every_http_client_in_src_comes_from_make_client():
     assert offenders == []
 
 
+def test_the_phones_server_is_the_only_one_in_src():
+    """Phone access (gui/phone_server.py) listens on a unix socket in a folder
+    only this user can open, for tor to forward to. Nothing else listens."""
+    source = Path(__file__).resolve().parents[1] / "src" / "sealedlore"
+    servers = ("QLocalServer(", "QTcpServer(", "HTTPServer(", "socketserver", ".bind(")
+    offenders = {
+        str(path.relative_to(source)): [s for s in servers if s in path.read_text(encoding="utf-8")]
+        for path in sorted(source.rglob("*.py"))
+        if path.name != "phone_server.py"
+    }
+    assert {name: found for name, found in offenders.items() if found} == {}
+
+
+def test_an_onion_address_is_no_exception_to_https_going_out():
+    """The phones' page is plain http over the onion (Tor encrypts it end to
+    end): that carve-out is for the one server SealedLore runs, never for an
+    endpoint it calls."""
+    from sealedlore.models.config import require_https
+
+    with pytest.raises(ValueError):
+        require_https("http://" + "a" * 56 + ".onion/v1")
+    assert not is_secure("http://" + "a" * 56 + ".onion/v1")
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="mode bits; Windows: test_windows.py")
 def test_the_data_folder_and_its_logs_are_the_owners_alone(tmp_path: Path):
     """config.json holds the key and api_log.jsonl every prompt: the folder is

@@ -30,7 +30,16 @@ SOURCE_ROOT = Path(__file__).resolve().parents[1] / "src" / "sealedlore"
 ON_FIRST_USE = ("numpy", "tiktoken", "tinfoil", "keyring")
 # Modules of a package, likewise: QtMultimedia loads FFmpeg (~20 MB of
 # libraries) and is needed only once a video is shown or played.
-MODULES_ON_FIRST_USE = ("PySide6.QtMultimedia", "PySide6.QtMultimediaWidgets")
+MODULES_ON_FIRST_USE = (
+    "PySide6.QtMultimedia",
+    "PySide6.QtMultimediaWidgets",
+    # Phone access: QtNetwork and its server are loaded when it is first
+    # turned on, which it is not unless the author asks.
+    "PySide6.QtNetwork",
+    "sealedlore.gui.phone_server",
+)
+# The one module whose job is a first-use module: it is itself loaded on first use.
+FIRST_USE_HOMES = {"gui/phone_server.py": {"PySide6.QtNetwork"}}
 
 
 def imported_at_the_top(path: Path) -> set[str]:
@@ -54,6 +63,7 @@ def test_heavy_packages_are_imported_on_first_use():
                 for name in imported_at_the_top(path)
                 if name.split(".")[0] in ON_FIRST_USE or name in MODULES_ON_FIRST_USE
             }
+            - FIRST_USE_HOMES.get(str(path.relative_to(SOURCE_ROOT)), set())
         )
     }
     assert offenders == {}

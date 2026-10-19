@@ -120,6 +120,7 @@ from sealedlore.gui.window_find import FindWindow
 from sealedlore.gui.window_images import ImagesWindow
 from sealedlore.gui.window_layout import LayoutWindow, StoriesDock
 from sealedlore.gui.window_objects import ObjectsWindow
+from sealedlore.gui.window_phone import PhoneWindow
 from sealedlore.gui.window_private import PrivateWindow
 from sealedlore.gui.window_text import TextSizeWindow
 from sealedlore.gui.window_videos import VideosWindow
@@ -228,6 +229,7 @@ class MainWindow(
     MapEditWindow,
     ImagesWindow,
     VideosWindow,
+    PhoneWindow,
     PrivateWindow,
     TextSizeWindow,
     LayoutWindow,
@@ -492,6 +494,7 @@ class MainWindow(
             )
         ]
         self._init_images()
+        self._init_phone()
         self._init_videos()
         self._init_private()
 
@@ -1769,9 +1772,11 @@ class MainWindow(
                     [("Open Settings…", self.open_settings), ("Import…", self.import_file)],
                     rich=True,
                 )
+                self._phone_settled()
                 return
             self.start_page.rebuild(self.stories.recent(start_page.RECENT_COUNT))
             self._show_start(True)
+            self._phone_settled()
             return
         self._show_start(None)
         self._show_nodes(self.session.full_path())
@@ -1779,6 +1784,8 @@ class MainWindow(
         self._refresh_find()
         # The leaf moved (a branch, a take, an edit): the map is the path's.
         self.refresh_world(keep_view=True)
+        # The phones' view is rebuilt from the same state (gui/window_phone.py).
+        self._phone_settled()
 
     def _show_start(self, start: bool | None) -> None:
         """With no story open (`start` True for the start page, False for the
@@ -2414,6 +2421,7 @@ class MainWindow(
 
         def ask() -> None:
             self.session.provider = self._current_provider()
+            self._phone_turn_sent("Question", text, "question", origin)
             self._start(lambda: self.session.ask(text), question=text)
 
         self._queue_or_run(ask, text, None, origin=origin)
@@ -2432,6 +2440,7 @@ class MainWindow(
             # Written at the newest message, wherever the reader was.
             self.transcript.ensure_at_latest()
             self.transcript.add_message(label, text, kind_for(turn.speaker_id), turn.ooc)
+            self._phone_turn_sent(label, text, kind_for(turn.speaker_id), origin)
             self._start(lambda: self.session.send(turn))
 
         self._queue_or_run(
@@ -2869,6 +2878,7 @@ class MainWindow(
         worker.notice.connect(self._on_notice)
         worker.passage_done.connect(self._on_passage_done)
         worker.failed.connect(self._on_failed)
+        self._phone_job_started(worker, streaming=streaming, question=question)
         worker.finished.connect(thread.quit)
         # Cleanup hangs off the thread rather than the worker: the worker must
         # stay alive until its own thread has actually stopped, so dropping
@@ -2992,6 +3002,7 @@ class MainWindow(
             QTimer.singleShot(0, self.close)
             return
         self.transcript.end_streaming()
+        self._phone_job_finished()
         # The worker mutated the session on its own thread; rebuild the view
         # from story state now that it is finished, so the two cannot drift.
         self.reload_transcript()
@@ -4364,6 +4375,8 @@ class MainWindow(
         attestation_tests().wait()
         speed_tests().wait()
         hosts_catalog().wait()
+        # The phones are told it stopped, and nothing listens any more.
+        self.stop_phone_server()
         if self.session is not None:
             self.session.close()
             self.session.save()
