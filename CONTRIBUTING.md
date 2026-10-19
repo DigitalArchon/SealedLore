@@ -48,6 +48,7 @@ rest of it is. "Never silently discard or alter a response" is a rule too.
 | `sealedlore.storage` | JSON persistence, atomic writes | models |
 | `sealedlore.engine` | prompt assembly, budget, archival, the session | models, storage, providers |
 | `sealedlore.providers` | the OpenAI-compatible client, the mock, TEE checks | models |
+| `sealedlore.phone` | phone access without Qt: HTTP, pairing, the API and its sharing gate, the QR code, tor's control protocol, the phone's page | models, engine |
 | `sealedlore.gui` | everything PySide6 | all of the above |
 
 `tests/test_module_boundaries.py` enforces the last row: only `gui` may

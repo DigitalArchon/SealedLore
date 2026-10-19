@@ -234,6 +234,12 @@ Have fun!
   which model and route it is on.
 - **Chats kept in memory only**, pictures and all, that leave nothing on
   disk unless you export them.
+- **Play from your phone**: turn on File → Phone access, and a phone's Tor
+  Browser can play the stories you share, wherever the phone is, through
+  SealedLore's own tor, with nothing to set up on your router. Pair it by
+  scanning a code; its bookmark is its login. Text stories and chats, on
+  Linux, for now. See
+  [Playing from your phone](docs/manual.md#playing-from-your-phone).
 
 ## Installing
 
@@ -377,7 +383,9 @@ what each feature does.
 ## Your data and privacy
 
 There is no telemetry, no update check and no crash reporting. Every endpoint
-must be `https://` (plain `http://` is accepted only for `localhost`).
+must be `https://` (plain `http://` is accepted only for `localhost`). Phone
+access, below, answers phones over `http://` on an onion address, which tor
+encrypts the whole way.
 
 - **The chat endpoint** gets every prompt: the world, cast, lore, the recent
   story and your turn, and the side calls made from the story (chapter
@@ -395,6 +403,12 @@ must be `https://` (plain `http://` is accepted only for `localhost`).
   sends the enclave's GPU evidence to NVIDIA and fetches Intel's public
   certificates; nothing from your story goes to either. A `private/` model is
   end-to-end encrypted, so NanoGPT relays only ciphertext.
+- **Phone access**, off unless you turn it on, runs SealedLore's own tor,
+  which publishes your computer's onion address on the Tor network. Only
+  phones you paired get anything, and only from the stories you share. What a
+  phone shows may stay on the phone (Tor Browser and Android keep screenshots,
+  previews and what the keyboard learns), private scenes and memory-only
+  chats included.
 - **On disk**, settings and stories live in a data folder only your user
   can read. API keys go to the system keychain, or into that folder's
   `config.json` in plain text where there is no keychain or you choose it. Each story keeps every

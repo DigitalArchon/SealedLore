@@ -37,6 +37,7 @@ part of the window, and what each feature does. The README's
 - [Videos](#videos)
 - [Private scenes](#private-scenes)
 - [Simple chat](#simple-chat)
+- [Playing from your phone](#playing-from-your-phone)
 - [The context budget and archiving](#the-context-budget-and-archiving)
 - [The terminal client](#the-terminal-client)
 - [Where your data goes](#where-your-data-goes)
@@ -98,6 +99,9 @@ part of the window, and what each feature does. The README's
   or in memory only, handed back as a summary you approve.
 - **Drafting and review**: a whole story from a premise; a settings review
   that proposes typed changes you tick.
+- **From your phone**: play the stories you share from a phone's Tor
+  Browser, anywhere, through SealedLore's own tor; paired by scanning a code,
+  with nothing to set up on your router. Text stories and chats, on Linux.
 - **Costs**: per passage, per session and per story, from the endpoint's own
   figures or the model's listed prices.
 - **Endpoints**: any OpenAI-compatible endpoint, Anthropic's own API, and
@@ -123,7 +127,9 @@ lack (so no `libxcb-cursor0` install needed). It runs on x86_64 with glibc
 the floor set by PySide6 6.10+. Stories and settings live where they always
 do (`$XDG_DATA_HOME/sealedlore`, usually `~/.local/share/sealedlore`), so the
 AppImage and an installed copy share them. The sample plot files and their
-format guide are inside it (Help → Plot format guide and samples opens them).
+format guide are inside it (Help → Plot format guide and samples opens them),
+and so is the tor that phone access runs (see
+[Playing from your phone](#playing-from-your-phone)).
 
 If the machine has no FUSE (common in containers, occasionally on minimal
 installs), run it with `--appimage-extract-and-run`.
@@ -163,6 +169,12 @@ Playing videos uses Qt Multimedia, which needs the PulseAudio client library
 (`libpulse0` on Debian/Ubuntu/Mint), present on nearly every desktop. Without
 it everything else works, and videos show without a preview and can't be
 played in place (their ⋯ menu still opens them in your own player).
+
+Playing from your phone runs tor, which the AppImage brings and a source
+install doesn't: install the program (`sudo apt-get install -y tor` on
+Debian/Ubuntu/Mint). SealedLore starts its own copy only while phone access
+is on, with its own settings, and never uses the tor service your system may
+run; you can leave that service disabled.
 
 #### Desktop entry (optional)
 
@@ -347,7 +359,7 @@ and does nothing.
 
 **Settings** (File → Settings…, Ctrl+,) lists its pages down the left in
 groups: **Connection** (Endpoints, Models), **Writing** (Generation, Context,
-Lore), **Pictures** (Images, Video) and **Privacy** (Private). Each page says
+Lore), **Pictures** (Images, Video) and **Privacy** (Private, Phone). Each page says
 at its top what it is for. Options most people never change are put away
 under a heading that opens them, such as **Sampling (advanced)** under
 Generation, **Prompt caching (advanced)** under Endpoints, **Chapters and
@@ -2148,6 +2160,109 @@ story is (Settings → Context), with a plain summariser.
   ordinary model the provider still receives every message (on NanoGPT, your
   account's data retention setting applies there).
 
+## Playing from your phone
+
+Phone access lets a phone play the stories and chats you choose, from Tor
+Browser, wherever the phone is, while SealedLore runs on your computer.
+SealedLore runs its own tor and gives your computer an onion address, so
+there is nothing to set up on your router, no port is opened, and there is
+no account or service in between. It is off until you turn it on, and while
+it is off nothing of it runs, listens or can be reached. For now it works on
+Linux, and for stories and chats that don't keep a map (Story → Continue
+without the map… makes a copy that can go on the phone).
+
+The phone needs **Tor Browser** (from the Tor Project, through Google Play,
+F-Droid or torproject.org), at its Standard or Safer security level: the page
+needs scripts, which Safest turns off.
+
+**Turning it on.** **File → Phone access** turns it on for as long as
+SealedLore runs. A small onion then shows in the status bar with what tor is
+doing: "Phone: connecting 45%" while tor joins the Tor network (usually ten to
+thirty seconds, now and then a few minutes), then "Phone: ready", or
+"Phone: 1 connected" while a phone is playing; a click on it opens the phones
+and stories. Unticking File → Phone access stops tor and closes every phone's
+connection, and so does quitting. To have it start with SealedLore, tick
+Settings → Phone → Turn phone access on when SealedLore starts (off unless you
+tick it); Settings → Phone → Say when a phone connects shows a notice when
+one does.
+
+**Choosing what the phones see.** Nothing is shared until you choose it. Tick
+the stories under **Stories on your phones** in **File → Phone devices…**, or,
+while phone access is on, right-click a story in the Stories list and tick
+**Share with phone**; a shared story's row then says "on your phones". A
+phone lists and opens only those, and gets nothing at all from any other:
+while the desktop has a story open that isn't shared, the phone says only
+"The story open on the desktop isn't shared with this phone", not even its
+title. What is shared is kept on this computer, not in the story, so a
+backup, a copy or a scenario of it starts out unshared. A memory-only chat
+can be shared from the same list for as long as it is open, and that choice
+is never written down.
+
+**Pairing a phone.**
+
+1. On the phone, open Tor Browser and let it connect.
+2. On the computer, open **File → Phone devices…** and choose **Pair a
+   phone…**. It shows a QR code, the link it holds, and **Copy link**.
+3. Scan the code with the phone's camera, tap **Copy**, and paste the link
+   into Tor Browser's address bar. (The camera opens links in the phone's
+   usual browser, which can't reach an onion address, and Share doesn't offer
+   Tor Browser.) A code works once, for five minutes, and closing the window
+   ends it.
+4. On the phone, give it a name and tap **Connect**. The computer asks
+   whether to allow the phone and shows four digits: allow it only if the
+   phone shows the same four.
+5. Bookmark the page the phone then shows (⋮ menu → ☆) and tap **I've
+   bookmarked it**. **The bookmark is the phone's login**: Tor Browser forgets
+   its pages when it closes and has no "Add to home screen", so open the
+   bookmark each time you play. Whoever has the bookmark can play what you
+   share, so keep it like a password.
+
+**Playing.** The phone shows the story open on the desktop, and the two stay
+together: a turn from either shows on both, and the passage is written on
+both at once. Under the box are **Speaking as**, the length, and behind
+**More** the outcome and, when a roll applies, the roll and its difficulty;
+everything else (who you play, who the model may voice) is the desktop's
+composer's. Send becomes Stop while a passage is written, and a turn sent
+while the reads after a passage finish waits to go (Queue). Under a passage
+are ‹ › for its takes, **Regenerate** and **Roll again**. The ☰ menu lists the
+shared stories (opening one opens it on the desktop too), the story's
+branches, and **Forget this phone**. Pictures in the story show small, and
+whole when tapped.
+
+Some things wait for the desktop: while a question is open there (a summary
+to approve, say), the phone says "The desktop is waiting for an answer". A
+private scene is begun and ended on the desktop.
+
+**Private scenes, memory-only chats and private models** can be played from
+the phone if their story is shared, and the computer asks first when you
+share one. But whatever a phone shows is on that phone: Tor Browser and
+Android may keep it (the open tab, screenshots and the recent-apps preview,
+what the keyboard learns, backups), and SealedLore can't promise for a phone
+what it promises for your computer. The first time the page reaches
+something private it says so, full screen, and shows it only after **Show
+it**; **Not now** leaves a placeholder you can tap later.
+
+**Phones you no longer want.** **Revoke** beside a phone in **File → Phone
+devices…** cuts it off at once; its bookmark stops working. **Forget this
+phone** in the phone's own menu does the same from the phone (delete the
+bookmark too). **New address…** gives your computer a new onion address and
+forgets every phone, so each one has to be paired again: for when you think
+a bookmark has got out. **Details** there shows tor's own latest messages.
+
+**Why the link starts with http://.** An onion address is a key: tor finds
+your computer by it, checks that it is talking to the holder of that key, and
+encrypts everything from the phone to your computer. Tor Browser therefore
+counts it as a secure page. A certificate would add nothing but a warning
+page every time. SealedLore answers only requests made to its own onion
+address, and everything but the page itself and pairing needs the phone's
+login.
+
+**Tor itself.** The AppImage brings tor (from the Tor Project's Tor Expert
+Bundle). Run from source, SealedLore uses the `tor` program on your `PATH`
+(see [System packages](#system-packages)); `SEALEDLORE_TOR` names another.
+Either way it runs its own copy, with its own settings and its state in the
+data folder's `phone` folder, never the tor service your system may run.
+
 ## The context budget and archiving
 
 ![What the storyteller sees: a chapter summary standing in for archived prose, then the recent passages word for word](screenshots/as-sent-view.webp)
@@ -2235,7 +2350,10 @@ sealedlore chat <story-id>
 
 Nothing leaves your machine except what the features below send, and every
 endpoint must be `https://` (plain `http://` is accepted only for
-`localhost`). There is no telemetry, no update check and no crash reporting.
+`localhost`). The one exception the other way is phone access, which answers
+phones over plain `http://` on its onion address, where tor encrypts the
+whole way (see [Playing from your phone](#playing-from-your-phone)). There is
+no telemetry, no update check and no crash reporting.
 
 - **The chat endpoints** (Settings → Endpoints) get every prompt: the world,
   cast, lore, the recent story and your turn; the chapter summaries, scene
@@ -2273,6 +2391,17 @@ endpoint must be `https://` (plain `http://` is accepted only for
   scene ends, and only the summary you approve goes back into it. "In
   memory" keeps the scene's messages off the disk; its calls are logged
   without content, so the cost still adds up.
+- **Phone access**, off until you turn it on (File → Phone access): SealedLore
+  runs its own tor, which talks to the Tor network's relays and publishes your
+  computer's onion address there. The address's key is kept in the keychain
+  like an API key, and tor's own state (the relays it knows) in the data
+  folder's `phone` folder. Phones reach the computer only through tor, and
+  only those you paired get anything, and only from the stories you share:
+  their messages, pictures and what the composer offers. A phone's login is
+  kept only as a hash. `config.json` keeps each phone's name, when it was
+  paired and the day it was last seen, and which stories are shared. What a
+  phone shows is on the phone, and Tor Browser and Android may keep it (see
+  [Playing from your phone](#playing-from-your-phone)).
 - **On first run from a source or pip install**, `tiktoken` downloads its
   token vocabulary from OpenAI's public file store; the AppImage bundles it.
   No data about you is sent.
