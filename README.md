@@ -36,6 +36,12 @@ works as intended. Bug reports and pull requests are welcome; see
   key.
 - **Image models chosen once.** Pick a model, and SealedLore sends its
   editing version whenever a picture goes with the prompt.
+- **Play from your phone** (new in 2.0.0b2). Turn on File → Phone access,
+  and a phone's Tor Browser can play the stories you share, wherever the
+  phone is, through SealedLore's own tor: nothing to set up on your router,
+  no port opened. Pair it by scanning a code; its bookmark is its login.
+  Text stories and chats, on Linux, for now. See
+  [Playing from your phone](docs/manual.md#playing-from-your-phone).
 
 ### Play on a map
 
@@ -234,12 +240,6 @@ Have fun!
   which model and route it is on.
 - **Chats kept in memory only**, pictures and all, that leave nothing on
   disk unless you export them.
-- **Play from your phone**: turn on File → Phone access, and a phone's Tor
-  Browser can play the stories you share, wherever the phone is, through
-  SealedLore's own tor, with nothing to set up on your router. Pair it by
-  scanning a code; its bookmark is its login. Text stories and chats, on
-  Linux, for now. See
-  [Playing from your phone](docs/manual.md#playing-from-your-phone).
 
 ## Installing
 
