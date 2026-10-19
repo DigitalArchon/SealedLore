@@ -110,15 +110,16 @@ a program of its own, which SealedLore starts only while phone access is on.
   (`texts/GPL-3.0.txt`), as `tor --version` says.
 - **libevent** is under the 3-clause BSD license (`tor/libevent.txt`).
 - **OpenSSL 3** is under the Apache License 2.0 (`tor/openssl.txt`).
-- **Source:** attached to every SealedLore release beside the AppImage, as
-  their projects publish it: `tor-0.4.9.14.tar.gz`,
-  `libevent-2.1.13-stable.tar.gz` and `openssl-3.5.9.tar.gz` (also at
-  <https://archive.torproject.org/tor-package-archive/>,
-  <https://github.com/libevent/libevent/releases> and
-  <https://github.com/openssl/openssl/releases>). How the bundle is built from
-  them is Tor Browser's build system, tag `tbb-15.0.25-build2` of
+- **Source:** tor 0.4.9.14 is
+  <https://archive.torproject.org/tor-package-archive/tor-0.4.9.14.tar.gz>
+  (git tag `tor-0.4.9.14` of <https://gitlab.torproject.org/tpo/core/tor>).
+  The bundle is built from it by Tor Browser's build system, tag
+  `tbb-15.0.25-build2` of
   <https://gitlab.torproject.org/tpo/applications/tor-browser-build>
-  (`projects/tor`, `projects/libevent` and `projects/openssl`).
+  (`projects/tor`, `projects/libevent` and `projects/openssl`), which also
+  names the libraries' sources: libevent `release-2.1.13-stable`
+  (<https://github.com/libevent/libevent>) and OpenSSL 3.5.9
+  (<https://github.com/openssl/openssl/releases/tag/openssl-3.5.9>).
 - **Replacing it:** extract the AppImage and put your own tor in
   `usr/lib/tor`, or run the AppImage with `SEALEDLORE_TOR` set to the path of
   another tor.

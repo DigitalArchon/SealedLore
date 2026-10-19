@@ -17,6 +17,9 @@ pinned packages from PyPI, eight small libraries from Debian 11's archive,
 the Tor Expert Bundle from the Tor Project's archive (checked against pinned
 checksums), and `appimagetool`. They are cached in `build/appimage/cache`.
 
+To change a package version, edit `packaging/appimage/requirements.in` and
+run `packaging/appimage/lock.sh` (it uses the same pinned `uv` as the build).
+
 ## Tor, for phone access
 
 Phone access runs tor, and the AppImage brings its own: the `tor` program
@@ -28,28 +31,23 @@ tor with the environment the app gives it and stops if it isn't the pinned
 version, or would load a library from anywhere but its own folder.
 
 That build of tor is made with `--enable-gpl` (for the onion service's
-proof-of-work defence), so the `tor` program is covered by the GPL, version 3,
-and its source goes with every release. `packaging/appimage/tor_sources.sh`
-puts the source tarballs of tor, libevent and OpenSSL, as their projects
-publish them and checked against the sums in `tools.sh` (`TOR_SOURCES`), in
-`dist/`; the release workflow attaches them beside the AppImage.
+proof-of-work defence), so the `tor` program is covered by the GPL, version 3.
+`packaging/appimage/THIRD-PARTY-NOTICES.md`, inside the AppImage too, says
+where its source is: the Tor Project's own tarball of that version, and the
+tag of Tor Browser's build system that built the bundle from it.
 
 Tor is updated with each release, since the network turns away a tor that has
-become obsolete: change the versions and sums in `tools.sh` (the source
-versions are the ones Tor Browser's build system,
-[tor-browser-build](https://gitlab.torproject.org/tpo/applications/tor-browser-build),
-uses for that bundle, in `projects/tor`, `projects/libevent` and
-`projects/openssl`), and the versions `packaging/appimage/THIRD-PARTY-NOTICES.md`
-names. `tests/test_packaging_tor.py` checks that they agree, and
-`tools/smoke/appimage_tor.sh` checks a built AppImage's tor publishes an onion
-address (it needs the network).
+become obsolete: change the versions and sum in `tools.sh`, and the versions,
+source and build-system tag that `THIRD-PARTY-NOTICES.md` names (the tag's
+`projects/tor`, `projects/libevent` and `projects/openssl` in
+[tor-browser-build](https://gitlab.torproject.org/tpo/applications/tor-browser-build)
+give the bundle's versions). `tests/test_packaging_tor.py` checks that they
+agree, and `tools/smoke/appimage_tor.sh` checks a built AppImage's tor
+publishes an onion address (it needs the network).
 
 Running from source, phone access uses a `tor` on `PATH` (for example
 `sudo apt install tor`); only the program is used, never a tor service the
 system runs. `SEALEDLORE_TOR` names another one.
-
-To change a package version, edit `packaging/appimage/requirements.in` and
-run `packaging/appimage/lock.sh` (it uses the same pinned `uv` as the build).
 
 ## Checking an AppImage is what it claims to be
 

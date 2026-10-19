@@ -38,8 +38,7 @@
 #     systems the AppImage is for (Ubuntu 24.04's libxcb-cursor needs 2.38);
 #   - tor, for phone access: the tor program of the official Tor Expert Bundle
 #     and the three libraries it was built against, in usr/lib/tor, run only
-#     while phone access is on (its source goes beside each release:
-#     tor_sources.sh);
+#     while phone access is on;
 #   - the tokenizer's data file, so the first run on a new machine works offline;
 #   - SealedLore's licence and the third-party notices (THIRD-PARTY-NOTICES.md,
 #     with the licence texts in licenses/ and each Debian library's copyright
@@ -48,9 +47,10 @@
 #
 # Bumping the Python base, a Debian library, the runtime or tor: update the
 # versions THIRD-PARTY-NOTICES.md names, and the texts in licenses/ if they
-# changed. For tor, also TOR_SOURCES in tools.sh (tor-browser-build's versions
-# for the bundle), and BUNDLED_LIBRARIES in phone/torrc.py if the bundle's
-# libraries are renamed (the build takes exactly those).
+# changed. For tor, also the source and build-system tag the notices name
+# (tor-browser-build's for that bundle), and BUNDLED_LIBRARIES in
+# phone/torrc.py if the bundle's libraries are renamed (the build takes
+# exactly those).
 set -euo pipefail
 umask 022
 
