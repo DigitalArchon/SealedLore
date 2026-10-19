@@ -136,12 +136,22 @@ def _fill_keys(config: Config, root: Path | None) -> str | None:
             missing.append(slot)
         else:
             holder.api_key = value
-    if missing:
-        return (
-            f"{keychain.where().capitalize()} has no key for {', '.join(missing)}: "
+    notes = []
+    keys = [slot for slot in missing if slot != "phone"]
+    if keys:
+        notes.append(
+            f"{keychain.where().capitalize()} has no key for {', '.join(keys)}: "
             "enter it again in Settings."
         )
-    return None
+    if "phone" in missing:
+        # Not a key the author typed: tor made it, and it is the phones'
+        # address. A new one is made only when the author asks.
+        notes.append(
+            f"{keychain.where().capitalize()} has lost phone access's address key: phones "
+            "can't reach this computer until it has a new address (File → Phone devices… → "
+            "New address…), and then they pair again."
+        )
+    return " ".join(notes) or None
 
 
 def _load_config(root: Path | None) -> tuple[Config, str | None]:

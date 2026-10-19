@@ -330,6 +330,18 @@ def test_the_phones_server_is_the_only_one_in_src():
     assert {name: found for name, found in offenders.items() if found} == {}
 
 
+def test_tor_is_the_only_program_sealedlore_starts():
+    """Phone access runs tor (gui/tor_service.py); nothing else is started."""
+    source = Path(__file__).resolve().parents[1] / "src" / "sealedlore"
+    starts = ("QProcess", "subprocess", "os.system(", "os.exec", "os.spawn", "Popen(")
+    offenders = {
+        str(path.relative_to(source)): [s for s in starts if s in path.read_text(encoding="utf-8")]
+        for path in sorted(source.rglob("*.py"))
+        if path.name != "tor_service.py"
+    }
+    assert {name: found for name, found in offenders.items() if found} == {}
+
+
 def test_an_onion_address_is_no_exception_to_https_going_out():
     """The phones' page is plain http over the onion (Tor encrypts it end to
     end): that carve-out is for the one server SealedLore runs, never for an

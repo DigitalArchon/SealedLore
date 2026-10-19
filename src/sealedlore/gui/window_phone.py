@@ -21,6 +21,7 @@ phones use.
 from __future__ import annotations
 
 import dataclasses
+import sys
 import uuid
 from datetime import date
 from pathlib import Path
@@ -42,7 +43,9 @@ from sealedlore.phone import views
 from sealedlore.phone.api import Api, PhoneTurn, Refused, Retake, StoryRow
 from sealedlore.phone.page import page_files
 from sealedlore.phone.pairing import Claim, Pairing, token_hash
+from sealedlore.phone.torrc import find_tor, make_folders, phone_paths
 from sealedlore.storage.library import story_listings
+from sealedlore.storage.paths import data_home
 from sealedlore.storage.repository import save_config
 
 if TYPE_CHECKING:
@@ -64,6 +67,17 @@ ALREADY_QUEUED = "A turn is already waiting to go."
 NO_ENDPOINT = "Set up an endpoint on the desktop first."
 LEAVING_ASKS = "Leaving this story needs an answer on the desktop."
 NOT_IN_PRIVATE = "That waits until the private scene ends."
+NO_TOR = (
+    "Phone access needs tor, and none was found. The AppImage brings its own; run from "
+    "source, install tor (for example: sudo apt install tor). Only the program is used, "
+    "never a tor service the system runs."
+)
+NO_TOR_WINDOWS = "Phone access is for Linux for now."
+KEY_MISSING = (
+    "The phone address's key is missing from the keychain, so phones can't find this "
+    "computer at its address. Make a new address (File → Phone devices… → New address…) "
+    "and pair the phones again."
+)
 
 
 class PhoneWindow:
@@ -71,10 +85,72 @@ class PhoneWindow:
 
     def _init_phone(self) -> None:
         self._phone: _PhoneService | None = None
+        self._tor = None  # gui/tor_service.TorService while phone access is on
         # Memory-only chats shared for this run: never written to the config,
         # which learns nothing from them.
         self._phone_memory_shared: set[str] = set()
         self.queued_turn_returned.connect(self._phone_turn_returned)
+
+    # --- phone access on and off: tor and the server ----------------------------------
+
+    def start_phone_access(self) -> str | None:
+        """Phone access on for this run: the phones' server listening and
+        tor started to give it its onion address. Why not, when it can't be."""
+        if self._tor is not None:
+            return None
+        tor = find_tor()
+        if tor is None:
+            return NO_TOR_WINDOWS if sys.platform == "win32" else NO_TOR
+        phone = self.config.phone
+        if "phone" in self.config.keychain_slots and not phone.onion.api_key:
+            # Never a new key over one that can't be read: every paired phone
+            # would lose the address.
+            return KEY_MISSING
+        # QtNetwork on first use: phone access is off unless turned on.
+        from sealedlore.gui.tor_service import TorService
+
+        paths = phone_paths(self.root or data_home())
+        make_folders(paths)
+        self.start_phone_server(paths.http, "")
+        service = TorService(tor, paths, key=phone.onion.api_key or None, parent=self)
+        service.changed.connect(self._on_tor_changed)
+        service.address.connect(self._on_tor_address)
+        service.key_made.connect(self._on_tor_key)
+        self._tor = service
+        service.start()
+        return None
+
+    def stop_phone_access(self) -> None:
+        """Off: the phones told, nothing listening, tor ended."""
+        self.stop_phone_server()
+        service, self._tor = self._tor, None
+        if service is not None:
+            service.changed.disconnect(self._on_tor_changed)
+            service.stop()
+            service.deleteLater()
+        self.phone_access_changed.emit()
+
+    @property
+    def phone_step(self) -> str:
+        """tor's step (gui/tor_service.py), "off" with phone access off."""
+        return self._tor.step if self._tor is not None else "off"
+
+    @property
+    def phone_words(self) -> str:
+        return self._tor.words if self._tor is not None else ""
+
+    def _on_tor_changed(self, _step: str, _words: str) -> None:
+        self.phone_access_changed.emit()
+
+    def _on_tor_address(self, onion: str) -> None:
+        if self._phone is not None:
+            self._phone.onion = onion
+
+    def _on_tor_key(self, key: str, service_id: str) -> None:
+        """A key tor made: kept (in the keychain) so the address stays."""
+        self.config.phone.onion.api_key = key
+        self.config.phone.service_id = service_id
+        save_config(self.config, root=self.root)
 
     # --- the server's life ---------------------------------------------------------
 

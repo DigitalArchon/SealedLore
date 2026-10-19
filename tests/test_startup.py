@@ -37,9 +37,13 @@ MODULES_ON_FIRST_USE = (
     # turned on, which it is not unless the author asks.
     "PySide6.QtNetwork",
     "sealedlore.gui.phone_server",
+    "sealedlore.gui.tor_service",
 )
-# The one module whose job is a first-use module: it is itself loaded on first use.
-FIRST_USE_HOMES = {"gui/phone_server.py": {"PySide6.QtNetwork"}}
+# Modules whose job is a first-use module: they are themselves loaded on first use.
+FIRST_USE_HOMES = {
+    "gui/phone_server.py": {"PySide6.QtNetwork"},
+    "gui/tor_service.py": {"PySide6.QtNetwork"},
+}
 
 
 def imported_at_the_top(path: Path) -> set[str]:

@@ -240,6 +240,8 @@ class MainWindow(
     # (a phone) and stopped before it went; the composer's own goes back
     # into the composer instead.
     queued_turn_returned = Signal(str, str)
+    # Phone access went on or off, or tor moved a step (gui/window_phone.py).
+    phone_access_changed = Signal()
 
     def __init__(self, *, root: Path | None = None, use_mock: bool = False) -> None:
         super().__init__()
@@ -4375,8 +4377,8 @@ class MainWindow(
         attestation_tests().wait()
         speed_tests().wait()
         hosts_catalog().wait()
-        # The phones are told it stopped, and nothing listens any more.
-        self.stop_phone_server()
+        # The phones are told it stopped, nothing listens any more, tor ends.
+        self.stop_phone_access()
         if self.session is not None:
             self.session.close()
             self.session.save()
