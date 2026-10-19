@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QObject, QTimer, Slot
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from sealedlore import __version__
 from sealedlore.engine.dice import chip_text
@@ -44,6 +44,7 @@ from sealedlore.phone.api import Api, PhoneTurn, Refused, Retake, StoryRow
 from sealedlore.phone.page import page_files
 from sealedlore.phone.pairing import Claim, Pairing, token_hash
 from sealedlore.phone.torrc import find_tor, make_folders, phone_paths
+from sealedlore.storage import keychain
 from sealedlore.storage.library import story_listings
 from sealedlore.storage.paths import data_home
 from sealedlore.storage.repository import save_config
@@ -89,7 +90,9 @@ class PhoneWindow:
         # Memory-only chats shared for this run: never written to the config,
         # which learns nothing from them.
         self._phone_memory_shared: set[str] = set()
+        self._phone_dialog = None
         self.queued_turn_returned.connect(self._phone_turn_returned)
+        self.phone_access_changed.connect(self._sync_phone_controls)
 
     # --- phone access on and off: tor and the server ----------------------------------
 
@@ -141,6 +144,162 @@ class PhoneWindow:
 
     def _on_tor_changed(self, _step: str, _words: str) -> None:
         self.phone_access_changed.emit()
+
+    # --- the window's controls: File → Phone access, Phone devices…, the status bar ----
+
+    def set_phone_access(self, on: bool) -> None:
+        """On or off for this run (File → Phone access, the dialog's button);
+        Settings → Phone says whether it starts with the app."""
+        if on:
+            reason = self.start_phone_access()
+            if reason:
+                QMessageBox.information(self, "Phone access", reason)
+        else:
+            self.stop_phone_access()
+        self._sync_phone_controls()
+
+    def _maybe_start_phone(self) -> None:
+        """At launch, once the window is up, when the author chose so."""
+        if not self.config.phone.start_on_launch or self._tor is not None:
+            return
+        reason = self.start_phone_access()
+        if reason:
+            self.statusBar().showMessage(f"Phone access didn't start: {reason}", 15_000)
+        self._sync_phone_controls()
+
+    def _sync_phone_controls(self) -> None:
+        """The menu's tick, the status bar's sign and the Stories list's marks,
+        as phone access stands."""
+        on = self._tor is not None
+        action = getattr(self, "phone_action", None)
+        if action is not None:
+            action.blockSignals(True)
+            action.setChecked(on)
+            action.blockSignals(False)
+        status = getattr(self, "phone_status", None)
+        if status is not None:
+            connected = len(self._phone.api.hub.devices()) if self._phone is not None else 0
+            status.show_state(
+                self.phone_step,
+                self.phone_words,
+                progress=self._tor.progress if self._tor is not None else 0,
+                connected=connected,
+                shared=len(self.config.phone.shared_stories) + len(self._phone_memory_shared),
+            )
+        stories = getattr(self, "stories", None)
+        if stories is not None:
+            shared = set(self.config.phone.shared_stories) | self._phone_memory_shared
+            stories.set_phone(shared if on else None)
+
+    def _share_from_list(self, story_id: str, shared: bool) -> None:
+        """The Stories list's Share with phone."""
+        if shared and not self.phone_confirm_share(story_id, memory=False):
+            self._sync_phone_controls()
+            return
+        self.phone_share(story_id, shared)
+
+    def open_phone_devices(self) -> None:
+        """File → Phone devices…: one at a time, raised if already open."""
+        from sealedlore.gui.phone_dialog import PhoneDevicesDialog
+
+        dialog = getattr(self, "_phone_dialog", None)
+        if dialog is None:
+            dialog = PhoneDevicesDialog(self)
+            dialog.finished.connect(self._phone_dialog_closed)
+            self._phone_dialog = dialog
+        dialog.refresh()
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def _phone_dialog_closed(self) -> None:
+        dialog, self._phone_dialog = getattr(self, "_phone_dialog", None), None
+        if dialog is not None:
+            self.phone_access_changed.disconnect(dialog.refresh)
+            dialog.deleteLater()
+
+    def phone_pairing_link(self) -> str | None:
+        """A new pairing code, as the link the phone opens; any earlier code
+        is spent. None until the onion has its address."""
+        service = self._phone
+        if service is None or not service.onion:
+            return None
+        return f"http://{service.onion}/#pair={service.pairing.open()}"
+
+    def phone_pairing_closed(self) -> None:
+        if self._phone is not None:
+            self._phone.pairing.close()
+
+    def _phone_claim(self, claim: Claim) -> None:
+        """A phone asks to be paired: the author compares its four digits."""
+        box = QMessageBox(self)
+        box.setWindowTitle("Allow this phone?")
+        box.setIcon(QMessageBox.Question)
+        box.setText(
+            f"A phone called “{claim.name}” asks to connect to SealedLore.\n\n"
+            f"Allow it only if that phone shows: {claim.check}"
+        )
+        allow = box.addButton("Allow", QMessageBox.AcceptRole)
+        box.addButton("Refuse", QMessageBox.RejectRole)
+
+        def answered() -> None:
+            allowed = box.clickedButton() is allow
+            device = self.phone_answer_claim(claim.id, allowed)
+            if device is not None:
+                self.statusBar().showMessage(f"Paired: {device.name}", 8000)
+            self.phone_access_changed.emit()
+            box.deleteLater()
+
+        box.finished.connect(answered)
+        box.open()  # window-modal, and the event loop runs: the phone's polls are answered
+
+    def phone_confirm_share(self, story_id: str, memory: bool) -> bool:
+        """Before something private goes on the phones: a memory-only chat, a
+        story with a private scene open, a chat on a private model."""
+        session = self.session
+        private = memory or (
+            session is not None
+            and session.story.id == story_id
+            and (session.in_private or session.tee_chat)
+        )
+        if not private:
+            return True
+        from sealedlore.gui.phone_dialog import PHONE_KEEPS
+
+        answer = QMessageBox.question(
+            self, "Share something private?", f"{PHONE_KEEPS}\n\nShare it with your phones?"
+        )
+        return answer == QMessageBox.Yes
+
+    def phone_new_address(self) -> str | None:
+        """A new onion address: the old key and every paired phone forgotten.
+        Started again if it was on; why not, if it can't be."""
+        was_on = self._tor is not None
+        self.stop_phone_access()
+        phone = self.config.phone
+        phone.onion.api_key = ""
+        phone.service_id = ""
+        phone.devices = []
+        if "phone" in self.config.keychain_slots:
+            self.config.keychain_slots = [s for s in self.config.keychain_slots if s != "phone"]
+            try:
+                keychain.remove("phone", self.root)
+            except keychain.KeychainError:
+                pass  # gone or out of reach: it is listed nowhere now
+        save_config(self.config, root=self.root)
+        reason = self.start_phone_access() if was_on else None
+        self._sync_phone_controls()
+        return reason
+
+    def _phone_stream_opened(self, device_id: str) -> None:
+        """A phone connected: said once per phone, not on each reconnect."""
+        service = self._phone
+        if service is None:
+            return
+        if self.config.phone.notify_connect and service.api.hub.count(device_id) == 1:
+            name = next((d.name for d in self.config.phone.devices if d.id == device_id), "A phone")
+            self.statusBar().showMessage(f"Phone connected: {name}", 6000)
+        self._sync_phone_controls()
 
     def _on_tor_address(self, onion: str) -> None:
         if self._phone is not None:
@@ -197,6 +356,7 @@ class PhoneWindow:
         save_config(self.config, root=self.root)
         if self._phone is not None:
             self._phone.api.hub.drop_device(device_id, "revoked")
+        self._sync_phone_controls()
 
     def phone_shared(self, story_id: str) -> bool:
         return story_id in self.config.phone.shared_stories or story_id in self._phone_memory_shared
@@ -213,6 +373,7 @@ class PhoneWindow:
             self.config.phone.shared_stories = listed + ([story_id] if shared else [])
             save_config(self.config, root=self.root)
         self._phone_settled()
+        self._sync_phone_controls()
 
     # --- hooks from the window ---------------------------------------------------------
 
@@ -292,6 +453,8 @@ class _PhoneService(QObject):
         from sealedlore.gui.phone_server import PhoneServer
 
         self.server = PhoneServer(self.api, self)
+        self.server.stream_opened.connect(window._phone_stream_opened)
+        self.server.streams_changed.connect(window._sync_phone_controls)
         self.entries: list[dict] = []
         self.branches: list[dict] = []
         self.picture_files: dict[str, str] = {}  # picture id -> its file, for what is shown
@@ -305,9 +468,9 @@ class _PhoneService(QObject):
         self._thinking = QTimer(self)
         self._thinking.setSingleShot(True)
         self._thinking.setInterval(THINKING_EVERY_MS)
-        # Called with each claim, for the desktop to ask the author
-        # (gui/phone_dialog.py); without one, the claim waits.
-        self.on_claim = None
+        # Called with each claim, for the desktop to ask the author; a test
+        # may answer instead.
+        self.on_claim = window._phone_claim
 
     def close(self) -> None:
         self._flush.stop()

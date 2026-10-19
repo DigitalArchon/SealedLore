@@ -49,6 +49,8 @@ class StoryListPanel(QWidget):
     duplicate_story_requested = Signal(str)
     delete_requested = Signal(str)
     open_folder_requested = Signal(str)
+    # (story id, shared): Share with phone, while phone access is on.
+    share_requested = Signal(str, bool)
     # The list was read again (a story made, deleted, played).
     refreshed = Signal()
 
@@ -56,6 +58,10 @@ class StoryListPanel(QWidget):
         super().__init__()
         # (id, label, updated) of every readable story, played last first.
         self._played: list[tuple[str, str, str]] = []
+        # Phone access (gui/window_phone.py): the shared stories while it is
+        # on, None while it is off; and which stories keep a map (never shared).
+        self._phone_shared: set[str] | None = None
+        self._maps: set[str] = set()
         self.root = root
 
         layout = QVBoxLayout(self)
@@ -93,6 +99,7 @@ class StoryListPanel(QWidget):
         """
         self.list.clear()
         self._played.clear()
+        self._maps.clear()
         try:
             self._fill(selected_id)
         finally:
@@ -115,8 +122,11 @@ class StoryListPanel(QWidget):
                 reason = (error.splitlines() or ["unreadable"])[0][:80]
                 label = f"{listing.id}\n⚠ can't be read: {reason}"
             story_id = listing.id
+            if listing.keeps_map:
+                self._maps.add(story_id)
             item = QListWidgetItem(label)
             item.setData(Qt.UserRole, story_id)
+            item.setData(PHONE_ROLE, self._phone_mark(story_id))
             item.setToolTip(label.split("\n", 1)[0])
             if error is not None:
                 item.setForeground(QBrush(Qt.gray))
@@ -146,10 +156,31 @@ class StoryListPanel(QWidget):
         self.list.setCurrentItem(item)
         self.menu_for(story_id).exec(self.list.viewport().mapToGlobal(position))
 
+    def set_phone(self, shared: set[str] | None) -> None:
+        """The stories shared with phones, while phone access is on (None:
+        off): marked in their rows, and Share with phone in their menus."""
+        self._phone_shared = None if shared is None else set(shared)
+        for row in range(self.list.count()):
+            item = self.list.item(row)
+            item.setData(PHONE_ROLE, self._phone_mark(item.data(Qt.UserRole)))
+
+    def _phone_mark(self, story_id: str) -> str:
+        if self._phone_shared is None or story_id not in self._phone_shared:
+            return ""
+        return "" if story_id in self._maps else "on your phones"
+
     def menu_for(self, story_id: str) -> QMenu:
         """A story's right-click menu."""
         menu = QMenu(self)
         menu.addAction("Open", lambda: self.story_activated.emit(story_id))
+        readable = any(played[0] == story_id for played in self._played)
+        if self._phone_shared is not None and readable and story_id not in self._maps:
+            shared = story_id in self._phone_shared
+            share = menu.addAction("Share with phone")
+            share.setCheckable(True)
+            share.setChecked(shared)
+            share.setToolTip("Phones paired for phone access may see and play it")
+            share.toggled.connect(lambda on: self.share_requested.emit(story_id, on))
         # On an unreadable story too: that's where its files most need a look.
         open_folder = menu.addAction(
             "Open folder", lambda: self.open_folder_requested.emit(story_id)
@@ -185,6 +216,9 @@ class StoryListPanel(QWidget):
 
 # Lines a title may take before it is cut with "…".
 TITLE_LINES = 2
+# A row's phone mark ("on your phones"), drawn after its message count: the
+# item's own text stays "Title\nN messages".
+PHONE_ROLE = Qt.UserRole + 1
 # The count's size beside the title's, and the space between them.
 META_SCALE = 0.86
 META_GAP = 2
@@ -272,7 +306,9 @@ class _StoryRow(QStyledItemDelegate):
     def _parts(index: QModelIndex) -> tuple[str, str]:
         text = str(index.data(Qt.DisplayRole) or "")
         title, _, meta = text.partition("\n")
-        return title, meta.replace("\n", " · ")
+        meta = meta.replace("\n", " · ")
+        phone = index.data(PHONE_ROLE)
+        return title, f"{meta} · {phone}" if phone and meta else meta
 
     @staticmethod
     def _meta_font(font: QFont) -> QFont:

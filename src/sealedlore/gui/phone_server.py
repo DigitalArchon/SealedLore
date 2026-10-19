@@ -17,7 +17,7 @@ import os
 import traceback
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, QObject, QTimer
+from PySide6.QtCore import QByteArray, QObject, QTimer, Signal
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 from sealedlore.phone.api import Api
@@ -32,6 +32,11 @@ MAX_UNSENT = 1024 * 1024
 
 
 class PhoneServer(QObject):
+    # A phone's event stream opened (its device id), or one closed: how many
+    # phones are connected is what the status bar shows.
+    stream_opened = Signal(str)
+    streams_changed = Signal()
+
     def __init__(self, api: Api, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self.api = api
@@ -142,6 +147,8 @@ class _Connection(QObject):
                 self._handle = hub.subscribe(response.device, self._send_event, self.close)
                 self._idle.stop()
                 hub.send_to(self._handle, "hello", self._server.api.state_payload())
+                self._server.stream_opened.emit(response.device)
+                self._server.streams_changed.emit()
                 return
             self._write(render(response, keep_alive=request.keep_alive))
             if not request.keep_alive:
@@ -165,6 +172,7 @@ class _Connection(QObject):
         if self._handle is not None:
             self._server.api.hub.unsubscribe(self._handle)
             self._handle = None
+            self._server.streams_changed.emit()
         self._idle.stop()
         self._server._forget(self)
         try:

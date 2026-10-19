@@ -7,6 +7,8 @@ the story, and the archival knobs sit across both.
 
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -56,6 +58,7 @@ from sealedlore.gui.model_picker import (
     pick_model,
     pick_model_and_route,
 )
+from sealedlore.gui.phone_dialog import PHONE_KEEPS
 from sealedlore.gui.settings_pages import Fold, SettingsPages
 from sealedlore.gui.sizing import size_to_screen
 from sealedlore.gui.speed_test import SpeedTestDialog, speed_tests
@@ -91,6 +94,7 @@ from sealedlore.models.generation import (
 )
 from sealedlore.models.route import ModelRoute
 from sealedlore.models.story import Story
+from sealedlore.phone.torrc import find_tor
 from sealedlore.providers import make_chat_provider
 from sealedlore.providers.base import ChatProvider
 from sealedlore.providers.context_probe import detect_context
@@ -144,6 +148,7 @@ PAGE_ABOUT = {
     "Images": "Pictures of the story, portraits of its characters, and the map's pictures.",
     "Video": "Short videos of the story. Off until video has a key of its own.",
     "Private": "Private scenes: played on a model of their own, and kept out of the story's model.",
+    "Phone": "Playing shared stories from a phone's Tor Browser, through SealedLore's own tor.",
 }
 
 # Settings → Context → Recall earlier detail (engine/recall.py): what is
@@ -222,7 +227,7 @@ class SettingsDialog(QDialog):
                 ),
             ),
             ("Pictures", (("Images", self._images_tab), ("Video", self._video_tab))),
-            ("Privacy", (("Private", self._private_tab),)),
+            ("Privacy", (("Private", self._private_tab), ("Phone", self._phone_tab))),
         )
         for group, members in pages:
             self.tabs.add_group(group)
@@ -1312,6 +1317,50 @@ class SettingsDialog(QDialog):
         provider.close()
         return provider.config.model_copy(update={"model": self.private_model.text().strip()})
 
+    def _phone_tab(self) -> QWidget:
+        """Phone access (gui/window_phone.py): only whether it starts with the
+        app, and whether a phone connecting is said. Turning it on and off,
+        pairing and the stories shared are File → Phone access and Phone devices…."""
+        widget = QWidget()
+        form = QFormLayout(widget)
+        intro = QLabel(
+            "Phone access lets a phone play the stories you share, from Tor Browser: "
+            "SealedLore runs its own tor and gives this computer an onion address, so "
+            "nothing has to be set up on your router and no port is opened. Turn it on for "
+            "this run with File → Phone access; pair phones and choose the stories they may "
+            "see in File → Phone devices…. Stories that keep a map stay on the desktop for now."
+        )
+        intro.setObjectName("hintLabel")
+        intro.setWordWrap(True)
+        form.addRow(intro)
+        self.phone_on_launch = QCheckBox("Turn phone access on when SealedLore starts")
+        self.phone_on_launch.setChecked(self.config.phone.start_on_launch)
+        form.addRow(self.phone_on_launch)
+        self.phone_notify = QCheckBox("Say when a phone connects")
+        self.phone_notify.setChecked(self.config.phone.notify_connect)
+        form.addRow(self.phone_notify)
+        tor = find_tor()
+        if tor is None:
+            where = (
+                "Phone access is for Linux for now."
+                if sys.platform == "win32"
+                else "No tor was found. Run from source, install it (for example: sudo apt "
+                "install tor): only the program is used, never a tor service the system runs."
+            )
+        elif os.environ.get("SEALEDLORE_TOR") == str(tor):
+            where = "The tor that comes with SealedLore."
+        else:
+            where = str(tor)
+        tor_label = QLabel(where)
+        tor_label.setWordWrap(True)
+        tor_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        form.addRow("Tor:", tor_label)
+        keeps = QLabel(PHONE_KEEPS)
+        keeps.setObjectName("hintLabel")
+        keeps.setWordWrap(True)
+        form.addRow(keeps)
+        return widget
+
     def _private_tab(self) -> QWidget:
         """The private model: where private scenes go, and nothing else does."""
         existing = self.config.private_provider
@@ -1939,6 +1988,8 @@ class SettingsDialog(QDialog):
             self.config.private_provider = None
         self.config.private_budget = self.private_budget.value()
         self.config.private_verify_tee = self.private_tee.isChecked()
+        self.config.phone.start_on_launch = self.phone_on_launch.isChecked()
+        self.config.phone.notify_connect = self.phone_notify.isChecked()
         self.config.scene_reads = "every_turn" if self.keep_scene.isChecked() else "manual"
         self.config.scene_model = self._role_model(self.scene_model) or None
         self.config.plot_reads = self.plot_reads.isChecked()

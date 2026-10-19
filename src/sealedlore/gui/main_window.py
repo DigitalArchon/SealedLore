@@ -84,6 +84,7 @@ from sealedlore.gui.model_trouble import (
 )
 from sealedlore.gui.new_story_guide import NewStoryGuide
 from sealedlore.gui.people_page import NOT_NAMED_SUFFIX, PeoplePage, people_view
+from sealedlore.gui.phone_status import PhoneStatusButton
 from sealedlore.gui.plot_editor import PlotEditorWindow
 from sealedlore.gui.plot_panel import ClockDialog, PlotPanel
 from sealedlore.gui.prompt_editor import PromptEditorDialog
@@ -434,6 +435,7 @@ class MainWindow(
         self.stories.duplicate_story_requested.connect(self.duplicate_entire_story)
         self.stories.delete_requested.connect(self.delete_story)
         self.stories.open_folder_requested.connect(self._open_story_folder)
+        self.stories.share_requested.connect(self._share_from_list)
         left = StoriesDock("Stories", self)
         left.setObjectName("storiesDock")
         left.setWidget(self.stories)
@@ -561,6 +563,10 @@ class MainWindow(
         bar.add_left(self.clock_button)
         bar.add_left(self.status_strip.budget_label)
         bar.add_left(self.status_strip.bar, 1)
+        # First of the permanent widgets, so a notice never hides it.
+        self.phone_status = PhoneStatusButton()
+        self.phone_status.clicked.connect(self.open_phone_devices)
+        bar.addPermanentWidget(self.phone_status)
         bar.addPermanentWidget(self.status_strip.lore_label)
         bar.addPermanentWidget(self.status_strip.archive_label)
         bar.addPermanentWidget(self.status_strip.cache_label)
@@ -625,6 +631,23 @@ class MainWindow(
         )
         self.prompts_action.triggered.connect(self.open_prompt_editor)
         file_menu.addAction(self.prompts_action)
+
+        file_menu.addSeparator()
+        # Phone access (gui/window_phone.py): on or off for this run; whether
+        # it starts with the app is Settings → Phone.
+        self.phone_action = QAction("Phone access", self)
+        self.phone_action.setCheckable(True)
+        self.phone_action.setStatusTip(
+            "Play shared stories from a phone's Tor Browser, through SealedLore's own tor"
+        )
+        self.phone_action.toggled.connect(self.set_phone_access)
+        file_menu.addAction(self.phone_action)
+        self.phone_devices_action = QAction("Phone devices…", self)
+        self.phone_devices_action.setStatusTip(
+            "Pair a phone, choose the stories it may see, revoke a phone"
+        )
+        self.phone_devices_action.triggered.connect(self.open_phone_devices)
+        file_menu.addAction(self.phone_devices_action)
 
         file_menu.addSeparator()
         quit_action = QAction("&Quit", self)
@@ -4327,6 +4350,7 @@ class MainWindow(
             self._tokenizer_warming = True
             QTimer.singleShot(WARM_UP_DELAY_MS, self, self._warm_tokenizer)
             QTimer.singleShot(WARM_UP_DELAY_MS, self, self._move_keys_to_keychain)
+            QTimer.singleShot(WARM_UP_DELAY_MS, self, self._maybe_start_phone)
 
     def _warm_tokenizer(self) -> None:
         """tiktoken reads its vocabulary on first use (~0.25s, holding the

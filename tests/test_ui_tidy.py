@@ -241,6 +241,7 @@ def test_settings_tabs_and_every_model_in_one_place(app, window: MainWindow):
         "Images",
         "Video",
         "Private",
+        "Phone",
     ]
     assert all(isinstance(tabs.widget(i), QScrollArea) for i in range(tabs.count()))
     models = tabs.widget(names.index("Models"))
@@ -588,6 +589,8 @@ def test_the_file_menu_has_one_new_and_only_what_applies(app, tmp_path: Path, st
             "Plot file editor…",
             "Settings…",
             "Prompts (advanced)…",
+            "Phone access",
+            "Phone devices…",
             "Quit",
         ]
         bar = [a.text().replace("&", "") for a in window.menuBar().actions() if a.isVisible()]
