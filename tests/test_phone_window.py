@@ -266,7 +266,7 @@ def test_the_desktop_s_turn_reaches_the_phone_too(app, tmp_path, sockets, story,
     window.send_turn()
     events.wait_for("job_finished")
     turn = next(data for name, data in events.events() if name == "turn")
-    # Serrik isn't in the scene, so the composer speaks as the narrator.
+    # The composer still speaks as it opened, as the narrator.
     assert turn == {
         "label": "Narrator",
         "text": "I push the door.",

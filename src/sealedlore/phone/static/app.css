@@ -1,0 +1,112 @@
+:root {
+  --bg: #15171c;
+  --panel: #1e222b;
+  --panel-2: #262b36;
+  --line: #343a48;
+  --text: #e6e6e6;
+  --dim: #9aa1b2;
+  --accent: #3b5ba5;
+  --accent-text: #ffffff;
+  --gold: #c9a85c;
+  --warn: #5a3b12;
+  --ok: #1e4d2b;
+  --danger: #6b2430;
+  --narration: #2a2f3c;
+  --director: #33293f;
+  --character: #23324a;
+  --private: #3a2a20;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+body { font: 17px/1.5 sans-serif; min-height: 100vh; }
+[hidden] { display: none !important; }
+button, select, textarea, input { font: inherit; color: inherit; }
+button {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 12px; min-height: 40px;
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+button.danger { background: var(--danger); border-color: var(--danger); }
+button:disabled { opacity: 0.5; }
+select, textarea, input {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px;
+}
+select { max-width: 100%; }
+a { color: var(--gold); }
+
+#footer, .about { color: var(--dim); font-size: 12px; text-align: center; padding: 8px 16px; }
+body.story-view #footer { display: none; }
+
+.page-message { max-width: 640px; margin: 0 auto; padding: 24px 16px; }
+.page-message h1 { font-size: 22px; }
+.page-message .row { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.check { font-size: 40px; letter-spacing: 8px; font-weight: bold; color: var(--gold); }
+.box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 12px 0; }
+.box.warn { background: var(--warn); border-color: var(--warn); }
+.box.ok { background: var(--ok); border-color: var(--ok); }
+
+/* --- the story ------------------------------------------------------------------ */
+
+#top {
+  position: sticky; top: 0; z-index: 5; background: var(--bg);
+  border-bottom: 1px solid var(--line); padding: 8px 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+#top .title { flex: 1; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#status { font-size: 13px; color: var(--dim); padding: 4px 12px; min-height: 0; }
+#status:empty { display: none; }
+#banner { margin: 8px 12px 0; }
+
+#messages { padding: 8px 12px; display: flex; flex-direction: column; gap: 10px; }
+.message { border-radius: 10px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); }
+.message.narration { background: var(--narration); }
+.message.director { background: var(--director); }
+.message.character, .message.user { background: var(--character); }
+.message.private { border-color: var(--gold); }
+.message.archived { opacity: 0.75; }
+.message .label { font-size: 13px; color: var(--dim); margin-bottom: 4px; }
+.message .text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.message .ooc { font-size: 14px; color: var(--dim); margin-top: 6px; white-space: pre-wrap; }
+.message .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+.message .take { font-size: 14px; color: var(--dim); }
+.message.writing .text::after { content: " ▍"; color: var(--gold); }
+.message details { margin-top: 8px; font-size: 15px; }
+.message details summary { color: var(--dim); }
+.branch-start { font-size: 13px; color: var(--gold); margin-bottom: 4px; }
+.pictures { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.pictures img { max-width: 100%; max-height: 240px; border-radius: 8px; }
+.placeholder { color: var(--dim); font-style: italic; }
+#earlier { align-self: center; }
+
+/* --- the composer ------------------------------------------------------------------ */
+
+#composer {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
+  background: var(--bg); border-top: 1px solid var(--line);
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+}
+#composer:empty { display: none; }
+#composer textarea { width: 100%; min-height: 64px; max-height: 40vh; resize: vertical; }
+#composer .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+#composer .row label { font-size: 13px; color: var(--dim); display: flex; flex-direction: column; gap: 2px; }
+#composer .send { margin-left: auto; min-width: 96px; }
+#composer .hint { font-size: 13px; color: var(--dim); }
+
+/* --- panels over the story ---------------------------------------------------------- */
+
+.overlay {
+  position: fixed; inset: 0; z-index: 10; background: var(--bg);
+  overflow-y: auto; padding: 16px;
+}
+.overlay h1 { font-size: 20px; margin: 18px 0 8px; }
+.overlay .sheet { max-width: 640px; margin: 0 auto; }
+.overlay img.whole { max-width: 100%; }
+.list { display: flex; flex-direction: column; gap: 6px; }
+.list button { text-align: left; width: 100%; }
+.list .current { border-color: var(--gold); }
+#toast {
+  position: fixed; left: 12px; right: 12px; bottom: 180px; z-index: 11;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+}
+#toast.error { background: var(--danger); }

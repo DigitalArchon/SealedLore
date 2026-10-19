@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import QObject, QTimer, Slot
 from PySide6.QtWidgets import QApplication
 
+from sealedlore import __version__
 from sealedlore.engine.dice import chip_text
 from sealedlore.gui import image_codec
 from sealedlore.gui.composer import GENERAL_SKILL, QUESTION, STORY_DEFAULT
@@ -39,6 +40,7 @@ from sealedlore.models.config import PhoneDevice
 from sealedlore.models.node import CHAT_USER_ID
 from sealedlore.phone import views
 from sealedlore.phone.api import Api, PhoneTurn, Refused, Retake, StoryRow
+from sealedlore.phone.page import page_files
 from sealedlore.phone.pairing import Claim, Pairing, token_hash
 from sealedlore.storage.library import story_listings
 from sealedlore.storage.repository import save_config
@@ -204,7 +206,12 @@ class _PhoneService(QObject):
         self.window = window
         self.onion = onion
         self.pairing = Pairing()
-        self.api = Api(_Backend(window, self), pairing=self.pairing, onion=lambda: self.onion)
+        self.api = Api(
+            _Backend(window, self),
+            pairing=self.pairing,
+            onion=lambda: self.onion,
+            static=page_files(__version__),
+        )
         # QtNetwork on first use: phone access is off unless turned on.
         from sealedlore.gui.phone_server import PhoneServer
 

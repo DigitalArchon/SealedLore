@@ -65,7 +65,7 @@ sealedlore-gui = "sealedlore.gui.app:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-sealedlore = ["gui/*.qss"]
+sealedlore = ["gui/*.qss", "phone/static/*"]
 
 [tool.ruff]
 line-length = 100
