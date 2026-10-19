@@ -47,6 +47,7 @@ from sealedlore.engine.tile_sets import (
     head_noun,
     item_slugs,
     roof_role,
+    suitable_item,
 )
 from sealedlore.gui import deck_look
 from sealedlore.gui.image_codec import encoded, image_from_data
@@ -261,9 +262,11 @@ class TileSource:
         return bool(asks(role)) if callable(asks) else False
 
     def item(self, name: str) -> QImage | None:
-        """The thing's own picture, else the set's nearest thing of the same
-        kind (`closest_item`; the reader lists what the set has), else None:
-        drawn as a plain box until its own picture comes in."""
+        """The thing's own picture, else the set's thing that suits it as it
+        is (`suitable_item`: no picture of its own is drawn for it), else the
+        set's nearest thing of the same kind (`closest_item`) until its own
+        picture comes in (the reader lists what the set has), else None:
+        drawn as a plain box."""
         for found in item_slugs(name):
             image = self.image(f"items/{found}")
             if image is not None:
@@ -271,7 +274,8 @@ class TileSource:
         listing = getattr(self.read, "items", None)
         if callable(listing):
             if name not in self._stand_ins:
-                self._stand_ins[name] = closest_item(name, listing())
+                names = listing()
+                self._stand_ins[name] = suitable_item(name, names) or closest_item(name, names)
             found = self._stand_ins[name]
             nature = NATURE_STAND_INS.get(head_noun(name))
             # A stone is the set's rock unless the set has a stone of its own.

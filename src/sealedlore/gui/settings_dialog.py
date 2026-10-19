@@ -1568,6 +1568,11 @@ class SettingsDialog(QDialog):
             f"{model or 'No model'}: {price}." + (f" {known.note}" if known is not None else "")
         )
 
+    def _sync_map_pictures_over(self) -> None:
+        """The limit on drawing unasked means something only when drawing
+        automatically."""
+        self.map_pictures_over.setEnabled(self.map_pictures.currentData() == "auto")
+
     def _map_pictures_rows(self, form: QFormLayout) -> None:
         """Map pictures: drawn on their own under a standing approval (the
         default), or each run's approved first on the Map page (the author,
@@ -1587,6 +1592,21 @@ class SettingsDialog(QDialog):
             "on."
         )
         form.addRow("Draw map pictures", self.map_pictures)
+        # Automatically, up to so many at once; more wait on the Map page (the
+        # author, Oct 19 2026: an old story opened drew 33 in two minutes).
+        self.map_pictures_over = QSpinBox()
+        self.map_pictures_over.setRange(0, 500)
+        self.map_pictures_over.setSpecialValueText("any number")
+        self.map_pictures_over.setSuffix(" at once")
+        self.map_pictures_over.setValue(self.config.map_pictures_ask_over)
+        self.map_pictures_over.setToolTip(
+            "Drawing automatically: when the map wants more pictures than this at once (an "
+            "older story opened again, say, or a new place full of things), they wait on the "
+            "Map page with their price until you approve them. Any number: never ask."
+        )
+        form.addRow("Without asking, at most", self.map_pictures_over)
+        self.map_pictures.currentIndexChanged.connect(self._sync_map_pictures_over)
+        self._sync_map_pictures_over()
         self.map_picture_model = ModelField(
             family_id(self.config.map_picture_model, self._image_models),
             self._browse_image_models if self.image_catalog is not None else None,
@@ -1932,6 +1952,7 @@ class SettingsDialog(QDialog):
         self.config.image_count = self.image_count.value()
         self.config.image_prompt_model = self.image_prompt_model.text().strip() or None
         self.config.map_pictures_mode = self.map_pictures.currentData()
+        self.config.map_pictures_ask_over = self.map_pictures_over.value()
         self.config.portrait_model = (
             self.portrait_model.text().strip() or self.config.portrait_model
         )

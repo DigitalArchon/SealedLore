@@ -883,6 +883,11 @@ class Config(BaseModel):
     # is left unread. Story pictures still ask each time. The limit is per
     # story and day; the subscription allows ~100.
     map_pictures_mode: Literal["auto", "ask", "off"] = "auto"
+    # In "auto": how many pictures may be drawn at once without asking; more
+    # than that wait on the Map page as in "ask" (the author, Oct 19 2026: an
+    # old story opened after map pictures went automatic drew 33 at once).
+    # 0: never ask.
+    map_pictures_ask_over: int = Field(default=10, ge=0)
     # Every map picture: the play view's things, textures, roofs and the
     # avatars (from the portrait, by the model's editing version: engine/
     # image_variants.py), a story's own tile set, and the Region map's

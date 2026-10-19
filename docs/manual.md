@@ -1165,7 +1165,12 @@ is drawn into the ground itself, roofed as its description says it is built
 stands on the map as **Unknown 1** (then 2, 3…) until a passage names them;
 the menus and the storyteller call them as the story described them ("the
 teenage girl"). A thing the tile set has no picture of borrows the set's
-nearest one of the same kind until its own is drawn.
+nearest one of the same kind until its own is drawn. When the set's own
+suits it as it is (a "workbench" and the set's heavy wooden workbench, a
+"cast iron stove" and its cast-iron wood stove), that one stands for it for
+good and nothing new is drawn; a different kind of the thing (a rifle rack
+is no tool rack), another material, a broken one or one holding something
+else gets its own.
 
 **Draw map pictures** (under Settings → Images) has an image model (the
 **Map picture model** there, FLUX.3 Klein unless you choose another) draw the
@@ -1176,7 +1181,11 @@ or what their card says of them (you first, then whoever is with you), roofs
 of what each building is made of, the things in each room, and each building
 standing on the ground where the story put it. **Automatically** (the
 default) draws them in the background as the story reaches them, without
-asking. **Ask before drawing** draws nothing until you say: the Map page says
+asking, up to **Without asking, at most** (10 at once unless you change it;
+"any number" never asks). More than that at once, such as a story you
+played before a newer version opening with everything since to catch up
+on, wait as they would under Ask before drawing, and the Map page says why.
+**Ask before drawing** draws nothing until you say: the Map page says
 how many pictures wait and what they cost, with **Review…** (every picture
 with its prompt and price: change any prompt, untick what you don't want, and
 **Draw** sends the ticked ones exactly as they stand), **Draw them** (all, as

@@ -258,7 +258,7 @@ class WorldWindow:
         elif not total and not activity and not waiting:
             self._progress_timer.stop()
 
-    # --- map pictures that wait for the author (Ask before drawing) ----------------
+    # --- map pictures that wait for the author (Ask before drawing, or too many) ----
 
     def _sync_waiting_pictures(self, *, drawing: bool) -> None:
         """The Map page's line for the map pictures that wait for approval;
@@ -269,7 +269,10 @@ class WorldWindow:
         prices = [w.price for w in waiting]
         known = [p for p in prices if p is not None]
         self.world_view.set_waiting(
-            len(waiting), sum(known) if known else None, unpriced=None in prices
+            len(waiting),
+            sum(known) if known else None,
+            unpriced=None in prices,
+            over=session.map_pictures_ask_over if session is not None else 0,
         )
         if (
             session is not None

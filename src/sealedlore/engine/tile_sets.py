@@ -114,13 +114,25 @@ def slug(name: str) -> str:
     return "x" + format(zlib.crc32(name.strip().encode("utf-8")), "08x")
 
 
+def bare_slug(name: str) -> str:
+    """A thing's slug without its article: "an armchair" is "armchair"."""
+    return slug(re.sub(r"^(the|a|an)\s+", "", name.strip(), flags=re.IGNORECASE))
+
+
 def item_slugs(name: str) -> list[str]:
     """The slugs a thing's sprite may be under, best first: the name as it
-    is, then without its article ("a wooden chest" is drawn as
-    "wooden-chest" in one set, "a-wooden-chest" in another)."""
+    is, then without its article, then with one ("a wooden chest" is drawn
+    as "wooden-chest" in one set, "a-wooden-chest" in another; the
+    furnisher's "wooden chair" was drawn again beside the Doomsville set's
+    "a-wooden-chair", Oct 19 2026)."""
     whole = slug(name)
-    bare = slug(re.sub(r"^(the|a|an)\s+", "", name.strip(), flags=re.IGNORECASE))
-    return list(dict.fromkeys(s for s in (whole, bare) if s))
+    plain = re.sub(r"^(the|a|an)\s+", "", name.strip(), flags=re.IGNORECASE)
+    bare = bare_slug(name)
+    articled: list[str] = []
+    if re.search(r"[a-z0-9]", plain.lower()):  # a name in another script has none
+        article = "an" if plain.lower()[:1] in "aeiou" else "a"
+        articled = [slug(f"{article} {plain}"), slug(f"the {plain}")]
+    return list(dict.fromkeys(s for s in (whole, bare, *articled) if s))
 
 
 # Words that say little of what a thing is, left out when matching names.
@@ -192,6 +204,116 @@ def closest_item(name: str, slugs: Iterable[str]) -> str | None:
         if best is None or score[:4] > best[:4]:
             best = score
     return best[4] if best is not None else None
+
+
+# What a thing is made of, by the words that say so: a thing that names one
+# never borrows a picture of a thing that names another.
+_MATERIALS: dict[str, frozenset[str]] = {
+    group: frozenset(_stem(w) for w in words.split())
+    for group, words in {
+        "wood": "wood wooden timber plank planks pine oak birch log logs driftwood bamboo",
+        "metal": "metal iron steel tin brass copper bronze aluminium aluminum chrome zinc "
+        "pewter silver gold",
+        "stone": "stone marble granite brick concrete clay ceramic porcelain terracotta",
+        "glass": "glass crystal",
+        "cloth": "cloth fabric canvas linen wool woollen cotton silk velvet burlap hessian",
+        "leather": "leather hide fur",
+        "plastic": "plastic vinyl rubber",
+        "straw": "straw wicker rattan reed",
+        "bone": "bone ivory",
+        "paper": "paper cardboard",
+    }.items()
+}
+# Words that say how a thing looks now: a picture of the thing without that
+# state doesn't show it ("a wardrobe with a missing door").
+_STATES = frozenset(
+    _stem(w)
+    for w in (
+        "broken collapsed smashed shattered burnt burned burning charred scorched overturned "
+        "toppled upturned tipped rotten rotting bloody bloodied bloodstained ruined wrecked "
+        "cracked splintered missing empty emptied gutted flooded smouldering smoldering "
+        "destroyed damaged torn ripped open opened lit glowing frozen"
+    ).split()
+)
+# Words before a thing's head noun that leave what it looks like alone: a
+# "sturdy shelf" is drawn as any shelf, a "rifle rack" never as a tool rack.
+_PLAIN = frozenset(
+    _stem(w)
+    for w in (
+        "old new worn sturdy heavy light plain simple rough rustic crude makeshift battered "
+        "scavenged salvaged homemade handmade tiny huge wide narrow cheap spare single "
+        "leaning standing weathered faded dusty patched cast"
+    ).split()
+)
+
+
+def _materials(words: set[str]) -> set[str]:
+    return {group for group, terms in _MATERIALS.items() if words & terms}
+
+
+def _parts(name: str) -> tuple[list[str], list[str]]:
+    """A name's words up to its head noun, filler left out, and those after
+    (what is with it: "a crate of root vegetables" is a crate, of
+    vegetables). A letter alone is no word (the "s" of "overseer's")."""
+    words = [w for w in _words(_thing(name)) if len(w) > 1]
+    for i, word in enumerate(words):
+        if word in _AFTER_HEAD and i > 0:
+            return [w for w in words[:i] if w not in _FILLER], words[i:]
+    return [w for w in words if w not in _FILLER], []
+
+
+def _says_the_same(before: str, other: set[str]) -> bool:
+    """Whether the word before one name's head noun leaves it the same thing
+    as the other name: the other has it too, or it only says how the thing
+    looks or what it is made of."""
+    return not before or before in other or before in _PLAIN or bool(_materials({before}))
+
+
+def suitable_item(name: str, slugs: Iterable[str]) -> str | None:
+    """The set's thing that can be drawn for `name` as it is, with no picture
+    of its own (the author, Oct 19 2026: reuse existing pieces when they
+    appear suitable; a furnisher's "workbench" had been drawn anew beside
+    the set's "a heavy wooden workbench"). Of the things `closest_item`
+    would rank, the first that is the same kind of thing (its head noun),
+    whose words before that noun are each other's or only say how sturdy,
+    old or plain it is, or what it is made of ("rifle rack" is no tool rack,
+    a "hydroponic planter bed" no wooden bed), made of nothing else, in the
+    same state ("broken", "burning", "missing" one: a broken crate is no
+    crate) and holding nothing else ("crates of timber" are no crate of
+    vegetables); the one with the most words in common and the fewest of
+    its own first. None when none is."""
+    core, tail = _parts(name)
+    if not core:
+        return None
+    head = core[-1]
+    mine = set(core) | set(tail)
+    wanted_materials = _materials(mine)
+    states = mine & _STATES
+    before = core[-2] if len(core) > 1 else ""
+    contents = {w for w in tail[1:] if w not in _FILLER} if tail[:1] == ["of"] else set()
+    found: list[tuple[tuple, str]] = []
+    for candidate in slugs:
+        their_core, their_tail = _parts(candidate.replace("-", " "))
+        if not their_core or their_core[-1] != head:
+            continue
+        theirs = set(their_core) | set(their_tail)
+        if not _says_the_same(before, theirs) or not _says_the_same(
+            their_core[-2] if len(their_core) > 1 else "", mine
+        ):
+            continue
+        materials = _materials(theirs)
+        if wanted_materials and materials and not wanted_materials & materials:
+            continue
+        if theirs & _STATES != states:
+            continue
+        their_contents = (
+            {w for w in their_tail[1:] if w not in _FILLER} if their_tail[:1] == ["of"] else set()
+        )
+        if contents and their_contents and not contents & their_contents:
+            continue
+        rank = (-len(mine & theirs), len(theirs - mine), len(candidate), candidate)
+        found.append((rank, candidate))
+    return min(found)[1] if found else None
 
 
 # A building's roof by what it is made of, from its own words: the set's

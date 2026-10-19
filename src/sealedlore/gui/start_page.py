@@ -165,6 +165,7 @@ class Card(QFrame):
 
     def __init__(self, title: str, text: str, *, picture: bool = False) -> None:
         super().__init__()
+        self._second_click = False
         self.setObjectName("startCard")
         self.setFocusPolicy(Qt.StrongFocus)
         self.setCursor(Qt.PointingHandCursor)
@@ -212,7 +213,21 @@ class Card(QFrame):
         y = max(0, (scaled.height() - height) // 2)
         self.picture.setPixmap(scaled.copy(x, y, width, height))
 
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt naming
+        self._second_click = False  # a new click, whatever came before
+        super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt naming
+        # A double-click's first release has chosen already: its second
+        # release isn't a second choice (it opened the story twice). Set
+        # after Qt's own, which goes through mousePressEvent.
+        super().mouseDoubleClickEvent(event)
+        self._second_click = event.button() == Qt.LeftButton
+
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt naming
+        if self._second_click:
+            self._second_click = False
+            return
         if event.button() == Qt.LeftButton and self.rect().contains(event.position().toPoint()):
             self.activated.emit()
             return

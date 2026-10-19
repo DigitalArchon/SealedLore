@@ -1,0 +1,264 @@
+"""An older map story opened again (the author, Oct 19 2026): Doomsville with
+a map, played on Oct 16-17, drew 33 map pictures in two minutes of being
+opened, the catch-up of everything added since. Fixed: a double-click opened
+the story twice (the second cancelling what the first had sent); "wooden
+chair" was drawn anew beside the set's "a wooden chair"; the set's own pieces
+now stand for a furnisher's names they suit; and drawing automatically asks
+first when more than `Config.map_pictures_ask_over` (10) are wanted at once.
+Offscreen, mocks only."""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+import pytest
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+pytest.importorskip("PySide6")
+
+from PySide6.QtCore import QPoint, Qt  # noqa: E402
+from PySide6.QtTest import QTest  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
+
+from sealedlore.engine.tile_sets import item_slugs, suitable_item  # noqa: E402
+from sealedlore.engine.world_pictures import PictureJob  # noqa: E402
+from sealedlore.models.config import Config  # noqa: E402
+from sealedlore.models.story import Story  # noqa: E402
+from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
+from tests.test_area import make_session  # noqa: E402
+from tests.test_map_drawing import _pictures_on  # noqa: E402
+
+DOOMSVILLE_ITEMS = sorted(
+    path.stem
+    for path in (
+        Path(__file__).resolve().parents[1] / "SampleStories/tilesets/doomsville/items"
+    ).glob("*")
+)
+
+
+@pytest.fixture
+def app() -> QApplication:
+    return QApplication.instance() or QApplication([])
+
+
+def double_click(widget, at: QPoint) -> None:
+    """A double-click as the system sends one: a click, then the second
+    press as a double-click, and its release (QTest's own sends the
+    double-click alone)."""
+    QTest.mousePress(widget, Qt.LeftButton, Qt.NoModifier, at)
+    QTest.mouseRelease(widget, Qt.LeftButton, Qt.NoModifier, at)
+    QTest.mouseDClick(widget, Qt.LeftButton, Qt.NoModifier, at)
+    QTest.mouseRelease(widget, Qt.LeftButton, Qt.NoModifier, at)
+
+
+# --- a double-click opens a story once ---------------------------------------------------
+
+
+def test_a_double_click_in_the_stories_list_opens_the_story_once(app, tmp_path):
+    from sealedlore.gui.stories import StoryListPanel
+
+    save_story_bundle(StoryBundle(story=Story(title="One"), cast=[]), root=tmp_path)
+    panel = StoryListPanel(tmp_path)
+    panel.refresh()
+    panel.resize(300, 400)
+    panel.show()
+    app.processEvents()
+    opened: list[str] = []
+    panel.story_activated.connect(opened.append)
+    item = panel.list.item(0)
+    double_click(panel.list.viewport(), panel.list.visualItemRect(item).center())
+    app.processEvents()
+    assert opened == [item.data(Qt.UserRole)]
+    panel.close()
+
+
+def test_a_double_click_on_a_start_page_card_chooses_it_once(app):
+    from sealedlore.gui.start_page import Card
+
+    card = Card("Doomsville", "Four years after the end of the world.")
+    card.resize(240, 120)
+    card.show()
+    app.processEvents()
+    chosen: list[bool] = []
+    card.activated.connect(lambda: chosen.append(True))
+    double_click(card, card.rect().center())
+    assert chosen == [True]
+    QTest.mouseClick(card, Qt.LeftButton, Qt.NoModifier, card.rect().center())
+    assert chosen == [True, True]  # a click after it is a choice again
+    # A double-click whose release went elsewhere never eats the next click.
+    QTest.mouseDClick(card, Qt.LeftButton, Qt.NoModifier, card.rect().center())
+    QTest.mouseClick(card, Qt.LeftButton, Qt.NoModifier, card.rect().center())
+    assert chosen == [True, True, True]
+    card.close()
+
+
+# --- the set's own pieces ----------------------------------------------------------------
+
+
+def test_a_thing_s_picture_is_found_with_or_without_its_article():
+    assert item_slugs("wooden chair") == ["wooden-chair", "a-wooden-chair", "the-wooden-chair"]
+    assert item_slugs("an armchair")[:2] == ["an-armchair", "armchair"]
+    assert "a-wooden-chair" in DOOMSVILLE_ITEMS
+
+
+@pytest.mark.parametrize(
+    ("name", "piece"),
+    [
+        # The same kind of thing, described more or less.
+        ("workbench", "a-heavy-wooden-workbench"),
+        ("armchair", "a-worn-wooden-armchair"),
+        ("cast iron stove", "a-cast-iron-wood-stove"),
+        ("low coffee table", "a-low-pine-coffee-table"),
+        ("hanging drying rack", "a-wooden-drying-rack"),
+        ("worn couch by the hearth", "couch-with-patched-cushions"),
+        # Not another kind of the thing ("rifle rack", a "hydroponic planter
+        # bed" for a bed), nor of another material, state or contents.
+        ("leaning rifle rack", None),
+        ("small bedside crate", None),
+        ("crates of salvaged timber", None),
+        ("wardrobe with missing door", None),
+        ("broken chair", None),
+        ("a filleting knife", None),
+    ],
+)
+def test_a_piece_of_the_set_stands_for_a_name_it_suits(name, piece):
+    assert suitable_item(name, DOOMSVILLE_ITEMS) == piece
+
+
+def test_suitable_means_the_same_kind_material_and_state():
+    pieces = ["a-hydroponic-planter-bed", "a-simple-wooden-bed", "a-broken-wooden-crate"]
+    assert suitable_item("a wooden bed", pieces) == "a-simple-wooden-bed"
+    assert suitable_item("a metal bed", ["a-simple-wooden-bed"]) is None
+    assert suitable_item("a crate", pieces) is None  # broken, and this one isn't
+    assert suitable_item("a broken crate", pieces) == "a-broken-wooden-crate"
+    assert suitable_item("温泉", pieces) is None
+
+
+WORKSHOP = json.dumps(
+    {
+        "rooms": [
+            {
+                "room": 0,
+                "purpose": "workshop",
+                "items": [
+                    {"name": "workbench", "w": 2, "h": 1, "where": "wall"},
+                    {"name": "a weaving loom", "w": 2, "h": 1, "where": "wall"},
+                ],
+            }
+        ]
+    }
+)
+
+
+def test_a_piece_the_set_suits_is_not_drawn_and_the_play_view_shows_that_piece(
+    app, tmp_path, story, cast
+):
+    from sealedlore.gui.area_render import TileSource
+
+    session = make_session(tmp_path, story, cast, [WORKSHOP] * 3)
+    _pictures_on(session)
+    session.set_tile_set("doomsville")
+    furnish, _pictures = session.tile_art_jobs()
+    session._tile_run([a for a in furnish if a.id == "house"], [], None, session.provider)
+    _furnish, pictures = session.tile_art_jobs()
+    keys = {job.key for job in pictures}
+    assert "item:a-weaving-loom" in keys  # no set has one: drawn
+    assert "item:workbench" not in keys  # the set's own stands for it
+    info, read = session.tile_set()
+    source = TileSource(info, read)
+    shown = source.item("workbench")
+    assert shown is not None and shown is source.image("items/a-heavy-wooden-workbench")
+
+
+# --- asking first when too many are wanted at once ---------------------------------------
+
+
+def jobs(*keys: str) -> list[PictureJob]:
+    return [PictureJob(key=k, subject="item", subject_id=k, name=k, prompt="p") for k in keys]
+
+
+def keys_of(found) -> list[str]:
+    return [getattr(item, "job", item).key for item in found]
+
+
+def test_drawing_automatically_asks_first_when_more_are_wanted_at_once(tmp_path, story, cast):
+    session = make_session(tmp_path, story, cast)
+    _pictures_on(session)
+    session.config.map_pictures_ask_over = 3
+    # Three at once are drawn as they come.
+    assert keys_of(session._held_for_approval("tile", jobs("a", "b", "c"))) == ["a", "b", "c"]
+    assert session.map_pictures_waiting() == []
+    # With those three still being drawn, two more are five at once: they wait.
+    assert session._held_for_approval("map", jobs("d", "e")) == []
+    assert keys_of(session.map_pictures_waiting()) == ["d", "e"]
+    session._picture_drawn("tile", "a")
+    session._pictures_run_ended("tile")
+    # What waited for being too many waits on, even when fewer are wanted
+    # now; what auto let through once isn't counted again.
+    assert session._held_for_approval("map", jobs("d", "e")) == []
+    assert keys_of(session._held_for_approval("tile", jobs("a", "b", "c", "f"))) == [
+        "a",
+        "b",
+        "c",
+        "f",
+    ]
+    # Approved, they are drawn, a run's own cap at a time.
+    session.approve_map_pictures(jobs("d", "e"), start=False)
+    assert session.map_pictures_waiting() == []
+    assert keys_of(session._held_for_approval("map", jobs("d", "e"), limit=1)) == ["d"]
+    assert keys_of(session._held_for_approval("map", jobs("d", "e"))) == ["e"]
+    # Declined are never drawn, asked or not.
+    session._pictures_run_ended("map")
+    session._pictures_run_ended("tile")
+    assert session._held_for_approval("map", jobs("g", "h", "i", "j")) == []
+    session.decline_map_pictures(["g", "h", "i", "j"])
+    assert keys_of(session._held_for_approval("map", jobs("g", "k"))) == ["k"]
+    # Any number: never asks.
+    session._pictures_run_ended("map")
+    session.config.map_pictures_ask_over = 0
+    many = [chr(c) for c in range(ord("l"), ord("z"))]
+    assert keys_of(session._held_for_approval("tile", jobs(*many))) == many
+
+
+def test_what_waited_under_ask_goes_once_drawing_is_automatic(tmp_path, story, cast):
+    session = make_session(tmp_path, story, cast)
+    _pictures_on(session)
+    session.config.map_pictures_mode = "ask"
+    assert session._held_for_approval("tile", jobs("a", "b")) == []
+    assert keys_of(session.map_pictures_waiting()) == ["a", "b"]
+    session.config.map_pictures_mode = "auto"
+    assert session.map_pictures_waiting() == []  # only what the limit held back shows
+    assert keys_of(session._held_for_approval("tile", jobs("a", "b"))) == ["a", "b"]
+
+
+def test_the_map_page_says_why_pictures_wait(app):
+    from sealedlore.gui.world_view import WorldView
+
+    view = WorldView()
+    view.set_waiting(12, 0.12, over=10)
+    assert view.waiting_label.text() == (
+        "12 map pictures wait for your approval (more than 10 at once; about $0.12)."
+    )
+    view.set_waiting(2, 0.02)
+    assert view.waiting_label.text() == "2 map pictures wait for your approval (about $0.02)."
+
+
+def test_settings_sets_how_many_are_drawn_without_asking(app):
+    from sealedlore.gui.settings_dialog import SettingsDialog
+
+    config = Config()
+    assert config.map_pictures_ask_over == 10
+    dialog = SettingsDialog(config, None)
+    assert dialog.map_pictures_over.value() == 10 and dialog.map_pictures_over.isEnabled()
+    dialog.map_pictures.setCurrentIndex(dialog.map_pictures.findData("ask"))
+    assert not dialog.map_pictures_over.isEnabled()
+    dialog.map_pictures.setCurrentIndex(dialog.map_pictures.findData("auto"))
+    dialog.map_pictures_over.setValue(25)
+    dialog._save()
+    assert config.map_pictures_ask_over == 25 and config.map_pictures_mode == "auto"
+    dialog.map_pictures_over.setValue(0)
+    assert dialog.map_pictures_over.text() == "any number"
+    dialog.deleteLater()

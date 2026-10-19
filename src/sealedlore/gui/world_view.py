@@ -2449,10 +2449,13 @@ class WorldView(QWidget):
         if self.world.places:
             self._sync_buttons()
 
-    def set_waiting(self, count: int, price: float | None, unpriced: bool = False) -> None:
+    def set_waiting(
+        self, count: int, price: float | None, unpriced: bool = False, over: int = 0
+    ) -> None:
         """How many map pictures wait for the author's approval and what
         they cost listed (`unpriced`: some have no listed price); hidden
-        at none."""
+        at none. `over`: they wait because drawn automatically they would
+        have been more than that at once."""
         if count <= 0:
             self.waiting.hide()
             return
@@ -2461,7 +2464,8 @@ class WorldView(QWidget):
             cost = "at a price the listing doesn't give"
         else:
             cost = f"about ${price:.2f}" + (", some unpriced" if unpriced else "")
-        self.waiting_label.setText(f"{count} {noun} for your approval ({cost}).")
+        why = f"more than {over} at once; " if over else ""
+        self.waiting_label.setText(f"{count} {noun} for your approval ({why}{cost}).")
         self.waiting.show()
 
     def set_progress(

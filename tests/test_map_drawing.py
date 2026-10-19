@@ -26,7 +26,7 @@ BED = json.dumps(
             {
                 "room": 0,
                 "purpose": "bedroom",
-                "items": [{"name": "a wooden bed", "w": 2, "h": 1, "where": "wall"}],
+                "items": [{"name": "a weaving loom", "w": 2, "h": 1, "where": "wall"}],
             }
         ]
     }
@@ -50,7 +50,8 @@ def test_a_run_that_furnishes_has_the_pieces_drawn_by_the_next_at_once(tmp_path,
     session._tile_run(house, [], None, session.provider)
     assert session.map_art_wanted_again and session.tile_art_running
     _furnish, pictures = session.tile_art_jobs()
-    assert "item:a-wooden-bed" in {j.key for j in pictures}, "drawn by the follow-up run"
+    # (A loom: no shipped set has one, so it is drawn, not borrowed.)
+    assert "item:a-weaving-loom" in {j.key for j in pictures}, "drawn by the follow-up run"
 
 
 def test_the_map_says_what_it_is_drawing_and_with_what(tmp_path, story, cast):

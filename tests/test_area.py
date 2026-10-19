@@ -309,7 +309,8 @@ def test_a_tile_set_is_chosen_by_what_the_setting_says():
     assert choose_set("own", "", [], shipped, own=["own"]) == "own"  # the old single set
     assert choose_set("own:gone", "An elven forest.", [], shipped, own=["neon"]) == "elf"
     assert choose_set("", "Nothing in particular.", [], shipped) == "elf"  # the first, by name
-    assert item_slugs("A wooden chest") == ["a-wooden-chest", "wooden-chest"]
+    assert item_slugs("A wooden chest") == ["a-wooden-chest", "wooden-chest", "the-wooden-chest"]
+    assert item_slugs("armchair") == ["armchair", "an-armchair", "the-armchair"]
     assert own_key("Rain-slick alleys", []) == "rain-slick-alleys"
     assert own_key("Rain-slick alleys", ["rain-slick-alleys"]) == "rain-slick-alleys-2"
     assert own_key("", ["own"]) == "own-2"

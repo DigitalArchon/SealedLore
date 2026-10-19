@@ -27,7 +27,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sealedlore.engine.objects import parse_objects
-from sealedlore.engine.tile_sets import closest_item, item_slugs
+from sealedlore.engine.tile_sets import bare_slug, closest_item, item_slugs
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID
 
 
@@ -58,9 +58,9 @@ class ObjectsOffer:
 
 
 def object_role(name: str) -> str:
-    """The tile set role an object's picture is drawn under."""
-    slugs = item_slugs(name)
-    return f"items/{slugs[-1] if slugs else 'object'}"
+    """The tile set role an object's picture is drawn under: its name
+    without the article."""
+    return f"items/{bare_slug(name) or 'object'}"
 
 
 class ObjectsRuntime:

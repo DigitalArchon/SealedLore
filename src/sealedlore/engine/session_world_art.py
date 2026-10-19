@@ -78,6 +78,8 @@ from sealedlore.storage.world_art import load_world_art, save_world_art
 # Pieces drawn at once in the background: enough to keep up with a passage,
 # few enough to leave the subscription's burst for the story's own calls.
 ART_WORKERS = 2
+# Map pictures one run of the picture thread draws; the rest go to the next.
+PICTURE_RUN = 6
 
 
 def job_words(job: PictureJob) -> str:
@@ -362,14 +364,17 @@ class WorldArtRuntime:
         art = art or self.map_art_copy()
         return max(0, self.config.map_picture_daily_limit - art.pictures_by_day.get(_today(), 0))
 
-    def map_picture_jobs(self, limit: int = 6) -> list[PictureJob]:
-        """What the map at the leaf still needs from the image model."""
+    def map_picture_jobs(self, limit: int | None = PICTURE_RUN) -> list[PictureJob]:
+        """What the map at the leaf still needs from the image model, at
+        most `limit` (None: all the day allows)."""
         if not self.map_pictures_on:
             return []
         art = self.map_art_copy()
         room = self.map_pictures_left_today(art)
         if room <= 0:
             return []
+        if limit is None:
+            limit = room
         info = self._picture_model()
         # A chat's user has no card to draw an avatar from: the map's own
         # figure stands for them. Played on the map, everyone has an avatar
@@ -630,10 +635,13 @@ class WorldArtRuntime:
             self._pictures_again = True
             return False
         self._pictures_again = False
-        # Asking first: only what the author approved is drawn, the rest waits.
-        jobs = self._held_for_approval("map", self.map_picture_jobs())
+        # Asking first (or more at once than auto draws unasked): only what
+        # the author approved is drawn, the rest waits. All the map wants is
+        # counted; a run draws PICTURE_RUN of it.
+        jobs = self._held_for_approval("map", self.map_picture_jobs(None), limit=PICTURE_RUN)
         media = self.config.images()
         if not jobs or media is None:
+            self._pictures_run_ended("map")
             return False
         self._picture_total, self._picture_done = len(jobs), 0
         client = ImageClient(media.base_url, media.api_key, api=media.api)
@@ -667,8 +675,10 @@ class WorldArtRuntime:
                     f"{job_words(job)}, by {self.model_name(self.config.map_picture_model)}",
                 )
                 self._picture_one(job, client, sizes[job.subject == "postcard"])
+                self._picture_drawn("map", job.key)
                 self._picture_done += 1
         finally:
+            self._pictures_run_ended("map")
             self._doing("pictures", None)
             client.close()
 

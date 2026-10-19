@@ -77,8 +77,11 @@ class StoryListPanel(QWidget):
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.list.setResizeMode(QListView.Adjust)
         self.list.setItemDelegate(_StoryRow(self.list))
+        # Activated alone: a double-click is also an activation (or a single
+        # click, where the desktop says so), and with both connected one
+        # double-click opened the story twice, the second cancelling what
+        # the first had already sent for its map (Oct 19 2026).
         self.list.itemActivated.connect(self._activate)
-        self.list.itemDoubleClicked.connect(self._activate)
         self.list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.list.customContextMenuRequested.connect(self._show_menu)
         delete_key = QShortcut(QKeySequence.Delete, self.list)
