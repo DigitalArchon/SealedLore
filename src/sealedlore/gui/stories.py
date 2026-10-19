@@ -38,8 +38,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.gui import theme
 from sealedlore.gui.start_page import Recent, when_played
-from sealedlore.storage.atomic import read_json
-from sealedlore.storage.paths import is_safe_story_id, stories_dir
+from sealedlore.storage.library import story_listings
 
 
 class StoryListPanel(QWidget):
@@ -104,37 +103,18 @@ class StoryListPanel(QWidget):
         return self.list.count() > 0
 
     def _fill(self, selected_id: str | None) -> None:
-        directory = stories_dir(self.root)
-        if not directory.exists():
-            return
-        rows: list[tuple[str, str, str, str | None]] = []  # (updated, title, id, error)
-        for entry in directory.iterdir():
-            if not entry.is_dir() or not is_safe_story_id(entry.name):
-                continue
-            try:
-                story = read_json(entry / "story.json")
-                if not isinstance(story, dict):
-                    raise ValueError("no story.json")
-                nodes = read_json(entry / "nodes.json", [])
-                count = len(nodes) if isinstance(nodes, list) else 0
-                title = str(story.get("title") or entry.name)
-                updated = str(story.get("updated_at") or "")
-                rows.append(
-                    (
-                        updated,
-                        f"{title}\n{count} message{'s' if count != 1 else ''}",
-                        entry.name,
-                        None,
-                    )
-                )
-            except (OSError, ValueError) as exc:
+        for listing in story_listings(self.root):
+            error = listing.error
+            if error is None:
+                count = listing.messages
+                label = f"{listing.title}\n{count} message{'s' if count != 1 else ''}"
+                self._played.append((listing.id, label, listing.updated))
+            else:
                 # Shown rather than skipped: a story that vanished without a
                 # word can't be looked into or deleted. Opening it says why.
-                reason = (str(exc).splitlines() or ["unreadable"])[0][:80]
-                rows.append(("", f"{entry.name}\n⚠ can't be read: {reason}", entry.name, str(exc)))
-        for updated, label, story_id, error in sorted(rows, key=lambda row: row[0], reverse=True):
-            if error is None:
-                self._played.append((story_id, label, updated))
+                reason = (error.splitlines() or ["unreadable"])[0][:80]
+                label = f"{listing.id}\n⚠ can't be read: {reason}"
+            story_id = listing.id
             item = QListWidgetItem(label)
             item.setData(Qt.UserRole, story_id)
             item.setToolTip(label.split("\n", 1)[0])

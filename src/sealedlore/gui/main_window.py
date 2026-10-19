@@ -234,6 +234,10 @@ class MainWindow(
     QMainWindow,
 ):
     generation_requested = Signal()
+    # (origin, text): a turn queued from somewhere other than the composer
+    # (a phone) and stopped before it went; the composer's own goes back
+    # into the composer instead.
+    queued_turn_returned = Signal(str, str)
 
     def __init__(self, *, root: Path | None = None, use_mock: bool = False) -> None:
         super().__init__()
@@ -267,6 +271,8 @@ class MainWindow(
         self._background = False
         self._queued: Callable[[], None] | None = None
         self._queued_text: tuple[str, str | None] | None = None
+        # Where the queued turn came from: "desktop" (the composer) or "phone".
+        self._queued_origin = "desktop"
         # What the plot holds back from the Cast and Lore tabs, as last shown.
         self._shown_hidden: set[str] = set()
         # The progress dialog of a background job (see _start's busy_text).
@@ -2396,17 +2402,26 @@ class MainWindow(
             return
 
         if self.composer.is_question():
-
-            def ask() -> None:
-                self.session.provider = self._current_provider()
-                self._start(lambda: self.session.ask(text), question=text)
-
-            self._queue_or_run(ask, text, None)
+            self._submit_ask(text)
             return
-
         # Built now, from the composer as the author set it; if it has to wait
         # for the background reads, it goes as it was sent.
-        turn = self._current_turn(text)
+        self._submit_turn(text, self._current_turn(text))
+
+    def _submit_ask(self, text: str, *, origin: str = "desktop") -> None:
+        """A Question, now or once the background reads finish. The caller
+        has checked it may be sent."""
+
+        def ask() -> None:
+            self.session.provider = self._current_provider()
+            self._start(lambda: self.session.ask(text), question=text)
+
+        self._queue_or_run(ask, text, None, origin=origin)
+
+    def _submit_turn(self, text: str, turn: TurnRequest, *, origin: str = "desktop") -> None:
+        """A turn, now or once the background reads finish. The caller has
+        checked it may be sent; `origin` says whose it is ("desktop", or
+        "phone" for one sent from a phone, which leaves the composer alone)."""
         label = speaker_label_for(turn.speaker_id, self.session.cast)
 
         def send() -> None:
@@ -2419,7 +2434,9 @@ class MainWindow(
             self.transcript.add_message(label, text, kind_for(turn.speaker_id), turn.ooc)
             self._start(lambda: self.session.send(turn))
 
-        self._queue_or_run(send, text, turn.ooc, shown=(label, kind_for(turn.speaker_id)))
+        self._queue_or_run(
+            send, text, turn.ooc, shown=(label, kind_for(turn.speaker_id)), origin=origin
+        )
 
     def _can_queue(self) -> bool:
         return self._busy and self._background and self._queued is None
@@ -2431,18 +2448,23 @@ class MainWindow(
         ooc: str | None,
         *,
         shown: tuple[str, str] | None = None,
+        origin: str = "desktop",
     ) -> None:
         """Send now, or, while the last turn's background reads run, once they finish.
 
         The reads are the worker's; the author's next turn can't start until
-        they are done, but there is no reason to stop them writing it.
+        they are done, but there is no reason to stop them writing it. A
+        phone's turn leaves the composer as it is: the author may be writing
+        there.
         """
-        self.composer.clear_turn()
+        if origin == "desktop":
+            self.composer.clear_turn()
         if not self._busy:
             run()
             return
         self._queued = run
         self._queued_text = (text, ooc)
+        self._queued_origin = origin
         if shown is not None:
             self.transcript.add_message(shown[0], text, shown[1], ooc)
         self.statusBar().showMessage(
@@ -2460,20 +2482,28 @@ class MainWindow(
 
     def _run_queued(self) -> None:
         run, self._queued, self._queued_text = self._queued, None, None
+        self._queued_origin = "desktop"
         if run is not None and self.session is not None and not self._busy:
             run()
 
     def _drop_queued(self) -> None:
-        """Stopped before it could go: the turn goes back to the composer to send again."""
+        """Stopped before it could go: the turn goes back where it was written
+        to send again, the composer or the phone."""
         if self._queued_text is not None:
             text, ooc = self._queued_text
-            self.composer.input.setPlainText(text)
-            if ooc:
-                self.composer.ooc.setPlainText(ooc)
+            if self._queued_origin == "desktop":
+                self.composer.input.setPlainText(text)
+                if ooc:
+                    self.composer.ooc.setPlainText(ooc)
+            else:
+                self.queued_turn_returned.emit(self._queued_origin, text)
         self._queued = None
         self._queued_text = None
+        self._queued_origin = "desktop"
 
-    def regenerate(self) -> None:
+    def regenerate(self, shape: TurnShape | None = None) -> None:
+        """Another take of the latest passage. `shape` is the phone's; the
+        desktop's is the composer's, read here."""
         if self.session is None or self._busy:
             return
         if not self.session.full_path() or not self._tee_allows_send():
@@ -2482,11 +2512,12 @@ class MainWindow(
         # The composer's controls are what the author has in front of them, so
         # a retake follows them: "make it longer" then Regenerate used to come
         # back at exactly the old length.
-        shape = self._current_shape()
-        self.statusBar().showMessage(self._shape_summary(), 6000)
+        if shape is None:
+            shape = self._current_shape()
+            self.statusBar().showMessage(self._shape_summary(), 6000)
         self._start(lambda: self.session.regenerate(shape=shape))
 
-    def reroll(self, node_id: str = "") -> None:
+    def reroll(self, node_id: str = "", shape: TurnShape | None = None) -> None:
         """Roll again for the latest dice turn: a new sibling take, new outcome."""
         if self.session is None or self._busy:
             return
@@ -2494,23 +2525,26 @@ class MainWindow(
         if not path or (node_id and path[-1].id != node_id):
             return
         self.session.provider = self._current_provider()
-        self._start(lambda: self.session.regenerate(reroll=True, shape=self._current_shape()))
+        if shape is None:
+            shape = self._current_shape()
+        self._start(lambda: self.session.regenerate(reroll=True, shape=shape))
 
-    def _regenerate_node(self, node_id: str) -> None:
+    def _regenerate_node(self, node_id: str, shape: TurnShape | None = None) -> None:
         """Another take of any passage; the old one stays as a sibling (§2.2)."""
         if self.session is None or self._busy:
             return
         path = self.session.full_path()
         if path and path[-1].id == node_id:
-            self.regenerate()
+            self.regenerate(shape)
             return
         self.session.provider = self._current_provider()
         # Show the story as it stood before that passage while the new take
         # streams in, so it doesn't appear below the later messages.
         before = path_to(self.session.nodes, node_id)[:-1]
         self._show_nodes(before)
-        shape = self._current_shape()
-        self.statusBar().showMessage(self._shape_summary(), 6000)
+        if shape is None:
+            shape = self._current_shape()
+            self.statusBar().showMessage(self._shape_summary(), 6000)
         self._focus_after_job = before[-1].id if before else None
         self._start(lambda: self.session.regenerate(node_id, shape=shape))
 

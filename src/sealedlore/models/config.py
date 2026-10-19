@@ -611,6 +611,45 @@ class WindowLayout(BaseModel):
     composer_height: int = 0
 
 
+class PhoneDevice(BaseModel):
+    """A phone paired for phone access (sealedlore/phone/): its token is
+    never kept, only the token's sha256."""
+
+    id: str
+    name: str = "A phone"
+    token_sha256: str
+    paired_at: str = ""
+    # The day it was last seen (YYYY-MM-DD), not the time: enough to tell an
+    # old phone to revoke from one in use.
+    last_seen_day: str = ""
+
+
+class OnionKey(BaseModel):
+    """The onion service's private key, as tor's ADD_ONION gives it
+    ("ED25519-V3:…"). Named `api_key` so the keychain keeps it as it keeps
+    the endpoints' keys (storage/keychain.py `slots`)."""
+
+    api_key: str = ""
+
+
+class PhoneAccess(BaseModel):
+    """Playing a shared story from a phone's Tor Browser (gui/window_phone.py).
+
+    Off unless turned on: `start_on_launch` is only whether it starts with the
+    app; File → Phone access turns it on or off for one run and writes
+    nothing here. Nothing is shared until the author shares it, and which
+    stories are shared stays on this machine: a backup, a copy or a scenario
+    never carries it."""
+
+    start_on_launch: bool = False
+    notify_connect: bool = True
+    shared_stories: list[str] = Field(default_factory=list)
+    devices: list[PhoneDevice] = Field(default_factory=list)
+    onion: OnionKey = Field(default_factory=OnionKey)
+    # The onion address's 56 letters, without ".onion": known with the key.
+    service_id: str = ""
+
+
 class Config(BaseModel):
     @field_validator("text_scale")
     @classmethod
@@ -943,6 +982,8 @@ class Config(BaseModel):
     # The author's edits to the program's prompt texts for every story, by
     # key (engine/prompt_texts.py). A story's own edits win over these.
     prompt_edits: dict[str, PromptEdit] = Field(default_factory=dict)
+    # Phone access through Tor (sealedlore/phone/, gui/window_phone.py).
+    phone: PhoneAccess = Field(default_factory=PhoneAccess)
 
     def private(self) -> ProviderConfig | None:
         """The private endpoint, with a blank key filled from the chat

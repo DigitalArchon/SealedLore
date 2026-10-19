@@ -48,6 +48,8 @@ def slots(config: Config) -> Iterator[tuple[str, HasKey]]:
     yield "videos", config.video_endpoint
     if config.private_provider is not None:
         yield "private", config.private_provider
+    # Not an API key, but as secret: whoever holds it can be the phones' server.
+    yield "phone", config.phone.onion
 
 
 def keys_in_file(config: Config) -> bool:
