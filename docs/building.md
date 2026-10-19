@@ -13,9 +13,40 @@ any). It needs `git`, `curl`, `tar`, `dpkg-deb`, `sha256sum`, `file`, `objdump`
 (binutils) and `ldd`.
 
 The build downloads, over HTTPS, a relocatable Python (python-appimage), the
-pinned packages from PyPI, eight small libraries from Debian 11's archive
-(checked against pinned checksums), and `appimagetool`. They are cached in
-`build/appimage/cache`.
+pinned packages from PyPI, eight small libraries from Debian 11's archive,
+the Tor Expert Bundle from the Tor Project's archive (checked against pinned
+checksums), and `appimagetool`. They are cached in `build/appimage/cache`.
+
+## Tor, for phone access
+
+Phone access runs tor, and the AppImage brings its own: the `tor` program
+and the three libraries it was built against (libevent and OpenSSL), taken
+unmodified from the official Tor Expert Bundle into `usr/lib/tor`. The
+bundle's version and checksum are pinned in `packaging/appimage/tools.sh`
+(`TOR_BUNDLE_VERSION`, `TOR_URL`, `TOR_SHA256`). The build runs the bundled
+tor with the environment the app gives it and stops if it isn't the pinned
+version, or would load a library from anywhere but its own folder.
+
+That build of tor is made with `--enable-gpl` (for the onion service's
+proof-of-work defence), so the `tor` program is covered by the GPL, version 3,
+and its source goes with every release. `packaging/appimage/tor_sources.sh`
+puts the source tarballs of tor, libevent and OpenSSL, as their projects
+publish them and checked against the sums in `tools.sh` (`TOR_SOURCES`), in
+`dist/`; the release workflow attaches them beside the AppImage.
+
+Tor is updated with each release, since the network turns away a tor that has
+become obsolete: change the versions and sums in `tools.sh` (the source
+versions are the ones Tor Browser's build system,
+[tor-browser-build](https://gitlab.torproject.org/tpo/applications/tor-browser-build),
+uses for that bundle, in `projects/tor`, `projects/libevent` and
+`projects/openssl`), and the versions `packaging/appimage/THIRD-PARTY-NOTICES.md`
+names. `tests/test_packaging_tor.py` checks that they agree, and
+`tools/smoke/appimage_tor.sh` checks a built AppImage's tor publishes an onion
+address (it needs the network).
+
+Running from source, phone access uses a `tor` on `PATH` (for example
+`sudo apt install tor`); only the program is used, never a tor service the
+system runs. `SEALEDLORE_TOR` names another one.
 
 To change a package version, edit `packaging/appimage/requirements.in` and
 run `packaging/appimage/lock.sh` (it uses the same pinned `uv` as the build).

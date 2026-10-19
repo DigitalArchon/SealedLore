@@ -17,6 +17,10 @@ export LD_LIBRARY_PATH="$HERE/usr/lib/x11${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export TIKTOKEN_CACHE_DIR="${TIKTOKEN_CACHE_DIR:-$HERE/usr/share/sealedlore/tiktoken}"
 # The sample plot files and the format guide, for Help → About and the Plot tab.
 export SEALEDLORE_SAMPLES="${SEALEDLORE_SAMPLES:-$HERE/usr/share/sealedlore/samples}"
+# The tor phone access runs (the Tor Expert Bundle's, in usr/lib/tor). The app
+# gives it its own folder as its library path and nothing else of this
+# environment (phone/torrc.py tor_environment).
+export SEALEDLORE_TOR="${SEALEDLORE_TOR:-$HERE/usr/lib/tor/tor}"
 # The host's Python settings must not leak into the bundled interpreter.
 unset PYTHONHOME PYTHONPATH
 # Certificate authorities for anything that asks OpenSSL for its defaults.

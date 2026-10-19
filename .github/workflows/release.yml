@@ -2,8 +2,9 @@ name: Release
 
 # Pushing a tag vX.Y.Z builds the AppImage from that commit, attests it (a
 # signed record that this workflow built these bytes from this commit), and
-# opens a draft release with the AppImage and its .sha256 attached. Publish
-# the draft by hand once its notes are written.
+# opens a draft release with the AppImage and its .sha256 attached, and the
+# source of the tor inside it (GPL-3: packaging/appimage/tor_sources.sh).
+# Publish the draft by hand once its notes are written.
 #
 # Run by hand (Actions → Release → Run workflow) it only builds, and the
 # checksum is on the run's summary page: a way to check that GitHub's build
@@ -62,10 +63,18 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # The bundled tor's source and its libraries', checked against tools.sh.
+      - name: Tor's source
+        run: packaging/appimage/tor_sources.sh
+
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: appimage
-          path: dist/SealedLore-*-x86_64.AppImage*
+          path: |
+            dist/SealedLore-*-x86_64.AppImage*
+            dist/tor-*.tar.gz
+            dist/libevent-*.tar.gz
+            dist/openssl-*.tar.gz
           if-no-files-found: error
           retention-days: 7
 
@@ -119,7 +128,14 @@ jobs:
             echo
             echo "Or rebuild it: check out \`$GITHUB_REF_NAME\`, run \`packaging/appimage/build.sh\`,"
             echo "and compare the checksum. The build is reproducible."
+            echo
+            echo "## Tor's source"
+            echo
+            echo "Phone access runs the tor of the Tor Expert Bundle, which is built as GPL-3. Its"
+            echo "source, and the source of the two libraries it is built against, are attached as"
+            echo "their projects publish them: $(cd dist && ls tor-*.tar.gz libevent-*.tar.gz openssl-*.tar.gz | sed 's/.*/`&`/' | paste -sd, - | sed 's/,/, /g')."
           } > notes.md
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
             --title "SealedLore ${GITHUB_REF_NAME#v}" --notes-file notes.md \
-            "dist/$APPIMAGE" "dist/$APPIMAGE.sha256"
+            "dist/$APPIMAGE" "dist/$APPIMAGE.sha256" \
+            dist/tor-*.tar.gz dist/libevent-*.tar.gz dist/openssl-*.tar.gz

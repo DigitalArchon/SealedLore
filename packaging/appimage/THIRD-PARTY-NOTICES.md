@@ -8,7 +8,9 @@ The AppImage also contains the software listed below. Each part keeps its own
 licence, and nothing in SealedLore's licence changes those terms. Paths are
 inside the AppImage: run it with `--appimage-extract` to see them. A path
 starting `texts/` is in `usr/share/licenses/sealedlore/texts/`, which holds
-the licence texts the components don't carry themselves.
+the licence texts the components don't carry themselves; one starting `tor/`
+is in `usr/share/licenses/sealedlore/tor/`, the licence files the Tor Expert
+Bundle ships.
 
 ## Qt and Qt for Python
 
@@ -92,6 +94,34 @@ copyright file, with its licence (MIT/X11 style), is in
 | libxcb-util1 | 0.4.0-1+b1 |
 | libxkbcommon0 | 1.0.3-2 |
 | libxkbcommon-x11-0 | 1.0.3-2 |
+
+## Tor
+
+Phone access runs tor, taken unmodified from the Tor Expert Bundle 15.0.25
+for Linux x86_64 (<https://www.torproject.org/download/tor/>): `tor` 0.4.9.14
+and the libraries it was built against, libevent 2.1.13 (`libevent-2.1.so.7`)
+and OpenSSL 3.5.9 (`libssl.so.3`, `libcrypto.so.3`), in `usr/lib/tor`. Tor is
+a program of its own, which SealedLore starts only while phone access is on.
+
+- **Tor** is under the 3-clause BSD license, with the licences of the code it
+  includes, in `tor/tor.txt`. **This build is made with `--enable-gpl`**, for
+  the onion service's proof-of-work defence, so the `tor` program as a whole
+  is covered by the GNU General Public License, version 3
+  (`texts/GPL-3.0.txt`), as `tor --version` says.
+- **libevent** is under the 3-clause BSD license (`tor/libevent.txt`).
+- **OpenSSL 3** is under the Apache License 2.0 (`tor/openssl.txt`).
+- **Source:** attached to every SealedLore release beside the AppImage, as
+  their projects publish it: `tor-0.4.9.14.tar.gz`,
+  `libevent-2.1.13-stable.tar.gz` and `openssl-3.5.9.tar.gz` (also at
+  <https://archive.torproject.org/tor-package-archive/>,
+  <https://github.com/libevent/libevent/releases> and
+  <https://github.com/openssl/openssl/releases>). How the bundle is built from
+  them is Tor Browser's build system, tag `tbb-15.0.25-build2` of
+  <https://gitlab.torproject.org/tpo/applications/tor-browser-build>
+  (`projects/tor`, `projects/libevent` and `projects/openssl`).
+- **Replacing it:** extract the AppImage and put your own tor in
+  `usr/lib/tor`, or run the AppImage with `SEALEDLORE_TOR` set to the path of
+  another tor.
 
 ## Python packages
 

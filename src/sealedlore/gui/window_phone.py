@@ -69,9 +69,9 @@ NO_ENDPOINT = "Set up an endpoint on the desktop first."
 LEAVING_ASKS = "Leaving this story needs an answer on the desktop."
 NOT_IN_PRIVATE = "That waits until the private scene ends."
 NO_TOR = (
-    "Phone access needs tor, and none was found. The AppImage brings its own; run from "
-    "source, install tor (for example: sudo apt install tor). Only the program is used, "
-    "never a tor service the system runs."
+    "Phone access needs tor, and none was found. The AppImage brings its own; running "
+    "from source, install tor (for example: sudo apt install tor). Only the program is "
+    "used, never a tor service the system runs."
 )
 NO_TOR_WINDOWS = "Phone access is for Linux for now."
 KEY_MISSING = (

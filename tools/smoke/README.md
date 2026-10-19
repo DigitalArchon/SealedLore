@@ -56,5 +56,11 @@ Without it Sigstore's trust-root update fails, and with it every `private/`
 model's attestation. Run it after every build: the test suite can't see
 this, because the dev venv uses the system's OpenSSL.
 
+`appimage_tor.sh [APPIMAGE]` (the network, no display) starts the bundled
+tor through AppRun, the AppImage's Python and the app's own `TorService`,
+waits until its onion address is published, and checks that it stops and
+nothing of it is left running. Run it by hand after a build that changed
+tor or the packaging: the tests use a fake tor.
+
 `screenshot.py FILE.png` grabs the whole screen with Qt (no ImageMagick
 needed).

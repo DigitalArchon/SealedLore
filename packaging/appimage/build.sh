@@ -36,14 +36,21 @@
 #     taken from Debian 11 (built for glibc <= 2.17) rather than from whatever
 #     machine runs this script — a host's copy can need a newer glibc than the
 #     systems the AppImage is for (Ubuntu 24.04's libxcb-cursor needs 2.38);
+#   - tor, for phone access: the tor program of the official Tor Expert Bundle
+#     and the three libraries it was built against, in usr/lib/tor, run only
+#     while phone access is on (its source goes beside each release:
+#     tor_sources.sh);
 #   - the tokenizer's data file, so the first run on a new machine works offline;
 #   - SealedLore's licence and the third-party notices (THIRD-PARTY-NOTICES.md,
 #     with the licence texts in licenses/ and each Debian library's copyright
 #     file) in usr/share/licenses/sealedlore. The build fails if a Python
 #     package ships without a licence text (notices.py).
 #
-# Bumping the Python base, a Debian library or the runtime: update the versions
-# THIRD-PARTY-NOTICES.md names, and the texts in licenses/ if they changed.
+# Bumping the Python base, a Debian library, the runtime or tor: update the
+# versions THIRD-PARTY-NOTICES.md names, and the texts in licenses/ if they
+# changed. For tor, also TOR_SOURCES in tools.sh (tor-browser-build's versions
+# for the bundle), and BUNDLED_LIBRARIES in phone/torrc.py if the bundle's
+# libraries are renamed (the build takes exactly those).
 set -euo pipefail
 umask 022
 
@@ -258,6 +265,30 @@ for entry in "${DEBIAN_LIBS[@]}"; do
 done
 rm -rf "$CACHE/debs/x"
 
+log "Tor, for phone access (Tor Expert Bundle $TOR_BUNDLE_VERSION)"
+# tor and the libraries the app checks for beside it (BUNDLED_LIBRARIES): the
+# bundle has no RUNPATH, so tor finds them through LD_LIBRARY_PATH, which the
+# app sets to this folder for tor alone (phone/torrc.py tor_environment). In a
+# folder of their own, never usr/lib or usr/lib/x11: this OpenSSL 3 must not
+# stand in for anything else's. Left out: the pluggable transports (no bridges
+# yet), the debug copies, and the geoip files (an onion service needs none).
+TORDIR="$APPDIR/usr/lib/tor"
+TOR_ARCHIVE="$CACHE/tor-expert-bundle-linux-x86_64-$TOR_BUNDLE_VERSION.tar.gz"
+fetch "$TOR_URL" "$TOR_ARCHIVE" "$TOR_SHA256"
+read -r -a TOR_LIBS <<<"$("$PYTHON" -s -c \
+    'from sealedlore.phone.torrc import BUNDLED_LIBRARIES; print(*BUNDLED_LIBRARIES)')"
+rm -rf "$CACHE/tor-x" && mkdir -p "$CACHE/tor-x" "$TORDIR" "$LICENCES/tor"
+tar -xzf "$TOR_ARCHIVE" -C "$CACHE/tor-x" tor/tor "${TOR_LIBS[@]/#/tor/}" \
+    docs/tor.txt docs/libevent.txt docs/openssl.txt
+install -m 755 "$CACHE/tor-x/tor/tor" "$TORDIR/tor"
+for lib in "${TOR_LIBS[@]}"; do
+    install -m 644 "$CACHE/tor-x/tor/$lib" "$TORDIR/$lib"
+done
+# The licence files the bundle ships with this tor: tor's own (BSD-3, with the
+# code it includes), libevent's (BSD-3) and OpenSSL's (Apache 2.0).
+install -m 644 "$CACHE"/tor-x/docs/{tor,libevent,openssl}.txt "$LICENCES/tor/"
+rm -rf "$CACHE/tor-x"
+
 log "Tokenizer data"
 mkdir -p "$APPDIR/usr/share/sealedlore/tiktoken"
 TIKTOKEN_CACHE_DIR="$APPDIR/usr/share/sealedlore/tiktoken" "$PYTHON" -s -c \
@@ -328,6 +359,34 @@ if [ -n "$missing" ]; then
     echo "the FFmpeg plugin can't resolve: $missing" >&2
     exit 1
 fi
+# Phone access: QtNetwork (in Essentials) and what it loads on first use; and
+# the bundled tor, run with the environment the app gives it (from one holding
+# AppRun's library path, which tor must not inherit), says it is the version
+# pinned and finds its libraries in its own folder, never the system's.
+"$PYTHON" -s -c "import PySide6.QtNetwork, sealedlore.gui.phone_server, sealedlore.gui.tor_service"
+"$PYTHON" -s - "$TORDIR/tor" "$TOR_VERSION" <<'TOR'
+import subprocess
+import sys
+from pathlib import Path
+
+from sealedlore.phone.torrc import BUNDLED_LIBRARIES, tor_environment
+
+tor, version = Path(sys.argv[1]), sys.argv[2]
+env = tor_environment(tor, {"HOME": "/nonexistent", "PATH": "/usr/bin:/bin", "LD_LIBRARY_PATH": "/x11"})
+if env.get("LD_LIBRARY_PATH") != str(tor.parent):
+    sys.exit(f"the app wouldn't give tor its own libraries: {env}")
+said = subprocess.run([tor, "--version"], env=env, capture_output=True, text=True, check=True).stdout
+if f"Tor version {version} " not in said:
+    sys.exit(f"the bundled tor says {said!r}, not version {version}")
+links = subprocess.run(["ldd", tor], env=env, capture_output=True, text=True, check=True).stdout
+for line in links.splitlines():
+    name, _, found = line.strip().partition(" => ")
+    if "not found" in found:
+        sys.exit(f"tor can't resolve {name}")
+    if name in BUNDLED_LIBRARIES and not found.startswith(f"{tor.parent}/"):
+        sys.exit(f"tor would load {name} from {found}, not its own folder")
+print(said.splitlines()[0])
+TOR
 missing="$(find "$APPDIR/usr/lib" "$STDLIB/lib-dynload" -maxdepth 1 -name '*.so*' -type f \
     -exec ldd {} \; 2>/dev/null | grep 'not found' || true)"
 if [ -n "$missing" ]; then

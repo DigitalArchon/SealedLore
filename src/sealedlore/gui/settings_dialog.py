@@ -1344,8 +1344,9 @@ class SettingsDialog(QDialog):
             where = (
                 "Phone access is for Linux for now."
                 if sys.platform == "win32"
-                else "No tor was found. Run from source, install it (for example: sudo apt "
-                "install tor): only the program is used, never a tor service the system runs."
+                else "No tor was found. The AppImage brings its own; running from source, "
+                "install it (for example: sudo apt install tor). Only the program is used, "
+                "never a tor service the system runs."
             )
         elif os.environ.get("SEALEDLORE_TOR") == str(tor):
             where = "The tor that comes with SealedLore."
