@@ -412,6 +412,11 @@ class AreaWindow:
 
     def _area_painted(self, key: object, ground: Ground | None) -> None:
         self._area_painting.discard(key)
+        if self.session is None or self._area_story is None:
+            # The story closed while this was painted: nothing of it stays
+            # for the next story (CI, Oct 19 2026: a paint landing after
+            # the close left its picture in the cache).
+            return
         if ground is None or ground.image.isNull():
             self._area_failed.add(key)
             self.refresh_area()  # the plain map, said to be standing in
