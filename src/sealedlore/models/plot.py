@@ -183,6 +183,9 @@ class EventStatus(BaseModel):
     rest: int = 0
     asked_minutes: int = 0
     asked_scene: str = ""
+    # The author's turn that last held this quiet-moment event back for an
+    # answer (`director.held_for_answer`); the next turn offers it anyway.
+    held_for: str | None = None
     # A timed event whose last day passed: it happens at the next chance,
     # whatever the moment.
     overdue: bool = False

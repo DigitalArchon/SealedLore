@@ -208,6 +208,27 @@ def test_nothing_quiet_begins_while_the_author_waits_on_an_answer():
     chronicle.events["the_fall"].overdue = True
     overdue = armed(plot(), chronicle, {"the_fall": 3})
     assert held_for_answer(overdue, '"How many?"') == overdue
+    # Held by the turn before: offered now, question or not.
+    assert held_for_answer(items, '"How many?"', held_last={"the_fall"}) == items
+
+
+def test_a_question_every_turn_holds_a_quiet_event_one_turn_at_a_time(tmp_path: Path):
+    """An author whose character asks something every turn held quiet
+    events for good (the review of Oct 20 2026): held one turn, offered
+    the next."""
+    session = make_session(
+        tmp_path,
+        ["Marcus counted.", read(), director(), "Marcus shrugged.", read(), "Quiet.", read()],
+    )
+    for text in ('"How many on the wall?"', '"And at the gate?"', '"Who sleeps first?"'):
+        list(session.send(turn(session, text)))
+    asked = [
+        kinds(session, tmp_path)[: i + 1].count("director_request")
+        for i, kind in enumerate(kinds(session, tmp_path))
+        if kind == "chronicle_request"
+    ]
+    # No call on the first question, one on the second, none on the third.
+    assert asked == [0, 1, 1]
 
 
 def test_the_storyteller_is_told_to_leave_the_held_character_alone():

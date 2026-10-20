@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 import statistics
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field, replace
 
 from sealedlore.engine.chronicle import Armed, day_of, format_clock
@@ -69,19 +69,31 @@ def awaits_answer(text: str) -> bool:
     return bool(_ASKED.search(text.strip()))
 
 
-def held_for_answer(armed: Sequence[Armed], author_text: str) -> list[Armed]:
+def held_for_answer(
+    armed: Sequence[Armed], author_text: str, *, held_last: Collection[str] = ()
+) -> list[Armed]:
     """No quiet-moment event begins while the author waits on an answer.
 
     Live, Mistral Medium 3.5 started Hellsville's attack on "How many on the
     wall tonight?" at supper 3/3, even told that a question is owed its reply;
     it is plain in the text, so code decides it. Lead-ins, reveals and an
     overdue event are unaffected.
+
+    `held_last`: the events the author's previous turn held. One is held a
+    turn at most, then offered whatever this turn asks: an author whose
+    character asks something every turn held them for good (the review of
+    Oct 20 2026).
     """
     if not awaits_answer(author_text):
         return list(armed)
     kept: list[Armed] = []
     for item in armed:
-        if "begin" in item.kinds and item.event.pacing == "quiet" and not item.overdue:
+        if (
+            "begin" in item.kinds
+            and item.event.pacing == "quiet"
+            and not item.overdue
+            and item.event.id not in held_last
+        ):
             kinds = tuple(kind for kind in item.kinds if kind != "begin")
             if not kinds:
                 continue

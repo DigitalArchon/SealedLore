@@ -302,7 +302,9 @@ applies to every variant; a variant's own value for the same fact wins.
 1. From the event's chosen day (timeline events), or once its conditions hold
    (optional events), the director watches for the right moment. With
    `pacing: quiet moment`, that means a lull: short turns from the author, or
-   the character settling down for the night. Nothing intense gets interrupted.
+   the character settling down for the night. Nothing intense gets interrupted,
+   and a question your character asks gets its answer first: the event waits
+   that turn, though never two turns running.
 2. The director tells the storyteller what should happen. You don't see this
    instruction unless you look at the prompt in the Inspector. The storyteller
    still writes the scene, and never decides what your character does.

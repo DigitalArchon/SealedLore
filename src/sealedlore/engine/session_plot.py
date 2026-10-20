@@ -103,6 +103,7 @@ from sealedlore.models.plot import (
     Direction,
     EventDef,
     EventState,
+    EventStatus,
     EventVariant,
     Plot,
 )
@@ -965,10 +966,20 @@ class PlotRuntime:
         changed = (
             switched or skipped or resolution.changed or bool(resolution.undecided) or bool(gap)
         )
-        candidates = held_for_answer(
-            armed(plot, chronicle, days, mentioned=self._places_mentioned(user_node, history)),
-            user_node.content,
-        )
+        offered = armed(plot, chronicle, days, mentioned=self._places_mentioned(user_node, history))
+        # Held a turn at most: what the author's previous turn held is offered now.
+        previous = next((node for node in reversed(history) if node.kind == "user"), None)
+        held_last = {
+            event_id
+            for event_id, status in chronicle.events.items()
+            if previous is not None and status.held_for == previous.id
+        }
+        candidates = held_for_answer(offered, user_node.content, held_last=held_last)
+        kept = {item.event.id for item in candidates if "begin" in item.kinds}
+        for item in offered:
+            if "begin" in item.kinds and item.event.id not in kept:
+                chronicle.events.setdefault(item.event.id, EventStatus()).held_for = user_node.id
+                changed = True
         directions = automatic_directions(candidates)
         confirmed: list[str] = []
         consulted = False
