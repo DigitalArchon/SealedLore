@@ -486,3 +486,24 @@ def test_an_optional_event_only_between_certain_days_is_skipped_after_them():
     chronicle.minutes = clock_minutes(6, 9, 0)
     resolve_due(guarded, chronicle, {}, node_id=None)
     assert chronicle.events["the_fall"].state == "pending"
+
+
+def test_still_to_come_takes_the_begin_off_the_turn_so_a_retake_does_not_begin_it(tmp_path):
+    # The passage after a begun event deleted, the event marked "Still to
+    # come", Regenerate: the storyteller was told to Begin it again (the
+    # direction stayed on the author's turn), the read's confirmation was
+    # refused as unexpected, and the director began it again later.
+    begin = {"event": "the_fall", "kind": "begin", "variant": "In town", "why": "asleep"}
+    session = make_session(tmp_path, [director(begin), PASSAGE, read(), "Quiet.", read()])
+    list(session.send(turn(session)))
+    assert "Begin this in the passage" in section(session, SECTION_DIRECTION)
+    passage = session.path()[-1]
+    session.delete_from(passage.id)
+    author = session.path()[-1]
+    assert author.kind == "user" and [d.kind for d in author.meta.direction] == ["begin"]
+    session.mark_event("the_fall", "pending")
+    assert author.meta.direction == []
+    list(session.regenerate())
+    assert session.path()[-1].content == "Quiet."
+    assert section(session, SECTION_DIRECTION) == ""
+    assert session.chronicle.events["the_fall"].state == "pending"

@@ -1866,6 +1866,7 @@ class StorySession(
         if previous is not None and taken is not None and taken.parent_id == user_node.id:
             # A take of a branch's first passage is a take of that branch's.
             taken.meta.branch_name = previous.meta.branch_name
+            self.carry_plot_correction(previous, taken)
         yield PassageDone()
         pick = self._start_lore_pick()
         yield from self.read_after_turn()
@@ -1903,6 +1904,7 @@ class StorySession(
             self.story.active_leaf_id = leaf
             if new is not None and new.id != leaf and new.parent_id == user_node.id:
                 new.meta.branch_name = carrier.meta.branch_name
+                self.carry_plot_correction(carrier, new)
                 self._swap_take(carrier, new)
             else:
                 self._sync_scene()

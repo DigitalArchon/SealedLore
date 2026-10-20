@@ -475,3 +475,25 @@ def test_a_read_that_under_counts_a_skip_keeps_the_skips_hour():
     counted = parse_read(read(9, "days", quote=turn_text, ends_at="16:00"))
     after = counted.applied_to(before, p, at_least=skipped_to, **kwargs)
     assert after.minutes == clock_minutes(10, 16, 0) and not counted.refused
+
+
+def test_regenerate_keeps_the_authors_corrections_at_that_passage(tmp_path: Path):
+    # The read said ten minutes; the author set the clock and a fact and
+    # regenerated the passage for its prose: the clock and the fact went
+    # back to the read's (the review of Oct 20 2026).
+    session = make_session(tmp_path, [PASSAGE, read(10), "Another take.", "Later.", read(30)])
+    list(session.send(turn(session)))
+    session.set_clock(clock_minutes(3, 8, 0))
+    session.set_fact("town", "fallen")
+    list(session.regenerate())
+    assert session.path()[-1].content == "Another take."
+    assert session.chronicle.minutes == clock_minutes(3, 8, 0)
+    assert session.chronicle.facts["town"] == "fallen"
+    # The correction is still the author's: nothing to undo, and no read
+    # was made for the retake.
+    assert not session.chronicle_changed_here()
+    assert len(session.provider.requests) == 3
+    # The next passage's read counts on from it.
+    list(session.send(turn(session, "I wait.")))
+    assert session.chronicle.minutes == clock_minutes(3, 8, 30)
+    assert session.chronicle.facts["town"] == "fallen"

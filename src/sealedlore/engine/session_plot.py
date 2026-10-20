@@ -338,7 +338,7 @@ class PlotRuntime:
         chronicle = self._prepare_chronicle_read()
         if chronicle is not None:
             reads.append((chronicle, self.update_chronicle_after_turn))
-        elif self.story.plot is not None and not self.config.plot_reads:
+        elif self.story.plot is not None:
             yield from self._settle_without_read()
         world = self._prepare_world_read()
         if world is not None:
@@ -392,7 +392,9 @@ class PlotRuntime:
         if result is None or result.node is None or result.stopped_early:
             return None
         node = result.node
-        if not node.content.strip():
+        if not node.content.strip() or self._carried_correction(node) is not None:
+            # A retake of a passage the author corrected the plot at keeps
+            # the correction; a read would write over it (`_settle_without_read`).
             return None
         path = self._path_to(node.id)
         before = chronicle_at(path[:-1], plot)
@@ -561,33 +563,61 @@ class PlotRuntime:
         words = describe_chronicle(after)
         yield SessionNotice(f"Plot: {words}" if words else "Plot: no time passed, no change")
 
+    @staticmethod
+    def _carried_correction(node: Node) -> Chronicle | None:
+        """The author's correction of the plot a retake carries from the take
+        it replaced (`carry_plot_correction`), or None."""
+        snapshot = node.meta.chronicle
+        return snapshot if snapshot is not None and snapshot.source == "author" else None
+
+    @staticmethod
+    def carry_plot_correction(previous: Node | None, taken: Node | None) -> None:
+        """A retake keeps the author's correction of the plot at the take it
+        replaces: the clock set, a fact, an event marked. It is the author's
+        statement of where the plot stands after this turn, not the old
+        take's reading of its prose, so it stands on the new take and no read
+        writes over it. Before, Regenerate put the clock and the facts back to
+        what the read had said (the review of Oct 20 2026).
+        """
+        if previous is None or taken is None or taken is previous:
+            return
+        snapshot = previous.meta.chronicle
+        if snapshot is not None and snapshot.source == "author":
+            taken.meta.chronicle = snapshot.model_copy(deep=True)
+
     def _settle_without_read(self) -> Iterator[SessionNotice]:
-        """With the plot's reads off (Settings), what the read settled in code
-        after each passage, still: a directed event whose people the passage
-        names has begun, one sent again without asking and never shown is
-        taken as happened after `UNCONFIRMED_LIMIT` passages, and one the
-        director began waits again. Before, nothing counted the passages, so
-        an overdue event was begun again on every turn for the rest of the
-        story (the review of Oct 20 2026).
+        """What the read settles in code after a passage, when there is no
+        read: the plot's reads are off (Settings), or the passage is a retake
+        carrying the author's correction (`carry_plot_correction`). A directed
+        event whose people the passage names has begun, one sent again without
+        asking and never shown is taken as happened after `UNCONFIRMED_LIMIT`
+        passages, and one the director began waits again. Before, with the
+        reads off nothing counted the passages, so an overdue event was begun
+        again on every turn for the rest of the story (the review of Oct 20
+        2026).
         """
         plot = self.story.plot
         result = self.last_result
         if plot is None or result is None or result.node is None or result.stopped_early:
             return
         node = result.node
-        if not node.content.strip():
+        corrected = self._carried_correction(node)
+        if not node.content.strip() or (self.config.plot_reads and corrected is None):
             return
         path = self._path_to(node.id)
-        before = chronicle_at(path[:-1], plot)
+        before = corrected if corrected is not None else chronicle_at(path[:-1], plot)
         take_viewpoint(before, node.meta.controlled_character_id)
+        # The author's correction stays theirs (nothing to Undo); what the
+        # code settled is the story's.
+        source = "author" if corrected is not None else "story"
         after = before.model_copy(
-            update={"source": "story", "elapsed": 0, "elapsed_quote": "", "changes": []},
+            update={"source": source, "elapsed": 0, "elapsed_quote": "", "changes": []},
             deep=True,
         )
         begun = self._begun_by_introductions(node, after, plot)
         settled = settle_unconfirmed(plot, after, [event.id for event in begun], node_id=node.id)
         released = release_unconfirmed(plot, after)
-        if after.events == before.events and not begun:
+        if corrected is None and after.events == before.events and not begun:
             return
         node.meta.chronicle = after
         self.save()
@@ -1157,7 +1187,26 @@ class PlotRuntime:
             chronicle.events[event_id] = chronicle.events[event_id].model_copy(
                 update={"state": state, "overdue": False}
             )
+            self._drop_direction(event_id)
         self._set_chronicle(chronicle)
+
+    def _drop_direction(self, event_id: str) -> None:
+        """ "Still to come" or "Skip" takes the event's begin off the author's
+        turn the leaf belongs to, so a retake of its passage doesn't begin
+        the event again against the author's word (the review of Oct 20
+        2026: the passage deleted, the event put back, Regenerate began it
+        once more and the read's confirmation was refused as unexpected)."""
+        path = self.path()
+        author = next((node for node in reversed(path[-2:]) if node.kind == "user"), None)
+        if author is None:
+            return
+        kept = [
+            direction
+            for direction in author.meta.direction
+            if not (direction.event_id == event_id and direction.kind == "begin")
+        ]
+        if len(kept) != len(author.meta.direction):
+            author.meta.direction = kept
 
     def set_place(self, place: str | None) -> None:
         """Correct where the author's character is (None: none of the plot's places)."""
