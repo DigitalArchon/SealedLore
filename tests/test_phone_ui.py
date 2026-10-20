@@ -267,3 +267,15 @@ def test_share_with_phone_in_the_stories_list(app, place, story, cast):
     assert meta.endswith("on your phones")
     assert row.text().split("\n")[1].endswith("messages")  # the item's own text unchanged
     window.close()
+
+
+def test_the_status_bar_counts_only_the_shared_stories_that_are_here(app, place, story):
+    """Live, a config copied from another machine said "3 stories shared" over
+    a data folder holding none of them. The ids stay listed (a story may come
+    back from the Trash); only those here are counted."""
+    window = window_with(place, story, [])
+    window.config.phone.shared_stories = [story.id, "ghost-1", "ghost-2"]
+    turned_on(app, window)
+    assert "1 story shared" in window.phone_status.toolTip()
+    assert window.phone_shared("ghost-1"), "kept, not counted"
+    window.close()

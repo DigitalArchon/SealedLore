@@ -46,7 +46,7 @@ from sealedlore.phone.pairing import Claim, Pairing, token_hash
 from sealedlore.phone.torrc import find_tor, make_folders, phone_paths
 from sealedlore.storage import keychain
 from sealedlore.storage.library import story_listings
-from sealedlore.storage.paths import data_home
+from sealedlore.storage.paths import data_home, story_dir
 from sealedlore.storage.repository import save_config
 
 if TYPE_CHECKING:
@@ -184,7 +184,7 @@ class PhoneWindow:
                 self.phone_words,
                 progress=self._tor.progress if self._tor is not None else 0,
                 connected=connected,
-                shared=len(self.config.phone.shared_stories) + len(self._phone_memory_shared),
+                shared=len(self._phone_shared_here()) + len(self._phone_memory_shared),
             )
         stories = getattr(self, "stories", None)
         if stories is not None:
@@ -357,6 +357,21 @@ class PhoneWindow:
         if self._phone is not None:
             self._phone.api.hub.drop_device(device_id, "revoked")
         self._sync_phone_controls()
+
+    def _phone_shared_here(self) -> list[str]:
+        """The shared stories that are in this data folder. The list stays on
+        this machine, but a config copied from another one carries its ids
+        (live, "3 stories shared" over a folder with none of them); an id
+        whose story is gone is kept, since the story may come back from the
+        Trash, and counted only while it is here."""
+        here = []
+        for story_id in self.config.phone.shared_stories:
+            try:
+                if story_dir(story_id, self.root).is_dir():
+                    here.append(story_id)
+            except ValueError:  # not a story id at all
+                continue
+        return here
 
     def phone_shared(self, story_id: str) -> bool:
         return story_id in self.config.phone.shared_stories or story_id in self._phone_memory_shared
