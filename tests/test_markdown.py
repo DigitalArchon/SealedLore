@@ -137,3 +137,5 @@ def test_a_message_that_is_only_a_picture_shows_its_words_or_its_address(app):
     assert shown_text("![   ](https://example.com/cat.png)") == "(https://example.com/cat.png)"
     widget = MessageWidget("Assistant", bare, "assistant", node_id="a1")
     assert widget.body.text().strip()
+    # Inside a code span the link is text, shown as written.
+    assert shown_text("Write `![](x.png)` *there*") == "Write ![](x.png) there"

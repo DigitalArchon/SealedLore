@@ -85,9 +85,7 @@ def _with_breaks(text: str) -> str:
         if _FENCE.match(line):
             fenced = not fenced
         elif not fenced:
-            # A picture with no alt text is given its address as its words,
-            # before the importer, which otherwise drops it whole.
-            line = _BARE_IMAGE.sub(lambda m: f"![({m.group(1)})]({m.group(1)})", line)
+            line = _pictures_named(line)
         after = lines[i + 1] if i + 1 < len(lines) else ""
         if _QUOTE.match(line) and _QUOTE.match(after):
             line_says, after_says = _QUOTE.sub("", line), _QUOTE.sub("", after)
@@ -104,6 +102,18 @@ def _with_breaks(text: str) -> str:
         )
         out.append(line + _BREAK if marked else line)
     return "\n".join(out)
+
+
+def _pictures_named(line: str) -> str:
+    """A picture with no alt text given its address as its words, before
+    the importer, which otherwise drops it whole; never inside a code span
+    (the odd segments of a split on backticks), where it is text."""
+    if "![" not in line:
+        return line
+    segments = line.split("`")
+    for i in range(0, len(segments), 2):
+        segments[i] = _BARE_IMAGE.sub(lambda m: f"![({m.group(1)})]({m.group(1)})", segments[i])
+    return "`".join(segments)
 
 
 def _link(match: re.Match[str]) -> str:
