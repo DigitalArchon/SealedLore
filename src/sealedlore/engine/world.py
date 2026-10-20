@@ -353,14 +353,19 @@ def _around(world: WorldMap, here: str | None, place: WorldPlace, fixed: Collect
     return f"{head}: {what}" if what else head
 
 
-def _nearest(world: WorldMap, here: str, places: list[WorldPlace]) -> list[WorldPlace]:
+def _nearest(
+    world: WorldMap, here: str, places: list[WorldPlace], whole: Collection[str] = ()
+) -> list[WorldPlace]:
     """At most MAP_LIST_LIMIT of `places`, the nearest to `here` by their
     middles (one with no spot counts as far), kept in the map's own order.
     Under the limit the list is as it was: the cut used to take the first
     eight in the map's order, which for the world designer's regions (keyed
     by cell) was the most westerly, leaving the neighbours out (the review,
-    Oct 20 2026)."""
-    if len(places) <= MAP_LIST_LIMIT:
+    Oct 20 2026). `whole`: places always listed and not counted against the
+    limit (the world designer's regions: the author's ruling, every region
+    in full)."""
+    cut = [p for p in places if p.id not in whole]
+    if len(cut) <= MAP_LIST_LIMIT:
         return places
     at = position(world, here)
 
@@ -370,7 +375,7 @@ def _nearest(world: WorldMap, here: str, places: list[WorldPlace]) -> list[World
             return math.inf
         return math.hypot(spot[0] - at[0], spot[1] - at[1])
 
-    keep = {p.id for p in sorted(places, key=far)[:MAP_LIST_LIMIT]}
+    keep = {p.id for p in sorted(cut, key=far)[:MAP_LIST_LIMIT]} | set(whole)
     return [p for p in places if p.id in keep]
 
 
@@ -381,6 +386,7 @@ def render_map_context(
     *,
     fixed: Collection[str] = (),
     mark_fixed: bool = False,
+    whole: Collection[str] = (),
 ) -> str:
     """The local map for the storyteller's tail: where the author's character
     is (the start before any read), what is inside it, what else is around
@@ -388,7 +394,9 @@ def render_map_context(
     is `established`; `fixed` are the places a plot file put, whose distance
     and bearing are given, from the nearest of them the character is in.
     `mark_fixed`: a thing that can't be taken is marked so, on a turn that
-    may not move it. Empty without a place."""
+    may not move it. `whole`: places listed whatever their number (the
+    world designer's regions); every other level is cut to the nearest
+    MAP_LIST_LIMIT. Empty without a place."""
     here_id = world.where.get(held or "") or world.start
     chain = _chain(world, here_id)
     if not chain:
@@ -407,7 +415,9 @@ def render_map_context(
         if here.state:
             said = (said + " " if said else "") + f"Now: {' '.join(here.state.split())}."
         lines.append("  " + said)
-    inside = _nearest(world, here.id, [p for p in world.places.values() if p.inside == here.id])
+    inside = _nearest(
+        world, here.id, [p for p in world.places.values() if p.inside == here.id], whole
+    )
     if inside:
         lines.append("Inside it: " + "; ".join(_around(world, origin, p, fixed) for p in inside))
     shown = {p.id for p in chain} | {p.id for p in inside}
@@ -421,6 +431,7 @@ def render_map_context(
                 for p in world.places.values()
                 if p.inside == parent and p.id != chain[level].id and p.id not in shown
             ],
+            whole,
         )
         if around:
             label = f"Also in {outer.name}" if outer is not None else "Elsewhere on the map"

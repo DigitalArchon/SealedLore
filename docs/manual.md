@@ -1398,10 +1398,10 @@ story or a walk takes them in.
   shown only the region you stand in, and never moves anyone into another
   region unless the passage names the place. Places the story has stand
   where they are, a settlement or a building entered by its door, and the
-  storyteller is told what is near you with its distance. The world has no
-  edge: the map grows as far as you walk, at the cost of the designs and
-  drawings. A city too wide to walk tile by tile (up to 8 km) gets a plan
-  at a coarser grain.
+  storyteller is told what is near you with its distance, and every region
+  designed so far. The world has no edge: the map grows as far as you walk,
+  at the cost of the designs and drawings. A city too wide to walk tile by
+  tile (up to 8 km) gets a plan at a coarser grain.
 - **Changing the map by Direction.** A Direction or Narration states what
   is so, on the map too. Besides adding a place (at a marked spot, or by
   its distance and bearing from one) and changing what state a place is in

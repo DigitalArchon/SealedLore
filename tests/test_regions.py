@@ -451,6 +451,61 @@ def test_the_storyteller_is_told_the_regions_nearest_the_author_s_character():
     assert "Region -2,-1" not in listed and "Region -2,0" not in listed
 
 
+def test_every_designed_region_is_listed_and_other_places_still_cut_to_the_nearest():
+    """The author's ruling (Oct 19 2026): every designed region in full. The
+    cut to the nearest MAP_LIST_LIMIT stays for the story's own places at a
+    level, the regions not counted against it."""
+    from sealedlore.engine.world import MAP_LIST_LIMIT, render_map_context
+
+    places = {}
+    regions = set()
+    for i in range(12):
+        place = WorldPlace(id=f"r{i}", name=f"Region {i}", kind="region", x=400.0 * i,
+                           y=0.0, size=400.0, what=f"Fields number {i}.")  # fmt: skip
+        places[place.id] = place
+        regions.add(place.id)
+    for i in range(10):  # the story's own places, further off the further down
+        place = WorldPlace(id=f"s{i}", name=f"Steading {i}", kind="building",
+                           x=100.0 * (i + 1), y=-50.0, size=20.0)  # fmt: skip
+        places[place.id] = place
+    places["here"] = WorldPlace(id="here", name="The crossroads", kind="site", x=0.0, y=0.0)
+    world = WorldMap(places=places, where={"John": "here"})
+    text = render_map_context(world, "John", fixed=set(places), whole=regions)
+    assert all(f"Region {i} (" in text for i in range(12))
+    steadings = [i for i in range(10) if f"Steading {i} (" in text]
+    assert steadings == list(range(MAP_LIST_LIMIT))  # the nearest eight
+    # Without the ruling's set, the regions are cut with the rest.
+    cut = render_map_context(world, "John", fixed=set(places))
+    assert sum(f"Region {i} (" in cut for i in range(12)) < 12
+
+
+def test_the_storyteller_is_sent_every_designed_region_past_the_limit(tmp_path, story, cast):
+    session = open_session(tmp_path, story, cast, ["Snow.", "{}"])
+    region = _with_region(session)
+    art = session.world_art
+    origin = (art.region_origin[0], art.region_origin[1])
+    i, j = cell_of(origin, 800.0, 800.0)
+    names = []
+    for n in range(10):
+        far = {**DESIGN, "name": f"The Reach {n}", "what": f"Frozen ground number {n}.",
+               "places": [], "things": [], "people": []}  # fmt: skip
+        built, patch = build_region(
+            parse_region(json.dumps(far)),
+            key=cell_key(i + 1 + n, j),
+            rect=cell_rect(origin, i + 1 + n, j),
+            holder_id=None,
+            labels_from=LABEL_FROM + 10 * (n + 1),
+        )
+        art.regions[built.key] = built
+        art.terrain.append(patch)
+        names.append(far["name"])
+    session.story.world_base.where["Serrik Vaun"] = region.place_id
+    session._designed_cache = None
+    list(session.send(turn("I look along the fence.")))
+    sent = session.provider.requests[0].messages[-1].text
+    assert all(name in sent for name in names)
+
+
 def test_someone_in_the_player_s_region_is_not_pulled_beside_them_as_company(tmp_path, story, cast):
     """The live test: the read put John "at the North Woodlot", a region,
     and two of its people were stood beside him as if in his company."""

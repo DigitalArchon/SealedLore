@@ -241,6 +241,9 @@ class WorldRuntime:
             fixed=({p.id for p in base.places} if base is not None else set())
             | self.designed_place_ids(),
             mark_fixed=stays,
+            # Every designed region in full (the author's ruling, Oct 19
+            # 2026); other places are cut to the nearest MAP_LIST_LIMIT.
+            whole={r.place_id for r in self.world_art.regions.values()},
         )
         # Where everyone stands as the turn is written, as the positions
         # below have it: a retake's leaf is elsewhere in the story.
