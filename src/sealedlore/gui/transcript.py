@@ -408,9 +408,11 @@ class MessageWidget(QFrame):
             reroll = menu.addAction("Reroll the dice")
             reroll.triggered.connect(lambda: self.reroll_requested.emit(self.node_id))
             self.actions_["reroll"] = reroll
-        if assistant:
+        if assistant and self._keep_full is None:
             # A settings review otherwise sees only the newest replies; this
-            # lets the author point at the passage they mean.
+            # lets the author point at the passage they mean. `_keep_full` is
+            # set only in a chat, which has no review to be evidence in (the
+            # action marked a reply and promised one).
             mark = menu.addAction("Use as evidence in a review")
             mark.setCheckable(True)
             mark.setChecked(self._marked)
@@ -419,6 +421,7 @@ class MessageWidget(QFrame):
             )
             mark.triggered.connect(lambda: self.review_mark_requested.emit(self.node_id))
             self.actions_["review_mark"] = mark
+        if assistant:
             illustrate = menu.addAction("Illustrate this passage…")
             illustrate.setToolTip("Write an image prompt for the moment this passage ends on")
             illustrate.triggered.connect(lambda: self.illustrate_requested.emit(self.node_id))
@@ -1728,7 +1731,9 @@ class TranscriptView(QScrollArea):
 
     def begin_streaming(self) -> None:
         self.ensure_at_latest()
-        self._streaming = self.add_message("Story", "", "assistant")
+        # The label the rebuild gives it afterwards (`speaker_label`): a
+        # chat's header read "Story" while the reply streamed, then flipped.
+        self._streaming = self.add_message("Assistant" if self._chat else "Story", "", "assistant")
         self.scroll_to_end()
 
     def begin_aside(self, question: str) -> None:

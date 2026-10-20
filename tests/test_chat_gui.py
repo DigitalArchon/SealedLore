@@ -828,3 +828,118 @@ def test_the_new_chat_dialog_asks_the_name_only_with_the_map(app):
     assert dialog.chat_character.isEnabled()
     assert dialog.chat_character.placeholderText() == "You"
     dialog.deleteLater()
+
+
+# --- the review of Oct 20 2026 ---------------------------------------------------
+
+
+def _no_start_dialog(monkeypatch) -> list[str]:
+    """Setup saved as it is; a Start dialog recorded, never shown."""
+    from sealedlore.gui.start_dialog import StartDialog
+
+    starts: list[str] = []
+    monkeypatch.setattr(SetupDialog, "exec", lambda self: SetupDialog.Accepted)
+    monkeypatch.setattr(
+        StartDialog, "exec", lambda self: starts.append(self.windowTitle()) or StartDialog.Accepted
+    )
+    return starts
+
+
+def test_restart_and_import_of_a_chat_make_a_chat_and_open_no_start_dialog(
+    app, window, monkeypatch, tmp_path
+):
+    """Restart on a chat (and File → Import of a chat scenario) opened the
+    story's Start dialog ("Play as: Nobody"), and Start raised: a chat has
+    no opening. Now a chat is opened as a chat, fresh, with the same settings."""
+    from sealedlore.storage.scenario import scenario_from_bundle, write_scenario
+
+    make_chat(window, monkeypatch)
+    send(app, window, "What is 1 + 1?")
+    chat_id = window.session.story.id
+    starts = _no_start_dialog(monkeypatch)
+
+    window.restart_story(review=True)
+    fresh = window.session.story
+    assert fresh.chat and fresh.id != chat_id and not window.session.nodes
+    assert fresh.chat_prompt == "You are a patient tutor." and fresh.chat_tail
+    assert starts == [] and not window._busy and window.composer.input.isEnabled()
+    assert "first message" in window.statusBar().currentMessage()
+    window.start_story()
+    assert starts == [], "a chat has no Start"
+
+    path = tmp_path / "tutor.sealedlore-scenario.json"
+    write_scenario(path, scenario_from_bundle(window.session.bundle, {}))
+    window._import_scenario(path)
+    assert window.session.story.chat and window.session.story.id != fresh.id
+    assert window.session.story.chat_prompt == "You are a patient tutor."
+    assert starts == [] and not window._busy
+
+
+def test_a_memory_chats_title_keeps_its_suffix_after_setup(app, window, monkeypatch):
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    make_chat(window, monkeypatch, model="z-ai/glm-5.3", keep="memory")
+    assert window.windowTitle().endswith(window_chat.MEMORY_TITLE)
+    monkeypatch.setattr(SetupDialog, "exec", lambda self: SetupDialog.Accepted)
+    assert window.open_setup()
+    assert window.windowTitle().endswith(window_chat.MEMORY_TITLE)
+    send(app, window, "Hello")
+    assert window.windowTitle().endswith(window_chat.MEMORY_TITLE)
+    window.close_story()
+
+
+def test_a_chats_reply_streams_under_its_own_label_and_offers_no_review_mark(
+    app, window, monkeypatch
+):
+    transcript = window.transcript
+    # A story: "Story" while streaming, and a reply can be a review's evidence.
+    transcript.begin_streaming()
+    assert transcript._streaming.header.text() == "Story"
+    transcript.end_streaming()
+    window.reload_transcript()
+    story_reply = window.session.path()[-1]
+    assert "review_mark" in transcript.message_widget(story_reply.id).actions_
+
+    make_chat(window, monkeypatch)
+    transcript.begin_streaming()
+    assert transcript._streaming.header.text() == "Assistant"
+    transcript.end_streaming()
+    send(app, window, "What is 1 + 1?")
+    reply = window.session.path()[-1]
+    actions = transcript.message_widget(reply.id).actions_
+    assert "review_mark" not in actions, "a chat has no review to be evidence in"
+    assert "illustrate" in actions, "pictures are a chat's too"
+
+
+def test_duplicate_settings_of_a_chat_says_how_it_begins(app, window, monkeypatch):
+    make_chat(window, monkeypatch)
+    window.duplicate_story_settings(window.session.story.id)
+    assert window.session.story.chat and not window.session.nodes
+    message = window.statusBar().currentMessage()
+    assert "Type the first message" in message and "Start story" not in message
+
+
+def test_the_model_button_leaves_the_default_model_alone_in_a_chat(
+    app, window, monkeypatch, tmp_path
+):
+    """A chat on disk moved to another model by its button made that model
+    the endpoint's default (Settings → Models → Story model, and every new
+    story's); New simple chat never did. A chat's model is the chat's."""
+    from sealedlore.models.config import ProviderConfig
+
+    window.config.providers = [
+        ProviderConfig(name="nano", base_url="https://nano-gpt.com/api/v1", model="z-ai/glm-5.3")
+    ]
+    window.config.active_provider_name = "nano"
+    monkeypatch.setattr(window, "_browse_models", lambda _current, **_limits: "TEE/gemma-3-27b")
+    monkeypatch.setattr(window, "_attest_chat", lambda: None)
+    make_chat(window, monkeypatch, model="anthropic/claude-sonnet-4.6")
+    window.choose_story_model()
+    assert window.session.model == "TEE/gemma-3-27b"
+    assert window.config.active_provider().model == "z-ai/glm-5.3"
+    assert load_story_bundle(window.session.story.id, root=tmp_path).story.defaults.main_model == (
+        "TEE/gemma-3-27b"
+    )
+    # A story's model set by the button still becomes the default, as before.
+    window.open_story("story-1")
+    window.choose_story_model()
+    assert window.config.active_provider().model == "TEE/gemma-3-27b"

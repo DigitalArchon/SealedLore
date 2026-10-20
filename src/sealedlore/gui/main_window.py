@@ -1020,6 +1020,15 @@ class MainWindow(
         self.open_story(bundle.story.id)
         if self.session is None or self.session.story.id != bundle.story.id:
             return
+        if self.in_chat:
+            # A chat has no Start: it begins with the first message. Setup,
+            # when asked for, is its name and system prompt. (Restart and an
+            # imported chat scenario used to go on to the story's Start
+            # dialog, which then raised.)
+            if review:
+                self.open_setup()
+            self.statusBar().showMessage("The chat begins with your first message.", 8000)
+            return
         if review and not self.open_setup():
             self.statusBar().showMessage(
                 "Not begun yet: Story → Start story… when it's ready", 8000
@@ -1254,10 +1263,13 @@ class MainWindow(
         save_story_bundle(bundle, root=self.root)
         self.stories.refresh(selected_id=bundle.story.id)
         self.open_story(bundle.story.id)
+        next_step = (
+            "Type the first message to begin."
+            if bundle.story.chat
+            else "Story → Start story… to begin."
+        )
         self.statusBar().showMessage(
-            f"Created “{bundle.story.title}” — same setup, unplayed. Story → Start story… "
-            "to begin.",
-            8000,
+            f"Created “{bundle.story.title}” — same setup, unplayed. {next_step}", 8000
         )
 
     def duplicate_entire_story(self, story_id: str) -> None:
@@ -1480,7 +1492,7 @@ class MainWindow(
             self.session.story.style, started=bool(self.session.nodes), texts=self.session.texts
         )
         self.composer.set_default_length(self.session.story.style.response_style)
-        self.setWindowTitle(f"SealedLore — {self.session.story.title}")
+        self.setWindowTitle(self._window_title())
         self.stories.refresh(selected_id=self.session.story.id)
         self.reload_transcript()
         self._reassemble_inspector()
@@ -1509,7 +1521,7 @@ class MainWindow(
 
     def start_story(self) -> None:
         """Pick who to play, then run the opening (§ story setup)."""
-        if self.session is None or self._busy or self.session.nodes:
+        if self.session is None or self._busy or self.session.nodes or self.in_chat:
             return
         story = self.session.story
         offered = (
@@ -3677,9 +3689,12 @@ class MainWindow(
         if not self._chat_model_allowed(chosen):
             return
         self.session.story.defaults.main_model = chosen
-        if not self.session.memory_only:
+        if not self.session.memory_only and not self.in_chat:
             # A memory-only chat teaches the config nothing, its model included;
             # Settings changes an open story's model only when its field changed.
+            # A chat's model is the chat's own (New simple chat never made it the
+            # default either): a chat moved to a TEE model used to become the
+            # story model for every new story.
             self._set_default_model(chosen)
         self.session.save()
         if self.in_chat:

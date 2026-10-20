@@ -134,10 +134,16 @@ class ChatWindow:
         self.composer.set_private_offered(not tee)
         self.composer.set_private_look(self._shows_private())
         self._sync_capture()
-        title = self.session.story.title if self.session is not None else ""
         if self.session is not None:
-            suffix = f"  {MEMORY_TITLE}" if self.memory_chat else ""
-            self.setWindowTitle(f"SealedLore — {title}{suffix}")
+            self.setWindowTitle(self._window_title())
+
+    def _window_title(self) -> str:
+        """The window's title for the open story: a chat kept in memory only
+        says so after its name, wherever the title is written (Setup used to
+        drop the suffix for the rest of the session)."""
+        title = self.session.story.title if self.session is not None else ""
+        suffix = f"  {MEMORY_TITLE}" if self.memory_chat else ""
+        return f"SealedLore — {title}{suffix}"
 
     def _chat_allows_close(self) -> bool:
         """Leaving a chat kept in memory only loses it: ask first."""
