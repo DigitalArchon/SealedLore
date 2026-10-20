@@ -416,6 +416,24 @@ def test_open_country_sets_how_much_a_region_holds_and_holds_the_design_to_it(
     assert sent and all("At most 2 places, 1 thing and 1 person;" in s for s in sent)
 
 
+def test_what_the_world_holds_scarce_is_told_only_when_switched_on():
+    """`map.region.scarce` (the review, Oct 20 2026: rifles, fuel and tinned
+    food round a farm in a story about scarcity) waits for a judged A/B:
+    off, the designer's request is as it always was."""
+    from sealedlore.engine import regions
+    from sealedlore.engine.prompt_texts import DEFAULT_TEXTS
+
+    parts = dict(setting="", story="", where="", places="", edges="", ground="")
+    assert regions.SCARCITY is False
+    off = regions.region_messages(DEFAULT_TEXTS, **parts)[0].text
+    assert "scarce" not in off
+    on = regions.region_messages(DEFAULT_TEXTS, **parts, scarce=True)[0].text
+    clause = DEFAULT_TEXTS.fill("map.region.scarce")
+    assert on == off + "\n\n" + clause and '"scarce"' in clause
+    # A reply naming what is scarce reads as any design.
+    assert parse_region(json.dumps({"scarce": "food, fuel, ammunition", **DESIGN})).name
+
+
 def test_the_map_page_sees_the_designer_at_work(tmp_path, story, cast, monkeypatch):
     """The review (Oct 20 2026): ~35 s of nothing shown while a ring of nine
     was designed; the designer's thread now counts in the map's progress."""
