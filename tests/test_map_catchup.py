@@ -340,6 +340,22 @@ def test_settings_sets_how_many_are_drawn_without_asking(app):
     dialog.deleteLater()
 
 
+def test_settings_sets_how_much_the_world_designer_puts_in_a_region(app):
+    """Settings → Models → Open country, beside the world designer's model
+    (the review, Oct 20 2026)."""
+    from sealedlore.gui.settings_dialog import SettingsDialog
+
+    config = Config()
+    dialog = SettingsDialog(config, None)
+    assert dialog.open_country.currentData() == "normal"
+    labels = [dialog.open_country.itemText(i) for i in range(dialog.open_country.count())]
+    assert labels == ["Sparse", "Normal", "Rich"]
+    dialog.open_country.setCurrentIndex(dialog.open_country.findData("rich"))
+    dialog._save()
+    assert config.open_country == "rich"
+    dialog.deleteLater()
+
+
 def test_the_map_page_never_says_drawn_over_pictures_that_wait(app):
     """With pictures waiting for approval the progress line read "✓ The map
     is drawn" right above the line saying they wait (the review, Oct 20

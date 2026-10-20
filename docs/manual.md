@@ -1387,11 +1387,15 @@ story or a walk takes them in.
   grid of regions about the size of a farm (400 m across, walked at 2.5 m a
   tile, as the farm is) starting where the story begins. **The world
   designer** designs them ahead of you, the one you stand in and the eight
-  around it, and the next ring as you walk on: each region's land, up to
-  five places (buildings you can enter, landmarks, a settlement), things to
-  find and people or creatures, to fit the world, what has happened in the
+  around it, and the next ring as you walk on: each region's land, a few
+  places (buildings you can enter, landmarks, a settlement), things to find
+  and people or creatures, to fit the world, what has happened in the
   story, and the regions beside it, whose roads, rivers and woods carry on
-  across the edges. It runs on the story model unless Settings → Models →
+  across the edges. How much a region holds is **Settings → Models → Open
+  country**: Sparse (at most two places, one thing and one person or
+  creature), Normal, the default (three places, three things, one person),
+  or Rich (five places, eight things, three people). A region designed
+  already keeps what it has. It runs on the story model unless Settings → Models →
   World designer model names another, a ring of nine taking about half a
   minute, and only while **Draw the map** is on. A region is kept once
   designed, on every branch, and stays under fog on the Region and World

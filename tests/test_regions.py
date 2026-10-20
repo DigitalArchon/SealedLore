@@ -315,6 +315,60 @@ def test_the_regions_round_the_player_are_designed_ahead_on_the_story_model(
     assert not session._start_region_design()  # nothing left to design here
 
 
+def test_open_country_sets_how_much_a_region_holds_and_holds_the_design_to_it(
+    tmp_path, story, cast, monkeypatch
+):
+    """Settings → Models → Open country (the review, Oct 20 2026: the ring
+    round the Doomsville farm held 13 people and ~30 things in a story about
+    scarcity). The designer is told the numbers and its reply is held to
+    them; "rich" asks exactly as every request did before."""
+    from sealedlore.engine.prompt_texts import DEFAULT_TEXTS
+    from sealedlore.engine.regions import limits_for, region_messages
+    from sealedlore.models.config import Config
+
+    assert Config().open_country == "normal"
+    things = [{"name": f"a thing {n}", "x": 10 + n, "y": 70} for n in range(6)]
+    people = [{"who": f"a stranger {n}", "doing": "waiting", "x": 5 + n, "y": 75} for n in range(3)]
+    crowded = {**DESIGN, "things": things, "people": people}
+    rich = parse_region(json.dumps(crowded))  # held to "rich" unless told otherwise
+    assert (len(rich.places), len(rich.things), len(rich.people)) == (2, 6, 3)
+    normal = parse_region(json.dumps(crowded), limits_for("normal"))
+    assert (len(normal.places), len(normal.things), len(normal.people)) == (2, 3, 1)
+    sparse = parse_region(json.dumps(crowded), limits_for("sparse"))
+    assert (len(sparse.things), len(sparse.people)) == (1, 1)
+    assert limits_for("unheard of") == limits_for("normal")
+
+    def asked(choice: str) -> str:
+        parts = dict(setting="", story="", where="", places="", edges="", ground="")
+        return region_messages(DEFAULT_TEXTS, **parts, limits=limits_for(choice))[0].text
+
+    assert "At most 5 places, 8 things and 3 people; fewer is often better." in asked("rich")
+    assert "At most 3 places, 3 things and 1 person; fewer" in asked("normal")
+    assert "At most 2 places, 1 thing and 1 person; fewer" in asked("sparse")
+
+    class Designer(MockChatProvider):
+        made: list[MockChatProvider] = []
+
+        def detached(self):
+            client = MockChatProvider([json.dumps(crowded)] * 4)
+            self.made.append(client)
+            return client
+
+    session = open_session(tmp_path, story, cast, ["Snow.", "{}"])
+    session.config.map_art = True
+    session.config.open_country = "sparse"
+    list(session.send(turn("I set out across the erg.")))
+    designer = Designer([])
+    monkeypatch.setattr(session, "provider", designer)
+    assert session._start_region_design()
+    session._region_thread.join(30)
+    regions = list(session.world_art.regions.values())
+    assert len(regions) == 9
+    assert all(len(r.things) <= 1 and len(r.people) <= 1 for r in regions)
+    sent = [c.requests[0].messages[0].text for c in designer.made if c.requests]
+    assert sent and all("At most 2 places, 1 thing and 1 person;" in s for s in sent)
+
+
 def test_the_map_page_sees_the_designer_at_work(tmp_path, story, cast, monkeypatch):
     """The review (Oct 20 2026): ~35 s of nothing shown while a ring of nine
     was designed; the designer's thread now counts in the map's progress."""

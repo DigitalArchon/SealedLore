@@ -161,6 +161,14 @@ RECALL_CHOICES = (
     ("Questions and turns: chapters and passages", "exchanges|everywhere"),
 )
 
+# Settings → Models → Open country (`Config.open_country`): how much the
+# world designer puts in each region (engine/regions.py OPEN_COUNTRY).
+OPEN_COUNTRY_CHOICES = (
+    ("sparse", "Sparse"),
+    ("normal", "Normal"),
+    ("rich", "Rich"),
+)
+
 # Settings → Images → Draw map pictures (`Config.map_pictures_mode`).
 MAP_PICTURE_MODES = (
     ("auto", "Automatically"),
@@ -870,6 +878,19 @@ class SettingsDialog(QDialog):
             "a few more as the player moves on. Blank uses the story's model."
         )
         form.addRow("World designer model", self.region_model)
+        self.open_country = QComboBox()
+        for value, label in OPEN_COUNTRY_CHOICES:
+            self.open_country.addItem(label, value)
+        self.open_country.setCurrentIndex(
+            max(self.open_country.findData(self.config.open_country), 0)
+        )
+        self.open_country.setToolTip(
+            "How much the world designer puts in each region of open country it designs. "
+            "Sparse: two places, one thing and one person or creature at most. Normal: "
+            "three places, three things and one person. Rich: five places, eight things and "
+            "three people. A region designed already keeps what it has."
+        )
+        form.addRow("Open country", self.open_country)
         self.map_art = QCheckBox("Draw the map")
         self.map_art.setChecked(self.config.map_art)
         self.map_art.setToolTip(
@@ -2022,6 +2043,7 @@ class SettingsDialog(QDialog):
         self.config.map_model = self._role_model(self.map_model) or None
         self.config.map_art_model = self._role_model(self.map_art_model) or None
         self.config.region_model = self._role_model(self.region_model) or None
+        self.config.open_country = self.open_country.currentData()
         self.config.map_art = self.map_art.isChecked()
         self.config.cache_control_mode = self.cache_mode.currentText()  # type: ignore[assignment]
         self.config.cache_ttl = self.cache_ttl.currentData()

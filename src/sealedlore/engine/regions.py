@@ -51,7 +51,22 @@ DESIGN_SCALE = REGION_GRID_TILES // DESIGN_GRID
 REGION_TILES = DESIGN_GRID * DESIGN_SCALE
 # A design is a long JSON reply.
 REGION_MAX_TOKENS = 8000
-MAX_PLACES, MAX_THINGS, MAX_PEOPLE = 5, 8, 3
+# Places, things and people in a region at most, by Settings → Models → Open
+# country (`Config.open_country`); the designer is told the numbers and its
+# reply is held to them. "rich" is what every region had before Oct 21 2026.
+# In 84 logged designs under it (six stories) a region held about 2 places,
+# 4.3 things and 1.3 people, so its limits were seldom reached and only a
+# lower limit makes fewer: "normal" caps things at 3 and people at 1 (a ring
+# of nine at most 27 things and 9 people, against the ~39 and ~13 seen round
+# the Doomsville farm), places kept at 3 (a building and a landmark give a
+# region its character); "sparse" is country to cross rather than search, a
+# thing and a person at most.
+OPEN_COUNTRY: dict[str, tuple[int, int, int]] = {
+    "sparse": (2, 1, 1),
+    "normal": (3, 3, 1),
+    "rich": (5, 8, 3),
+}
+MAX_PLACES, MAX_THINGS, MAX_PEOPLE = OPEN_COUNTRY["rich"]
 MAX_FEATURES = 120
 # A thing this close to a place's walls is that place's.
 BESIDE = 10.0
@@ -297,6 +312,16 @@ def taken_lines(art: WorldArt, most: int = 60, story: Sequence[str] = ()) -> str
     return "; ".join(names) or "nothing yet"
 
 
+def limits_for(open_country: str) -> tuple[int, int, int]:
+    """(places, things, people) at most in a region, for Settings' choice;
+    "normal" for one the program doesn't know."""
+    return OPEN_COUNTRY.get(open_country, OPEN_COUNTRY["normal"])
+
+
+def _counted(n: int, one: str, many: str) -> str:
+    return f"{n} {one if n == 1 else many}"
+
+
 def region_messages(
     texts: PromptTexts,
     *,
@@ -307,16 +332,19 @@ def region_messages(
     edges: str,
     ground: str,
     taken: str = "nothing yet",
+    limits: tuple[int, int, int] = OPEN_COUNTRY["rich"],
 ) -> list[PromptMessage]:
+    most_places, most_things, most_people = limits
     system = texts.fill(
         "map.region.design",
         side=f"{REGION_SIDE:.0f}",
         grid=str(DESIGN_GRID),
         last=str(DESIGN_GRID - 1),
         tile=f"{REGION_SIDE / DESIGN_GRID:g}",
-        max_places=str(MAX_PLACES),
-        max_things=str(MAX_THINGS),
-        max_people=str(MAX_PEOPLE),
+        # With their words ("1 person"): "rich" reads as it always has.
+        max_places=_counted(most_places, "place", "places"),
+        max_things=_counted(most_things, "thing", "things"),
+        max_people=_counted(most_people, "person", "people"),
     )
     user = texts.fill(
         "map.region.ask",
@@ -374,9 +402,11 @@ def _text(value: Any, most: int) -> str:
     return " ".join(str(value or "").split())[:most]
 
 
-def parse_region(text: str) -> RegionDesign:
-    """The designer's reply as a design; ValueError for one with no name or
+def parse_region(text: str, limits: tuple[int, int, int] = OPEN_COUNTRY["rich"]) -> RegionDesign:
+    """The designer's reply as a design, held to `limits` (places, things
+    and people at most: `limits_for`); ValueError for one with no name or
     no land."""
+    most_places, most_things, most_people = limits
     data = extract_json(text, dict, "region")
     name = _text(data.get("name"), 80)
     if not name:
@@ -422,9 +452,9 @@ def parse_region(text: str) -> RegionDesign:
         what=_text(data.get("what"), 600),
         ground=ground if ground in GROUNDS else "dirt",
         features=features,
-        places=places[:MAX_PLACES],
-        things=things[:MAX_THINGS],
-        people=people[:MAX_PEOPLE],
+        places=places[:most_places],
+        things=things[:most_things],
+        people=people[:most_people],
     )
 
 

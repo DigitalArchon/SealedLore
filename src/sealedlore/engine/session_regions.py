@@ -18,6 +18,7 @@ from sealedlore.engine.regions import (
     designed_delta,
     designed_point,
     edge_lines,
+    limits_for,
     next_label,
     origin_of,
     parse_region,
@@ -266,7 +267,12 @@ class RegionRuntime:
         return "\n".join(lines) or "Nothing yet: the story is beginning."
 
     def _region_request(
-        self, world: WorldMap, art: WorldArt, cell: tuple[int, int], model: str
+        self,
+        world: WorldMap,
+        art: WorldArt,
+        cell: tuple[int, int],
+        model: str,
+        limits: tuple[int, int, int] | None = None,
     ) -> ChatRequest:
         origin = (art.region_origin[0], art.region_origin[1])
         rect = cell_rect(origin, *cell)
@@ -291,6 +297,7 @@ class RegionRuntime:
             taken=taken_lines(
                 art, story=[p.name for p in world.places.values() if p.id not in designed]
             ),
+            limits=limits if limits is not None else limits_for(self.config.open_country),
         )
         return ChatRequest(
             model=model,
@@ -310,9 +317,11 @@ class RegionRuntime:
         key = cell_key(*cell)
         failure = f"region:{key}"
         log_ref = None
+        # Held to what it was asked for (Settings → Models → Open country).
+        limits = limits_for(self.config.open_country)
         try:
             world, art = self.world(), self.map_art_copy()
-            request = self._region_request(world, art, cell, model)
+            request = self._region_request(world, art, cell, model, limits)
             log_ref = self._log(
                 "map_region_request", {"region": key, "payload": client.build_payload(request)}
             )
@@ -322,7 +331,7 @@ class RegionRuntime:
                 {"request_log_ref": log_ref, "text": reply, "usage": completed.raw_usage},
             )
             self.unreported_usage.append(self.priced(completed.usage, request.model))
-            design = parse_region(reply)
+            design = parse_region(reply, limits)
         except (ProviderError, ValueError) as exc:
             if self._map_closed or self._art_stop:
                 return  # stopped, not failed

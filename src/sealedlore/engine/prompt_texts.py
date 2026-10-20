@@ -2433,7 +2433,7 @@ Features are drawn in order, later over earlier; roads are straight runs between
 A building is a house, a barn, a shop: it can be entered, and its inside is drawn later. A \
 landmark is a spot with a name (a wrecked car, a well, a grave) drawn with your shapes. A \
 settlement is a village or a town; give it room, and it gets a plan of its own. At most \
-{max_places} places, {max_things} things and {max_people} people; fewer is often better. \
+{max_places}, {max_things} and {max_people}; fewer is often better. \
 Carry on the roads, rivers and woods that the regions beside it run into it along their \
 edges, keep the country passable from edge to edge, keep the story's own places you are \
 given clear, and put nothing on water or rock that should stand on ground.""",
@@ -2442,9 +2442,9 @@ given clear, and put nothing on water or rock that should stand on ground.""",
         ("grid", "Tiles across (and down)"),
         ("last", "The last tile's index"),
         ("tile", "Metres a tile"),
-        ("max_places", "Places at most"),
-        ("max_things", "Things at most"),
-        ("max_people", "People at most"),
+        ("max_places", 'Places at most, with the word ("3 places"): Settings → Open country'),
+        ("max_things", 'Things at most, with the word ("3 things")'),
+        ("max_people", 'People at most, with the word ("1 person")'),
     ),
 )
 

@@ -359,6 +359,9 @@ CacheControlMode = Literal["auto", "on", "off"]
 CacheTtl = Literal["5m", "1h"]
 SceneLedger = Literal["every_turn", "manual"]
 LoreSelector = Literal["picker", "jev", "similarity"]
+# How much the world designer puts in each region of open country
+# (engine/regions.py OPEN_COUNTRY): Settings → Models → Open country.
+OpenCountry = Literal["sparse", "normal", "rich"]
 
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
@@ -917,6 +920,12 @@ class Config(BaseModel):
     tileset_model: str | None = None
     # The world designer's model (engine/regions.py): blank, the story model.
     region_model: str | None = None
+    # How much it puts in each region (regions.OPEN_COUNTRY: places, things
+    # and people at most). "rich" is what every region had before Oct 21 2026
+    # (5, 8, 3); live, the Doomsville map sample's ring round the farm held 13
+    # people and ~30 things in a story about scarcity, so "normal" is fewer.
+    # Only new designs: a region designed already keeps what it has.
+    open_country: OpenCountry = "normal"
 
     # Pictures (engine/image_prompt.py, providers/images.py). The image model
     # takes reference pictures: Seedream 5.0 Pro was the author's pick for
