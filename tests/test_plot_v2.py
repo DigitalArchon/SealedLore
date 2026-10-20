@@ -1497,8 +1497,9 @@ def test_a_director_skip_settles_the_skipped_events_before_its_passage(tmp_path)
     ]
     payload = json.dumps(reads[-1]["payload"], ensure_ascii=False)
     assert "THE CLOCK, before the author's turn: Day 3 · 18:10" in payload
-    # Day 8, the day the author's five days reached, at whatever hour.
-    assert session.chronicle.minutes == clock_minutes(8, 0, 0)
+    # Day 8, the day the author's five days reached, at the skip's own hour
+    # (the read gave none; it used to land at 00:00, the start of the day).
+    assert session.chronicle.minutes == start + 5 * 1440
     assert any("moved the clock" in r for r in read_api_log_refusals(session, tmp_path))
 
 

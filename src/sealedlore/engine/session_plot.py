@@ -93,7 +93,6 @@ from sealedlore.models.node import (
     Node,
 )
 from sealedlore.models.plot import (
-    MINUTES_PER_DAY,
     Chronicle,
     Direction,
     EventDef,
@@ -131,9 +130,11 @@ class _ChronicleRead:
     request: ChatRequest
     log_ref: str
     author_states_facts: bool
-    # The least the clock may end at: the author's own stated skip, already
-    # moved before the passage was written (`direct_turn`).
+    # Where the author's own stated skip moved the clock, before the passage
+    # was written (`direct_turn`): the passage ends on that day at the earliest.
     at_least: int | None = None
+    # No passage before this one has set a time: the hour the read gives stands.
+    first: bool = False
     # On a Director or Narration turn, the events it may have told, and the
     # way each would go (`authors_candidates`).
     authors_events: dict[str, EventVariant] = field(default_factory=dict)
@@ -380,8 +381,14 @@ class PlotRuntime:
         skipped = max(0, skipped - walked)
         at_least = None
         if skipped > 0:
-            at_least = before.minutes - before.minutes % MINUTES_PER_DAY
+            at_least = before.minutes
             before.minutes -= skipped
+        # The first passage read: nothing before it has set the hour, so the
+        # read's time of day stands (a plot with no `start:` is at 00:00).
+        first = not any(
+            earlier.kind == "assistant" and earlier.meta.chronicle is not None
+            for earlier in path[:-1]
+        )
         author_text = (
             render_chunk([author], self.cast, texts=self.texts) if author is not None else ""
         )
@@ -427,6 +434,7 @@ class PlotRuntime:
             author_states_facts=states,
             at_least=at_least,
             authors_events=offered,
+            first=first,
         )
 
     def update_chronicle_after_turn(
@@ -484,6 +492,7 @@ class PlotRuntime:
             at_least=pending.at_least,
             authors_events=pending.authors_events,
             place_words=self.plot_place_words(),
+            first=pending.first,
         )
         settled = settle_unconfirmed(
             plot, after, [event_id for event_id, _ in delta.happened], node_id=node.id

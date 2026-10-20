@@ -297,9 +297,20 @@ _BACKSTORY = re.compile(
 )
 # Before this hour, the night isn't over: "the next morning" is this day's.
 _NIGHT_ENDS = 5 * 60
-_FUTURE = re.compile(
-    r"\b(?:will|would|must|should|shall|plans?|planned|expect(?:s|ed)?|scheduled|due|"
-    r"until|before|deadline|hopes?|intends?|aims?|going to)\b",
+_PLAN_WORDS = (
+    r"will|would|must|should|shall|plans?|planned|expect(?:s|ed)?|scheduled|due|"
+    r"hopes?|intends?|aims?|going to"
+)
+# A day said as a plan or a bound, not as now ("set for day 40", "ready by
+# day 60", "until day 12").
+_FUTURE = re.compile(rf"\b(?:{_PLAN_WORDS}|until|before|deadline)\b|['’]ll\b", re.IGNORECASE)
+# A stretch of time said as a plan, not as passing: "the militia will pass
+# through in three days", "they agree to meet two days later", "she'll be
+# ready to leave a week later" (the review of Oct 20 2026: each moved the
+# clock before the passage). "Before" is no plan here: "Two days pass before
+# anyone speaks of it" is time passing.
+_PLANNED = re.compile(
+    rf"\b(?:{_PLAN_WORDS}|agree(?:s|d)?|promise(?:s|d)?|arrange(?:s|d)?)\b|['’]ll\b",
     re.IGNORECASE,
 )
 
@@ -334,7 +345,7 @@ def stated_skip(text: str, now: int, *, next_time: bool = False) -> tuple[int, s
         return (day - 1) * MINUTES_PER_DAY + now % MINUTES_PER_DAY, sentence
     for match in _SPAN.finditer(text):
         sentence = _sentence_around(text, match)
-        if _PASSING.search(sentence):
+        if _PASSING.search(sentence) and not _PLANNED.search(sentence):
             return now + _span_minutes(match), sentence
     # "The next morning", "the following evening": the next day, at that
     # time of day (the three playtests, Oct 18 2026: the map's own clock
@@ -490,6 +501,7 @@ class ChronicleDelta:
         at_least: int | None = None,
         authors_events: dict[str, EventVariant] | None = None,
         place_words: Mapping[str, Sequence[str]] | None = None,
+        first: bool = False,
     ) -> Chronicle:
         """The chronicle after this passage, keeping only what the text supports.
 
@@ -504,9 +516,16 @@ class ChronicleDelta:
         passage never showed an arrival), and the fall then resolved as if
         she had never been there while she stood in the town.
 
-        `at_least`: the start of the day the author's own skip moved the clock
-        to before the passage, which the director has already acted on; the
-        read may land at any hour of it or later, never before it.
+        `at_least`: where the author's own skip moved the clock to before the
+        passage, which the director has already acted on. The read may land
+        at any hour of that day or later, never before it: raised to it, it
+        keeps the hour it read, else the skip's own (a read that under-counted
+        used to land at 00:00 of the day, fourteen hours short of the turn).
+
+        `first`: no passage before this one has set a time, so the hour the
+        read gives stands whatever it adds. A plot whose file names no start
+        begins at 00:00; an afternoon opening then had its hour refused as
+        skipping most of a day, and the story ran a day behind for good.
 
         `scene_location` is the scene card's location after this passage (the
         scene read is applied first). While it still names the place they
@@ -557,7 +576,7 @@ class ChronicleDelta:
         # Over a skip of days, landing on the stated hour may take up to one
         # more: "a week passes" from an evening, then "morning".
         slack = MAX_UNQUOTED_MINUTES if elapsed < MINUTES_PER_DAY else MINUTES_PER_DAY
-        if ends_at is not None and minutes - before.minutes - elapsed > slack:
+        if ends_at is not None and not first and minutes - before.minutes - elapsed > slack:
             self.refused.append("a time of day that would skip most of a day")
             minutes = before.minutes + elapsed
         # A day the text names outright wins, if it is quoted and not past.
@@ -576,13 +595,16 @@ class ChronicleDelta:
                 self.refused.append(f"day {self.day} is in the past")
             else:
                 minutes = named
-        # The author's stated skip, which the director has already acted on.
-        if at_least is not None and minutes < at_least:
+        # The author's stated skip, which the director has already acted on:
+        # the passage ends on that day at the earliest, at the hour the read
+        # gave, else the skip's own.
+        if at_least is not None and minutes < at_least - at_least % MINUTES_PER_DAY:
             self.refused.append(
                 f"a passage ending at {format_clock(minutes)} where the author's turn "
-                f"moved the clock to {format_clock(at_least)} at least"
+                f"moved the clock to {format_clock(at_least)}"
             )
-            minutes = at_least
+            day_start = at_least - at_least % MINUTES_PER_DAY
+            minutes = day_start + ends_at if ends_at is not None else at_least
         after.minutes = minutes
         after.elapsed = minutes - before.minutes
         after.elapsed_quote = quote

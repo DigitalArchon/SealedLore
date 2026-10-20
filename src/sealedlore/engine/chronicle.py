@@ -124,7 +124,11 @@ def advance(minutes: int, elapsed: int, ends_at: int | None) -> int:
         return minutes + max(elapsed, 0)
     base = minutes + (max(elapsed, 0) // MINUTES_PER_DAY) * MINUTES_PER_DAY
     candidate = base - base % MINUTES_PER_DAY + ends_at
-    if candidate <= base:
+    # The hour already reached, with time left over that the days didn't
+    # cover, is the next day's; whole days ending on the very hour the clock
+    # shows ("Nine days pass. It is two in the afternoon." from 14:00) land
+    # on that day, not the one after.
+    if candidate < base or (candidate == base and max(elapsed, 0) % MINUTES_PER_DAY):
         candidate += MINUTES_PER_DAY
     return candidate
 

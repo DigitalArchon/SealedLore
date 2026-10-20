@@ -373,3 +373,105 @@ def test_the_authors_own_skip_needs_no_quote():
     delta = parse_read(read(5, "weeks"))
     after = delta.applied_to(before, plot(), passage=PASSAGE, author_turn=turn)
     assert after.elapsed == MAX_UNQUOTED_MINUTES
+
+
+# --- the clock's arithmetic, after the review of Oct 20 2026 --------------------
+
+
+def test_whole_days_ending_on_the_very_hour_land_on_that_day():
+    # "Nine days pass. It is two in the afternoon." from 14:00 is day 10, not 11.
+    start = clock_minutes(1, 14, 0)
+    assert advance(start, 9 * 1440, 14 * 60) == clock_minutes(10, 14, 0)
+    # Time left over past the whole days still means the next time it reads that hour.
+    assert advance(start, 8 * 60, 14 * 60) == clock_minutes(2, 14, 0)
+    assert advance(start, 9 * 1440 + 30, 14 * 60) == clock_minutes(11, 14, 0)
+    # No time at all, at the hour it already is: nothing moves.
+    assert advance(start, 0, 14 * 60) == start
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Marcus says the militia will pass through in three days.",
+        "They agree to meet two days later at the gate.",
+        "Jane tells Marcus she'll be ready to leave a week later.",
+        "They arranged to meet again three days later.",
+    ],
+)
+def test_a_plan_stated_in_days_moves_no_clock(text):
+    from sealedlore.engine.chronicle_read import stated_skip
+
+    assert stated_skip(text, clock_minutes(1, 14, 0)) is None
+
+
+@pytest.mark.parametrize(
+    ("text", "days"),
+    [
+        ("Three weeks pass.", 21),
+        ("Two days pass before anyone speaks of it.", 2),
+        ("A week later, the snow has come.", 7),
+    ],
+)
+def test_time_said_to_pass_still_moves_the_clock(text, days):
+    from sealedlore.engine.chronicle_read import stated_skip
+
+    now = clock_minutes(1, 14, 0)
+    skip = stated_skip(text, now)
+    assert skip is not None and skip[0] == now + days * 1440
+
+
+def test_the_first_read_sets_the_hour_whatever_the_start(tmp_path: Path):
+    # A plot file with no `start:` begins at 00:00; an afternoon opening then
+    # had its hour refused as "skipping most of a day", and the whole story
+    # ran a day behind.
+    midnight = PLOT_FILE.replace("start: day 1, 16:00\n", "")
+    p = parse_plot_markdown(midnight).scenario.plot
+    assert p.start_minutes == 0
+    before = initial_chronicle(p)
+    opening = parse_read(read(0, ends_at="15:30"))
+    after = opening.applied_to(before, p, passage=PASSAGE, author_turn="", first=True)
+    assert after.minutes == clock_minutes(1, 15, 30) and not opening.refused
+    later = parse_read(read(0, ends_at="15:30"))
+    after = later.applied_to(before, p, passage=PASSAGE, author_turn="")
+    assert after.minutes == 0 and later.refused
+
+    # Through the session: the first passage's read sets the hour, the next
+    # is held to the slack as before.
+    bundle = bundle_from_scenario(parse_plot_markdown(midnight).scenario)
+    save_story_bundle(bundle, root=tmp_path)
+    session = StorySession(
+        bundle,
+        Config(scene_reads="manual"),
+        MockChatProvider([PASSAGE, read(0, ends_at="15:30"), "Later.", read(10, ends_at="04:30")]),
+        root=tmp_path,
+        estimator=TokenEstimator(counter=fallback_counter),
+        learn_corrections=False,
+    )
+    session.story.held_character_id = session.cast[0].id
+    list(session.send(turn(session)))
+    assert session.chronicle.minutes == clock_minutes(1, 15, 30)
+    list(session.send(turn(session, "I wait.")))
+    assert session.chronicle.minutes == clock_minutes(1, 15, 40)
+
+
+def test_a_read_that_under_counts_a_skip_keeps_the_skips_hour():
+    # "By day 10, the snow has come." moved the author's turn to Day 10 ·
+    # 14:00; a read answering no time at all used to land the passage at
+    # Day 10 · 00:00, fourteen hours short of where the director had acted.
+    p = plot()
+    before = initial_chronicle(p)
+    before.minutes = clock_minutes(1, 14, 0)
+    skipped_to = clock_minutes(10, 14, 0)
+    turn_text = "By day 10, the snow has come."
+    kwargs = dict(passage="The snow had come.", author_turn=turn_text, author_states_facts=True)
+    short = parse_read(read(0))
+    after = short.applied_to(before, p, at_least=skipped_to, **kwargs)
+    assert after.minutes == skipped_to and short.refused
+    # With an hour read, that hour of the skip's day.
+    hour = parse_read(read(0, ends_at="16:00"))
+    after = hour.applied_to(before, p, at_least=skipped_to, **kwargs)
+    assert after.minutes == clock_minutes(10, 16, 0)
+    # A read that counted the skip itself is left alone.
+    counted = parse_read(read(9, "days", quote=turn_text, ends_at="16:00"))
+    after = counted.applied_to(before, p, at_least=skipped_to, **kwargs)
+    assert after.minutes == clock_minutes(10, 16, 0) and not counted.refused
