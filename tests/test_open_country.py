@@ -725,6 +725,50 @@ def test_where_everyone_stands_is_settled_once_until_something_changes(
     assert len(calls) == 3
 
 
+def test_still_at_a_place_is_measured_in_metres_not_tiles(tmp_path, story, cast):
+    """The review (Oct 20 2026): "still at the door" was 8 tiles, which on
+    a window of open country at 40 m a tile reached 320 m: someone 300 m
+    from a building's door was told as "just outside" it."""
+    from sealedlore.engine.area import anchor_of
+    from sealedlore.engine.session_area import AT_A_PLACE_M
+
+    session = open_session(tmp_path, story, cast)
+    world = session.world()
+    land = session.area(HERE)
+    assert "wreck" in land.buildings and land.tile_m == 40.0
+    front = anchor_of(land, world, "wreck")
+    assert front is not None
+
+    def still(dx: int) -> bool:
+        return session._still_at(land, world, Spot(area=HERE, x=front[0] + dx, y=front[1]), "wreck")
+
+    assert still(1) and not still(3)  # a tile beside the door, yes; 120 m away, no
+    # On a plan at walking scale the reach is the metres: 12 m is 8 tiles of 1.5 m.
+    assert AT_A_PLACE_M / 1.5 == 8
+    # Settled on a farm's plan (3.3 m a tile), someone outside the house 5
+    # tiles (17 m) from its door is stood at the door again (8 tiles kept
+    # them there before).
+    from tests.test_area import make_session
+
+    farm_session = make_session(tmp_path / "farm", story, cast)
+    farm_session.story.world_base.where["Maela Orr"] = "house"
+    farm_session.story.world_base.outside["Maela Orr"] = True
+    world = farm_session.world()
+    farm = farm_session.area("farm")
+    door = anchor_of(farm, world, "house")
+    assert door is not None and 3.0 < farm.tile_m < 3.5
+    off = next(
+        (door[0] + dx, door[1] + dy)
+        for dx, dy in ((5, 0), (-5, 0), (0, 5), (5, 1), (-5, 1), (4, 3), (-4, 3))
+        if farm.walkable(door[0] + dx, door[1] + dy)
+    )
+    state = farm_session.area_state()
+    state.spots["Maela Orr"] = Spot(area="farm", x=off[0], y=off[1])
+    settled = farm_session.settle(state, world, farm_session.map_art_copy())
+    maela = settled.spots["Maela Orr"]
+    assert maela.area == "farm" and abs(maela.x - door[0]) + abs(maela.y - door[1]) <= 2
+
+
 def test_a_window_s_edge_paths_are_kept_and_reused(tmp_path):
     """`edges_open_memo`: the ways cut to a window's edges are kept by the
     rows they were cut for, and a kept answer skips the search."""

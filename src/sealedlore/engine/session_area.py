@@ -185,9 +185,13 @@ WINDING = 1.25
 GIVE_REACH_M = 4.0
 # Someone placed with the author's character stands this close to them.
 BESIDE = 3
-# How far from a building's door someone "at" it may stand before they are
-# stood at it again.
-AT_A_PLACE = 8
+# How far from a building's door (or a place's spot) someone "at" it may
+# stand before they are stood at it again: in metres, and never under a
+# tile and a half (a tile's neighbours count whatever its width). It was 8
+# tiles, which on a window of open country at 40 m a tile reached 320 m
+# (the review, Oct 20 2026).
+AT_A_PLACE_M = 12.0
+AT_A_PLACE_TILES = 1.5
 # Tiles from a door's front, outside, that count as at the door (shown at it
 # from inside: `at_the_door`).
 AT_THE_DOOR = 2.5
@@ -1284,7 +1288,8 @@ class AreaRuntime:
             anchor = self._spot_in(world, area, place_id)
         if anchor is None:
             return True
-        return math.hypot(spot.x - anchor[0], spot.y - anchor[1]) <= AT_A_PLACE
+        reach = max(AT_A_PLACE_TILES, AT_A_PLACE_M / max(area.tile_m, 0.1))
+        return math.hypot(spot.x - anchor[0], spot.y - anchor[1]) <= reach
 
     def _stand(
         self,
