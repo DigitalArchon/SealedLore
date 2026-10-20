@@ -597,7 +597,14 @@ class PlotRuntime:
         if delta.refused:
             self._log("chronicle_refused", {"request_log_ref": log_ref, "refused": delta.refused})
         words = describe_chronicle(after)
-        yield SessionNotice(f"Plot: {words}" if words else "Plot: no time passed, no change")
+        notice = f"Plot: {words}" if words else "Plot: no time passed, no change"
+        if begun:
+            notice += "; " + ", ".join(event.title for event in begun) + " taken as begun"
+        if delta.refused:
+            # What the read claimed and the text didn't back, said as well as
+            # logged: it is the moment the author would correct the clock.
+            notice += " · not taken: " + "; ".join(delta.refused)
+        yield SessionNotice(notice)
 
     @staticmethod
     def _carried_correction(node: Node) -> Chronicle | None:
@@ -965,7 +972,7 @@ class PlotRuntime:
             user_node.meta.chronicle = chronicle
         user_node.meta.direction = list(directions)
         self.save()
-        words = self._direction_words(fired, directions, confirmed)
+        words = self._direction_words(fired, directions, confirmed, consulted=consulted)
         if words:
             yield SessionNotice(words)
         elif consulted:
@@ -1136,13 +1143,21 @@ class PlotRuntime:
                 chronicle.brought_in.append(item_id)
 
     def _direction_words(
-        self, fired: Sequence, directions: Sequence[Direction], confirmed: Sequence[str]
+        self,
+        fired: Sequence,
+        directions: Sequence[Direction],
+        confirmed: Sequence[str],
+        *,
+        consulted: bool = False,
     ) -> str:
-        """What the director did, named only with spoilers on."""
+        """What the plot did this turn, named only with spoilers on. Off, it
+        says only whether the director was asked: an outcome code settled
+        (an offscreen event on its day, a gap fitted) used to read "the
+        director was consulted" when it wasn't."""
         if not (fired or directions or confirmed):
             return ""
         if not self.config.show_plot_spoilers:
-            return "Plot: the director was consulted."
+            return "Plot: the director was consulted." if consulted else "Plot: the plot moved on."
         plot = self.story.plot
         assert plot is not None
         parts = [f"{event.title} happened out of sight" for event in fired]

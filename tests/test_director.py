@@ -507,3 +507,16 @@ def test_still_to_come_takes_the_begin_off_the_turn_so_a_retake_does_not_begin_i
     assert session.path()[-1].content == "Quiet."
     assert section(session, SECTION_DIRECTION) == ""
     assert session.chronicle.events["the_fall"].state == "pending"
+
+
+def test_an_outcome_code_settled_is_not_called_a_consultation(tmp_path: Path):
+    # Spoilers off, an offscreen event fired on its day with no director
+    # call made: the notice said "the director was consulted".
+    quiet = AWAY.replace("- aftermath: The town burned, and the dead walk its streets.\n", "")
+    session = make_session(tmp_path, ["Snow.", read()], text=quiet)
+    events = list(session.send(turn(session, "I rest.")))
+    notices = [e.text for e in events if isinstance(e, SessionNotice)]
+    assert session.chronicle.events["the_fall"].state == "happened"
+    assert "Plot: the plot moved on." in notices
+    assert "Plot: the director was consulted." not in notices
+    assert "director_request" not in kinds(session, tmp_path)

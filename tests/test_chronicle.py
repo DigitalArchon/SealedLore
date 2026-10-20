@@ -497,3 +497,12 @@ def test_regenerate_keeps_the_authors_corrections_at_that_passage(tmp_path: Path
     list(session.send(turn(session, "I wait.")))
     assert session.chronicle.minutes == clock_minutes(3, 8, 30)
     assert session.chronicle.facts["town"] == "fallen"
+
+
+def test_what_the_read_claimed_and_the_text_did_not_back_is_said(tmp_path: Path):
+    # A refusal went to the API log alone; the author saw "no time passed,
+    # no change" at the moment they would want to correct the clock.
+    session = make_session(tmp_path, [PASSAGE, read(3, "weeks")])
+    notices = [e.text for e in session.send(turn(session)) if isinstance(e, SessionNotice)]
+    plot_notice = next(n for n in notices if n.startswith("Plot: "))
+    assert plot_notice.startswith("Plot: +12h, now Day 2 · 04:00 · not taken: a jump of 504h")
