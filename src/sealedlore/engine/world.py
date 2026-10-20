@@ -353,6 +353,27 @@ def _around(world: WorldMap, here: str | None, place: WorldPlace, fixed: Collect
     return f"{head}: {what}" if what else head
 
 
+def _nearest(world: WorldMap, here: str, places: list[WorldPlace]) -> list[WorldPlace]:
+    """At most MAP_LIST_LIMIT of `places`, the nearest to `here` by their
+    middles (one with no spot counts as far), kept in the map's own order.
+    Under the limit the list is as it was: the cut used to take the first
+    eight in the map's order, which for the world designer's regions (keyed
+    by cell) was the most westerly, leaving the neighbours out (the review,
+    Oct 20 2026)."""
+    if len(places) <= MAP_LIST_LIMIT:
+        return places
+    at = position(world, here)
+
+    def far(place: WorldPlace) -> float:
+        spot = position(world, place.id)
+        if at is None or spot is None:
+            return math.inf
+        return math.hypot(spot[0] - at[0], spot[1] - at[1])
+
+    keep = {p.id for p in sorted(places, key=far)[:MAP_LIST_LIMIT]}
+    return [p for p in places if p.id in keep]
+
+
 def render_map_context(
     world: WorldMap,
     held: str | None,
@@ -386,17 +407,21 @@ def render_map_context(
         if here.state:
             said = (said + " " if said else "") + f"Now: {' '.join(here.state.split())}."
         lines.append("  " + said)
-    inside = [p for p in world.places.values() if p.inside == here.id][:MAP_LIST_LIMIT]
+    inside = _nearest(world, here.id, [p for p in world.places.values() if p.inside == here.id])
     if inside:
         lines.append("Inside it: " + "; ".join(_around(world, origin, p, fixed) for p in inside))
     shown = {p.id for p in chain} | {p.id for p in inside}
     for level, outer in enumerate([*chain[1:], None]):
         parent = outer.id if outer is not None else None
-        around = [
-            p
-            for p in world.places.values()
-            if p.inside == parent and p.id != chain[level].id and p.id not in shown
-        ][:MAP_LIST_LIMIT]
+        around = _nearest(
+            world,
+            here.id,
+            [
+                p
+                for p in world.places.values()
+                if p.inside == parent and p.id != chain[level].id and p.id not in shown
+            ],
+        )
         if around:
             label = f"Also in {outer.name}" if outer is not None else "Elsewhere on the map"
             lines.append(f"{label}: " + "; ".join(_around(world, origin, p, fixed) for p in around))

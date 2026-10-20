@@ -385,6 +385,38 @@ def test_the_designer_s_labels_never_collide_with_the_story_s_unknowns():
     assert next_label(art, world_at([node, node2], designed=designed_delta(art))) == LABEL_FROM + 5
 
 
+def test_the_storyteller_is_told_the_regions_nearest_the_author_s_character():
+    """The review (Oct 20 2026): with twelve designed regions the map
+    section listed the first eight in cell-key order, the most westerly,
+    and left the player's neighbours out."""
+    from sealedlore.engine.world import MAP_LIST_LIMIT, render_map_context
+    from sealedlore.models.world import DesignedRegion
+
+    art = WorldArt(region_origin=[0.0, 0.0])
+    for i in range(-2, 2):
+        for j in range(-1, 2):
+            west, north, side = cell_rect((0.0, 0.0), i, j)
+            place = WorldPlace(
+                id=f"r{i}_{j}", name=f"Region {i},{j}", kind="region", x=west + 200,
+                y=north - 200, size=400.0, what=f"Rolling fields at cell {i},{j}.",
+            )  # fmt: skip
+            art.regions[cell_key(i, j)] = DesignedRegion(
+                key=cell_key(i, j), west=west, north=north, side=side, place_id=place.id,
+                places=[place],
+            )  # fmt: skip
+    art.explored = list(art.regions)
+    world = world_at([], designed=designed_delta(art))
+    world.where["John"] = "r1_1"  # the far corner of the grid
+    text = render_map_context(
+        world, "John", fixed={p.id for r in art.regions.values() for p in r.places}
+    )
+    others = (f"Region {i},{j}" for i in range(-2, 2) for j in range(-1, 2) if (i, j) != (1, 1))
+    listed = [n for n in others if n in text]
+    assert len(listed) == MAP_LIST_LIMIT
+    assert {"Region 0,0", "Region 0,1", "Region 1,0", "Region 1,-1", "Region 0,-1"} <= set(listed)
+    assert "Region -2,-1" not in listed and "Region -2,0" not in listed
+
+
 def test_someone_in_the_player_s_region_is_not_pulled_beside_them_as_company(tmp_path, story, cast):
     """The live test: the read put John "at the North Woodlot", a region,
     and two of its people were stood beside him as if in his company."""
