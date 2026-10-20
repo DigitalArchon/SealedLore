@@ -2891,6 +2891,21 @@ _text(
     "Summarised, with the messages marked to keep given word for word.",
 )
 
+# A chat's history can begin with the assistant's message once the user's
+# message before it was summarised, or cut for room (the budget keeps the
+# newest whole messages), and Anthropic wants the first message to be the
+# user's. The stand-in is the chat's own: a maths tutor was being sent the
+# story's "[Begin the story.]" (the review of Oct 20 2026).
+_text(
+    "chat.opening_turn",
+    CHAT,
+    "Stand-in first message",
+    "Sent as the first user message of a chat when the oldest message the request keeps is "
+    "the assistant's (the one before it summarised, or cut for room), because the history "
+    "must start with the user.",
+    "[Continuing the conversation.]",
+)
+
 _text(
     "chat.summariser",
     CHAT,

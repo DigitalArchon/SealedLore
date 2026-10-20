@@ -621,3 +621,51 @@ def test_a_chat_tail_travels_with_the_chat_but_not_to_the_picture_writer(tmp_pat
     with pytest.raises(ValueError):
         session.write_image_prompt("the cat", anchor_id=None, max_refs=0, fixed=None, model=None)
     assert "Stay terse." not in provider.requests[-1].messages[-1].text
+
+
+def test_a_chat_is_never_sent_the_storys_stand_in_first_message(tmp_path):
+    """A chat whose oldest kept message is the assistant's (the one before it
+    cut for room, or summarised) gets a stand-in user message of its own,
+    never "[Begin the story.]" (a maths tutor was sent it)."""
+    story_line = DEFAULT_TEXTS["storyteller.opening_turn"]
+    chat_line = DEFAULT_TEXTS["chat.opening_turn"]
+    assert chat_line != story_line and "story" not in chat_line.lower()
+    # Long questions and one-word replies: walking back from the newest, the
+    # budget runs out on a question, so the window begins with a reply.
+    question = "tell me more. " * 60
+
+    def played(root, config, budget, replies):
+        session, provider = chat_session(root, replies, config=config)
+        session.story.defaults.context_token_budget = budget
+        for i in range(6):
+            say(session, f"Question {i}: {question}")
+        return session, texts(provider.requests[-1])
+
+    # Cut for room: auto-archive off, so the window only ever trims.
+    session, sent = played(tmp_path / "cut", make_config(auto_archive=False), 700, ["ok."] * 20)
+    assert session.last_prompt.excluded_node_ids, "the budget cut something"
+    assert sent[0] == ("system", PROMPT)
+    assert sent[1] == ("user", chat_line) and sent[2] == ("assistant", "ok.")
+    assert all(story_line not in text for _role, text in sent)
+    # Summarised, and still cut: a chunk is only ever four whole exchanges,
+    # so between archivals the window grows past the budget and the oldest
+    # messages fall out again, right after the summaries block. (The first
+    # message is short: kept in full, it rides in that block.)
+    replies = ["ok."] * 30
+    replies.insert(8, "They discussed the first sums.")
+    session, provider = chat_session(
+        tmp_path / "summarised", replies, config=make_config(archive_chunk_turns=4)
+    )
+    session.story.defaults.context_token_budget = 700
+    say(session, "Hi.")
+    for i in range(1, 10):
+        say(session, f"Question {i}: {question}")
+    assert session.bundle.summaries, "something was summarised"
+    requests = [texts(request) for request in provider.requests]
+    assert all(story_line not in text for sent in requests for _role, text in sent)
+    assert any(
+        "EARLIER IN THIS CONVERSATION" in sent[0][1]
+        and sent[1] == ("user", chat_line)
+        and sent[2] == ("assistant", "ok.")
+        for sent in requests
+    ), "no request was both summarised and cut after the summary"

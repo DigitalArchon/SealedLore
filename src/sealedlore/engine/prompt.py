@@ -492,6 +492,7 @@ def assemble_chat(
         system_parts=[(SECTION_CHAT_PROMPT, story.chat_prompt.strip())],
         summaries_text=render_chat_summaries(summaries, nodes_by_id or {}, texts),
         render_node=lambda node: render_chat_node(node, texts),
+        chat=True,
     )
 
 
@@ -508,10 +509,12 @@ def _assemble(
     system_parts: Sequence[tuple[str, str]] | None = None,
     summaries_text: str | None = None,
     render_node: Callable[[Node], str] | None = None,
+    chat: bool = False,
 ) -> AssembledPrompt:
     """The request, in the cached order. A simple chat (`assemble_chat`) gives
     its own `system_parts` in place of the rules, world, lore and cast, its
-    own `summaries_text`, and `render_node` for plain history."""
+    own `summaries_text`, `render_node` for plain history, and `chat` so the
+    stand-in first message is the chat's, not the story's."""
     estimator = estimator or TokenEstimator()
     options = options or AssemblyOptions()
     model = story.defaults.main_model
@@ -597,7 +600,7 @@ def _assemble(
     available = options.token_budget - (system_tokens + summaries_tokens + tail_tokens)
     kept, dropped = select_history_items(items, available)
 
-    history_messages = _merge_history(kept, options.texts)
+    history_messages = _merge_history(kept, options.texts, chat=chat)
     history_tokens = sum(message.total_tokens for message in history_messages)
     if history_messages:
         history_text = "\n\n".join("\n\n".join(message.texts) for message in history_messages)
@@ -656,13 +659,17 @@ def _assemble(
 
 
 def _merge_history(
-    items: Sequence[HistoryItem], texts: PromptTexts = DEFAULT_TEXTS
+    items: Sequence[HistoryItem], texts: PromptTexts = DEFAULT_TEXTS, *, chat: bool = False
 ) -> list[_DraftMessage]:
     """Nodes to messages, merging runs of the same role.
 
     Anthropic requires strictly alternating user/assistant messages and a
     leading user message, and consecutive author turns (a speaker switch, a
-    director aside) would otherwise break that.
+    director aside) would otherwise break that. A history that begins with
+    the model's message (a story's opening passage; a chat whose oldest kept
+    message is the reply to one summarised or cut for room) gets a stand-in
+    user message first: the story's, or with `chat` the chat's own, never
+    "[Begin the story.]" in a conversation.
     """
     messages: list[_DraftMessage] = []
     for item in items:
@@ -674,9 +681,8 @@ def _merge_history(
             messages.append(_DraftMessage(role=role, texts=[item.text], tokens=[item.tokens]))
 
     if messages and messages[0].role == "assistant":
-        messages.insert(
-            0, _DraftMessage(role="user", texts=[texts["storyteller.opening_turn"]], tokens=[0])
-        )
+        key = "chat.opening_turn" if chat else "storyteller.opening_turn"
+        messages.insert(0, _DraftMessage(role="user", texts=[texts[key]], tokens=[0]))
     return messages
 
 
