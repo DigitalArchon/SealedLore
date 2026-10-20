@@ -526,13 +526,27 @@ class PlotRuntime:
             place_words=self.plot_place_words(),
             first=pending.first,
         )
+        # A directed event the read named but misquoted (GLM does, now and
+        # then): the passage naming someone it brings in is the evidence the
+        # quote failed to give. Left directed, the newcomer stood on the
+        # roster with no card, and the event could be begun a second time.
+        misquoted = [
+            event_id
+            for event_id, _ in delta.happened
+            if (status := after.events.get(event_id)) is not None and status.state == "directed"
+        ]
+        begun = self._begun_by_introductions(node, after, plot, only=misquoted)
         settled = settle_unconfirmed(
             plot, after, [event_id for event_id, _ in delta.happened], node_id=node.id
         )
-        if settled:
+        if settled or begun:
             self._log(
                 "chronicle_settled",
-                {"request_log_ref": log_ref, "events": [event.id for event in settled]},
+                {
+                    "request_log_ref": log_ref,
+                    "events": [event.id for event in settled],
+                    "begun": [event.id for event in begun],
+                },
             )
         released = release_unconfirmed(plot, after)
         if released:

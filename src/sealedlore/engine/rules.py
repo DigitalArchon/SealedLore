@@ -338,16 +338,20 @@ def render_scene_block(
         "author": "turn.roster.author_only",
         "storyteller": "turn.roster.storytellers",
     }
-    if present_ids:
-        for character_id in present_ids:
-            character = cast_by_id.get(character_id)
-            name = character.name if character else character_id
+    named = [(character_id, cast_by_id.get(character_id)) for character_id in present_ids]
+    # Someone the storyteller has no card for (a character the plot still
+    # keeps hidden, put in the room by the scene read as the passage
+    # introduced them) is left out rather than named by their id: live, the
+    # roster read "- 1d595139-d72d-48b9-a0ec-3afb12052fa9".
+    named = [(character_id, character) for character_id, character in named if character]
+    if named:
+        for character_id, character in named:
             role = voicing(character, character_id, controlled_character_id)
             handed_over = handed_over or role == "storyteller"
             if role in roles:
-                lines.append(f"  - {name} {texts[roles[role]]}")
+                lines.append(f"  - {character.name} {texts[roles[role]]}")
             else:
-                lines.append(f"  - {name}")
+                lines.append(f"  - {character.name}")
     elif not scene.present_others:
         lines.append(f"  - {texts['turn.roster.nobody']}")
 

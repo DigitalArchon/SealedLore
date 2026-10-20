@@ -1685,3 +1685,46 @@ def test_the_authors_events_have_their_own_field_in_the_reply():
         authors_events=authors_candidates(p, before),
     )
     assert after.events["the_raid"].state == "happened"
+
+
+def test_a_refused_quote_still_confirms_an_event_the_passage_brings_in(tmp_path: Path):
+    # Live (GLM): the read names the directed event with a loose quote, the
+    # code refuses it, and the character the event brought in stood on the
+    # roster as a raw id with no card for the storyteller; released later,
+    # the director could begin the event a second time.
+    session = make_session(
+        tmp_path,
+        [
+            PASSAGE,
+            read(place=("The Mill", "Ann pushed through the mill door.")),
+            director({"event": "the_raid", "kind": "begin", "variant": "Ann at the mill"}),
+            RAID,
+            read(happened=[{"event": "the_raid", "quote": "Mara limped in, shouting of raiders"}]),
+        ],
+    )
+    mara = session.character_by_name("Mara")
+    list(session.send(turn(session, "I go into the mill.")))
+    session.set_clock(clock_minutes(4, 8, 0))
+    notices = [e.text for e in session.send(turn(session, "I rest.")) if hasattr(e, "text")]
+    status = session.chronicle.events["the_raid"]
+    assert status.state == "happened" and status.variant == "Ann at the mill"
+    assert session.chronicle.facts["raided"] == "yes"
+    assert mara in session.visible_cast()
+    log = read_api_log(session.story.id, root=tmp_path)
+    refused = [e for e in log if e["kind"] == "chronicle_refused"]
+    assert refused[-1]["refused"] == ["the_raid: no sentence in the passage shows it"]
+    settled = [e for e in log if e["kind"] == "chronicle_settled"]
+    assert settled[-1]["begun"] == ["the_raid"]
+    assert any(n.startswith("Plot:") for n in notices)
+
+
+def test_the_roster_never_names_anyone_by_their_id():
+    from sealedlore.engine.rules import render_scene_block
+
+    ann = Character(id="ann", name="Ann")
+    ghost = "1d595139-d72d-48b9-a0ec-3afb12052fa9"
+    scene = SceneState(tracked=True, present_character_ids=["ann", ghost])
+    text = render_scene_block(scene, {"ann": ann}, "ann")
+    assert "- Ann" in text and ghost not in text
+    alone = SceneState(tracked=True, present_character_ids=[ghost])
+    assert ghost not in render_scene_block(alone, {"ann": ann}, "ann")
