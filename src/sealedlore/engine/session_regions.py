@@ -33,6 +33,7 @@ from sealedlore.ids import utc_now_iso
 from sealedlore.models.area import AreaState
 from sealedlore.models.world import WorldArt, WorldDelta, WorldMap
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError
+from sealedlore.threads import BackgroundThread
 
 # Regions designed at once, a client each: a wave borders nothing else in
 # itself (`regions.waves`), so the four beside the player's go together.
@@ -196,7 +197,7 @@ class RegionRuntime:
         clients = [detached() for _ in range(REGION_WORKERS)]
         self._region_clients = clients
         self._region_total, self._region_done = sum(len(wave) for wave in wanted), 0
-        thread = threading.Thread(
+        thread = BackgroundThread(
             target=self._design_waves,
             args=(wanted, self.region_model, clients),
             name="map-regions",
@@ -216,7 +217,7 @@ class RegionRuntime:
                 if self._map_closed or self._art_stop:
                     return
                 helpers = [
-                    threading.Thread(
+                    BackgroundThread(
                         target=self._design_one, args=(cell, model, client), daemon=True
                     )
                     for cell, client in zip(wave, clients, strict=False)

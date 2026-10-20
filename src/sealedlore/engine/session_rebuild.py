@@ -35,6 +35,7 @@ from sealedlore.ids import utc_now_iso
 from sealedlore.models.node import Node
 from sealedlore.models.summary import Summary
 from sealedlore.providers.base import ChatRequest
+from sealedlore.threads import BackgroundThread
 
 
 def _texts_print(texts: Sequence[str]) -> list[str]:
@@ -204,7 +205,7 @@ class RebuildRuntime:
                 _close(client)
 
         self._rebuild_job = job
-        threading.Thread(target=run, name="chapter-rebuild", daemon=True).start()
+        BackgroundThread(target=run, name="chapter-rebuild", daemon=True).start()
         return True
 
     def adopt_rebuild(self) -> list[str]:

@@ -44,6 +44,7 @@ from sealedlore.engine.session_plot import SessionNotice
 from sealedlore.models.node import NARRATOR_SPEAKER_ID, Node
 from sealedlore.models.summary import Summary
 from sealedlore.providers.base import ChatRequest, ProviderError, StreamCancelled
+from sealedlore.threads import BackgroundThread
 
 # Start preparing once the next prompt would be this share of the budget: a
 # turn's own text is a few hundred tokens, so the chapters are usually ready
@@ -278,7 +279,7 @@ class ArchivalRuntime:
                                 extra_body=route,
                             )
                         )
-                        worker = threading.Thread(
+                        worker = BackgroundThread(
                             target=_call, args=(clients[1], chapter.ledger), daemon=True
                         )
                         worker.start()
@@ -305,7 +306,7 @@ class ArchivalRuntime:
                 for client in clients:
                     _close(client)
 
-        threading.Thread(target=run, name="archival", daemon=True).start()
+        BackgroundThread(target=run, name="archival", daemon=True).start()
         return job
 
     @staticmethod

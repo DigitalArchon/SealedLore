@@ -176,6 +176,7 @@ from sealedlore.storage import tile_sets as shipped
 from sealedlore.storage.area_cache import load_edge_cache, save_edge_cache
 from sealedlore.storage.image_meta import MetadataError, picture_kind, strip_metadata
 from sealedlore.storage.images import MEDIA_TYPES
+from sealedlore.threads import BackgroundThread
 
 # Seconds taken going through a door.
 DOOR_SECONDS = 3
@@ -3376,7 +3377,7 @@ class AreaRuntime:
             # A provider without `detached` (the scripted mock): inline.
             self._tile_run(furnish, [], None, self.provider)
             return True
-        thread = threading.Thread(
+        thread = BackgroundThread(
             target=self._tile_run,
             args=(furnish, pictures if client is not None else [], client, self._tile_text),
             name="map-tiles",
@@ -3667,7 +3668,7 @@ class AreaRuntime:
             messages=pick_messages(setting[:PICK_SETTING_LIMIT], sets, self.texts),
             params=self.side_params(model, max_tokens=PICK_MAX_TOKENS),
         )
-        thread = threading.Thread(
+        thread = BackgroundThread(
             target=self._pick_run,
             args=(text, request, list(sets)),
             name="map-tileset-pick",
@@ -3854,7 +3855,7 @@ class AreaRuntime:
             for data, caption in pictures
             if picture_kind(data) in MEDIA_TYPES
         ]
-        thread = threading.Thread(
+        thread = BackgroundThread(
             target=self._design_run,
             args=(text, designer, " ".join(description.split()), shown),
             name="map-tileset-design",
@@ -3945,7 +3946,7 @@ class AreaRuntime:
         client = ImageClient(media.base_url, media.api_key, api=media.api)
         self._own_set_client = client
         self._art_stop = False
-        thread = threading.Thread(
+        thread = BackgroundThread(
             target=self._own_set_run,
             args=(design, " ".join(title.split()), client),
             name="map-tileset",
@@ -4285,7 +4286,7 @@ class AreaRuntime:
             day = _today()
             art.pictures_by_day[day] = art.pictures_by_day.get(day, 0) + 1
             self._save_art(art)
-        thread = threading.Thread(target=run, name="map-tile-asset", daemon=True)
+        thread = BackgroundThread(target=run, name="map-tile-asset", daemon=True)
         self._asset_thread = thread
         self._asset_role = wanted[0][0]
         thread.start()

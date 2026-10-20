@@ -74,6 +74,7 @@ from sealedlore.providers.images import (
 from sealedlore.storage.image_meta import MetadataError, picture_kind, strip_metadata
 from sealedlore.storage.images import MEDIA_TYPES, WORLD_ART_FILE
 from sealedlore.storage.world_art import load_world_art, save_world_art
+from sealedlore.threads import BackgroundThread
 
 # Pieces drawn at once in the background: enough to keep up with a passage,
 # few enough to leave the subscription's burst for the story's own calls.
@@ -491,7 +492,7 @@ class WorldArtRuntime:
         client = ImageClient(media.base_url, media.api_key, api=media.api)
         self._isometric_area = area_id
         self._isometric_client = client  # for `stop_map_art` to cancel
-        thread = threading.Thread(
+        thread = BackgroundThread(
             target=self._paint_isometric,
             args=(job, client, render),
             name="map-isometric",
@@ -656,7 +657,7 @@ class WorldArtRuntime:
         self._picture_client = client
         self._art_stop = False
         info = self._picture_model()
-        thread = threading.Thread(
+        thread = BackgroundThread(
             target=self._picture_all,
             args=(jobs, client, info),
             name="map-pictures",
@@ -839,7 +840,7 @@ class WorldArtRuntime:
         # The requests are built on the art thread (`_draw_one`): their
         # reasoning level may need the model listing, fetched on first use,
         # and a story opening on its map starts this from the GUI thread.
-        thread = threading.Thread(
+        thread = BackgroundThread(
             target=self._draw,
             args=(jobs, model, clients),
             name="map-art",
@@ -945,7 +946,7 @@ class WorldArtRuntime:
         if len(clients) == 1:
             worker(clients[0])
             return
-        helpers = [threading.Thread(target=worker, args=(c,), daemon=True) for c in clients[1:]]
+        helpers = [BackgroundThread(target=worker, args=(c,), daemon=True) for c in clients[1:]]
         for helper in helpers:
             helper.start()
         worker(clients[0])

@@ -28,6 +28,7 @@ from sealedlore.engine.archival import (
 )
 from sealedlore.models.summary import Summary
 from sealedlore.providers.base import ChatRequest, ProviderError
+from sealedlore.threads import BackgroundThread
 
 
 @dataclass
@@ -87,7 +88,7 @@ class MergeRuntime:
                 job.done.set()
                 _close(side)
 
-        job.thread = threading.Thread(target=call, name="chapter-merge", daemon=True)
+        job.thread = BackgroundThread(target=call, name="chapter-merge", daemon=True)
         self._merge_job = job
         job.thread.start()
         return True

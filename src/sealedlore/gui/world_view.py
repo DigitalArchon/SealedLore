@@ -31,7 +31,6 @@ Everything here is read from the session; the view never changes the story.
 from __future__ import annotations
 
 import math
-import threading
 import time
 from collections.abc import Callable, Sequence
 from html import escape
@@ -116,6 +115,7 @@ from sealedlore.models.world import (
     WorldPlace,
 )
 from sealedlore.storage.tile_sets import read_asset, shipped_sets
+from sealedlore.threads import BackgroundThread
 
 LEVELS = ("local", "region", "world")
 # A place's picture on the region: scaled with the map, within these (a
@@ -1566,7 +1566,7 @@ class WorldView(QWidget):
                     except RuntimeError:
                         return  # the view is gone (a window closed, a test torn down)
 
-            threading.Thread(target=render, name="region-land", daemon=True).start()
+            BackgroundThread(target=render, name="region-land", daemon=True).start()
 
     def _lay_land(self, patch: TerrainPatch, pixmap: QPixmap) -> None:
         item = QGraphicsPixmapItem(pixmap)

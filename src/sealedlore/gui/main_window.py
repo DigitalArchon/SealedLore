@@ -8,7 +8,6 @@ and difficulty) live in the composer's second row, per §10.
 
 from __future__ import annotations
 
-import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -180,6 +179,7 @@ from sealedlore.storage.scenario import (
     write_scenario,
 )
 from sealedlore.storage.world_art import carried_art, carried_story_art, load_sidecar
+from sealedlore.threads import BackgroundThread
 from sealedlore.tree import path_to
 
 # The panel beside the story: its title with no story open, and what each
@@ -4596,7 +4596,7 @@ class MainWindow(
         while the window was being built, it took most of that time from the
         window's first paint. A story opened meanwhile waits for the rest of
         the load (tiktoken loads an encoding once)."""
-        threading.Thread(target=lambda: self.estimator.raw_count("warm up"), daemon=True).start()
+        BackgroundThread(target=lambda: self.estimator.raw_count("warm up"), daemon=True).start()
 
     def _move_keys_to_keychain(self) -> None:
         """Keys an older config.json holds in plain text go into the keychain

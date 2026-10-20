@@ -24,10 +24,13 @@ def _wheel_guard_style_first():
         yield
         return
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from sealedlore.gui.collector import install_collector_pause
     from sealedlore.gui.fields import install_wheel_guard
 
     app = QApplication.instance() or QApplication([])
     install_wheel_guard(app)
+    # As the app does: the collector waits while background threads run.
+    install_collector_pause(app)
     yield
     # Offscreen on Windows, mime data left on the clipboard (Copy prompt,
     # winprivacy.copy_text) crashes the interpreter's exit with an access

@@ -108,6 +108,7 @@ from sealedlore.providers.base import (
     ChatRequest,
     ProviderError,
 )
+from sealedlore.threads import BackgroundThread
 
 # The model list the review checks suggestions against; refetched after this.
 
@@ -399,7 +400,7 @@ class PlotRuntime:
                 except BaseException as exc:  # noqa: BLE001 - re-raised on this thread below
                     box["error"] = exc
 
-            thread = threading.Thread(target=call, name="side-read", daemon=True)
+            thread = BackgroundThread(target=call, name="side-read", daemon=True)
             thread.start()
             boxes.append(box)
             threads.append(thread)

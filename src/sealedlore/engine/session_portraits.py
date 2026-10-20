@@ -38,6 +38,7 @@ from sealedlore.models.lore import LoreEntry
 from sealedlore.providers.base import ChatProvider, ChatRequest
 from sealedlore.providers.images import ImageModelInfo
 from sealedlore.storage.images import REFS_DIR
+from sealedlore.threads import BackgroundThread
 
 # The caption a drawn portrait is given on its card.
 PORTRAIT_CAPTION = "portrait"
@@ -155,7 +156,7 @@ class PortraitRuntime:
             sibling = getattr(self.provider, "sibling", None)
             helper = None
             if callable(sibling) and len(batches) > 1:
-                helper = threading.Thread(target=lane, args=(sibling(),), daemon=True)
+                helper = BackgroundThread(target=lane, args=(sibling(),), daemon=True)
                 helper.start()
             lane(self.provider)
             if helper is not None:

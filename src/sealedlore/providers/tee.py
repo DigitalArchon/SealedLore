@@ -36,7 +36,6 @@ import hashlib
 import json
 import secrets
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from urllib.parse import quote, urlparse
 
@@ -48,6 +47,7 @@ from sealedlore.providers import dcap, nras
 from sealedlore.providers.base import ProviderError
 from sealedlore.providers.ethsig import recover_personal
 from sealedlore.providers.http import make_client
+from sealedlore.threads import thread_pool
 
 NRAS_URL = "https://nras.attestation.nvidia.com/v3/attest/gpu"
 TIMEOUT_SECONDS = 30.0
@@ -407,7 +407,7 @@ class TeeClient:
             )
         if not instances:
             raise TeeRefused(f"{self.model}'s attestation listed no instances")
-        with ThreadPoolExecutor(max_workers=min(8, len(instances))) as pool:
+        with thread_pool(min(8, len(instances))) as pool:
             results = list(pool.map(lambda item: self._check_instance(item, nonce), instances))
         check = _Checks(
             f"each of {len(instances)} instances' keys, bound into its TDX quote, signed our nonce"

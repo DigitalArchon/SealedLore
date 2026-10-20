@@ -208,6 +208,7 @@ from sealedlore.storage.repository import (
     save_config,
     save_story_bundle,
 )
+from sealedlore.threads import BackgroundThread
 from sealedlore.tree import (
     active_path,
     index_nodes,
@@ -1034,7 +1035,7 @@ class StorySession(
         detached = getattr(self.provider, "detached", None)
         if callable(detached):
             client = detached()
-            pick.thread = threading.Thread(
+            pick.thread = BackgroundThread(
                 target=self._run_lore_pick, args=(pick, client, True), name="lore-pick", daemon=True
             )
             pick.thread.start()
@@ -2324,7 +2325,7 @@ class StorySession(
                 except Exception as exc:  # noqa: BLE001 - reported by _finish_ledger
                     job.error = str(exc) or type(exc).__name__
 
-            job.thread = threading.Thread(target=call, name="ledger", daemon=True)
+            job.thread = BackgroundThread(target=call, name="ledger", daemon=True)
             job.thread.start()
         return job
 

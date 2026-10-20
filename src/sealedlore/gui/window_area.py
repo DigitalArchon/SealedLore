@@ -52,6 +52,7 @@ from sealedlore.gui.tile_set_gallery import TileSetDesigner, TileSetGallery
 from sealedlore.models.character import Character
 from sealedlore.storage.paths import story_dir
 from sealedlore.storage.repository import save_config
+from sealedlore.threads import BackgroundThread
 
 # Areas kept painted, most recent first.
 PAINTED_KEPT = 6
@@ -413,7 +414,7 @@ class AreaWindow:
                 ground = None
             signal.done.emit(key, ground)
 
-        thread = threading.Thread(target=paint, name="area-paint", daemon=True)
+        thread = BackgroundThread(target=paint, name="area-paint", daemon=True)
         self._paint_threads = [t for t in self._paint_threads if t.is_alive()] + [thread]
         thread.start()
 

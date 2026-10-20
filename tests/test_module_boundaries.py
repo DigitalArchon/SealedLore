@@ -13,7 +13,7 @@ from pathlib import Path
 
 SOURCE_ROOT = Path(__file__).resolve().parents[1] / "src" / "sealedlore"
 HEADLESS_PACKAGES = ("engine", "models", "phone", "providers", "storage")
-HEADLESS_MODULES = ("tree.py", "messages.py", "ids.py", "cli.py")
+HEADLESS_MODULES = ("tree.py", "messages.py", "ids.py", "cli.py", "threads.py")
 
 FORBIDDEN_PREFIXES = ("PySide6", "sealedlore.gui")
 

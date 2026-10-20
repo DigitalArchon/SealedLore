@@ -18,6 +18,7 @@ from PySide6.QtWidgets import QApplication
 
 from sealedlore import __version__
 from sealedlore.gui import theme
+from sealedlore.gui.collector import install_collector_pause
 from sealedlore.gui.fields import install_wheel_guard
 from sealedlore.gui.main_window import MainWindow
 from sealedlore.gui.text_size import load_stylesheet
@@ -58,6 +59,8 @@ def build_app(argv: Sequence[str]) -> QApplication:
     app = QApplication(list(argv))
     # Before any widget and before the stylesheet (fields.install_wheel_guard).
     install_wheel_guard(app)
+    # Before any background thread (sealedlore.threads).
+    install_collector_pause(app)
     # Qt's own palette is light: arrows and frames the stylesheet leaves to
     # the style came out black on the dark grounds (gui/theme.py).
     app.setPalette(theme.palette())

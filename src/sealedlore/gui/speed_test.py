@@ -17,15 +17,15 @@ closed earlier, and PySide's hand-back of those to the GUI thread for
 deletion called a null pointer (`Shiboken::BindingManager::
 runDeletionInMainThread`): a segfault, every time, in the full test run.
 Nothing is lost by the pause: what would have been collected is collected
-when the run ends, on the GUI thread.
+when the run ends, on the GUI thread. Every background thread pauses it
+the same way now (`sealedlore.threads`); a run holds it from start to end.
 """
 
 from __future__ import annotations
 
-import gc
 import threading
 from collections.abc import Callable, Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import as_completed
 from itertools import count
 
 from PySide6.QtCore import QCoreApplication, QObject, Qt, QThread, Signal, Slot
@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore import threads
 from sealedlore.engine.speed_test import (
     PROMPT,
     SpeedResult,
@@ -51,6 +52,7 @@ from sealedlore.engine.speed_test import (
 from sealedlore.gui.sizing import adjustable_columns, size_to_screen
 from sealedlore.models.config import ModelPrice, ProviderConfig
 from sealedlore.providers.base import ChatProvider
+from sealedlore.threads import thread_pool
 
 MakeProvider = Callable[[ProviderConfig], ChatProvider]
 COLUMNS = ("Model", "Used for", "First word", "Tokens a second", "In all", "Notes")
@@ -143,7 +145,7 @@ class _Run(QObject):
             if not self._targets:
                 return
             workers = min(len(self._targets), MAX_AT_ONCE)
-            with ThreadPoolExecutor(max_workers=workers) as pool:
+            with thread_pool(workers) as pool:
                 for index in range(len(self._targets)):
                     self.began.emit(index)
                 # Enclaves are attested first, and only then is anything
@@ -179,8 +181,6 @@ class SpeedTests(QObject):
         super().__init__(parent)
         self._ids = count(1)
         self._running: dict[int, tuple[QThread, _Run]] = {}
-        # Whether it was this that paused the collector (see the module's note).
-        self._paused_gc = False
         # Tests give a factory; the app reaches each model as play would.
         self.make_provider: MakeProvider = provider_for
 
@@ -188,11 +188,8 @@ class SpeedTests(QObject):
         self, targets: Sequence[SpeedTarget], prices: Mapping[str, ModelPrice] | None = None
     ) -> int:
         run_id = next(self._ids)
-        if not self._running and gc.isenabled():
-            # On the GUI thread, before any of the run's threads exist.
-            gc.collect()
-            gc.disable()
-            self._paused_gc = True
+        # Before any of the run's threads exist (see the module's note).
+        threads.hold()
         run = _Run(targets, self.make_provider, prices or {})
         thread = QThread(self)
         run.moveToThread(thread)
@@ -215,10 +212,9 @@ class SpeedTests(QObject):
         return run_id in self._running
 
     def _ended(self, run_id: int) -> None:
-        self._running.pop(run_id, None)
-        if not self._running and self._paused_gc:
-            self._paused_gc = False
-            gc.enable()
+        if self._running.pop(run_id, None) is not None:
+            threads.release()
+            threads.resume_collector()  # on the GUI thread, at once
         self.finished.emit(run_id)
 
     def wait(self, msecs: int = 35_000) -> None:
