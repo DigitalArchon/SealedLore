@@ -649,11 +649,13 @@ class PlotRuntime:
         if delta.refused:
             # What the read claimed and the text didn't back, said as well as
             # logged: it is the moment the author would correct the clock.
-            # Kept under the passage too. With spoilers off, what names the
-            # plot's own events or facts is counted, not named.
+            # Said, not kept under the passage: one plot read in five refuses
+            # something (72 of 346 logged), nearly all of them the program
+            # rightly turning down a move or a day the text never showed, and
+            # a warning under every fifth passage teaches the author to skip
+            # warnings. With spoilers off, what names the plot's own events
+            # or facts is counted, not named.
             notice += " · not taken: " + self._refusals_said(delta.refused, plot)
-            yield self._kept_notice(notice, node=node)
-            return
         yield SessionNotice(notice)
 
     def _refusals_said(self, refused: Sequence[str], plot: Plot) -> str:
