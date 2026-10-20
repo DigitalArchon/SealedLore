@@ -364,7 +364,7 @@ class PhoneWindow:
         (live, "3 stories shared" over a folder with none of them); an id
         whose story is gone is kept, since the story may come back from the
         Trash, and counted only while it is here."""
-        here = []
+        here: list[str] = []
         for story_id in self.config.phone.shared_stories:
             try:
                 if story_dir(story_id, self.root).is_dir():
