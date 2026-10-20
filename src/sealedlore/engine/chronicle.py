@@ -626,11 +626,6 @@ class Armed:
 MAX_REST = 3
 # The scene moving, or this much story time passing, ends a rest at once.
 REST_ENDS_AFTER_MINUTES = 6 * 60
-# A quiet-moment event the director declined rests one turn in the same
-# scene (the review of Oct 20 2026: the samples' quiet events kept it asked
-# before every passage). Off until measured: its moment, turning in for the
-# night, can be the very next turn.
-QUIET_REST = False
 
 
 def can_rest(item: Armed) -> bool:
@@ -642,17 +637,7 @@ def can_rest(item: Armed) -> bool:
     """
     if item.overdue or item.unconfirmed:
         return False
-    if QUIET_REST and item.kinds == ("begin",) and item.event.pacing == "quiet":
-        return True
     return item.kinds == ("reveal",) or (item.kinds == ("begin",) and item.event.pacing == "any")
-
-
-def _rest_limit(item: Armed) -> int:
-    """How many turns a decline rests it at most: a reveal or a quiet-moment
-    event one, since the moment it waits for can come any time."""
-    if item.kinds == ("reveal",) or item.event.pacing == "quiet":
-        return 1
-    return MAX_REST
 
 
 def resting(item: Armed, chronicle: Chronicle, scene: str) -> bool:
@@ -676,7 +661,7 @@ def note_asked(
         status.declined += 1
         # A reveal rests one turn at most: the moment it waits for (someone
         # who could tell it, the author heading its way) can come any time.
-        status.rest = min(status.declined, _rest_limit(item))
+        status.rest = min(status.declined, 1 if item.kinds == ("reveal",) else MAX_REST)
         status.asked_minutes = chronicle.minutes
         status.asked_scene = scene
 

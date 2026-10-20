@@ -1334,26 +1334,6 @@ def test_a_quiet_moment_event_is_asked_about_every_turn():
     assert not resting(items[0], chronicle, "the ridge")
 
 
-def test_with_the_switch_a_declined_quiet_event_rests_one_turn_in_the_scene(monkeypatch):
-    """Off by default (above). On, a quiet-moment event the director
-    declined waits one turn in the same scene, and never longer."""
-    from sealedlore.engine import chronicle as chronicle_module
-    from sealedlore.engine.chronicle import armed, note_asked, note_skipped, resting
-
-    monkeypatch.setattr(chronicle_module, "QUIET_REST", True)
-    p = plot(GATED.replace("- at: The Mill\n", ""))
-    chronicle = initial_chronicle(p)
-    chronicle.minutes = clock_minutes(1, 9, 0)
-    items = armed(p, chronicle, {"the_raid": 4})
-    for _ in range(3):
-        note_asked(items, set(), chronicle, "the ridge")
-        assert chronicle.events["the_cellar"].rest == 1
-        assert resting(items[0], chronicle, "the ridge")
-        assert not resting(items[0], chronicle, "the mill yard")
-        note_skipped(items, chronicle)
-        assert not resting(items[0], chronicle, "the ridge")
-
-
 def test_the_director_is_not_asked_again_on_the_very_next_turn(tmp_path):
     session = make_session(
         tmp_path,
