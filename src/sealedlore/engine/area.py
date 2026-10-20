@@ -2732,6 +2732,7 @@ def render_positions(
     level_names: Mapping[str, str] | None = None,
     now: str = "",
     mark_fixed: bool = False,
+    at_the_door: Collection[str] = (),
 ) -> str:
     """Where everyone stands, for the storyteller: exact, from the grid
     (design §5). `now`: the time of day and the weather (`now_words`), right
@@ -2744,7 +2745,9 @@ def render_positions(
     how far they walked since the last passage. Never the clock's day (the
     author's ruling: the day is the plot's). `mark_fixed`: what can't be
     taken or moved (built in, rooted, bolted down) is marked so in reach, on
-    a turn that may not move it."""
+    a turn that may not move it. `at_the_door`: names among `spots` standing
+    at a door of this building from outside (on the tile beyond its wall),
+    said so."""
     me = spots.get(held)
     if me is None or me.area != area.id:
         return ""
@@ -2772,6 +2775,8 @@ def render_positions(
         if area.indoor and room is not None and my_room is not None and room.index != my_room.index:
             apart = f", in {room_words(area, room)} (another room)"
         where = where_words(area, spot.x, spot.y)
+        if name in at_the_door:
+            where = "at the door, just outside"
         far = metres_words(metres)
         way = bearing(here, (spot.x, spot.y))
         how = f"beside {held}" if far == "beside" else f"{far} {way} of {held}"

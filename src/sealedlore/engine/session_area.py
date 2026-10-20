@@ -1233,17 +1233,26 @@ class AreaRuntime:
         held = self.held_name()
         me = state.spots.get(held or "")
         area = self.area(me.area) if me is not None else None
-        if area is None or not area.indoor or area.level or not area.exits:
+        if area is None:
+            return []
+        return self._at_the_door(state, self.world(), self._art_read(), held, area)
+
+    def _at_the_door(
+        self, state: AreaState, world: WorldMap, art: WorldArt, held: str | None, area: Area
+    ) -> list[tuple[str, int, int, int, int]]:
+        """`at_the_door` for a state and the area the author's character is
+        in on it (the turn's snapshot for the storyteller, the live state for
+        the play view)."""
+        if not area.indoor or area.level or not area.exits:
             return []
         building = place_of_area(area.id)
-        world = self.world()
         steps = {"north": (0, -1), "south": (0, 1), "west": (-1, 0), "east": (1, 0)}
         out: list[tuple[str, int, int, int, int]] = []
         used: dict[tuple[int, int], int] = {}
         for name, spot in state.spots.items():
             if name == held or spot.area == area.id:
                 continue
-            around = self.area(spot.area, world)
+            around = self.area(spot.area, world, art)
             if around is None or building not in around.buildings:
                 continue
             box = around.buildings[building]
@@ -2532,10 +2541,16 @@ class AreaRuntime:
             if action_line:
                 lines.append(action_line)
             return "\n".join(lines)
+        # Whoever stands at a door of this building from outside is here too,
+        # just beyond its wall (`at_the_door`): live (Oct 20 2026) John walked
+        # in through the farmhouse door, the woman on the threshold was
+        # settled outside at it, and the storyteller was told he stood alone
+        # in the kitchen while the prose had her holding him at gunpoint.
+        spots, at_door = self._with_those_at_the_door(state, world, art, held, area)
         text = render_positions(
             area,
             world,
-            state.spots,
+            spots,
             held,
             walked=state.walked_words if turn is not None and state.walked >= 30 else "",
             action_line=action_line,
@@ -2545,11 +2560,26 @@ class AreaRuntime:
             level_names=self._level_names(area, world, art),
             now=now,
             mark_fixed=mark_fixed,
+            at_the_door=at_door,
         )
         if not text:
             return ""
         heading = self.texts["map.positions"]
         return text.replace(text.split("\n", 1)[0], heading, 1)
+
+    def _with_those_at_the_door(
+        self, state: AreaState, world: WorldMap, art: WorldArt, held: str | None, area: Area
+    ) -> tuple[dict[str, Spot], set[str]]:
+        """The state's spots with whoever stands at a door of `area` from
+        outside put on the tile just beyond that door's wall, and their
+        names: in the area for the storyteller and the scene card, as the
+        play view shows them."""
+        spots = dict(state.spots)
+        at_door: set[str] = set()
+        for name, bx, by, _ex, _ey in self._at_the_door(state, world, art, held, area):
+            spots[name] = Spot(area=area.id, x=bx, y=by)
+            at_door.add(name)
+        return spots, at_door
 
     def map_scene(
         self, nodes: Sequence[Node], held_id: str | None, *, turn_node_id: str | None = None
@@ -2582,7 +2612,8 @@ class AreaRuntime:
         mine = (me.x, me.y)
         here: list[str] = []
         away: dict[str, str] = {}
-        for name, spot in state.spots.items():
+        spots, _at_door = self._with_those_at_the_door(state, world, self._art_read(), held, area)
+        for name, spot in spots.items():
             if name == held:
                 continue
             theirs = (spot.x, spot.y)

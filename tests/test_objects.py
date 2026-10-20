@@ -95,6 +95,15 @@ def test_someone_outside_a_building_alone_on_the_land_stands_at_its_door(
     house = session.area("house")
     assert (dx, dy) in house.exits
     assert not (0 <= bx < house.width and 0 <= by < house.height)
+    # And in the storyteller's positions and on the card as here, at the
+    # door (live, Oct 20 2026: John walked in through the farmhouse door, the
+    # woman on the threshold was settled outside at it, and the storyteller
+    # was told he stood alone in the kitchen while she held him at gunpoint).
+    told = session.positions_context([], "char-serrik")
+    line = next(ln for ln in told.splitlines() if ln.startswith("- Ruth:"))
+    assert "at the door, just outside" in line and "in sight" in line
+    scene = session.map_scene([], "char-serrik")
+    assert scene is not None and "Ruth" in scene.present_others
 
 
 def test_a_porch_the_read_put_inside_a_building_is_outside_it(tmp_path, story, cast, monkeypatch):
