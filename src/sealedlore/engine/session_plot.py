@@ -96,6 +96,7 @@ from sealedlore.models.node import (
     Node,
 )
 from sealedlore.models.plot import (
+    MINUTES_PER_DAY,
     Chronicle,
     Direction,
     EventDef,
@@ -453,9 +454,11 @@ class PlotRuntime:
         if skipped > 0:
             at_least = before.minutes
             before.minutes -= skipped
-        # The first passage read: nothing before it has set the hour, so the
-        # read's time of day stands (a plot with no `start:` is at 00:00).
-        first = not any(
+        # The first passage read of a plot whose file names no start (the
+        # clock at 00:00): nothing has set the hour, so the read's time of
+        # day stands. A file that names its start keeps the slack rule from
+        # the first read: a misread opening hour would otherwise cost a day.
+        first = plot.start_minutes % MINUTES_PER_DAY == 0 and not any(
             earlier.kind == "assistant" and earlier.meta.chronicle is not None
             for earlier in path[:-1]
         )

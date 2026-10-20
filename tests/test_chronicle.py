@@ -454,6 +454,27 @@ def test_the_first_read_sets_the_hour_whatever_the_start(tmp_path: Path):
     assert session.chronicle.minutes == clock_minutes(1, 15, 40)
 
 
+def test_a_plot_that_names_its_start_holds_the_first_read_to_the_slack(tmp_path: Path):
+    # The free first hour is for a file that names no start. One that does
+    # keeps the slack rule from the first read: a misread opening hour would
+    # otherwise cost the story most of a day, once and for good.
+    scenario = parse_plot_markdown(PLOT_FILE).scenario
+    assert scenario.plot.start_minutes == clock_minutes(1, 16, 0)
+    bundle = bundle_from_scenario(scenario)
+    save_story_bundle(bundle, root=tmp_path)
+    session = StorySession(
+        bundle,
+        Config(scene_reads="manual"),
+        MockChatProvider([PASSAGE, read(0, ends_at="04:30")]),
+        root=tmp_path,
+        estimator=TokenEstimator(counter=fallback_counter),
+        learn_corrections=False,
+    )
+    session.story.held_character_id = session.cast[0].id
+    list(session.send(turn(session)))
+    assert session.chronicle.minutes == clock_minutes(1, 16, 0)
+
+
 def test_a_read_that_under_counts_a_skip_keeps_the_skips_hour():
     # "By day 10, the snow has come." moved the author's turn to Day 10 ·
     # 14:00; a read answering no time at all used to land the passage at
