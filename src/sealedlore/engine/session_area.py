@@ -628,7 +628,7 @@ class AreaRuntime:
         leaf (kept while nothing it is built from changes), with what became
         of its things laid over it (`apply_things`: `things`, the records of
         the state in hand, else those live or at the leaf)."""
-        world = world if world is not None else self.world()
+        world = world if world is not None else self._world_read()
         art = art if art is not None else self._art_read()
         built = self._built_area(area_id, world, art)
         if built is None:
@@ -782,7 +782,7 @@ class AreaRuntime:
         """The area as its plan builds it, before the author's own tiles."""
         if area_id is None:
             return None
-        world = world if world is not None else self.world()
+        world = world if world is not None else self._world_read()
         art = art if art is not None else self._art_read()
         if is_window(area_id):
             return self._window(area_id, world, art)
@@ -861,7 +861,7 @@ class AreaRuntime:
             area_id,
             tuple((p.id, p.made_at, len(p.rows), p.ground) for p in art.terrain),
             self._art_version,
-            world_key(world),
+            self._world_key_of(world),
             tuple(sorted(art.layouts)),
             tuple(self.area_people()),
         )
@@ -965,15 +965,17 @@ class AreaRuntime:
         leaf, who is held, the live walking or the snapshot, the map as
         folded, and the art (its version, bumped on every save)."""
         live = self._live()
-        state = live if live is not None else self._snapshot_on(self.path())
-        world = self.world()
+        path = self.path()
+        state = live if live is not None else self._snapshot_on(path)
+        # The kept fold, read only (settling reads the map, never changes it).
+        world = self._world_read(path)
         art = self.world_art
         key = (
             self.story.active_leaf_id,
             self.held_name(),
             live is None,
             state.model_dump_json() if state is not None else "",
-            world_key(world),
+            self._world_key_of(world),
             self._art_version,
             len(art.layouts),
             len(art.terrain),
@@ -995,6 +997,23 @@ class AreaRuntime:
 
     def held_name(self) -> str | None:
         return self.map_held_name(self.story.held_character_id)
+
+    def _world_key_of(self, world: WorldMap) -> tuple:
+        """`world_key` of a kept fold (`_world_read`), worked out once per
+        fold: with 500 places it took a millisecond, asked on every lookup
+        of a window and every `area_state`. Any other map (a copy, its
+        holder's to change) is keyed afresh."""
+        if not self._is_kept_fold(world):
+            return world_key(world)
+        memo = self.__dict__.setdefault("_world_keys", {})
+        found = memo.get(id(world))
+        if found is not None and found[0] is world:
+            return found[1]
+        made = world_key(world)
+        if len(memo) > 8:
+            memo.clear()
+        memo[id(world)] = (world, made)  # the fold held, so its id is never given again
+        return made
 
     def settle(
         self, state: AreaState, world: WorldMap, art: WorldArt, *, walked: bool = True
@@ -1409,7 +1428,7 @@ class AreaRuntime:
         (walked, through a door, since the last turn), else the map's."""
         if not self.map_first or self.in_private:
             return None
-        world = self.world()
+        world = self._world_read()
         me = self.area_state().spots.get(self.held_name() or "")
         return self.place_of_spot(me, world) or world.where.get(self.held_name() or "")
 

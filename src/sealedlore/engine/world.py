@@ -1712,6 +1712,15 @@ def world_at(
     entry in `hidden` (`WorldPlace.lore_id`) is left out, with its ways, the
     things in it and anyone placed there: the plot keeps it from every model
     until it is revealed, and from the author's map too."""
+    world = fold_onto(world_under(base, start=start, designed=designed), path)
+    return hide(world, hidden)
+
+
+def world_under(
+    base: WorldDelta | None = None, *, start: str | None = None, designed: WorldDelta | None = None
+) -> WorldMap:
+    """The map before any passage: the imported map, the world designer's
+    regions under it, and where the story begins (`world_at`)."""
     world = WorldMap()
     if base is not None:
         world = applied(world, base, base=True)
@@ -1722,11 +1731,23 @@ def world_at(
     world.start = start if start in world.places else None
     if world.start is not None and world.start not in world.seen:
         world.seen.append(world.start)  # where the story begins is never under fog
+    return world
+
+
+def fold_onto(world: WorldMap, path: Sequence[Node]) -> WorldMap:
+    """`world` with every message's delta on `path` applied, in order, onto
+    `world` itself (`world_at`; the session keeps folds and goes on from
+    one, `WorldRuntime._fold`)."""
     for node in path:
         if node.meta.world is not None:
             world = applied(world, node.meta.world, in_place=True)  # ours alone: fresh above
         for fix in node.meta.world_fixes:  # the author's corrections, after the read's
             world = applied(world, fix, in_place=True)
+    return world
+
+
+def hide(world: WorldMap, hidden: Collection[str]) -> WorldMap:
+    """`world` less what the plot keeps hidden (`world_at`), in place."""
     gone = {p.id for p in world.places.values() if p.lore_id is not None and p.lore_id in hidden}
     if not gone:
         return world

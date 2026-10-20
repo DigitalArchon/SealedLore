@@ -725,6 +725,122 @@ def test_where_everyone_stands_is_settled_once_until_something_changes(
     assert len(calls) == 3
 
 
+def _long_map_story(session, count: int = 20):
+    """`count` exchanges, each passage adding a hut in the erg and moving
+    Serrik and Maela there: a path long enough for the fold's kept head."""
+    from sealedlore.models.node import Node, NodeMeta
+    from sealedlore.tree import link_child
+
+    previous = None
+    for i in range(count):
+        user = Node(id=f"u{i}", kind="user", speaker_id="char-serrik", content=f"Turn {i}.",
+                    meta=NodeMeta(controlled_character_id="char-serrik"))  # fmt: skip
+        hut = WorldPlace(id=f"hut{i}", name=f"Hut {i}", kind="building", inside="erg",
+                         x=400.0 + 30.0 * i, y=1200.0, size=10.0)  # fmt: skip
+        delta = WorldDelta(places=[hut], added=[hut.id], seen=[hut.id],
+                           where={"Serrik Vaun": hut.id, "Maela Orr": hut.id})  # fmt: skip
+        passage = Node(id=f"a{i}", kind="assistant", speaker_id="__narrator__",
+                       content=f"Passage {i}.", meta=NodeMeta(world=delta))  # fmt: skip
+        if previous is not None:
+            link_child(previous, user)
+        link_child(user, passage)
+        session.bundle.nodes += [user, passage]
+        previous = passage
+    session.story.active_leaf_id = previous.id
+    return session.path()
+
+
+def test_the_map_is_folded_once_until_what_it_is_folded_from_changes(
+    tmp_path, story, cast, monkeypatch
+):
+    """The review (Oct 20 2026): `area_state()` folded the whole path before
+    its cache check, 25 ms a fold at 500 passages and several folds a
+    redraw. The fold is kept, read shared and handed out as copies, and
+    folded again whenever anything it is folded from changes."""
+    import sealedlore.engine.session_world as session_world
+    from sealedlore.models.plot import Plot
+
+    session = open_session(tmp_path, story, cast)
+    path = _long_map_story(session)
+    folds = []
+    real = session_world.fold_onto
+
+    def counting(world, nodes):
+        folds.append(len(nodes))
+        return real(world, nodes)
+
+    monkeypatch.setattr(session_world, "fold_onto", counting)
+    first = session.world()
+    assert first.where["Maela Orr"] == "hut19" and "hut0" in first.places
+    folds.clear()
+    for _ in range(3):
+        again = session.world()
+        session.area_state()
+        session.here_place()
+    assert folds == [] and again == first
+    assert session._world_read() is session._world_read()  # shared, never copied
+    again.where["Maela Orr"] = "oasis"  # a caller's copy
+    assert session.world().where["Maela Orr"] == "hut19"
+
+    def now():
+        return session.world()
+
+    # The passage's own delta, written in place by a read after it.
+    path[-1].meta.world.where["Maela Orr"] = "oasis"
+    assert now().where["Maela Orr"] == "oasis"
+    # A correction on the latest message, filled in after it was begun.
+    session._begin_correction("Maela moved")
+    assert now().where["Maela Orr"] == "oasis"
+    session._fix().where["Maela Orr"] = "wreck"
+    assert now().where["Maela Orr"] == "wreck"
+    assert session.area_state().spots["Maela Orr"].area == session.world().places["wreck"].id
+    session.undo_correction()
+    assert now().where["Maela Orr"] == "oasis"
+    # An old message's delta replaced (beyond the last few, kept by which
+    # delta each message carries), and one changed in place by a fix.
+    old = path[3].meta.world
+    renamed = old.model_copy(deep=True)
+    renamed.places[0].name = "The shack"
+    path[3].meta.world = renamed
+    assert now().places["hut1"].name == "The shack"
+    path[5].meta.world_fixes.append(WorldDelta(things=[]))
+    path[5].meta.world_fixes[-1].where["Serrik Vaun"] = "wreck"
+    assert now().where["Serrik Vaun"] == "hut19"  # later passages move him on
+    assert "wreck" in now().visited.get("Serrik Vaun", [])
+    # The imported map changed in place, and the world designer's regions.
+    session.story.world_base.places[1].what = "A wreck, burnt out."
+    assert now().places["wreck"].what == "A wreck, burnt out."
+    region = WorldPlace(id="dreg", name="The salt flats", kind="region", x=-5000.0, y=0.0,
+                        size=400.0)  # fmt: skip
+    monkeypatch.setattr(
+        session, "designed_delta", lambda: WorldDelta(places=[region], added=[region.id])
+    )
+    assert "dreg" in now().places
+    monkeypatch.undo()
+    monkeypatch.setattr(session_world, "fold_onto", counting)
+    # The leaf moved back (a branch, a retake, Take back).
+    session.story.active_leaf_id = path[-3].id
+    assert now().where["Maela Orr"] == "hut18" and "hut19" not in now().places
+    session.story.active_leaf_id = path[-1].id
+    # What the plot hides.
+    session.story.world_base.places[2].lore_id = "lore-oasis"
+    session.story.plot = Plot()
+    monkeypatch.setattr(session, "hidden_ids", lambda path=None, **_: {"lore-oasis"})
+    assert "oasis" not in now().places
+    monkeypatch.setattr(session, "hidden_ids", lambda path=None, **_: set())
+    assert "oasis" in now().places
+    # Through all of it, every fold the same as one made afresh.
+    from sealedlore.engine.world import world_at
+
+    fresh = world_at(
+        session.path(),
+        session.story.world_base,
+        start=session.story.world_start,
+        designed=session.designed_delta(),
+    )
+    assert now() == fresh
+
+
 def test_still_at_a_place_is_measured_in_metres_not_tiles(tmp_path, story, cast):
     """The review (Oct 20 2026): "still at the door" was 8 tiles, which on
     a window of open country at 40 m a tile reached 320 m: someone 300 m

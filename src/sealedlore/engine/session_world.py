@@ -18,7 +18,9 @@ makes (session_plot.py `_read_after_turn`).
 from __future__ import annotations
 
 import re
+import threading
 import time
+from collections import OrderedDict
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -40,6 +42,8 @@ from sealedlore.engine.world import (
     build_world_read_messages,
     describe_delta,
     established,
+    fold_onto,
+    hide,
     key,
     parse_world_reply,
     place_delta,
@@ -47,7 +51,7 @@ from sealedlore.engine.world import (
     resolve_reply,
     unknown_words,
     within_ids,
-    world_at,
+    world_under,
 )
 from sealedlore.engine.world_layout import CHILD_SHARE, size_of
 from sealedlore.models.character import Character
@@ -63,6 +67,14 @@ MAX_FIXED_NAMED = 3
 WORLD_MAX_TOKENS = 4000
 # A chat's user on the map when the chat names nobody.
 CHAT_MAP_NAME = "You"
+
+# The fold of a path is kept (`WorldRuntime._fold`): a fold of a 500-message
+# path took 25 ms, and a redraw folded it five times (the review, Oct 20
+# 2026). The last messages are compared by what they hold, since the reads,
+# the turn being stamped and the author's corrections write their deltas in
+# place; the rest by which delta each message carries.
+FOLD_TAIL = 6
+FOLDS_KEPT = 8
 
 
 # What opens where it stands: fixed, but opening it moves nothing, and "if
@@ -201,21 +213,103 @@ class WorldRuntime:
         return self.role_model("map_art")
 
     def world(self, node_id: str | None = None) -> WorldMap:
-        """The map at a message (the leaf by default), on its path."""
+        """The map at a message (the leaf by default), on its path: a copy,
+        the caller's to change."""
         return self._world_on(self.path() if node_id is None else self._path_to(node_id))
 
     def _world_on(self, path, *, whole: bool = False) -> WorldMap:
         """The map at the end of `path`: the story's imported map under it,
         less what the plot is keeping hidden at that point (`whole`: with
-        it, for placing new places clear of what is hidden)."""
+        it, for placing new places clear of what is hidden). A copy of the
+        kept fold (`_fold`), the caller's to change."""
+        return self._fold(path, whole=whole).model_copy(deep=True)
+
+    def _world_read(self, path=None) -> WorldMap:
+        """The map at the end of `path` (the leaf's by default) for reading
+        only: the kept fold itself, shared by every reader until what it is
+        folded from changes. Never change it; `world()` gives a copy."""
+        return self._fold(self.path() if path is None else path)
+
+    def _fold(self, path: Sequence[Node], *, whole: bool = False) -> WorldMap:
+        """The map folded from `path`, kept: one fold per path and what it
+        is folded from (the imported map, the start, the designer's regions,
+        what the plot hides, each message's delta and the author's
+        corrections on it), shared, never to be changed. The fold of all but
+        the last FOLD_TAIL messages is kept by which delta each carries (a
+        delta replaced is a new one), and goes on from there; the last are
+        compared by what they hold, since they are written in place."""
         hidden = self.hidden_ids(path) if self.story.plot is not None and not whole else ()
-        return world_at(
-            path,
-            self.story.world_base,
-            start=self.story.world_start,
-            hidden=hidden,
-            designed=self.designed_delta(),
+        designed = self.designed_delta()
+        base = self.story.world_base
+        head = list(path[:-FOLD_TAIL]) if len(path) > FOLD_TAIL else []
+        tail = list(path[len(head) :])
+        head_key = (
+            id(designed),
+            base.model_dump_json() if base is not None else "",
+            self.story.world_start,
+            tuple(
+                (n.id, id(n.meta.world), id(n.meta.world_fixes), *map(id, n.meta.world_fixes))
+                for n in head
+            ),
         )
+        tail_key = tuple(
+            (
+                n.id,
+                n.meta.world.model_dump_json() if n.meta.world is not None else "",
+                *(f.model_dump_json() for f in n.meta.world_fixes),
+            )
+            for n in tail
+        )
+        key = (head_key, tail_key, tuple(sorted(hidden)))
+        folds = self._folds()
+        lock = self._fold_lock()
+        with lock:
+            found = folds["all"].get(key)
+            if found is not None:
+                folds["all"].move_to_end(key)
+                return found[0]
+            kept = folds["head"].get(head_key)
+            if kept is not None:
+                folds["head"].move_to_end(head_key)
+        if kept is None:
+            under = world_under(base, start=self.story.world_start, designed=designed)
+            world = fold_onto(under, head)
+            # What the key's ids are of, held while it is kept, so that no id
+            # in it is given to another object meanwhile.
+            held = [
+                designed,
+                *(n.meta.world for n in head),
+                *(n.meta.world_fixes for n in head),
+                *(f for n in head for f in n.meta.world_fixes),
+            ]
+            kept = (world, held)
+            with lock:
+                folds["head"][head_key] = kept
+                while len(folds["head"]) > FOLDS_KEPT:
+                    folds["head"].popitem(last=False)
+        world = hide(fold_onto(kept[0].model_copy(deep=True), tail), hidden)
+        with lock:
+            folds["all"][key] = (world, kept[1])
+            while len(folds["all"]) > FOLDS_KEPT:
+                folds["all"].popitem(last=False)
+        return world
+
+    def _folds(self) -> dict[str, OrderedDict]:
+        found = self.__dict__.get("_world_folds")
+        if found is None:
+            found = self.__dict__.setdefault(
+                "_world_folds", {"head": OrderedDict(), "all": OrderedDict()}
+            )
+        return found
+
+    def _is_kept_fold(self, world: WorldMap) -> bool:
+        """Whether `world` is a kept fold (`_world_read`), shared and never
+        changed, rather than a copy."""
+        with self._fold_lock():
+            return any(kept[0] is world for kept in self._folds()["all"].values())
+
+    def _fold_lock(self) -> threading.Lock:
+        return self.__dict__.setdefault("_world_fold_lock", threading.Lock())
 
     def map_context(self, path, held_id: str | None, *, turn_node_id: str | None = None) -> str:
         """The local map for the storyteller at the end of `path`, whenever
