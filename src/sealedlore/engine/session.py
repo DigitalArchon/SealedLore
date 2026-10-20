@@ -1292,15 +1292,27 @@ class StorySession(
         author's intent for that turn now, and the next take should reproduce
         this one rather than the shape the first take happened to use.
         """
+        mode = shape.agency_mode or turn.agency_mode
+        # The composer's skill and difficulty describe one attempt (the
+        # difficulty resets to Standard after every send): they apply to a
+        # roll made now, a turn moved into dice mode, never to a roll the
+        # turn keeps or rolls again. Regenerate keeps the roll and Reroll is
+        # "against the same odds" (§4): read from the composer, a Hard turn
+        # was rerolled at Standard and written down as Standard.
+        fresh_roll = mode == "dice" and turn.roll is None
         turn = replace(
             turn,
             response_style=shape.response_style,
             length_hint=shape.length_hint,
-            agency_mode=shape.agency_mode or turn.agency_mode,
+            agency_mode=mode,
             npc_scope=shape.npc_scope or turn.npc_scope,
             npc_scope_ids=shape.npc_scope_ids,
-            difficulty=shape.difficulty or turn.difficulty,
-            dice_domain=shape.dice_domain if shape.dice_domain is not None else turn.dice_domain,
+            difficulty=(shape.difficulty or turn.difficulty) if fresh_roll else turn.difficulty,
+            dice_domain=(
+                shape.dice_domain
+                if fresh_roll and shape.dice_domain is not None
+                else turn.dice_domain
+            ),
         )
         # A roll belongs to dice mode. Leaving one on a turn the author has
         # moved to Contested would hand the model an outcome nothing asked for;
@@ -1861,7 +1873,18 @@ class StorySession(
         lore = self._retrieve_for_turn(turn, history)
         recall = self._recall_for_turn(self._recall_query(turn, history), history)
         prompt = self.assemble(turn, history_nodes=history, lore=lore, recall=recall)
-        yield from self._generate(prompt, turn, parent=user_node)
+        standing = previous.id if previous is not None else user_node.id
+        try:
+            yield from self._generate(prompt, turn, parent=user_node)
+        finally:
+            if self.story.active_leaf_id == standing:
+                # Nothing came (stopped or failed before any text): the
+                # passage being retaken stands, and the live scene goes back
+                # to the one it left. It was left where this turn found it,
+                # one passage behind, and the next prompt listed people the
+                # standing passage had sent away (the review, Oct 20 2026).
+                self._sync_scene()
+                self.save()
         taken = index_nodes(self.nodes).get(self.story.active_leaf_id or "")
         if previous is not None and taken is not None and taken.parent_id == user_node.id:
             # A take of a branch's first passage is a take of that branch's.

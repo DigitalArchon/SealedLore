@@ -1413,3 +1413,38 @@ def test_hidden_lore_never_stands_in_the_system_block(session: StorySession):
 
     assert "Sundering Accord" not in prompt.section("system.lore").text
     assert "Calder ironwork" in prompt.section("system.lore").text
+
+
+def test_a_retake_keeps_the_odds_the_turn_was_rolled_at(session: StorySession):
+    """The composer's difficulty resets to Standard after every send, and a
+    retake read it: a turn sent at Hard was rerolled at Standard, and a plain
+    Regenerate wrote Standard onto the turn too (the review, Oct 20 2026).
+    Regenerate keeps the roll and Reroll rolls "against the same odds" (§4),
+    so a kept or rerolled roll keeps the turn's skill and difficulty; only a
+    turn moved into dice mode takes the composer's."""
+    session.cast[0].competence.tiers = {"lockpicking": "expert"}
+    session.rng = random.Random(3)
+    session.provider = MockChatProvider(["one", "two", "three", "four", "five"])
+    list(session.send(dice_turn(dice_domain="lockpicking", difficulty="hard")))
+    user_node = session.path()[0]
+    first = user_node.meta.roll
+    assert first is not None and first.difficulty == "hard"
+    composer = TurnShape(agency_mode="dice", difficulty="standard", dice_domain="stealth")
+
+    list(session.regenerate(shape=composer))
+    assert user_node.meta.roll == first
+    assert user_node.meta.difficulty == "hard" and user_node.meta.dice_domain == "lockpicking"
+
+    session.rng = random.Random(99)
+    list(session.regenerate(reroll=True, shape=composer))
+    second = user_node.meta.roll
+    assert second is not None and second != first
+    assert second.difficulty == "hard" and second.domain == first.domain
+    assert user_node.meta.difficulty == "hard"
+
+    # Moved into dice mode now: there was no roll, so the composer's odds apply.
+    list(session.send(turn("I slip past.")))
+    plain = session.path()[-2]
+    list(session.regenerate(shape=TurnShape(agency_mode="dice", difficulty="hard")))
+    assert plain.meta.roll is not None and plain.meta.roll.difficulty == "hard"
+    assert plain.meta.difficulty == "hard"

@@ -27,7 +27,7 @@ from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.models.character import Character
 from sealedlore.models.config import Config, ProviderConfig
 from sealedlore.models.scene import SceneChange, SceneLogEntry, SceneState
-from sealedlore.providers.base import ProviderError
+from sealedlore.providers.base import ProviderError, StreamCancelled
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage.repository import (
     StoryBundle,
@@ -577,3 +577,47 @@ def test_staying_with_the_character_the_radio_room_may_not(session: StorySession
 
     assert "even if it is" in session.provider.requests[-1].messages[0].text
     assert [s.name for s in session.nodes[-1].meta.scene_shortcuts] == ["Tess"]
+
+
+def test_a_retake_that_never_began_leaves_the_scene_where_the_passage_left_it(
+    session: StorySession,
+):
+    """Regenerate on the newest passage, stopped or failed before any text:
+    the passage stands, but the live scene had been left where that turn
+    found it, one passage behind, so the Scene page showed the people the
+    passage had sent away and the next prompt listed them as present (the
+    review, Oct 20 2026). `_retake_in_place` already put it back; the plain
+    path does too now."""
+    respond(
+        session,
+        "Serrik left Maela in the undercroft and climbed to the yard.",
+        delta(left=[{"name": "Maela Orr", "how": "stayed below"}], location="The yard"),
+        "SECOND TAKE never arrives",
+    )
+    list(session.send(turn("I climb to the yard.")))
+    leaf = session.path()[-1]
+    assert session.story.scene.present_character_ids == ["char-serrik"]
+    assert session.story.scene.location == "The yard"
+
+    # A: the request fails before any text (a 500, the network).
+    session.provider.error = ProviderError("boom")
+    with pytest.raises(ProviderError):
+        list(session.regenerate())
+    session.provider.error = None
+    assert session.path()[-1].id == leaf.id
+    assert session.story.scene.present_character_ids == ["char-serrik"]
+    assert session.story.scene.location == "The yard"
+
+    # B: Stop before the first chunk (the generator is closed at its yield).
+    session.provider.cancel()
+    events = session.regenerate()
+    with pytest.raises(StreamCancelled):
+        for _event in events:
+            pass
+    session.provider.reset_cancel()
+    assert session.path()[-1].id == leaf.id
+    assert session.story.scene.present_character_ids == ["char-serrik"]
+    tail = session.assemble(turn("I look around.")).messages[-1].text
+    lines = tail.splitlines()
+    here = lines[next(i for i, line in enumerate(lines) if line.startswith("IN THE SCENE")) + 1]
+    assert "Serrik Vaun" in here and "Maela" not in here
