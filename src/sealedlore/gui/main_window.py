@@ -301,6 +301,8 @@ class MainWindow(
         self._queued_origin = "desktop"
         # The turn or Question the running job is answering (`_start(sent=)`).
         self._sent: _Sent | None = None
+        # A rebuild of the transcript that waits for an open editor to close.
+        self._reload_deferred = False
         # What the running job is called in a failure ("Review"), and the
         # failure itself, kept until the job has let go of the story.
         self._job_name = "Generation"
@@ -361,6 +363,7 @@ class MainWindow(
         self.transcript.take_back_requested.connect(self._take_back)
         self.transcript.review_mark_requested.connect(self._toggle_review_mark)
         self.transcript.edit_committed.connect(self._edit_node)
+        self.transcript.edit_closed.connect(self._on_edit_closed)
         self.transcript.delete_requested.connect(self._delete_node)
         self.transcript.keep_full_requested.connect(self._toggle_keep_full)
         self.transcript.delete_aside_requested.connect(self._delete_aside)
@@ -1836,7 +1839,22 @@ class MainWindow(
         save_config(self.config, root=self.root)
         self.stories.refresh(selected_id=self.session.story.id if self.session else None)
 
+    def _reload_unless_editing(self) -> None:
+        """A rebuild nobody asked for (a job ending, a rebuild landing, a
+        picture arriving): it waits while a message's editor is open, since
+        the rebuild destroys every widget and the editor with it, mid-sentence
+        (the review, Oct 20 2026). It runs when the editor closes."""
+        if self.transcript.editing():
+            self._reload_deferred = True
+            return
+        self.reload_transcript()
+
+    def _on_edit_closed(self) -> None:
+        if self._reload_deferred and not self._busy:
+            self.reload_transcript()
+
     def reload_transcript(self) -> None:
+        self._reload_deferred = False
         if self.session is None:
             self.transcript.clear()
             self.refresh_branch_bar()
@@ -2851,7 +2869,7 @@ class MainWindow(
         session.unreported_usage.clear()
         self._absorb_summary_costs()
         self._refresh_story_cost()
-        self.reload_transcript()
+        self._reload_unless_editing()
         self.refresh_summaries()
         self._reassemble_inspector()
         if notices:
@@ -3189,7 +3207,7 @@ class MainWindow(
     def _finish_job(self) -> None:
         # The worker mutated the session on its own thread; rebuild the view
         # from story state now that it is finished, so the two cannot drift.
-        self.reload_transcript()
+        self._reload_unless_editing()
         focus, self._focus_after_job = self._focus_after_job, None
         if focus is not None:
             QTimer.singleShot(0, lambda: self.transcript.scroll_to_node(focus))
@@ -4443,6 +4461,9 @@ class MainWindow(
             background=self._background,
             queued=self._queued is not None,
         )
+        # Edit and ⋯ on every message are off too (the worker is the only
+        # writer); an editor already open keeps its text until the job ends.
+        self.transcript.set_busy(busy)
         self.stories.setEnabled(not busy)
         self.close_story_action.setEnabled(has_story and not busy)
         self.close_story_action.setVisible(has_story)

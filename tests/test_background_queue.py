@@ -389,3 +389,58 @@ def test_a_failed_job_is_named_for_what_it_was(app, tmp_path: Path, story, cast,
     assert warned == [("Archiving failed", "the summariser is down")]
     assert window.statusBar().currentMessage().startswith("Archiving failed:")
     window.close()
+
+
+def test_an_editor_open_while_a_job_runs_keeps_its_text_and_outlives_the_job(
+    app, tmp_path: Path, story, cast
+):
+    """The transcript stayed fully clickable while the model wrote: Save on
+    an editor was thrown away without a word, and an editor open when the
+    job ended was destroyed with the rebuild, mid-sentence (the review, Oct
+    20 2026). Now Edit and ⋯ are off while a job runs, as every control that
+    changes the story is; an editor already open stays, its Save waits for
+    the job, and the rebuild waits for the editor to close."""
+    from shiboken6 import isValid
+
+    window = _window(
+        tmp_path, story, cast, ["The door gives.", "{}", "The hall is dark.", "{}", "Quiet.", "{}"]
+    )
+    session = window.session
+    _send(window, "I push the door.")
+    wait_for(app, lambda: not window._busy)
+    turn = session.path()[0]
+    widget = window.transcript.message_widget(turn.id)
+    assert widget.edit_button.isEnabled() and widget.more_button.isEnabled()
+    widget.begin_edit()
+    widget._editor.setPlainText("I push the door, hard.")
+
+    window._provider.delay = 0.03
+    _send(window, "I step inside.")
+    wait_for(app, lambda: window._busy)
+    other = window.transcript.message_widget(session.path()[1].id)
+    assert not other.edit_button.isEnabled() and not other.more_button.isEnabled()
+    assert widget._editor is not None and not widget._save_button.isEnabled()
+    widget._commit_edit()  # Save pressed anyway: the editor and its text stay
+    assert widget._editor is not None and session.nodes[0].content == "I push the door."
+    wait_for(app, lambda: not window._busy)
+
+    # The job ended: the rebuild waited, the editor is whole, Save works again.
+    assert isValid(widget) and widget._editor is not None and widget._save_button.isEnabled()
+    assert window._reload_deferred and other.edit_button.isEnabled()
+    assert widget._editor.toPlainText() == "I push the door, hard."
+    widget._commit_edit()
+    assert session.nodes[0].content == "I push the door, hard."
+    assert not window._reload_deferred
+    assert window.transcript.message_widget(session.path()[-1].id) is not None
+
+    # Cancelled instead, the waiting rebuild runs then too.
+    window._provider.delay = 0.0
+    widget = window.transcript.message_widget(turn.id)
+    widget.begin_edit()
+    _send(window, "I listen.")
+    wait_for(app, lambda: not window._busy)
+    assert window._reload_deferred and isValid(widget)
+    widget.cancel_edit()
+    assert not window._reload_deferred
+    assert window.transcript.message_widget(session.path()[-1].id) is not None
+    window.close()

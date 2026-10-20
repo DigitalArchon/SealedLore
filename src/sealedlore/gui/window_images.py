@@ -246,10 +246,11 @@ class ImagesWindow:
         return views | walking
 
     def _refresh_image_views(self) -> None:
-        """The Media tab now; the transcript once no passage is streaming into it."""
+        """The Media tab now; the transcript once no passage is streaming into
+        it, and no message is being edited."""
         self.refresh_images()
         if not self._busy:
-            self.reload_transcript()
+            self._reload_unless_editing()
 
     # --- generating -------------------------------------------------------------
 

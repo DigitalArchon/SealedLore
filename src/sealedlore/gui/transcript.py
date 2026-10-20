@@ -220,6 +220,8 @@ class MessageWidget(QFrame):
     # Toggle this passage as evidence for the next settings review.
     review_mark_requested = Signal(str)
     edit_committed = Signal(str, str)
+    # The editor closed without saving (the transcript may be rebuilt now).
+    edit_closed = Signal()
     # ⋯ → New branch from here…: (node id, the new text, the branch's name or
     # "" for the next "Branch N"), as a new branch.
     rewrite_committed = Signal(str, str, str)
@@ -262,6 +264,9 @@ class MessageWidget(QFrame):
         self.setProperty("archived", "true" if archived else "false")
         self.node_id = node_id
         self._editor: QPlainTextEdit | None = None
+        self._save_button: QPushButton | None = None
+        # The story is being written: nothing here may change it (set_busy).
+        self._busy = False
         self._edit_row: QWidget | None = None
         self._branch_name: QLineEdit | None = None
         # The name a new branch gets when its field is left blank ("Branch 3").
@@ -534,27 +539,54 @@ class MessageWidget(QFrame):
         self.edit_button.setEnabled(False)
         self._editor = editor
         self._edit_row = row
+        self._save_button = save
+        self._sync_save()
         editor.setFocus(Qt.OtherFocusReason)
 
-    def cancel_edit(self) -> None:
+    def cancel_edit(self, *, committing: bool = False) -> None:
         if self._editor is None:
             return
         self._editor.deleteLater()
         self._editor = None
         self._branch_name = None
+        self._save_button = None
         if self._edit_row is not None:
             self._edit_row.deleteLater()
             self._edit_row = None
         self.body.show()
-        self.edit_button.setEnabled(True)
+        self.edit_button.setEnabled(not self._busy)
+        if not committing:
+            self.edit_closed.emit()
+
+    def set_busy(self, busy: bool) -> None:
+        """While the story is being written nothing on a message may change
+        it: Edit and ⋯ are off, and an editor already open stays open with
+        its Save waiting (the text is the author's; it used to be thrown
+        away without a word, the review of Oct 20 2026)."""
+        self._busy = busy
+        self.edit_button.setEnabled(not busy and self._editor is None)
+        if self.more_button is not None:
+            self.more_button.setEnabled(not busy)
+        self._sync_save()
+
+    def _sync_save(self) -> None:
+        if self._save_button is None:
+            return
+        self._save_button.setEnabled(not self._busy)
+        self._save_button.setToolTip(
+            "Saved once the story's current job is done" if self._busy else ""
+        )
+
+    def editing(self) -> bool:
+        return self._editor is not None
 
     def _commit_edit(self) -> None:
-        if self._editor is None:
-            return
+        if self._editor is None or self._busy:
+            return  # the editor stays, and Save with it, until the job is done
         text = self._editor.toPlainText()
         rewriting = self._rewriting
         name = self._branch_name.text().strip() if self._branch_name is not None else ""
-        self.cancel_edit()
+        self.cancel_edit(committing=True)
         # The window rebuilds the transcript from story state, so the widget
         # does not update itself here — one writer, as with generation.
         if rewriting:
@@ -999,10 +1031,14 @@ class TranscriptView(QScrollArea):
     # (action, video id): a finished video's menu, or a pending one's button.
     video_action_requested = Signal(str, str)
     keep_full_requested = Signal(str, bool)
+    # A message's editor closed without saving.
+    edit_closed = Signal()
 
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("transcript")
+        # The story is being written: no message may change it (set_busy).
+        self._busy = False
         # A simple chat (`set_chat`): its labels, Keep in full, and a TEE
         # chat's private look.
         self._chat = False
@@ -1211,9 +1247,27 @@ class TranscriptView(QScrollArea):
         widget.regenerate_requested.connect(self.regenerate_requested)
         widget.take_back_requested.connect(self.take_back_requested)
         widget.edit_committed.connect(self.edit_committed)
+        widget.edit_closed.connect(self.edit_closed)
         widget.delete_requested.connect(self.delete_requested)
+        widget.set_busy(self._busy)
         self._place(widget)
         return widget
+
+    def set_busy(self, busy: bool) -> None:
+        """The story is being written (or not): every message built now,
+        and every one built later, knows (`MessageWidget.set_busy`)."""
+        self._busy = busy
+        for widget in self._container.findChildren(MessageWidget):
+            if self._layout.indexOf(widget) >= 0:
+                widget.set_busy(busy)
+
+    def editing(self) -> bool:
+        """Whether a message's editor is open: a rebuild would destroy it."""
+        return any(
+            widget.editing()
+            for widget in self._container.findChildren(MessageWidget)
+            if self._layout.indexOf(widget) >= 0
+        )
 
     def add_picture(self, image: GeneratedImage, data: bytes | None) -> ImageMessageWidget:
         widget = ImageMessageWidget(image, data)
