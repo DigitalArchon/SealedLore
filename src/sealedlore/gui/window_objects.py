@@ -189,6 +189,7 @@ class ObjectsWindow:
             job,
             streaming=False,
             busy_text=f"Writing a card for {name} from what the story says of them…",
+            job="Card",
         )
 
     def _run_after_job(self) -> None:

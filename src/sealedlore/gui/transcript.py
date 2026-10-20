@@ -201,6 +201,19 @@ class TextBody(QLabel):
         super().changeEvent(event)
 
 
+def _retakeable_ids(nodes: Sequence[Node]) -> set[str]:
+    """The passages Regenerate applies to: those answering an author turn.
+    An opening written as given has none before it, and a private scene's
+    summary is the author's approved text."""
+    return {
+        node.id
+        for before, node in zip(nodes, nodes[1:], strict=False)
+        if node.kind == "assistant"
+        and before.kind == "user"
+        and node.meta.private_summary_of is None
+    }
+
+
 class MessageWidget(QFrame):
     regenerate_requested = Signal(str)
     take_back_requested = Signal(str)
@@ -229,6 +242,7 @@ class MessageWidget(QFrame):
         node_id: str = "",
         archived: bool = False,
         rerollable: bool = False,
+        retakeable: bool = True,
         variant: tuple[int, int] | None = None,
         usage: Usage | None = None,
         reasoning: str | None = None,
@@ -294,7 +308,7 @@ class MessageWidget(QFrame):
         self.more_button: QToolButton | None = None
         self.actions_: dict[str, QAction] = {}
         if node_id:
-            self._add_more_menu(header_row, kind == "assistant", rerollable)
+            self._add_more_menu(header_row, kind == "assistant", rerollable, retakeable)
         layout.addLayout(header_row)
         # Where a branch begins: the one place in the story it shows.
         self.branch_label: QLabel | None = None
@@ -382,7 +396,9 @@ class MessageWidget(QFrame):
         row.addWidget(self.variant_label)
         row.addWidget(following)
 
-    def _add_more_menu(self, row: QHBoxLayout, assistant: bool, rerollable: bool) -> None:
+    def _add_more_menu(
+        self, row: QHBoxLayout, assistant: bool, rerollable: bool, retakeable: bool = True
+    ) -> None:
         menu = QMenu(self)
         if not assistant:
             # The author's own turn, back in the composer with the settings it
@@ -395,7 +411,7 @@ class MessageWidget(QFrame):
             )
             take_back.triggered.connect(lambda: self.take_back_requested.emit(self.node_id))
             self.actions_["take_back"] = take_back
-        if assistant:
+        if assistant and retakeable:
             regenerate = menu.addAction("Regenerate this passage")
             regenerate.setToolTip(
                 "Write another take of this passage, in its place; this one is kept (‹ ›), "
@@ -1160,6 +1176,7 @@ class TranscriptView(QScrollArea):
         node_id: str = "",
         archived: bool = False,
         rerollable: bool = False,
+        retakeable: bool = True,
         variant: tuple[int, int] | None = None,
         usage: Usage | None = None,
         reasoning: str | None = None,
@@ -1175,6 +1192,7 @@ class TranscriptView(QScrollArea):
             node_id=node_id,
             archived=archived,
             rerollable=rerollable,
+            retakeable=retakeable,
             variant=variant,
             usage=usage,
             reasoning=reasoning,
@@ -1261,12 +1279,15 @@ class TranscriptView(QScrollArea):
                 rerollable=(
                     node is nodes[-1] and node.kind == "assistant" and node.meta.roll is not None
                 ),
+                retakeable=node.id in retakeable,
                 variant=variant_of(node.id) if variant_of else None,
                 marked=node.id in marked_ids,
                 show_rolls=show_rolls,
                 branch_start=(branch_starts or {}).get(node.id),
             )
             add_asides(node.id)
+
+        retakeable = _retakeable_ids(nodes)
 
         units: list[_Unit] = [(None, lambda: add_asides(None))]
         units += [(node.id, lambda node=node: build(node)) for node in nodes]
@@ -1315,12 +1336,14 @@ class TranscriptView(QScrollArea):
                 rerollable=(
                     node is nodes[-1] and node.kind == "assistant" and node.meta.roll is not None
                 ),
+                retakeable=node.id in retakeable,
                 variant=variant_of(node.id) if variant_of else None,
                 marked=node.id in marked_ids,
                 show_rolls=show_rolls,
                 branch_start=(branch_starts or {}).get(node.id),
             )
 
+        retakeable = _retakeable_ids(nodes)
         units: list[_Unit] = [(None, note)]
         units += [(None, lambda chapter=chapter: card(chapter)) for chapter in chapters]
         units += [(node.id, lambda node=node: build(node)) for node in nodes]
@@ -1341,6 +1364,7 @@ class TranscriptView(QScrollArea):
         archived: bool = False,
         unsent: bool = False,
         rerollable: bool = False,
+        retakeable: bool = True,
         variant: tuple[int, int] | None = None,
         marked: bool = False,
         show_rolls: bool = True,
@@ -1371,6 +1395,7 @@ class TranscriptView(QScrollArea):
             node_id=node.id,
             archived=archived or unsent,
             rerollable=rerollable,
+            retakeable=retakeable,
             variant=variant,
             usage=node.meta.usage if node.kind == "assistant" else None,
             reasoning=node.meta.reasoning if node.kind == "assistant" else None,

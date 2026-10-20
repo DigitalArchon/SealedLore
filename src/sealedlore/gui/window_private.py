@@ -314,6 +314,7 @@ class PrivateWindow:
                 f"{session.model} is condensing the story so far for the private model…"
             ),
             provider=session.provider,
+            job="Condensing the story",
         )
 
     def _start_attestation(self, settings: ProviderConfig) -> None:
@@ -683,6 +684,7 @@ class PrivateWindow:
                 f"{span.model} is summarising the private scene… (Stop to end it "
                 "without a summary or keep playing)"
             ),
+            job="Summary",
         )
 
     def _offer_private_summary(self) -> None:
@@ -718,6 +720,7 @@ class PrivateWindow:
                 if self.in_chat
                 else "Adding the summary; the scene and the clock catch up from it…",
                 provider=session.provider,
+                job="Adding the summary",
             )
         elif dialog.choice == PrivateSummaryDialog.AGAIN:
             self.end_private()

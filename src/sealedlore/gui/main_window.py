@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6 import __version__ as pyside_version
@@ -207,12 +208,32 @@ def _how_it_starts(story: Story) -> dict:
     return story.setup.model_dump(exclude={"description"})
 
 
+@dataclass(frozen=True)
+class _Sent:
+    """A turn or Question as it left the composer (or a phone), kept while
+    its job runs: one whose passage never comes goes back where it was
+    typed (`_return_unanswered`)."""
+
+    text: str
+    ooc: str | None
+    origin: str
+    # The leaf before the job: a user node past it, standing alone when the
+    # job ends, is this turn with no passage.
+    leaf_before: str | None
+    question: bool = False
+
+
 # A chat's kept messages past this share of the budget are pointed out.
 KEPT_WARNING_SHARE = 0.2
 
 
 # How often the window looks for a finished background rebuild.
 REBUILD_POLL_MS = 700
+# Regenerate on a message no author turn led to (an opening written as given).
+NOT_A_TAKE = (
+    "This opening was written as given, not by the storyteller, so there is nothing to "
+    "regenerate. Change it under Story → Setup, or write on from it."
+)
 # The centre column's margin at each side, clear of the docks.
 CENTRE_MARGIN = 10
 # Help → User manual: the manual isn't bundled, so its copy in the public
@@ -278,6 +299,12 @@ class MainWindow(
         self._queued_text: tuple[str, str | None] | None = None
         # Where the queued turn came from: "desktop" (the composer) or "phone".
         self._queued_origin = "desktop"
+        # The turn or Question the running job is answering (`_start(sent=)`).
+        self._sent: _Sent | None = None
+        # What the running job is called in a failure ("Review"), and the
+        # failure itself, kept until the job has let go of the story.
+        self._job_name = "Generation"
+        self._failed: str | None = None
         # What the plot holds back from the Cast and Lore tabs, as last shown.
         self._shown_hidden: set[str] = set()
         # The progress dialog of a background job (see _start's busy_text).
@@ -1779,6 +1806,7 @@ class MainWindow(
             self.session.archive_down,
             streaming=False,
             busy_text="Archiving the oldest turns into chapters…",
+            job="Archiving",
         )
 
     def _archive_automatically(self) -> None:
@@ -2477,7 +2505,8 @@ class MainWindow(
         def ask() -> None:
             self.session.provider = self._current_provider()
             self._phone_turn_sent("Question", text, "question", origin)
-            self._start(lambda: self.session.ask(text), question=text)
+            sent = _Sent(text, None, origin, self.session.story.active_leaf_id, question=True)
+            self._start(lambda: self.session.ask(text), question=text, sent=sent)
 
         self._queue_or_run(ask, text, None, origin=origin)
 
@@ -2496,14 +2525,17 @@ class MainWindow(
             self.transcript.ensure_at_latest()
             self.transcript.add_message(label, text, kind_for(turn.speaker_id), turn.ooc)
             self._phone_turn_sent(label, text, kind_for(turn.speaker_id), origin)
-            self._start(lambda: self.session.send(turn))
+            sent = _Sent(text, turn.ooc, origin, self.session.story.active_leaf_id)
+            self._start(lambda: self.session.send(turn), sent=sent)
 
         self._queue_or_run(
             send, text, turn.ooc, shown=(label, kind_for(turn.speaker_id)), origin=origin
         )
 
     def _can_queue(self) -> bool:
-        return self._busy and self._background and self._queued is None
+        return (
+            self._busy and self._background and self._queued is None and not self._close_when_idle
+        )
 
     def _queue_or_run(
         self,
@@ -2570,7 +2602,11 @@ class MainWindow(
         desktop's is the composer's, read here."""
         if self.session is None or self._busy:
             return
-        if not self.session.full_path() or not self._tee_allows_send():
+        path = self.session.full_path()
+        if not path or not self._tee_allows_send():
+            return
+        if not self._retakeable(path):
+            self.statusBar().showMessage(NOT_A_TAKE, 8000)
             return
         self.session.provider = self._current_provider()
         # The composer's controls are what the author has in front of them, so
@@ -2600,6 +2636,9 @@ class MainWindow(
         path = self.session.full_path()
         if path and path[-1].id == node_id:
             self.regenerate(shape)
+            return
+        if not self._retakeable(path_to(self.session.nodes, node_id)):
+            self.statusBar().showMessage(NOT_A_TAKE, 8000)
             return
         self.session.provider = self._current_provider()
         # Show the story as it stood before that passage while the new take
@@ -2648,21 +2687,34 @@ class MainWindow(
         box.setText("Take this turn back to the composer?")
         box.setInformativeText("\n\n".join(details))
         take_back = box.addButton("Take back", QMessageBox.AcceptRole)
-        box.addButton(QMessageBox.Cancel)
-        box.setDefaultButton(take_back)
+        cancel = box.addButton(QMessageBox.Cancel)
+        # Enter on a box that says "This can't be undone" must not do it.
+        box.setDefaultButton(cancel)
         box.exec()
         if box.clickedButton() is not take_back:
             return
-
-        self.composer.restore_turn(node)
-        self.session.restore_area(node)  # its walking and travel, live again
-        self.session.delete_from(node_id)
+        self._return_turn(node)
         self.reload_transcript()
         self.refresh_panels()
         self.refresh_summaries()
         self._reassemble_inspector()
         self._update_controls()
         self.statusBar().showMessage("Turn taken back — edit it and send again", 6000)
+
+    def _return_turn(self, node: Node) -> None:
+        """The author's turn back in the composer with its settings, and it
+        and what followed gone from the story (Take back; a turn whose
+        passage never came).
+
+        The story steps back first: the composer's taking the turn's
+        character up again runs `hold()`, which cuts the scene to them, and
+        done before the delete that cut scene was all the first turn's take
+        back left of the starting scene (the review, Oct 20 2026).
+        """
+        assert self.session is not None
+        self.session.restore_area(node)  # its walking and travel, live again
+        self.session.delete_from(node.id)
+        self.composer.restore_turn(node)
 
     # --- archival and summaries (§5.2, §5.3) --------------------------------
 
@@ -2676,7 +2728,12 @@ class MainWindow(
             )
             return
         self.session.provider = self._current_provider()
-        self._start(self._archive_job, streaming=False, busy_text="Summarising the oldest chapter…")
+        self._start(
+            self._archive_job,
+            streaming=False,
+            busy_text="Summarising the oldest chapter…",
+            job="Archiving",
+        )
 
     def _archive_job(self):
         session = self.session
@@ -2765,6 +2822,7 @@ class MainWindow(
             lambda: self._rebuild_job(summary_ids),
             streaming=False,
             busy_text="Rebuilding the chapter summaries…",
+            job="Rebuild",
         )
 
     def _rebuild_job(self, summary_ids: list[str]):
@@ -2914,15 +2972,21 @@ class MainWindow(
         question: str | None = None,
         busy_text: str | None = None,
         provider=None,
+        job: str | None = None,
+        sent: _Sent | None = None,
     ) -> None:
         """Run a job on the worker thread.
 
         `busy_text` is for jobs that don't stream into the transcript — a
         review, a summary, a scan: with nothing else moving on screen they
         looked as if they had failed, so a progress dialog says what's running
-        and offers Stop.
+        and offers Stop. `job` names it in a failure ("Review failed"); `sent`
+        is the turn or Question it answers.
         """
         self._finish_walk_before_job()
+        self._job_name = job or ("Question" if question is not None else "Generation")
+        self._sent = sent
+        self._failed = None
         if question is not None:
             self.transcript.begin_aside(question)
         elif streaming:
@@ -3003,9 +3067,52 @@ class MainWindow(
         self.statusBar().showMessage(text, 12000)
 
     def _on_failed(self, message: str) -> None:
-        self.statusBar().showMessage(f"Generation failed: {message}", 10000)
+        # Said once the job has let go of the story (`_say_failed`): the
+        # dialog is modal, and shown here the finish handler ran under it,
+        # before the turn was back in the composer.
+        self._failed = message
+
+    def _say_failed(self, returned: bool) -> None:
+        failed, self._failed = self._failed, None
+        if failed is None:
+            return
+        title = f"{self._job_name} failed"
+        if returned:
+            failed += "\n\nYour turn is back in the composer, ready to send again."
+        self.statusBar().showMessage(f"{title}: {failed}", 10000)
         # The message can carry the endpoint's own words; never render it as HTML.
-        self._warn_plain("Generation failed", message)
+        self._warn_plain(title, failed)
+
+    def _return_unanswered(self) -> bool:
+        """After a job: a turn or Question whose answer never came goes back
+        where it was typed, and True. Stopped before the job began (a Stop
+        within the thread's start), nothing was written and the text alone
+        comes back; a turn attached and left with no passage (the request
+        failed, or was stopped before any text) comes back with its settings
+        and leaves the story, as Take back does. Live, the turn stayed in
+        the transcript over an empty composer, and typed again it was there
+        twice (Oct 20 2026). A passage with any text is kept."""
+        sent, self._sent = self._sent, None
+        session = self.session
+        if sent is None or session is None:
+            return False
+        if self._worker is not None and self._worker.never_ran:
+            if sent.origin != "desktop":
+                self.queued_turn_returned.emit(sent.origin, sent.text)
+                return True
+            self.composer.input.setPlainText(sent.text)
+            if sent.ooc:
+                self.composer.ooc_toggle.setChecked(True)
+                self.composer.ooc.setPlainText(sent.ooc)
+            return True
+        if sent.question or sent.origin != "desktop":
+            return False
+        path = session.full_path()
+        leaf = path[-1] if path else None
+        if leaf is None or leaf.kind != "user" or leaf.id == sent.leaf_before:
+            return False
+        self._return_turn(leaf)
+        return True
 
     def _warn_plain(self, title: str, message: str) -> None:
         box = QMessageBox(QMessageBox.Warning, title, message, QMessageBox.Ok, self)
@@ -3071,6 +3178,15 @@ class MainWindow(
             return
         self.transcript.end_streaming()
         self._phone_job_finished()
+        returned = self._return_unanswered()
+        self._finish_job()
+        if returned and self._failed is None:
+            self.statusBar().showMessage(
+                "No passage came: your turn is back in the composer, ready to send again.", 10000
+            )
+        self._say_failed(returned)
+
+    def _finish_job(self) -> None:
         # The worker mutated the session on its own thread; rebuild the view
         # from story state now that it is finished, so the two cannot drift.
         self.reload_transcript()
@@ -3408,6 +3524,7 @@ class MainWindow(
                 f"Reviewing this story's settings with {model or self.session.authoring_model}…"
                 "\n\nThis usually takes between ten seconds and a minute."
             ),
+            job="Review",
         )
 
     def _review_job(
@@ -3663,9 +3780,18 @@ class MainWindow(
     def _can_regenerate(self) -> bool:
         if self.session is None:
             return False
-        path = self.session.full_path()
-        # A private scene's summary is the author's approved text, not a take.
-        return bool(path) and path[-1].meta.private_summary_of is None
+        return self._retakeable(self.session.full_path())
+
+    @staticmethod
+    def _retakeable(path: Sequence[Node]) -> bool:
+        """Whether the last message of `path` can be regenerated: an author
+        turn (a retry), or a passage answering one. An as-written opening
+        has no author turn before it (nothing wrote it), and a private
+        scene's summary is the author's approved text, not a take; the
+        session refused both with a raw error (the review, Oct 20 2026)."""
+        if not path or path[-1].meta.private_summary_of is not None:
+            return False
+        return path[-1].kind == "user" or (len(path) > 1 and path[-2].kind == "user")
 
     def _refresh_model_button(self) -> None:
         # The line above the transcript says the same things, and more; an
@@ -3833,6 +3959,7 @@ class MainWindow(
             lambda: self._infer_job(character_id),
             streaming=False,
             busy_text=f"Suggesting skills for {character.name if character else 'this character'}…",
+            job="Skill suggestion",
         )
 
     def _infer_job(self, character_id: str):
@@ -3885,6 +4012,7 @@ class MainWindow(
             self.session.scan_recent,
             streaming=False,
             busy_text="Looking for new characters in the recent story…",
+            job="Character scan",
         )
 
     def _on_scene_changed(self) -> None:
@@ -4058,6 +4186,7 @@ class MainWindow(
                 f"Reading the recent passages with {self.session.scene_model}…\n\n"
                 "This usually takes a few seconds."
             ),
+            job="Scene update",
         )
 
     def _scene_update_job(self):
@@ -4137,7 +4266,9 @@ class MainWindow(
                 "No embeddings endpoint configured — retrieval is using keywords", 6000
             )
             return
-        self._start(self._reembed_job, streaming=False, busy_text="Embedding the lorebook…")
+        self._start(
+            self._reembed_job, streaming=False, busy_text="Embedding the lorebook…", job="Embedding"
+        )
 
     def _reembed_job(self):
         assert self.session is not None
@@ -4387,6 +4518,22 @@ class MainWindow(
                 for action in (self.restart_action, self.export_action):
                     action.setEnabled(False)
 
+    def _may_lose_queued(self) -> bool:
+        """Closing with a turn still waiting to go: asked, Keep playing first."""
+        text = (self._queued_text or ("", None))[0]
+        shown = text if len(text) <= 120 else text[:117] + "…"
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Question)
+        box.setWindowTitle("A turn is waiting")
+        box.setText("A turn is still waiting to be sent. Close anyway and lose it?")
+        box.setInformativeText(shown)
+        box.setTextFormat(Qt.PlainText)
+        lose = box.addButton("Close and lose it", QMessageBox.DestructiveRole)
+        keep = box.addButton("Keep playing", QMessageBox.RejectRole)
+        box.setDefaultButton(keep)
+        box.exec()
+        return box.clickedButton() is lose
+
     def showEvent(self, event) -> None:  # noqa: N802 - Qt naming
         super().showEvent(event)
         self._fit_centre_width()
@@ -4426,6 +4573,15 @@ class MainWindow(
                 event.ignore()
                 return
         if self._thread is not None and self._thread.isRunning():
+            if self._queued is not None and not self._close_when_idle:
+                # Typed and sent while the reads ran: closing now loses it,
+                # and used to without a word (the review, Oct 20 2026).
+                if not self._may_lose_queued():
+                    event.ignore()
+                    return
+                self._queued = None
+                self._queued_text = None
+                self._queued_origin = "desktop"
             # A stream notices stop() only at its next chunk, so waiting here
             # with a timeout could save under the worker and destroy a running
             # thread. Close once thread.finished says it is done instead.

@@ -49,6 +49,9 @@ class GenerationWorker(QObject):
         self._provider = provider
         self._events: Iterator[WorkerEvent] | None = None
         self._stopping = False
+        # Stop landed before the job began: nothing was sent, nothing was
+        # written, and the window puts the turn back where it was typed.
+        self.never_ran = False
 
     @Slot()
     def run(self) -> None:
@@ -58,6 +61,7 @@ class GenerationWorker(QObject):
                 # one for this job may already have come, so check after.
                 self._provider.reset_cancel()
                 if self._stopping:
+                    self.never_ran = True
                     return
             self._events = self._start()
             for event in self._events:

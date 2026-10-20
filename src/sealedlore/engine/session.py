@@ -2558,8 +2558,15 @@ class StorySession(
             self.story.active_leaf_id = node.parent_id
         self.story.updated_at = utc_now_iso()
         self.last_result = None
+        if node.parent_id is None and node.meta.scene is not None and not self.path():
+            # The story's first message taken out: back to the scene it began
+            # in, stamped on it when it was attached. With nothing left on the
+            # path the live scene was whatever stood last (the review, Oct 20
+            # 2026: a take back of the first turn kept the end's scene).
+            self.story.scene = node.meta.scene.model_copy(deep=True)
         # Scene state lives on the nodes, so stepping back steps the roster back.
         self._sync_scene()
+        self.sync_unstarted_scene()
         self.save()
         return deletion
 
