@@ -753,3 +753,42 @@ def test_save_all_saves_each_picture_once_and_no_hidden_card_s(
     assert not any("maela" in name for name in saved)  # hidden
     assert "cast-serrik-vaun-2.png" in saved
     assert named_for("b.gif", PNG) == "b.png" and named_for("a.jpeg", b"\xff\xd8\xff") == "a.jpeg"
+
+
+def test_the_media_tab_keeps_its_thumbnails(app, window: MainWindow, tmp_path: Path, monkeypatch):
+    """Every listed picture was decoded afresh on every open of the Media
+    tab and every picture that landed while it showed (the review, Oct 20
+    2026): a thumbnail is made once for a file's bytes, and only what is
+    listed is kept."""
+    from sealedlore.gui import images_panel
+
+    decoded: list[int] = []
+    real = images_panel.thumbnail_of
+
+    def counting(data, side):
+        decoded.append(side)
+        return real(data, side)
+
+    monkeypatch.setattr(images_panel, "thumbnail_of", counting)
+    panel = window.images_panel
+    panel._thumbs.clear()  # opening the story filled it already
+    window.refresh_images()
+    assert decoded == [images_panel.CARD_THUMB]  # Serrik's one picture
+    window.refresh_images()
+    window.refresh_images()
+    assert len(decoded) == 1 and len(panel._thumbs) == 1
+
+    # A picture landing on another card: that one alone is decoded.
+    session = window.session
+    write_story_file(session.story.id, "images/refs/maela.png", PNG, tmp_path)
+    session.cast[1].reference_images.append(ImageRef(id="ref-2", file="images/refs/maela.png"))
+    window.refresh_images()
+    assert len(decoded) == 2 and len(panel._thumbs) == 2
+    # The same bytes under a new name are decoded once more; the old name's go.
+    session.cast[1].reference_images[0].file = "images/refs/maela2.png"
+    write_story_file(session.story.id, "images/refs/maela2.png", PNG, tmp_path)
+    window.refresh_images()
+    assert len(decoded) == 3 and len(panel._thumbs) == 2
+    # Nothing listed: nothing kept.
+    panel.set_images([], None, set())
+    assert panel._thumbs == {} and len(decoded) == 3
