@@ -3191,10 +3191,7 @@ class AreaRuntime:
             and art.furnishing_for(a.id, world.places[a.place_id].state) is None
             and art.failures.get(f"furnish:{a.id}", 0) < 2
         ]
-        if not self.map_pictures_on:
-            return furnish, []
-        room = self.map_pictures_left_today(art)
-        if room <= 0 or self.tile_set_waiting():
+        if not self.map_pictures_on or self.tile_set_waiting():
             return furnish, []
         info, read = self.tile_set(art)
         source_items = {p.subject_id for p in art.pictures if p.subject == "item"}
@@ -3275,9 +3272,11 @@ class AreaRuntime:
         if asked:
             keys = {_asset_key(role) for role in asked}
             jobs = [j for j in jobs if j.key not in keys]
-        # Every one the day allows: `_start_tile_art` draws RUN_LIMIT a run,
-        # after `_held_for_approval` has counted them all.
-        return furnish, jobs[:room]
+        # Every one the map wants: `_start_tile_art` draws RUN_LIMIT a run,
+        # within what the day's limit leaves, after `_held_for_approval` has
+        # counted them all (an approval beyond the day's room used to be
+        # dropped as unwanted; the review, Oct 20 2026).
+        return furnish, jobs
 
     def _start_tile_art(self) -> bool:
         """Furnish and draw what the areas near the story need, on a thread
@@ -3294,8 +3293,11 @@ class AreaRuntime:
         self._tile_again = False
         furnish, pictures = self.tile_art_jobs()
         # Asking first (or more at once than auto draws unasked): only what
-        # the author approved is drawn, the rest waits.
-        pictures = self._held_for_approval("tile", pictures, limit=RUN_LIMIT)
+        # the author approved is drawn, the rest waits; and no more than the
+        # day's limit leaves.
+        pictures = self._held_for_approval(
+            "tile", pictures, limit=RUN_LIMIT, room=self.map_pictures_left_today()
+        )
         if not furnish and not pictures:
             return False
         self._tile_total, self._tile_done = len(furnish) + len(pictures), 0
@@ -3377,10 +3379,8 @@ class AreaRuntime:
                     info=self._listed_image_model(model),
                     extra={"enable_prompt_expansion": False},
                 )
-                self._picture_drawn("tile", job.key)
                 self._tile_done += 1
         finally:
-            self._pictures_run_ended("tile")
             self._doing("tile", None)
             if client is not None:
                 client.close()

@@ -640,18 +640,21 @@ def test_asking_first_draws_nothing_until_approved_and_then_exactly_what_was_app
     ]
     assert not session.start_map_pictures() and FakeImages.sent == []
     waiting = session.map_pictures_waiting()
-    assert len(waiting) == 2  # the day's limit, as a run would draw
+    # Everything the map wants (the day's limit caps the run, not what is
+    # asked: an approval beyond the day's room used to be dropped).
+    assert len(waiting) == 4 and session.map_picture_jobs(None) == [w.job for w in waiting]
     assert all(w.model == session.config.map_picture_model and w.run == "map" for w in waiting)
-    first, second = waiting
+    first, second = waiting[:2]
     assert session.approve_map_pictures([replace(first.job, prompt="Exactly this.")])
     session._picture_thread.join(10)
     assert [p["prompt"] for p in FakeImages.sent] == ["Exactly this."]
     # (The play view's avatars wait beside them: that is the tile run's.)
     map_run = [w for w in session.map_pictures_waiting() if w.run == "map"]
-    assert [w.job.key for w in map_run] == [second.job.key]
+    assert [w.job.key for w in map_run] == [w.job.key for w in waiting[1:]]
     assert not session.map_pictures_approved_pending  # an approval is for one drawing
     session.decline_map_pictures([second.job.key])
-    assert [w for w in session.map_pictures_waiting() if w.run == "map"] == []
+    map_run = [w for w in session.map_pictures_waiting() if w.run == "map"]
+    assert [w.job.key for w in map_run] == [w.job.key for w in waiting[2:]]
     session.config.map_picture_daily_limit = 10
     session.start_map_pictures()
     assert second.job.key not in {w.job.key for w in session.map_pictures_waiting()}

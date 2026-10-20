@@ -16,10 +16,20 @@ In "auto" mode pictures are drawn without asking, unless more than
 `Config.map_pictures_ask_over` would be drawn at once (the author, Oct 19
 2026: an old story opened after map pictures went automatic drew 33 in two
 minutes, its catch-up all at once). "At once" counts what this run wants
-and what the other run is still drawing unasked; each run sees everything
-it wants before its own cap (6 or 12 a run), so a burst split over runs
-still counts whole. Those then wait as in "ask", and new ones join them
-while any of them wait; what auto let through once isn't counted again.
+with everything let through unasked in the last `RECENT_SECONDS` since the
+author last answered (live, Oct 20 2026: a sample's map drew 30 unasked in
+runs of 3, 10, 1, 3, 5, 6 and 2 a minute apart, each under the limit on its
+own); each run sees everything it wants before its own cap (6 or 12 a run),
+so a burst split over runs still counts whole. Those then wait as in "ask",
+and new ones join them while any of them wait; what auto let through once
+isn't counted as new again.
+
+An approval is kept until its picture is drawn or the map no longer wants
+it: the day's limit (`Config.map_picture_daily_limit`) caps what a run
+draws, never what stays approved (the review, Oct 20 2026: approvals
+beyond the day's room were dropped, and at the limit every approval went
+with the waiting line, with nothing said); `map_pictures_room_note` says
+when approved pictures wait for the next day.
 
 Avatars, roofs and the things of the play view are the tile run's
 (engine/session_area.py); places, things on the map and postcards the
@@ -30,6 +40,7 @@ picture run's (engine/session_world_art.py). Each run calls
 from __future__ import annotations
 
 import threading
+import time
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Literal
@@ -39,6 +50,9 @@ from sealedlore.engine.world_pictures import PictureJob, picture_size
 
 Run = Literal["map", "tile"]
 RUNS: tuple[Run, ...] = ("map", "tile")
+# How long a picture let through unasked counts against "more than N at
+# once" (and no longer than since the author last approved or declined).
+RECENT_SECONDS = 600.0
 
 
 @dataclass(frozen=True)
@@ -62,11 +76,11 @@ class MapApprovalRuntime:
     _pictures_waiting: dict[Run, list[WaitingPicture]] | None = None
     _pictures_approved: dict[str, WaitingPicture] | None = None
     _pictures_declined: set[str] | None = None
-    # In "auto": what each run is drawing without having asked (by job key,
-    # until drawn or the run ends), and what auto let through once (not
-    # counted against the limit again, for as long as the story is open).
-    _pictures_unasked: dict[Run, set[str]] | None = None
+    # In "auto": what auto let through once (not counted as new against the
+    # limit again, for as long as the story is open), and when each was let
+    # through (monotonic seconds, by job key), for the recent count.
     _pictures_let_through: set[str] | None = None
+    _pictures_recent: list[tuple[float, str]] | None = None
     # In "auto": what waited because there were too many at once (Ask's own
     # waiting isn't held against auto once the author switches to it).
     _pictures_held_over: set[str] | None = None
@@ -77,10 +91,18 @@ class MapApprovalRuntime:
             self._pictures_waiting = {"map": [], "tile": []}
             self._pictures_approved = {}
             self._pictures_declined = set()
-            self._pictures_unasked = {"map": set(), "tile": set()}
             self._pictures_let_through = set()
+            self._pictures_recent = []
             self._pictures_held_over = set()
         return self._approval_lock
+
+    def _recent_unasked(self) -> set[str]:
+        """The job keys let through unasked within RECENT_SECONDS (under
+        the lock; older ones are forgotten)."""
+        now = time.monotonic()
+        recent = self._pictures_recent
+        recent[:] = [(at, key) for at, key in recent if now - at <= RECENT_SECONDS]
+        return {key for _at, key in recent}
 
     @property
     def map_pictures_asking(self) -> bool:
@@ -97,23 +119,32 @@ class MapApprovalRuntime:
         return max(0, self.config.map_pictures_ask_over)
 
     def _held_for_approval(
-        self, run: Run, jobs: list[PictureJob], *, limit: int | None = None
+        self,
+        run: Run,
+        jobs: list[PictureJob],
+        *,
+        limit: int | None = None,
+        room: int | None = None,
     ) -> list[PictureJob]:
-        """What a run may draw now, at most `limit`, from `jobs`: everything
-        it wants drawn, before its own cap. The approved first, as the author
+        """What a run may draw now, at most `limit` and at most `room` (what
+        the day's limit leaves; None: no such cap), from `jobs`: everything
+        it wants drawn, before any cap. The approved first, as the author
         approved them (each approval used up when drawn); an approval for a
-        picture the run no longer wants is dropped. In "ask" mode the rest
-        wait. In "auto" the rest are drawn, unless they come to more than
-        `map_pictures_ask_over` at once: then what auto hasn't let through
-        before waits as in "ask". Never what the author declined."""
+        picture the run no longer wants is dropped, but never for want of
+        room today. In "ask" mode the rest wait. In "auto" the rest are
+        drawn, unless with what was let through unasked lately
+        (`_recent_unasked`) they come to more than `map_pictures_ask_over`:
+        then what auto hasn't let through before waits as in "ask". Never
+        what the author declined."""
         mode = self.config.map_pictures_mode
         over = self.map_pictures_ask_over
         with self._approval():
             approved, declined = self._pictures_approved, self._pictures_declined
             let_through = self._pictures_let_through
             wanted = {job.key for job in jobs}
-            for key in [k for k, w in approved.items() if w.run == run and k not in wanted]:
-                del approved[key]
+            if room is None or room > 0:
+                for key in [k for k, w in approved.items() if w.run == run and k not in wanted]:
+                    del approved[key]
             ready = [approved[job.key].job for job in jobs if job.key in approved]
             rest = [job for job in jobs if job.key not in approved and job.key not in declined]
             go, wait = rest, []
@@ -122,21 +153,23 @@ class MapApprovalRuntime:
             elif over:
                 fresh = [job for job in rest if job.key not in let_through]
                 held = self._pictures_held_over
-                elsewhere = sum(
-                    len(keys) for other, keys in self._pictures_unasked.items() if other != run
-                )
+                lately = self._recent_unasked() - {job.key for job in fresh}
                 if fresh and (
-                    any(job.key in held for job in fresh) or len(fresh) + elsewhere > over
+                    any(job.key in held for job in fresh) or len(fresh) + len(lately) > over
                 ):
                     go, wait = [job for job in rest if job.key in let_through], fresh
                     held.update(job.key for job in fresh)
                 else:
+                    now = time.monotonic()
+                    self._pictures_recent += [(now, job.key) for job in fresh]
                     let_through.update(job.key for job in rest)
-            draw = (ready + go)[:limit]
+            cap = limit
+            if room is not None:
+                cap = room if limit is None else min(limit, room)
+            draw = (ready + go)[:cap]
             for job in draw:
                 approved.pop(job.key, None)
-            self._pictures_unasked[run] = {job.key for job in go}
-            if not wait:
+            if not wait and (jobs or room is None or room > 0):
                 self._pictures_waiting[run] = []
         if wait:
             priced = [self._waiting_picture(run, job) for job in wait]  # outside the lock
@@ -148,16 +181,6 @@ class MapApprovalRuntime:
                     and w.job.key not in self._pictures_declined
                 ]
         return draw
-
-    def _picture_drawn(self, run: Run, key: str) -> None:
-        """A run has drawn (or given up on) one of its pictures."""
-        with self._approval():
-            self._pictures_unasked[run].discard(key)
-
-    def _pictures_run_ended(self, run: Run) -> None:
-        """A run is over: nothing of it is being drawn any more."""
-        with self._approval():
-            self._pictures_unasked[run] = set()
 
     def _waiting_picture(self, run: Run, job: PictureJob) -> WaitingPicture:
         """A job with the model, size and price it would be drawn at: as
@@ -190,10 +213,29 @@ class MapApprovalRuntime:
 
     @property
     def map_pictures_approved_pending(self) -> bool:
-        """Approved pictures still to be drawn (a run was busy when they
-        were approved): the window starts the next run once it is free."""
+        """Approved pictures still to be drawn, and room today to draw them
+        (a run was busy when they were approved): the window starts the
+        next run once it is free."""
         with self._approval():
-            return bool(self._pictures_approved)
+            pending = bool(self._pictures_approved)
+        return pending and self.map_pictures_left_today() > 0
+
+    def map_pictures_room_note(self) -> str:
+        """Why approved map pictures aren't being drawn: the day's limit is
+        reached, so they wait for the next day. "" when nothing approved
+        waits for room. For the window to say after an approval (the review,
+        Oct 20 2026: approve at the day's limit and nothing happened, with
+        no word why)."""
+        with self._approval():
+            count = len(self._pictures_approved)
+        if not count or self.map_pictures_left_today() > 0:
+            return ""
+        limit = self.config.map_picture_daily_limit
+        noun = "map picture waits" if count == 1 else "map pictures wait"
+        return (
+            f"{count} approved {noun} for tomorrow: today's {limit} are drawn "
+            "(Settings → Images sets the day's limit)."
+        )
 
     def approve_map_pictures(self, jobs: Sequence[PictureJob], *, start: bool = True) -> bool:
         """Draw these, as the author approved them (prompts and all), in
@@ -214,6 +256,7 @@ class MapApprovalRuntime:
                 self._pictures_waiting[run] = [
                     w for w in self._pictures_waiting[run] if w.job.key not in approved
                 ]
+            self._pictures_recent.clear()  # the author has answered: the count starts afresh
         return self.start_map_art() if start else False
 
     def _repriced(self, job: PictureJob, run: Run) -> WaitingPicture:
@@ -232,3 +275,4 @@ class MapApprovalRuntime:
                 self._pictures_waiting[run] = [
                     w for w in self._pictures_waiting[run] if w.job.key not in keys
                 ]
+            self._pictures_recent.clear()  # the author has answered: the count starts afresh

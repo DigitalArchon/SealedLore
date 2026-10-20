@@ -184,43 +184,119 @@ def keys_of(found) -> list[str]:
     return [getattr(item, "job", item).key for item in found]
 
 
-def test_drawing_automatically_asks_first_when_more_are_wanted_at_once(tmp_path, story, cast):
+def test_drawing_automatically_asks_first_when_more_are_wanted_at_once(
+    tmp_path, story, cast, monkeypatch
+):
+    """ "More than N at once" counts what this run wants with everything let
+    through unasked lately (the last ten minutes, since the author last
+    answered): live (Oct 20 2026) a sample's map drew 30 unasked in runs of
+    3, 10, 1, 3, 5, 6 and 2 a minute apart, each under the limit on its own."""
+    from sealedlore.engine import session_map_approval
+
+    clock = [1000.0]
+    monkeypatch.setattr(session_map_approval.time, "monotonic", lambda: clock[0])
     session = make_session(tmp_path, story, cast)
     _pictures_on(session)
     session.config.map_pictures_ask_over = 3
     # Three at once are drawn as they come.
     assert keys_of(session._held_for_approval("tile", jobs("a", "b", "c"))) == ["a", "b", "c"]
     assert session.map_pictures_waiting() == []
-    # With those three still being drawn, two more are five at once: they wait.
+    # A minute later two more are five within the window: they wait.
+    clock[0] += 60
     assert session._held_for_approval("map", jobs("d", "e")) == []
     assert keys_of(session.map_pictures_waiting()) == ["d", "e"]
-    session._picture_drawn("tile", "a")
-    session._pictures_run_ended("tile")
     # What waited for being too many waits on, even when fewer are wanted
-    # now; what auto let through once isn't counted again.
+    # now; what auto let through once is drawn again unasked, but a new one
+    # beside it is a fourth within the window.
     assert session._held_for_approval("map", jobs("d", "e")) == []
-    assert keys_of(session._held_for_approval("tile", jobs("a", "b", "c", "f"))) == [
-        "a",
-        "b",
-        "c",
-        "f",
-    ]
-    # Approved, they are drawn, a run's own cap at a time.
+    assert keys_of(session._held_for_approval("tile", jobs("a", "b", "c", "f"))) == ["a", "b", "c"]
+    assert keys_of(session.map_pictures_waiting()) == ["d", "e", "f"]
+    # Approved, they are drawn, a run's own cap at a time; the author's answer
+    # starts the count afresh.
     session.approve_map_pictures(jobs("d", "e"), start=False)
-    assert session.map_pictures_waiting() == []
+    assert keys_of(session.map_pictures_waiting()) == ["f"]
     assert keys_of(session._held_for_approval("map", jobs("d", "e"), limit=1)) == ["d"]
     assert keys_of(session._held_for_approval("map", jobs("d", "e"))) == ["e"]
     # Declined are never drawn, asked or not.
-    session._pictures_run_ended("map")
-    session._pictures_run_ended("tile")
     assert session._held_for_approval("map", jobs("g", "h", "i", "j")) == []
     session.decline_map_pictures(["g", "h", "i", "j"])
     assert keys_of(session._held_for_approval("map", jobs("g", "k"))) == ["k"]
+    # Ten minutes on, the window has passed: three more go unasked.
+    clock[0] += 601
+    assert keys_of(session._held_for_approval("tile", jobs("l", "m", "n"))) == ["l", "m", "n"]
     # Any number: never asks.
-    session._pictures_run_ended("map")
     session.config.map_pictures_ask_over = 0
-    many = [chr(c) for c in range(ord("l"), ord("z"))]
+    many = [chr(c) for c in range(ord("o"), ord("z"))]
     assert keys_of(session._held_for_approval("tile", jobs(*many))) == many
+
+
+def test_a_burst_of_small_runs_a_minute_apart_asks_as_one(tmp_path, story, cast, monkeypatch):
+    """The live run: 3, 10, 1, 3, 5, 6 and 2 a minute apart, never asked.
+    Now the second run is thirteen within the window with the first's three,
+    and from then on the new ones wait with them."""
+    from sealedlore.engine import session_map_approval
+
+    clock = [0.0]
+    monkeypatch.setattr(session_map_approval.time, "monotonic", lambda: clock[0])
+    session = make_session(tmp_path, story, cast)
+    _pictures_on(session)
+    session.config.map_pictures_ask_over = 10
+    drawn, n = 0, 0
+    waiting: list[str] = []
+    for size in (3, 10, 1, 3, 5, 6, 2):
+        clock[0] += 60
+        # A run wants what waited and what is new, never what it has drawn.
+        new = [f"p{n + i}" for i in range(size)]
+        n += size
+        drawn += len(session._held_for_approval("tile", jobs(*waiting, *new)))
+        waiting = keys_of(session.map_pictures_waiting())
+    # The first three went; the ten were thirteen within the window and
+    # waited, and new ones join what waits.
+    assert drawn == 3 and len(waiting) == 27
+
+
+def test_approvals_keep_until_drawn_and_the_day_s_limit_only_caps_the_run(tmp_path, story, cast):
+    """The review (Oct 20 2026): approvals beyond the day's room were dropped
+    as "no longer wanted", and at the day's limit every approval was deleted
+    and the waiting line cleared with no word; the next day they were all
+    waiting again."""
+    session = make_session(tmp_path, story, cast)
+    _pictures_on(session)
+    session.config.map_pictures_mode = "ask"
+    wanted = jobs(*[f"t{i}" for i in range(35)])
+    assert session._held_for_approval("tile", wanted, limit=12) == []
+    assert len(session.map_pictures_waiting()) == 35
+    session.approve_map_pictures(wanted, start=False)
+    assert len(session._pictures_approved) == 35 and session.map_pictures_waiting() == []
+    # The day has room for 30: a run draws 12 of them, and 12, and 6; the 5
+    # beyond the room stay approved. (A run wants what it hasn't drawn.)
+    drawn = []
+    for room in (30, 18, 6, 0):
+        got = session._held_for_approval("tile", wanted, limit=12, room=room)
+        drawn.append(len(got))
+        wanted = [job for job in wanted if job not in got]
+    assert drawn == [12, 12, 6, 0]
+    assert len(session._pictures_approved) == 5 and session.map_pictures_waiting() == []
+    # At the limit the note says so; with room, nothing to say.
+    session.config.map_picture_daily_limit = 0
+    assert session.map_pictures_room_note() == (
+        "5 approved map pictures wait for tomorrow: today's 0 are drawn "
+        "(Settings → Images sets the day's limit)."
+    )
+    assert not session.map_pictures_approved_pending  # no run to start today
+    session.config.map_picture_daily_limit = 40
+    assert session.map_pictures_room_note() == "" and session.map_pictures_approved_pending
+    # Next day: the five are drawn first, nothing is asked again.
+    assert keys_of(session._held_for_approval("tile", wanted, limit=12, room=40)) == [
+        f"t{i}" for i in range(30, 35)
+    ]
+    assert session._pictures_approved == {} and session.map_pictures_waiting() == []
+    # An approval for a picture the map no longer wants (with room to draw it) goes.
+    more = jobs("u0", "u1", "u2")
+    session._held_for_approval("tile", more, limit=12)
+    session.approve_map_pictures(more, start=False)
+    assert session._held_for_approval("tile", more[1:], limit=12, room=40) == more[1:]
+    assert session._pictures_approved == {}
 
 
 def test_what_waited_under_ask_goes_once_drawing_is_automatic(tmp_path, story, cast):

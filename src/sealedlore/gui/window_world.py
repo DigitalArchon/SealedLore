@@ -331,6 +331,11 @@ class WorldWindow:
         # is done: `_sync_waiting_pictures`).
         start = not self._busy and not session.in_private
         session.approve_map_pictures(jobs, start=start)
+        # Approved at the day's limit: they wait for tomorrow, said here (the
+        # review, Oct 20 2026: nothing happened, and nothing said why).
+        note = session.map_pictures_room_note()
+        if note:
+            self.statusBar().showMessage(note, 8000)
         self._progress_timer.start()
 
     def _decline_map_pictures(self) -> None:
