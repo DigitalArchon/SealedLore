@@ -230,6 +230,9 @@ class WorldArtRuntime:
         thread = getattr(self, "_own_set_thread", None)
         if thread is not None and thread.is_alive():
             done, total = done + self._own_set_done, total + self._own_set_total
+        thread = getattr(self, "_region_thread", None)  # the world designer (session_regions.py)
+        if thread is not None and thread.is_alive():
+            done, total = done + self._region_done, total + self._region_total
         if self.isometric_painting is not None:
             total += 1
         if getattr(self, "tile_asset_drawing", None) is not None:
@@ -260,6 +263,7 @@ class WorldArtRuntime:
             "tile": getattr(self, "_tile_thread", None),
             "pictures": self._picture_thread,
             "painting": self._isometric_thread,
+            "regions": getattr(self, "_region_thread", None),
         }
         return "; ".join(
             words

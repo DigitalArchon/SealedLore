@@ -47,6 +47,11 @@ class RegionRuntime:
     _region_thread: threading.Thread | None = None
     _region_clients: list[ChatProvider] | None = None
     _designed_cache: tuple[Any, WorldDelta | None] | None = None
+    # The regions being designed now, and how many are done, for the Map
+    # page's progress (`map_art_progress`; the review, Oct 20 2026: ~35 s of
+    # nothing shown while a ring was designed).
+    _region_total: int = 0
+    _region_done: int = 0
 
     @property
     def regions_on(self) -> bool:
@@ -190,6 +195,7 @@ class RegionRuntime:
             return False
         clients = [detached() for _ in range(REGION_WORKERS)]
         self._region_clients = clients
+        self._region_total, self._region_done = sum(len(wave) for wave in wanted), 0
         thread = threading.Thread(
             target=self._design_waves,
             args=(wanted, self.region_model, clients),
@@ -204,6 +210,7 @@ class RegionRuntime:
         self, wanted: list[list[tuple[int, int]]], model: str, clients: list[ChatProvider]
     ) -> None:
         """Each wave's regions side by side, a wave at a time."""
+        self._doing("regions", f"designing the land around you, by {model}")
         try:
             for wave in wanted:
                 if self._map_closed or self._art_stop:
@@ -219,6 +226,7 @@ class RegionRuntime:
                 for helper in helpers:
                     helper.join()
         finally:
+            self._doing("regions", None)
             for client in clients:
                 close = getattr(client, "close", None)
                 if callable(close):
@@ -291,6 +299,13 @@ class RegionRuntime:
         )
 
     def _design_one(self, cell: tuple[int, int], model: str, client: ChatProvider) -> None:
+        try:
+            self._design_cell(cell, model, client)
+        finally:
+            with self._lock():
+                self._region_done += 1
+
+    def _design_cell(self, cell: tuple[int, int], model: str, client: ChatProvider) -> None:
         key = cell_key(*cell)
         failure = f"region:{key}"
         log_ref = None

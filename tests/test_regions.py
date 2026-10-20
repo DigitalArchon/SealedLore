@@ -274,6 +274,40 @@ def test_the_regions_round_the_player_are_designed_ahead_on_the_story_model(
     assert not session._start_region_design()  # nothing left to design here
 
 
+def test_the_map_page_sees_the_designer_at_work(tmp_path, story, cast, monkeypatch):
+    """The review (Oct 20 2026): ~35 s of nothing shown while a ring of nine
+    was designed; the designer's thread now counts in the map's progress."""
+    import threading
+    import time
+
+    session = open_session(tmp_path, story, cast, ["Snow.", "{}"])
+    session.config.map_art = True
+    list(session.send(turn("I set out across the erg.")))
+    gate = threading.Event()
+
+    class Slow(MockChatProvider):
+        def stream(self, request):
+            gate.wait(10)
+            yield from super().stream(request)
+
+    class Designer(MockChatProvider):
+        def detached(self):
+            return Slow([json.dumps(DESIGN)] * 4)
+
+    monkeypatch.setattr(session, "provider", Designer([]))
+    assert session._start_region_design()
+    assert session.map_art_progress() == (0, 9)
+    for _ in range(50):
+        if "designing the land around you" in session.map_art_now():
+            break
+        time.sleep(0.02)
+    assert "designing the land around you, by " in session.map_art_now()
+    gate.set()
+    session._region_thread.join(30)
+    assert session.map_art_progress() == (0, 0) and session.map_art_now() == ""
+    assert len(session.world_art.regions) == 9 and session._region_done == 9
+
+
 def test_nobody_is_designed_within_sight_of_the_player_nor_the_story_s_places_twice():
     """The live test (Oct 18 2026): the region John stood in was designed
     with a scavenger at the tree line beside him (simply there), and a
