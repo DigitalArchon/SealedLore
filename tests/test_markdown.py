@@ -125,3 +125,15 @@ def test_find_finds_what_the_reader_sees_and_selects_it(app, window: MainWindow)
         assert body.selectedText().replace(" ", "\n") == words
     window._on_find_changed("**Ruth**")
     assert window.find_bar.count.text() != "1 of 1"
+
+
+def test_a_message_that_is_only_a_picture_shows_its_words_or_its_address(app):
+    """A reply that was one picture link showed as an empty message (the
+    picture is never loaded; with no alt text nothing was left to read)."""
+    bare = "![](https://example.com/cat.png)"
+    assert shown_text(bare) == "(https://example.com/cat.png)"
+    assert "<img" not in (markdown_html(bare) or "")
+    assert shown_text("![a cat](https://example.com/cat.png)") == "a cat"
+    assert shown_text("![   ](https://example.com/cat.png)") == "(https://example.com/cat.png)"
+    widget = MessageWidget("Assistant", bare, "assistant", node_id="a1")
+    assert widget.body.text().strip()

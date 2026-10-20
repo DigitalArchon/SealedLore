@@ -8,8 +8,9 @@ importer with HTML switched off, so a model's "<b>" or "<CLOSED>" stays text
 and never becomes markup (the rule the plain labels kept: model prose is
 never interpreted as HTML). What the importer makes is then held to the
 transcript: the document's own font left out (the label's, the theme's and
-Text size's, stand), pictures shown by their words (an image's address
-could be any file on the computer), links as their words with the address
+Text size's, stand), pictures shown by their words, or by their address
+when they have none (an image's address could be any file on the computer,
+so it is never loaded), links as their words with the address
 after them (nothing opens from a model's text), and a line break inside a
 paragraph kept a line break (Markdown joins the lines, and Qt's importer
 makes a hard break a new paragraph, spaced as one).
@@ -58,6 +59,9 @@ _BREAK = "\u2e18"
 _BODY = re.compile(r"<body style=\"[^\"]*\">")
 _IMAGE = re.compile(r"<img\b[^>]*>")
 _ALT = re.compile(r"\balt=\"([^\"]*)\"")
+_SRC = re.compile(r"\bsrc=\"([^\"]*)\"")
+# A picture with no words of its own: Qt's importer leaves nothing of it.
+_BARE_IMAGE = re.compile(r"!\[\s*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 _LINK = re.compile(r"<a href=\"([^\"]*)\">(.*?)</a>", re.DOTALL)
 _TAG = re.compile(r"<[^>]+>")
 _LINK_COLOUR = re.compile(r" color:#0000ff;")
@@ -72,13 +76,18 @@ def _with_breaks(text: str) -> str:
     """The text with each line break inside a paragraph marked by `_BREAK`
     at the end of its line: two lines of text, the second carrying on what
     the first says (not a list's next item, a heading, a table's row, a
-    quote after plain text), a quote's lines counted by what they quote."""
+    quote after plain text), a quote's lines counted by what they quote;
+    and a picture with no words given its address as them."""
     lines = text.split("\n")
     out: list[str] = []
     fenced = False
     for i, line in enumerate(lines):
         if _FENCE.match(line):
             fenced = not fenced
+        elif not fenced:
+            # A picture with no alt text is given its address as its words,
+            # before the importer, which otherwise drops it whole.
+            line = _BARE_IMAGE.sub(lambda m: f"![({m.group(1)})]({m.group(1)})", line)
         after = lines[i + 1] if i + 1 < len(lines) else ""
         if _QUOTE.match(line) and _QUOTE.match(after):
             line_says, after_says = _QUOTE.sub("", line), _QUOTE.sub("", after)
@@ -106,8 +115,13 @@ def _link(match: re.Match[str]) -> str:
 
 
 def _image(match: re.Match[str]) -> str:
+    """A picture by its words: its alt text, else its address (as a link's
+    is shown), so a message that is only a picture never shows as blank."""
     alt = _ALT.search(match.group(0))
-    return alt.group(1) if alt else ""
+    if alt and alt.group(1).strip():
+        return alt.group(1)
+    src = _SRC.search(match.group(0))
+    return f"({src.group(1)})" if src and src.group(1) else ""
 
 
 @functools.lru_cache(maxsize=2048)
