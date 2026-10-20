@@ -4724,6 +4724,21 @@ _text(
 )
 
 _text(
+    "map_read.company",
+    MAP,
+    "Map read: who is with the author's character",
+    "Added to the map read's request in a story played on the map, when "
+    "session_world.TELL_READ_COMPANY is on (off until measured): whom the scene card had "
+    "with the author's character as the passage began. Live (Oct 20 2026) the read put a "
+    "man the passage had a few paces from John at the town's main street, 345 m off.",
+    "These people are with {held} now, as the passage begins: {names}.",
+    (
+        ("held", "the author's character"),
+        ("names", "the people with them, by the map's names"),
+    ),
+)
+
+_text(
     "map_read.unknowns",
     MAP,
     "Map read: people not named yet",
