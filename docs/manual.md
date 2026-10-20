@@ -1177,7 +1177,10 @@ is drawn into the ground itself, roofed as its description says it is built
 (stone, slate, thatch, metal…). Someone the story brings in without a name
 stands on the map as **Unknown 1** (then 2, 3…) until a passage names them;
 the menus and the storyteller call them as the story described them ("the
-teenage girl"). A thing the tile set has no picture of borrows the set's
+teenage girl"). When a plot event brings a character in and the passage
+introduces one person without a name, that person is the character, as long
+as the description is of one person and not of the other sex ("the
+watchmen" stay unknown). A thing the tile set has no picture of borrows the set's
 nearest one of the same kind until its own is drawn. When the set's own
 suits it as it is (a "workbench" and the set's heavy wooden workbench, a
 "cast iron stove" and its cast-iron wood stove), that one stands for it for

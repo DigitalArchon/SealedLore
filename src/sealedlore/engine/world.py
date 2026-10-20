@@ -545,6 +545,40 @@ _MALE = frozenset(
 )
 
 
+# A description of more than one person (`several`): a number or a group
+# before what they are, or what they are in the plural.
+_GROUP = frozenset(
+    "two three four five six seven eight nine ten dozen both pair couple several some many "
+    "few group crowd gang band crew party pack knot handful others people folk children".split()
+)
+# Where a description goes on from what the person is to what is with them.
+_DESCRIPTION_GOES_ON = frozenset(
+    "in with of on at by from who whose that near carrying wearing holding maybe "
+    "perhaps somewhere about around".split()
+)
+
+
+def several(described: str) -> bool:
+    """Whether a description is of more than one person ("the watchmen",
+    "two guards", "the Merrow brothers"): never one character's. Live (Oct
+    20 2026) the map read placed "the watchmen" at the south gate, and the
+    one character the plot's event brought, Elena Ruiz, was taken for them."""
+    first = re.split(r"[,;:(—–-]", described.lower(), maxsplit=1)[0]
+    words = re.findall(r"[a-z']+", first)
+    for i, word in enumerate(words):
+        if word in _DESCRIPTION_GOES_ON and i > 0:
+            words = words[:i]
+            break
+    if not words:
+        return False
+    if _GROUP & set(words) or "and" in words:
+        return True
+    head = words[-1]
+    if head.endswith("men"):  # watchmen, women, men
+        return True
+    return head.endswith("s") and not head.endswith(("ss", "us", "is", "'s"))
+
+
 def _sex_of(text: str) -> set[str]:
     words = set(re.findall(r"[a-z]+", text.lower()))
     return ({"f"} if words & _FEMALE else set()) | ({"m"} if words & _MALE else set())
@@ -605,6 +639,113 @@ def _elsewhere(
     span = locate_quote(source, quote) if quote else None
     around = _sentences_to(source, span[1]) if span is not None else quote
     return not _names_place(around, place)
+
+
+# How `resolve_reply` says it kept someone with the author's character.
+KEPT = "kept with"
+# How far apart the author's character and someone with them may be put
+# before the passage must show them going (`_kept_with`): earshot, as the
+# play view has it (area.EARSHOT_M).
+COMPANY_EARSHOT_M = 20.0
+# A word of going in a `where` quote's sentences: away, out, on the way
+# somewhere, or come from somewhere else (the scene read's own departure
+# words, `session_world._WENT_OUT`, and the ways of moving).
+_GOING = re.compile(
+    r"\b(?:out|outside|away|off|home|ashore|left|leaves?|leaving|depart\w*|exit\w*|"
+    r"took (?:his|her|their) leave|took leave|went|goes|going|gone|set(?:s|ting)? off|"
+    r"head(?:s|ed|ing)? (?:for|to|towards?|back|up|down|out|off|over|into)|"
+    r"walk(?:s|ed|ing)? (?:to|towards?|back|over|across|up|down|out|off|away|into|through)|"
+    r"(?:ran|runs?|running|hurr(?:y|ies|ied|ying)|rode|drove|climb\w*|cross(?:es|ed|ing)?|"
+    r"strode|return\w*|retreat\w*|disappear\w*|vanish\w*|slipp?(?:ed|ing|s)?)\b|"
+    r"made (?:his|her|their|its) way|on (?:his|her|their) way|followed|following)\b",
+    re.IGNORECASE,
+)
+
+
+def _quote_sentences(source: str, entry: dict[str, Any]) -> str:
+    """The sentence an entry's quote ends in and the one before it, "" when
+    the quote isn't found."""
+    quote = _text(entry.get("quote"))
+    span = locate_quote(source, quote) if quote else None
+    return _sentences_to(source, span[1]) if span is not None else ""
+
+
+def _apart(world: WorldMap, delta: WorldDelta, a: str, b: str) -> bool:
+    """Whether two places lie out of earshot of each other: not the same,
+    neither inside the other, and their footprints (a road at its middle,
+    where the play view stands someone at it) more than COMPANY_EARSHOT_M
+    apart. A place with no spot yet is not apart: it goes beside the author's
+    character unless a link says otherwise."""
+    if a == b:
+        return False
+    copies = {p.id: p for p in delta.places}
+
+    def place(pid: str) -> WorldPlace | None:
+        return copies.get(pid) or world.places.get(pid)
+
+    def chain(pid: str) -> set[str]:
+        out: set[str] = set()
+        current: str | None = pid
+        while current is not None and current not in out and place(current) is not None:
+            out.add(current)
+            current = place(current).inside  # type: ignore[union-attr]
+        return out
+
+    if a in chain(b) or b in chain(a):
+        return False
+    pa, pb = place(a), place(b)
+    at, bt = position_any(world, delta, a), position_any(world, delta, b)
+    if pa is None or pb is None or at is None or bt is None:
+        return False
+    if (pa.x is None or pb.x is None) and pa.kind != "route" and pb.kind != "route":
+        return False  # one has no spot of its own yet: placed beside, or by a link
+
+    def half(p: WorldPlace) -> float:
+        return 0.0 if p.kind == "route" else size_of(p) / 2
+
+    gap_x = max(0.0, abs(at[0] - bt[0]) - half(pa) - half(pb))
+    gap_y = max(0.0, abs(at[1] - bt[1]) - half(pa) - half(pb))
+    return math.hypot(gap_x, gap_y) > COMPANY_EARSHOT_M
+
+
+def _kept_with(
+    world: WorldMap,
+    delta: WorldDelta,
+    held: str | None,
+    together: Collection[str],
+    departed: Collection[str],
+    said: Mapping[str, str],
+    *,
+    author_says: bool,
+) -> list[str]:
+    """`resolve_reply(held=)`: each of the author's character's company the
+    reply moves out of earshot of them, the passage not showing them go,
+    kept with them instead (where the author's character is after the
+    reply); what was refused, for the log."""
+    if held is None or author_says or not together:
+        return []
+    here = delta.where.get(held) or world.where.get(held)
+    if here is None:
+        return []
+    out: list[str] = []
+    for name, place_id in list(delta.where.items()):
+        if name == held or name not in together or place_id == world.where.get(name):
+            continue
+        if name in departed or not _apart(world, delta, place_id, here):
+            continue
+        around = said.get(name, "")
+        place = next((p for p in delta.places if p.id == place_id), None) or world.places.get(
+            place_id
+        )
+        if _GOING.search(around) or (place is not None and _names_place(around, place)):
+            continue
+        out.append(
+            f"where {name} @ {place_name_any(world, delta, place_id)}: with {held} before the "
+            f"passage, which doesn't show them going, so {KEPT} {held}"
+        )
+        delta.where[name] = here
+        delta.outside[name] = delta.outside.get(held, held in world.outside)
+    return out
 
 
 def _sentences_to(source: str, end: int) -> str:
@@ -720,6 +861,8 @@ def resolve_reply(
     moves_fixed: bool | None = None,
     standing_in: Mapping[str, tuple[float, float, float]] | None = None,
     together: Collection[str] = (),
+    held: str | None = None,
+    departed: Collection[str] = (),
 ) -> tuple[WorldDelta, list[str]]:
     """What the reply changes, as a delta on `world`, and what was refused
     and why (for the log and the panel). `source` is the author's turn and
@@ -755,7 +898,15 @@ def resolve_reply(
     `together`: by the map's names, who was in the author's character's
     scene before this passage. A place one of them is put in, within reach
     of where they stand, is within reach of the others going there with
-    them; never of anyone else."""
+    them; never of anyone else.
+
+    `held`: the author's character, by the map's name. Someone `together`
+    with them is not put out of earshot of them unless the passage shows
+    them going: a word of going in the quote's sentence or the one before,
+    the place named there, or the scene read having them leave (`departed`,
+    the map's names). Refused, they stay with the author's character. Live
+    (Oct 20 2026), the next turn's positions put a speaker 345 m off while
+    the prose had him a few paces away, under "the map is exact"."""
     # `added` is always a list from here: a delta that changes known places
     # and makes none must still skip their copies on a fold without them.
     delta = WorldDelta(added=[])
@@ -977,6 +1128,8 @@ def resolve_reply(
 
     company = set(together)
     shared: set[str] = set()
+    # The sentences each person's `where` quote stands in (`_kept_with`).
+    said: dict[str, str] = {}
     if standing_in and company:
         for entry in _entries(reply, "where"):
             who = _text(entry.get("who"))
@@ -1042,6 +1195,7 @@ def resolve_reply(
         if label is not None:
             delta.where[label] = place
             delta.outside[label] = outside
+            said[label] = _quote_sentences(source, entry)
             continue
         assert canonical is not None
         if "outside" not in entry and _left_outside(
@@ -1050,6 +1204,8 @@ def resolve_reply(
             outside = True
         delta.where[canonical] = place
         delta.outside[canonical] = outside
+        said[canonical] = _quote_sentences(source, entry)
+    refused += _kept_with(world, delta, held, together, departed, said, author_says=author_says)
     for entry in _entries(reply, "named"):
         label = unknown_for(_text(entry.get("who")), world, delta)
         name = _text(entry.get("name"))

@@ -35,6 +35,7 @@ from sealedlore.engine.session_plot import SessionNotice
 from sealedlore.engine.takeable import FIXED_MARK, named_in, the
 from sealedlore.engine.validators import mentions
 from sealedlore.engine.world import (
+    KEPT,
     MAP_LIST_LIMIT,
     _chain,
     _names_place,
@@ -49,6 +50,7 @@ from sealedlore.engine.world import (
     place_delta,
     render_map_context,
     resolve_reply,
+    several,
     unknown_words,
     within_ids,
     world_under,
@@ -75,6 +77,13 @@ CHAT_MAP_NAME = "You"
 # place; the rest by which delta each message carries.
 FOLD_TAIL = 6
 FOLDS_KEPT = 8
+
+# The company guard (`world.resolve_reply(held=)`): someone the author's
+# character was with is not put out of earshot of them by the map read
+# unless the passage shows them going. Off: replayed on 1,225 logged reads
+# (Oct 21 2026), it fired 4 times, and 2 of them kept someone back who had
+# gone (SealedLoreDocs tools/testbed/data/map_company).
+KEEP_COMPANY = False
 
 
 # What opens where it stands: fixed, but opening it moves nothing, and "if
@@ -567,6 +576,10 @@ class WorldRuntime:
             together=self._present_on_map(scene_at(path[:-1], self.story.setup.starting_scene))
             if self.map_first
             else (),
+            # ...and who are not put out of earshot of the author's character
+            # unless the passage shows them going (`KEEP_COMPANY`).
+            held=held_name if KEEP_COMPANY and self.map_first else None,
+            departed=self._departed(node),
         )
         # Map-first: what the author marked is put exactly there, and what
         # has nothing else to go on goes beside where they stand (the turn's
@@ -604,6 +617,25 @@ class WorldRuntime:
         # the background (session_world_art.py): the passage never waits.
         self.start_map_art()
         yield SessionNotice(f"Map: {describe_delta(pending.before, delta)}")
+        kept = [line.split(" @ ")[0].removeprefix("where ") for line in refused if KEPT in line]
+        if kept and held_name is not None:
+            yield SessionNotice(
+                f"Map: {', '.join(kept)} kept with {held_name}: the passage doesn't show "
+                "them going."
+            )
+
+    def _departed(self, node: Node) -> list[str]:
+        """Who the scene read has leaving the scene on this passage, by the
+        map's names, when its read of the passage has landed (the reads are
+        applied as each returns); none otherwise."""
+        scene = node.meta.scene
+        if scene is None or scene.set_at_node_id != node.id or not node.meta.scene_read:
+            return []
+        return [
+            self._map_person(change.name) or change.name
+            for change in scene.changes
+            if change.kind == "left"
+        ]
 
     def _name_brought(
         self, delta: WorldDelta, author: Node | None, before: WorldMap, passage: str
@@ -636,6 +668,11 @@ class WorldRuntime:
         if len(brought) != 1:
             return
         label, name = new[0], brought[0].name
+        # One person who could be them: never a group ("the watchmen" became
+        # Elena Ruiz, live, Oct 20 2026), nor someone of the other sex.
+        said = delta.unknowns[label]
+        if several(said) or _other_sex(said, self._card_words(name)):
+            return
         delta.unknowns.pop(label)
         if label in delta.where:
             delta.where[name] = delta.where.pop(label)
