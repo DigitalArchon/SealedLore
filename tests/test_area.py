@@ -673,6 +673,65 @@ def test_an_area_that_adjoins_is_walked_on_into(tmp_path, story, cast):
     assert all(c[0] != "area" for c in session.edge_choices("north"))
 
 
+def test_a_landing_past_an_edge_steps_on_into_the_far_area_not_back():
+    """The review (Oct 20 2026): `_landing` stepped "in" the wrong way (tile
+    y grows south), so a line of trees just past an edge read as barred
+    though the ground a tile beyond it was open."""
+    from sealedlore.engine.area import Area
+    from sealedlore.engine.session_area import AreaRuntime
+
+    def area(rows: list[str]) -> Area:
+        return Area(
+            place_id="w",
+            name="open country",
+            indoor=False,
+            look="grass",
+            rows=rows,
+            tile_m=2.5,
+            objects={},
+            labels={},
+            rect=(0.0, 0.0, 22.5, 22.5),
+        )
+
+    # Leaving north: the far area's row at the spot is all trees; north of
+    # it (smaller y) open ground, south of it (toward the area left) water.
+    far = area(["........."] * 3 + ["TTTTTTTTT"] + ["~~~~~~~~~"] * 5)
+    assert AreaRuntime._landing(far, Spot(area="w", x=4, y=3), "north") == (4, 2)
+    far = area(["~~~~~~~~~"] * 3 + ["TTTTTTTTT"] + ["........."] * 5)
+    assert AreaRuntime._landing(far, Spot(area="w", x=4, y=3), "south") == (4, 4)
+    assert AreaRuntime._landing(area(["~~~T....."] * 9), Spot(area="w", x=3, y=4), "east") == (4, 4)
+    assert AreaRuntime._landing(area([".....T~~~"] * 9), Spot(area="w", x=5, y=4), "west") == (4, 4)
+    # Two lines deep is as far as it looks: a river is never crossed.
+    far = area(["........."] * 3 + ["~~~~~~~~~"] * 3 + ["........."] * 3)
+    assert AreaRuntime._landing(far, Spot(area="w", x=4, y=5), "north") is None
+    # Tiles to avoid are never landed on, though walkable.
+    far = area(["........."] * 9)
+    assert AreaRuntime._landing(
+        far, Spot(area="w", x=4, y=8), "north", avoid={(x, 8) for x in range(9)}
+    ) == (4, 7)
+
+
+def test_walking_on_into_open_country_never_lands_in_the_place_s_own_yard(tmp_path, story, cast):
+    """The review (Oct 20 2026): on the window of open country a place with
+    a plan is boxed as a fenced yard rounded out to whole 40 m tiles, and the
+    first tile past the plan's edge lay inside that box (The Pilgrims' Rest's
+    own gate or pavement), where `door_here` led straight back in."""
+    session = make_session(tmp_path, story, cast)
+    # The farm's 400 m plan off the land's 40 m grid, so its box on the
+    # window runs a tile past the plan's edge (Doomsville's farm happens to
+    # fill whole tiles, which is why it landed clear).
+    farm = next(p for p in session.story.world_base.places if p.id == "farm")
+    farm.x, farm.y = 10.0, 10.0
+    _stand(session, "farm", 30, 0)
+    state = session.cross_edge("north")
+    me = state.spots["Serrik Vaun"]
+    there = session.area(me.area)
+    assert there.window and "farm" in there.buildings
+    x0, y0, x1, y1 = there.buildings["farm"]
+    assert not (x0 <= me.x <= x1 and y0 <= me.y <= y1)
+    assert session.door_here() is None  # not on the farm's own gate
+
+
 def test_one_asset_of_the_tile_set_is_changed_drawn_again_or_put_back(
     tmp_path, story, cast, monkeypatch
 ):

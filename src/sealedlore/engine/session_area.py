@@ -24,7 +24,7 @@ from __future__ import annotations
 import math
 import re
 import threading
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -369,6 +369,19 @@ def _doors_of(area: Area) -> set[tuple[int, int]]:
     for d in area.doorways:
         doors |= set(d.tiles())
     return doors
+
+
+def _box_tiles(area: Area) -> set[tuple[int, int]]:
+    """Every tile of the boxes an outdoor area draws for the places in it
+    (a building, or on a window of open country a place with a plan, as a
+    fenced yard with its gate): not open country, whatever is walkable in
+    them."""
+    return {
+        (x, y)
+        for x0, y0, x1, y1 in area.buildings.values()
+        for y in range(y0, y1 + 1)
+        for x in range(x0, x1 + 1)
+    }
 
 
 class AreaRuntime:
@@ -2736,26 +2749,40 @@ class AreaRuntime:
             if spot is not None and spot.area != area.id:
                 there = self.area(spot.area, world, art)
                 if there is not None and not there.indoor:
-                    landing = self._landing(there, spot, side)
                     if there.window:
+                        # Never inside a place's own box on the land (the
+                        # window boxes a place with a plan as a fenced yard,
+                        # rounded out to whole land tiles): "Walk on into open
+                        # country" from The Pilgrims' Rest landed on the Rest's
+                        # own gate, and `door_here` led straight back in (the
+                        # review, Oct 20 2026). On past the box, up to the reach.
+                        landing = self._landing(there, spot, side, avoid=_box_tiles(there))
                         if window is None and landing is not None:
                             window = Spot(area=spot.area, x=landing[0], y=landing[1]), reach
-                    elif landing is None:
-                        return None  # water, trees or rock bar the way there
                     else:
+                        landing = self._landing(there, spot, side)
+                        if landing is None:
+                            return None  # water, trees or rock bar the way there
                         return Spot(area=spot.area, x=landing[0], y=landing[1]), reach
             reach += step
         return window
 
     @staticmethod
-    def _landing(area: Area, spot: Spot, side: str) -> tuple[int, int] | None:
+    def _landing(
+        area: Area, spot: Spot, side: str, *, avoid: Collection[tuple[int, int]] = ()
+    ) -> tuple[int, int] | None:
         """A tile to stand on at the far area's edge near `spot`: along the
         edge a few tiles either way and a tile or two in, walkable, never
         past what bars it (`stand_near` would cross a river to the nearest
-        dry tile; the review, Oct 16 2026)."""
+        dry tile; the review, Oct 16 2026). "In" is on into the far area,
+        away from the one being left: tile y grows south, so for `side`
+        north (the far area lies north) in is y - 1. It stepped the other
+        way, back off the far area's edge, so a line of trees just past the
+        edge read as barred though the ground beyond it was open (the
+        review, Oct 20 2026). `avoid`: tiles never to land on."""
         along = (1, 0) if side in ("north", "south") else (0, 1)
-        inward = {"north": (0, 1), "south": (0, -1), "east": (-1, 0), "west": (1, 0)}[side]
-        blocked = area.blocked()
+        inward = {"north": (0, -1), "south": (0, 1), "east": (1, 0), "west": (-1, 0)}[side]
+        blocked = area.blocked() | set(avoid)
         for depth in range(0, EDGE_LANDING_IN + 1):
             for offset in sorted(range(-EDGE_LANDING_ALONG, EDGE_LANDING_ALONG + 1), key=abs):
                 x = spot.x + along[0] * offset + inward[0] * depth
