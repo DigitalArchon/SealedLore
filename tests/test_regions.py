@@ -326,6 +326,65 @@ def test_a_region_is_told_the_others_names_and_not_their_places_as_the_story_s()
     assert "The Kessler fields" in taken and "the Kessler barn" in taken and "fuel can" in taken
 
 
+def test_the_designer_s_labels_never_collide_with_the_story_s_unknowns():
+    """The review (Oct 20 2026): the designer numbered from its own labels
+    (101…), the story from the folded map's count, which the designed labels
+    raise; a story unknown made after the first wave took 104, and the next
+    wave's designer gave 104 again: the designed person was then the story's
+    unknown on every fold."""
+    from sealedlore.engine.regions import designed_delta, next_label
+    from sealedlore.engine.world import next_unknown
+    from sealedlore.models.node import Node, NodeMeta
+    from sealedlore.models.world import DesignedPerson, DesignedRegion, WorldDelta
+
+    art = WorldArt()
+    region = WorldPlace(
+        id="r00", name="The back forty", kind="region", x=200.0, y=-200.0, size=400.0
+    )
+    art.regions["0:0"] = DesignedRegion(
+        key="0:0",
+        west=0,
+        north=0,
+        side=400,
+        place_id="r00",
+        places=[region],
+        people=[
+            DesignedPerson(
+                label=f"Unknown {LABEL_FROM + i}", who=f"a scavenger {i}", x=50.0 * i, y=-50.0
+            )
+            for i in range(3)
+        ],
+    )
+    world = world_at([], designed=designed_delta(art))
+    label = next_unknown(world)
+    assert label == f"Unknown {LABEL_FROM + 3}"
+    # The story makes that unknown; the next wave's designer counts it.
+    story = WorldDelta(unknowns={label: "the teenage girl"}, where={label: "r00"})
+    node = Node(kind="assistant", speaker_id="narrator", content="x", meta=NodeMeta(world=story))
+    later = world_at([node], designed=designed_delta(art))
+    assert next_label(art) == LABEL_FROM + 3  # the designer's own count alone: the collision
+    assert next_label(art, later) == LABEL_FROM + 4
+    zombie = f"Unknown {next_label(art, later)}"
+    art.regions["1:0"] = DesignedRegion(
+        key="1:0",
+        west=400,
+        north=0,
+        side=400,
+        place_id="r10",
+        places=[
+            WorldPlace(id="r10", name="The ridge", kind="region", x=600.0, y=-200.0, size=400.0)
+        ],
+        people=[DesignedPerson(label=zombie, who="a wandering zombie", x=600.0, y=-300.0)],
+    )
+    after = world_at([node], designed=designed_delta(art))
+    assert after.unknowns[label] == "the teenage girl" and after.where[label] == "r00"
+    assert after.unknowns[zombie] == "a wandering zombie" and after.where[zombie] == "r10"
+    # A story unknown named since still counts: its number is not given again.
+    named = WorldDelta(named={label: "Ruth"})
+    node2 = Node(kind="assistant", speaker_id="narrator", content="x", meta=NodeMeta(world=named))
+    assert next_label(art, world_at([node, node2], designed=designed_delta(art))) == LABEL_FROM + 5
+
+
 def test_someone_in_the_player_s_region_is_not_pulled_beside_them_as_company(tmp_path, story, cast):
     """The live test: the read put John "at the North Woodlot", a region,
     and two of its people were stood beside him as if in his company."""

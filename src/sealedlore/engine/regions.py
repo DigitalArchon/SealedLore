@@ -27,6 +27,7 @@ from typing import Any
 
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import PromptTexts
+from sealedlore.engine.world import is_unknown
 from sealedlore.engine.world_art import REGION_GRID_SIDE, REGION_GRID_TILES, rasterise
 from sealedlore.engine.world_layout import meets, position, size_of
 from sealedlore.ids import new_id
@@ -602,14 +603,24 @@ def build_region(
     return designed, patch
 
 
-def next_label(art: WorldArt) -> int:
-    """The number the next designed person's label starts from."""
+def next_label(art: WorldArt, world: WorldMap | None = None) -> int:
+    """The number the next designed person's label starts from: past every
+    label the designer has given, and past every label the story's map has
+    made (`world.unknowns_made`, which the fold raises to the designed labels
+    too, so the story's next unknown after the first wave took the next
+    number in the designer's range, and the next wave gave it again: the
+    designed person was then the story's unknown on every fold; the review,
+    Oct 20 2026)."""
     used = [
         int(p.label.rsplit(" ", 1)[-1])
         for r in art.regions.values()
         for p in r.people
         if p.label.rsplit(" ", 1)[-1].isdigit()
     ]
+    if world is not None:
+        used.append(world.unknowns_made)
+        used += [int(label.split()[-1]) for label in world.unknowns if is_unknown(label)]
+        used += [int(name.split()[-1]) for name in world.where if is_unknown(name)]
     return max([LABEL_FROM - 1, *used]) + 1
 
 

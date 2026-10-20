@@ -323,6 +323,9 @@ class RegionRuntime:
             return
         # Where the player stands, before the lock (it reads the map's art).
         player = self.held_point(world=world)
+        # The map as it is now, for the labels: the story may have made an
+        # unknown while the designer thought.
+        latest = self.world()
         art = self.world_art
         with self._lock():
             if key in art.regions or not art.region_origin:
@@ -337,7 +340,7 @@ class RegionRuntime:
                 key=key,
                 rect=rect,
                 holder_id=holder_id,
-                labels_from=next_label(art),
+                labels_from=next_label(art, latest),
                 model=model,
                 made_at=utc_now_iso(),
                 story=[p for p in world.places.values() if p.id not in designed_ids],
