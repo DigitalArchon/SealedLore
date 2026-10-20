@@ -732,6 +732,51 @@ def test_walking_on_into_open_country_never_lands_in_the_place_s_own_yard(tmp_pa
     assert session.door_here() is None  # not on the farm's own gate
 
 
+def test_standing_in_the_door_of_a_building_whose_inside_isn_t_drawn_says_so(tmp_path, story, cast):
+    """The review (Oct 20 2026): the door tile is walkable, they stood in it
+    and nothing happened, which looked like a dead door; `door_here` is None
+    there (no way through), so the window needs the building's name to say."""
+    session = make_session(tmp_path, story, cast)
+    session.world_art.layouts.pop("house")  # the house's inside isn't drawn yet
+    session._area_cache = None
+    state = session.area_state()
+    me = state.spots["Serrik Vaun"]
+    farm = session.area(me.area)
+    assert "house" in farm.buildings and not farm.entrances
+    x0, y0, x1, y1 = farm.buildings["house"]
+    door = next(
+        (x, y) for y in range(y0, y1 + 1) for x in range(x0, x1 + 1) if farm.at(x, y) == "+"
+    )
+    steps = session.walk_route(*door)
+    assert steps and steps[-1] == door
+    session.walked(steps)
+    assert session.door_here() is None
+    assert session.undrawn_door_here() == "The house"
+    # A step off the door: nothing to say.
+    session.walked(session.walk_route(door[0], door[1] + 1))
+    assert session.undrawn_door_here() is None
+
+
+def test_a_correction_forgetting_the_area_cache_mid_build_breaks_nothing(
+    tmp_path, story, cast, monkeypatch
+):
+    """The review (Oct 20 2026): a correction on the worker sets the area
+    cache to None while the GUI thread may be building an area; the build
+    read the attribute twice and failed on the second."""
+    from sealedlore.engine import session_area
+
+    session = make_session(tmp_path, story, cast)
+    real = session_area.build_area
+
+    def forgetful(*args, **kwargs):
+        session._area_cache = None  # `_done`, meanwhile
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(session_area, "build_area", forgetful)
+    assert session.area("house") is not None
+    assert session.area("house") is not None
+
+
 def test_one_asset_of_the_tile_set_is_changed_drawn_again_or_put_back(
     tmp_path, story, cast, monkeypatch
 ):

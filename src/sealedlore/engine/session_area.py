@@ -824,9 +824,13 @@ class AreaRuntime:
             inner,
             tuple(self.area_people()),
         )
-        if self._area_cache is None:
-            self._area_cache = {}
-        found = self._area_cache.get(cache_key)
+        # One reference to the cache for the whole lookup: a correction
+        # (`_done`, on the worker) sets `_area_cache` to None while the GUI
+        # thread may be in here (the review, Oct 20 2026).
+        cache = self._area_cache
+        if cache is None:
+            cache = self._area_cache = {}
+        found = cache.get(cache_key)
         if found is None:
             build = build_area if not level else build_level
             args = (place.id,) if not level else (place.id, level)
@@ -837,9 +841,9 @@ class AreaRuntime:
                 density=self.story.defaults.map_density,
                 people=self.area_people(),
             )
-            if len(self._area_cache) > 160:  # one per window of open country round a long walk
-                self._area_cache.clear()
-            self._area_cache[cache_key] = found
+            if len(cache) > 160:  # one per window of open country round a long walk
+                cache.clear()
+            cache[cache_key] = found
         return found
 
     def _window(self, area_id: str, world: WorldMap, art: WorldArt) -> Area | None:
@@ -860,18 +864,19 @@ class AreaRuntime:
             tuple(sorted(art.layouts)),
             tuple(self.area_people()),
         )
-        if self._area_cache is None:
-            self._area_cache = {}
-        found = self._area_cache.get(cache_key)
+        cache = self._area_cache  # one reference, as in `_base_area`
+        if cache is None:
+            cache = self._area_cache = {}
+        found = cache.get(cache_key)
         if found is None:
             memo = self._edge_cache()
             before = len(memo) if memo is not None else 0
             found = build_window(world, art, area_id, people=self.area_people(), edge_memo=memo)
             if memo is not None and len(memo) > before:
                 self._save_edge_cache(memo)
-            if len(self._area_cache) > 160:  # one per window of open country round a long walk
-                self._area_cache.clear()
-            self._area_cache[cache_key] = found
+            if len(cache) > 160:  # one per window of open country round a long walk
+                cache.clear()
+            cache[cache_key] = found
         return found
 
     def _edge_cache(self) -> dict[str, tuple[list[str], list[str]]] | None:
@@ -1493,6 +1498,25 @@ class AreaRuntime:
             around = self.area(area.parent, world)
             holder = world.places.get(around.place_id) if around and around.window else None
             return area.parent, holder.name if holder else self.area_title(area.parent, world)
+        return None
+
+    def undrawn_door_here(self) -> str | None:
+        """The name of the building (or boxed place) whose door the author's
+        character stands in when nothing leads through it yet: its inside
+        isn't drawn, so `door_here` is None. For the window to say so (the
+        review, Oct 20 2026: the door tile is walkable, they stood in it and
+        nothing happened, which looked like a dead door)."""
+        state = self.area_state()
+        me = state.spots.get(self.held_name() or "")
+        area = self.area(me.area if me else None)
+        if me is None or area is None or area.indoor or area.at(me.x, me.y) != "+":
+            return None
+        if area.entrance_at(me.x, me.y) is not None:
+            return None
+        for place_id, (x0, y0, x1, y1) in area.buildings.items():
+            on_wall = me.x in (x0, x1) or me.y in (y0, y1)
+            if x0 <= me.x <= x1 and y0 <= me.y <= y1 and on_wall:
+                return area.names.get(place_id) or self.area_title(place_id)
         return None
 
     def area_title(self, area_id: str, world: WorldMap | None = None) -> str:

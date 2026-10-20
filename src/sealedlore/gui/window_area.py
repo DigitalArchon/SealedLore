@@ -568,6 +568,14 @@ class AreaWindow:
                 if not session.in_private:
                     session.start_tile_art()
                     self._sync_progress()
+        elif door is None and pending is None:
+            # The door of a building whose inside isn't drawn yet: said, or it
+            # looks like a dead door (the review, Oct 20 2026).
+            undrawn = session.undrawn_door_here()
+            if undrawn is not None:
+                why = "Draw the map is off" if not self.config.map_art else "the map draws it"
+                note = f"The inside of {undrawn} isn't drawn yet: {why}, "
+                self.statusBar().showMessage(note + "and the door works once it is.", 6000)
         if pending is not None:
             self._fill_turn(*pending)
         self._design_ahead()
