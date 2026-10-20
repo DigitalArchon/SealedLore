@@ -1381,7 +1381,11 @@ story or a walk takes them in.
   last tile, or **Leave north ▾** when you stand on it) to walk on into the
   area beyond, where one adjoins and nothing bars the way (water, trees or
   rock at the far edge do), or to set off for the places that lie that way.
-  Where no place adjoins, **Walk on into open country** does.
+  Where no place adjoins, **Walk on into open country** does. A farm's, a
+  village's or a site's plan has a way out to each of its edges, and the
+  ground just past it on the land is cleared and joined to the open
+  country, so a village in a forest can be left on every side; water, the
+  dark of a chasm or a wall still bar the way.
 - **Open country.** Between places, in a region, a desert or a forest, or
   in no place the map names, you stand on the land itself, laid out as a
   grid of regions about the size of a farm (400 m across, walked at 2.5 m a

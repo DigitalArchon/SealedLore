@@ -342,3 +342,59 @@ def test_every_building_on_a_sample_s_map_can_be_entered_and_left(tmp_path: Path
             problems += [f"{path.stem}: {p}" for p in ways_in_and_out(session, pid)]
     assert checked >= 20
     assert problems == []
+
+
+def test_a_village_in_a_forest_has_a_way_out_on_every_side(tmp_path: Path):
+    """The review (Oct 20 2026): The Silverwood's Fernhollow could not be
+    left by its west edge: none of the village's ground reached it, and the
+    land past it was solid trees. An outdoor plan has a way cut to each edge
+    (`area.edges_open`, as a region of open country has), and the ground is
+    cleared round a place's yard on the land (`area.ways_round`)."""
+    from sealedlore.engine.area import path as walk
+    from sealedlore.engine.session import StorySession
+    from sealedlore.models.area import Spot
+    from sealedlore.models.config import Config
+    from sealedlore.providers.mock import MockChatProvider
+    from sealedlore.storage.repository import load_story_bundle, save_story_bundle
+    from sealedlore.storage.scenario import bundle_from_scenario
+    from sealedlore.storage.world_art import load_sidecar
+
+    sample = SAMPLES / "The Silverwood.md"
+    art, _files = load_sidecar(sample)
+    bundle = bundle_from_scenario(parse_plot_markdown(sample.read_text(encoding="utf-8")).scenario)
+    bundle.world_art = art
+    save_story_bundle(bundle, root=tmp_path)
+    session = StorySession(
+        load_story_bundle(bundle.story.id, root=tmp_path),
+        Config(map_art=False),
+        MockChatProvider(),
+        root=tmp_path,
+        learn_corrections=False,
+    )
+    session.save = lambda *a, **k: None
+    session.story.held_character_id = session.story.held_character_id or session.cast[0].id
+    held = session.held_name()
+    start = session.area_state().spots[held]
+    village = session.area(start.area)
+    assert village.name == "Fernhollow"
+    assert any("west edge" in r for r in village.repairs)
+    edges = {
+        "north": [(x, 0) for x in range(village.width)],
+        "south": [(x, village.height - 1) for x in range(village.width)],
+        "west": [(0, y) for y in range(village.height)],
+        "east": [(village.width - 1, y) for y in range(village.height)],
+    }
+    for side, tiles in edges.items():
+        reached = [t for t in tiles if walk(village, (start.x, start.y), t)]
+        assert reached, f"no way from the green to the {side} edge"
+        x, y = reached[len(reached) // 2]
+        state = session.area_state()
+        state.spots[held] = Spot(area=village.id, x=x, y=y)
+        session._set_live(state)
+        assert session.cross_edge(side) is not None, f"the way {side} is barred"
+        landed = session.area_state().spots[held]
+        land = session.area(landed.area)
+        assert land.window and land.walkable(landed.x, landed.y)
+        state = session.area_state()
+        state.spots[held] = start
+        session._set_live(state)

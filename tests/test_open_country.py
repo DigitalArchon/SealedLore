@@ -901,3 +901,37 @@ def test_a_window_s_edge_paths_are_kept_and_reused(tmp_path):
     save_edge_cache("story-1", memo, tmp_path)
     assert load_edge_cache("story-1", tmp_path) == {k: (v[0], v[1]) for k, v in memo.items()}
     assert load_edge_cache("nobody", tmp_path) == {}
+
+
+def test_the_ground_is_cleared_round_a_place_s_yard_on_the_land_and_joined_to_it():
+    """The review (Oct 20 2026): leaving Fernhollow by its west edge landed
+    on solid trees just past its yard on the land, and the way was barred.
+    A ring round each yard is cleared (trees, rock, a fence; never water)
+    and joined to the open ground, never through a box."""
+    from sealedlore.engine.area import WALKABLE, Area, path, ways_round, ways_round_memo
+
+    rows = (
+        ["T" * 14] * 2
+        + ["TT%%%%%TTTTTTT", "TT%___%TTTTTTT", "TT%%+%%TTTTTTT"]
+        + ["TTTTTTTTTT~~~~", "TTTTTTTTTT~..."]
+        + ["TTTTTTTTTTT..."] * 3
+    )
+    box = (2, 2, 6, 4)
+    repairs: list[str] = []
+    out = ways_round(rows, [("Fernhollow", box)], [box], repairs)
+    ring = [(x, y) for y in (1, 5) for x in range(1, 8)]
+    ring += [(x, y) for x in (1, 7) for y in (2, 3, 4)]
+    assert all(out[y][x] in WALKABLE for x, y in ring)
+    assert any("cleared the ground round Fernhollow" in r for r in repairs)
+    assert any("cut a way to Fernhollow" in r for r in repairs)
+    area = Area(
+        place_id="w", name="open country", indoor=False, look="grass", rows=out, tile_m=40.0,
+        objects={}, labels={},
+    )  # fmt: skip
+    assert path(area, (1, 1), (12, 8))  # from the west of the yard out to the open ground
+    assert out[5][10:14] == "~~~~" or "b" in out[5]  # the water stays water, bridged at most
+    assert all(out[y][x] == rows[y][x] for x in range(2, 7) for y in range(2, 5))  # the yard
+    memo: dict = {}
+    again: list[str] = []
+    assert ways_round_memo(rows, [("Fernhollow", box)], [box], again, memo) == out
+    assert again == repairs and len(memo) == 1

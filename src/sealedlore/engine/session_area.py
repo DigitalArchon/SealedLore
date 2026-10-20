@@ -837,15 +837,28 @@ class AreaRuntime:
             cache = self._area_cache = {}
         found = cache.get(cache_key)
         if found is None:
-            build = build_area if not level else build_level
-            args = (place.id,) if not level else (place.id, level)
-            found = build(
-                world,
-                art,
-                *args,
-                density=self.story.defaults.map_density,
-                people=self.area_people(),
-            )
+            if level:
+                found = build_level(
+                    world,
+                    art,
+                    place.id,
+                    level,
+                    density=self.story.defaults.map_density,
+                    people=self.area_people(),
+                )
+            else:
+                memo = self._edge_cache()
+                before = len(memo) if memo is not None else 0
+                found = build_area(
+                    world,
+                    art,
+                    place.id,
+                    density=self.story.defaults.map_density,
+                    people=self.area_people(),
+                    edge_memo=memo,
+                )
+                if memo is not None and len(memo) > before:
+                    self._save_edge_cache(memo)
             if len(cache) > 160:  # one per window of open country round a long walk
                 cache.clear()
             cache[cache_key] = found

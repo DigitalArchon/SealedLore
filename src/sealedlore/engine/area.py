@@ -1090,10 +1090,12 @@ def build_area(
     *,
     density: str = "normal",
     people: Collection[str] = (),
+    edge_memo: MutableMapping[str, tuple[list[str], list[str]]] | None = None,
 ) -> Area | None:
     """The area of a place with a plan, built from it; None without one.
     `people` are names in the story: a plan's object named for one ("Marcus
-    Webb" in the diner) is a person, not a thing."""
+    Webb" in the diner) is a person, not a thing. `edge_memo`: the ways cut
+    to an outdoor plan's edges, kept (`edges_open_memo`)."""
     place = world.places.get(place_id)
     if place is None:
         return None
@@ -1196,6 +1198,11 @@ def build_area(
         tile_m = plan_tile(place) / k
         exits = []
         rows, entrances, buildings = _fix_buildings(world, art, rows, big, fixed, repairs)
+        # A way out to every edge, as a region of open country has (the
+        # review, Oct 20 2026: Fernhollow's west edge was reached from none of
+        # the village's ground). Outdoor plans only: a building's walls and a
+        # deck's hull are what they are.
+        rows = edges_open_memo(rows, repairs, edge_memo)
     labels = _inside_labels(world, place, labels)
     # Objects named for people are people.
     for digit, name in list(objects.items()):
@@ -1564,20 +1571,15 @@ def _resampled(
 CARVABLE = frozenset("T^~%*,:")
 
 
-def edges_open(rows: list[str], repairs: list[str]) -> list[str]:
-    """Rows where every edge is reached from the largest stretch of ground
-    one can walk: where an edge isn't, the fewest tiles of trees, rock,
-    water or fence on the way to it are cut (a path, a bridge), going round
-    buildings. A region of open country is a world one walks on through,
-    and the farmhouse stamped in the middle of John's cut its road east
-    (the live test of the world designer, Oct 18 2026)."""
-    h, w = len(rows), len(rows[0]) if rows else 0
-    if not h or not w:
-        return rows
-    grid = [list(r) for r in rows]
+def _largest_ground(
+    grid: list[list[str]], skip: Collection[tuple[int, int]] = ()
+) -> set[tuple[int, int]]:
+    """The largest stretch of ground one can walk in a grid, by four-way
+    steps, leaving out the tiles in `skip`."""
+    h, w = len(grid), len(grid[0]) if grid else 0
 
     def walkable(x: int, y: int) -> bool:
-        return grid[y][x] in WALKABLE
+        return grid[y][x] in WALKABLE and (x, y) not in skip
 
     seen: set[tuple[int, int]] = set()
     best: set[tuple[int, int]] = set()
@@ -1596,6 +1598,86 @@ def edges_open(rows: list[str], repairs: list[str]) -> list[str]:
             seen |= part
             if len(part) > len(best):
                 best = part
+    return best
+
+
+def _cut_way(
+    grid: list[list[str]],
+    best: set[tuple[int, int]],
+    tiles: Collection[tuple[int, int]],
+    skip: Collection[tuple[int, int]] = (),
+) -> int | None:
+    """The fewest tiles of trees, rock, water or fence (CARVABLE) from the
+    walked ground `best` to any of `tiles`, cut (a path, a bridge over
+    water), never through `skip`; `best` grows by what the cut joined to it.
+    How many were cut, or None where no way can be cut."""
+    h, w = len(grid), len(grid[0]) if grid else 0
+    dist = {cell: 0 for cell in best}
+    back: dict[tuple[int, int], tuple[int, int]] = {}
+    todo = deque(best)
+    found = None
+    while todo:
+        cell = todo.popleft()
+        if cell in tiles:
+            found = cell
+            break
+        x, y = cell
+        for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if not (0 <= nx < w and 0 <= ny < h) or (nx, ny) in skip:
+                continue
+            ch = grid[ny][nx]
+            if ch in WALKABLE:
+                cost = 0
+            elif ch in CARVABLE:
+                cost = 1
+            else:
+                continue
+            step = dist[cell] + cost
+            if step < dist.get((nx, ny), 1 << 30):
+                dist[(nx, ny)] = step
+                back[(nx, ny)] = cell
+                (todo.appendleft if cost == 0 else todo.append)((nx, ny))
+    if found is None:
+        return None
+    cut = 0
+    cell = found
+    while cell in back:
+        x, y = cell
+        if grid[y][x] in CARVABLE:
+            grid[y][x] = BRIDGE if grid[y][x] == "~" else "="
+            cut += 1
+        cell = back[cell]
+    # What the cut joined to the walked ground, and nothing else.
+    grown = list(best)
+    while grown:
+        x, y = grown.pop()
+        for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if (
+                0 <= nx < w
+                and 0 <= ny < h
+                and (nx, ny) not in best
+                and (nx, ny) not in skip
+                and grid[ny][nx] in WALKABLE
+            ):
+                best.add((nx, ny))
+                grown.append((nx, ny))
+    return cut
+
+
+def edges_open(rows: list[str], repairs: list[str]) -> list[str]:
+    """Rows where every edge is reached from the largest stretch of ground
+    one can walk: where an edge isn't, the fewest tiles of trees, rock,
+    water or fence on the way to it are cut (a path, a bridge), going round
+    buildings. A region of open country is a world one walks on through,
+    and the farmhouse stamped in the middle of John's cut its road east
+    (the live test of the world designer, Oct 18 2026); a place's plan has
+    a way out on every side (Fernhollow's west edge was reached from none
+    of the village's ground; the review, Oct 20 2026)."""
+    h, w = len(rows), len(rows[0]) if rows else 0
+    if not h or not w:
+        return rows
+    grid = [list(r) for r in rows]
+    best = _largest_ground(grid)
     if not best:
         return rows
     edges = {
@@ -1607,53 +1689,84 @@ def edges_open(rows: list[str], repairs: list[str]) -> list[str]:
     for side, tiles in edges.items():
         if tiles & best:
             continue
-        # The fewest cuttable tiles from the walked ground to this edge.
-        dist = {cell: 0 for cell in best}
-        back: dict[tuple[int, int], tuple[int, int]] = {}
-        todo = deque(best)
-        found = None
-        while todo:
-            cell = todo.popleft()
-            if cell in tiles:
-                found = cell
-                break
-            x, y = cell
-            for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
-                if not (0 <= nx < w and 0 <= ny < h):
-                    continue
-                ch = grid[ny][nx]
-                if ch in WALKABLE:
-                    cost = 0
-                elif ch in CARVABLE:
-                    cost = 1
-                else:
-                    continue
-                step = dist[cell] + cost
-                if step < dist.get((nx, ny), 1 << 30):
-                    dist[(nx, ny)] = step
-                    back[(nx, ny)] = cell
-                    (todo.appendleft if cost == 0 else todo.append)((nx, ny))
-        if found is None:
-            continue
-        cut = 0
-        cell = found
-        while cell in back:
-            x, y = cell
-            if grid[y][x] in CARVABLE:
-                grid[y][x] = BRIDGE if grid[y][x] == "~" else "="
-                cut += 1
-            cell = back[cell]
+        cut = _cut_way(grid, best, tiles)
         if cut:
             repairs.append(f"cut a way to the {side} edge through {cut} tiles")
-        # What the cut joined to the walked ground, and nothing else.
-        grown = list(best)
-        while grown:
-            x, y = grown.pop()
-            for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
-                if 0 <= nx < w and 0 <= ny < h and (nx, ny) not in best and walkable(nx, ny):
-                    best.add((nx, ny))
-                    grown.append((nx, ny))
     return ["".join(r) for r in grid]
+
+
+# What the ground cleared round a place's yard on the land goes through:
+# trees, rock and fences. Water stays: a village on a lake shore keeps it.
+CLEARED = frozenset("T^%")
+
+
+def ways_round(
+    rows: list[str],
+    yards: Sequence[tuple[str, tuple[int, int, int, int]]],
+    boxes: Collection[tuple[int, int, int, int]],
+    repairs: list[str],
+) -> list[str]:
+    """Rows of a window of open country with the ground cleared in a ring
+    round each place's plan on it (`yards`: name and box, x0, y0, x1, y1,
+    its yard or its plan's rectangle on the window: `plan_grounds`) and the
+    ring joined to the open ground there (`_cut_way`), never through a box
+    (`boxes`, every one on the window). Leaving a plan by any edge lands on
+    the land just past it, and the land there was solid trees round
+    Fernhollow (The Silverwood): its west edge was barred (the review, Oct
+    20 2026). A village in a forest has its clearing and a way out."""
+    h, w = len(rows), len(rows[0]) if rows else 0
+    if not h or not w or not yards:
+        return rows
+    grid = [list(r) for r in rows]
+    inside = {
+        (x, y) for x0, y0, x1, y1 in boxes for y in range(y0, y1 + 1) for x in range(x0, x1 + 1)
+    }
+    # The land's own open ground, before any ring: a cleared ring is joined
+    # to it, not taken for it (in a forest the ring is the larger).
+    best = _largest_ground(grid, inside)
+    rings: list[tuple[str, list[tuple[int, int]]]] = []
+    for name, (x0, y0, x1, y1) in yards:
+        ring = [(x, y) for y in (y0 - 1, y1 + 1) for x in range(x0 - 1, x1 + 2)]
+        ring += [(x, y) for x in (x0 - 1, x1 + 1) for y in range(y0, y1 + 1)]
+        ring = [(x, y) for x, y in ring if 0 <= x < w and 0 <= y < h and (x, y) not in inside]
+        cleared = 0
+        for x, y in ring:
+            if grid[y][x] in CLEARED:
+                grid[y][x] = "."
+                cleared += 1
+        if cleared:
+            repairs.append(f"cleared the ground round {name} ({cleared} tiles)")
+        rings.append((name, ring))
+    for name, ring in rings:
+        walk = {(x, y) for x, y in ring if grid[y][x] in WALKABLE}
+        if not walk or walk & best:
+            continue
+        cut = _cut_way(grid, best, walk, inside)
+        if cut:
+            repairs.append(f"cut a way to {name} through {cut} tiles")
+    return ["".join(r) for r in grid]
+
+
+def _memo(
+    memo: MutableMapping[str, tuple[list[str], list[str]]] | None,
+    key_text: str,
+    repairs: list[str],
+    work: Callable[[list[str]], list[str]],
+) -> list[str]:
+    """`work`'s rows, kept in `memo` by `key_text` (a story keeps the memo
+    on disk, storage/area_cache.py), with the repairs it made."""
+    if memo is None:
+        return work(repairs)
+    key = hashlib.blake2b(key_text.encode(), digest_size=16).hexdigest()
+    kept = memo.get(key)
+    if kept is not None:
+        repairs.extend(kept[1])
+        return list(kept[0])
+    added: list[str] = []
+    out = work(added)
+    repairs.extend(added)
+    memo[key] = (out, added)
+    return out
 
 
 def edges_open_memo(
@@ -1664,18 +1777,65 @@ def edges_open_memo(
     """`edges_open`, with its answer kept in `memo` by the rows it was asked
     for (a story keeps the memo on disk, storage/area_cache.py): the search
     cost 20 ms a window, 24 windows the first settle of a story (Oct 19 2026)."""
-    if memo is None:
-        return edges_open(rows, repairs)
-    key = hashlib.blake2b("\n".join(rows).encode(), digest_size=16).hexdigest()
-    kept = memo.get(key)
-    if kept is not None:
-        repairs.extend(kept[1])
-        return list(kept[0])
-    added: list[str] = []
-    out = edges_open(rows, added)
-    repairs.extend(added)
-    memo[key] = (out, added)
+    return _memo(memo, "\n".join(rows), repairs, lambda added: edges_open(rows, added))
+
+
+def plan_grounds(
+    world: WorldMap,
+    art: WorldArt,
+    rect: tuple[float, float, float, float],
+    tile: float,
+    buildings: Mapping[str, tuple[int, int, int, int]],
+) -> list[tuple[str, tuple[int, int, int, int]]]:
+    """Each outdoor place with a plan of its own (a farm, a village, a site:
+    played on its plan, left by its edges) that reaches into a window of
+    open country or ends within a tile of it, by name and box on the
+    window's tiles: its yard where the window draws one (`buildings`), else
+    its plan's rectangle (a town wider than the window is no yard on it),
+    which may run past the window's edges (the ring round it, the tiles
+    just past it, may still be on the window: The Heartgrove's west edge is
+    the next window's east one). Not a building, a room or a vehicle: those
+    are left by their doors."""
+    west, north, width, height = rect
+    out: list[tuple[str, tuple[int, int, int, int]]] = []
+    for place in world.places.values():
+        if place.kind in ("region", "route", "building", "room", "vehicle"):
+            continue
+        box = buildings.get(place.id)
+        if box is None:
+            if art.layout_shown(place.id, place.state) is None:
+                continue  # no plan drawn: played on the land itself
+            drawn = footprint(world, art, place.id)
+            if drawn is None:
+                continue
+            w0, s0, e0, n0 = drawn
+            if (
+                e0 < west - tile
+                or w0 > west + width + tile
+                or s0 > north + tile
+                or n0 < north - height - tile
+            ):
+                continue
+            x0, y0 = math.floor((w0 - west) / tile), math.floor((north - n0) / tile)
+            x1, y1 = math.ceil((e0 - west) / tile) - 1, math.ceil((north - s0) / tile) - 1
+            box = (x0, y0, x1, y1)
+        if plan_place(world, art, place.id) is not place:
+            continue  # reached on another place's plan, or none
+        out.append((place.name, box))
+    out.sort(key=lambda pair: (pair[1], pair[0]))
     return out
+
+
+def ways_round_memo(
+    rows: list[str],
+    yards: Sequence[tuple[str, tuple[int, int, int, int]]],
+    boxes: Collection[tuple[int, int, int, int]],
+    repairs: list[str],
+    memo: MutableMapping[str, tuple[list[str], list[str]]] | None,
+) -> list[str]:
+    """`ways_round`, kept in `memo` as `edges_open_memo` keeps its answers."""
+    text = "round\n" + repr((list(yards), sorted(boxes))) + "\n" + "\n".join(rows)
+    return _memo(memo, text, repairs, lambda added: ways_round(rows, yards, boxes, added))
 
 
 def build_window(
@@ -1741,6 +1901,12 @@ def build_window(
     for f in fixed:
         labels[f["name"][:60]] = (f["x"] + f["w"] // 2, f["y"] + f["h"] // 2)
     rows, entrances, buildings = _fix_buildings(world, art, rows, big, fixed, repairs)
+    # Ground cleared round each place's yard, joined to the open ground: a
+    # plan is left by any edge onto the land just past its yard.
+    grounds = plan_grounds(world, art, rect, tile, buildings)
+    if grounds:
+        boxes = sorted({*buildings.values(), *(box for _name, box in grounds)})
+        rows = ways_round_memo(rows, grounds, boxes, repairs, edge_memo)
     if region_cell:
         rows = edges_open_memo(rows, repairs, edge_memo)
     objects: dict[str, str] = {}
