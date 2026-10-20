@@ -412,3 +412,33 @@ def test_objects_in_the_window_make_place_and_say_so(app, window):
     assert "Armchair placed" in window.statusBar().currentMessage()
     panel.close()
     assert window.area_view.tool() is None, "closing the panel puts the tool down"
+
+
+def test_objects_and_the_look_wait_for_the_story_s_job(app, window):
+    """Make, Forget and Look ▾'s set choice wrote the map's art while the
+    worker owned the story; and Set up pictures… on the People page opened
+    nothing, with no word why (the review, Oct 20 2026)."""
+    import tests.test_area_view as area_tests
+    from tests.test_corrections_gui import begun
+
+    window.show()
+    begun(app, window)
+    session = window.session
+    before = session.map_art_copy().tile_set
+    choices = session.object_choices()
+    window._busy = True
+    try:
+        window.open_objects()
+        area_tests.pump(app)
+        assert window._objects_panel is None
+        assert "Objects can be made once" in window.statusBar().currentMessage()
+        window._objects_create(["armchair"])
+        window._objects_forget("armchair")
+        assert session.object_choices() == choices
+        window._area_look("village" if before != "village" else "doomsville")
+        assert session.map_art_copy().tile_set == before
+        assert "look can be changed once" in window.statusBar().currentMessage()
+        window.open_settings("Images")
+        assert "Settings can be opened once" in window.statusBar().currentMessage()
+    finally:
+        window._busy = False

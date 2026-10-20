@@ -262,3 +262,24 @@ def test_settings_sets_how_many_are_drawn_without_asking(app):
     dialog.map_pictures_over.setValue(0)
     assert dialog.map_pictures_over.text() == "any number"
     dialog.deleteLater()
+
+
+def test_the_map_page_never_says_drawn_over_pictures_that_wait(app):
+    """With pictures waiting for approval the progress line read "✓ The map
+    is drawn" right above the line saying they wait (the review, Oct 20
+    2026)."""
+    from sealedlore.gui.world_view import MAP_DRAWN, MAP_DRAWN_BUT_WAITING, WorldView
+
+    view = WorldView()
+    view.set_progress(0, 0)
+    assert view.progress_label.text() == MAP_DRAWN
+    view.set_waiting(2, 0.02)
+    assert view.progress_label.text() == MAP_DRAWN_BUT_WAITING
+    view.set_progress(0, 0)  # the next tick keeps it
+    assert view.progress_label.text() == MAP_DRAWN_BUT_WAITING
+    view.set_progress(1, 3)  # drawing again: the count, whatever waits
+    view.set_waiting(2, 0.02)
+    assert view.progress_label.text() == "Drawing the map: 1 of 3"
+    view.set_progress(0, 0)
+    view.set_waiting(0, None)
+    assert view.progress_label.text() == MAP_DRAWN and view.waiting.isHidden()

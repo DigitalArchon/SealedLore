@@ -181,7 +181,14 @@ class AreaWindow:
         # whoever is there with it.
         editing_elsewhere = getattr(self, "_edit_area_id", None)
         if editing_elsewhere and getattr(self, "_map_editing", False):
-            shown_id = editing_elsewhere
+            if session.area(editing_elsewhere) is None:
+                # Gone (taken off the map, another story): back to where the
+                # author's character is, rather than no area at all.
+                self._edit_area_id = None
+                self.area_view.focus = None
+                self.area_view.edit_bar.set_back(None)
+            else:
+                shown_id = editing_elsewhere
         area = session.area(shown_id) if shown_id is not None else None
         if me is None or area is None:
             self.area_view.set_message(self._no_area_words(session))
@@ -882,6 +889,14 @@ class AreaWindow:
     def _area_look(self, name: str) -> None:
         session = self.session
         if session is None:
+            return
+        if self._busy:
+            # The tile set is pinned with the map's art, which the worker may
+            # be starting to draw.
+            self.statusBar().showMessage(
+                "The look can be changed once the story's current job is done.", 6000
+            )
+            self._area_looks()  # the menu's tick back on the set in use
             return
         session.set_tile_set(name)
         self.refresh_area()

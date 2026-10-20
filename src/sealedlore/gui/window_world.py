@@ -43,6 +43,9 @@ class _ArtSignal(QObject):
 
 class WorldWindow:
     _world_drawn: tuple | None = None  # what the Region map was last built from
+    # The art copy the key names by id: held, so the id can't be reused by
+    # another copy at the same address while it is the one drawn.
+    _drawn_art: object = None
 
     def _build_world(self) -> None:
         """Called from `__init__` before the centre is laid out."""
@@ -149,11 +152,13 @@ class WorldWindow:
         # layout, the open itself), each a full build of the Region map
         # (Oct 19 2026, 7 s of a 7 s open with 27 designed regions).
         world = session.world()
+        art = session._art_read()
         key = (
             session.story.id,
             session.story.active_leaf_id,
             world_key(world),
-            id(session._art_read()),
+            session._art_version,
+            id(art),
             held,
             session.here_place(),
             session.in_private,
@@ -170,6 +175,7 @@ class WorldWindow:
         else:
             self.world_view.set_world(world, session.map_art_copy(), held, keep_view=keep_view)
             self._world_drawn = key
+            self._drawn_art = art
         # Map-first play: the area to walk on (gui/window_area.py).
         self.refresh_area()
 

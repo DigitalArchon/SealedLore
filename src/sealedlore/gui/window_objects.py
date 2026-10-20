@@ -39,6 +39,8 @@ class ObjectsWindow:
         if session.in_private:
             self.statusBar().showMessage("A private scene is open: the map is paused.", 5000)
             return
+        if self._objects_blocked():
+            return
         panel = self._objects_panel
         if panel is None:
             panel = ObjectsPanel(self)
@@ -113,9 +115,19 @@ class ObjectsWindow:
             words += f"; the tile set has {', '.join(have)} already"
         return words + ".", True
 
+    def _objects_blocked(self) -> bool:
+        """The worker owns the story (and starts the map's drawing after a
+        passage): making or forgetting an object meanwhile raced it."""
+        if not self._busy:
+            return False
+        self.statusBar().showMessage(
+            "Objects can be made once the story's current job is done.", 6000
+        )
+        return True
+
     def _objects_create(self, names: list[str]) -> None:
         session = self.session
-        if session is None or not names:
+        if session is None or not names or self._objects_blocked():
             return
         drawing = session.create_objects(names)
         panel = self._objects_panel
@@ -130,7 +142,9 @@ class ObjectsWindow:
         self._sync_objects_panel()
 
     def _objects_forget(self, name: str) -> None:
-        if self.session is not None and self.session.forget_object(name):
+        if self.session is None or self._objects_blocked():
+            return
+        if self.session.forget_object(name):
             self._sync_objects_panel()
 
     def _objects_tool_stopped(self) -> None:

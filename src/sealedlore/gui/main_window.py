@@ -1454,9 +1454,7 @@ class MainWindow(
             self.session.close(wait_seconds=0)
             self.session.save()
         self.session = None
-        self.leave_map_edit()
-        self._close_area()
-        self._close_objects()
+        self._leave_story_views()
         # Nothing of the story's map stays for the next: a memory chat's
         # card, postcard and decoded views (the review, Oct 15 2026).
         self.world_view.picture_reader = None
@@ -1662,9 +1660,24 @@ class MainWindow(
         self.session = session
         self._after_open()
 
+    def _leave_story_views(self) -> None:
+        """Nothing of a story's map views stays for the next: Edit Mode and
+        the area it looked at, the play view and its painted areas, a
+        painting waiting for its pieces, a menu choice mid-walk, the Objects
+        panel, and what the Region map was last built from. Closing a story
+        did this and opening another over it didn't: the next story came up
+        in the last one's Edit Mode, looking for a building it didn't have,
+        with no area at all until Done (the review, Oct 20 2026)."""
+        self.leave_map_edit(refresh=False)
+        self._close_area()  # the painting waited for, the menu choice, the caches
+        self._close_objects()
+        self._world_drawn = None
+        self._drawn_art = None
+
     def _after_open(self) -> None:
         """Everything that follows a story being opened, from disk or (a
         memory-only chat) from memory."""
+        self._leave_story_views()
         # A route to one host is checked against that host's price.
         self.session.host_price = self._host_price
         self._fetch_host_prices()
@@ -4387,7 +4400,12 @@ class MainWindow(
         """`tab`: the page to open on, by its label ("Images")."""
         # Applying settings replaces the provider and saves the story, and the
         # worker is the only writer while it runs.
-        if self._busy or self._settings_paused():
+        if self._busy:
+            self.statusBar().showMessage(
+                "Settings can be opened once the story's current job is done.", 6000
+            )
+            return
+        if self._settings_paused():
             return
         story = self.session.story if self.session else None
         model_before = self.session.model if self.session else None

@@ -1682,3 +1682,61 @@ def test_a_story_picture_s_cut_out_is_kept_between_launches(tmp_path):
     finally:
         module.sprite_image = real
     assert found is not None and (found.width(), found.height()) == (61, 61) and calls == []
+
+
+def test_opening_another_story_leaves_the_last_one_s_map_views(app, window, tmp_path, story, cast):
+    """In a map story, Edit map, Go inside, then open another story from the
+    Stories list: it came up in the last story's Edit Mode, its bar naming
+    the last story's area, looking for a building it didn't have, with no
+    area at all until Done; the Objects panel stayed bound to the old
+    session, a painting waited for an old area, a menu choice mid-walk
+    stood (the review, Oct 20 2026). What closing a story put away, opening
+    another does too."""
+    import copy
+
+    from tests.test_corrections_gui import begun
+
+    world, art = world_and_art()
+    places = [p for p in world.places.values() if p.id != "house"]
+    art.layouts.pop("house", None)
+    second = copy.deepcopy(story)
+    second.id, second.title = "story-2", "The second"
+    second.world_base = WorldDelta(places=places, seen=[p.id for p in places])
+    second.world_start = "farm"
+    save_story_bundle(StoryBundle(story=second, cast=cast), root=tmp_path)
+    save_world_art(second.id, art, tmp_path)
+    window.show()
+    begun(app, window)
+    window.enter_map_edit()
+    pump(app)
+    assert window._map_editing
+    # Edit Mode looking at an area the map no longer has: back home, not nothing.
+    window._edit_area_id = "nowhere"
+    window.area_view.edit_bar.set_back("The farm")
+    window.refresh_area()
+    assert window._edit_area_id is None and window.area_view.area is not None
+    window._edit_area_id = "house"
+    window.refresh_area()
+    assert window.area_view.area.id == "house"
+    window._paint_waiting = "house"
+    window._area_pending = ("talk", "Maela Orr", "Maela Orr")
+    window.open_objects()
+    pump(app)
+    assert window._objects_panel is not None and window._objects_panel.isVisible()
+    drawn = window._world_drawn
+
+    window.open_story(second.id)
+    pump(app)
+    view = window.area_view
+    assert window.session.story.id == second.id
+    assert not window._map_editing and not view.editing and view.edit_bar.isHidden()
+    assert not view.travel_button.isHidden()
+    assert window._edit_area_id is None and window._paint_waiting is None
+    assert window._area_pending is None and window._objects_panel is None
+    assert view.area is not None and view.area.id != "house"  # the new story's own
+    assert window._world_drawn is not None and window._world_drawn != drawn
+    assert window._drawn_art is not None
+
+    window._close_story()
+    pump(app)
+    assert window._world_drawn is None and window._drawn_art is None

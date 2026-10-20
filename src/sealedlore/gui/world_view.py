@@ -603,6 +603,12 @@ class _PlanItem(QGraphicsPixmapItem):
         )
 
 
+# The progress line once nothing is drawing: with pictures waiting for the
+# author below it, it mustn't say the map is done.
+MAP_DRAWN = "✓ The map is drawn"
+MAP_DRAWN_BUT_WAITING = "The map is drawn, but for the pictures waiting below"
+
+
 class _LandSignal(QObject):
     """A patch of land rendered on the land thread; delivered on the GUI
     thread (queued): the generation it was asked for, and the patch."""
@@ -2456,6 +2462,10 @@ class WorldView(QWidget):
         they cost listed (`unpriced`: some have no listed price); hidden
         at none. `over`: they wait because drawn automatically they would
         have been more than that at once."""
+        self._waiting_count = max(count, 0)
+        if self.progress_label.text() in (MAP_DRAWN, MAP_DRAWN_BUT_WAITING):
+            # Not "✓ The map is drawn" right above the pictures waiting.
+            self.progress_label.setText(MAP_DRAWN_BUT_WAITING if count > 0 else MAP_DRAWN)
         if count <= 0:
             self.waiting.hide()
             return
@@ -2501,7 +2511,9 @@ class WorldView(QWidget):
             self.progress_label.setText(f"The map is drawn, but not {named}")
             self._drew = True
         else:
-            self.progress_label.setText("✓ The map is drawn")
+            self.progress_label.setText(
+                MAP_DRAWN_BUT_WAITING if getattr(self, "_waiting_count", 0) else MAP_DRAWN
+            )
         self.retry_button.setVisible(bool(failed) and not drawing and not activity and self.art_on)
         self.progress.setVisible(drawing or bool(activity))
         self.progress_label.setVisible(drawing or bool(activity) or (self._drew and self.art_on))

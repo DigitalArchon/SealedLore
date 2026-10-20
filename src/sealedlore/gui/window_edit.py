@@ -74,7 +74,9 @@ class MapEditWindow:
             self.area_view.edit_bar.say(words)
             self.statusBar().showMessage("The map opens in Edit Mode.", 8000)
 
-    def leave_map_edit(self) -> None:
+    def leave_map_edit(self, *, refresh: bool = True) -> None:
+        """`refresh` False: the story is being left; the next one draws its
+        own area."""
         if not self._map_editing:
             return
         self._map_editing = False
@@ -83,7 +85,7 @@ class MapEditWindow:
         self.area_view.set_placing(None)
         self.area_view.set_removing(False)
         self.area_view.set_editing(False)
-        if hasattr(self, "refresh_area") and self.session is not None:
+        if refresh and hasattr(self, "refresh_area") and self.session is not None:
             self.refresh_area()
 
     def _edit_outside(self) -> None:
