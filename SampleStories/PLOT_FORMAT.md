@@ -270,7 +270,8 @@ What the storyteller is told should happen. It can also be given as `- tell:`.
 `when:` takes a range (`day 30–50`, `day 30 to 50`) or one day (`day 12`).
 An optional event can have `when:` too: it can't happen before the first day,
 and once the last has passed it is skipped, rather than waited for, if its
-conditions don't hold then. It is never forced, and `must happen:` on an
+conditions don't hold then, or if it has no `requires:` of its own (nothing
+else to wait for). It is never forced, and `must happen:` on an
 optional event is noted and ignored. A variant (`###`) takes the same
 settings as its event: `requires`, `tell`, `sets`, `trigger`, `brings`,
 `reveals`, `at` and `offscreen`.

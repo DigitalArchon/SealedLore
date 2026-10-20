@@ -1099,7 +1099,7 @@ class WayPage(Page):
                 hint(
                     "A day in the window is drawn at random. Off the timeline, the first day "
                     "is the earliest it can happen; past the last it is skipped if its "
-                    "conditions don't hold."
+                    "conditions don't hold, or if it has none of its own."
                 )
             )
             form.addRow("Pacing", self.pacing)

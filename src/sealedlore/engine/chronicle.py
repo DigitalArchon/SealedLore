@@ -487,6 +487,13 @@ def resolve_due(
             if not status.overdue:
                 status.overdue = True
                 result.changed = True
+        elif closed and onscreen and event.kind == "optional" and not event.requires:
+            # An optional event with `when:` and nothing else to wait for
+            # is only between those days: past them it is skipped. Left
+            # waiting, it was armed (and a quiet one kept the director
+            # consulted) on day 300 (the review of Oct 20 2026).
+            status.state = "missed"
+            result.changed = True
         elif closed and onscreen:
             # A conditional event that still fits keeps waiting for its
             # trigger ("the next time he sleeps"). Forced as overdue, the

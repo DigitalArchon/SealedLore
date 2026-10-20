@@ -459,3 +459,30 @@ def test_with_the_reads_off_an_overdue_event_is_still_settled(tmp_path: Path):
     assert "Begin this in the passage" not in section(session, SECTION_DIRECTION)
     logged = kinds(session, tmp_path)
     assert "chronicle_request" not in logged and "chronicle_settled" in logged
+
+
+def test_an_optional_event_only_between_certain_days_is_skipped_after_them():
+    # An optional event with `when:` and no `requires:` of its own stayed
+    # armed for the rest of the story once its window closed (a quiet one
+    # keeping the director consulted on day 300); one with conditions that
+    # still hold keeps waiting for its trigger, as the format guide says.
+    windowed = PLOT_FILE.replace(
+        "# Timeline\n## The fall\n- when: day 3–5\n",
+        "# Events\n## The fall\n- when: day 3–5\n- trigger: Ann turns in for the night.\n",
+    )
+    p = plot(windowed)
+    assert p.event("the_fall").kind == "optional"
+    chronicle = initial_chronicle(p)
+    chronicle.minutes = clock_minutes(5, 9, 0)
+    assert not resolve_due(p, chronicle, {}, node_id=None).changed
+    assert [item.event.id for item in armed(p, chronicle, {})] == ["the_fall"]
+    chronicle.minutes = clock_minutes(6, 9, 0)
+    assert resolve_due(p, chronicle, {}, node_id=None).changed
+    assert chronicle.events["the_fall"].state == "missed"
+    assert armed(p, chronicle, {}) == []
+
+    guarded = plot(windowed.replace("- trigger:", "- requires: town = standing\n- trigger:"))
+    chronicle = initial_chronicle(guarded)
+    chronicle.minutes = clock_minutes(6, 9, 0)
+    resolve_due(guarded, chronicle, {}, node_id=None)
+    assert chronicle.events["the_fall"].state == "pending"
