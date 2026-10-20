@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Literal, get_args
 
@@ -1330,3 +1331,82 @@ def parse_plot_markdown(text: str, *, fallback_title: str = "Untitled") -> Parse
     """Read a plot file. `fallback_title` (usually the file's name) is used when
     the file sets none."""
     return _Parser(text, fallback_title).parse()
+
+
+def rekey_plot(
+    plot: Plot,
+    *,
+    file_people: Sequence[Character],
+    file_lore: Sequence[LoreEntry],
+    story_people: Sequence[Character],
+    story_lore: Sequence[LoreEntry],
+) -> tuple[Plot, list[str]]:
+    """A parsed plot's links re-keyed to a story's own cards, by name.
+
+    Every parse of a file gives its characters and lore entries fresh ids, and
+    the plot's `brings:`, `reveals:`, `Name at =` conditions and places carry
+    them. Attached to a story as parsed (Story → Add a plot from a file…), no
+    event could bring anyone in and every named-character condition tested
+    nobody (the review of Oct 20 2026). Each id among the file's own cards
+    (`file_people`, `file_lore`) becomes the story card's of the same name
+    (or alias, or title); an id the file doesn't know is left as it is (a
+    plot built against the story's own cards). Returns the plot and what it
+    couldn't match: a `brings`/`reveals` of nobody is dropped, a condition
+    about nobody stays and tests nobody, a place keeps its name alone.
+    """
+    story_by_name: dict[str, str] = {}
+    for character in story_people:
+        for alias in character.aliases:
+            story_by_name.setdefault(_norm(alias), character.id)
+    for character in story_people:
+        story_by_name[_norm(character.name)] = character.id
+    lore_by_title = {_norm(entry.title): entry.id for entry in story_lore}
+    file_names = {character.id: character.name for character in file_people}
+    file_titles = {entry.id: entry.title for entry in file_lore}
+    problems: list[str] = []
+
+    def found(item_id: str) -> str | None:
+        """The story's id for a file card's; None for none; the id itself
+        when the file doesn't know it."""
+        if item_id in file_names:
+            return story_by_name.get(_norm(file_names[item_id]))
+        if item_id in file_titles:
+            return lore_by_title.get(_norm(file_titles[item_id]))
+        return item_id
+
+    def brought(ids: list[str], field_name: str, where: str) -> list[str]:
+        kept: list[str] = []
+        for item_id in ids:
+            story_id = found(item_id)
+            if story_id is None:
+                name = file_names.get(item_id) or file_titles.get(item_id, item_id)
+                problems.append(
+                    f"{where}: `{field_name}` names {name}, not in this story's cast or lore, "
+                    "so it brings them in no longer."
+                )
+            else:
+                kept.append(story_id)
+        return list(dict.fromkeys(kept))
+
+    rekeyed = plot.model_copy(deep=True)
+    for event in rekeyed.events:
+        holders = [(event, event.title)]
+        holders += [(v, f"{event.title} › {v.title or 'its variant'}") for v in event.variants]
+        for holder, where in holders:
+            holder.brings = brought(holder.brings, "brings", where)
+            holder.reveals = brought(holder.reveals, "reveals", where)
+            for condition in holder.requires:
+                if condition.who is None or condition.who not in file_names:
+                    continue
+                story_id = found(condition.who)
+                if story_id is None:
+                    problems.append(
+                        f"{where}: a condition is about {file_names[condition.who]}, not in "
+                        "this story's cast, so it tests nobody."
+                    )
+                else:
+                    condition.who = story_id
+    for place in rekeyed.places:
+        if place.lore_id is not None and place.lore_id in file_titles:
+            place.lore_id = found(place.lore_id)
+    return rekeyed, problems

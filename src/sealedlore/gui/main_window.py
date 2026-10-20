@@ -1202,12 +1202,24 @@ class MainWindow(
             )
             if answer != QMessageBox.Yes:
                 return
-        self.session.attach_plot(parsed.scenario.plot)
+        scenario = parsed.scenario
+        # The file's cards go with the plot only to re-key its links (who an
+        # event brings in, whose place a condition tests) to this story's
+        # cards of the same names; the cards themselves are not used.
+        problems = self.session.attach_plot(
+            scenario.plot, people=[*scenario.cast, *scenario.supporting], lore=scenario.lore
+        )
         self.statusBar().showMessage(
             "Plot attached: its facts and events. The world, cast and places in the file "
             "were not used; start a new story from the file to use those too.",
             10000,
         )
+        if problems:
+            self._warn_plain(
+                "Plot attached, with gaps",
+                "The plot names people or places this story doesn't have:\n\n"
+                + "\n".join(f"• {problem}" for problem in problems),
+            )
 
     def restart_story(self, *, review: bool = False) -> None:
         """A fresh playthrough of this story's setup, leaving this one untouched.

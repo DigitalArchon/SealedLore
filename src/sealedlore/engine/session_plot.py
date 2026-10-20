@@ -24,6 +24,7 @@ from sealedlore.engine.chronicle import (
     carried,
     chronicle_at,
     eligible,
+    fitted,
     force,
     happen,
     initial_chronicle,
@@ -69,6 +70,7 @@ from sealedlore.engine.director import (
     render_direction_block,
     render_story_time_block,
 )
+from sealedlore.engine.plot_md import rekey_plot
 from sealedlore.engine.prompt import (
     TurnRequest,
     assemble_question,
@@ -240,20 +242,48 @@ class PlotRuntime:
         The clock read after each passage runs on the scene model."""
         return self.config.plot_model or self.scene_model
 
-    def attach_plot(self, plot: Plot) -> None:
+    def attach_plot(
+        self,
+        plot: Plot,
+        *,
+        people: Sequence[Character] = (),
+        lore: Sequence[LoreEntry] = (),
+    ) -> list[str]:
         """Give the story a plot's facts and events, replacing any it had.
 
-        A story already under way starts the plot where it is: the clock at
-        the plot's start and every fact at its first value, from the leaf on.
-        Earlier passages keep whatever an old plot recorded, fitted to this
-        one when read.
+        A story already under way with no plot starts this one where it is:
+        the clock at the plot's start and every fact at its first value, from
+        the leaf on. One that had a plot keeps its state (the clock, where
+        everyone is, what has happened, who has been brought in), fitted to
+        the new plot (`fitted`): a file edited mid-play and imported again
+        used to hide again everyone an event had brought in. Earlier passages
+        keep whatever the old plot recorded, fitted when read.
+
+        `people` and `lore` are the cards of the file the plot was read from:
+        its `brings:`, `reveals:`, named-character conditions and places carry
+        their ids, which are re-keyed to this story's cards of the same names
+        (`plot_md.rekey_plot`). Returns what couldn't be matched, for the
+        author. Without them the plot is taken as keyed to this story already.
         """
         self._refuse_in_private("Attaching a plot")
-        self.story.plot = plot.model_copy(deep=True)
+        plot, problems = rekey_plot(
+            plot,
+            file_people=people,
+            file_lore=lore,
+            story_people=[*self.cast, *self.supporting],
+            story_lore=self.bundle.lore,
+        )
         path = self.path()
+        previous = self.story.plot
+        self.story.plot = plot
         if path:
-            path[-1].meta.chronicle = initial_chronicle(self.story.plot)
+            path[-1].meta.chronicle = (
+                fitted(carried(chronicle_at(path, previous)), plot)
+                if previous is not None
+                else initial_chronicle(plot)
+            )
         self.save()
+        return problems
 
     @property
     def chronicle(self) -> Chronicle | None:

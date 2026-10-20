@@ -257,6 +257,62 @@ def test_the_system_block_holds_until_someone_is_brought_in(tmp_path: Path):
     assert session.last_prompt.messages[0] == first
 
 
+def test_a_plot_re_imported_from_its_file_keeps_its_links_to_the_storys_cards(tmp_path: Path):
+    # Story → Add a plot from a file…: every parse gives the file's cards new
+    # ids, and the plot's brings:, reveals:, named-character conditions and
+    # places carried them, so after a re-import no event brought anyone in and
+    # hidden places showed (the review of Oct 20 2026).
+    text = PLOT_FILE.replace(
+        "## The cellar\n- requires: visited The Mill\n",
+        "## The cellar\n- requires: Ann visited The Mill\n",
+    )
+    session = make_session(
+        tmp_path, [PASSAGE, read(place=("The Mill", "Ann pushed through the mill door."))], text
+    )
+    list(session.send(turn(session, "I go in.")))
+    ann, mara = session.cast[0], next(c for c in session.cast if c.name == "Mara")
+    mill, cellar = session.bundle.lore
+    again = parse_plot_markdown(text).scenario
+    assert again.plot.event("the_raid").variants[0].brings != [mara.id]
+    problems = session.attach_plot(
+        again.plot, people=[*again.cast, *again.supporting], lore=again.lore
+    )
+    assert problems == []
+    attached = session.story.plot
+    assert attached.event("the_raid").variants[0].brings == [mara.id]
+    assert attached.event("the_cellar").reveals == [cellar.id]
+    assert attached.event("the_cellar").requires[0].who == ann.id
+    assert [place.lore_id for place in attached.places] == [mill.id, cellar.id]
+    assert session.plot_places() == ["The Mill"]
+    # The story's state goes on under the re-imported plot: the clock, the
+    # place, and so the variant that fits when the raid is marked happened.
+    assert session.chronicle.place == "The Mill"
+    assert session.chronicle.minutes == clock_minutes(3, 18, 10)
+    session.mark_event("the_raid", "happened")
+    assert mara.id not in session.hidden_ids()
+    # Imported again, whoever was brought in stays in.
+    session.attach_plot(again.plot, people=[*again.cast, *again.supporting], lore=again.lore)
+    assert mara.id not in session.hidden_ids()
+    assert session.chronicle.events["the_raid"].state == "happened"
+
+    # Someone the file has and the story doesn't is said, and brings nobody.
+    stranger = text.replace("- brings: Mara\n", "- brings: Mara, Zed\n").replace(
+        "## Mara\n", "## Zed\n- hidden: yes\n\nA stranger.\n\n## Mara\n"
+    )
+    other = parse_plot_markdown(stranger).scenario
+    problems = session.attach_plot(
+        other.plot, people=[*other.cast, *other.supporting], lore=other.lore
+    )
+    assert problems == [
+        "The raid › Ann at the mill: `brings` names Zed, not in this story's cast or lore, "
+        "so it brings them in no longer."
+    ]
+    assert session.story.plot.event("the_raid").variants[0].brings == [mara.id]
+    # A plot keyed to the story already (no file cards given) is left as it is.
+    assert session.attach_plot(session.story.plot) == []
+    assert session.story.plot.event("the_raid").variants[0].brings == [mara.id]
+
+
 def test_hidden_people_stay_out_of_the_reads(tmp_path: Path):
     session = make_session(tmp_path, ["One.", read()], scene_reads="every_turn")
     session.provider.responses = ["One.", "{}", read()]
