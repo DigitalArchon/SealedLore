@@ -52,6 +52,55 @@ def test_the_shipped_samples_are_offered_and_import_cleanly():
         assert parsed.ok, f"{path.name}: " + "; ".join(p.describe() for p in parsed.problems)
 
 
+def _quiet_armed(plot, chronicle, day: int = 1) -> set[str]:
+    from sealedlore.engine.chronicle import armed
+
+    days = {event.id: day for event in plot.events}
+    chronicle.minutes = (day - 1) * 24 * 60 + 12 * 60
+    return {
+        item.event.title
+        for item in armed(plot, chronicle, days, mentioned=set())
+        if "begin" in item.kinds and item.event.pacing == "quiet" and item.event.kind == "optional"
+    }
+
+
+def test_the_samples_quiet_events_wait_for_their_moment():
+    """A quiet-moment event whose conditions held from the start had the
+    director asked before every passage from turn 1 (Brasshaven, The Ninth
+    Furnace, the extended Doomsville; the review of Oct 20 2026). Each now
+    waits for what its story needs first."""
+    from sealedlore.engine.chronicle import happen, initial_chronicle, set_place
+
+    def load(path: Path):
+        return parse_plot_markdown(path.read_text(encoding="utf-8")).scenario.plot
+
+    brass = load(SAMPLES / "Brasshaven.md")
+    chronicle = initial_chronicle(brass)
+    set_place(chronicle, "Tinker's Row")
+    assert _quiet_armed(brass, chronicle) == set()
+    chronicle.facts["automaton_repaired"] = "yes"
+    assert _quiet_armed(brass, chronicle) == {"Tock speaks"}
+    tock = brass.event("tock_speaks")
+    happen(chronicle, tock, tock.variants[0], node_id="n", revealed=True)
+    assert _quiet_armed(brass, chronicle) == {"An invitation from Lady Ashcombe"}
+
+    furnace = load(SAMPLES / "The Ninth Furnace.md")
+    chronicle = initial_chronicle(furnace)
+    assert _quiet_armed(furnace, chronicle) == set()
+    set_place(chronicle, "The Pilgrims' Rest")
+    assert _quiet_armed(furnace, chronicle) == set()
+    set_place(chronicle, None)  # out on the road
+    assert _quiet_armed(furnace, chronicle) == {"The imp's bargain"}
+
+    roads = load(ROOT / "tests" / "data" / "doomsville_extended.md")
+    chronicle = initial_chronicle(roads)
+    set_place(chronicle, "The Northern Camp")
+    assert _quiet_armed(roads, chronicle, day=3) == set()
+    set_place(chronicle, "Hellsville")
+    assert _quiet_armed(roads, chronicle, day=1) == set()
+    assert "Father Brennan's flock" in _quiet_armed(roads, chronicle, day=3)
+
+
 pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication  # noqa: E402

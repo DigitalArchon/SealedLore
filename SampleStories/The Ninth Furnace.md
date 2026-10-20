@@ -332,7 +332,7 @@ Malgareth leaves his citadel.
 
 ## The imp's bargain
 - pacing: quiet moment
-- requires: ashgrin = neutral
+- requires: ashgrin = neutral, visited The Pilgrims' Rest, at != The Pilgrims' Rest
 - trigger: The player's character is alone, resting or hiding.
 - tell: Ashgrin the imp drops out of the smoke onto a nearby rock, grinning, and offers a bargain: he knows things about the cult, the Citadel and the Ashen Gate, and will share them for a price. Whatever is agreed, he means to keep his options open.
 

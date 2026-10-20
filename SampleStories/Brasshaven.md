@@ -288,6 +288,7 @@ full of steam vents and dripping pipes.
 - automatons: restless (restless, rising, freed, under Ashcombe's control) [watch] — what has become of the city's automatons: freed once the calculating engine's hold on them is broken; under Ashcombe's control once they obey her orders openly; rising once they march
 - wanted: no [watch] — yes once the Constabulary is hunting the player's character by name; no if the hunt is called off
 - plot_exposed: no — yes once the player's character holds proof that Lady Ashcombe means to stop the Engine
+- automaton_repaired: no [watch] — yes once the wounded automaton has been repaired enough to speak, or its brass card has been read on a machine that can read it
 
 # Timeline
 
@@ -333,7 +334,8 @@ Lady Ashcombe's calculating engine sends its order.
 
 ## Tock speaks
 - pacing: quiet moment
-- trigger: The player's character repairs the damaged automaton, or reads its brass card on a machine that can.
+- requires: automaton_repaired
+- trigger: The automaton has been repaired, or its brass card read, and there is a lull to hear it out.
 - tell: Repaired, the automaton names itself Tock. Haltingly it explains that it was one of Lady Ashcombe's servants, that it overheard her plan to stop the Great Engine and seize the city when the floating districts fall, and that every automaton of her pattern is listening for one order. It fled before its own order came.
 
 ## Into the Undercroft
@@ -354,6 +356,6 @@ Lady Ashcombe's calculating engine sends its order.
 
 ## An invitation from Lady Ashcombe
 - pacing: quiet moment
-- requires: plot_exposed = no
+- requires: plot_exposed = no, Tock speaks happened
 - trigger: The player's character has drawn attention by asking questions about the Engine or House Ashcombe.
 - tell: A liveried automaton delivers a gilt-edged card: Lady Imogen Ashcombe requests the pleasure of their company for dinner at Ashcombe Hall, tonight. Her carriage is waiting. It is not an invitation one safely refuses, nor safely accepts.

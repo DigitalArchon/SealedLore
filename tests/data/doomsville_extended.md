@@ -382,6 +382,7 @@ The broadcast was not as private as they thought.
 
 ## Father Brennan's flock
 - when: day 3–40
+- at: Hellsville
 - pacing: quiet moment
 - brings: Aaron Brennan
 - trigger: Jane is seen in public on the main street, or word of what came out of the trees has had time to spread.
