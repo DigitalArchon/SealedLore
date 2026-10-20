@@ -20,6 +20,7 @@ from sealedlore.engine.archival import (
     render_chunk,
 )
 from sealedlore.engine.chronicle import (
+    Armed,
     armed,
     carried,
     chronicle_at,
@@ -203,11 +204,13 @@ class PlotRuntime:
     def _places_mentioned(self, user_node: Node, history: Sequence[Node]) -> set[str]:
         """The plot's places the author's turn or the last passage names, by
         name or by their lore keywords."""
+        last = next((node for node in reversed(history) if node.kind == "assistant"), None)
+        return self._places_named(user_node.content + "\n" + (last.content if last else ""))
+
+    def _places_named(self, text: str) -> set[str]:
         plot = self.story.plot
         if plot is None:
             return set()
-        last = next((node for node in reversed(history) if node.kind == "assistant"), None)
-        text = user_node.content + "\n" + (last.content if last is not None else "")
         lore = {entry.id: entry for entry in self.bundle.lore}
         found: set[str] = set()
         for place in plot.places:
@@ -287,9 +290,42 @@ class PlotRuntime:
 
     @property
     def chronicle(self) -> Chronicle | None:
-        """The plot's state at the leaf, or None for a story without a plot."""
+        """The plot's state at the leaf, as it stands for the character the
+        author holds now (`take_viewpoint`: their place and visits), or None
+        for a story without a plot. Before, the Plot tab showed the last
+        character's place and armed events until the new one's first turn
+        (the review of Oct 20 2026)."""
         plot = self.story.plot
-        return chronicle_at(self.path(), plot) if plot is not None else None
+        if plot is None:
+            return None
+        chronicle = chronicle_at(self.path(), plot)
+        take_viewpoint(chronicle, self.story.held_character_id)
+        return chronicle
+
+    def _correction_base(self, plot: Plot) -> Chronicle:
+        """What an author's correction starts from: the state at the leaf, for
+        the character they hold (as the Plot tab shows it)."""
+        chronicle = carried(chronicle_at(self.path(), plot))
+        take_viewpoint(chronicle, self.story.held_character_id)
+        return chronicle
+
+    def armed_now(self) -> list[Armed]:
+        """What the director could act on if the author sent a turn now: the
+        Plot tab's "could happen now", with the same place gate as a turn
+        (`_places_mentioned`, from the latest turn and passage on the path),
+        so it doesn't name an event at a place the director won't be asked
+        about."""
+        plot = self.story.plot
+        chronicle = self.chronicle
+        if plot is None or chronicle is None:
+            return []
+        path = self.path()
+        latest = {
+            kind: next((node.content for node in reversed(path) if node.kind == kind), "")
+            for kind in ("user", "assistant")
+        }
+        mentioned = self._places_named(latest["user"] + "\n" + latest["assistant"])
+        return armed(plot, chronicle, self.plot_days(), mentioned=mentioned)
 
     def read_after_turn(self) -> Iterator[SessionNotice]:
         """The reads after a passage (`_read_after_turn`), then a note for any
@@ -1178,7 +1214,7 @@ class PlotRuntime:
         plot = self.story.plot
         if plot is None or (event := plot.event(event_id)) is None:
             raise ValueError(f"no event {event_id}")
-        chronicle = carried(chronicle_at(self.path(), plot))
+        chronicle = self._correction_base(plot)
         if state == "happened":
             fitting = eligible(event, chronicle) or event.variants
             node = self.path()[-1] if self.path() else None
@@ -1215,7 +1251,7 @@ class PlotRuntime:
             raise ValueError("this story has no plot")
         if place is not None and place not in [p.name for p in plot.places]:
             raise ValueError(f"no place called {place}")
-        chronicle = carried(chronicle_at(self.path(), plot))
+        chronicle = self._correction_base(plot)
         if set_place(chronicle, place):
             self._set_chronicle(chronicle)
 
@@ -1226,7 +1262,7 @@ class PlotRuntime:
             raise ValueError("this story has no plot")
         if not self.path():
             raise ValueError("the story hasn't begun; there is no passage to set it on")
-        chronicle = carried(chronicle_at(self.path(), plot))
+        chronicle = self._correction_base(plot)
         if item_id not in chronicle.brought_in:
             chronicle.brought_in.append(item_id)
             self._set_chronicle(chronicle)
@@ -1269,7 +1305,7 @@ class PlotRuntime:
             plot.start_minutes = minutes
             self.save()
             return
-        chronicle = carried(chronicle_at(self.path(), plot))
+        chronicle = self._correction_base(plot)
         chronicle.minutes = minutes
         self._set_chronicle(chronicle)
 
@@ -1280,6 +1316,6 @@ class PlotRuntime:
             raise ValueError(f"no fact called {name}")
         if definition.values and value not in definition.values:
             raise ValueError(f"{name} can't be {value}")
-        chronicle = carried(chronicle_at(self.path(), plot))
+        chronicle = self._correction_base(plot)
         if change_fact(chronicle, name, value):
             self._set_chronicle(chronicle)

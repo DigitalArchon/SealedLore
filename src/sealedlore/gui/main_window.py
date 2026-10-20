@@ -35,7 +35,7 @@ from sealedlore import __version__
 from sealedlore.engine.archival import chapter_number, chapter_numbers, turns_in
 from sealedlore.engine.authoring import describe, stale_voicing_notes
 from sealedlore.engine.branches import next_branch_name, unique_branch_name
-from sealedlore.engine.chronicle import armed, format_clock
+from sealedlore.engine.chronicle import format_clock
 from sealedlore.engine.export import markdown_user_name, render_markdown
 from sealedlore.engine.plot_md import PLOT_SUFFIX, ParsedPlotFile, parse_plot_markdown
 from sealedlore.engine.prompt import TurnRequest
@@ -3933,8 +3933,8 @@ class MainWindow(
         started = bool(session and session.path())
         days = session.plot_days() if session is not None and plot is not None else {}
         armed_ids = (
-            frozenset(item.event.id for item in armed(plot, chronicle, days))
-            if plot is not None and chronicle is not None
+            frozenset(item.event.id for item in session.armed_now())
+            if session is not None and plot is not None
             else frozenset()
         )
         held_back: list[tuple[str, str, bool]] = []

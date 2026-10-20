@@ -879,6 +879,52 @@ def test_each_character_keeps_their_own_place_across_a_switch():
     assert not take_viewpoint(after, "ann")
 
 
+def test_the_plot_tab_follows_the_character_taken_up_at_once(tmp_path: Path):
+    # John at Hellsville; the author takes up Jane, never there: the Plot tab
+    # said "Where: Hellsville" and listed the town's event as "could happen
+    # now" for her until her first turn (the review of Oct 20 2026).
+    text = GATED.replace("## Mara\n", "## Bo\n- role: player\n\nA second player.\n\n## Mara\n")
+    session = make_session(
+        tmp_path,
+        [
+            PASSAGE,
+            read(place=("The Mill", "Ann pushed through the mill door.")),
+            # Turn 2: the cellar is armed at the mill; the director declines.
+            director(),
+            "Ann sat down and rested.",
+            read(),
+        ],
+        text,
+    )
+    list(session.send(turn(session, "I go in.")))
+    list(session.send(turn(session, "I sit down.")))
+    ann, bo = session.cast[0], session.character_by_name("Bo")
+    assert session.chronicle.place == "The Mill"
+    assert [item.event.id for item in session.armed_now()] == ["the_cellar"]
+    session.hold(bo.id)
+    assert session.chronicle.place is None and session.chronicle.held_id == bo.id
+    assert session.armed_now() == []
+    # A correction made now is about Bo; Ann keeps her place.
+    session.set_place("The Mill")
+    snapshot = session.path()[-1].meta.chronicle
+    assert snapshot.held_id == bo.id and snapshot.place == "The Mill"
+    assert snapshot.places == {ann.id: "The Mill"}
+    session.hold(ann.id)
+    assert session.chronicle.place == "The Mill"
+
+
+def test_the_plot_tabs_could_happen_now_honours_the_place_gate(tmp_path: Path):
+    # The cellar is found at the mill; Ann elsewhere, nothing naming the
+    # mill, the director won't be asked about it, so the tab doesn't say it
+    # could happen now. Named in the last turn or passage, it could.
+    session = make_session(tmp_path, ["Ann walked on.", read(), "Ann saw the mill.", read()], GATED)
+    session.set_clock(clock_minutes(1, 9, 0))  # before the raid's days
+    list(session.send(turn(session, "I walk on.")))
+    assert session.armed_now() == []
+    list(session.send(turn(session, "I look around.")))
+    assert [item.event.id for item in session.armed_now()] == ["the_cellar"]
+
+
 def test_a_condition_can_be_about_a_named_character():
     from sealedlore.engine.chronicle import holds, take_viewpoint
 
