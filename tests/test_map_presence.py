@@ -261,34 +261,3 @@ def test_the_company_guard_is_off_unless_switched_on(tmp_path, story, cast, monk
     list(session.send(turn("I wait.")))
     list(session.read_after_turn())
     assert seen.get("held") == "Serrik Vaun"
-
-
-def test_the_map_read_is_told_who_is_with_the_author_s_character_only_when_switched_on(
-    tmp_path, story, cast, monkeypatch
-):
-    """C2 (Oct 21 2026): `map_read.company`, in the read's user message
-    only, behind `session_world.TELL_READ_COMPANY` (off until measured)."""
-    import sealedlore.engine.session_world as session_world
-
-    assert session_world.TELL_READ_COMPANY is False
-    session = make_session(tmp_path, story, cast, ["Quiet.", "{}", "{}"])
-    session.config.scene_reads = "manual"
-    session.story.scene.present_character_ids = ["char-serrik", "char-maela"]
-    list(session.send(turn("I look around.")))
-
-    def read_message() -> str:
-        pending = session._prepare_world_read()
-        return pending.request.messages[-1].text
-
-    line = "These people are with Serrik Vaun now, as the passage begins: Maela Orr."
-    assert line not in read_message()
-    monkeypatch.setattr(session_world, "TELL_READ_COMPANY", True)
-    message = read_message()
-    assert line in message
-    assert line not in session._prepare_world_read().request.messages[0].text  # never the system
-    # Nobody with them: no line.
-    session.story.scene.present_character_ids = ["char-serrik"]
-    session.path()[-1].meta.scene = None
-    session.path()[0].meta.scene = None
-    session.story.setup.starting_scene.present_character_ids = ["char-serrik"]
-    assert "These people are with" not in read_message()

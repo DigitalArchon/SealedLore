@@ -84,9 +84,6 @@ FOLDS_KEPT = 8
 # (Oct 21 2026), it fired 4 times, and 2 of them kept someone back who had
 # gone (SealedLoreDocs tools/testbed/data/map_company).
 KEEP_COMPANY = False
-# The map read told whom the scene card has with the author's character
-# (`map_read.company`, in its user message only). Off until measured.
-TELL_READ_COMPANY = False
 
 
 # What opens where it stands: fixed, but opening it moves nothing, and "if
@@ -478,7 +475,6 @@ class WorldRuntime:
                         begins_at,
                         self.read_marks(author),
                         self.read_unknowns(shown),
-                        self.read_company(path[:-1], held),
                         direction,
                     )
                     if n
@@ -500,18 +496,6 @@ class WorldRuntime:
             request=request,
             log_ref=log_ref,
         )
-
-    def read_company(self, before: Sequence[Node], held: str | None) -> str:
-        """`map_read.company`: whom the scene card has with the author's
-        character as the passage begins, by the map's names, when
-        TELL_READ_COMPANY is on; "" otherwise or with nobody there."""
-        if not TELL_READ_COMPANY or not self.map_first or held is None:
-            return ""
-        card = scene_at(before, self.story.setup.starting_scene)
-        names = [n for n in self._present_on_map(card) if n != held]
-        if not names:
-            return ""
-        return self.texts.fill("map_read.company", held=held, names=", ".join(names))
 
     def read_begins_at(self, before: Sequence[Node]) -> str:
         """Where Setup says the story begins, for the read of the opening of
