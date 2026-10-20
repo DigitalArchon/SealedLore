@@ -1563,6 +1563,22 @@ _text(
     (("minutes", "the minutes walked, as a number"),),
 )
 
+# Not sent unless `chronicle_read.NEXT_DAY_NOTE` is on (off: unmeasured).
+# Live (Doomsville, Oct 20 2026), the fall of Hellsville began at 08:00, the
+# author's next turn was "I climb to the barricade walk at dawn", and the
+# read gave ten minutes, ending at 08:10, for a passage after the night.
+_text(
+    "plot.chronicle_read.next_day",
+    PLOT,
+    "The chronicle read: an earlier hour is the next day",
+    "Added to the read after the clock when switched on in code: a time of day earlier than "
+    "the clock's, given for now, is the next day's. Not sent by default.",
+    "It is {hour} on that clock. A time of day the author's turn or the passage gives for "
+    "now that is earlier than {hour} (dawn, say, when the clock says 08:00) is the next "
+    'day\'s, unless the text says otherwise: count the night between in "elapsed".',
+    (("hour", "the clock's time of day, HH:MM"),),
+)
+
 _text(
     "plot.chronicle_read.authors_events",
     PLOT,

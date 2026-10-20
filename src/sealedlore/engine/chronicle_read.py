@@ -416,6 +416,17 @@ def render_authors_candidates(plot: Plot, candidates: dict[str, EventVariant]) -
     return "\n".join(lines)
 
 
+# Tell the read that a time of day earlier than the clock's is the next day's
+# (`plot.chronicle_read.next_day`). Off until measured on logged reads.
+NEXT_DAY_NOTE = False
+
+
+def next_day_note(minutes: int, texts: PromptTexts = DEFAULT_TEXTS) -> str:
+    """The note on an earlier hour, for the clock at `minutes`."""
+    within = minutes % MINUTES_PER_DAY
+    return texts.fill("plot.chronicle_read.next_day", hour=f"{within // 60:02d}:{within % 60:02d}")
+
+
 def build_read_messages(
     *,
     plot: Plot,
@@ -435,6 +446,7 @@ def build_read_messages(
     body = [
         *([f"THE AUTHOR'S CHARACTER: {held}"] if held else []),
         f"THE CLOCK, before the author's turn: {format_clock(chronicle.minutes)}",
+        *([next_day_note(chronicle.minutes, texts)] if NEXT_DAY_NOTE else []),
         *([texts.fill("plot.chronicle_read.walked", minutes=str(walked))] if walked > 0 else []),
         "THE PLACES: " + (", ".join(places) or "(none)") + ", or elsewhere. "
         f"Before the author's turn: {chronicle.place or 'elsewhere'}.",

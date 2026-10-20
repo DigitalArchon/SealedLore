@@ -568,3 +568,27 @@ def test_what_was_not_taken_is_kept_under_the_passage_and_names_the_plot_only_wi
     else:
         assert "town" not in plot_notice.text
         assert "1 claim about the plot itself" in plot_notice.text
+
+
+def test_the_next_day_note_is_sent_only_with_its_switch(monkeypatch):
+    """Off by default (unmeasured): the read is told that an hour earlier
+    than the clock's is the next day's only when `NEXT_DAY_NOTE` is on."""
+    from sealedlore.engine import chronicle_read
+    from sealedlore.engine.chronicle_read import build_read_messages
+
+    plot = parse_plot_markdown(PLOT_FILE).scenario.plot
+    chronicle = initial_chronicle(plot)
+    chronicle.minutes = clock_minutes(49, 8, 0)
+
+    def user_text() -> str:
+        messages = build_read_messages(
+            plot=plot, chronicle=chronicle, author_turn="I climb up at dawn.", passage="Quiet."
+        )
+        return "\n".join(part.text for part in messages[-1].parts)
+
+    assert "earlier than" not in user_text()
+    monkeypatch.setattr(chronicle_read, "NEXT_DAY_NOTE", True)
+    shown = user_text()
+    clock_line = "THE CLOCK, before the author's turn: Day 49 · 08:00"
+    assert clock_line + "\nIt is 08:00 on that clock." in shown
+    assert "earlier than 08:00 (dawn, say" in shown
