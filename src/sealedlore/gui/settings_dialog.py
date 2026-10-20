@@ -814,7 +814,10 @@ class SettingsDialog(QDialog):
         self.plot_reads.setToolTip(
             "Only for stories with a plot. After each passage, the scene model reads how "
             "much story time passed and which of the plot's facts changed, and the Plot "
-            "tab follows (with an Undo). Off, they change only when you set them."
+            "tab follows (with an Undo). Off, they change only when you set them; an event "
+            "the storyteller was told to begin still counts as begun when the passage "
+            "brings in who it brings, and one never shown after six passages is taken as "
+            "happened (or waits again), so no event is sent over and over."
         )
         form.addRow(self.plot_reads)
         self.plot_model = self._routed_field(

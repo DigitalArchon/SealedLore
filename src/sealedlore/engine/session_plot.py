@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 import threading
-from collections.abc import Callable, Generator, Iterator, Sequence
+from collections.abc import Callable, Collection, Generator, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 
 from sealedlore.engine.archival import (
@@ -338,6 +338,8 @@ class PlotRuntime:
         chronicle = self._prepare_chronicle_read()
         if chronicle is not None:
             reads.append((chronicle, self.update_chronicle_after_turn))
+        elif self.story.plot is not None and not self.config.plot_reads:
+            yield from self._settle_without_read()
         world = self._prepare_world_read()
         if world is not None:
             reads.append((world, self.update_world_after_turn))
@@ -545,6 +547,57 @@ class PlotRuntime:
         words = describe_chronicle(after)
         yield SessionNotice(f"Plot: {words}" if words else "Plot: no time passed, no change")
 
+    def _settle_without_read(self) -> Iterator[SessionNotice]:
+        """With the plot's reads off (Settings), what the read settled in code
+        after each passage, still: a directed event whose people the passage
+        names has begun, one sent again without asking and never shown is
+        taken as happened after `UNCONFIRMED_LIMIT` passages, and one the
+        director began waits again. Before, nothing counted the passages, so
+        an overdue event was begun again on every turn for the rest of the
+        story (the review of Oct 20 2026).
+        """
+        plot = self.story.plot
+        result = self.last_result
+        if plot is None or result is None or result.node is None or result.stopped_early:
+            return
+        node = result.node
+        if not node.content.strip():
+            return
+        path = self._path_to(node.id)
+        before = chronicle_at(path[:-1], plot)
+        take_viewpoint(before, node.meta.controlled_character_id)
+        after = before.model_copy(
+            update={"source": "story", "elapsed": 0, "elapsed_quote": "", "changes": []},
+            deep=True,
+        )
+        begun = self._begun_by_introductions(node, after, plot)
+        settled = settle_unconfirmed(plot, after, [event.id for event in begun], node_id=node.id)
+        released = release_unconfirmed(plot, after)
+        if after.events == before.events and not begun:
+            return
+        node.meta.chronicle = after
+        self.save()
+        if not (begun or settled or released):
+            return
+        self._log(
+            "chronicle_settled",
+            {
+                "node_id": node.id,
+                "begun": [event.id for event in begun],
+                "events": [event.id for event in settled],
+                "released": [event.id for event in released],
+            },
+        )
+        if not self.config.show_plot_spoilers:
+            yield SessionNotice("Plot: an event passed on to the storyteller was settled.")
+            return
+        parts = [
+            f"{event.title} taken as begun: the passage brings in who it brings" for event in begun
+        ]
+        parts += [f"{event.title} taken as happened: never shown" for event in settled]
+        parts += [f"{event.title} waits again: never shown" for event in released]
+        yield SessionNotice("Plot: " + "; ".join(parts))
+
     def _confirm_by_introductions(
         self, node: Node, before: Chronicle, plot: Plot
     ) -> list[EventDef]:
@@ -555,25 +608,40 @@ class PlotRuntime:
         the priest arrived twice. Only what the event brings counts: a name
         the plot kept hidden until now is evidence no general word can be.
         """
-        people = {c.id: c for c in [*self.cast, *self.supporting]}
         after = before.model_copy(
             update={"source": "story", "elapsed": 0, "elapsed_quote": "", "changes": []},
             deep=True,
         )
+        begun = self._begun_by_introductions(node, after, plot)
+        if begun:
+            node.meta.chronicle = after
+            self.save()
+        return begun
+
+    def _begun_by_introductions(
+        self,
+        node: Node,
+        chronicle: Chronicle,
+        plot: Plot,
+        *,
+        only: Collection[str] | None = None,
+    ) -> list[EventDef]:
+        """Mark happened, on `chronicle`, every directed event (or those in
+        `only`) whose passage names someone it brings in. Returns them."""
+        people = {c.id: c for c in [*self.cast, *self.supporting]}
         begun: list[EventDef] = []
         for event in plot.events:
-            status = after.events.get(event.id)
+            if only is not None and event.id not in only:
+                continue
+            status = chronicle.events.get(event.id)
             if status is None or status.state != "directed":
                 continue
             variant = variant_named(event, status.variant)
             brought = [people[i] for i in introduced(event, variant) if i in people]
             if not any(mentions(node.content, person) for person in brought):
                 continue
-            happen(after, event, variant or event.variants[0], node_id=node.id, revealed=True)
+            happen(chronicle, event, variant or event.variants[0], node_id=node.id, revealed=True)
             begun.append(event)
-        if begun:
-            node.meta.chronicle = after
-            self.save()
         return begun
 
     def plot_days(self) -> dict[str, int]:

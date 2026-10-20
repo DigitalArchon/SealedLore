@@ -436,3 +436,26 @@ def test_an_event_the_director_began_and_no_passage_showed_waits_again():
     status = chronicle.events["the_fall"]
     assert status.state == "pending" and status.variant is None
     assert status.unconfirmed_passages == 0
+
+
+def test_with_the_reads_off_an_overdue_event_is_still_settled(tmp_path: Path):
+    # Settings' "Keep a plot's clock and facts after every passage" off: only
+    # the read counted the passages a passed-on event went unshown, so with
+    # it off an overdue event was begun again on every turn for the rest of
+    # the story (the review of Oct 20 2026).
+    overdue = PLOT_FILE.replace("day 3, 21:00", "day 6, 10:00")
+    session = make_session(
+        tmp_path, ["Quiet."] * (UNCONFIRMED_LIMIT + 1), text=overdue, plot_reads=False
+    )
+    for sent in range(1, UNCONFIRMED_LIMIT + 1):
+        list(session.send(turn(session, "I look around.")))
+        assert "Begin this in the passage" in section(session, SECTION_DIRECTION)
+        status = session.chronicle.events["the_fall"]
+        if sent < UNCONFIRMED_LIMIT:
+            assert status.state == "directed" and status.unconfirmed_passages == sent
+    assert session.chronicle.events["the_fall"].state == "happened"
+    assert session.chronicle.facts["town"] == "under attack"
+    list(session.send(turn(session, "I look around.")))
+    assert "Begin this in the passage" not in section(session, SECTION_DIRECTION)
+    logged = kinds(session, tmp_path)
+    assert "chronicle_request" not in logged and "chronicle_settled" in logged
