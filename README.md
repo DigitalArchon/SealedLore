@@ -69,7 +69,9 @@ lays out its land, places to go into, things to find and people or creatures,
 to fit the world and what has happened so far, with the roads, rivers and
 woods of the regions beside it carried on across the edges. A snowbound farm
 after the end of the world has dead fields, a collapsed barn and a zombie at
-the fence line round it, and further off the town you left.
+the fence line round it, and further off the town you left. How much each
+region holds is yours to choose, sparse, normal or rich (Settings → Models →
+Open country).
 
 Every building is furnished, as sparsely or as fully as you like, and every
 character gets a pixel-art avatar drawn from their portrait. Everything is
