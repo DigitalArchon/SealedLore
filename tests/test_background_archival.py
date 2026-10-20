@@ -12,7 +12,7 @@ from sealedlore.engine.prompt_texts import DEFAULT_TEXTS
 from sealedlore.engine.session import SessionNotice, StorySession
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.models.node import Node, NodeMeta
-from sealedlore.providers.base import ChatRequest, StreamCompleted
+from sealedlore.providers.base import ChatRequest, StreamCancelled, StreamCompleted
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage.repository import StoryBundle, read_api_log, save_story_bundle
 from sealedlore.tree import link_child
@@ -192,3 +192,41 @@ def test_a_finished_job_for_another_branch_frees_the_slot(session: StorySession)
     session.prepare_archival()
     assert session._archive_job is not job
     assert session.summaries
+
+
+def test_archive_now_takes_the_chapters_the_background_wrote(session: StorySession, tmp_path):
+    """Archive now with chapters ready in the background used to summarise
+    the same turns again inline, drop the background's as "archived
+    meanwhile" and blame the story for changing (the review, Oct 20 2026).
+    They come in first; one still being written is waited for, and Stop
+    ends the wait."""
+    import time
+
+    background = session.provider.background
+    background.gate.clear()
+    list(session.send(turn()))
+    job = session._archive_job
+    assert job is not None and not job.done.is_set()
+
+    # Still being written: Stop ends the wait, and the job goes on.
+    with pytest.raises(StreamCancelled):
+        list(session.take_background_chapters(stopping=lambda: True))
+    assert session._archive_job is job and not session.summaries
+
+    # Waited for, then adopted: no chapter is written here.
+    said: list[str] = []
+    taker = threading.Thread(
+        target=lambda: said.extend(notices(session.take_background_chapters()))
+    )
+    taker.start()
+    time.sleep(0.3)
+    background.gate.set()
+    taker.join(10)
+    assert not taker.is_alive()
+    assert said[0].startswith("Waiting for the chapters")
+    assert any("written in the background" in text for text in said[1:])
+    assert session.summaries and session._archive_job is None
+    assert all(s.content.startswith("Chapter written in the background") for s in session.summaries)
+    log = read_api_log(session.story.id, root=tmp_path)
+    assert not [e for e in log if e["kind"] == "summary_response" and e.get("dropped")]
+    assert len(session.provider.requests) == 1  # the passage; nothing summarised inline

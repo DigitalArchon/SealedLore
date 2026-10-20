@@ -2679,12 +2679,25 @@ class MainWindow(
         self._start(self._archive_job, streaming=False, busy_text="Summarising the oldest chapter…")
 
     def _archive_job(self):
-        assert self.session is not None
+        session = self.session
+        assert session is not None
+        if not session.next_chunk(allow_partial=True):
+            return
+        # Chapters the background job has written, or is writing, come in
+        # first: they are paid for, and they cover the turns asked for. Only
+        # when none lands on this path is a chapter written here.
+        on_path = len(session.split().summaries)
+        worker = self._worker
+        yield from session.take_background_chapters(
+            stopping=lambda: worker is not None and worker.stopping
+        )
+        if len(session.split().summaries) > on_path:
+            return
         # Asked for by hand, so a short chapter is the author's call (§5.2).
-        chunk = self.session.next_chunk(allow_partial=True)
+        chunk = session.next_chunk(allow_partial=True)
         if not chunk:
             return
-        summary = self.session.archive(chunk)
+        summary = session.archive(chunk)
         numbers = chapter_numbers(self.session.split().summaries)
         yield SessionNotice(
             f"Archived {turns_in(chunk)} turns into chapter "

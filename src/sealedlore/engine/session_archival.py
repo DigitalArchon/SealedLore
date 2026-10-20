@@ -43,7 +43,7 @@ from sealedlore.engine.session_merge import _close
 from sealedlore.engine.session_plot import SessionNotice
 from sealedlore.models.node import NARRATOR_SPEAKER_ID, Node
 from sealedlore.models.summary import Summary
-from sealedlore.providers.base import ChatRequest, ProviderError
+from sealedlore.providers.base import ChatRequest, ProviderError, StreamCancelled
 
 # Start preparing once the next prompt would be this share of the budget: a
 # turn's own text is a few hundred tokens, so the chapters are usually ready
@@ -338,6 +338,26 @@ class ArchivalRuntime:
         # Its messages are a run of one path, in order, as when written.
         tail = self._path_to(chapter.node_ids[-1])
         return [n.id for n in tail[len(before) :]] == chapter.node_ids
+
+    def take_background_chapters(self, *, stopping=None) -> Iterator[SessionNotice]:  # noqa: ANN001
+        """Archive now: the chapters the background job has written come in
+        first, and one still being written is waited for (`stopping`, polled,
+        ends the wait as a Stop). Worker thread only.
+
+        The archive on demand used to ignore the job: the same turns were
+        summarised again inline, the job's chapters dropped as "archived
+        meanwhile" and logged as paid, and the notice blamed the story for
+        changing (the review, Oct 20 2026).
+        """
+        job = self._archive_job
+        if job is None:
+            return
+        if not job.done.is_set():
+            yield SessionNotice("Waiting for the chapters being written in the background…")
+            while not job.done.wait(0.25):
+                if stopping is not None and stopping():
+                    raise StreamCancelled()
+        yield from self.adopt_archival(self.path())
 
     def adopt_archival(self, history: Sequence[Node]) -> Iterator[SessionNotice]:
         """Put the chapters written in the background into the story. Worker thread only.

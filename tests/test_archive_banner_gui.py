@@ -84,3 +84,41 @@ def test_settings_turn_the_ledger_and_archival_on_and_off(app, story):
     dialog._save()
     assert config.story_ledger is True
     assert config.auto_archive is False
+
+
+def test_archive_now_in_the_window_uses_the_background_s_chapters(app, tmp_path: Path, story, cast):
+    """Through the window: the Story so far page's Archive now, pressed once
+    the background job has written its chapters, adopts them and pays for
+    nothing more."""
+    from tests.test_background_archival import Background, Storyteller, turn
+
+    nodes = make_exchange(24)
+    for node in nodes:
+        node.content = f"{node.content} {FILLER * 12}".strip()
+    story.active_leaf_id = nodes[-1].id
+    story.held_character_id = "char-serrik"
+    save_story_bundle(StoryBundle(story=story, cast=cast, nodes=nodes), root=tmp_path)
+    window = MainWindow(root=tmp_path, use_mock=True)
+    window.config.auto_archive = True
+    window.config.suggest_characters = False
+    window.config.scene_reads = "manual"
+    provider = Storyteller(["A passage."], Background())
+    window._provider = provider
+    window.open_story(story.id)
+    session = window.session
+    full = session.assemble(turn()).full_total
+    session.story.defaults.context_token_budget = int(full / 0.95)
+    window._refresh_composer()
+    window.composer.input.setPlainText("I wait.")
+    window.send_turn()
+    wait_for(app, lambda: not window._busy)
+    job = session._archive_job
+    assert job is not None and job.done.wait(5) and not session.summaries
+
+    window.archive_now()
+    wait_for(app, lambda: not window._busy)
+    assert session.summaries and session._archive_job is None
+    assert all(s.content.startswith("Chapter written in the background") for s in session.summaries)
+    assert len(provider.requests) == 1  # the passage alone: no chapter written inline
+    assert "written in the background" in window.statusBar().currentMessage()
+    window.close()

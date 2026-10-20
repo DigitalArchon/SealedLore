@@ -79,6 +79,12 @@ class GenerationWorker(QObject):
             self._close()
             self.finished.emit()
 
+    @property
+    def stopping(self) -> bool:
+        """Whether Stop has been pressed for this job (a job that waits on
+        something other than its stream polls this)."""
+        return self._stopping
+
     @Slot()
     def stop(self) -> None:
         """End the stream now. The partial text is kept (§8.1).
