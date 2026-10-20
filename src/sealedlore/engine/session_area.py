@@ -85,7 +85,7 @@ from sealedlore.engine.marks import (
     nearest_place,
     place_at,
 )
-from sealedlore.engine.regions import designed_point, designed_spot, into_place
+from sealedlore.engine.regions import designed_point, designed_spot, into_place, unexplored_ids
 from sealedlore.engine.session_world_art import _today, job_words
 from sealedlore.engine.takeable import fixed_thing, same_thing, the, thing_class
 from sealedlore.engine.tile_draw import (
@@ -3349,7 +3349,17 @@ class AreaRuntime:
 
         words = world_words(self._set_words(art, info), self.map_setting())
         style = style_words(self._set_words(art, info))
-        jobs = item_jobs(areas, has_sprite, words, self.texts, style=style, failed=failed)
+        # Nothing the world designer made is drawn before the author's
+        # character has been in its region (the review, Oct 20 2026).
+        jobs = item_jobs(
+            areas,
+            has_sprite,
+            words,
+            self.texts,
+            style=style,
+            failed=failed,
+            skip=unexplored_ids(art),
+        )
         here = {name for name, spot in self.area_state().spots.items()}
         people = []
         # Not before the story begins: Start offers portraits, and live the

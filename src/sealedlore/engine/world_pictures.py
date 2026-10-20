@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -141,12 +141,15 @@ def plan_pictures(
     texts: PromptTexts = DEFAULT_TEXTS,
     limit: int = 6,
     style: str = "in a style that suits the world's mood",
+    hidden: Collection[str] = (),
 ) -> list[PictureJob]:
     """What the map still needs from the image model, in the order it is
     wanted. `edits`: the model takes a picture to work from (a change is
     then drawn from the last picture; otherwise drawn afresh). Nothing drawn,
     and nothing that failed too often, is asked again. `style`: the pixel
-    art's style in a few words (the tile set's, `tile_draw.style_words`)."""
+    art's style in a few words (the tile set's, `tile_draw.style_words`).
+    `hidden`: places and things never drawn yet (the world designer's in a
+    region the author's character hasn't been in, `regions.unexplored_ids`)."""
     look = style
     style = texts.fill("map.picture.style", style=look)
     here = world.where.get(held or "")
@@ -189,12 +192,12 @@ def plan_pictures(
     subjects: list[tuple[Literal["place", "thing"], str, str, str, str | None, int]] = [
         ("place", p.id, p.name, p.what, p.id, 2)
         for p in world.places.values()
-        if p.kind in SPRITE_KINDS and p.id in shown
+        if p.kind in SPRITE_KINDS and p.id in shown and p.id not in hidden
     ]
     subjects += [
         ("thing", t.id, t.name, "", world.where.get(t.carried_by or "") or t.at, 3)
         for t in world.things.values()
-        if t.carried_by or t.at in shown
+        if (t.carried_by or t.at in shown) and t.id not in hidden
     ]
     for subject, subject_id, name, what, at, order in subjects:
         state = (

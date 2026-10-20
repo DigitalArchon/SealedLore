@@ -58,14 +58,18 @@ DESIGN = {
 
 
 def designed(
-    world: WorldMap | None = None, art: WorldArt | None = None, cell=(0, 0), holder_id=None
+    world: WorldMap | None = None,
+    art: WorldArt | None = None,
+    cell=(0, 0),
+    holder_id=None,
+    design: dict | None = None,
 ):
     world = world or WorldMap()
     art = art or WorldArt()
     origin = origin_of(world, art)
     art.region_origin = list(origin)
     region, patch = build_region(
-        parse_region(json.dumps(DESIGN)),
+        parse_region(json.dumps(design or DESIGN)),
         key=cell_key(*cell),
         rect=cell_rect(origin, *cell),
         holder_id=holder_id,
@@ -163,11 +167,11 @@ def test_a_region_beside_one_tells_its_designer_what_crosses_the_edge():
     assert edge_lines(art, origin, 5, 5) == "- none designed yet"
 
 
-def _with_region(session, holder_id=None):
+def _with_region(session, holder_id=None, design: dict | None = None):
     world = session.world()
     art = session.world_art
     cell = cell_of(origin_of(world, art), 800.0, 800.0)
-    _w, _a, region, _patch = designed(world, art, cell=cell, holder_id=holder_id)
+    _w, _a, region, _patch = designed(world, art, cell=cell, holder_id=holder_id, design=design)
     session._area_cache = None
     session._designed_cache = None
     return region
@@ -198,6 +202,43 @@ def test_open_country_on_a_designed_region_is_its_land_with_its_places_things_an
     tx = (x - west) / area.tile_m
     ty = (north - y) / area.tile_m
     assert math.hypot(spot.x - tx, spot.y - ty) <= 3  # where the designer put them
+
+
+def test_nothing_the_designer_made_is_drawn_before_its_region_is_explored(
+    tmp_path, story, cast, monkeypatch
+):
+    """The review (Oct 20 2026): opening the Doomsville map sample wanted ~30
+    sprites for the designer's scatter round the farm before John had taken
+    a step (the people the designer put in a region had "visited" it, which
+    put its things in view). Its things and places wait for the author's
+    character to be in the region (`WorldArt.explored`)."""
+    from sealedlore.engine import session_world_art
+    from sealedlore.models.config import MediaEndpoint
+
+    monkeypatch.setattr(session_world_art, "list_image_models", lambda *a, **k: [])
+    session = open_session(tmp_path, story, cast)
+    session.config.providers[0].api_key = "k"
+    session.config.image_endpoint = MediaEndpoint()
+    session.config.map_art = True
+    session.config.map_pictures_mode = "auto"
+    # Things no tile set has a picture of, so each would be drawn.
+    odd = [
+        {"name": "a brass orrery", "x": 57, "y": 30},
+        {"name": "a glass harmonica", "x": 10, "y": 70},
+    ]
+    region = _with_region(session, design={**DESIGN, "things": odd})
+    made = {t.id for t in region.things} | {p.id for p in region.places}
+    assert region.key not in session.world_art.explored
+    assert not [j for j in session.map_picture_jobs(None) if j.subject_id in made]
+    _furnish, sprites = session.tile_art_jobs()
+    assert not [j for j in sprites if "orrery" in j.name or "harmonica" in j.name]
+    session.mark_explored()  # the author's character stands in it
+    assert region.key in session.world_art.explored
+    wanted = [j for j in session.map_picture_jobs(None) if j.subject_id in made]
+    assert {j.subject_id for j in wanted if j.subject == "thing"} == {t.id for t in region.things}
+    assert any(j.subject == "place" for j in wanted)  # the barn's sprite too
+    _furnish, sprites = session.tile_art_jobs()
+    assert [j for j in sprites if "harmonica" in j.name]  # its sprite on the play view
 
 
 def test_the_storyteller_is_told_the_region_and_its_places_with_their_distances(

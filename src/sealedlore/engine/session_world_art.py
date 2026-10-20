@@ -31,6 +31,7 @@ from datetime import UTC, datetime
 
 from sealedlore.engine.area import now_words
 from sealedlore.engine.image_variants import fitting_model
+from sealedlore.engine.regions import unexplored_ids
 from sealedlore.engine.takeable import the
 from sealedlore.engine.world_art import (
     LAYOUT_MAX_TOKENS,
@@ -403,6 +404,9 @@ class WorldArtRuntime:
             texts=self.texts,
             limit=limit,
             style=self.tile_style(art),
+            # Nothing the world designer made until the author's character
+            # has been in its region (the review, Oct 20 2026).
+            hidden=unexplored_ids(art),
         )
 
     def _picture_model(self) -> ImageModelInfo | None:
@@ -817,6 +821,10 @@ class WorldArtRuntime:
             return False
         # Before anything is drawn in it: the set is kept from here on.
         self.pin_tile_set()
+        # The region the author's character stands in is explored before
+        # anything is planned (a read may have moved them into another): what
+        # the designer put there may be drawn now, and nothing elsewhere.
+        self.mark_explored()
         pictures = self._start_map_pictures()
         # Map-first play's furnishing and sprites (engine/session_area.py).
         pictures = self._start_tile_art() or pictures

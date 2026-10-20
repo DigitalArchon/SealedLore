@@ -1396,8 +1396,11 @@ story or a walk takes them in.
   minute, and only while **Draw the map** is on. A region is kept once
   designed, on every branch, and stays under fog on the Region and World
   maps until you have been there; the next one is painted as you near its
-  edge, so it shows the moment you cross. Nobody is designed close by you,
-  and nothing the story already has is designed again. The map read is
+  edge, so it shows the moment you cross. Nothing the designer put in a
+  region has its own picture drawn (under Draw map pictures) until you have
+  been in that region: until then the tile set's nearest thing stands in.
+  Nobody is designed close by you, and nothing the story already has is
+  designed again. The map read is
   shown only the region you stand in, and never moves anyone into another
   region unless the passage names the place. Places the story has stand
   where they are, a settlement or a building entered by its door, and the

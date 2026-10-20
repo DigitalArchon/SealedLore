@@ -18,7 +18,7 @@ pure. Under the same standing approval and daily limit as map pictures:
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 
 from sealedlore.engine.area import Area
 from sealedlore.engine.jsonreply import extract_json
@@ -111,12 +111,17 @@ def item_jobs(
     *,
     style: str = DEFAULT_STYLE,
     failed: Callable[[str], bool] = lambda _k: False,
+    skip: Collection[str] = (),
 ) -> list[PictureJob]:
-    """A sprite for each kind of thing in these areas that has none."""
+    """A sprite for each kind of thing in these areas that has none; none
+    for a thing in `skip` (by id: the world designer's in a region the
+    author's character hasn't been in, `regions.unexplored_ids`)."""
     out: list[PictureJob] = []
     seen: set[str] = set()
     for area in areas:
         for placement in area.placements:
+            if placement.id in skip:
+                continue
             slugs = item_slugs(placement.name)
             if not slugs or slugs[0] in seen or has_sprite(placement.name):
                 continue

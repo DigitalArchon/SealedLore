@@ -647,6 +647,23 @@ def designed_delta(art: WorldArt) -> WorldDelta | None:
     return delta
 
 
+def unexplored_ids(art: WorldArt) -> set[str]:
+    """The ids of the places and things the designer made in regions the
+    author's character has not been in yet (`WorldArt.explored`): nothing is
+    drawn for them until then. Live (the review, Oct 20 2026), opening the
+    Doomsville map sample wanted ~30 sprites for the scatter round the farm,
+    a sled, rifles, flares, before John had taken a step: the people the
+    designer put in each region had "visited" it, which put its things in
+    view of the map pictures."""
+    explored = set(art.explored)
+    return {
+        item.id
+        for key, region in art.regions.items()
+        if key not in explored
+        for item in (*region.places, *region.things)
+    }
+
+
 def designed_point(art: WorldArt, name: str) -> tuple[float, float] | None:
     """Where the designer put someone, in metres, or None."""
     for region in art.regions.values():
