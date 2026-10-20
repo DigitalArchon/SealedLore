@@ -370,6 +370,55 @@ def test_the_read_moves_the_place_only_with_a_quote_and_a_known_place():
     assert after.place is None and hidden.refused
 
 
+def test_a_move_to_a_place_needs_a_sentence_that_names_it():
+    # Live (Doomsville, Oct 20 2026): still at the farmhouse, the read moved
+    # John to Hellsville on a sentence of speech found in the passage that
+    # named nowhere, and the town's welcome began five miles short of it.
+    p = plot()
+    before = initial_chronicle(p)
+    places = ["The Mill"]
+    passage = (
+        '"Close it behind you," she says. "Slowly." Ann did, and the wind dropped. '
+        "She stepped in out of the cold, under the mill's broken wheel. "
+        "Later she reached the millhouse door at last."
+    )
+    speech = parse_read(read(place=("The Mill", '"Close it behind you," she says. "Slowly."')))
+    after = speech.applied_to(before, p, passage=passage, author_turn="", places=places)
+    assert after.place is None
+    assert speech.refused == ["moved to The Mill: the sentence quoted doesn't name it"]
+
+    # The quote's whole sentence counts, possessives included.
+    part = parse_read(read(place=("The Mill", "She stepped in out of the cold")))
+    after = part.applied_to(before, p, passage=passage, author_turn="", places=places)
+    assert after.place == "The Mill" and not part.refused
+
+    # One of the place's other names (its lore entry's keywords) names it too.
+    alias = parse_read(read(place=("The Mill", "Later she reached the millhouse door at last.")))
+    after = alias.applied_to(before, p, passage=passage, author_turn="", places=places)
+    assert after.place is None and alias.refused
+    alias = parse_read(read(place=("The Mill", "Later she reached the millhouse door at last.")))
+    after = alias.applied_to(
+        before,
+        p,
+        passage=passage,
+        author_turn="",
+        places=places,
+        place_words={"The Mill": ["the mill", "the old millhouse"]},
+    )
+    assert after.place == "The Mill" and not alias.refused
+
+    # Leaving is as before: the sentence shown needn't name the place left.
+    before.place, before.visited = "The Mill", ["The Mill"]
+    left = parse_read(read(place=("elsewhere", "Ann did, and the wind dropped.")))
+    after = left.applied_to(before, p, passage=passage, author_turn="", places=places)
+    assert after.place is None and not left.refused
+
+
+def test_the_session_tells_the_read_a_places_other_names(tmp_path: Path):
+    session = make_session(tmp_path, [])
+    assert session.plot_place_words() == {"The Mill": ["The Mill"], "The Cellar": ["The Cellar"]}
+
+
 def test_unwatched_facts_are_not_the_reads_to_change():
     p = plot()
     before = initial_chronicle(p)

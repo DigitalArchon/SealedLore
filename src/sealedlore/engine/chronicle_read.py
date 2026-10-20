@@ -13,7 +13,7 @@ so, in the passage or the author's turn, or it is cut back.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 from sealedlore.engine.chronicle import (
@@ -214,9 +214,50 @@ def _span_minutes(match: re.Match[str]) -> int:
 
 
 def _sentence_around(text: str, match: re.Match[str]) -> str:
-    start = max(text.rfind(end, 0, match.start()) for end in ".!?\n") + 1
-    stops = [i for i in (text.find(end, match.end()) for end in ".!?\n") if i >= 0]
+    return _sentence_at(text, match.start(), match.end())
+
+
+def _sentence_at(text: str, first: int, last: int) -> str:
+    """The sentence(s) of `text` holding the span `first:last`."""
+    start = max(text.rfind(end, 0, first) for end in ".!?\n") + 1
+    stops = [i for i in (text.find(end, last) for end in ".!?\n") if i >= 0]
     return text[start : min(stops) + 1 if stops else len(text)].strip()
+
+
+# Words of a place's name that name nothing on their own ("the", "old"), as
+# the map's `world._names_place` has them.
+_PLACE_NOISE = frozenset("the a an of and in at on to old new place area land lands".split())
+
+
+def _words(text: str) -> set[str]:
+    return {re.sub(r"['’]s$", "", word) for word in re.findall(r"[\w'’-]+", text.lower())}
+
+
+def names_place(text: str, forms: Sequence[str]) -> bool:
+    """Whether the text names the place: a distinctive word of its name or of
+    one of its other names (a lore entry's keywords), never an article alone.
+
+    Live (Doomsville, Oct 20 2026): the read moved John to Hellsville on
+    '"Close it behind you," she says. "Slowly."', a sentence found in the
+    passage that names no place at all, and the town's welcome began five
+    miles short of the town.
+    """
+    said = _words(text)
+    for form in forms:
+        own = _words(form)
+        own = {word for word in own if word not in _PLACE_NOISE} or own
+        if own and own & said:
+            return True
+    return False
+
+
+def _quote_sentence(quote: str, texts: Sequence[str]) -> str | None:
+    """The whole sentence a quote sits in, in the first of `texts` that has it."""
+    for text in texts:
+        found = locate_quote(text, quote)
+        if found is not None:
+            return _sentence_at(text, *found)
+    return None
 
 
 # A sentence that says time goes by, not one that merely counts it ("fifty-one
@@ -448,8 +489,13 @@ class ChronicleDelta:
         scene_location: str = "",
         at_least: int | None = None,
         authors_events: dict[str, EventVariant] | None = None,
+        place_words: Mapping[str, Sequence[str]] | None = None,
     ) -> Chronicle:
         """The chronicle after this passage, keeping only what the text supports.
+
+        `place_words`: each place's other names (its lore entry's keywords).
+        A move to a place needs its quote's sentence to name the place by one
+        of them, as the map holds its reads to (`world._names_place`).
 
         `author_states_facts`: the author's turn is a Director or Narration
         turn, the author's own statement of what happens, so its sentences
@@ -571,10 +617,25 @@ class ChronicleDelta:
                     )
                 ):
                     set_place(after, place)
-                elif not shown(self.place_quote):
-                    self.refused.append(f"moved to {place or 'elsewhere'}: no sentence shows it")
+                elif place is None:
+                    if not shown(self.place_quote):
+                        self.refused.append("moved to elsewhere: no sentence shows it")
+                    else:
+                        set_place(after, place)
                 else:
-                    set_place(after, place)
+                    # Arriving somewhere, the sentence has to say where: a
+                    # sentence merely found in the passage is no evidence of
+                    # a place it never names.
+                    sentence = _quote_sentence(self.place_quote, evidence)
+                    forms = [place, *(place_words or {}).get(place, ())]
+                    if sentence is None:
+                        self.refused.append(f"moved to {place}: no sentence shows it")
+                    elif not names_place(sentence, forms):
+                        self.refused.append(
+                            f"moved to {place}: the sentence quoted doesn't name it"
+                        )
+                    else:
+                        set_place(after, place)
 
         # Events first: what they set is where the passage started from, and
         # a fact the passage shows moving on ("under attack", then "fallen")

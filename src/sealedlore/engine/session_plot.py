@@ -185,6 +185,18 @@ class PlotRuntime:
         hidden = self.hidden_ids(pending=True)
         return [place.name for place in plot.places if place.lore_id not in hidden]
 
+    def plot_place_words(self) -> dict[str, list[str]]:
+        """Each plot place's other names: its lore entry's keywords ("the
+        town" for Hellsville), by which a read's quote may name it."""
+        plot = self.story.plot
+        if plot is None:
+            return {}
+        lore = {entry.id: entry for entry in self.bundle.lore}
+        return {
+            place.name: list(entry.keywords) if (entry := lore.get(place.lore_id)) else []
+            for place in plot.places
+        }
+
     def _places_mentioned(self, user_node: Node, history: Sequence[Node]) -> set[str]:
         """The plot's places the author's turn or the last passage names, by
         name or by their lore keywords."""
@@ -471,6 +483,7 @@ class PlotRuntime:
             scene_location=self.story.scene.location or "",
             at_least=pending.at_least,
             authors_events=pending.authors_events,
+            place_words=self.plot_place_words(),
         )
         settled = settle_unconfirmed(
             plot, after, [event_id for event_id, _ in delta.happened], node_id=node.id
