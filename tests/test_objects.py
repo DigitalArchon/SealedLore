@@ -106,6 +106,60 @@ def test_someone_outside_a_building_alone_on_the_land_stands_at_its_door(
     assert scene is not None and "Ruth" in scene.present_others
 
 
+def test_someone_across_the_wall_within_earshot_is_in_the_positions_only_when_switched_on(
+    tmp_path, story, cast, monkeypatch
+):
+    """F (Oct 21 2026), behind `session_area.ADJOINING_POSITIONS` (off: in
+    logged map play someone stood within earshot across a wall at 6 of 343
+    turns, too few to measure)."""
+    import math
+
+    import sealedlore.engine.session_area as session_area
+    from sealedlore.engine.area import inner_to_outer
+    from sealedlore.models.area import LiveArea, Spot
+
+    assert session_area.ADJOINING_POSITIONS is False
+    session = make_session(tmp_path, story, cast)
+    _with_ruth(session, "farm", outside=False)
+    state = session.area_state()
+    me = state.spots["Serrik Vaun"]
+    assert me.area == "house"
+    farm, house = session.area("farm"), session.area("house")
+    box = farm.buildings["house"]
+    x0, y0, x1, y1 = box
+    mine = inner_to_outer(house, box, me.x, me.y)
+    doors = [(e.x, e.y) for e in farm.entrances if e.place_id == "house"]
+    # Two tiles beyond the wall nearest the author's character, clear of its door.
+    ring = [(x, y) for x in range(x0 - 2, x1 + 3) for y in (y0 - 2, y1 + 2)]
+    ring += [(x, y) for y in range(y0 - 2, y1 + 3) for x in (x0 - 2, x1 + 2)]
+    ring = [t for t in ring if all(math.hypot(t[0] - dx, t[1] - dy) > 4 for dx, dy in doors)]
+    sx, sy = min(ring, key=lambda t: math.hypot(t[0] - mine[0], t[1] - mine[1]))
+
+    def ruth_at(x: int, y: int) -> str | None:
+        state.spots["Ruth"] = Spot(area="farm", x=x, y=y)
+        session.story.area_live = LiveArea(leaf_id=session.story.active_leaf_id, state=state)
+        told = session.positions_context([], "char-serrik")
+        return next((ln for ln in told.splitlines() if ln.startswith("- Ruth:")), None)
+
+    assert ruth_at(sx, sy) is None
+    monkeypatch.setattr(session_area, "ADJOINING_POSITIONS", True)
+    line = ruth_at(sx, sy)
+    assert line is not None and "of Serrik Vaun" in line and "outside" in line
+    assert "through the wall" in line or "through the window" in line
+    # Further than earshot: left out.
+    step = 20.0 / farm.tile_m + 2
+    dx, dy = sx - mine[0], sy - mine[1]
+    norm = math.hypot(dx, dy) or 1.0
+    assert ruth_at(round(sx + dx / norm * step), round(sy + dy / norm * step)) is None
+    # The other way round: the author's character outside, Ruth in the house.
+    state.spots["Serrik Vaun"] = Spot(area="farm", x=sx, y=sy)
+    state.spots["Ruth"] = Spot(area="house", x=me.x, y=me.y)
+    session.story.area_live = LiveArea(leaf_id=session.story.active_leaf_id, state=state)
+    told = session.positions_context([], "char-serrik")
+    line = next((ln for ln in told.splitlines() if ln.startswith("- Ruth:")), "")
+    assert "inside" in line and "of Serrik Vaun" in line
+
+
 def test_a_porch_the_read_put_inside_a_building_is_outside_it(tmp_path, story, cast, monkeypatch):
     place, _outside = _lone_house(monkeypatch, porch=True)
     session = make_session(tmp_path, story, cast)

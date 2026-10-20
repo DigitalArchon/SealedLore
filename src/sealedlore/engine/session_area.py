@@ -33,6 +33,7 @@ from sealedlore.engine.area import (
     Area,
     LaidThing,
     _front,
+    adjoining_line,
     anchor_of,
     anchor_tile,
     anchors_near,
@@ -196,6 +197,9 @@ AT_A_PLACE_TILES = 1.5
 # Tiles from a door's front, outside, that count as at the door (shown at it
 # from inside: `at_the_door`).
 AT_THE_DOOR = 2.5
+# People across the wall of the author's character's building, within
+# earshot, in the positions (`_adjoining`). Off until measured.
+ADJOINING_POSITIONS = False
 MAX_READ_MINUTES = 7 * 24 * 60
 # Where the clock starts when the opening's read gives no time it can use:
 # morning, not the midnight a count from nothing meant.
@@ -2591,6 +2595,11 @@ class AreaRuntime:
         # settled outside at it, and the storyteller was told he stood alone
         # in the kitchen while the prose had her holding him at gunpoint.
         spots, at_door = self._with_those_at_the_door(state, world, art, held, area)
+        adjoining = (
+            [line for _m, line in self._adjoining(state, world, art, held, area, at_door)]
+            if ADJOINING_POSITIONS
+            else []
+        )
         text = render_positions(
             area,
             world,
@@ -2605,11 +2614,63 @@ class AreaRuntime:
             now=now,
             mark_fixed=mark_fixed,
             at_the_door=at_door,
+            adjoining=adjoining,
         )
         if not text:
             return ""
         heading = self.texts["map.positions"]
         return text.replace(text.split("\n", 1)[0], heading, 1)
+
+    def _adjoining(
+        self,
+        state: AreaState,
+        world: WorldMap,
+        art: WorldArt,
+        held: str,
+        area: Area,
+        at_door: Collection[str] = (),
+    ) -> list[tuple[float, str]]:
+        """Whoever stands across the wall of the author's character's
+        building within earshot of them, nearest first, with their line for
+        the positions (`area.adjoining_line`): outside it on the plan round
+        it, or, with the author's character outside, inside a building of
+        theirs. Never someone at its door (said already, `at_the_door`), nor
+        anyone on another level (the stairs lines say them)."""
+        me = state.spots.get(held)
+        if me is None or area.level:
+            return []
+        building = place_of_area(area.id)
+        out: list[tuple[float, str]] = []
+        for name, spot in state.spots.items():
+            if name == held or spot.area == area.id or name in at_door:
+                continue
+            other = self.area(spot.area, world, art)
+            if other is None or other.level:
+                continue
+            if area.indoor and building in other.buildings:
+                inner, outer, held_inside = area, other, True
+                box, inside = other.buildings[building], building
+            else:
+                theirs = place_of_area(other.id)
+                if theirs not in area.buildings:
+                    continue
+                inner, outer, held_inside = other, area, False
+                box, inside = area.buildings[theirs], theirs
+            place = world.places.get(inside or "")
+            found = adjoining_line(
+                inner,
+                outer,
+                box,
+                held,
+                name,
+                held_inside=held_inside,
+                me=(me.x, me.y),
+                them=(spot.x, spot.y),
+                building=place.name if place is not None else "the building",
+            )
+            if found is not None:
+                out.append(found)
+        return sorted(out)
 
     def _with_those_at_the_door(
         self, state: AreaState, world: WorldMap, art: WorldArt, held: str | None, area: Area

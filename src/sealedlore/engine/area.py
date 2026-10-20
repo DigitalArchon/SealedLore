@@ -2733,6 +2733,7 @@ def render_positions(
     now: str = "",
     mark_fixed: bool = False,
     at_the_door: Collection[str] = (),
+    adjoining: Sequence[str] = (),
 ) -> str:
     """Where everyone stands, for the storyteller: exact, from the grid
     (design §5). `now`: the time of day and the weather (`now_words`), right
@@ -2747,7 +2748,8 @@ def render_positions(
     taken or moved (built in, rooted, bolted down) is marked so in reach, on
     a turn that may not move it. `at_the_door`: names among `spots` standing
     at a door of this building from outside (on the tile beyond its wall),
-    said so."""
+    said so. `adjoining`: lines for people across this building's wall, in
+    earshot (`adjoining_line`), after those in the area."""
     me = spots.get(held)
     if me is None or me.area != area.id:
         return ""
@@ -2782,6 +2784,7 @@ def render_positions(
         how = f"beside {held}" if far == "beside" else f"{far} {way} of {held}"
         tail = f", {where}" if where and not apart else apart
         lines.append(f"- {name}: {how}{tail}; {sight_words(area, here, (spot.x, spot.y))}.")
+    lines += list(adjoining)
     reach = sorted(
         (
             (math.hypot(p.centre[0] - me.x - 0.5, p.centre[1] - me.y - 0.5) * area.tile_m, p)
@@ -2837,6 +2840,90 @@ def render_positions(
     if action_line:
         lines.append(action_line)
     return "\n".join(lines)
+
+
+def inner_to_outer(
+    inner: Area, box: tuple[int, int, int, int], x: float, y: float
+) -> tuple[float, float]:
+    """A tile of a building's own plan as a point on the plan round it,
+    where that plan draws the building as `box` (its tiles there): the
+    inside laid over the box, as the play view lays it."""
+    x0, y0, x1, y1 = box
+    return (
+        x0 - 0.5 + (x + 0.5) * (x1 - x0 + 1) / max(inner.width, 1),
+        y0 - 0.5 + (y + 0.5) * (y1 - y0 + 1) / max(inner.height, 1),
+    )
+
+
+def outer_to_inner(
+    inner: Area, box: tuple[int, int, int, int], x: float, y: float
+) -> tuple[float, float]:
+    """The inverse of `inner_to_outer`: a point of the plan round a
+    building on the building's own plan's grid (outside it beyond the
+    edge)."""
+    x0, y0, x1, y1 = box
+    return (
+        (x - x0 + 0.5) * max(inner.width, 1) / (x1 - x0 + 1) - 0.5,
+        (y - y0 + 0.5) * max(inner.height, 1) / (y1 - y0 + 1) - 0.5,
+    )
+
+
+def by_a_window(inner: Area, x: float, y: float, reach: int = 2) -> bool:
+    """Whether a window of a building's plan is within `reach` tiles of a
+    point on (or just beyond) its grid."""
+    if not inner.rows:
+        return False
+    cx = min(max(round(x), 0), inner.width - 1)
+    cy = min(max(round(y), 0), inner.height - 1)
+    for ty in range(max(cy - reach, 0), min(cy + reach, inner.height - 1) + 1):
+        row = inner.rows[ty]
+        for tx in range(max(cx - reach, 0), min(cx + reach, len(row) - 1) + 1):
+            if row[tx] == "W":
+                return True
+    return False
+
+
+def adjoining_line(
+    inner: Area,
+    outer: Area,
+    box: tuple[int, int, int, int],
+    held: str,
+    name: str,
+    *,
+    held_inside: bool,
+    me: tuple[int, int],
+    them: tuple[int, int],
+    building: str,
+) -> tuple[float, str] | None:
+    """Someone in the area beside the author's character's, across the
+    boundary of one building: them outside it on the plan round it with the
+    author's character inside (`held_inside`), or them inside it with the
+    author's character outside. Their distance in metres and their line for
+    the positions ("outside the window, 6 m north of John; seen and heard
+    through the window"), or None past earshot (EARSHOT_M)."""
+    if held_inside:
+        mine = inner_to_outer(inner, box, *me)
+        theirs: tuple[float, float] = them
+        window = by_a_window(inner, *outer_to_inner(inner, box, *them))
+    else:
+        mine = me
+        theirs = inner_to_outer(inner, box, *them)
+        window = by_a_window(inner, *them)
+    metres = math.hypot(theirs[0] - mine[0], theirs[1] - mine[1]) * outer.tile_m
+    if metres > EARSHOT_M:
+        return None
+    far = metres_words(metres)
+    how = f"beside {held}" if far == "beside" else f"{far} {bearing(mine, theirs)} of {held}"
+    if held_inside:
+        where = "outside the window" if window else f"outside, beyond the wall of {building}"
+    else:
+        where = f"inside {building}" + (", by a window" if window else "")
+    heard = (
+        "seen and heard through the window"
+        if window
+        else "out of sight, within earshot through the wall"
+    )
+    return metres, f"- {name}: {where}, {how}; {heard}."
 
 
 def stairs_lines(
