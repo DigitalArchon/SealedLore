@@ -918,6 +918,32 @@ def test_duplicate_settings_of_a_chat_says_how_it_begins(app, window, monkeypatc
     assert "Type the first message" in message and "Start story" not in message
 
 
+def test_close_the_chat_after_a_refused_enclave_asks_as_any_close_does(app, window, monkeypatch):
+    """The refused-enclave dialog's "Close the chat" went straight to the
+    no-story state: a memory-only chat was lost without the question every
+    other way out asks."""
+    monkeypatch.setattr(window, "_attest_chat", lambda: None)
+    make_chat(window, monkeypatch, model="TEE/gemma-3-27b", keep="memory")
+    session = window.session
+    monkeypatch.setattr(QMessageBox, "exec", lambda self: 0)
+    monkeypatch.setattr(
+        QMessageBox,
+        "clickedButton",
+        lambda self: next(
+            b for b in self.buttons() if self.buttonRole(b) == QMessageBox.DestructiveRole
+        ),
+    )
+    asked: list[bool] = []
+    answers = [False, True]
+    monkeypatch.setattr(
+        window, "_chat_allows_close", lambda: asked.append(True) or answers[len(asked) - 1]
+    )
+    window._offer_reattest("offers no attestation", True)
+    assert asked == [True] and window.session is session, "Cancel keeps the chat"
+    window._offer_reattest("offers no attestation", True)
+    assert asked == [True, True] and window.session is None
+
+
 def test_the_model_button_leaves_the_default_model_alone_in_a_chat(
     app, window, monkeypatch, tmp_path
 ):

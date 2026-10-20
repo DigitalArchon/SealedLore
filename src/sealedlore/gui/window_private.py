@@ -451,8 +451,9 @@ class PrivateWindow:
             self._start_attestation(self._tee_settings)
         elif clicked is leave and not self._busy:
             if for_chat:
-                # A memory-only chat is simply gone; one on disk is kept.
-                self._close_story()
+                # As File → Close story: a memory-only chat asks first, since
+                # closing loses it (it used to go without the question here).
+                self.close_story()
             else:
                 self.end_private()
 
