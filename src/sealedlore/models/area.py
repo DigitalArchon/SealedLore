@@ -55,6 +55,26 @@ class Spot(BaseModel):
     for_place: str = ""
 
 
+class ThingRecord(BaseModel):
+    """What became of a thing on the play view, kept on each snapshot under
+    its placement id (a plan's object, a piece of furniture, or one of the
+    map's things by its id): the area shows it (gone from the floor, broken,
+    lying where it was put) and the storyteller is told who carries what.
+    Written by the menu's choices (code decides, no model call) and by what
+    the map read found the passage did."""
+
+    state: ThingState
+    name: str
+    # Taken: who carries it (as the map names them).
+    by: str = ""
+    # Dropped (and a broken thing that was moved): the tile it lies on, its
+    # top-left corner when it is bigger than a tile.
+    spot: Spot | None = None
+    # Its footprint in tiles: a table moved is as big where it stands now.
+    w: int = 1
+    h: int = 1
+
+
 class MapAction(BaseModel):
     """The menu choice a turn came from (the author's ruling: it fills the
     composer, so the turn can be read and changed before it is sent). The
@@ -75,26 +95,12 @@ class MapAction(BaseModel):
     seconds: int = 0
     # Give: who the thing is handed to (as the map names them).
     to: str = ""
-
-
-class ThingRecord(BaseModel):
-    """What became of a thing on the play view, kept on each snapshot under
-    its placement id (a plan's object, a piece of furniture, or one of the
-    map's things by its id): the area shows it (gone from the floor, broken,
-    lying where it was put) and the storyteller is told who carries what.
-    Written by the menu's choices (code decides, no model call) and by what
-    the map read found the passage did."""
-
-    state: ThingState
-    name: str
-    # Taken: who carries it (as the map names them).
-    by: str = ""
-    # Dropped (and a broken thing that was moved): the tile it lies on, its
-    # top-left corner when it is bigger than a tile.
-    spot: Spot | None = None
-    # Its footprint in tiles: a table moved is as big where it stands now.
-    w: int = 1
-    h: int = 1
+    # The thing's record before the turn's own was written
+    # (`_record_action`; None for none), so Take back puts that back and
+    # leaves every other record standing: the author's corrections made
+    # before the turn (an object placed with Objects…, a thing dragged)
+    # used to jump back to the plan's spots (the review, Oct 20 2026).
+    was: ThingRecord | None = None
 
 
 class Mark(BaseModel):

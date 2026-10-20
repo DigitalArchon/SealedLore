@@ -920,11 +920,28 @@ class AreaRuntime:
             state.action = state.action.model_copy(update={"seconds": 0})
         state.marks = []
         # What the turn itself did to a thing (Take, Destroy, Eat, Drop,
-        # Give) goes with it: the records before the turn stand, and the
-        # turn's own come back when it is sent again with the menu's words,
-        # not when it is rewritten without them.
-        before = self._snapshot_on(self._path_to(node.parent_id)) if node.parent_id else None
-        state.things = dict(before.things) if before is not None else {}
+        # Give) goes with it: that thing's record is as it was before the
+        # turn (`MapAction.was`), and the turn's own comes back when it is
+        # sent again with the menu's words, not when it is rewritten without
+        # them. Every other record the turn carried stands: the author's
+        # corrections made before the turn (an object placed with Objects…,
+        # a thing dragged, broken or renamed) used to be reset to the
+        # previous passage's records, which never had them, so the object
+        # jumped back to the way in (the review, Oct 20 2026).
+        action = node.meta.area.action
+        roll = node.meta.roll
+        failed = roll is not None and roll.band in ("failure", "critical_failure")
+        if (
+            action is not None
+            and action.verb in RECORD_VERBS
+            and action.target_id
+            and not failed
+            and action.text in node.content
+        ):
+            if action.was is not None:
+                state.things[action.target_id] = action.was.model_copy(deep=True)
+            else:
+                state.things.pop(action.target_id, None)
         self.story.area_live = LiveArea(
             leaf_id=node.parent_id,
             held=self.map_held_name(node.meta.controlled_character_id),
@@ -1749,6 +1766,9 @@ class AreaRuntime:
             record = ThingRecord(state="dropped", name=name, spot=Spot(area=me.area, x=x, y=y))
         if record is None:
             return
+        # What the record was before, for Take back (`restore_area`).
+        before = state.things.get(action.target_id)
+        action.was = before.model_copy(deep=True) if before is not None else None
         state.things[action.target_id] = record
         thing = _find_thing(world, name)
         if thing is None:

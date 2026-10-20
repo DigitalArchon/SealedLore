@@ -1412,6 +1412,56 @@ def test_a_take_survives_take_back_and_a_retake_as_the_spots_do(tmp_path, story,
     assert session.carried_things() == [(lantern.id, "brass lantern")]
 
 
+def test_take_back_keeps_the_author_s_corrections_made_before_the_turn(tmp_path, story, cast):
+    """The review (Oct 20 2026): an object placed with Objects… (or a thing
+    dragged) before a turn jumped back to the way in (or the plan's spot) on
+    Take back, since the records were reset to the previous passage's."""
+    session = things_session(tmp_path, story, cast, ["One.", "{}", "Two.", "{}", "Three.", "{}"])
+    session.config.scene_reads = "manual"
+    list(session.send(turn("I look around.")))
+    house = session.area("house")
+    state = session.area_state()
+    taken = {(s.x, s.y) for s in state.spots.values()} | house.blocked()
+    doors = {t for d in house.doorways for t in d.tiles()}
+
+    def free(not_near: tuple[int, int] | None = None) -> tuple[int, int]:
+        for y in range(house.height):
+            for x in range(house.width):
+                far = not_near is None or abs(x - not_near[0]) + abs(y - not_near[1]) > 3
+                if house.walkable(x, y, taken) and house.room_at(x, y) and (x, y) not in doors:
+                    if far:
+                        taken.add((x, y))
+                        return x, y
+        raise AssertionError("no free tile")
+
+    stool_at = free()
+    stool_id = session.correct_put_thing("a wooden stool", "house", *stool_at)
+    lantern = _thing(session, "lantern")
+    lantern_at = free((lantern.x, lantern.y))
+    assert session.correct_move_thing(lantern.id, "house", *lantern_at)
+    # A turn after the corrections, taken back: both stand where the author put them.
+    list(session.send(turn("I sit on the stool.")))
+    user = session.path()[-2]
+    assert {r.name for r in user.meta.area.things.values()} >= {"a wooden stool", "a brass lantern"}
+    session.restore_area(user)
+    session.delete_from(user.id)
+    after = session.area("house")
+    shown = {p.id: (p.x, p.y) for p in after.placements}
+    assert shown[stool_id] == stool_at and shown[lantern.id] == lantern_at
+    # The turn's own doing goes, and only that: the lantern taken after it was
+    # dragged lies where it was dragged to again, not at the plan's spot.
+    text = session.map_action("take", lantern.name, lantern.id)
+    list(session.send(turn(text)))
+    assert session.carried_things() == [(lantern.id, "brass lantern")]
+    user = session.path()[-2]
+    assert user.meta.area.action.was is not None and user.meta.area.action.was.spot is not None
+    session.restore_area(user)
+    session.delete_from(user.id)
+    assert session.carried_things() == []
+    shown = {p.id: (p.x, p.y) for p in session.area("house").placements}
+    assert shown[lantern.id] == lantern_at and shown[stool_id] == stool_at
+
+
 def test_the_time_of_day_has_its_bands_and_never_the_day():
     """The storyteller is told the time of day in words, never the day
     (the author's rule): one phrase from the clock's minute."""
