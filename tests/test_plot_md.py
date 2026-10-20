@@ -156,6 +156,21 @@ def test_problems_are_errors_with_line_numbers(change: tuple[str, str], expected
     assert any(expected in line for line in problems(text)), problems(text)
 
 
+def test_events_that_require_each_other_are_an_error():
+    # Each waits for the other forever; nothing at play time says why.
+    text = MINIMAL.replace(
+        "- trigger: Ann arrives.", "- trigger: Ann arrives.\n- requires: attack happened"
+    ).replace("- sets: town = fallen", "- sets: town = fallen\n- requires: greeting happened")
+    parsed = parse_plot_markdown(text)
+    assert not parsed.ok
+    assert any("none of them can ever happen" in line for line in problems(text)), problems(text)
+    alone = MINIMAL.replace(
+        "- sets: town = fallen", "- sets: town = fallen\n- requires: attack happened"
+    )
+    assert any("requires itself" in line for line in problems(alone)), problems(alone)
+    assert parse_plot_markdown(MINIMAL).ok
+
+
 def test_a_bullet_list_in_a_description_stays_prose():
     text = MINIMAL.replace("- present: yes\n", "- present: yes\n\n- Strength: great\n")
     cy = next(c for c in parse_plot_markdown(text).scenario.cast if c.name == "Cy")

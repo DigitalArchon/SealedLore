@@ -361,6 +361,8 @@ class _Parser:
         # Places and lore both: anything `reveals:` can name.
         self.lore_entries: dict[str, LoreEntry] = {}
         self.pictures: list[PlotPicture] = []
+        # Each event's heading line, for problems found across events.
+        self.event_lines: dict[str, int] = {}
 
     def note(self, line: int, message: str) -> None:
         self.problems.append(PlotProblem(line, message))
@@ -699,6 +701,7 @@ class _Parser:
             parsed = self.event(child, kind, facts, ids)
             if parsed is not None:
                 events.append(parsed)
+                self.event_lines[parsed.id] = child.line
         if block.lines and _prose(block.lines):
             self.note(block.line, f"Text directly under “# {block.title}” is ignored.")
         return events
@@ -1158,6 +1161,51 @@ class _Parser:
 
     # --- the whole file ----------------------------------------------------------
 
+    def requirement_loops(self, events: Sequence[EventDef]) -> None:
+        """Events that each need another of them to have happened first can
+        never happen: an error, on the first of them in the file. Only the
+        event's own `requires:` count (a variant's choose between versions of
+        an event that happens anyway)."""
+        needs = {
+            event.id: {
+                condition.event_id
+                for condition in event.requires
+                if condition.event_id is not None and condition.happened
+            }
+            for event in events
+        }
+
+        def reaches(start: str) -> set[str]:
+            seen: set[str] = set()
+            todo = list(needs.get(start, ()))
+            while todo:
+                found = todo.pop()
+                if found not in seen:
+                    seen.add(found)
+                    todo.extend(needs.get(found, ()))
+            return seen
+
+        reach = {event.id: reaches(event.id) for event in events}
+        titles = {event.id: event.title for event in events}
+        done: set[str] = set()
+        for event in events:
+            if event.id in done or event.id not in reach[event.id]:
+                continue
+            loop = [
+                other.id
+                for other in events
+                if other.id in reach[event.id] and event.id in reach[other.id]
+            ]
+            done.update(loop)
+            names = ", ".join(f"“{titles[event_id]}”" for event_id in loop)
+            if len(loop) == 1:
+                message = f"{names} requires itself to have happened first: it can never happen."
+            else:
+                message = (
+                    f"{names} each require another of them first: none of them can ever happen."
+                )
+            self.error(self.event_lines.get(event.id, 0), message)
+
     def parse(self) -> ParsedPlotFile:
         lines = self.text.split("\n")
         front, body_start = self.front_matter(lines)
@@ -1192,6 +1240,7 @@ class _Parser:
             *self.events(sections.get("timeline"), "timed", facts, ids),
             *self.events(sections.get("events"), "optional", facts, ids),
         ]
+        self.requirement_loops(events)
         start = self.clock(*front["start"]) if "start" in front else None
         plot = (
             Plot(
