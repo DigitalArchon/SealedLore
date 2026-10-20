@@ -304,6 +304,31 @@ def test_markdown_is_prose_only(cast):
     assert "Rain fell on the keep." in text and "Thunder answered." in text
 
 
+def test_markdown_names_an_author_turn_by_the_held_card_before_unknown(cast, story):
+    """A turn whose speaker no card names any more (a card deleted after it
+    was written) is labelled by the card the author held for it, else by the
+    name the caller gives for the author, before ever "Unknown"."""
+    from sealedlore.engine.export import markdown_user_name
+    from sealedlore.models.node import NodeMeta
+
+    nodes = [
+        Node(
+            kind="user",
+            speaker_id="char-gone",
+            content="I wait.",
+            meta=NodeMeta(controlled_character_id="char-serrik"),
+        ),
+        Node(kind="user", speaker_id="char-gone", content="I listen."),
+    ]
+    text = render_markdown("T", nodes, cast)
+    assert "**Serrik Vaun:** I wait." in text and "**Unknown:** I listen." in text
+    story.held_character_id = "char-maela"
+    text = render_markdown("T", nodes, cast, user_name=markdown_user_name(story, cast))
+    assert "**Serrik Vaun:** I wait." in text and "**Maela Orr:** I listen." in text
+    story.held_character_id = None
+    assert markdown_user_name(story, cast) is None
+
+
 # --- usage -------------------------------------------------------------------------
 
 

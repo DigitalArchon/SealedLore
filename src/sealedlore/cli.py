@@ -19,7 +19,7 @@ from sealedlore.engine.archival import chapter_number, turns_in
 from sealedlore.engine.authoring import current_value, describe, format_value
 from sealedlore.engine.dice import DIFFICULTY_ORDER, chance_for, chip_text, tier_for
 from sealedlore.engine.drafting import StoryDraft
-from sealedlore.engine.export import render_markdown
+from sealedlore.engine.export import markdown_user_name, render_markdown
 from sealedlore.engine.prompt import TurnRequest
 from sealedlore.engine.prompt_edits import texts_in_force
 from sealedlore.engine.reasoning import config_params, config_reasoning
@@ -280,7 +280,13 @@ def cmd_export(args: argparse.Namespace) -> int:
         # approved summary standing in for them.
         path = StorySession.model_nodes(active_path(bundle.nodes, bundle.story.active_leaf_id))
         args.file.write_text(
-            render_markdown(bundle.story.title, path, bundle.cast), encoding="utf-8"
+            render_markdown(
+                bundle.story.title,
+                path,
+                bundle.cast,
+                user_name=markdown_user_name(bundle.story, bundle.cast),
+            ),
+            encoding="utf-8",
         )
         print(f"Wrote {len(path)} messages of {bundle.story.title!r} to {args.file}")
         return 0

@@ -36,7 +36,7 @@ from sealedlore.engine.archival import chapter_number, chapter_numbers, turns_in
 from sealedlore.engine.authoring import describe, stale_voicing_notes
 from sealedlore.engine.branches import next_branch_name, unique_branch_name
 from sealedlore.engine.chronicle import armed, format_clock
-from sealedlore.engine.export import render_markdown
+from sealedlore.engine.export import markdown_user_name, render_markdown
 from sealedlore.engine.plot_md import PLOT_SUFFIX, ParsedPlotFile, parse_plot_markdown
 from sealedlore.engine.prompt import TurnRequest
 from sealedlore.engine.prompt_edits import texts_in_force
@@ -2275,7 +2275,13 @@ class MainWindow(
         subtitle = "The current chapter" if chapter_only else None
         try:
             path.write_text(
-                render_markdown(story.title, nodes, self.session.cast, subtitle=subtitle),
+                render_markdown(
+                    story.title,
+                    nodes,
+                    self.session.cast,
+                    subtitle=subtitle,
+                    user_name=markdown_user_name(story, self.session.cast),
+                ),
                 encoding="utf-8",
             )
         except OSError as exc:

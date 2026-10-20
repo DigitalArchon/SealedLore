@@ -623,6 +623,28 @@ def test_a_chat_tail_travels_with_the_chat_but_not_to_the_picture_writer(tmp_pat
     assert "Stay terse." not in provider.requests[-1].messages[-1].text
 
 
+def test_a_chats_markdown_export_names_the_user_as_the_chat_does(tmp_path):
+    """The review of Oct 20 2026: every one of the author's messages was
+    "**Unknown:**" (the name came from the cast, and a chat has none)."""
+    from sealedlore.engine.export import markdown_user_name, render_markdown
+
+    session, _provider = chat_session(tmp_path, ["Two.", "Four."])
+    say(session, "What is 1 + 1?")
+    say(session, "And 2 + 2?")
+    story, cast = session.story, session.cast
+
+    def exported() -> str:
+        name = markdown_user_name(story, cast)
+        return render_markdown(story.title, session.path(), cast, user_name=name)
+
+    out = exported()
+    assert "**You:** What is 1 + 1?" in out and "**You:** And 2 + 2?" in out
+    assert "Unknown" not in out
+    story.chat_character = "Ada"
+    out = exported()
+    assert "**Ada:** What is 1 + 1?" in out and "You:" not in out
+
+
 def test_a_chat_is_never_sent_the_storys_stand_in_first_message(tmp_path):
     """A chat whose oldest kept message is the assistant's (the one before it
     cut for room, or summarised) gets a stand-in user message of its own,
