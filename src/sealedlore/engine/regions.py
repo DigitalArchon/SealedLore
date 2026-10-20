@@ -21,15 +21,21 @@ from __future__ import annotations
 
 import math
 from collections import deque
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 from sealedlore.engine.jsonreply import extract_json
+from sealedlore.engine.marks import footprint
 from sealedlore.engine.prompt_texts import PromptTexts
 from sealedlore.engine.world import is_unknown
-from sealedlore.engine.world_art import REGION_GRID_SIDE, REGION_GRID_TILES, rasterise
-from sealedlore.engine.world_layout import meets, position, size_of
+from sealedlore.engine.world_art import (
+    PLAN_MAX_SIZE,
+    REGION_GRID_SIDE,
+    REGION_GRID_TILES,
+    rasterise,
+)
+from sealedlore.engine.world_layout import meets, moves, position, size_of
 from sealedlore.ids import new_id
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.world import (
@@ -675,6 +681,39 @@ def designed_delta(art: WorldArt) -> WorldDelta | None:
         if key in explored:
             delta.seen += [p.id for p in region.places]
     return delta
+
+
+def has_ground(world: WorldMap, place: WorldPlace) -> bool:
+    """Whether a story place is ground of its own, played on a plan (a
+    farm, a town, a site, a building), not open country however it is named:
+    a region, a road, a vehicle (it has no spot of its own) or anything wider
+    than a plan is drawn for (PLAN_MAX_SIZE: The Silverwood's 16 km forest is
+    played as open country, its land in windows)."""
+    return (
+        place.kind not in ("region", "route")
+        and not moves(world.places, place)
+        and size_of(place) <= PLAN_MAX_SIZE
+    )
+
+
+def file_covers(
+    world: WorldMap, art: WorldArt, ids: Collection[str], point: tuple[float, float]
+) -> bool:
+    """Whether one of a plot file's places (`ids`: `Story.world_base`'s, as
+    the map has them now) with ground of its own (`has_ground`) covers a
+    point: its plan's rectangle where it has one, else its square
+    (`marks.footprint`): off the farm's plan is off the farm."""
+    for place_id in ids:
+        place = world.places.get(place_id)
+        if place is None or not has_ground(world, place):
+            continue
+        box = footprint(world, art, place_id)
+        if box is None:
+            continue
+        west, south, east, north = box
+        if west <= point[0] <= east and south <= point[1] <= north:
+            return True
+    return False
 
 
 def unexplored_ids(art: WorldArt) -> set[str]:

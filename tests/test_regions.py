@@ -31,7 +31,7 @@ from sealedlore.engine.world import world_at
 from sealedlore.engine.world_art import window_rect
 from sealedlore.models.world import WorldArt, WorldMap, WorldPlace
 from sealedlore.providers.mock import MockChatProvider
-from tests.test_open_country import open_session, turn
+from tests.test_open_country import HERE, open_session, turn
 
 DESIGN = {
     "name": "The Kessler fields",
@@ -313,6 +313,53 @@ def test_the_regions_round_the_player_are_designed_ahead_on_the_story_model(
     assert sent and all(r.model == session.model for r in sent)  # the story model
     assert "The region to design" in sent[0].messages[-1].text
     assert not session._start_region_design()  # nothing left to design here
+
+
+def test_a_plot_file_s_map_is_designed_round_only_once_the_author_leaves_its_places(
+    tmp_path, story, cast, monkeypatch
+):
+    """The review (Oct 20 2026): the Doomsville map sample ran the designer
+    13 times round the farm the file had drawn already. On a plot file's map
+    it waits while the author's character stands on one of the file's
+    places, and designs round them once they stand where none is; a region
+    as wide as the erg is open country, not a place of the file's own."""
+    from sealedlore.engine.world_art import window_id
+    from sealedlore.models.area import Spot
+
+    session = open_session(tmp_path, story, cast, ["Snow.", "{}"])
+    session.config.map_art = True
+    session.story.world_base.where["Serrik Vaun"] = "wreck"
+    list(session.send(turn("I search the wreck.")))
+    assert session.area_state().spots["Serrik Vaun"].area == "wreck"  # on the file's plan
+    assert session.designer_waits() and not session.regions_on
+    designer = _Designer([])
+    designer.made = []  # its own, not the class's
+    monkeypatch.setattr(session, "provider", designer)
+    assert not session._start_region_design() and not session.world_art.region_origin
+    assert not session.regions_missing() and designer.made == []
+    # Out onto the land, past the file's places: the window of the land
+    # there, before the grid is laid.
+    state = session.area_state()
+    state.spots["Serrik Vaun"] = Spot(area=HERE, x=20, y=20)  # (820, 780) on the dunes
+    session._set_live(state)
+    assert not session.designer_waits() and session.regions_missing()
+    assert session._start_region_design()
+    session._region_thread.join(30)
+    art = session.world_art
+    assert len(art.regions) == 9 and art.region_origin
+    # Onto the grid's window at the same point, as everyone else.
+    on = session.area_state().spots["Serrik Vaun"]
+    assert on.area == window_id(*window_rect(art, 800.0, 800.0)) != HERE
+    assert session.held_point() == pytest.approx((820.0, 780.0), abs=3.0)  # the tile's middle
+    # Begun, it goes on as on any map, back on the file's places too.
+    state = session.area_state()
+    state.spots["Serrik Vaun"] = Spot(area="wreck", x=10, y=10)
+    session._set_live(state)
+    assert not session.designer_waits()
+    # A grown map never waits.
+    session.story.world_base = None
+    session.world_art.region_origin = None
+    assert not session.designer_waits()
 
 
 def test_open_country_sets_how_much_a_region_holds_and_holds_the_design_to_it(

@@ -1108,7 +1108,7 @@ class AreaRuntime:
                 and not arrived
                 and self.area(spot.area, world, art, things=state.things) is not None
             ):
-                spots[name] = spot
+                spots[name] = self._on_the_grid(spot, world, art) or spot
                 continue
             if target is None:
                 continue
@@ -1200,6 +1200,27 @@ class AreaRuntime:
             spots[name] = Spot(area=spot.area, x=x, y=y, for_place=spot.for_place)
         state.spots = spots
         return state
+
+    def _on_the_grid(self, spot: Spot, world: WorldMap, art: WorldArt) -> Spot | None:
+        """Someone on a window of the land laid out before the world
+        designer's grid was (`window_rect`: a plot file's map, whose designer
+        waits until the author's character leaves the file's places), on the
+        grid's window at the point they stand at; None when they are on the
+        grid, or on no window. Kept where they walked, the author's character
+        stood on the old window while everyone else went onto the grid's."""
+        if not art.region_origin or not is_window(spot.area):
+            return None
+        point = self._spot_point(spot, world, art)
+        if point is None:
+            return None
+        grid = window_id(*window_rect(art, *point))
+        if grid == spot.area:
+            return None
+        area = self.area(grid, world, art)
+        tile = point_tile(world, area, *point) if area is not None else None
+        if tile is None:
+            return None
+        return Spot(area=grid, x=tile[0], y=tile[1], for_place=spot.for_place)
 
     def _outside_of(
         self,

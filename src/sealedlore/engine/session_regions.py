@@ -18,6 +18,7 @@ from sealedlore.engine.regions import (
     designed_delta,
     designed_point,
     edge_lines,
+    file_covers,
     limits_for,
     next_label,
     origin_of,
@@ -59,14 +60,33 @@ class RegionRuntime:
     def regions_on(self) -> bool:
         """Regions are designed: a map played on, drawn (Draw the map), the
         story begun, never in a private scene (its story reaches no model
-        but the private one)."""
+        but the private one), and not while a plot file's map is all there
+        is round the author's character (`designer_waits`)."""
         return bool(
             self.map_first
             and self.config.map_art
             and self.open_span is None
             and not self._map_closed
             and self.path()
+            and not self.designer_waits()
         )
+
+    def designer_waits(self) -> bool:
+        """A plot file's map (`Story.world_base`) is the file's own world:
+        the designer waits while the author's character stands on one of its
+        places (`regions.file_covers`), and begins once they stand where none
+        does, then designs round them as on any map (the review, Oct 20
+        2026: opening the Doomsville map sample ran it 13 times round the
+        farm, which the file had drawn already). Once begun, the grid laid,
+        it never waits again. A grown map never waits."""
+        base = self.story.world_base
+        if base is None or not base.places or self.world_art.region_origin:
+            return False
+        world = self.world()
+        point = self.held_point(world=world)
+        if point is None:
+            return True
+        return file_covers(world, self._art_read(), [p.id for p in base.places], point)
 
     @property
     def region_model(self) -> str:
