@@ -1526,15 +1526,27 @@ def applied(
         out.unknowns_made = max(out.unknowns_made, int(label.split()[-1]))
     for label, name in delta.named.items():
         # Named: the label's place and travels are the name's from now on.
+        # The label's place wins over one the name had before (the naming is
+        # the passage's, or the author's, word on where they are now): named
+        # as a cast member an earlier read had placed elsewhere, the person
+        # stayed there and the unknown's figure vanished (the review, Oct 20
+        # 2026). What the label carried is the name's too.
         out.unknowns_made = max(out.unknowns_made, int(label.split()[-1]))
         out.unknowns.pop(label, None)
         if label in out.where:
-            out.where.setdefault(name, out.where.pop(label))
-        if label in out.outside:
+            out.where[name] = out.where.pop(label)
+            was_outside = label in out.outside
+            out.outside = [n for n in out.outside if n not in (label, name)]
+            if was_outside:
+                out.outside.append(name)
+        elif label in out.outside:
             out.outside = [name if n == label else n for n in out.outside]
         been = out.visited.pop(label, [])
         mine = out.visited.setdefault(name, [])
         mine.extend(p for p in been if p not in mine)
+        for thing in out.things.values():
+            if thing.carried_by == label:
+                thing.carried_by = name
     for old, new in delta.renamed_people.items():
         # The author's correction: they were someone else all along.
         if old in out.where:

@@ -1677,13 +1677,18 @@ class AreaRuntime:
         as written (or added to). `to`: who a Give hands the thing to."""
         state = self.area_state()
         # Someone not named yet goes into the turn as the passage described
-        # them ("I walk over to the teenage girl"), not by their label.
+        # them ("I walk over to the teenage girl"), not by their label. Who
+        # a Give hands the thing to is kept by the map's name (the label):
+        # the record says who carries it, and the storyteller's lines are
+        # worded by description as the whole map section is (`unknown_words`).
+        # Recorded by description, `carried_by` never found the carrier and
+        # naming them never moved it (the review, Oct 20 2026).
         unknowns = self.world().unknowns
-        target, to = unknowns.get(target, target), unknowns.get(to, to)
+        target, to_words = unknowns.get(target, target), unknowns.get(to, to)
         if verb in ("use", "take", "destroy", "eat", *CARRY_VERBS):
             target = bare(target)  # "the stove", not "the a stove"
         if verb == "give":
-            text = self.texts.fill("map.turn.give", name=target, who=to)
+            text = self.texts.fill("map.turn.give", name=target, who=to_words)
         else:
             text = self.texts.fill(f"map.turn.{verb}", name=target)
         state.action = MapAction(
@@ -1975,10 +1980,15 @@ class AreaRuntime:
         # country has no word in the map's `where`, so a stale place there
         # must not pull them back).
         moved = held is not None and held in (node.meta.world.where if node.meta.world else {})
-        # Someone named by this passage stands where they stood unnamed.
+        # Someone named by this passage stands where they stood unnamed (the
+        # unknown's spot wins over one the name had: the passage's word is the
+        # latest), and what the unknown carried is theirs.
         for label, name in (node.meta.world.named if node.meta.world else {}).items():
             if label in state.spots:
-                state.spots.setdefault(name, state.spots.pop(label))
+                state.spots[name] = state.spots.pop(label)
+            for record in state.things.values():
+                if record.by == label:
+                    record.by = name
         state = self.settle(state, world, art, walked=not moved)
         me = state.spots.get(held or "")
         # The things first, so someone the read stands "at the bench" stands

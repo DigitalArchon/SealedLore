@@ -225,6 +225,10 @@ class CorrectionRuntime:
                 record.by = new
         self._done(state)
         self._rename_in_roster(name, new, description)
+        # Standing with the author's character, the one named is on the
+        # card's roster (Maela, named for the unknown beside the player, was
+        # on the map here and not in the scene).
+        self._roster_follows(new, state)
         return True
 
     def _where(self, name: str, spot: Spot, world: WorldMap) -> None:

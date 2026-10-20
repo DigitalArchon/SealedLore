@@ -1291,6 +1291,70 @@ def test_a_thing_taken_is_off_the_floor_with_its_taker_and_the_map_knows(tmp_pat
     assert "Serrik Vaun carries: brass lantern." in _told(session)
 
 
+def test_a_thing_given_to_someone_not_named_yet_is_theirs_when_they_are_named(
+    tmp_path, story, cast
+):
+    """The review (Oct 20 2026): Give to an unknown recorded the description
+    ("the teenage girl"), so `carried_by` never found the carrier; and a
+    naming moved the unknown's place but not what they carried."""
+    from sealedlore.models.area import LiveArea
+
+    passage = '"Call me Ruth," the girl said, hefting the lantern.'
+    read = {"named": [{"who": "the teenage girl", "name": "Ruth", "quote": "Call me Ruth"}]}
+    replies = ["One.", "{}", "Two.", "{}", passage, json.dumps(read)]
+    session = things_session(tmp_path, story, cast, replies)
+    session.story.world_base.unknowns = {"Unknown 2": "the teenage girl"}
+    session.story.world_base.where = {"Unknown 2": "house"}
+    state = session.area_state()
+    state.spots["Unknown 2"] = Spot(area="house", x=27, y=5)
+    session.story.area_live = LiveArea(leaf_id=session.story.active_leaf_id, state=state)
+    lantern = _thing(session, "lantern")
+    list(session.send(turn(session.map_action("take", lantern.name, lantern.id))))
+    text = session.map_action("give", lantern.name, lantern.id, to="Unknown 2")
+    assert "the teenage girl" in text and "Unknown 2" not in text  # the turn, in words
+    list(session.send(turn(text)))
+    assert session.path()[-1].meta.area.things[lantern.id].by == "Unknown 2"  # the map's name
+    assert session.world().things["lantern"].carried_by == "Unknown 2"
+    told = _told(session)
+    assert "the teenage girl (not named yet) carries: brass lantern." in told
+    assert "Unknown 2" not in told
+    # Named by the next passage: the lantern is Ruth's, where the girl stood.
+    list(session.send(turn("Who are you?")))
+    node = session.path()[-1]
+    assert node.meta.world.named == {"Unknown 2": "Ruth"}
+    assert node.meta.area.things[lantern.id].by == "Ruth"
+    assert session.world().things["lantern"].carried_by == "Ruth"
+    assert "Ruth" in node.meta.area.spots and "Unknown 2" not in node.meta.area.spots
+    assert "Ruth carries: brass lantern." in session.positions_context(session.path(), None)
+
+
+def test_a_naming_puts_the_name_where_the_unknown_stood_with_what_they_carried():
+    """Pure: the fold (`applied`). A cast member an earlier read placed
+    elsewhere, named for the unknown here, is here."""
+    from sealedlore.engine.world import world_at
+    from sealedlore.models.node import Node, NodeMeta
+
+    farm = WorldPlace(id="farm", name="The farm", kind="site", x=0.0, y=0.0, size=300.0)
+    barn = WorldPlace(id="barn", name="The barn", kind="building", x=0.0, y=400.0, size=20.0)
+    first = WorldDelta(
+        places=[farm, barn],
+        added=["farm", "barn"],
+        where={"John": "farm", "Elena Ruiz": "barn", "Unknown 1": "farm"},
+        outside={"Elena Ruiz": True},
+        unknowns={"Unknown 1": "a girl in a red coat"},
+        things=[WorldThing(id="t1", name="a brass key", carried_by="Unknown 1")],
+    )
+    second = WorldDelta(named={"Unknown 1": "Elena Ruiz"})
+    nodes = [
+        Node(kind="assistant", speaker_id="n", content="x", meta=NodeMeta(world=d))
+        for d in (first, second)
+    ]
+    world = world_at(nodes)
+    assert world.where == {"John": "farm", "Elena Ruiz": "farm"}
+    assert world.outside == []  # the unknown wasn't outside anything
+    assert world.unknowns == {} and world.things["t1"].carried_by == "Elena Ruiz"
+
+
 def test_a_thing_destroyed_stays_broken_and_one_eaten_is_gone(tmp_path, story, cast):
     replies = ["Crash.", "{}", "Crumbs.", "{}", "Quiet.", "{}"]
     session = things_session(tmp_path, story, cast, replies)

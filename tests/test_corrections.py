@@ -94,6 +94,36 @@ def test_an_unknown_named_and_a_wrong_name_put_right(tmp_path, story, cast):
     assert not session.correct_name("Maela Orr", "Serrik Vaun")  # not the author's own
 
 
+def test_naming_an_unknown_as_someone_the_map_has_elsewhere_brings_them_here(tmp_path, story, cast):
+    """The review (Oct 20 2026): "Unknown 1 is Maela Orr" with Maela placed
+    at the farm by an earlier read left Maela at the farm and lost the
+    unknown's figure beside the player (`applied` kept the name's old place)."""
+    story.scene.present_character_ids = ["char-serrik"]  # Maela isn't in the scene
+    session = started(tmp_path, story, cast)
+    session.story.world_base.where = {
+        "Serrik Vaun": "house",
+        "Maela Orr": "farm",
+        "Unknown 1": "house",
+    }
+    session.story.world_base.unknowns = {"Unknown 1": "a woman with a locksmith's roll"}
+    session.story.world_base.outside = {"Maela Orr": True}
+    me = session.area_state().spots["Serrik Vaun"]
+    put(session, "Unknown 1", me.x, me.y - 1)  # beside the player, in sight
+    before = session.area_state()
+    stood = before.spots["Unknown 1"]
+    assert before.spots["Maela Orr"].area == "farm" and stood.area == "house"
+    assert session.correct_name("Unknown 1", "Maela Orr")
+    world = session.world()
+    assert world.where["Maela Orr"] == "house" and "Unknown 1" not in world.where
+    assert "Maela Orr" not in world.outside  # not outside the house: the unknown wasn't
+    after = session.area_state()
+    assert "Unknown 1" not in after.spots
+    maela = after.spots["Maela Orr"]
+    assert (maela.area, maela.x, maela.y) == (stood.area, stood.x, stood.y)
+    # And on the card: she stands with the player.
+    assert "char-maela" in session.story.scene.present_character_ids
+
+
 def test_a_thing_moved_renamed_broken_and_removed_by_hand(tmp_path, story, cast):
     session = started(tmp_path, story, cast, house_objects=[KETTLE])
     house = session.area("house")
