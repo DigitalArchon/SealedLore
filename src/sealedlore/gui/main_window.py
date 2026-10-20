@@ -998,6 +998,11 @@ class MainWindow(
         elif self.map_shown():
             self.show_map(False)
         elif self.world_shown():
+            # On the play view, what is pending (a Move…, an Objects tool, an
+            # Edit Mode stroke, Edit Mode) goes first; the window's shortcut
+            # took the key before the view saw it.
+            if self.world_view.play_shown() and self.area_view.cancel_pending():
+                return
             # From the isometric view back to the map; from the local level
             # (the play view too) out to the region; then off the map.
             if not self.world_view.escape():

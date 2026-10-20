@@ -2168,12 +2168,30 @@ class AreaView(QWidget):
         menu.setToolTipsVisible(True)
         self._show_menu(menu, at)
 
-    def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt's name
-        if event.key() == Qt.Key_Escape and self._moving is not None:
+    def cancel_pending(self) -> bool:
+        """Esc on the play view: what is pending is stopped, first of a
+        Move… waiting for its click, an Objects tool in hand, a stroke being
+        drawn in Edit Mode, and Edit Mode itself (as Done); True when
+        something was. The window asks before its own Esc (Stop, then out
+        to the Region): every hint said "Esc to cancel", and Esc took the
+        play view away with the Move… still pending (the review, Oct 20
+        2026)."""
+        if self._moving is not None:
             self._stop_moving()
-            return
-        if event.key() == Qt.Key_Escape and self.tool() is not None:
+            return True
+        if self.tool() is not None:
             self._stop_tool()
+            return True
+        if self.editing:
+            if self._stroke_from is not None or self._band is not None:
+                self._clear_stroke()
+                return True
+            self.edit_done.emit()
+            return True
+        return False
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt's name
+        if event.key() == Qt.Key_Escape and self.cancel_pending():
             return
         held = self.held()
         step = WALK_KEYS.get(event.key())

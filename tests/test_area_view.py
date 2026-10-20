@@ -1740,3 +1740,47 @@ def test_opening_another_story_leaves_the_last_one_s_map_views(app, window, tmp_
     window._close_story()
     pump(app)
     assert window._world_drawn is None and window._drawn_art is None
+
+
+def test_escape_cancels_what_the_play_view_has_pending_before_it_leaves(app, window):
+    """Right-click → Move… says "Esc to cancel"; Esc took the play view away
+    to the Region with the Move… still pending, and the same for an object
+    chosen in Objects… and for Edit Mode, whose bar vanished with Edit Mode
+    still on (the review, Oct 20 2026). The window's shortcut asks the play
+    view first; with nothing pending Esc goes out to the Region as before."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    from tests.test_corrections_gui import begun
+
+    window.show()
+    begun(app, window)
+    view = window.area_view
+    assert window.world_view.play_shown()
+    view.view.setFocus()
+    view._start_moving("person", "Maela Orr", "Maela Orr")
+    QTest.keyClick(view.view, Qt.Key_Escape)
+    pump(app)
+    assert view._moving is None and window.world_view.play_shown()
+    assert "Esc to cancel" not in view.hint.text()
+
+    stopped: list[bool] = []
+    view.tool_stopped.connect(lambda: stopped.append(True))
+    view.set_placing("an armchair")
+    QTest.keyClick(view.view, Qt.Key_Escape)
+    pump(app)
+    assert view.tool() is None and stopped == [True] and window.world_view.play_shown()
+
+    window.enter_map_edit()
+    pump(app)
+    assert window._map_editing and not view.edit_bar.isHidden()
+    view.view.setFocus()
+    QTest.keyClick(view.view, Qt.Key_Escape)
+    pump(app)
+    assert not window._map_editing and view.edit_bar.isHidden()
+    assert window.world_view.play_shown()
+
+    # Nothing pending: out to the Region, as before.
+    QTest.keyClick(view.view, Qt.Key_Escape)
+    pump(app)
+    assert not window.world_view.play_shown() and window.world_view.level() == "region"
