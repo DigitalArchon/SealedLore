@@ -1264,7 +1264,8 @@ class MainWindow(
         """
         if self.session is None or self._busy:
             return
-        title = f"{self.session.story.title} (new playthrough)"
+        again = "new chat" if self.session.story.chat else "new playthrough"
+        title = f"{self.session.story.title} ({again})"
         files, art = self._files_and_art()
         self._open_new_bundle(
             fresh_playthrough(self.session.bundle, title, files, art), review=review

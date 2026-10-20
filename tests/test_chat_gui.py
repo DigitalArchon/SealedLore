@@ -861,6 +861,7 @@ def test_restart_and_import_of_a_chat_make_a_chat_and_open_no_start_dialog(
     window.restart_story(review=True)
     fresh = window.session.story
     assert fresh.chat and fresh.id != chat_id and not window.session.nodes
+    assert fresh.title.endswith("(new chat)"), fresh.title
     assert fresh.chat_prompt == "You are a patient tutor." and fresh.chat_tail
     assert starts == [] and not window._busy and window.composer.input.isEnabled()
     assert "first message" in window.statusBar().currentMessage()
