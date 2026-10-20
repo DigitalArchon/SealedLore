@@ -1399,8 +1399,12 @@ story or a walk takes them in.
   country**: Sparse (at most two places, one thing and one person or
   creature), Normal, the default (three places, three things, one person),
   or Rich (five places, eight things, three people). A region designed
-  already keeps what it has. On a map that came with a plot file (the
-  samples' among them) the file's world is drawn already: the designer
+  already keeps what it has. In a world of want, tick **Things are scarce
+  in this world** (Story → Setup → About → Scarcity; a plot file's
+  `scarce: yes`): the designer keeps food, fuel, weapons and whatever else
+  the world holds scarce rare, hidden or hard to reach rather than lying
+  about for the taking. Leave it off for a world without scarcity. On a map
+  that came with a plot file (the samples' among them) the file's world is drawn already: the designer
   waits while you are on one of its places (a farm, a town, a site, a
   building; a region or a forest too wide for a plan of its own doesn't
   count), and begins the first time you stand beyond them all. It runs on the story model unless Settings → Models →

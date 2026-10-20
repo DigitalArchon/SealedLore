@@ -173,6 +173,8 @@ class PlotDocument(BaseModel):
     start_time: str = "00:00"
     agency: AgencyMode | None = None
     world_activity: WorldActivity | None = None
+    # `scarce: yes`: things are scarce in this world (StoryDefaults.scarce).
+    scarce: bool = False
     perspective: Perspective | None = None
     length: FileLength | None = None
     # The picture behind the transcript, a file beside the plot file

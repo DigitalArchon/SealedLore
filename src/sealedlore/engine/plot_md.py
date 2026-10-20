@@ -1301,6 +1301,10 @@ class _Parser:
         activity = self.literal(front, "world_activity", get_args(WorldActivity))
         if activity:
             scenario.world_activity = activity  # type: ignore[assignment]
+        if "scarce" in front:
+            # Things are scarce in this world: the world designer keeps them
+            # rare in the open country (StoryDefaults.scarce).
+            scenario.scarce = self.flag(*front["scarce"], "scarce")
         if "background" in front:
             line, value = front["background"]
             source, _caption = picture_parts(value)
@@ -1318,6 +1322,7 @@ class _Parser:
                 "start",
                 "agency",
                 "world_activity",
+                "scarce",
                 "perspective",
                 "length",
                 "background",

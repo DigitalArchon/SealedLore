@@ -79,6 +79,11 @@ class StoryDefaults(BaseModel):
     # How full the map's rooms are (models/area.py, engine/area.py): the
     # furnishing's counts, halved or raised by two thirds.
     map_density: Density = "normal"
+    # Things are scarce in this world (Story → Setup → About; a plot file's
+    # `scarce: yes`): the world designer is told to keep what the world holds
+    # scarce rare in the open country (`map.region.scarce`). A choice for
+    # worlds of want; off, its request is as it always was.
+    scarce: bool = False
     # The author's testing (Sept 2026): Sonnet 4.5/4.6 storytelling degrades
     # quickly past ~60k tokens of context, so 60k is the ceiling as well as
     # the default. Existing stories keep what they were saved with.

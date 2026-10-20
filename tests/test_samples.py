@@ -52,6 +52,17 @@ def test_the_shipped_samples_are_offered_and_import_cleanly():
         assert parsed.ok, f"{path.name}: " + "; ".join(p.describe() for p in parsed.problems)
 
 
+def test_the_samples_of_worlds_of_want_say_things_are_scarce():
+    """`scarce: yes` helps the world designer in a world of want and makes a
+    world without scarcity plainer, so only the samples set in one say it."""
+    scarce = {
+        path.name
+        for _name, path in sample_stories(SAMPLES)
+        if parse_plot_markdown(path.read_text(encoding="utf-8")).scenario.scarce
+    }
+    assert scarce == {"Doomsville with a map.md", "The Ashen Reach.md"}
+
+
 def _quiet_armed(plot, chronicle, day: int = 1) -> set[str]:
     from sealedlore.engine.chronicle import armed
 

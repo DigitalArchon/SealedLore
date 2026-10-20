@@ -42,6 +42,7 @@ description: One line for the story list.
 start: day 1, 15:30          <!-- the clock at the first passage -->
 agency: contested            <!-- fiat | plausible | contested | dice -->
 world activity: normal       <!-- quiet | normal | eventful -->
+scarce: yes                  <!-- yes | no (default): things are scarce in this world -->
 perspective: whole story     <!-- whole story | with character -->
 length: adaptive             <!-- adaptive | brief | standard | descriptive | literary (never custom) -->
 background: pictures/farm.jpg   <!-- the picture behind the story (see Pictures) -->
@@ -50,6 +51,12 @@ background: pictures/farm.jpg   <!-- the picture behind the story (see Pictures)
 
 (The notes after each value are comments, as anywhere in the file: a `#`
 there would be read as part of the value.)
+
+`scarce: yes` says things are scarce in this world (Story → Setup → About →
+Scarcity in the app): on a map, the open country the program designs keeps
+food, fuel, weapons and whatever else the world holds scarce rare, hidden or
+hard to reach rather than lying about for the taking. Leave it out for a
+world without scarcity.
 
 A key the importer doesn't know is noted and ignored, so there is no
 front-matter key for the picture style: set that in the app.

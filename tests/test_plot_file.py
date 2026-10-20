@@ -314,3 +314,27 @@ def test_an_empty_document_renders_nothing_alarming():
     rendered, problems = check_plot_document(PlotDocument())
     assert rendered.text.strip() == ""
     assert all(not p.error for p in problems)
+
+
+def test_things_scarce_in_the_world_are_read_written_and_imported():
+    """`scarce: yes` in the front matter (StoryDefaults.scarce): written only
+    when set, read back exactly, and imported onto the scenario."""
+    document = PlotDocument(title="Want", world="Nothing is left.")
+    assert "scarce" not in render_plot_markdown(document).text
+    assert parse_plot_markdown(render_plot_markdown(document).text).scenario.scarce is False
+
+    document.scarce = True
+    rendered, problems = check_plot_document(document)
+    assert problems == [] and "\nscarce: yes\n" in rendered.text
+    assert parse_plot_markdown(rendered.text).scenario.scarce is True
+    read = read_plot_document(rendered.text)
+    assert read.problems == [] and read.document.scarce is True
+    assert render_plot_markdown(read.document).text == rendered.text
+
+    # A value that isn't yes or no is the importer's error, against the line.
+    wrong = rendered.text.replace("scarce: yes", "scarce: very")
+    parsed = parse_plot_markdown(wrong)
+    messages = [problem.message for problem in parsed.problems]
+    assert not parsed.ok and any("`scarce` should be yes or no" in m for m in messages)
+    plain = rendered.text.replace("scarce: yes", "scarce: no")
+    assert parse_plot_markdown(plain).scenario.scarce is False

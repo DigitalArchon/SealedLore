@@ -56,6 +56,9 @@ class Scenario(BaseModel):
     world_map: bool = False
     # How full its rooms are (map-first play, models/area.py).
     map_density: Density = "normal"
+    # Things are scarce in this world (StoryDefaults.scarce): the world
+    # designer keeps them rare in the open country.
+    scarce: bool = False
     # A map drawn up beforehand (a plot file's `# Map`): its places, ways and
     # things, fixed from the start, and where the story begins on it.
     world_base: WorldDelta | None = None

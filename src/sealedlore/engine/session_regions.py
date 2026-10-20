@@ -330,6 +330,7 @@ class RegionRuntime:
                 art, story=[p.name for p in world.places.values() if p.id not in designed]
             ),
             limits=limits if limits is not None else limits_for(self.config.open_country),
+            scarce=self.story.defaults.scarce,
         )
         return ChatRequest(
             model=model,

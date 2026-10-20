@@ -2500,18 +2500,20 @@ these names): {taken}
     ),
 )
 
-# Not in use: sent only with regions.SCARCITY on (off), pending a judged
-# A/B (Oct 21 2026, SealedLoreDocs tools/testbed/data/region_scarcity/). The
-# review (Oct 20 2026): round the Doomsville farm, four years after the end
-# of the world, the designer laid rifles, shells, fuel and tinned food about
-# (30-36% of its things in four logged rings). Built from what the request
-# already carries, the world and the story; nothing new from the author.
+# In use when the story says things are scarce (Story → Setup → About,
+# `StoryDefaults.scarce`; a plot file's `scarce: yes`). Without it, round a
+# farm four years after the end of the world, the designer laid rifles,
+# shells, fuel and tinned food about for the taking. It suits a world of want
+# and makes a world without scarcity plainer, so it is the story's choice,
+# off by default. Built from what the request already carries, the world and
+# the story; nothing new from the author.
 _text(
     "map.region.scarce",
     MAP,
     "World designer: what the world holds scarce",
-    "Added to the world designer's system prompt (when switched on): before it designs, it "
-    "names what this world holds scarce or precious, and keeps those rare in the region.",
+    "Added to the world designer's system prompt when the story says things are scarce "
+    "(Story → Setup → About): before it designs, it names what this world holds scarce or "
+    "precious, and keeps those rare in the region.",
     """\
 What the world holds scarce: before you design, read the world and what the story has shown \
 for what is scarce or precious there, and what its people would long since have taken or used \

@@ -4,6 +4,7 @@ description: Separated at a frozen river, two survivors each try to find the oth
 start: day 1, 10:00
 agency: fiat
 world activity: normal
+scarce: yes
 perspective: whole story
 length: descriptive
 background: pictures/hellsville-gate.png

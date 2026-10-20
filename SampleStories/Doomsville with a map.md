@@ -4,6 +4,7 @@ description: Four years after the dead rose, a lone survivor crosses a frozen Ca
 start: day 1, 15:30
 agency: contested
 world activity: normal
+scarce: yes
 background: pictures/doomsville-background.jpg
 ---
 

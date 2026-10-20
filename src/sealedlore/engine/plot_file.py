@@ -82,6 +82,7 @@ _FRONT_KEYS = (
     "start",
     "agency",
     "world_activity",
+    "scarce",
     "perspective",
     "length",
     "background",
@@ -235,6 +236,7 @@ def render_plot_markdown(document: PlotDocument) -> RenderedPlot:
         for key, value in (
             ("agency", document.agency),
             ("world activity", document.world_activity),
+            ("scarce", "yes" if document.scarce else None),
             ("perspective", document.perspective),
             ("length", document.length),
         )
@@ -625,6 +627,8 @@ class _Reader:
                     setattr(document, key, _key(value))
                 else:
                     self.problem(line, f"`{key}: {value}` isn't a choice the format has; left out.")
+        if "scarce" in front:
+            document.scarce = parser.flag(*front["scarce"], "scarce")
         if "background" in front:
             document.background = picture_parts(front["background"][1])[0]
         for key, (line, value) in front.items():

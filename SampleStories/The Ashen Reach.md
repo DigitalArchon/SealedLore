@@ -4,6 +4,7 @@ description: On a dying mining world under a merciless Directorate, a penal troo
 start: day 1, 06:00
 agency: contested
 world activity: normal
+scarce: yes
 background: pictures/reach-background.jpg
 ---
 

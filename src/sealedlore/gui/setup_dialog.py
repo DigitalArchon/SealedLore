@@ -33,6 +33,8 @@ from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.gui.composer import (
     AGENCY_LABELS,
     AGENCY_TIPS,
+    SCARCE_LABEL,
+    SCARCE_TIP,
     WORLD_ACTIVITY_LABELS,
     WORLD_ACTIVITY_TIPS,
 )
@@ -205,7 +207,19 @@ class SetupDialog(QDialog):
                 'beside it: your character\'s name, or "You".'
             )
         )
+        self._scarce_row(form)
         return widget
+
+    def _scarce_row(self, form: QFormLayout) -> None:
+        """Things are scarce in this world (`StoryDefaults.scarce`): told to
+        the world designer, so only for a story or chat that keeps a map."""
+        self.scarce = QCheckBox(SCARCE_LABEL)
+        self.scarce.setChecked(self.story.defaults.scarce)
+        self.scarce.setToolTip(SCARCE_TIP)
+        self.scarce.setEnabled(self.world_map.isChecked())
+        self.world_map.toggled.connect(self.scarce.setEnabled)
+        form.addRow("Scarcity", self.scarce)
+        form.addRow(_hint(SCARCE_TIP))
 
     def _chat_prompt_tab(self) -> QWidget:
         widget = QWidget()
@@ -287,6 +301,7 @@ class SetupDialog(QDialog):
                 "Continue without the map…"
             )
         )
+        self._scarce_row(form)
         self.map_density = QComboBox()
         for value, label in DENSITY_LABELS.items():
             self.map_density.addItem(label, value)
@@ -530,6 +545,7 @@ class SetupDialog(QDialog):
             story.chat_prompt = self.chat_prompt.toPlainText().strip()
             story.chat_tail = self.chat_tail.toPlainText().strip()
             story.defaults.world_map = self.world_map.isChecked()
+            story.defaults.scarce = self.scarce.isChecked()
             story.chat_character = self.chat_character.text().strip()
             self.accept()
             return
@@ -540,6 +556,7 @@ class SetupDialog(QDialog):
         story.defaults.world_activity = self.world_activity.currentData()
         story.defaults.world_map = self.world_map.isChecked()
         story.defaults.map_density = self.map_density.currentData()
+        story.defaults.scarce = self.scarce.isChecked()
         story.style = self.style
         story.image_style = self.image_style.text().strip()
         story.private_prompt.mode = self.private_mode.currentData()

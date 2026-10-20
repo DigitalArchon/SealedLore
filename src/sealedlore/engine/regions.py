@@ -73,10 +73,6 @@ OPEN_COUNTRY: dict[str, tuple[int, int, int]] = {
     "rich": (5, 8, 3),
 }
 MAX_PLACES, MAX_THINGS, MAX_PEOPLE = OPEN_COUNTRY["rich"]
-# The designer told what the world holds scarce (`map.region.scarce`): off
-# until a judged A/B says it helps (SealedLoreDocs tools/testbed/data/
-# region_scarcity/); off, every request is as before, byte for byte.
-SCARCITY = False
 MAX_FEATURES = 120
 # A thing this close to a place's walls is that place's.
 BESIDE = 10.0
@@ -343,8 +339,12 @@ def region_messages(
     ground: str,
     taken: str = "nothing yet",
     limits: tuple[int, int, int] = OPEN_COUNTRY["rich"],
-    scarce: bool | None = None,
+    scarce: bool = False,
 ) -> list[PromptMessage]:
+    """The designer's request for one region. `scarce` is the story's own
+    choice (Story → Setup → About, `StoryDefaults.scarce`): on, the designer
+    is told to keep what the world holds scarce rare (`map.region.scarce`);
+    off, the request is as it always was."""
     most_places, most_things, most_people = limits
     system = texts.fill(
         "map.region.design",
@@ -357,7 +357,7 @@ def region_messages(
         max_things=_counted(most_things, "thing", "things"),
         max_people=_counted(most_people, "person", "people"),
     )
-    if SCARCITY if scarce is None else scarce:
+    if scarce:
         system += "\n\n" + texts.fill("map.region.scarce")
     user = texts.fill(
         "map.region.ask",

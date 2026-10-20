@@ -179,3 +179,17 @@ def test_a_scene_carried_into_a_scenario_is_a_fresh_card(bundle: StoryBundle):
     assert starting.changes == []
     assert starting.set_at_node_id is None
     assert starting.location == "The undercroft beneath Calder Keep"
+
+
+def test_things_scarce_in_the_world_go_with_the_scenario(bundle: StoryBundle, tmp_path: Path):
+    """Story → Setup → About → Scarcity is a choice for the story, so a
+    scenario file, Restart and Duplicate settings keep it."""
+    from sealedlore.storage.scenario import fresh_playthrough
+
+    assert scenario_from_bundle(bundle).scarce is False
+    bundle.story.defaults.scarce = True
+    path = tmp_path / "want.sealedlore-scenario.json"
+    write_scenario(path, scenario_from_bundle(bundle))
+    assert read_scenario(path).scarce is True
+    assert bundle_from_scenario(read_scenario(path)).story.defaults.scarce is True
+    assert fresh_playthrough(bundle, "Again").story.defaults.scarce is True

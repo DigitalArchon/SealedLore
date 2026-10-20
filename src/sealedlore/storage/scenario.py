@@ -82,6 +82,7 @@ def scenario_from_bundle(
         world_activity=story.defaults.world_activity,
         world_map=story.defaults.world_map,
         map_density=story.defaults.map_density,
+        scarce=story.defaults.scarce,
         world_base=story.world_base,
         world_start=story.world_start,
         world_art=world_art.model_copy(deep=True) if world_art is not None else None,
@@ -170,6 +171,7 @@ def bundle_from_scenario(
     story.defaults.world_activity = scenario.world_activity
     story.defaults.world_map = scenario.world_map
     story.defaults.map_density = scenario.map_density
+    story.defaults.scarce = scenario.scarce
     story.world_base = scenario.world_base
     story.world_start = scenario.world_start
     story.defaults.main_model = main_model

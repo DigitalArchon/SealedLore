@@ -38,6 +38,8 @@ from sealedlore.engine.response_style import PRESETS
 from sealedlore.gui.composer import (
     AGENCY_LABELS,
     AGENCY_TIPS,
+    SCARCE_LABEL,
+    SCARCE_TIP,
     WORLD_ACTIVITY_LABELS,
     WORLD_ACTIVITY_TIPS,
 )
@@ -230,6 +232,8 @@ class StoryPage(Page):
             self.world_activity.setItemData(
                 self.world_activity.count() - 1, WORLD_ACTIVITY_TIPS[level], Qt.ToolTipRole
             )
+        self.scarce = QCheckBox(SCARCE_LABEL)
+        self.scarce.setToolTip(SCARCE_TIP)
         self.perspective = QComboBox()
         self.perspective.addItem(NOT_SET, None)
         for perspective, summary in PERSPECTIVE_SUMMARIES.items():
@@ -258,6 +262,7 @@ class StoryPage(Page):
         form.addRow(hint("The story's clock at the first passage. Events' days count from day 1."))
         form.addRow("Outcomes", self.agency)
         form.addRow("World", self.world_activity)
+        form.addRow("Scarcity", self.scarce)
         form.addRow("Perspective", self.perspective)
         form.addRow("Length", self.length)
         form.addRow("Background", self.background)
@@ -272,6 +277,7 @@ class StoryPage(Page):
             self.start_time,
             self.agency,
             self.world_activity,
+            self.scarce,
             self.perspective,
             self.length,
             self.background,
@@ -292,6 +298,7 @@ class StoryPage(Page):
             (self.length, document.length),
         ):
             combo.setCurrentIndex(max(combo.findData(value), 0) if value else 0)
+        self.scarce.setChecked(document.scarce)
         set_field_text(self.background, document.background)
         self.notes.setPlainText(document.notes)
 
@@ -304,6 +311,7 @@ class StoryPage(Page):
         document.start_time = self.start_time.time().toString("HH:mm")
         document.agency = self.agency.currentData()
         document.world_activity = self.world_activity.currentData()
+        document.scarce = self.scarce.isChecked()
         document.perspective = self.perspective.currentData()
         document.length = self.length.currentData()
         document.background = self.background.text().strip()

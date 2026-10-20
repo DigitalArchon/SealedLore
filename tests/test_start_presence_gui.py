@@ -65,6 +65,27 @@ def test_setup_with_no_cast_says_where_to_choose(app):
     dialog.deleteLater()
 
 
+def test_setup_says_whether_things_are_scarce_in_a_world_with_a_map(app):
+    """Story → Setup → About → Scarcity (`StoryDefaults.scarce`): told to the
+    world designer, so offered only while the story or chat keeps a map."""
+    for story in (Story(title="Want"), Story(title="Talk", mode="chat")):
+        dialog = SetupDialog(story, [])
+        assert not dialog.scarce.isChecked() and not dialog.scarce.isEnabled()
+        dialog.world_map.setChecked(True)
+        assert dialog.scarce.isEnabled()
+        dialog.scarce.setChecked(True)
+        dialog._save()
+        assert story.defaults.world_map and story.defaults.scarce
+        dialog.deleteLater()
+
+        dialog = SetupDialog(story, [])
+        assert dialog.scarce.isChecked() and dialog.scarce.isEnabled()
+        dialog.scarce.setChecked(False)
+        dialog._save()
+        assert story.defaults.scarce is False
+        dialog.deleteLater()
+
+
 def test_setup_saves_who_is_pinned(app, cast):
     story = Story(title="Keep")
     story.setup.starting_scene = SceneState(present_character_ids=[MAELA])

@@ -416,15 +416,16 @@ def test_open_country_sets_how_much_a_region_holds_and_holds_the_design_to_it(
     assert sent and all("At most 2 places, 1 thing and 1 person;" in s for s in sent)
 
 
-def test_what_the_world_holds_scarce_is_told_only_when_switched_on():
-    """`map.region.scarce` (the review, Oct 20 2026: rifles, fuel and tinned
-    food round a farm in a story about scarcity) waits for a judged A/B:
-    off, the designer's request is as it always was."""
+def test_a_story_that_says_things_are_scarce_tells_the_designer(tmp_path, story, cast):
+    """`map.region.scarce` is the story's choice (Story → Setup → About,
+    `StoryDefaults.scarce`): it helps a world of want and makes a world without
+    scarcity plainer. Off, the default, the designer's request is as it always
+    was; on, the clause and nothing else is added to its system prompt."""
     from sealedlore.engine import regions
     from sealedlore.engine.prompt_texts import DEFAULT_TEXTS
 
+    assert not hasattr(regions, "SCARCITY")
     parts = dict(setting="", story="", where="", places="", edges="", ground="")
-    assert regions.SCARCITY is False
     off = regions.region_messages(DEFAULT_TEXTS, **parts)[0].text
     assert "scarce" not in off
     on = regions.region_messages(DEFAULT_TEXTS, **parts, scarce=True)[0].text
@@ -432,6 +433,21 @@ def test_what_the_world_holds_scarce_is_told_only_when_switched_on():
     assert on == off + "\n\n" + clause and '"scarce"' in clause
     # A reply naming what is scarce reads as any design.
     assert parse_region(json.dumps({"scarce": "food, fuel, ammunition", **DESIGN})).name
+
+    session = open_session(tmp_path, story, cast)
+    assert session.story.defaults.scarce is False
+    world, art = session.world(), session.map_art_copy()
+    art.region_origin = list(origin_of(world, art))
+
+    def asked() -> list:
+        return session._region_request(world, art, (0, 0), "some/model").messages
+
+    plain = asked()
+    assert all("scarce" not in message.text for message in plain)
+    session.story.defaults.scarce = True
+    scarce = asked()
+    assert scarce[1:] == plain[1:]
+    assert scarce[0].text == plain[0].text + "\n\n" + clause
 
 
 def test_the_map_page_sees_the_designer_at_work(tmp_path, story, cast, monkeypatch):

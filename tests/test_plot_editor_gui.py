@@ -182,6 +182,29 @@ def test_saving_writes_what_reopens_and_imports(app, editor: PlotEditorWindow, t
     assert parsed.ok and "Zed" in {c.name for c in parsed.scenario.cast}
 
 
+def test_the_story_page_says_whether_things_are_scarce(
+    app, editor: PlotEditorWindow, tmp_path: Path
+):
+    """`scarce: yes` has its box on the Story page, like the other settings
+    a story starts with."""
+    from sealedlore.engine.plot_file import FRONT
+
+    editor._select((FRONT, 0, -1))
+    page = editor.pages.currentWidget()
+    assert not page.scarce.isChecked() and not editor.document.scarce
+    page.scarce.setChecked(True)
+    assert editor.document.scarce and editor.modified
+    path = tmp_path / "want.md"
+    assert editor._write(path)
+    assert "\nscarce: yes\n" in path.read_text(encoding="utf-8")
+    assert parse_plot_markdown(path.read_text(encoding="utf-8")).scenario.scarce
+
+    again = PlotEditorWindow()
+    assert again.open_path(path) and again.problems == []
+    again._select((FRONT, 0, -1))
+    assert again.pages.currentWidget().scarce.isChecked()
+
+
 def test_discarding_on_close_really_discards(app, tmp_path: Path, monkeypatch):
     """The window is kept while the app runs: closed with Discard and opened
     again, it showed the changes that had just been thrown away."""
