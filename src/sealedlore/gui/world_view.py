@@ -98,11 +98,10 @@ from sealedlore.gui.map_tiles import (
     LookColours,
     building_boxes,
     ground_pixmap,
-    land_image,
-    land_pixmap,
-    land_ready,
+    land_key,
     person_sprite,
     prop_sprite,
+    render_land,
     texture_colours,
     tiles_pixmap,
 )
@@ -611,9 +610,10 @@ MAP_DRAWN_BUT_WAITING = "The map is drawn, but for the pictures waiting below"
 
 class _LandSignal(QObject):
     """A patch of land rendered on the land thread; delivered on the GUI
-    thread (queued): the generation it was asked for, and the patch."""
+    thread (queued): the generation it was asked for, the patch, and its
+    image (nothing is rendered again on arrival)."""
 
-    ready = Signal(int, object)
+    ready = Signal(int, object, object)
 
 
 class _WorldGraphics(QGraphicsView):
@@ -1139,6 +1139,10 @@ class WorldView(QWidget):
         self._boxes: dict[str, tuple[str, tuple[int, int, int, int]]] = {}
         self._links: list[QGraphicsLineItem] = []
         self._land: list[QGraphicsPixmapItem] = []
+        # Each patch of the map shown, rendered once (`land_key` → pixmap);
+        # pruned to the map's own patches on every build, so another story's
+        # go with it.
+        self._land_cache: dict[tuple, QPixmap] = {}
         # Where each patch of land lies (scene rect), known before its
         # picture is: the ground and the veil are sized from these.
         self._land_rects: list[QRectF] = []
@@ -1525,7 +1529,8 @@ class WorldView(QWidget):
         explored = {r.place_id for k, r in self.art.regions.items() if k in self.art.explored}
         self._land_gen += 1
         gen = self._land_gen
-        later: list[tuple[tuple[str, ...], str, LookColours | None, TerrainPatch]] = []
+        later: list[tuple[tuple, TerrainPatch]] = []
+        kept: dict[tuple, QPixmap] = {}
         for patch in sorted(self.art.terrain, key=lambda p: -p.side):
             if not patch.rows or (patch.designed and patch.place_id not in explored):
                 continue
@@ -1534,25 +1539,30 @@ class WorldView(QWidget):
                     patch.x - patch.side / 2, -(patch.y + patch.side / 2), patch.side, patch.side
                 )
             )
-            rows = tuple(patch.rows)
-            if land_ready(rows, patch.ground, colours):
-                self._lay_land(patch, land_pixmap(rows, patch.ground, colours))
+            key = land_key(tuple(patch.rows), patch.ground, colours)
+            pixmap = self._land_cache.get(key)
+            if pixmap is not None:
+                kept[key] = pixmap
+                self._lay_land(patch, pixmap)
             else:
-                later.append((rows, patch.ground, colours, patch))
+                later.append((key, patch))
+        # Sized to the map shown: patches no longer on it (another story's, a
+        # look changed) go. The ones rendered below add themselves.
+        self._land_cache = kept
         if later:
             # Rendered off the GUI thread and laid in as each comes (a
-            # queued signal): the land took 1.2 s of a 4 s open, during
-            # which nothing else drew (Oct 19 2026).
+            # queued signal carrying the image): the land took 1.2 s of a
+            # 4 s open, during which nothing else drew (Oct 19 2026).
             signal = self._land_signal
-            self._land_pending = {id(p) for *_r, p in later}
+            self._land_pending = {id(p) for _k, p in later}
 
             def render() -> None:
-                for rows, ground, colours_, patch in later:
+                for key, patch in later:
                     if gen != self._land_gen:
                         return  # the map was rebuilt meanwhile: nobody wants these
-                    land_image(rows, ground, colours_)
+                    image = render_land(*key)
                     try:
-                        signal.ready.emit(gen, patch)
+                        signal.ready.emit(gen, patch, image)
                     except RuntimeError:
                         return  # the view is gone (a window closed, a test torn down)
 
@@ -1568,12 +1578,14 @@ class WorldView(QWidget):
         self.scene.addItem(item)
         self._land.append(item)
 
-    def _land_arrived(self, gen: int, patch: TerrainPatch) -> None:
-        """A patch rendered in the background: laid in, if the map is still
-        the one it was asked for."""
+    def _land_arrived(self, gen: int, patch: TerrainPatch, image: QImage) -> None:
+        """A patch rendered in the background: kept and laid in, if the map
+        is still the one it was asked for."""
         if gen != self._land_gen:
             return
-        self._lay_land(patch, land_pixmap(tuple(patch.rows), patch.ground, self._colours()))
+        pixmap = QPixmap.fromImage(image)
+        self._land_cache[land_key(tuple(patch.rows), patch.ground, self._colours())] = pixmap
+        self._lay_land(patch, pixmap)
         pending = getattr(self, "_land_pending", set())
         pending.discard(id(patch))
 

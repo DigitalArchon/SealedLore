@@ -1207,7 +1207,6 @@ def test_the_land_fades_at_its_edge_over_one_ground_in_the_set_s_colours(app):
     from sealedlore.gui.map_tiles import (
         LOOKS,
         LookColours,
-        land_pixmap,
         look_with,
         render_tiles,
         texture_colours,
@@ -1272,7 +1271,6 @@ def test_the_land_fades_at_its_edge_over_one_ground_in_the_set_s_colours(app):
     roof = (7 * 16 + 8, 2 * 16 + 8)
     assert plain.pixelColor(*roof) != tinted.pixelColor(*roof)
     assert tinted.pixelColor(*roof).red() > tinted.pixelColor(*roof).green() + 80
-    assert land_pixmap(tuple(FARM), "snow", colours) is land_pixmap(tuple(FARM), "snow", colours)
     plan = PlaceLayout(place_id="farm", rows=list(FARM), spec={"ground": "snow"})
     view.look_colours = colours
     view.set_world(world, WorldArt(layouts={"farm": {"": plan}}), "Jane", keep_view=False)
@@ -1327,3 +1325,59 @@ def test_the_map_says_what_it_gave_up_drawing_and_offers_to_try_again(app):
     assert view.retry_button.isHidden() and view.progress_label.text() == "Drawing the map: 1 of 3"
     view.set_progress(0, 0)
     assert view.progress_label.text() == "✓ The map is drawn" and view.retry_button.isHidden()
+
+
+def test_the_region_s_land_is_kept_per_map_and_rendered_once(app, monkeypatch):
+    """Past 48 patches the module's LRU caches thrashed: every rebuild of the
+    Region map rendered every patch again, on the GUI thread (3.5 s at 60
+    patches of 80 tiles; the review, Oct 20 2026). The view keeps each
+    patch of the map it shows, rendered once in the background, and lets
+    another map's go."""
+    import threading
+
+    from sealedlore.gui import map_tiles
+
+    calls = {"gui": 0, "bg": 0}
+    real = map_tiles.render_tiles
+
+    def counting(*args, **kwargs):
+        key = "gui" if threading.current_thread() is threading.main_thread() else "bg"
+        calls[key] += 1
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(map_tiles, "render_tiles", counting)
+
+    def land_world(count: int, side: int = 8, prefix: str = ""):
+        world, art = WorldMap(), WorldArt()
+        for i in range(count):
+            pid = f"p{i}"
+            world.places[pid] = WorldPlace(
+                id=pid, name=f"Place {i}", kind="area", x=float(i * 500), y=0.0, size=200
+            )
+            tag = (prefix + str(i).zfill(4) + "." * side)[:side]
+            rows = [tag] + ["." * side] * (side - 2) + ["," * side]
+            art.terrain.append(
+                TerrainPatch(place_id=pid, x=float(i * 500), y=0.0, side=400, rows=rows)
+            )
+        world.seen = list(world.places)
+        return world, art
+
+    world, art = land_world(60)
+    view = WorldView()
+    view.resize(800, 600)
+    view.set_world(world, art, None, keep_view=False)
+    view.wait_for_land(30)
+    assert calls == {"gui": 0, "bg": 60} and len(view._land) == 60
+    first = dict(view._land_cache)
+    assert len(first) == 60
+
+    view.set_world(world, art, None, keep_view=True)
+    assert calls == {"gui": 0, "bg": 60} and len(view._land) == 60  # nothing rendered again
+    assert all(view._land_cache[key] is pixmap for key, pixmap in first.items())
+
+    # Another map (another story): its own patches kept, the last one's let go.
+    other_world, other_art = land_world(3, prefix="x")
+    view.set_world(other_world, other_art, None, keep_view=False)
+    view.wait_for_land(30)
+    assert len(view._land_cache) == 3 and calls == {"gui": 0, "bg": 63}
+    assert not any(key in first for key in view._land_cache)
