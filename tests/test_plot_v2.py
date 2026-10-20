@@ -8,6 +8,7 @@ resolve, and the fixes from the Doomsville playtest.
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -1173,6 +1174,49 @@ def test_the_chronicle_read_goes_out_alongside_the_scene_read(tmp_path):
     )
     kinds = [e["kind"] for e in read_api_log(session.story.id, root=tmp_path)]
     assert kinds.count("chronicle_request") == 1 and kinds.count("chronicle_response") == 1
+
+
+class SlowSceneRead(TwoLines):
+    """The scene read on the provider itself, slow; the clock read on the
+    sibling comes back first."""
+
+    def complete(self, request):
+        if SCENE_READ_MARK in request.messages[0].text:
+            time.sleep(0.3)
+        return super().complete(request)
+
+
+SCENE_READ_MARK = "You keep the scene card"
+
+
+def test_the_clock_read_s_place_waits_for_the_scene_read_to_land(tmp_path):
+    """Leaving a place is vetoed while the scene card still names it, and the
+    reads come back in any order: the clock read, often the shorter reply,
+    found the card from before the passage and refused the move (the review
+    of Oct 20 2026). Applied after the scene read, it reads the card the
+    passage left."""
+    session = make_session(tmp_path, [], scene_reads="every_turn")
+    at_mill = json.dumps({"location": "The mill", "arrived": [], "left": [], "shortcuts": []})
+    session.provider = TwoLines(
+        [PASSAGE, at_mill], [read(place=("The Mill", "Ann pushed through the mill door."))]
+    )
+    list(session.send(turn(session, "I go into the mill.")))
+    assert session.chronicle.place == "The Mill" and session.story.scene.location == "The mill"
+
+    away = "Ann walked out of the mill and onto the north road."
+    on_road = json.dumps({"location": "The north road", "arrived": [], "left": [], "shortcuts": []})
+    provider = SlowSceneRead(
+        [director(), away, on_road],
+        [read(place=("elsewhere", away)), read(place=("elsewhere", away))],
+    )
+    session.provider = provider
+    notices = [e.text for e in session.send(turn(session, "I leave.")) if hasattr(e, "text")]
+    assert session.story.scene.location == "The north road"
+    assert session.chronicle.place is None, notices
+    scene = next(i for i, n in enumerate(notices) if n.startswith("Scene:"))
+    plot_notice = next(i for i, n in enumerate(notices) if n.startswith("Plot: +"))
+    assert scene < plot_notice
+    assert not any("the scene is still there" in n for n in notices)
 
 
 def test_a_failed_side_call_is_a_notice_not_a_failed_turn(tmp_path):
