@@ -145,6 +145,13 @@ class ScenePanel(QWidget):
         self.update_button.clicked.connect(self.update_requested)
         self.update_button.hide()
 
+        # Said when unticking the character the author plays is refused.
+        self.held_note = QLabel()
+        self.held_note.setObjectName("driftLabel")
+        self.held_note.setWordWrap(True)
+        self.held_note.setTextFormat(Qt.PlainText)
+        self.held_note.hide()
+
         self.recent = QLabel()
         self.recent.setObjectName("hintLabel")
         self.recent.setWordWrap(True)
@@ -161,6 +168,7 @@ class ScenePanel(QWidget):
         layout.setSpacing(8)
         layout.addWidget(self.changes_strip)
         layout.addWidget(self.roster)
+        layout.addWidget(self.held_note)
         layout.addLayout(others_form)
         layout.addLayout(form)
         layout.addWidget(caption)
@@ -192,6 +200,7 @@ class ScenePanel(QWidget):
         (`prompt.scene_time_shown`); where it doesn't, the field is hidden
         rather than left looking as though it did something."""
         self._scene = scene
+        self.held_note.hide()
         self._form.setRowVisible(self.time_of_day, show_time)
         self._cast = cast
         self._loading = True
@@ -231,9 +240,18 @@ class ScenePanel(QWidget):
             )
             box = QCheckBox()
             box.setChecked(here)
-            box.toggled.connect(
-                self._supporting_toggled if is_supporting else lambda _on: self._apply_edits()
-            )
+            if is_supporting:
+                box.toggled.connect(self._supporting_toggled)
+            elif character.id == held_id:
+                box.toggled.connect(
+                    lambda on, box=box, character=character: self._held_toggled(box, character, on)
+                )
+                if here:
+                    box.setToolTip(
+                        f"You are playing {character.name}, so they are always in the scene"
+                    )
+            else:
+                box.toggled.connect(lambda _on: self._apply_edits())
             holder = QWidget()
             holder_layout = QVBoxLayout(holder)
             holder_layout.setContentsMargins(0, 0, 0, 0)
@@ -296,6 +314,25 @@ class ScenePanel(QWidget):
         # Typing here is keeping track of everyone, not just the cast.
         self._others_touched = True
         self._apply_edits()
+
+    def _held_toggled(self, box: QCheckBox, character: Character, on: bool) -> None:
+        """The character the author plays can be ticked in (that puts them in
+        the scene), never out: the storyteller would be told the author's own
+        character is elsewhere while it is told the author plays them, and
+        Speaking as could no longer offer them (the mode review, Oct 2026)."""
+        if on:
+            self.held_note.hide()
+            self._apply_edits()
+            return
+        box.blockSignals(True)
+        box.setChecked(True)
+        box.blockSignals(False)
+        name = character.name or "the character you play"
+        self.held_note.setText(
+            f"{name} stays ticked: you are playing {name}, and the scene is wherever they "
+            f"are. To take {name} out of it, choose someone else under Playing first."
+        )
+        self.held_note.show()
 
     def _supporting_toggled(self, _on: bool) -> None:
         # So is saying who of the supporting characters is here.

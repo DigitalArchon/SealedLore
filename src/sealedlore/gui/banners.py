@@ -144,3 +144,61 @@ class OverBudgetBanner(QFrame):
             "them into chapters so the story keeps the gist."
         )
         self.show()
+
+
+class HeldAwayBanner(QFrame):
+    """The character the author plays isn't on the scene's roster.
+
+    Moving to another branch or take, deleting, or taking a turn back can
+    land on a passage where the roster has them elsewhere (another line's
+    read sent them away). The storyteller is then told the author's own
+    character is out of the scene, and Speaking as can't offer them.
+    Nothing changes on its own: putting them back cuts the scene to them
+    (`StorySession.hold`), which can contradict the passage standing here,
+    so it is the author's click.
+    """
+
+    put_back_requested = Signal()
+    dismissed = Signal()
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setObjectName("stalenessBanner")
+
+        self.message = QLabel()
+        self.message.setObjectName("stalenessText")
+        self.message.setWordWrap(True)
+
+        self.put_back_button = QPushButton()
+        self.put_back_button.clicked.connect(self.put_back_requested)
+        self.dismiss_button = QPushButton("Leave it")
+        self.dismiss_button.clicked.connect(self.dismissed)
+
+        actions = QHBoxLayout()
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions.setSpacing(6)
+        actions.addWidget(self.put_back_button)
+        actions.addWidget(self.dismiss_button)
+        actions.addStretch(1)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(8)
+        layout.addWidget(self.message)
+        layout.addLayout(actions)
+        self.hide()
+
+    def show_away(self, name: str) -> None:
+        self.message.setText(
+            f"You are playing {name}, but the scene here doesn't have {name} in it: the "
+            f"storyteller is told {name} is elsewhere, and Speaking as can't offer {name}."
+        )
+        self.put_back_button.setText(f"Put {name} back in the scene")
+        self.put_back_button.setToolTip(
+            f"The story moves to where {name} is, as choosing them under Playing does; "
+            "the next passage fills in who is with them"
+        )
+        self.dismiss_button.setToolTip(
+            f"Keep the scene as it is. Choosing {name} under Playing again puts them back later"
+        )
+        self.show()

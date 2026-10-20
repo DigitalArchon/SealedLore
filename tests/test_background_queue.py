@@ -444,3 +444,107 @@ def test_an_editor_open_while_a_job_runs_keeps_its_text_and_outlives_the_job(
     assert not window._reload_deferred
     assert window.transcript.message_widget(session.path()[-1].id) is not None
     window.close()
+
+
+def _speakers(window: MainWindow) -> list[str]:
+    combo = window.composer.speaker
+    return [str(combo.itemData(i)) for i in range(combo.count())]
+
+
+def test_a_move_that_leaves_the_held_character_out_says_so_and_puts_them_back_on_a_click(
+    app, tmp_path: Path, story, cast
+):
+    """On another branch the read sent Serrik away; back on Main, Maela was
+    held but off the roster: Speaking as fell to Narration, the prompt said
+    she was elsewhere, and choosing her again under Playing did nothing
+    (the review). Now the banner says so and nothing changes on its own;
+    its button, or choosing her again, holds her, which cuts the scene to
+    her."""
+    import json
+
+    def delta(**fields) -> str:
+        return json.dumps(fields)
+
+    story.scene.tracked = True
+    window = _window(
+        tmp_path,
+        story,
+        cast,
+        [
+            "Serrik climbs to the yard; Maela stays below.",
+            delta(left=[{"name": "Maela Orr", "how": "stayed below"}], location="The yard"),
+            "Maela works the lock while Serrik goes up alone.",
+            delta(left=[{"name": "Serrik Vaun", "how": "went up"}], location="The undercroft"),
+        ],
+    )
+    session = window.session
+    held = window.composer.held
+    _send(window, "I climb to the yard.")
+    wait_for(app, lambda: not window._busy)
+    first = session.path()[-1]
+    window._rewrite_from(first.id, first.content, "Maela's way")
+    held.setCurrentIndex(held.findData("char-maela"))
+    app.processEvents()
+    window.composer.select_speaker("char-maela")
+    window.composer.input.setPlainText("I keep working the lock.")
+    window.send_turn()
+    wait_for(app, lambda: not window._busy)
+    assert window.held_away.isHidden(), "she is in the scene on her own branch"
+    branch = next(b for b in session.branch_list() if b.name == "Maela's way")
+
+    window._switch_branch(None)
+    app.processEvents()
+    assert session.story.scene.present_character_ids == ["char-serrik"], "nothing changed"
+    assert not window.held_away.isHidden()
+    assert window.held_away.put_back_button.text() == "Put Maela Orr back in the scene"
+    assert "char-maela" not in _speakers(window)
+    window.held_away.dismiss_button.click()
+    window._refresh_scene_panel()
+    assert window.held_away.isHidden(), "left as it is, until the next move"
+
+    # Choosing the one already shown under Playing holds her again.
+    held.activated.emit(held.currentIndex())
+    app.processEvents()
+    assert session.story.scene.present_character_ids == ["char-maela"]
+    assert "char-maela" in _speakers(window)
+    assert window.composer.speaker_id() == "char-maela"
+
+    # Serrik held on her branch is cut to; back on Main he is the one away.
+    window._switch_branch(branch.start_id)
+    held.setCurrentIndex(held.findData("char-serrik"))
+    app.processEvents()
+    window._switch_branch(None)
+    app.processEvents()
+    assert "char-serrik" not in session.story.scene.present_character_ids
+    assert window.held_away.put_back_button.text() == "Put Serrik Vaun back in the scene"
+    window.held_away.put_back_button.click()
+    app.processEvents()
+    assert "char-serrik" in session.story.scene.present_character_ids
+    assert window.held_away.isHidden()
+    assert window.composer.speaker_id() == "char-serrik"
+    window.close()
+
+
+def test_the_scene_page_refuses_to_take_the_held_character_out(app, tmp_path: Path, story, cast):
+    """Unticked on the Scene page, the held character left the roster
+    empty and Speaking as with nobody to offer (the review)."""
+    window = _window(tmp_path, story, cast, [])
+    window._on_held_changed("char-serrik")
+    session = window.session
+    before = list(session.story.scene.present_character_ids)
+    assert "char-serrik" in before
+    panel = window.scene_panel
+    row = next(r for c, _supporting, r in panel._rows if c.id == "char-serrik")
+    box, _note = panel._row_widgets(row)
+    box.setChecked(False)
+    app.processEvents()
+    assert box.isChecked()
+    assert session.story.scene.present_character_ids == before
+    assert not panel.held_note.isHidden()
+    assert "you are playing Serrik Vaun" in panel.held_note.text()
+    # Anyone else comes and goes as before.
+    other = next(r for c, _supporting, r in panel._rows if c.id == "char-maela")
+    other_box, _ = panel._row_widgets(other)
+    other_box.setChecked(not other_box.isChecked())
+    assert ("char-maela" in session.story.scene.present_character_ids) == other_box.isChecked()
+    window.close()

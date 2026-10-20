@@ -60,7 +60,7 @@ from sealedlore.engine.usage import usage_fields, usage_report
 from sealedlore.gui import crop_dialog, start_page
 from sealedlore.gui.attest_check import attestation_tests
 from sealedlore.gui.bad_hosts import bad_hosts
-from sealedlore.gui.banners import OverBudgetBanner, StalenessBanner
+from sealedlore.gui.banners import HeldAwayBanner, OverBudgetBanner, StalenessBanner
 from sealedlore.gui.branch_bar import BranchBar, opening_words
 from sealedlore.gui.busy_lock import BusyLock
 from sealedlore.gui.cast_panel import CastPanel
@@ -325,6 +325,9 @@ class MainWindow(
         # produce no transcript message and no generation result.
         self._streaming_job = True
         self._staleness_dismissed = False
+        # (leaf, held) where the author chose to leave the held character
+        # off the roster: the banner stays away until either changes.
+        self._held_away_left: tuple[str | None, str] | None = None
         self._counted_summaries: set[tuple[str, str]] = set()
         # A rebuild the author asked for runs in the background; this looks
         # for it to finish and puts it in whenever nothing else is running.
@@ -378,6 +381,9 @@ class MainWindow(
         self.staleness = StalenessBanner()
         self.staleness.rebuild_requested.connect(self._rebuild_stale)
         self.staleness.dismissed.connect(self._dismiss_staleness)
+        self.held_away = HeldAwayBanner()
+        self.held_away.put_back_requested.connect(self._put_held_back)
+        self.held_away.dismissed.connect(self._leave_held_away)
 
         self.composer = Composer()
         self.composer.send_requested.connect(self.send_turn)
@@ -396,6 +402,7 @@ class MainWindow(
         self.session_line = SessionLine()
         centre_layout.addWidget(self.session_line)
         centre_layout.addWidget(self.staleness)
+        centre_layout.addWidget(self.held_away)
         centre_layout.addWidget(self.over_budget)
         self.view_toggle = ViewToggle()
         self.view_toggle.changed.connect(self.set_storyteller_view)
@@ -1477,6 +1484,7 @@ class MainWindow(
         self.lore_panel.set_entries([])
         self.summaries_panel.set_summaries([], on_path_ids=set(), archivable_turns=0)
         self.staleness.hide()
+        self.held_away.hide()
         self.inspector.clear()
         self.refresh_images()
         self._apply_background()
@@ -4097,6 +4105,46 @@ class MainWindow(
         self.lore_panel.set_held_back(session.held_back_ids())
         self._refresh_plot_panel()
         self._refresh_people()
+        self._sync_held_away()
+
+    def _held_away(self) -> Character | None:
+        """The character the author plays, when the scene here doesn't have
+        them (see `HeldAwayBanner`); None otherwise, and in a chat, a private
+        scene (who is held is frozen there) or a story not yet begun."""
+        session = self.session
+        if session is None or session.story.chat or session.in_private:
+            return None
+        story = session.story
+        held = next((c for c in session.visible_cast() if c.id == story.held_character_id), None)
+        if held is None or not session.path() or held.id in story.scene.present_character_ids:
+            return None
+        return held
+
+    def _sync_held_away(self) -> None:
+        held = self._held_away()
+        session = self.session
+        if held is None or session is None:
+            self.held_away.hide()
+            return
+        if self._held_away_left == (session.story.active_leaf_id, held.id):
+            self.held_away.hide()
+            return
+        self.held_away.show_away(held.name)
+        self.held_away.put_back_button.setEnabled(not self._busy)
+
+    def _put_held_back(self) -> None:
+        """The banner's one click: hold them again, which cuts the scene to them."""
+        held = self._held_away()
+        if held is None or self._busy:
+            self._sync_held_away()
+            return
+        self._on_held_changed(held.id)
+
+    def _leave_held_away(self) -> None:
+        held = self._held_away()
+        if held is not None and self.session is not None:
+            self._held_away_left = (self.session.story.active_leaf_id, held.id)
+        self.held_away.hide()
 
     def _refresh_plot_panel(self) -> None:
         """The plot's clock and facts at the leaf; they follow it like the scene.
@@ -4488,6 +4536,7 @@ class MainWindow(
         # Edit and ⋯ on every message are off too (the worker is the only
         # writer); an editor already open keeps its text until the job ends.
         self.transcript.set_busy(busy)
+        self.held_away.put_back_button.setEnabled(not busy)
         self.stories.setEnabled(not busy)
         self.close_story_action.setEnabled(has_story and not busy)
         self.close_story_action.setVisible(has_story)

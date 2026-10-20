@@ -1094,7 +1094,13 @@ roster by hand instead, as before.
 
 The scene is saved with each passage, so switching to another take or branch,
 taking a turn back, or deleting messages puts the roster back to what it was
-at that point.
+at that point. If the character you are playing isn't in the scene there
+(on another branch the story left them elsewhere), a banner above the story
+says so, and nothing changes on its own: **Put … back in the scene** moves
+the scene to them, as choosing them under *Playing* does (choosing the one
+already shown counts too), and **Leave it** keeps the scene as it stands.
+The one you are playing can't be unticked on the Scene page: the scene is
+wherever they are. Choose someone else under *Playing* first.
 
 The scene's **Time** is your starting time: it goes into the opening, and from
 then on the story's own prose says what time it is. In a story with a plot the

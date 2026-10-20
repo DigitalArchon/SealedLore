@@ -188,6 +188,10 @@ class Composer(QWidget):
         self.held.setObjectName("heldSelector")
         self.held.setMinimumWidth(150)
         self.held.currentIndexChanged.connect(self._on_held_changed)
+        # Choosing the one already shown changes no index; it still asks for
+        # them to be held (back in the scene, if a branch left them out).
+        self.held.activated.connect(self._on_held_activated)
+        self._held_just_changed = False
 
         self.speaker = QComboBox()
         self._compact(self.speaker, 16)
@@ -762,6 +766,21 @@ class Composer(QWidget):
             widget.style().polish(widget)
 
     def _on_held_changed(self) -> None:
+        # Qt emits `activated` right after this, in the same call, when the
+        # author picked a new entry: that one is handled here. Cleared on the
+        # next turn of the event loop, so a change made in code never makes a
+        # later re-pick look handled.
+        self._held_just_changed = True
+        QTimer.singleShot(0, self, self._forget_held_change)
+        self.held_character_changed.emit(self.held_character_id() or "")
+
+    def _forget_held_change(self) -> None:
+        self._held_just_changed = False
+
+    def _on_held_activated(self, _index: int) -> None:
+        if self._held_just_changed:
+            self._held_just_changed = False
+            return
         self.held_character_changed.emit(self.held_character_id() or "")
 
     def _on_ooc_toggled(self, checked: bool) -> None:
