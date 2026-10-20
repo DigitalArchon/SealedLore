@@ -418,7 +418,9 @@ class PrivateRuntime:
         from sealedlore.engine.session import SessionNotice
 
         if not text or completed.finish_reason == "length":
-            yield SessionNotice(
+            # Kept under the scene's own latest message (`_kept_notice`): a
+            # memory scene's never reaches the disk.
+            yield self._kept_notice(
                 "The private scene outgrew the private model's context, but its summary of "
                 "the oldest messages came back "
                 + ("cut off by its token limit" if text else "empty")

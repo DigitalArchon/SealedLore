@@ -548,3 +548,73 @@ def test_the_scene_page_refuses_to_take_the_held_character_out(app, tmp_path: Pa
     other_box.setChecked(not other_box.isChecked())
     assert ("char-maela" in session.story.scene.present_character_ids) == other_box.isChecked()
     window.close()
+
+
+# --- notices that vanished (the mode review) ----------------------------------------
+
+
+def test_a_failed_read_is_said_under_the_passage_after_the_next_notice(
+    app, tmp_path: Path, story, cast
+):
+    """ "Couldn't read the scene" was replaced in the status bar within
+    seconds and kept nowhere visible; it stands under the passage now."""
+    from PySide6.QtWidgets import QLabel
+
+    window = _window(tmp_path, story, cast, ["The door gives.", "I can't tell, sorry."])
+    _send(window, "I put my shoulder to the door.")
+    wait_for(app, lambda: not window._busy)
+    passage = window.session.path()[-1]
+    assert passage.meta.notes and passage.meta.notes[0].startswith("Couldn't read the scene")
+    window.statusBar().showMessage("Something else entirely", 12000)
+    widget = window.transcript.message_widget(passage.id)
+    notes = [
+        label.text() for label in widget.findChildren(QLabel) if label.objectName() == "messageNote"
+    ]
+    assert notes == ["⚠ " + passage.meta.notes[0]]
+    window.close()
+
+
+def test_a_long_read_after_the_passage_counts_up_and_says_stop_skips_it(app):
+    from sealedlore.gui.status import NOTICE_HOLD, WAIT_SAID_AFTER, NoticeStatusBar, WaitCounter
+
+    now = [100.0]
+    bar = NoticeStatusBar()
+    waits = WaitCounter(bar, clock=lambda: now[0])
+    waits.wait("Reading the scene with z-ai/glm-5.3…", 100.0)
+    assert bar.currentMessage() == "Reading the scene with z-ai/glm-5.3…"
+    now[0] += WAIT_SAID_AFTER - 1
+    waits.tick()
+    assert bar.currentMessage() == "Reading the scene with z-ai/glm-5.3…", "not yet"
+    now[0] += 36
+    waits.tick()
+    assert bar.currentMessage() == "Reading the scene with z-ai/glm-5.3… 45 s; Stop skips it."
+
+    # A result keeps the bar a while: the wait for the next read doesn't
+    # take it at once, and counts up only after.
+    bar.showMessage("Scene: +Constable Hollis (came in from the corridor)", 12000)
+    waits.wait("Still reading the map with deepseek…", 100.0)
+    waits.tick()
+    assert bar.currentMessage().startswith("Scene: +Constable Hollis")
+    now[0] += NOTICE_HOLD
+    waits.tick()
+    assert bar.currentMessage() == "Still reading the map with deepseek… 51 s; Stop skips it."
+
+    waits.stop()
+    now[0] += 30
+    waits.tick()
+    assert not waits.waiting()
+    assert bar.currentMessage().endswith("51 s; Stop skips it."), "no count once stopped"
+    bar.deleteLater()
+
+
+def test_the_window_counts_a_read_after_the_passage_and_stop_ends_it(
+    app, tmp_path: Path, story, cast
+):
+    window = _window(tmp_path, story, cast, [])
+    window._waits._other_at = float("-inf")  # no other notice lately
+    window._waits.wait("Reading the scene with small/model…", 0.0)
+    window._waits.tick()
+    assert window.statusBar().currentMessage().endswith("s; Stop skips it.")
+    window._on_notice("Scene: no change")
+    assert not window._waits.waiting()
+    window.close()

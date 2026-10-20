@@ -98,7 +98,7 @@ from sealedlore.gui.setup_dialog import SetupDialog
 from sealedlore.gui.speed_test import speed_tests
 from sealedlore.gui.start_dialog import DESIGN, StartDialog
 from sealedlore.gui.start_page import NewDialog, StartChooser
-from sealedlore.gui.status import NoticeStatusBar, StatusStrip
+from sealedlore.gui.status import NoticeStatusBar, StatusStrip, WaitCounter
 from sealedlore.gui.stories import StoryListPanel
 from sealedlore.gui.story_map import StoryMap
 from sealedlore.gui.style_panel import StylePanel
@@ -577,6 +577,8 @@ class MainWindow(
         bar = NoticeStatusBar()
         self.setStatusBar(bar)
         bar.route_status_tips(self)
+        # A long read after a passage counts up there (worker.waiting).
+        self._waits = WaitCounter(bar)
         # The storyteller's model, one click from another (see choose_story_model).
         self.model_button = QToolButton()
         self.model_button.setObjectName("modelButton")
@@ -3053,6 +3055,7 @@ class MainWindow(
         thread.started.connect(worker.run)
         worker.text_delta.connect(self.transcript.append_streaming)
         worker.notice.connect(self._on_notice)
+        worker.waiting.connect(self._waits.wait)
         worker.passage_done.connect(self._on_passage_done)
         worker.failed.connect(self._on_failed)
         self._phone_job_started(worker, streaming=streaming, question=question)
@@ -3101,6 +3104,7 @@ class MainWindow(
 
     def stop_generation(self) -> None:
         if self._busy and self._worker is not None:
+            self._waits.stop()
             self._worker.stop()
             if self._background:
                 self._drop_queued()
@@ -3109,6 +3113,7 @@ class MainWindow(
                 self.statusBar().showMessage("Stopping — partial text is kept", 4000)
 
     def _on_notice(self, text: str) -> None:
+        self._waits.stop()
         self.statusBar().showMessage(text, 12000)
 
     def _on_failed(self, message: str) -> None:
@@ -3211,6 +3216,7 @@ class MainWindow(
     def _on_generation_finished(self) -> None:
         self._busy = False
         self._background = False
+        self._waits.stop()
         self._hide_busy()
         if self._close_when_idle:
             # thread.finished fires just before the thread exits; wait out that

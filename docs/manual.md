@@ -554,7 +554,14 @@ archiving, rebuilding summaries.
 - **The status bar** says how full the storyteller's context is ("Context 4%
   used"), how much of the last prompt the endpoint's cache reused, and what
   the session and the whole story have cost; hover over any of them for the
-  exact numbers.
+  exact numbers. Notices show there for a few seconds as SealedLore works.
+  Anything that went wrong (a read after a passage that failed, chapters
+  that couldn't be written or used, a lore pick that failed) is also kept
+  under the message it is about, marked ⚠, so it is still there once the
+  next notice has replaced it. A read after a passage that takes a while
+  counts up ("Reading the scene with … 45 s; Stop skips it"): Stop then
+  skips the reads, the passage stays, and the scene, the clock or the map
+  stays as it was.
 - **Shortcuts**: Enter sends, Shift+Enter is a new line, Ctrl+Enter sends
   from anywhere, Esc stops, Ctrl+N new, Ctrl+O import, Ctrl+S save,
   Ctrl+, settings, Ctrl+Shift+I picture, Ctrl+Shift+V the transcript view,

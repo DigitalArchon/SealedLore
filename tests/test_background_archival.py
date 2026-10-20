@@ -128,6 +128,10 @@ def test_an_edited_node_voids_the_chapter_written_from_it(session: StorySession)
     said = notices(session.send(turn()))
     assert any("weren't used" in text for text in said)
     assert not session.summaries
+    # Kept under the turn whose sending found them stale, not the passage.
+    author = session.path()[-2]
+    assert author.kind == "user" and any("weren't used" in note for note in author.meta.notes)
+    assert session.path()[-1].meta.notes == []
 
 
 def test_a_turn_never_waits_for_chapters_still_being_written(session: StorySession):

@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import re
 import threading
+import time
 from collections.abc import Callable, Collection, Generator, Iterator, Sequence
 from dataclasses import dataclass, field, replace
+from typing import Literal
 
 from sealedlore.engine.archival import (
     render_chunk,
@@ -113,15 +115,30 @@ from sealedlore.threads import BackgroundThread
 # The model list the review checks suggestions against; refetched after this.
 
 
+NoticeSeverity = Literal["info", "warning", "failure"]
+
+
 @dataclass(frozen=True)
 class SessionNotice:
     """Something worth telling the author mid-turn — archival, mostly.
 
     Yielded alongside the provider's stream events so the CLI and the GUI
     worker can surface it on the same path they already use for deltas.
+
+    "info" is progress and results, for the status bar only. A warning or a
+    failure is also kept under the message it is about (`NodeMeta.notes`,
+    `StorySession._kept_notice`): the next notice replaced it within
+    seconds and it was kept nowhere (the mode review, Oct 2026).
+    `waiting_since` marks a wait for a read after the passage, which Stop
+    skips, with the time (`time.monotonic()`) it began: the window counts a
+    long one up.
     """
 
     text: str
+    severity: NoticeSeverity = "info"
+    # The message the note was kept under, if it was.
+    node_id: str | None = None
+    waiting_since: float | None = None
 
 
 @dataclass
@@ -406,6 +423,10 @@ class PlotRuntime:
             threads.append(thread)
         try:
             waiting = list(range(len(reads)))
+            since = time.monotonic()
+            # Said before the wait, and again after each that comes back
+            # while others are still out: the window counts a long one up.
+            yield SessionNotice(_reading_words([reads[i] for i in waiting]), waiting_since=since)
             while waiting:
                 for i in list(waiting):
                     threads[i].join(timeout=0.05)
@@ -414,6 +435,11 @@ class PlotRuntime:
                     waiting.remove(i)
                     pending, finish = reads[i]
                     yield from finish(pending, boxes[i])
+                    if waiting:
+                        yield SessionNotice(
+                            _reading_words([reads[j] for j in waiting], still=True),
+                            waiting_since=since,
+                        )
         finally:
             # A Stop closes this generator and cancels every provider, which
             # ends the calls; don't leave without them.
@@ -526,7 +552,10 @@ class PlotRuntime:
             return
         node, before, log_ref = pending.node, pending.before, pending.log_ref
 
-        yield SessionNotice(f"Reading the clock and facts with {self.scene_model}…")
+        yield SessionNotice(
+            f"Reading the clock and facts with {self.scene_model}…",
+            waiting_since=time.monotonic() if fetched is None else None,
+        )
         try:
             if fetched is None:
                 text, completed = self.provider.complete(pending.request)
@@ -548,9 +577,11 @@ class PlotRuntime:
                 if begun
                 else ""
             )
-            yield SessionNotice(
+            yield self._failed_notice(
                 f"Couldn't read the clock and facts from this passage ({exc}). "
-                "They are as they were; set them in the Plot panel if they moved." + also
+                "They are as they were; set them in the Plot panel if they moved." + also,
+                exc,
+                node=node,
             )
             return
 
@@ -607,8 +638,29 @@ class PlotRuntime:
         if delta.refused:
             # What the read claimed and the text didn't back, said as well as
             # logged: it is the moment the author would correct the clock.
-            notice += " · not taken: " + "; ".join(delta.refused)
+            # Kept under the passage too. With spoilers off, what names the
+            # plot's own events or facts is counted, not named.
+            notice += " · not taken: " + self._refusals_said(delta.refused, plot)
+            yield self._kept_notice(notice, node=node)
+            return
         yield SessionNotice(notice)
+
+    def _refusals_said(self, refused: Sequence[str], plot: Plot) -> str:
+        if self.config.show_plot_spoilers:
+            return "; ".join(refused)
+        names = [
+            *(event.id for event in plot.events),
+            *(event.title for event in plot.events if event.title),
+            *(fact.name for fact in plot.facts),
+        ]
+        said = [r for r in refused if not any(name and name in r for name in names)]
+        hidden = len(refused) - len(said)
+        if hidden:
+            said.append(
+                f"{hidden} claim{'s' if hidden != 1 else ''} about the plot itself "
+                "(shown with spoilers on)"
+            )
+        return "; ".join(said)
 
     @staticmethod
     def _carried_correction(node: Node) -> Chronicle | None:
@@ -894,9 +946,11 @@ class PlotRuntime:
             )
             gap_directions, failure = self._fit_gap(gap, chronicle, days, turn, user_node, history)
             if failure:
-                yield SessionNotice(
+                yield self._kept_notice(
                     f"Couldn't ask how the skipped-over events went ({failure}); "
-                    "the storyteller is given the plot's own words for them."
+                    "the storyteller is given the plot's own words for them.",
+                    node=user_node,
+                    severity="failure",
                 )
         changed = (
             switched or skipped or resolution.changed or bool(resolution.undecided) or bool(gap)
@@ -930,8 +984,10 @@ class PlotRuntime:
             try:
                 reply = self._ask_director(turn, user_node, history, chronicle, candidates, days)
             except (ProviderError, ValueError) as exc:
-                yield SessionNotice(
-                    f"Couldn't consult the director ({exc}); this turn goes ahead without."
+                yield self._failed_notice(
+                    f"Couldn't consult the director ({exc}); this turn goes ahead without.",
+                    exc,
+                    node=user_node,
                 )
             else:
                 directions = merge(automatic_directions(candidates), reply.directions)
@@ -1338,3 +1394,33 @@ class PlotRuntime:
         chronicle = self._correction_base(plot)
         if change_fact(chronicle, name, value):
             self._set_chronicle(chronicle)
+
+
+# What each read after a passage reads, by the method that finishes it.
+_READ_WORDS = {
+    "update_scene_after_turn": "the scene",
+    "update_chronicle_after_turn": "the clock and facts",
+    "update_world_after_turn": "the map",
+}
+
+
+def _reading_words(
+    reads: Sequence[tuple[object, Callable[..., object]]], *, still: bool = False
+) -> str:
+    """ "Reading the scene and the map with A and B…", for reads out at once."""
+    what = [_READ_WORDS.get(getattr(f, "__name__", ""), "the passage") for _p, f in reads]
+    models: list[str] = []
+    for pending, _finish in reads:
+        model = getattr(getattr(pending, "request", None), "model", "") or ""
+        if model and model not in models:
+            models.append(model)
+    head = "Still reading" if still else "Reading"
+    tail = f" with {_joined(models)}" if models else ""
+    return f"{head} {_joined(what)}{tail}…"
+
+
+def _joined(words: Sequence[str]) -> str:
+    """ "a", "a and b", "a, b and c"."""
+    if len(words) < 2:
+        return "".join(words)
+    return ", ".join(words[:-1]) + " and " + words[-1]

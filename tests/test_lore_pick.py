@@ -146,6 +146,9 @@ def test_a_failed_pick_is_a_notice_and_the_next_turn_uses_similarity(
 
     assert any(isinstance(e, SessionNotice) and "Lore pick failed" in e.text for e in events)
     assert session.path()[-1].meta.lore_picks is None
+    # Kept under the passage it was picked for: the notice alone was gone in
+    # seconds (the mode review).
+    assert any("Lore pick failed" in note for note in session.path()[-1].meta.notes)
 
 
 class FakeJev:

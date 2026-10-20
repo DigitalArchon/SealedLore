@@ -48,6 +48,9 @@ class _MergeJob:
 
 class MergeRuntime:
     _merge_job: _MergeJob | None = None
+    # Why the last merge adopted came to nothing, when it failed (a chapter
+    # changed meanwhile is no failure): said, and kept under the turn.
+    merge_problem: str | None = None
 
     def merge_run(self) -> list[Summary]:
         """What would be merged now, on the active path; empty if nothing."""
@@ -139,12 +142,14 @@ class MergeRuntime:
         if job is None or not job.done.is_set():
             return None
         self._merge_job = None
+        self.merge_problem = None
         log_ref = self._log(
             "merge_request",
             {"summary_ids": job.run_ids, "payload": self.provider.build_payload(job.request)},
         )
         if job.error is not None or job.reply is None:
             self._log("merge_response", {"request_log_ref": log_ref, "error": job.error})
+            self.merge_problem = job.error or "the call returned nothing"
             return None
         text, completed = job.reply
         self._log(
@@ -155,6 +160,10 @@ class MergeRuntime:
         text = text.strip()
         by_id = {summary.id: summary for summary in self.bundle.summaries}
         run = [by_id.get(summary_id) for summary_id in job.run_ids]
+        if not text:
+            self.merge_problem = "the summariser returned no text"
+        elif completed.finish_reason == "length":
+            self.merge_problem = "the summariser's reply was cut off by its token limit"
         if (
             not text
             or completed.finish_reason == "length"

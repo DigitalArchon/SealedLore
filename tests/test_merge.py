@@ -219,3 +219,34 @@ def test_editing_under_a_part_drops_it_and_its_chapters_stand_in(session: StoryS
     assert part not in session.summaries
     assert stale == [first]
     assert session.split().summaries[0] is first
+
+
+def test_a_merge_that_failed_is_said_and_kept_under_the_turn(session: StorySession):
+    """A failed merge was logged and nothing else (the mode review)."""
+
+    class Fails(MockChatProvider):
+        def complete(self, request):
+            raise RuntimeError("the host went away")
+
+    session.provider = Sibling(["A passage."], [])
+    session.provider.side = Fails([])
+    list(session.send(turn()))
+    assert session._merge_job is not None and session._merge_job.done.wait(5)
+
+    session.provider.responses = ["Another chapter.", "Next passage."]
+    session.story.defaults.context_token_budget = 900
+    said = [e for e in session.send(turn()) if hasattr(e, "severity")]
+    failed = next(e for e in said if "weren't merged" in e.text)
+    assert "the host went away" in failed.text and failed.severity == "warning"
+    author = next(n for n in session.nodes if n.id == failed.node_id)
+    assert author.kind == "user" and author.meta.notes == [failed.text]
+    assert session.merge_problem is None, "said once"
+
+
+def test_a_reply_about_chapters_that_changed_is_no_failure(session: StorySession):
+    session.provider = Sibling(["A passage."], ["Merged."])
+    list(session.send(turn()))
+    assert session._merge_job.done.wait(5)
+    session.edit_summary(session.summaries[0].id, "The author's own words.")
+    assert session.adopt_merge() is None
+    assert session.merge_problem is None

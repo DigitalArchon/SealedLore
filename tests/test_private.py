@@ -603,6 +603,7 @@ def test_a_cut_off_summary_is_never_kept_and_never_costs_the_turn(tmp_path: Path
     session, _main, held = build(tmp_path)
     session.config.private_budget = 2_600
     play(session, turn(held, "Before the scene."))
+    public_notes = {n.id: list(n.meta.notes) for n in session.nodes}
     private = CutOffSummaries([f"The private reply, {MARKER}, " + ("word " * 120)])
     session.enter_private(keep="memory", provider=private, model="local/model")
     notices = []
@@ -613,6 +614,13 @@ def test_a_cut_off_summary_is_never_kept_and_never_costs_the_turn(tmp_path: Path
         assert session.full_path()[-1].kind == "assistant", "every turn still gets its passage"
     assert any("cut off" in notice for notice in notices), "a condense was tried and refused"
     assert session.open_span.scene_summary is None
+    # Kept as a note under the scene's own message, never a public one: a
+    # memory scene's messages, notes and all, never reach the disk.
+    noted = [n for n in session.nodes if n.id not in public_notes and n.meta.notes]
+    assert noted and all(n.meta.private_span == session.open_span.id for n in noted)
+    assert {n.id: n.meta.notes for n in session.nodes if n.id in public_notes} == public_notes
+    saved = load_story_bundle(session.story.id, root=tmp_path)
+    assert {n.id: n.meta.notes for n in saved.nodes} == public_notes
     with pytest.raises(ProviderError, match="cut off"):
         session.summarise_private()
 

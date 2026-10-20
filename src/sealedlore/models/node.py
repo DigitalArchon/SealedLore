@@ -131,6 +131,12 @@ class NodeMeta(BaseModel):
     # written or read (engine/reasoning.py). The transcript says so under it,
     # since that is why the passage was slow to start.
     reasoning_caught: list[str] = Field(default_factory=list)
+    # What went wrong while this message was sent or read: a read that
+    # failed or was refused, chapters not written or not used, a lore pick
+    # that failed... (engine/session.py `_kept_notice`). Said in the status
+    # bar too, where the next notice replaced it; kept here, the transcript
+    # shows it under the message.
+    notes: list[str] = Field(default_factory=list)
 
 
 class Node(BaseModel):

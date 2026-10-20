@@ -30,6 +30,10 @@ class GenerationWorker(QObject):
     reasoning_delta = Signal(str)
     # Archival and anything else the session does on the way to the response.
     notice = Signal(str)
+    # A wait for a read after the passage, which Stop skips, and when it
+    # began (`time.monotonic()`): emitted in place of `notice`, so the
+    # window can count a long one up (SessionNotice.waiting_since).
+    waiting = Signal(str, float)
     # The passage is in; the rest of the job is background reads.
     passage_done = Signal()
     failed = Signal(str)
@@ -70,7 +74,10 @@ class GenerationWorker(QObject):
                 elif isinstance(event, ReasoningDelta):
                     self.reasoning_delta.emit(event.text)
                 elif isinstance(event, SessionNotice):
-                    self.notice.emit(event.text)
+                    if event.waiting_since is not None:
+                        self.waiting.emit(event.text, event.waiting_since)
+                    else:
+                        self.notice.emit(event.text)
                 elif isinstance(event, PassageDone):
                     self.passage_done.emit()
                 if self._stopping:

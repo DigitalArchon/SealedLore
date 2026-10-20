@@ -621,3 +621,44 @@ def test_a_retake_that_never_began_leaves_the_scene_where_the_passage_left_it(
     lines = tail.splitlines()
     here = lines[next(i for i, line in enumerate(lines) if line.startswith("IN THE SCENE")) + 1]
     assert "Serrik Vaun" in here and "Maela" not in here
+
+
+# --- a failure is kept under the passage --------------------------------------
+
+
+def test_a_failed_read_is_kept_under_the_passage_and_survives_a_reload(
+    session: StorySession, tmp_path: Path
+):
+    """Said in the status bar only, a failed read was replaced by the next
+    notice within seconds and kept nowhere (the mode review)."""
+    respond(session, "The door gives.", "I can't tell, sorry.")
+
+    events = [e for e in session.send(turn()) if isinstance(e, SessionNotice)]
+
+    passage = session.nodes[-1]
+    failed = next(e for e in events if e.text.startswith("Couldn't read the scene"))
+    assert failed.severity == "failure" and failed.node_id == passage.id
+    assert passage.meta.notes == [failed.text]
+    # The wait before it is progress: said, counted up if long, never kept.
+    waiting = next(e for e in events if e.text.startswith("Reading the scene"))
+    assert waiting.severity == "info" and waiting.waiting_since is not None
+    reloaded = load_story_bundle(session.story.id, root=tmp_path)
+    assert next(n for n in reloaded.nodes if n.id == passage.id).meta.notes == [failed.text]
+
+
+def test_a_read_the_author_stopped_is_said_but_not_kept(session: StorySession):
+    class Stopped(MockChatProvider):
+        def complete(self, request):
+            raise StreamCancelled()
+
+    session.provider = Stopped(["The door gives."])
+    events = [e for e in session.send(turn()) if isinstance(e, SessionNotice)]
+
+    assert any(e.text.startswith("Couldn't read the scene") for e in events)
+    assert all(e.severity == "info" for e in events)
+    assert session.nodes[-1].meta.notes == []
+
+
+def test_a_good_read_keeps_no_note(session: StorySession):
+    list(session.send(turn()))
+    assert session.nodes[-1].meta.notes == []

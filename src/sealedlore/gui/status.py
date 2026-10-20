@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
+
 from PySide6.QtCore import QEvent, QObject, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QMouseEvent, QPainter
 from PySide6.QtWidgets import (
@@ -111,6 +114,68 @@ class NoticeStatusBar(QStatusBar):
         """Send the window's status tips here rather than to QStatusBar's own message."""
         self._tips = _StatusTips(self)
         window.installEventFilter(self._tips)
+
+
+# A wait for a read after the passage counts up once it passes this many
+# seconds (live: an 86 s scene read showed only "Reading the scene with …").
+WAIT_SAID_AFTER = 10
+# The seconds a notice keeps the bar before a wait's count takes it back:
+# the next notice used to replace it before it could be read.
+NOTICE_HOLD = 6
+
+
+class WaitCounter(QObject):
+    """A long wait for a read after the passage (`GenerationWorker.waiting`)
+    counts up in the status bar: "Reading the scene with … 45 s; Stop skips
+    it". Stop does: the read's call is cancelled, and the roster, clock or
+    map stays as it was. A notice shown meanwhile keeps the bar for
+    `NOTICE_HOLD` seconds first, so a read's result isn't replaced at once
+    by the wait for the next."""
+
+    def __init__(self, bar: NoticeStatusBar, clock: Callable[[], float] = time.monotonic) -> None:
+        super().__init__(bar)
+        self._bar = bar
+        self._clock = clock
+        self._text: str | None = None
+        self._since = 0.0
+        self._shown = ""
+        self._other_at = float("-inf")
+        self._timer = QTimer(self)
+        self._timer.setInterval(1000)
+        self._timer.timeout.connect(self.tick)
+        bar.messageChanged.connect(self._message_changed)
+
+    def _message_changed(self, text: str) -> None:
+        if text and text != self._shown:
+            self._other_at = self._clock()
+
+    def wait(self, text: str, since: float) -> None:
+        self._text, self._since = text, since
+        if self._clock() - self._other_at >= NOTICE_HOLD:
+            self._show(text)
+        self._timer.start()
+        self.tick()
+
+    def stop(self) -> None:
+        self._text = None
+        self._timer.stop()
+
+    def waiting(self) -> bool:
+        return self._text is not None
+
+    def tick(self) -> None:
+        if self._text is None:
+            self._timer.stop()
+            return
+        now = self._clock()
+        elapsed = int(now - self._since)
+        if elapsed < WAIT_SAID_AFTER or now - self._other_at < NOTICE_HOLD:
+            return
+        self._show(f"{self._text} {elapsed} s; Stop skips it.")
+
+    def _show(self, text: str) -> None:
+        self._shown = text
+        self._bar.showMessage(text, 12000)
 
 
 class _StatusTips(QObject):

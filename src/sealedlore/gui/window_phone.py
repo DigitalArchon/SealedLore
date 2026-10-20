@@ -519,6 +519,7 @@ class _PhoneService(QObject):
         worker.text_delta.connect(self.on_text)
         worker.reasoning_delta.connect(self.on_reasoning)
         worker.notice.connect(self.on_notice)
+        worker.waiting.connect(self.on_waiting)
         worker.passage_done.connect(self.on_passage_done)
         worker.failed.connect(self.on_failed)
         self.publish("job_started", {"streaming": streaming, "question": question})
@@ -549,6 +550,10 @@ class _PhoneService(QObject):
 
     @Slot(str)
     def on_notice(self, text: str) -> None:
+        self.publish("notice", {"text": text})
+
+    @Slot(str, float)
+    def on_waiting(self, text: str, _since: float) -> None:
         self.publish("notice", {"text": text})
 
     @Slot()

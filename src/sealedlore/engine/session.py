@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import random
 import threading
+import time
 import weakref
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -151,7 +152,7 @@ from sealedlore.engine.session_images import ImageRuntime
 from sealedlore.engine.session_map_approval import MapApprovalRuntime
 from sealedlore.engine.session_merge import MergeRuntime, _close
 from sealedlore.engine.session_objects import ObjectsRuntime
-from sealedlore.engine.session_plot import PlotRuntime, SessionNotice
+from sealedlore.engine.session_plot import NoticeSeverity, PlotRuntime, SessionNotice
 from sealedlore.engine.session_portraits import PortraitRuntime
 from sealedlore.engine.session_private import PrivateRuntime
 from sealedlore.engine.session_reasoning import ReasoningRuntime
@@ -191,6 +192,7 @@ from sealedlore.providers.base import (
     ChatRequest,
     ProviderError,
     ReasoningDelta,
+    StreamCancelled,
     StreamCompleted,
     StreamEvent,
     TextDelta,
@@ -246,6 +248,9 @@ def _stale(price: ModelPrice) -> bool:
 # a long story or a lowered budget can legitimately take several chunks at
 # once — the cap is against runaway spending, not against a deep catch-up.
 MAX_AUTO_ARCHIVE_ROUNDS = 8
+# The notes kept under one message (`_kept_notice`): the latest, a retake
+# or a resent turn can repeat its warnings.
+MAX_NOTES = 6
 
 
 @dataclass(frozen=True)
@@ -580,6 +585,51 @@ class StorySession(
 
     def _path_to(self, node_id: str) -> list[Node]:
         return self.model_nodes(path_to(self.nodes, node_id))
+
+    def _kept_notice(
+        self,
+        text: str,
+        *,
+        node: Node | None = None,
+        turn: TurnRequest | None = None,
+        severity: NoticeSeverity = "warning",
+    ) -> SessionNotice:
+        """A warning or a failure: said, and kept under the message it is
+        about (`NodeMeta.notes`), which the transcript shows. The status bar
+        alone lost it to the next notice within seconds.
+
+        `node` is that message; else the turn's own (`turn.turn_node_id`:
+        archival before its passage), else the latest message on the path.
+        In a private scene only the scene's own messages take a note: one
+        on a public message would be saved even for a memory scene, whose
+        own messages, notes and all, `bundle_to_save` never writes.
+        """
+        if node is None and turn is not None and turn.turn_node_id:
+            node = next((n for n in self.nodes if n.id == turn.turn_node_id), None)
+        if node is None:
+            path = self.full_path() if self.in_private else self.path()
+            node = path[-1] if path else None
+        if node is not None and self.in_private and node.meta.private_span is None:
+            node = None
+        if node is not None and text not in node.meta.notes:
+            node.meta.notes.append(text)
+            del node.meta.notes[:-MAX_NOTES]
+            self.save()
+        return SessionNotice(text, severity=severity, node_id=node.id if node else None)
+
+    def _failed_notice(
+        self,
+        text: str,
+        exc: BaseException,
+        *,
+        node: Node | None = None,
+        turn: TurnRequest | None = None,
+    ) -> SessionNotice:
+        """A call that failed, kept as a note; one the author stopped is a
+        stop, said and not kept."""
+        if isinstance(exc, StreamCancelled):
+            return SessionNotice(text)
+        return self._kept_notice(text, node=node, turn=turn, severity="failure")
 
     # --- what the plot has brought into the story -------------------------------
 
@@ -1086,8 +1136,9 @@ class StorySession(
                             "timed_out": True,
                         },
                     )
-                yield SessionNotice(
-                    "The lore pick is taking too long; the next turn uses similarity."
+                yield self._kept_notice(
+                    "The lore pick is taking too long; the next turn uses similarity.",
+                    node=pick.node,
                 )
                 return
         if pick.request is not None:
@@ -1107,9 +1158,11 @@ class StorySession(
                 raise pick.error
             picks = parse_pick(pick.reply[0], pick.candidates) if pick.reply else []
         except (ProviderError, ValueError) as exc:
-            yield SessionNotice(
+            yield self._failed_notice(
                 f"Lore pick failed on {pick.model} ({exc}); the next turn uses similarity. "
-                "The lore model is set under Settings → Lore."
+                "The lore model is set under Settings → Lore.",
+                exc,
+                node=pick.node,
             )
             return
         pick.node.meta.lore_picks = picks
@@ -1990,11 +2043,14 @@ class StorySession(
         if self.story.chat and span is None and self.last_result is not None:
             # A TEE chat's reply: signed by the enclave that was attested?
             self._check_tee(self.last_result.node)
-        if completed is not None and completed.finish_reason == "length":
-            yield SessionNotice(cut_off_notice(request.params.max_tokens, completed))
         # A model caught reasoning though asked for nothing: said at once, and
         # kept under the passage, so the slow start reads as the model's.
         written = self.last_result.node if self.last_result is not None else None
+        if completed is not None and completed.finish_reason == "length":
+            # Under the passage too: it looks whole once the notice is gone.
+            yield self._kept_notice(
+                cut_off_notice(request.params.max_tokens, completed), node=written
+            )
         for note in self.reasoning_notices(written):
             yield SessionNotice(note)
 
@@ -2109,10 +2165,17 @@ class StorySession(
 
         # Chapters written in the background go in first; the summary block is
         # changing anyway, so a part merged in the background goes in with them.
-        yield from self.adopt_archival(history)
+        yield from self.adopt_archival(history, turn=turn)
         part = self.adopt_merge()
         if part is not None:
             yield SessionNotice(f"Merged {part.chapters} old chapters into one part.")
+        elif self.merge_problem:
+            yield self._kept_notice(
+                f"Old chapters weren't merged into a part ({self.merge_problem}); they "
+                "stand as they are, and the merge is tried again later.",
+                turn=turn,
+            )
+            self.merge_problem = None
         prompt = self.assemble(turn, history_nodes=history)
         if not (prompt.budget.over_budget or prompt.needs_archival):
             return
@@ -2166,10 +2229,11 @@ class StorySession(
         # changed nothing and the loop would stop with the window still full.
         while prompt.full_total > target:
             if rounds >= MAX_AUTO_ARCHIVE_ROUNDS:
-                yield SessionNotice(
+                yield self._kept_notice(
                     "Stopping after several chapters — the story is still over the budget. "
                     "The oldest turns will be left out of this prompt; archive again or "
-                    "raise the budget."
+                    "raise the budget.",
+                    turn=turn,
                 )
                 break
             chunk = self.next_chunk(history, allow_partial=allow_partial)
@@ -2180,15 +2244,18 @@ class StorySession(
             try:
                 summary = self.archive(chunk)
             except ProviderError as exc:
-                yield SessionNotice(
+                yield self._failed_notice(
                     f"Could not summarise the oldest turns ({exc}). Sending a shortened "
-                    "window instead; nothing has been lost from the story."
+                    "window instead; nothing has been lost from the story.",
+                    exc,
+                    turn=turn,
                 )
                 break
             if self.ledger_problem:
-                yield SessionNotice(
+                yield self._kept_notice(
                     f"The story ledger wasn't updated ({self.ledger_problem}); it stands as it "
-                    "was, and this chapter's summary holds what it would have added."
+                    "was, and this chapter's summary holds what it would have added.",
+                    turn=turn,
                 )
             archived.extend(chunk)
             rounds += 1
@@ -2202,7 +2269,7 @@ class StorySession(
         # One scan over everything archived this turn, not one per chapter:
         # each is a paid call, and a deep catch-up takes several chunks.
         if archived:
-            yield from self.suggest_characters_after_archive(archived)
+            yield from self.suggest_characters_after_archive(archived, turn=turn)
 
     def _cannot_archive_notice(self, history: Sequence[Node]) -> str:
         """Why the budget can't be met, and which lever to reach for.
@@ -2876,7 +2943,10 @@ class StorySession(
         if pending is None:
             return
         node, before = pending.node, pending.before
-        yield SessionNotice(f"Reading the scene with {self.scene_model}…")
+        yield SessionNotice(
+            f"Reading the scene with {self.scene_model}…",
+            waiting_since=time.monotonic() if fetched is None else None,
+        )
         try:
             if fetched is None:
                 text, completed = self.provider.complete(pending.request)
@@ -2886,9 +2956,11 @@ class StorySession(
                 text, completed = fetched["reply"]  # type: ignore[misc]
             delta = self._scene_delta(text, completed, pending.log_ref)
         except (ProviderError, ValueError) as exc:
-            yield SessionNotice(
+            yield self._failed_notice(
                 f"Couldn't read the scene from this passage ({exc}). The roster is as it "
-                "was; set it in the Scene panel if the story has moved on."
+                "was; set it in the Scene panel if the story has moved on.",
+                exc,
+                node=node,
             )
             return
 
@@ -3039,7 +3111,9 @@ class StorySession(
 
     # --- the plot's clock and facts ------------------------------------------
 
-    def suggest_characters_after_archive(self, chunk: Sequence[Node]) -> Iterator[SessionNotice]:
+    def suggest_characters_after_archive(
+        self, chunk: Sequence[Node], *, turn: TurnRequest | None = None
+    ) -> Iterator[SessionNotice]:
         """Look for new characters in prose that was just archived; never fails the turn."""
         self._refuse_in_private("Scanning for characters")
         if not self.config.suggest_characters or self.story.chat:
@@ -3047,7 +3121,9 @@ class StorySession(
         try:
             found = self.scan_for_characters(chunk)
         except (ProviderError, ValueError) as exc:
-            yield SessionNotice(f"Couldn't check the archived turns for new characters ({exc}).")
+            yield self._failed_notice(
+                f"Couldn't check the archived turns for new characters ({exc}).", exc, turn=turn
+            )
             return
         if found:
             names = ", ".join(suggestion.name for suggestion in found)

@@ -18,6 +18,7 @@ makes (session_plot.py `_read_after_turn`).
 from __future__ import annotations
 
 import re
+import time
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -409,7 +410,10 @@ class WorldRuntime:
         if pending is None:
             return
         node, log_ref = pending.node, pending.log_ref
-        yield SessionNotice(f"Reading the map with {pending.request.model}…")
+        yield SessionNotice(
+            f"Reading the map with {pending.request.model}…",
+            waiting_since=time.monotonic() if fetched is None else None,
+        )
         try:
             if fetched is None:
                 text, completed = self.provider.complete(pending.request)
@@ -425,8 +429,10 @@ class WorldRuntime:
             reply = parse_world_reply(text)
         except (ProviderError, ValueError) as exc:
             self.map_reading = None
-            yield SessionNotice(
-                f"Couldn't read the map from this passage ({exc}). It is as it was."
+            yield self._failed_notice(
+                f"Couldn't read the map from this passage ({exc}). It is as it was.",
+                exc,
+                node=node,
             )
             return
         finally:

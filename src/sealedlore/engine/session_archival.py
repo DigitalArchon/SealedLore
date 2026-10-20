@@ -360,7 +360,9 @@ class ArchivalRuntime:
                     raise StreamCancelled()
         yield from self.adopt_archival(self.path())
 
-    def adopt_archival(self, history: Sequence[Node]) -> Iterator[SessionNotice]:
+    def adopt_archival(
+        self, history: Sequence[Node], *, turn: TurnRequest | None = None
+    ) -> Iterator[SessionNotice]:
         """Put the chapters written in the background into the story. Worker thread only.
 
         Each must still continue its branch's record, unedited
@@ -405,14 +407,23 @@ class ArchivalRuntime:
         if adopted:
             problems = [c.ledger_problem for c in job.ready[: len(adopted)] if c.ledger_problem]
             if problems:
-                yield SessionNotice(
+                yield self._kept_notice(
                     f"The story ledger wasn't updated for {len(problems)} of them "
                     f"({problems[0]}); it carries on from before, and their summaries hold "
-                    "what it would have added."
+                    "what it would have added.",
+                    turn=turn,
+                )
+            if job.error:
+                yield self._kept_notice(
+                    f"The next chapter couldn't be written in the background ({job.error}); "
+                    "it is tried again when the story next fills its budget.",
+                    turn=turn,
                 )
         elif job.ready or job.error:
             reason = job.error or "the story changed while they were written"
-            yield SessionNotice(f"The chapters written in the background weren't used ({reason}).")
+            yield self._kept_notice(
+                f"The chapters written in the background weren't used ({reason}).", turn=turn
+            )
         # Paid calls that weren't used still go in the log and the cost: the
         # chapters after the first mismatch, the one that failed, and the scan
         # when nothing was adopted.
@@ -422,7 +433,7 @@ class ArchivalRuntime:
             if chapter.ledger is not None:
                 self._log_dropped("ledger", chapter.ledger, reason)
         if job.scan is not None and adopted:
-            yield from self._adopt_scan(job.scan, scanned)
+            yield from self._adopt_scan(job.scan, scanned, turn=turn)
         elif job.scan is not None:
             self._log_dropped("characters", job.scan, reason)
 
@@ -503,7 +514,9 @@ class ArchivalRuntime:
         self.save()
         return summary
 
-    def _adopt_scan(self, scan: _Call, archived: Sequence[Node]) -> Iterator[SessionNotice]:
+    def _adopt_scan(
+        self, scan: _Call, archived: Sequence[Node], *, turn: TurnRequest | None = None
+    ) -> Iterator[SessionNotice]:
         log_ref = self._log(
             "characters_request",
             {
@@ -514,8 +527,9 @@ class ArchivalRuntime:
         )
         if scan.reply is None:
             self._log("characters_response", {"request_log_ref": log_ref, "error": scan.error})
-            yield SessionNotice(
-                f"Couldn't check the archived turns for new characters ({scan.error})."
+            yield self._kept_notice(
+                f"Couldn't check the archived turns for new characters ({scan.error}).",
+                turn=turn,
             )
             return
         text, completed = scan.reply
@@ -532,7 +546,9 @@ class ArchivalRuntime:
         try:
             found = parse_suggestions(text, known=known)
         except ValueError as exc:
-            yield SessionNotice(f"Couldn't check the archived turns for new characters ({exc}).")
+            yield self._kept_notice(
+                f"Couldn't check the archived turns for new characters ({exc}).", turn=turn
+            )
             return
         supporting.suggestions.extend(found)
         self.save()

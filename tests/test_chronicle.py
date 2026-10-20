@@ -544,3 +544,27 @@ def test_what_the_read_claimed_and_the_text_did_not_back_is_said(tmp_path: Path)
     notices = [e.text for e in session.send(turn(session)) if isinstance(e, SessionNotice)]
     plot_notice = next(n for n in notices if n.startswith("Plot: "))
     assert plot_notice.startswith("Plot: +12h, now Day 2 · 04:00 · not taken: a jump of 504h")
+
+
+@pytest.mark.parametrize("spoilers", [False, True])
+def test_what_was_not_taken_is_kept_under_the_passage_and_names_the_plot_only_with_spoilers(
+    tmp_path: Path, spoilers: bool
+):
+    """The refusal went with the next notice (the mode review); kept under
+    the passage now, and what it says of the plot's own facts and events
+    is named only with spoilers on, as the Plot page does."""
+    claims = [{"fact": "town", "value": "razed", "quote": "She slept by the stove."}]
+    session = make_session(
+        tmp_path, [PASSAGE, read(3, "weeks", facts=claims)], show_plot_spoilers=spoilers
+    )
+    notices = [e for e in session.send(turn(session)) if isinstance(e, SessionNotice)]
+    plot_notice = next(n for n in notices if n.text.startswith("Plot: "))
+    passage = session.path()[-1]
+    assert plot_notice.severity == "warning" and plot_notice.node_id == passage.id
+    assert passage.meta.notes == [plot_notice.text]
+    assert "a jump of 504h" in plot_notice.text
+    if spoilers:
+        assert "town can't be “razed”" in plot_notice.text
+    else:
+        assert "town" not in plot_notice.text
+        assert "1 claim about the plot itself" in plot_notice.text

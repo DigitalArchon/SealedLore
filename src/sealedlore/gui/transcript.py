@@ -1472,6 +1472,10 @@ class TranscriptView(QScrollArea):
             )
         for model in node.meta.reasoning_caught:
             widget.add_note("⚠ " + caught_note(model))
+        # A failure or warning from sending or reading this message: the
+        # status bar's notice is gone in seconds (engine `_kept_notice`).
+        for note in node.meta.notes:
+            widget.add_note("⚠ " + note)
         return widget
 
     # --- paging -------------------------------------------------------------
