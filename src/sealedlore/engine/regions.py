@@ -513,12 +513,16 @@ def build_region(
     made_at: str = "",
     story: Sequence[WorldPlace] = (),
     player: tuple[float, float] | None = None,
+    grounds: Sequence[Box] | None = None,
 ) -> tuple[DesignedRegion, TerrainPatch]:
     """A design as the region the map keeps and its land: the shapes drawn
     on the designer's grid and each tile drawn DESIGN_SCALE times over, at
     walking scale; its own place (kind "region", holding the rest) and the
     places, things (each where it lies) and people (labelled from
-    `labels_from`) in it."""
+    `labels_from`) in it. Nothing is put on a story place's own ground
+    (`grounds`, `ground_boxes`; the story places' squares when not given):
+    a place there would be the story's drawn again, and a thing or a person
+    stood on ground played on its plan, where nobody sees them."""
     west, north, side = rect
     tile = side / DESIGN_GRID
     # Rock is the look of the open ground, walked on; the rock the designer
@@ -536,6 +540,7 @@ def build_region(
         return west + (gx + 0.5) * tile, north - (gy + 0.5) * tile
 
     own = {_plain(n) for s in story for n in (s.name, *s.aliases)}
+    ground = list(grounds) if grounds is not None else _squares(story)
     # A region named for the story's own place (the designer called the cell
     # inside the 1500 m town "Marrowgate"; live, Oct 18 2026): the read's
     # "inside: Marrowgate" then found the region first, and a new house in
@@ -559,15 +564,11 @@ def build_region(
         h = min(p["h"], DESIGN_GRID - p["y"])
         x, y = at(p["x"] + (w - 1) / 2, p["y"] + (h - 1) / 2)
         size = max(w, h) * tile
-        if _plain(p["name"]) in own or any(
-            s.x is not None
-            and s.y is not None
-            and s.kind not in ("region", "route")
-            and abs(s.x - x) < (size_of(s) + size) / 2
-            and abs(s.y - y) < (size_of(s) + size) / 2
-            for s in story
-        ):
-            continue  # the story's own place, drawn again (a second farmhouse)
+        if _plain(p["name"]) in own or _on_ground(ground, x, y, size / 2):
+            # The story's own place, drawn again (a second farmhouse). Not
+            # for one in a forest too wide for a plan: every place designed
+            # in The Silverwood was dropped as overlapping the forest.
+            continue
         if p["kind"] == "settlement":
             size = max(size, 60.0)
         places.append(
@@ -585,6 +586,11 @@ def build_region(
     spots: dict[str, list[float]] = {}
     for t in design.things:
         x, y = at(t["x"], t["y"])
+        if _on_ground(ground, x, y):
+            # On ground played on its own plan (The Ashen Reach's Shaft Nine
+            # doesn't fill its region; the review, Oct 20 2026), where the
+            # plan shows only its own things.
+            continue
         near = min(
             (p for p in places[1:]),
             key=lambda p: math.hypot((p.x or 0) - x, (p.y or 0) - y),
@@ -606,6 +612,8 @@ def build_region(
         x, y = at(p["x"], p["y"])
         if player is not None and math.hypot(x - player[0], y - player[1]) < CLEAR_OF_PLAYER:
             continue  # simply there, beside the player: never
+        if _on_ground(ground, x, y):
+            continue  # on a story place's own plan: unseen there, listed elsewhere
         n = len(people)
         people.append(
             DesignedPerson(
@@ -683,16 +691,56 @@ def designed_delta(art: WorldArt) -> WorldDelta | None:
     return delta
 
 
-def has_ground(world: WorldMap, place: WorldPlace) -> bool:
+def has_ground(world: WorldMap | dict[str, WorldPlace], place: WorldPlace) -> bool:
     """Whether a story place is ground of its own, played on a plan (a
     farm, a town, a site, a building), not open country however it is named:
     a region, a road, a vehicle (it has no spot of its own) or anything wider
     than a plan is drawn for (PLAN_MAX_SIZE: The Silverwood's 16 km forest is
-    played as open country, its land in windows)."""
+    played as open country, its land in windows). `world`: the map, or its
+    places by id."""
+    places = world.places if isinstance(world, WorldMap) else world
     return (
         place.kind not in ("region", "route")
-        and not moves(world.places, place)
+        and not moves(places, place)
         and size_of(place) <= PLAN_MAX_SIZE
+    )
+
+
+Box = tuple[float, float, float, float]  # west, south, east, north, in metres
+
+
+def ground_boxes(world: WorldMap, art: WorldArt, places: Sequence[WorldPlace]) -> list[Box]:
+    """The ground of each of `places` that has ground of its own
+    (`has_ground`), as the map lies it out: its plan's rectangle where it has
+    one, else its square (`marks.footprint`)."""
+    out = []
+    for place in places:
+        if place.id in world.places and has_ground(world, place):
+            box = footprint(world, art, place.id)
+            if box is not None:
+                out.append(box)
+    return out
+
+
+def _squares(story: Sequence[WorldPlace]) -> list[Box]:
+    """`ground_boxes` with no map: each story place's square."""
+    by_id = {p.id: p for p in story}
+    out = []
+    for s in story:
+        if s.x is None or s.y is None or not has_ground(by_id, s):
+            continue
+        half = size_of(s) / 2
+        out.append((s.x - half, s.y - half, s.x + half, s.y + half))
+    return out
+
+
+def _on_ground(boxes: Sequence[Box], x: float, y: float, half: float = 0.0) -> bool:
+    """Whether a point (with `half`, a square round it) lies on any box."""
+    return any(
+        x + half > west and x - half < east and y + half > south and y - half < north
+        if half
+        else west <= x <= east and south <= y <= north
+        for west, south, east, north in boxes
     )
 
 

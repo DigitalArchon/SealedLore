@@ -19,6 +19,8 @@ from sealedlore.engine.regions import (
     designed_point,
     edge_lines,
     file_covers,
+    ground_boxes,
+    has_ground,
     limits_for,
     next_label,
     origin_of,
@@ -31,6 +33,7 @@ from sealedlore.engine.regions import (
     where_words,
 )
 from sealedlore.engine.world_art import MAX_FAILURES, holding_place
+from sealedlore.engine.world_layout import size_of
 from sealedlore.ids import utc_now_iso
 from sealedlore.models.area import AreaState
 from sealedlore.models.world import WorldArt, WorldDelta, WorldMap
@@ -138,11 +141,20 @@ class RegionRuntime:
         if key in art.regions or art.failures.get(f"region:{key}", 0) >= MAX_FAILURES:
             return False
         designed_ids = {r.place_id for r in art.regions.values()}
-        holder = holding_place(world, *cell_rect(origin, *cell))
-        return not (
-            holder is not None
-            and holder.id not in designed_ids
-            and holder.kind in ("settlement", "site")
+        west, north, side = cell_rect(origin, *cell)
+        # Wholly on one of the story's places with ground of its own (a town,
+        # a farm, a site, a wood of a few km with its plan): its plan is what
+        # is there. A region or a forest too wide for a plan is open country.
+        return not any(
+            place.id not in designed_ids
+            and has_ground(world, place)
+            and place.x is not None
+            and place.y is not None
+            and place.x - size_of(place) / 2 <= west
+            and west + side <= place.x + size_of(place) / 2
+            and place.y - size_of(place) / 2 <= north - side
+            and north <= place.y + size_of(place) / 2
+            for place in world.places.values()
         )
 
     def designed_place_ids(self) -> set[str]:
@@ -380,6 +392,7 @@ class RegionRuntime:
             designed_ids = {r.place_id for r in art.regions.values()}
             holder = holding_place(world, *rect)
             holder_id = holder.id if holder is not None and holder.id not in designed_ids else None
+            story = [p for p in world.places.values() if p.id not in designed_ids]
             region, patch = build_region(
                 design,
                 key=key,
@@ -388,8 +401,9 @@ class RegionRuntime:
                 labels_from=next_label(art, latest),
                 model=model,
                 made_at=utc_now_iso(),
-                story=[p for p in world.places.values() if p.id not in designed_ids],
+                story=story,
                 player=player,
+                grounds=ground_boxes(world, art, story),
             )
             art.regions[key] = region
             art.terrain.append(patch)

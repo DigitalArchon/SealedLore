@@ -1411,8 +1411,9 @@ story or a walk takes them in.
   edge, so it shows the moment you cross. Nothing the designer put in a
   region has its own picture drawn (under Draw map pictures) until you have
   been in that region: until then the tile set's nearest thing stands in.
-  Nobody is designed close by you, and nothing the story already has is
-  designed again. The map read is
+  Nobody is designed close by you, nothing the story already has is
+  designed again, and nothing is put on a place's own ground (a farm, a
+  town, a site with its plan), where its plan would hide it. The map read is
   shown only the region you stand in, and never moves anyone into another
   region unless the passage names the place. Places the story has stand
   where they are, a settlement or a building entered by its door, and the

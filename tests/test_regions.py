@@ -488,6 +488,64 @@ def test_nobody_is_designed_within_sight_of_the_player_nor_the_story_s_places_tw
     assert "the Kessler barn" not in {p.name for p in again.places}  # where a story place stands
 
 
+def test_nothing_is_designed_on_a_story_place_s_own_ground_but_a_forest_is_open_country():
+    """The review (Oct 20 2026): The Ashen Reach's Shaft Nine doesn't fill
+    its region, so a designed scavenger could stand on its ground, invisible
+    on its plan and listed elsewhere. Things and people on a story place's
+    ground (its plan's rectangle, else its square) are left out, as places
+    there were. A forest too wide for a plan is open country: every place
+    designed in it used to be dropped as overlapping it."""
+    from sealedlore.engine.regions import ground_boxes
+
+    world = WorldMap(start=None)
+    origin = origin_of(world, WorldArt())
+    rect = cell_rect(origin, 0, 0)
+    west, north, _side = rect
+    tile = REGION_SIDE / DESIGN_GRID
+    # A pithead site over the region's west half: the fence wire (10, 70)
+    # and the zombie (60, 22) lie off it, put on it they are left out.
+    shaft = WorldPlace(
+        id="shaft", name="Shaft Nine", kind="site", x=west + 20 * tile, y=north - 60 * tile,
+        size=40 * tile,
+    )  # fmt: skip
+    on_shaft = {
+        **DESIGN,
+        "places": [],
+        "things": [*DESIGN["things"], {"name": "a pick", "x": 15, "y": 55}],
+        "people": [*DESIGN["people"], {"who": "a scavenger", "doing": "digging", "x": 20, "y": 60}],
+    }
+
+    def build(design, story, grounds=None):
+        return build_region(
+            parse_region(json.dumps(design)),
+            key="0:0",
+            rect=rect,
+            holder_id=None,
+            labels_from=LABEL_FROM,
+            story=story,
+            grounds=grounds,
+        )[0]
+
+    region = build(on_shaft, [shaft])
+    assert "a pick" not in {t.name for t in region.things}
+    assert "a bundle of fence wire" not in {t.name for t in region.things}  # (10, 70): on it
+    assert "a rusted fuel can" in {t.name for t in region.things}
+    assert [p.who for p in region.people] == ["a zombie in a torn parka"]
+    # By the plan's own rectangle when given (the map's footprint).
+    folded = WorldMap(places={"shaft": shaft})
+    assert ground_boxes(folded, WorldArt(), [shaft]) == [
+        (shaft.x - 100.0, shaft.y - 100.0, shaft.x + 100.0, shaft.y + 100.0)
+    ]
+    forest = WorldPlace(
+        id="wood", name="The Silverwood", kind="area", x=west, y=north, size=16_000.0
+    )
+    kept = build(
+        DESIGN, [forest], ground_boxes(WorldMap(places={"wood": forest}), WorldArt(), [forest])
+    )
+    assert {"the Kessler barn", "a burned-out pickup"} <= {p.name for p in kept.places}
+    assert len(kept.things) == 2 and len(kept.people) == 1
+
+
 def test_a_region_is_told_the_others_names_and_not_their_places_as_the_story_s():
     from sealedlore.engine.regions import place_lines, taken_lines
 
