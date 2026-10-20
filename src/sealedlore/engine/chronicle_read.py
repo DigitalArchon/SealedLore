@@ -565,10 +565,17 @@ class ChronicleDelta:
                 elapsed = span
         ends_at = self.ends_at
         if elapsed > MAX_UNQUOTED_MINUTES and not quoted:
-            self.refused.append(
-                f"a jump of {elapsed // 60}h with nothing in the text saying so; "
-                f"counted as {MAX_UNQUOTED_MINUTES // 60}h"
-            )
+            # Said only when the cap changes where the clock lands: with the
+            # read's hour of day the capped jump often reaches the same
+            # morning, and the notice then read "+16h 40m … not taken: a jump
+            # of 16h … counted as 12h" (live, Oct 21 2026).
+            if advance(before.minutes, MAX_UNQUOTED_MINUTES, ends_at) != advance(
+                before.minutes, elapsed, ends_at
+            ):
+                self.refused.append(
+                    f"a jump of {elapsed // 60}h with nothing in the text saying so; "
+                    f"counted as {MAX_UNQUOTED_MINUTES // 60}h"
+                )
             elapsed = MAX_UNQUOTED_MINUTES
         minutes = advance(before.minutes, elapsed, ends_at)
         # An hour of the day that would add most of a day the read didn't

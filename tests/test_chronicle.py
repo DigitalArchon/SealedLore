@@ -475,6 +475,23 @@ def test_a_plot_that_names_its_start_holds_the_first_read_to_the_slack(tmp_path:
     assert session.chronicle.minutes == clock_minutes(1, 16, 0)
 
 
+def test_an_unquoted_jump_is_reported_only_when_the_cap_changes_the_clock():
+    # "The next morning" in a Director turn: the read gave 16 hours with no
+    # quote and "08:30". Capped at 12h, the hour still lands on the same
+    # morning, so nothing was refused; the notice used to say "not taken: a
+    # jump of 16h … counted as 12h" beside "+16h 40m" (live, Oct 21 2026).
+    p = plot()
+    before = initial_chronicle(p)
+    before.minutes = clock_minutes(1, 15, 50)
+    moot = parse_read(read(16 * 60, ends_at="08:30"))
+    after = moot.applied_to(before, p, passage=PASSAGE, author_turn="")
+    assert after.minutes == clock_minutes(2, 8, 30) and not moot.refused
+    # Without an hour, the cap is what decides: still said.
+    capped = parse_read(read(16 * 60))
+    after = capped.applied_to(before, p, passage=PASSAGE, author_turn="")
+    assert after.minutes == clock_minutes(2, 3, 50) and capped.refused
+
+
 def test_a_read_that_under_counts_a_skip_keeps_the_skips_hour():
     # "By day 10, the snow has come." moved the author's turn to Day 10 ·
     # 14:00; a read answering no time at all used to land the passage at
