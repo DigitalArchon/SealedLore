@@ -42,6 +42,11 @@ works as intended. Bug reports and pull requests are welcome; see
   no port opened. Pair it by scanning a code; its bookmark is its login.
   Text stories and chats, on Linux, for now. See
   [Playing from your phone](docs/manual.md#playing-from-your-phone).
+- **Plots that play better** (new in 2.0.0b3). A guide to wording a plot,
+  [Writing a plot that plays well](SampleStories/WRITING_PLOTS.md) (also under
+  Help), the sample plots reworded where it mattered, the plot director asked
+  far less often, and the map's open country as sparse or as rich as you
+  like.
 
 ### Play on a map
 
