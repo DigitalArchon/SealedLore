@@ -364,6 +364,41 @@ def test_no_event_names_what_is_still_hidden(tmp_path: Path, path: Path):
     assert problems == []
 
 
+def test_the_ninth_furnace_s_places_answer_to_their_own_names_only(tmp_path: Path):
+    """A place's keywords wake its `at:` events and choose its lore. "The
+    citadel" is the story's everyday word for where Maren's brother is held,
+    so every passage about going there offered his event at the Iron Citadel
+    by mention alone; "the Rest" answered to "the rest of". Both places are
+    still found by what names them, and their lore with them."""
+    from sealedlore.engine.retrieval import select_lore
+    from sealedlore.engine.session import StorySession
+    from sealedlore.models.config import Config
+    from sealedlore.providers.mock import MockChatProvider
+    from sealedlore.storage.repository import save_story_bundle
+    from sealedlore.storage.scenario import bundle_from_scenario
+
+    path = SAMPLES / "The Ninth Furnace.md"
+    bundle = bundle_from_scenario(parse_plot_markdown(path.read_text(encoding="utf-8")).scenario)
+    save_story_bundle(bundle, root=tmp_path)
+    session = StorySession(
+        bundle, Config(), MockChatProvider(), root=tmp_path, learn_corrections=False
+    )
+    named = session._places_named
+    citadel, rest = "The Iron Citadel", "The Pilgrims' Rest"
+    assert named("We walk the rest of the way. The Citadel can wait.") == set()
+    assert named("Smoke rises over the Iron Citadel.") == {citadel}
+    assert named("They call it Malgareth's fortress.") == {citadel}
+    assert named("Back at Pilgrims' Rest the drums start.") == {rest}
+    assert named("The waystation's gates are chained.") == {rest}
+
+    def chosen(turn: str) -> set[str]:
+        report = select_lore(bundle.lore, keyword_text=turn, count_tokens=len)
+        return {injection.entry.title for injection in report.injected}
+
+    assert {citadel, rest} <= chosen("From the Pilgrims' Rest we can see the Iron Citadel.")
+    assert chosen("The rest of them follow.") == set()
+
+
 pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication  # noqa: E402

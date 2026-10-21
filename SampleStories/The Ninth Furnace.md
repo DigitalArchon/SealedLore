@@ -121,7 +121,7 @@ has almost forgotten who he was.
 # Places
 
 ## The Pilgrims' Rest
-- keywords: the waystation, the Rest
+- keywords: the waystation, Pilgrims' Rest
 - picture: pictures/furnace-pilgrims-rest.jpg | the waystation by the river of fire
 
 A walled cult waystation of black stone on the Pilgrim Road, its iron gates
@@ -142,7 +142,7 @@ Grey dunes of ash and cinders under a smoke-dark roof, dotted with the
 shelters of damned souls in hiding.
 
 ## The Iron Citadel
-- keywords: the citadel, Malgareth's fortress
+- keywords: Iron Citadel, Malgareth's fortress
 - picture: pictures/furnace-iron-citadel.jpg | the citadel
 
 Malgareth's fortress: a vast black iron castle of spiked towers rising from a
