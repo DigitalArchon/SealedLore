@@ -320,7 +320,7 @@ The Great Engine misses a beat for the first time in ninety years.
 - requires: automatons = restless
 - aftermath: On one night every Ashcombe-pattern automaton in the city walked out of the houses and factories and marched on the Engine Cathedral. The city is under curfew.
 
-Lady Ashcombe's calculating engine sends its order.
+Every Ashcombe-pattern automaton in the city receives the same order at once.
 
 ### The plot has been exposed
 - requires: plot_exposed = yes

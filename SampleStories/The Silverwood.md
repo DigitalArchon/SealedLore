@@ -340,7 +340,7 @@ Grey-blighted wolves attack Fernhollow at night.
 - brings: The Hollow King
 - aftermath: The Hollow King is free. Grey blight spreads from the mountains like frost, and the elves of Sylvaranth are preparing for war.
 
-The Seal of Thorns gives way.
+Deep under the Greyspine Mountains, what was sealed away a thousand years ago breaks free.
 
 ### In the Deepdelve
 - requires: at = The Deepdelve

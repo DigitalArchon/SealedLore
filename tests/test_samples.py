@@ -225,6 +225,145 @@ def test_doomsville_s_bandits_are_never_offered_in_town_and_keep_their_days():
         assert not offered(plot, chronicle), name
 
 
+def _names_entry(text: str, entry) -> bool:
+    """Whether a text names a lore entry: its title, or a keyword of more than
+    one word, articles aside. A one-word keyword ("the singing", "the gate")
+    is the story's everyday word, not the secret."""
+    import re
+
+    for form in (entry.title, *entry.keywords):
+        words = re.sub(r"^(?:the|a|an)\s+", "", form.strip(), flags=re.IGNORECASE)
+        if form is not entry.title and len(words.split()) < 2:
+            continue
+        if words and re.search(rf"(?<!\w){re.escape(words)}(?!\w)", text, re.IGNORECASE):
+            return True
+    return False
+
+
+def _brought_by(event) -> set[str]:
+    """What an event has certainly brought in once it has happened. Whoever
+    an offscreen way brings joins only when the character learns of it."""
+    if any(variant.offscreen for variant in event.variants):
+        return set()
+    ways = [set(variant.brings) | set(variant.reveals) for variant in event.variants]
+    return set(event.brings) | set(event.reveals) | (set.intersection(*ways) if ways else set())
+
+
+def _known_once(plot, conditions, seen: frozenset[str] = frozenset()) -> set[str]:
+    """Hidden ids certainly brought in by the time the conditions hold: what
+    an event they need has brought, a hidden place they stand the character
+    in (and whatever revealed it), and what the events that alone set a fact
+    to the value they ask have brought."""
+
+    def after(event) -> set[str]:
+        return _brought_by(event) | _known_once(plot, event.requires, seen | {event.id})
+
+    def all_of(events) -> set[str]:
+        events = [event for event in events if event.id not in seen]
+        return set.intersection(*(after(event) for event in events)) if events else set()
+
+    known: set[str] = set()
+    for condition in conditions:
+        if condition.event_id and condition.happened and condition.event_id not in seen:
+            known |= after(plot.event(condition.event_id))
+        elif condition.place and condition.op == "=":
+            place = next((p for p in plot.places if p.name == condition.place), None)
+            if place is not None and place.lore_id:
+                known.add(place.lore_id)
+                known |= all_of(
+                    event
+                    for event in plot.events
+                    if place.lore_id in event.reveals
+                    or any(place.lore_id in variant.reveals for variant in event.variants)
+                )
+        elif condition.fact and condition.op == "=":
+            fact = plot.fact(condition.fact)
+            if fact is None or fact.watched or condition.value == fact.initial:
+                continue
+            known |= all_of(
+                event
+                for event in plot.events
+                if any(
+                    (a.fact, a.value) == (condition.fact, condition.value)
+                    for a in (a for variant in event.variants for a in variant.sets)
+                )
+            )
+    return known
+
+
+@pytest.mark.parametrize(
+    "path",
+    [path for _, path in sample_stories(SAMPLES)]
+    + [ROOT / "tests" / "data" / "doomsville_extended.md"],
+    ids=lambda path: path.stem,
+)
+def test_no_event_names_what_is_still_hidden(tmp_path: Path, path: Path):
+    """An event's own text is what a lead-in shows, days ahead, with only the
+    names of whoever it brings taken out, and it opens the passage the event
+    begins in, a variant's tell after it. A hidden character or lore entry
+    either names, that nothing which must have happened by then has brought
+    in, reaches the storyteller early and with no card: Brasshaven's night of
+    the automatons named the hidden calculating engine, and the Silverwood's
+    Seal breaking named the hidden Seal of Thorns. A name the world or the
+    opening already uses is no secret."""
+    from sealedlore.engine.chronicle import introduced
+    from sealedlore.engine.director import direction_text
+    from sealedlore.engine.session import StorySession
+    from sealedlore.engine.validators import mentions
+    from sealedlore.models.config import Config
+    from sealedlore.models.plot import Direction
+    from sealedlore.providers.mock import MockChatProvider
+    from sealedlore.storage.repository import save_story_bundle
+    from sealedlore.storage.scenario import bundle_from_scenario
+
+    scenario = parse_plot_markdown(path.read_text(encoding="utf-8")).scenario
+    plot = scenario.plot
+    bundle = bundle_from_scenario(scenario)
+    save_story_bundle(bundle, root=tmp_path)
+    session = StorySession(
+        bundle, Config(), MockChatProvider(), root=tmp_path, learn_corrections=False
+    )
+    scene = scenario.starting_scene
+    told = "\n".join(
+        [scenario.world_bible or "", scenario.opening_text, scene.location, scene.situation]
+    )
+    people = [c for c in (*scenario.cast, *scenario.supporting) if c.plot_hidden]
+    lore = [e for e in scenario.lore if e.plot_hidden]
+    secrets = [c for c in people if not mentions(told, c)] + [
+        e for e in lore if not _names_entry(told, e)
+    ]
+    assert people or lore
+
+    def named(text: str, allowed: set[str]) -> list[str]:
+        return [
+            getattr(item, "name", None) or item.title
+            for item in secrets
+            if item.id not in allowed
+            and (_names_entry(text, item) if item in lore else mentions(text, item))
+        ]
+
+    problems: list[str] = []
+    for event in plot.events:
+        before = _known_once(plot, event.requires)
+        if event.lead_in:
+            lead = session._unnamed_lead_in(
+                Direction(
+                    event_id=event.id,
+                    kind="lead_in",
+                    text=direction_text(event, "lead_in", None),
+                )
+            )
+            problems += [f"{event.title} (lead-in): {n}" for n in named(lead.text, before)]
+        for variant in event.variants:
+            if variant.offscreen:
+                continue
+            allowed = before | _known_once(plot, variant.requires) | set(introduced(event, variant))
+            text = direction_text(event, "begin", variant)
+            way = variant.title or "begin"
+            problems += [f"{event.title} ({way}): {n}" for n in named(text, allowed)]
+    assert problems == []
+
+
 pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
