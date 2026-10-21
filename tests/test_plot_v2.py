@@ -1339,11 +1339,9 @@ LED_IN = PLOT_FILE.replace("- when: day 3–4\n", "- when: day 3–4\n- lead-in:
 )
 
 
-def test_with_the_switch_a_declined_lead_in_rests_as_an_any_time_event(monkeypatch):
-    """Off by default: a lead-in is offered every turn until it is given.
-    On, a declined one rests a turn, then two, then three, and a move or an
+def test_a_declined_lead_in_rests_as_an_any_time_event():
+    """A declined lead-in rests a turn, then two, then three, and a move or an
     arrival ends the rest as for any other."""
-    from sealedlore.engine import chronicle as chronicle_module
     from sealedlore.engine.chronicle import armed, note_asked, note_skipped, resting
 
     p = plot(LED_IN)
@@ -1351,12 +1349,6 @@ def test_with_the_switch_a_declined_lead_in_rests_as_an_any_time_event(monkeypat
     chronicle.minutes = clock_minutes(1, 9, 0)
     items = armed(p, chronicle, {"the_raid": 4}, mentioned=set())
     assert [(item.event.id, item.kinds) for item in items] == [("the_raid", ("lead_in",))]
-    note_asked(items, set(), chronicle, "the ridge")
-    assert not resting(items[0], chronicle, "the ridge")
-
-    monkeypatch.setattr(chronicle_module, "LEAD_IN_REST", True)
-    chronicle = initial_chronicle(p)
-    chronicle.minutes = clock_minutes(1, 9, 0)
     note_asked(items, set(), chronicle, "the ridge")
     assert resting(items[0], chronicle, "the ridge")
     assert not resting(items[0], chronicle, "the ridge | Tom")

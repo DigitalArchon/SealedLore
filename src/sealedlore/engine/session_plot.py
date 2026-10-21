@@ -1014,7 +1014,7 @@ class PlotRuntime:
             else:
                 directions = merge(automatic_directions(candidates), reply.directions)
                 confirmed = reply.happened
-                # A lead-in given is acted on, not declined (for `LEAD_IN_REST`).
+                # A lead-in given is acted on, not declined (a declined one rests).
                 acted = {d.event_id for d in directions if d.kind in ("begin", "lead_in")}
                 note_asked(candidates, acted, chronicle, scene_now)
                 changed = True

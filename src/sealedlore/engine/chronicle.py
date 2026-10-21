@@ -627,13 +627,6 @@ MAX_REST = 3
 # The author's character moving to another place, someone arriving or leaving
 # (`rest_moment`), or this much story time passing, ends a rest at once.
 REST_ENDS_AFTER_MINUTES = 6 * 60
-# A lead-in the director declined rests as an "any time" begin does (a turn,
-# then two, then three, ended the same ways). Live harness runs (Oct 2026):
-# Brasshaven's "The Engine falters" is due on days 3-5, so its lead-in is
-# offered from the first turn, and about half the director calls existed
-# only for it (declined up to 14 times running). Off until measured: a
-# lead-in waiting out a rest may come later, or not before the window opens.
-LEAD_IN_REST = False
 
 
 def rest_moment(place: str | None, people: Collection[str]) -> str:
@@ -659,7 +652,14 @@ def can_rest(item: Armed) -> bool:
     """
     if item.overdue or item.unconfirmed:
         return False
-    if LEAD_IN_REST and item.kinds == ("lead_in",):
+    # A declined lead-in rests as an "any time" begin does (a turn, then two,
+    # then three, ended the same ways). Brasshaven's "The Engine falters" is
+    # due on days 3-5, so its lead-in is offered from the first turn, and
+    # about half the director calls existed only for it (declined up to 14
+    # times running). Live harness runs, three an arm (Oct 21 2026): the
+    # calls made only for a lead-in fell from 16 to 9, the lead-in was given
+    # at about the same turn, and every event began after its lead-in.
+    if item.kinds == ("lead_in",):
         return True
     return item.kinds == ("reveal",) or (item.kinds == ("begin",) and item.event.pacing == "any")
 
