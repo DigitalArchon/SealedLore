@@ -300,7 +300,7 @@ A colossal gate of bone-white stone in a cliff that rises into the smoke.
 # Facts
 
 - orin: in chains (in chains, freed, lost) [watch] — what has become of Orin: freed once someone breaks his soul-chain; lost if he is taken back or destroyed
-- ashgrin: neutral (neutral, ally, betrayer) [watch] — where the imp Ashgrin stands: ally once a bargain with him is struck and kept; betrayer once he sells someone out
+- ashgrin: neutral (neutral, bargained, ally, betrayer) [watch] — where the imp Ashgrin stands: bargained once a bargain with him is struck; ally once he has done his part of one, telling or showing what he promised or helping as agreed; betrayer once he sells someone out
 - gate: sealed (sealed, open) — the Ashen Gate; changed only by events
 
 # Timeline
