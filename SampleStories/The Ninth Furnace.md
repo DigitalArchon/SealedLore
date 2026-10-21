@@ -134,6 +134,13 @@ hung with chains, its shrine lit by braziers, on the bank of a river of lava.
 A wide river of molten rock flowing through the Ninth Furnace, glowing orange
 and red, crossed only by narrow bridges of black iron.
 
+## The ash wastes
+- keywords: ash wastes, the wastes
+- picture: pictures/furnace-ash-wastes.jpg | the ash wastes
+
+Grey dunes of ash and cinders under a smoke-dark roof, dotted with the
+shelters of damned souls in hiding.
+
 ## The Iron Citadel
 - keywords: the citadel, Malgareth's fortress
 - picture: pictures/furnace-iron-citadel.jpg | the citadel
@@ -343,6 +350,7 @@ Malgareth leaves his citadel.
 - tell: A procession of the Ember Crown comes down the road with drums and censers, dragging chained souls behind it, High Cantor Vossk at its head. He stops, lifts his iron mask a little and sniffs the air. Something here is alive.
 
 ## The runaways' hollow
+- at: The ash wastes
 - pacing: any time
 - trigger: The player's character goes into the ash wastes looking for help, or asks who opposes the cult.
 - tell: In a ring of broken stones in the ash, a handful of runaway souls huddle around a guttering fire. They are wary, desperate and afraid, but they know the Iron Citadel, and they whisper of a living hand that can break soul-chains.
@@ -360,6 +368,12 @@ Malgareth leaves his citadel.
 - reveals: The Ashen Gate
 - trigger: The player's character learns how to open the Ashen Gate, from Ashgrin, the runaways or the cult's own scriptures.
 - tell: The way out is real: at the end of the Pilgrim Road stands the Ashen Gate, and a living hand pressed to its doors will open them. But the cult guards the road, and whatever passes through with the living may go up too, Archfiend or not.
+
+### Ashgrin knows it
+- requires: The imp's bargain happened
+
+### The runaways know it
+- requires: The runaways' hollow happened
 
 ## The Ashen Gate opens
 - at: The Ashen Gate

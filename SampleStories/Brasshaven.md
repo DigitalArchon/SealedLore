@@ -141,6 +141,14 @@ rising above every other building in the city.
 A forest of iron mooring towers on the city's highest pier, crowded with
 airships of every size, from fat cargo barges to sleek racing yachts.
 
+## The Ashcombe Works
+- keywords: Ashcombe Works, Ashcombe Hall
+- picture: pictures/brasshaven-ashcombe-works.jpg | the Ashcombe Works
+
+House Ashcombe's factories: smokestacks, foundries and warehouses behind iron
+railings, with automatons marching in and out of their gates, and beside them
+Ashcombe Hall, Lady Ashcombe's mansion of white stone and brass.
+
 ## The Undercroft
 - keywords: the undercity, under the piers
 - hidden: yes
@@ -347,6 +355,7 @@ Lady Ashcombe's calculating engine sends its order.
 - tell: A trapdoor, a steam vent or a friend of a friend leads down into the Undercroft, where Mags Carroway, smuggler queen of the piers, offers shelter at a price and knows a secret way into the Ashcombe Works.
 
 ## The calculating engine
+- at: The Ashcombe Works
 - pacing: any time
 - requires: Tock speaks happened
 - reveals: The Ashcombe Difference Engine

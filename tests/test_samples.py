@@ -122,6 +122,60 @@ def test_the_samples_quiet_events_wait_for_their_moment():
     assert "Father Brennan's flock" in _quiet_armed(roads, chronicle, day=3)
 
 
+def _begins_armed(plot, chronicle, mentioned: set[str] | None = None) -> set[str]:
+    from sealedlore.engine.chronicle import armed
+
+    days = {event.id: 1 for event in plot.events}
+    return {
+        item.event.title
+        for item in armed(plot, chronicle, days, mentioned=mentioned or set())
+        if "begin" in item.kinds and item.event.kind == "optional"
+    }
+
+
+def test_the_samples_any_time_events_wait_until_they_could_happen():
+    """An "any time" event with nothing to wait for was offered to the director
+    on every call of a journey (The Ninth Furnace's hollow and way out) or of
+    a stay at home (Brasshaven's calculating engine, once Tock had spoken):
+    live harness runs, Oct 2026. Each now waits for where or what it needs."""
+    from sealedlore.engine.chronicle import happen, initial_chronicle, set_place
+
+    def load(name: str):
+        return parse_plot_markdown((SAMPLES / name).read_text(encoding="utf-8")).scenario.plot
+
+    brass = load("Brasshaven.md")
+    chronicle = initial_chronicle(brass)
+    set_place(chronicle, "Tinker's Row")
+    chronicle.facts["automaton_repaired"] = "yes"
+    tock = brass.event("tock_speaks")
+    happen(chronicle, tock, tock.variants[0], node_id="n", revealed=True)
+    assert "The calculating engine" not in _begins_armed(brass, chronicle)
+    # Named (the invitation to Ashcombe Hall), or there: armed.
+    assert "The calculating engine" in _begins_armed(brass, chronicle, {"The Ashcombe Works"})
+    set_place(chronicle, "The Ashcombe Works")
+    assert "The calculating engine" in _begins_armed(brass, chronicle)
+
+    furnace = load("The Ninth Furnace.md")
+    chronicle = initial_chronicle(furnace)
+    set_place(chronicle, "The Pilgrims' Rest")
+    set_place(chronicle, None)  # out on the road
+    armed_now = _begins_armed(furnace, chronicle)
+    assert "The runaways' hollow" not in armed_now and "The way out" not in armed_now
+    set_place(chronicle, "The ash wastes")
+    assert "The runaways' hollow" in _begins_armed(furnace, chronicle)
+    # The way out once someone who knows has come into the story.
+    assert "The way out" not in _begins_armed(furnace, chronicle)
+    hollow = furnace.event("the_runaways_hollow")
+    happen(chronicle, hollow, hollow.variants[0], node_id="n", revealed=True)
+    assert "The way out" in _begins_armed(furnace, chronicle)
+    chronicle = initial_chronicle(furnace)
+    set_place(chronicle, "The Pilgrims' Rest")
+    set_place(chronicle, None)
+    bargain = furnace.event("the_imp_s_bargain")
+    happen(chronicle, bargain, bargain.variants[0], node_id="n", revealed=True)
+    assert "The way out" in _begins_armed(furnace, chronicle)
+
+
 pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication  # noqa: E402

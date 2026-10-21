@@ -53,8 +53,15 @@ def normalised(scenario: Scenario) -> dict:
 
 @pytest.mark.parametrize(
     "path",
-    [SAMPLES / "Doomsville.md", SAMPLES / "Doomsville with a map.md", EXTENDED],
-    ids=["sample", "mapped", "extended"],
+    [
+        SAMPLES / "Doomsville.md",
+        SAMPLES / "Doomsville with a map.md",
+        EXTENDED,
+        # Variants that only gate (no tell of their own), and places beside a map.
+        SAMPLES / "The Ninth Furnace.md",
+        SAMPLES / "Brasshaven.md",
+    ],
+    ids=["sample", "mapped", "extended", "furnace", "brasshaven"],
 )
 def test_a_sample_survives_reading_and_writing(path: Path):
     text = path.read_text(encoding="utf-8")
