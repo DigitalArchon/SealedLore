@@ -418,6 +418,34 @@ def test_the_guide_s_front_matter_parses_as_written():
     assert parsed.scenario.title == "Doomsville"
 
 
+def test_the_writing_guide_s_place_gate_is_doomsville_s_own():
+    """The writing guide's example of a place gate is Doomsville's ambush as
+    it ships, so a change to the one is made to the other."""
+    import re
+
+    guide = (SAMPLES / PLOT_WRITING_GUIDE).read_text(encoding="utf-8")
+    block = re.search(r"```markdown\n<!-- Good: never offered in town[^\n]*\n(.*?)```", guide, re.S)
+    assert block is not None
+    text = "# Places\n\n## Hellsville\nA town.\n\n# Events\n\n" + block.group(1)
+    parsed = parse_plot_markdown(text)
+    assert [p.message for p in parsed.problems if p.error] == []
+    example = parsed.scenario.plot.events[0]
+    sample = next(
+        event
+        for event in parse_plot_markdown(
+            (SAMPLES / "Doomsville.md").read_text(encoding="utf-8")
+        ).scenario.plot.events
+        if event.title == example.title
+    )
+
+    def shape(event) -> tuple:
+        ways = [(v.title, [c.model_dump() for c in v.requires]) for v in event.variants]
+        return event.window, event.pacing, event.trigger, event.requires, ways
+
+    assert shape(example) == shape(sample)
+    assert example.variants[0].requires[0].place == "Hellsville"
+
+
 def test_media_lists_only_the_views_the_map_shows(app, tmp_path: Path):
     """The review: Media's Map section listed (and Save all wrote) the views
     of places the map keeps under the fog, the vox relay among them."""

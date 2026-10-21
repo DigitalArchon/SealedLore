@@ -43,10 +43,26 @@ after turn until it happens.
 ```
 
 **Say where it can't happen.** A roadside ambush whose only condition is its
-window is offered to the director on every turn the character spends in town.
-`requires: at != Hellsville` means nobody is asked about it while they are in
-town. For an event that
-can only happen somewhere, `at:` does the same (see below).
+window is offered to the director on every turn the character spends in town,
+and now and then begun there. A condition on the place means nobody is asked
+about it in town at all, and leaves the trigger to say what the character is
+doing.
+
+```markdown
+<!-- Good: never offered in town, and the trigger says what the character is doing -->
+## First bandit meeting
+- when: day 2–60
+- pacing: any time
+- trigger: The player's character is travelling the roads or scavenging away from shelter, alone or nearly so.
+
+### Away from Hellsville
+- requires: at != Hellsville
+```
+
+The condition is on a variant, the event's only way to go, because the event
+has days (see "Windows" below); on an event without `when:`,
+`- requires: at != Hellsville` under its own heading does the same. For an event
+that can only happen somewhere, `at:` does the same (see below).
 
 **Don't spend the trigger on what is already settled.** Once a condition is
 in `requires:`, don't say it again in the trigger; an event happens once, so
@@ -70,18 +86,12 @@ turn. Nothing older, and nothing that isn't on the page.
 - trigger: The player's character has come to trust the townsfolk, and word of the fight has had time to spread.
 ```
 
-**A trigger is a moment, not a stretch.** "Is travelling the roads" is true
-for days on end, and a director that turned it down once has no new reason to
-say yes the next turn. Say what the moment looks like, and how many count as
-"nearly alone".
-
-```markdown
-<!-- Bad: true for days on end, and "nearly so" is anyone's guess -->
-- trigger: The player's character is travelling the roads, alone or nearly so.
-
-<!-- Good -->
-- trigger: The player's character sets out on a road or across open country, or goes scavenging away from shelter, alone or with one or two others.
-```
+**A trigger that holds for days is judged for days.** While its conditions
+hold, an event is offered again and again, and each time the director judges
+its trigger against the last couple of exchanges alone. Where the story has a
+moment to name ("reaches Sylvaranth", "goes to sleep"), name it. Where it has a
+stretch, as a journey does, take away with `requires:` and `at:` the turns it
+can't be, as the bandit meeting above is kept out of town.
 
 **Write for the company the character keeps.** "Alone" in a story whose two
 leads always travel together waits for a moment that never comes. If what you
@@ -163,6 +173,12 @@ chance, off screen if that variant fits, or as the plot model judges best. So:
   the watch is hunting the player's character by name"), and the story makes
   the captain of the watch a friend, the event that needs it never comes. If it
   matters, have an earlier event `sets:` the fact, or give it a second way in.
+
+An optional event with `when:` days is different: past its last day it is
+skipped if its own conditions fail then, or if it has none, but while they hold
+it waits on for its trigger, days or no. To keep it to its days and still say
+where it can't happen, put the place on a variant, as the bandit meeting above
+does.
 
 ## Lead-ins
 
