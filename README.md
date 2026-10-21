@@ -449,7 +449,9 @@ prove and what they don't, is in the manual:
 - [The manual](docs/manual.md): installing in detail, the window, every
   feature, the terminal client.
 - [The plot file format](SampleStories/PLOT_FORMAT.md), with
-  [Doomsville](SampleStories/Doomsville.md) as a worked example.
+  [Doomsville](SampleStories/Doomsville.md) as a worked example, and
+  [Writing a plot that plays well](SampleStories/WRITING_PLOTS.md), on how
+  to word one.
 - [Building and checking the AppImage](docs/building.md).
 - [Contributing](CONTRIBUTING.md): setting up, running the tests, and how
   the project works.

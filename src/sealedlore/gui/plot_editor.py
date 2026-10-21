@@ -62,6 +62,14 @@ from sealedlore.engine.plot_file import (
 )
 from sealedlore.engine.plot_md import PLOT_SUFFIX
 from sealedlore.gui import theme
+from sealedlore.gui.guides import (
+    FORMAT_LABEL,
+    PLOT_FORMAT_GUIDE,
+    PLOT_WRITING_GUIDE,
+    WRITING_LABEL,
+    WRITING_TIP,
+    open_guide,
+)
 from sealedlore.gui.plot_editor_pages import (
     CharacterPage,
     EntryPage,
@@ -251,6 +259,17 @@ class PlotEditorWindow(QMainWindow):
         close.setShortcut(QKeySequence.Close)
         close.triggered.connect(self.close)
         menu.addAction(close)
+        # The guides, where plots are written: what a file may hold, and how
+        # to word it so the director and the reads take it as meant.
+        guides = self.menuBar().addMenu("&Help")
+        format_guide = QAction(FORMAT_LABEL, self)
+        format_guide.setStatusTip("What a plot file may hold, part by part")
+        format_guide.triggered.connect(lambda: open_guide(self, PLOT_FORMAT_GUIDE))
+        guides.addAction(format_guide)
+        writing_guide = QAction(WRITING_LABEL, self)
+        writing_guide.setStatusTip(WRITING_TIP)
+        writing_guide.triggered.connect(lambda: open_guide(self, PLOT_WRITING_GUIDE))
+        guides.addAction(writing_guide)
 
     def _folder(self) -> Path | None:
         """Where the file's pictures are kept from: None until it is saved."""

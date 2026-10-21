@@ -483,3 +483,20 @@ def test_quitting_the_app_asks_about_the_editors_unsaved_file(app, tmp_path: Pat
     assert window.close()
     assert not editor.isVisible()
     assert answers == []
+
+
+def test_the_editor_opens_both_guides_from_its_help_menu(app, editor, monkeypatch):
+    """Where plots are written, the format guide and the guide to wording one
+    are a menu away (they ship beside the samples)."""
+    import sealedlore.gui.guides as guides
+
+    opened: list[str] = []
+    monkeypatch.setattr(
+        guides.QDesktopServices, "openUrl", lambda url: opened.append(url.toLocalFile())
+    )
+    menu = next(a.menu() for a in editor.menuBar().actions() if a.text() == "&Help")
+    for action in menu.actions():
+        action.trigger()
+    assert [Path(path).name for path in opened] == ["PLOT_FORMAT.md", "WRITING_PLOTS.md"]
+    assert all(Path(path).is_file() for path in opened)
+    editor.close()

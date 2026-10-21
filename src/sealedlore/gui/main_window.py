@@ -67,6 +67,7 @@ from sealedlore.gui.cast_panel import CastPanel
 from sealedlore.gui.composer import DEFAULT_SUFFIX, Composer
 from sealedlore.gui.fields import PageStack, install_wheel_guard
 from sealedlore.gui.generate_dialog import GenerateDialog
+from sealedlore.gui.guides import WRITING_LABEL, WRITING_TIP, open_guide
 from sealedlore.gui.inspector import ContextInspector
 from sealedlore.gui.lore_panel import LorePanel
 from sealedlore.gui.model_hosts import hosts_catalog
@@ -817,6 +818,10 @@ class MainWindow(
         )
         samples_action.triggered.connect(self._open_samples)
         help_menu.addAction(samples_action)
+        writing_action = QAction(WRITING_LABEL, self)
+        writing_action.setStatusTip(WRITING_TIP)
+        writing_action.triggered.connect(lambda: open_guide(self))
+        help_menu.addAction(writing_action)
         trouble_menu = help_menu.addMenu("Model &trouble")
         slow_action = QAction("The model takes too long before it writes…", self)
         slow_action.setStatusTip(

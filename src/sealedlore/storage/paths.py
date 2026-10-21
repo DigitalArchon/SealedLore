@@ -46,14 +46,17 @@ def samples_dir() -> Path | None:
     return checkout if checkout.is_dir() else None
 
 
-# The one Markdown file in the samples folder that isn't a story.
+# The Markdown files in the samples folder that aren't stories: what a plot
+# file may hold, and how to word one so it plays as its author meant.
 PLOT_FORMAT_GUIDE = "PLOT_FORMAT.md"
+PLOT_WRITING_GUIDE = "WRITING_PLOTS.md"
+GUIDES = (PLOT_FORMAT_GUIDE, PLOT_WRITING_GUIDE)
 
 
 def sample_stories(folder: Path | None = None) -> list[tuple[str, Path]]:
     """The sample stories offered by File → New story from a sample, as
     (name, path), sorted by name: every plot file (.md) in the samples folder
-    but the format guide, named after the file ("Doomsville.md" is
+    but the guides, named after the file ("Doomsville.md" is
     "Doomsville", "Dust_Road.md" "Dust Road"). A file dropped into
     SampleStories/ is offered with no other change: the AppImage build copies
     every .md there. Read afresh on each call, never cached."""
@@ -63,7 +66,7 @@ def sample_stories(folder: Path | None = None) -> list[tuple[str, Path]]:
     found = [
         (path.stem.replace("_", " "), path)
         for path in folder.glob("*.md")
-        if path.is_file() and path.name != PLOT_FORMAT_GUIDE
+        if path.is_file() and path.name not in GUIDES
     ]
     return sorted(found, key=lambda item: item[0].casefold())
 

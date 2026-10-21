@@ -5,6 +5,11 @@ opening, characters and places, and optionally a **plot**. The plot is the set
 of facts the story keeps track of and the events a director brings about when
 the time and the moment are right. `Doomsville.md` is a worked example.
 
+This guide says what a file may hold. How to word it so the story plays as
+you meant (triggers the director can judge, fact meanings the reader can't
+misread, lead-ins and aftermaths that hold) is in `WRITING_PLOTS.md` beside
+it, also under Help → Writing a plot that plays well.
+
 Import one with **File → Import scenario…** to start a new story, or with
 **Story → Import plot…** to give an existing story just its facts and events.
 Anything the importer can't read is listed with its line number. Errors stop
@@ -298,7 +303,8 @@ A variant's conditions apply on top of the event's own.
 | `<event> not happened` (or `hasn't happened`, `has not happened`) | The event hasn't happened. |
 
 Separate several conditions with commas or "and". Anything fuzzy goes in
-`trigger:`.
+`trigger:` (`WRITING_PLOTS.md` has what makes a trigger the director can
+judge).
 
 **Variants** (`###`) are the different ways an event can go. When it happens,
 the variant whose conditions hold is the one used. An event-level `sets:`

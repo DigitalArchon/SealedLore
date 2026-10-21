@@ -127,7 +127,7 @@ lack (so no `libxcb-cursor0` install needed). It runs on x86_64 with glibc
 the floor set by PySide6 6.10+. Stories and settings live where they always
 do (`$XDG_DATA_HOME/sealedlore`, usually `~/.local/share/sealedlore`), so the
 AppImage and an installed copy share them. The sample plot files and their
-format guide are inside it (Help → Plot format guide and samples opens them),
+guides are inside it (Help → Plot format guide and samples opens them),
 and so is the tor that phone access runs (see
 [Playing from your phone](#playing-from-your-phone)).
 
@@ -820,7 +820,7 @@ stand, and, with spoilers on, the events still to come.
 ![The Plot page with spoilers shown: the clock, events to come, facts, and characters held back until an event brings them in](screenshots/plot-tab.png)
 
 **File → Import…** takes a plot file too. The sample stories that come with
-SealedLore (every plot file in `SampleStories/` but the format guide) are
+SealedLore (every plot file in `SampleStories/` but the two guides) are
 on the start page and in **File → New…**, in the AppImage as well, each with
 its picture and its line: Doomsville there is the same as importing
 `Doomsville.md`, and **Doomsville with a map** is the same story with a map
@@ -840,6 +840,15 @@ kept in a `pictures` folder beside the plot file, so share the folder with
 the file, and are put on the cards when the file is imported. It needs no story open; the editor's
 own **Start a story from this file** (its File menu) saves and imports in one
 go.
+
+How a plot is worded matters as much as what is in it: a trigger the
+director can't judge from a passage waits for good, a watched fact with a
+loose meaning flips on the first stranger, an aftermath that fits one outcome
+is told as fact after the other. **Help → Writing a plot that plays well**
+(also in the plot file editor's Help menu, beside the format guide) opens
+[`SampleStories/WRITING_PLOTS.md`](../SampleStories/WRITING_PLOTS.md): what
+each part of a plot is read by, and how to word it, with good and bad
+examples in the style of the samples.
 
 ## Drafting a story, and reviewing its settings
 

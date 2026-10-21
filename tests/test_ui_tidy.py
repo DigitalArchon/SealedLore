@@ -440,6 +440,10 @@ def test_the_menus_are_grouped(app, window: MainWindow, monkeypatch):
     help_menu = _menu(window, "Help")
     next(a for a in help_menu.actions() if "Plot format guide" in a.text()).trigger()
     assert opened and opened[0].endswith("SampleStories")
+    # The guide to wording a plot opens itself, not the folder.
+    writing = "Writing a plot that plays well"
+    next(a for a in help_menu.actions() if a.text().replace("&", "") == writing).trigger()
+    assert opened[-1].endswith("SampleStories/WRITING_PLOTS.md")
 
 
 # --- scrolling the inspector's pages --------------------------------------------------

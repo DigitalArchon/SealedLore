@@ -17,7 +17,7 @@ from sealedlore.engine.world import applied
 from sealedlore.engine.world_art import local_area
 from sealedlore.models.world import WorldMap
 from sealedlore.storage import paths
-from sealedlore.storage.paths import PLOT_FORMAT_GUIDE, sample_stories
+from sealedlore.storage.paths import PLOT_FORMAT_GUIDE, PLOT_WRITING_GUIDE, sample_stories
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -25,8 +25,14 @@ ROOT = Path(__file__).resolve().parent.parent
 SAMPLES = ROOT / "SampleStories"
 
 
-def test_every_plot_file_but_the_guide_is_a_sample(tmp_path: Path):
-    for name in ("Doomsville.md", PLOT_FORMAT_GUIDE, "Dust_Road.md", "notes.txt"):
+def test_every_plot_file_but_the_guides_is_a_sample(tmp_path: Path):
+    for name in (
+        "Doomsville.md",
+        PLOT_FORMAT_GUIDE,
+        PLOT_WRITING_GUIDE,
+        "Dust_Road.md",
+        "notes.txt",
+    ):
         (tmp_path / name).write_text("# x\n", encoding="utf-8")
     (tmp_path / "drafts.md").mkdir()
     assert [(name, path.name) for name, path in sample_stories(tmp_path)] == [
@@ -47,6 +53,10 @@ def test_the_shipped_samples_are_offered_and_import_cleanly():
     offered = sample_stories(SAMPLES)
     assert "Doomsville" in [name for name, _ in offered]
     assert PLOT_FORMAT_GUIDE not in [path.name for _, path in offered]
+    # The writing guide ships beside them (the AppImage copies every .md
+    # there) and is no story either.
+    assert (SAMPLES / PLOT_WRITING_GUIDE).is_file()
+    assert PLOT_WRITING_GUIDE not in [path.name for _, path in offered]
     for name, path in offered:
         parsed = parse_plot_markdown(path.read_text(encoding="utf-8"), fallback_title=name)
         assert parsed.ok, f"{path.name}: " + "; ".join(p.describe() for p in parsed.problems)
