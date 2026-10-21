@@ -320,7 +320,7 @@ dwarf roads that go down a very long way.
 - lead-in: yes
 - requires: blight = spreading
 - must happen: yes
-- aftermath: Fernhollow was attacked by blighted wolves. Some cottages burned; the villagers speak of grey eyes in the dark.
+- aftermath: Blighted wolves attacked Fernhollow. The villagers speak of grey wolves with burning eyes, and of what the attack cost them.
 
 Grey-blighted wolves attack Fernhollow at night.
 

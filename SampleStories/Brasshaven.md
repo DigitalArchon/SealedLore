@@ -305,7 +305,7 @@ full of steam vents and dripping pipes.
 - lead-in: yes
 - must happen: yes
 - requires: engine = running
-- aftermath: For an hour the Great Engine faltered and the floating districts sagged on their tethers. Everyone in Brasshaven felt it, and nobody official will say why.
+- aftermath: For three heartbeats the Great Engine stopped, and the floating districts dropped on their tethers. Everyone in Brasshaven felt it, and nobody official will say why.
 
 The Great Engine misses a beat for the first time in ninety years.
 
