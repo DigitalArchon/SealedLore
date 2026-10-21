@@ -111,7 +111,7 @@ and a sagging fence around the yard. From the road it looks abandoned.
 
 - hellsville: standing (standing, under attack, saved, fallen) [watch] — the state of the town. Saved only if an attack on it is beaten off; fallen once the dead overrun it
 - elena: in hellsville (in hellsville, fleeing east, with the player, dead) — where Elena Ruiz is and what became of her
-- has_companions: no [watch] — yes while at least one other living person (not an animal) travels or lives with the player's character, as a party or a place in a community; no if they are alone again
+- has_companions: no [watch] — yes once another living person (not an animal) has joined the player's character to travel on with them or to live alongside them, as a party or a place in a community; meeting someone, talking with them, sharing a meal or being shown the way is not enough; no if they are alone again
 
 # Timeline
 

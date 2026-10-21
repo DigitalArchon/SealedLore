@@ -176,6 +176,23 @@ def test_the_samples_any_time_events_wait_until_they_could_happen():
     assert "The way out" in _begins_armed(furnace, chronicle)
 
 
+def test_both_doomsville_samples_play_the_same_plot():
+    """The map sample is Doomsville on a map, so a fix to one's facts or
+    events belongs in both: `has_companions` flipped yes on a stranger met
+    on the road or a shared meal until its meaning said what doesn't count
+    (Oct 21 2026)."""
+    from tests.test_plot_file import normalised
+
+    def plot_of(name: str) -> dict:
+        scenario = parse_plot_markdown((SAMPLES / name).read_text(encoding="utf-8")).scenario
+        return normalised(scenario)["plot"]
+
+    plain, mapped = plot_of("Doomsville.md"), plot_of("Doomsville with a map.md")
+    assert plain == mapped
+    companions = next(f for f in plain["facts"] if f["name"] == "has_companions")
+    assert "meeting someone" in companions["meaning"] and companions["watched"]
+
+
 pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication  # noqa: E402

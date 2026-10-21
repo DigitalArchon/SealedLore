@@ -232,7 +232,7 @@ in the prose. Events test them, and set them with `sets:`.
 
 ```markdown
 - elena: in hellsville (in hellsville, fleeing east, dead) — what became of Elena
-- has_companions: no [watch] — yes while at least one other living person travels with them
+- has_companions: no [watch] — yes once another living person has joined them to travel on together; meeting someone is not enough
 ```
 
 The format is `name: starting value (allowed values) [watch] — meaning`
