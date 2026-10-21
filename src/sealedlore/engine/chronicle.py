@@ -624,8 +624,23 @@ class Armed:
 # no in one scene predicts a no on the next turn of it; a quiet-moment event
 # is never rested, since its moment (turning in for the night) is one turn.
 MAX_REST = 3
-# The scene moving, or this much story time passing, ends a rest at once.
+# The author's character moving to another place, someone arriving or leaving
+# (`rest_moment`), or this much story time passing, ends a rest at once.
 REST_ENDS_AFTER_MINUTES = 6 * 60
+
+
+def rest_moment(place: str | None, people: Collection[str]) -> str:
+    """The moment a declined event rests in (`EventStatus.asked_scene`): where
+    the author's character is among the plot's places (the map's, when the
+    plot has none for them) and who is with them, by card or by name.
+
+    Never the scene card's own words. The scene read rewords the location on
+    a journey ("the road" → "the road near the gate", 5 to 11 times in 21
+    passages of The Ninth Furnace live, Oct 2026), and each rewording ended
+    every rest: the director was asked again about events it had just
+    declined, in a moment that hadn't changed.
+    """
+    return " | ".join([place or "", *sorted(set(people))])
 
 
 def can_rest(item: Armed) -> bool:
@@ -641,7 +656,10 @@ def can_rest(item: Armed) -> bool:
 
 
 def resting(item: Armed, chronicle: Chronicle, scene: str) -> bool:
-    """Whether the director needn't be asked about this event this turn."""
+    """Whether the director needn't be asked about this event this turn.
+
+    `scene` is the moment now (`rest_moment`), compared with the one it was
+    last declined in."""
     status = chronicle.events.get(item.event.id)
     if status is None or not can_rest(item) or status.rest <= 0:
         return False

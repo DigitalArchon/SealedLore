@@ -1362,6 +1362,83 @@ def test_the_director_is_not_asked_again_on_the_very_next_turn(tmp_path):
     ]
 
 
+def _consulted(session: StorySession, text: str) -> bool:
+    notices = [e.text for e in session.send(turn(session, text)) if hasattr(e, "text")]
+    return any("Consulting the director" in n for n in notices)
+
+
+def _recard(session: StorySession, location: str, others: list[str]) -> None:
+    """The scene read's card after a passage: its own words for where, and who."""
+    scene = session.story.scene.model_copy(deep=True)
+    scene.location, scene.present_others = location, others
+    session.set_scene(scene, source="read")
+
+
+def test_a_reworded_location_keeps_a_rest(tmp_path):
+    """Live (The Ninth Furnace, Oct 2026) the scene read reworded the location
+    on 5 to 11 of 21 passages of a journey, and each rewording ended every
+    rest: a declined event was asked about again in an unchanged moment."""
+    session = make_session(
+        tmp_path,
+        [director(), "Ann walked the road.", read(), "Ann kept walking.", read()],
+        text=ANY_TIME,
+    )
+    session.supporting.append(Character(id="tom", name="Tom Barrow"))
+    _recard(session, "the road", ["Tom"])
+    assert _consulted(session, "I walk.")
+    # The same road in other words, and Tom by his whole name: the same moment.
+    _recard(session, "the road near the old gate, in the rain", ["Tom Barrow"])
+    assert not _consulted(session, "I keep on.")
+
+
+def test_a_move_to_another_place_ends_a_rest(tmp_path):
+    session = make_session(
+        tmp_path,
+        [
+            director(),
+            PASSAGE,
+            read(place=("The Mill", "Ann pushed through the mill door.")),
+            director(),
+            "Ann looked around the mill.",
+            read(),
+        ],
+        text=ANY_TIME,
+    )
+    assert _consulted(session, "I go into the mill.")
+    assert session.chronicle.place == "The Mill"
+    assert _consulted(session, "I look around.")
+
+
+def test_someone_arriving_ends_a_rest(tmp_path):
+    session = make_session(
+        tmp_path,
+        [director(), "Ann walked the road.", read(), director(), "Ann waved.", read()],
+        text=ANY_TIME,
+    )
+    _recard(session, "the road", [])
+    assert _consulted(session, "I walk.")
+    _recard(session, "the road", ["a peddler with a cart"])
+    assert _consulted(session, "I wave.")
+
+
+def test_a_rest_on_a_map_story_follows_the_map_where_the_plot_has_no_place(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    session = make_session(tmp_path, [], text=ANY_TIME)
+    chronicle = initial_chronicle(session.story.plot)
+    session.story.defaults.world_map = True
+    where = {"Ann": "farm"}
+    monkeypatch.setattr(session, "_world_read", lambda path=None: SimpleNamespace(where=where))
+    at_farm = session._rest_moment(chronicle, [])
+    where["Ann"] = "town"
+    assert session._rest_moment(chronicle, []) != at_farm
+    # The plot's own place wins wherever it has one.
+    chronicle.place = "The Mill"
+    in_mill = session._rest_moment(chronicle, [])
+    where["Ann"] = "farm"
+    assert session._rest_moment(chronicle, []) == in_mill
+
+
 def test_the_scene_card_vetoes_a_move_to_elsewhere_while_it_names_the_place():
     p = plot()
     before = initial_chronicle(p)

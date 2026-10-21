@@ -38,6 +38,7 @@ from sealedlore.engine.chronicle import (
     note_skipped,
     release_unconfirmed,
     resolve_due,
+    rest_moment,
     resting,
     schedule,
     scheduled_minutes,
@@ -82,6 +83,7 @@ from sealedlore.engine.retrieval import held_back
 from sealedlore.engine.rules import render_cast_sheet
 from sealedlore.engine.scene_state import (
     log_on_path,
+    same_person,
 )
 from sealedlore.engine.scene_update import (
     render_card,
@@ -117,6 +119,9 @@ from sealedlore.threads import BackgroundThread
 
 
 NoticeSeverity = Literal["info", "warning", "failure"]
+
+# A leading article, left off a name in the scene with no card ("the clerk").
+_ARTICLE = re.compile(r"^(?:the|a|an)\s+")
 
 
 @dataclass(frozen=True)
@@ -985,15 +990,9 @@ class PlotRuntime:
         directions = automatic_directions(candidates)
         confirmed: list[str] = []
         consulted = False
-        # Where, and who is there: an arrival is a new moment for a resting event.
-        scene = self.story.scene
-        scene_now = " | ".join(
-            [
-                scene.location or "",
-                *sorted(scene.present_character_ids),
-                *sorted(scene.present_others),
-            ]
-        )
+        # Where, and who is there: a move or an arrival is a new moment for a
+        # resting event; a reworded location is not.
+        scene_now = self._rest_moment(chronicle, [*history, user_node])
         if candidates and not directions:
             if all(resting(item, chronicle, scene_now) for item in candidates):
                 # Everything armed was declined a turn or two ago, in this
@@ -1061,6 +1060,27 @@ class PlotRuntime:
         elif consulted:
             yield SessionNotice("Plot: the director was consulted.")
         return self._directed(turn, directions, [*history, user_node])
+
+    def _rest_moment(self, chronicle: Chronicle, path: Sequence[Node]) -> str:
+        """The moment a declined event rests in (`chronicle.rest_moment`): the
+        author's character's place among the plot's places, or on the map
+        when the story keeps one and the plot has them nowhere, and who is
+        in the scene, by card where a card answers to the name."""
+        place = chronicle.place
+        if place is None and self.map_on:
+            name = self.map_held_name(chronicle.held_id or self.story.held_character_id)
+            where = self._world_read(path).where.get(name) if name else None
+            place = f"map:{where}" if where else None
+        scene = self.story.scene
+        cards = [*self.cast, *self.supporting]
+        people = list(scene.present_character_ids)
+        for name in scene.present_others:
+            matches = {card.id for card in cards if same_person(name, card)}
+            if len(matches) == 1:
+                people.append(matches.pop())
+            else:
+                people.append(" ".join(_ARTICLE.sub("", name.strip().lower()).split()))
+        return rest_moment(place, people)
 
     @staticmethod
     def _author_skip(user_node: Node, chronicle: Chronicle) -> bool:
