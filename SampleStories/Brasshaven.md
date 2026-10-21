@@ -313,6 +313,15 @@ The Great Engine misses a beat for the first time in ninety years.
 - tell: Every pipe in the city shudders at once. The gas lamps dim; the floating districts overhead groan on their tethers and drop a sickening few feet; the Engine's endless thunder stutters, stops for three heartbeats, then starts again. All across the city, automatons stand still and look up at the Engine tower.
 - sets: engine = sabotaged
 
+## A warrant from House Ashcombe
+- when: day 5–7
+- pacing: any time
+- must happen: yes
+- requires: The Engine falters happened, plot_exposed = no, wanted = no
+- sets: wanted = yes
+- tell: Constables come for the player's character with a warrant sworn at House Ashcombe's request: sabotage of the Great Engine, and the theft of an Ashcombe automaton. Their name and likeness go up at every tram stop, the newssheets call them the Engine's saboteur, and constables look for them wherever they were last seen. If Inspector Grieve has come to trust them, he brings the warning himself, a little ahead of the constables; otherwise he leads them, polite and in no hurry. Whether they are taken, run or talk their way clear is the author's to decide.
+- aftermath: After the Engine faltered, House Ashcombe had a warrant sworn against the player's character for sabotage, and the Constabulary came looking for them by name.
+
 ## The night of the automatons
 - when: day 8–10
 - lead-in: yes

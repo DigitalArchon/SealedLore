@@ -225,6 +225,36 @@ def test_doomsville_s_bandits_are_never_offered_in_town_and_keep_their_days():
         assert not offered(plot, chronicle), name
 
 
+def test_brasshaven_s_undercroft_has_a_way_in():
+    """ "Into the Undercroft" waits for the Constabulary to hunt the player's
+    character by name (`wanted`, a watched fact), and nothing in the plot made
+    that happen: a story where Inspector Grieve became their friend never got
+    there. After the Engine falters, House Ashcombe now has a warrant sworn
+    against them, by itself, with no director call, and that sets it."""
+    from sealedlore.engine.chronicle import armed, clock_minutes, happen, initial_chronicle
+
+    plot = parse_plot_markdown(
+        (SAMPLES / "Brasshaven.md").read_text(encoding="utf-8")
+    ).scenario.plot
+    days = {"the_engine_falters": 3, "a_warrant_from_house_ashcombe": 5}
+    chronicle = initial_chronicle(plot)
+    chronicle.minutes = clock_minutes(5, 12, 0)
+
+    def beginning() -> dict:
+        found = armed(plot, chronicle, days, mentioned=set())
+        return {item.event.id: item for item in found if "begin" in item.kinds}
+
+    assert "a_warrant_from_house_ashcombe" not in beginning()  # the Engine hasn't faltered
+    falters = plot.event("the_engine_falters")
+    happen(chronicle, falters, falters.variants[0], node_id="n1", revealed=True)
+    warrant = beginning()["a_warrant_from_house_ashcombe"]
+    assert warrant.automatic
+    assert "into_the_undercroft" not in beginning()
+    happen(chronicle, warrant.event, warrant.variants[0], node_id="n2", revealed=True)
+    assert chronicle.facts["wanted"] == "yes"
+    assert "into_the_undercroft" in beginning()
+
+
 def _names_entry(text: str, entry) -> bool:
     """Whether a text names a lore entry: its title, or a keyword of more than
     one word, articles aside. A one-word keyword ("the singing", "the gate")
