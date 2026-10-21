@@ -1334,6 +1334,41 @@ def test_a_quiet_moment_event_is_asked_about_every_turn():
     assert not resting(items[0], chronicle, "the ridge")
 
 
+LED_IN = PLOT_FILE.replace("- when: day 3–4\n", "- when: day 3–4\n- lead-in: yes\n").replace(
+    "## The cellar\n- requires: visited The Mill\n", "## The cellar\n- at: The Mill\n"
+)
+
+
+def test_with_the_switch_a_declined_lead_in_rests_as_an_any_time_event(monkeypatch):
+    """Off by default: a lead-in is offered every turn until it is given.
+    On, a declined one rests a turn, then two, then three, and a move or an
+    arrival ends the rest as for any other."""
+    from sealedlore.engine import chronicle as chronicle_module
+    from sealedlore.engine.chronicle import armed, note_asked, note_skipped, resting
+
+    p = plot(LED_IN)
+    chronicle = initial_chronicle(p)
+    chronicle.minutes = clock_minutes(1, 9, 0)
+    items = armed(p, chronicle, {"the_raid": 4}, mentioned=set())
+    assert [(item.event.id, item.kinds) for item in items] == [("the_raid", ("lead_in",))]
+    note_asked(items, set(), chronicle, "the ridge")
+    assert not resting(items[0], chronicle, "the ridge")
+
+    monkeypatch.setattr(chronicle_module, "LEAD_IN_REST", True)
+    chronicle = initial_chronicle(p)
+    chronicle.minutes = clock_minutes(1, 9, 0)
+    note_asked(items, set(), chronicle, "the ridge")
+    assert resting(items[0], chronicle, "the ridge")
+    assert not resting(items[0], chronicle, "the ridge | Tom")
+    note_skipped(items, chronicle)
+    assert not resting(items[0], chronicle, "the ridge")
+    note_asked(items, set(), chronicle, "the ridge")
+    assert chronicle.events["the_raid"].rest == 2
+    # A lead-in given is acted on, not declined.
+    note_asked(items, {"the_raid"}, chronicle, "the ridge")
+    assert chronicle.events["the_raid"].declined == 2
+
+
 def test_the_director_is_not_asked_again_on_the_very_next_turn(tmp_path):
     session = make_session(
         tmp_path,
