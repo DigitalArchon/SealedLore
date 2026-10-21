@@ -193,6 +193,38 @@ def test_both_doomsville_samples_play_the_same_plot():
     assert "meeting someone" in companions["meaning"] and companions["watched"]
 
 
+def test_doomsville_s_bandits_are_never_offered_in_town_and_keep_their_days():
+    """The director was asked about the roadside ambush on every turn the
+    character spent in Hellsville, where it can't begin. The gate is on a
+    variant, not the event: an optional event's own conditions that still
+    hold when its last day passes keep it waiting past it, and the ambush
+    is for days 2 to 60 only."""
+    from sealedlore.engine.chronicle import (
+        armed,
+        clock_minutes,
+        initial_chronicle,
+        resolve_due,
+        set_place,
+    )
+
+    def offered(plot, chronicle) -> bool:
+        found = armed(plot, chronicle, {}, mentioned=set())
+        return "first_bandit_meeting" in {item.event.id for item in found}
+
+    for name in ("Doomsville.md", "Doomsville with a map.md"):
+        plot = parse_plot_markdown((SAMPLES / name).read_text(encoding="utf-8")).scenario.plot
+        chronicle = initial_chronicle(plot)
+        chronicle.minutes = clock_minutes(10, 12, 0)
+        set_place(chronicle, "Hellsville")
+        assert not offered(plot, chronicle), name
+        set_place(chronicle, None)  # out on the road
+        assert offered(plot, chronicle), name
+        chronicle.minutes = clock_minutes(61, 12, 0)
+        resolve_due(plot, chronicle, {}, node_id=None)
+        assert chronicle.events["first_bandit_meeting"].state == "missed", name
+        assert not offered(plot, chronicle), name
+
+
 pytest.importorskip("PySide6")
 
 from PySide6.QtWidgets import QApplication  # noqa: E402

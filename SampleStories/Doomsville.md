@@ -158,6 +158,9 @@ A horde of the dead descends on Hellsville.
 - trigger: The player's character is travelling the roads or scavenging away from shelter, alone or nearly so.
 - tell: A small band of bandits, three or four of them, confronts the player's character on the road. Evan Stevens, the youngest, is the one with the fanciest rifle and the eagerness to use it. What they want, and how it goes, depends on how the player's character handles them.
 
+### Away from Hellsville
+- requires: at != Hellsville
+
 ## Welcome to Hellsville
 - at: Hellsville
 - pacing: any time
