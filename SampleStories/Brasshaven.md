@@ -376,4 +376,4 @@ Every Ashcombe-pattern automaton in the city receives the same order at once.
 - pacing: quiet moment
 - requires: plot_exposed = no, Tock speaks happened
 - trigger: The player's character has drawn attention by asking questions about the Engine or House Ashcombe.
-- tell: A liveried automaton delivers a gilt-edged card: Lady Imogen Ashcombe requests the pleasure of their company for dinner at Ashcombe Hall, tonight. Her carriage is waiting. It is not an invitation one safely refuses, nor safely accepts.
+- tell: A liveried automaton delivers a gilt-edged card: Lady Imogen Ashcombe requests the pleasure of their company at Ashcombe Hall, and her carriage will call for them. It is not an invitation one safely refuses, nor safely accepts.
