@@ -52,6 +52,10 @@ works as intended. Bug reports and pull requests are welcome; see
   itself, portraits and all, in as much or as little detail as you like. For
   a story set in a world that already exists, **Fill with lore characters…**
   writes cards for its people, the ones you name first.
+- **A distrusted root out of the bundle** (2.0.0b5). The AppImage no longer
+  trusts emSign ECC Root CA - G3, the eMudhra root whose intermediates were
+  found to have recoverable keys in October 2026, and Private Mode's client
+  is on Tinfoil's current SDK, checked against NanoGPT's own.
 
 ### Play on a map
 
