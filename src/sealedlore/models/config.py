@@ -612,6 +612,9 @@ class WindowLayout(BaseModel):
     # The composer's height, as the divider above it was last dragged; 0 is
     # its natural height.
     composer_height: int = 0
+    # The Cast page's list of names, as its divider was last dragged; 0 is
+    # as tall as its names.
+    cast_list_height: int = 0
 
 
 class PhoneDevice(BaseModel):

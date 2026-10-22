@@ -481,6 +481,8 @@ class MainWindow(
         self.addDockWidget(Qt.LeftDockWidgetArea, left)
 
         self.cast_panel = CastPanel(self._story_pictures)
+        if self.config.window is not None:
+            self.cast_panel.set_list_height(self.config.window.cast_list_height)
         self.cast_panel.changed.connect(self._on_cast_changed)
         self.cast_panel.renamed.connect(self._on_character_renamed)
         self.cast_panel.promote_requested.connect(self._promote_character)

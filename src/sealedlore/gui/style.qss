@@ -16,12 +16,14 @@ QMainWindow::separator {
 
 /* The divider between the story and the composer: drag it to make the box
    you type in taller. A short grip line shows where it is. */
-#storySplit::handle:vertical {
+#storySplit::handle:vertical,
+#castSplit::handle:vertical {
   background: transparent;
   image: @grip;
 }
 
-#storySplit::handle:vertical:hover {
+#storySplit::handle:vertical:hover,
+#castSplit::handle:vertical:hover {
   background: @separator;
 }
 

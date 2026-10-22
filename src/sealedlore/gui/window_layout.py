@@ -219,6 +219,7 @@ class LayoutWindow:
             stories_width=before.stories_width,
             inspector_width=before.inspector_width,
             composer_height=before.composer_height,
+            cast_list_height=self.cast_panel.list_height() or before.cast_list_height,
         )
         if self._composer_dragged and self.composer.isVisible():
             layout.composer_height = self.composer.height()

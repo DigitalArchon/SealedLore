@@ -13,7 +13,7 @@ The model suggests them; nothing joins either tier without the author's say.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -55,6 +55,12 @@ PORTRAIT_COLUMN_MIN = 160
 LIST_ICON = 28
 # Past this many skills the table scrolls rather than pushing the form down.
 SKILL_ROWS_VISIBLE = 8
+# The list of names, until the author drags the divider under it: as tall as
+# its rows, at least LIST_ROWS_MIN of them and at most LIST_ROWS_MAX, and never
+# more than LIST_SHARE_MAX of the page (the sheet under it is the long part).
+LIST_ROWS_MIN = 4
+LIST_ROWS_MAX = 12
+LIST_SHARE_MAX = 0.5
 
 
 class CastPanel(QWidget):
@@ -117,15 +123,26 @@ class CastPanel(QWidget):
         top_layout.addLayout(buttons)
         top_layout.addWidget(self._build_suggestions())
 
+        # The list over the sheet, a divider with a grip between them. The
+        # list was given a fixed 150px share, and with supporting cards and
+        # suggestions under it that left room for one name at a time, even at
+        # 1440p (the author, Oct 2026); the divider was a bare 4px line. Now
+        # the list is as tall as its names (`_fit_list`) until the author
+        # drags the divider, and where they leave it is kept
+        # (`Config.window.cast_list_height`).
         splitter = QSplitter(Qt.Vertical)
+        splitter.setObjectName("castSplit")
+        splitter.setChildrenCollapsible(False)
+        splitter.setHandleWidth(10)
         splitter.addWidget(top)
         splitter.addWidget(self._build_editor())
-        # The list is a handful of names; the sheet under it, with the
-        # portrait at its top, is the long part: on a 768px laptop the list
-        # at 220 left only the top of the portrait in view.
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([150, 630])
+        splitter.splitterMoved.connect(self._list_dragged)
+        self.splitter = splitter
+        self._top = top
+        # The list's height as the author dragged it; 0 until they do.
+        self._list_height = 0
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -395,10 +412,60 @@ class CastPanel(QWidget):
                     self.list.setCurrentItem(item)
         self._loading = False
         self._show_suggestions()
+        self._fit_list()
         if self.list.currentItem() is None and self._cast:
             self.list.setCurrentRow(1)
         else:
             self._on_selection_changed(self.list.currentItem(), None)
+
+    # --- the list's height ------------------------------------------------
+
+    def list_height(self) -> int:
+        """The list's part of the page as the author dragged it; 0 if never."""
+        return self._list_height
+
+    def set_list_height(self, height: int) -> None:
+        """Where the author last left the divider (0: fitted to the names)."""
+        self._list_height = max(0, height)
+        self._fit_list()
+
+    def _list_dragged(self, position: int, _index: int) -> None:
+        self._list_height = position
+
+    def _rows_height(self, rows: int) -> int:
+        """The height of the list's first `rows` rows; past its last, rows
+        as tall as a name's."""
+        heights = [self.list.sizeHintForRow(row) for row in range(self.list.count())]
+        name = max(heights, default=0) or LIST_ICON + 10
+        shown = heights[:rows]
+        return sum(shown) + name * (rows - len(shown))
+
+    def _fit_list(self) -> None:
+        """The list as tall as its names (see LIST_ROWS_*), or as dragged."""
+        total = sum(self.splitter.sizes())
+        if total <= 0:
+            return
+        frame = 2 * self.list.frameWidth()
+        self.list.setMinimumHeight(self._rows_height(LIST_ROWS_MIN) + frame)
+        # Everything in the top part but the list: buttons, suggestions.
+        rest = max(0, self._top.minimumSizeHint().height() - self.list.minimumHeight())
+        least = self.list.minimumHeight() + rest
+        if self._list_height > 0:
+            wanted = self._list_height
+        else:
+            rows = min(max(self.list.count(), LIST_ROWS_MIN), LIST_ROWS_MAX)
+            wanted = min(self._rows_height(rows) + frame + rest, int(total * LIST_SHARE_MAX))
+        editor = self.splitter.widget(1).minimumSizeHint().height()
+        top = max(least, min(wanted, total - editor))
+        self.splitter.setSizes([top, total - top])
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        QTimer.singleShot(0, self, self._fit_list)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._fit_list()
 
     def _icon(self, character: Character) -> QIcon:
         return self._icons.icon(character.reference_images)

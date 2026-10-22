@@ -306,3 +306,47 @@ def test_groups_stand_further_apart_than_a_caption_from_its_control(app):
     assert c.geometry().left() - b.geometry().right() - 1 == 12
     assert row.sizeHint().width() == sum(w.sizeHint().width() for w in (a, b, c)) + 6 + 12
     host.close()
+
+
+def test_the_cast_list_shows_its_names_and_keeps_a_dragged_height(app, tmp_path: Path):
+    """The author (Oct 2026): at 1440p the Cast page's list showed one name
+    at a time and couldn't be resized. With supporting cards and suggestions
+    under it, its fixed share left 84px. It is fitted to its names now, its
+    divider has a grip, and a drag is kept for the next launch."""
+    from sealedlore.models.character import Character
+    from sealedlore.models.supporting import CharacterSuggestion
+
+    story = Story(title="Many people")
+    bundle = StoryBundle(story=story, cast=[Character(name=f"Person {i}") for i in range(6)])
+    bundle.supporting.characters = [Character(name=f"Support {i}") for i in range(3)]
+    bundle.supporting.suggestions = [CharacterSuggestion(name=f"Extra {i}") for i in range(3)]
+    save_story_bundle(bundle, root=tmp_path)
+    window = MainWindow(root=tmp_path, use_mock=True)
+    window.resize(1920, 1080)
+    window.show()
+    window.open_story(story.id)
+    window.right_tabs.setCurrentWidget(window.cast_panel)
+    settle(app)
+    panel = window.cast_panel
+    row = panel.list.sizeHintForRow(1)
+    assert panel.list.height() >= row * 6, "six names show at once"
+    assert panel.splitter.handleWidth() >= 10
+
+    top = panel.splitter.sizes()[0]
+    panel.splitter.moveSplitter(top + 80, 1)  # what a drag does
+    panel._list_dragged(top + 80, 1)
+    settle(app)
+    assert panel.list_height() == top + 80
+    window._remember_layout()
+    assert window.config.window.cast_list_height == top + 80
+    save_config(window.config, root=tmp_path)
+    window.close()
+
+    again = MainWindow(root=tmp_path, use_mock=True)
+    again.resize(1920, 1080)
+    again.show()
+    again.open_story(story.id)
+    again.right_tabs.setCurrentWidget(again.cast_panel)
+    settle(app)
+    assert abs(again.cast_panel.splitter.sizes()[0] - (top + 80)) <= 2
+    again.close()
