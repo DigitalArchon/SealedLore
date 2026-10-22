@@ -828,7 +828,7 @@ def test_people_come_first_and_the_scene_lists_the_supporting_characters(
     assert window.right_tabs.currentWidget() is window.people_page
     first = next(i for i in range(window.right_tabs.count()) if window.right_tabs.isTabVisible(i))
     assert window.right_tabs.tabText(first) == "People"  # Map comes first only with a map
-    window.right_tabs.setCurrentWidget(window.cast_panel)
+    window.right_tabs.setCurrentWidget(window.cast_page)
     window.open_story(window.session.story.id)
     assert window.right_tabs.currentWidget() is window.people_page, "a story opens on People"
 

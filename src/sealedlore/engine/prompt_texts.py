@@ -3844,6 +3844,116 @@ _text(
 }""",
 )
 
+# Cards for the people of a published world, asked for from the Cast page or
+# the new story guide (the author, Oct 2026: a story in a canon world brought
+# in the first few canon characters and seldom the rest, unless the author had
+# carded them by hand). Not measured.
+_text(
+    "authoring.lore_cast",
+    AUTHORING,
+    "Cards for a world's characters",
+    "The system prompt of Fill with lore characters… on the Cast page and in the "
+    "new story guide. The program reads its JSON reply: keep the shape it asks for.",
+    """\
+You write character cards for a collaborative roleplay story in SealedLore.
+The story is set in a world the author names: a published work or series, a
+myth or legend, a period of history. A storyteller model writes the story from
+these cards and its own knowledge of that world; the author plays one
+character from inside it. A character with a card is one the storyteller
+knows belongs in this story, and brings in when they have a reason to come.
+
+Write cards for the people the story is likely to need:
+
+- Everyone the author names, first, under the name the author used.
+- Then the world's main and recurring characters, the most important first,
+  up to {most} cards in all. Leave out anyone already on file (you are told
+  who), anyone who can't be part of the story as its setting stands (dead by
+  then, not yet born, gone for good), and groups or crowds.
+
+Sort them:
+
+- "cast": the characters the author names, and the few central figures the
+  world turns on: anyone the author might want to play. Their cards are sent
+  on every turn, so 2 to 8 of them.
+- "supporting": everyone else. Their cards are sent when the story mentions
+  them.
+
+Each card:
+
+- "canon": the work or tradition they come from.
+- "summary": who they are and what they do in this world, in one or two
+  lines.
+- "description": 40 to 120 words: how they look (their pictures are drawn
+  from it), their manner, and where they stand at the point the story's
+  setting describes. Where the author's setting changes something from the
+  original, write it as it is in this story.
+- "voice": how they speak, in a line.
+- "competence": what they can and cannot do, in words.
+- "skills": for the cast only, 3 to 6 domains, each a short lowercase noun
+  phrase ("swordplay", "court intrigue"), with a tier from {tiers}.
+  Supporting characters have none.
+- "playable": true for the cast, false for supporting.
+- "aliases": other names the story may call them by, if any. Never a title or
+  a word alone that would fit others too ("the captain", "the king").
+
+If you don't know the world, or someone the author names, write what you can
+and say so in "notes"; never invent a canon for them.
+
+Reply with one JSON object in exactly this shape, and nothing else:
+
+{
+  "cast": [ <character> ],
+  "supporting": [ <character> ],
+  "notes": "anything the author should know, or null"
+}
+
+where each <character> is:
+
+{character_shape}""",
+    (
+        ("most", "how many cards a call writes at most"),
+        ("tiers", "the competence tiers"),
+        ("character_shape", "A character, as JSON"),
+    ),
+)
+
+_text(
+    "authoring.lore_cast.world",
+    AUTHORING,
+    "Lore characters: the world",
+    "The request's first line: the world the author named.",
+    "The world the story is set in: {lore}",
+    (("lore", "the world, as the author named it"),),
+)
+
+_text(
+    "authoring.lore_cast.wanted",
+    AUTHORING,
+    "Lore characters: whom the author wants",
+    "When the author named characters they want for sure.",
+    "The characters the author wants for sure, as they wrote them: {wanted}",
+    (("wanted", "the names, as the author wrote them"),),
+)
+
+_text(
+    "authoring.lore_cast.setting",
+    AUTHORING,
+    "Lore characters: the story's setting",
+    "When the story has a world written: the cards fit it.",
+    "The story's setting, as the author wrote it. Fit the cards to it where it "
+    "differs from the original:\n\n{setting}",
+    (("setting", "the story's world text"),),
+)
+
+_text(
+    "authoring.lore_cast.known",
+    AUTHORING,
+    "Lore characters: already on file",
+    "The cards the story has, so the reply adds others.",
+    "Already on file, so not to be written again: {names}",
+    (("names", "the names of the story's cards"),),
+)
+
 _text(
     "authoring.style_guide",
     AUTHORING,

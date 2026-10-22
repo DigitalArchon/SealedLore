@@ -768,13 +768,25 @@ that trying other hosts would mean playing outside private mode.
 
 **Write a story from scratch** (on the start page, or File → New…) walks
 through what a story needs to begin, a step at a time: its title and world
-(and whether it keeps a map), who you play and anyone else to start with,
-where it begins and what happens first, and the person, tense and length it
-is told in. **Create the story** then goes straight to Start, which asks who
-you play and offers portraits for the characters before the opening is
-written. Everything else keeps its default and is in Setup and on the Cast
-page; **Skip to the full setup…** makes the story with what you have filled in
-and opens Setup instead.
+(and whether it keeps a map), its characters, where it begins and what
+happens first, and the person, tense and length it is told in.
+
+The story is made, and listed in your Stories, once its first step is done,
+so its **Characters** step is the Cast page itself: every field a card has,
+pictures drawn or chosen from a file, and **You play** to choose your own
+character (or nobody, to direct the story). Make as many or as few as you
+like, in as much or as little detail: a name is enough to begin. The more you
+put on the cards, the more say you have in who they are; anyone you leave out,
+the storyteller makes up as the story needs them. For a story set in a world
+that already exists, **Fill with lore characters…** writes cards for its
+people (see Perspective and supporting characters).
+
+**Create the story** then goes to Start, which asks who you play and offers
+portraits for anyone still without one before the opening is written.
+Everything else keeps its default and is in Setup and on the Cast page;
+**Skip to the full setup…** opens Setup instead. **Cancel** after the first
+step asks whether to keep the story made so far (not begun, in your Stories)
+or discard it to the Trash.
 
 **Story → Setup…** holds what a story is built on:
 - **World**: the setting and its rules, sent with every turn and cached;
@@ -972,6 +984,20 @@ named characters who aren't on file yet:
 - **Dismiss** stops the name being suggested again.
 
 **Move to cast** and **Move to supporting** switch a character between the two.
+The list is as tall as its names; drag the divider under it to make it taller
+or shorter, and it stays where you leave it.
+
+**Fill with lore characters…** is for a story set in a world that already
+exists: a book or series, a film, a game, a myth, a period of history. Name
+the world and, if you like, the characters you want for sure, in plain words,
+and the authoring model (Settings → Models) writes a card for each of them
+and for the world's other main and recurring characters, fitted to the
+story's World where it changes the original. The central figures go into the
+cast, everyone else in as supporting characters, all marked ✦. Change, move
+or remove any of them like your own cards. Ask again to add people it missed:
+it is told who is on file already, and never adds a name twice. Without
+cards, a story in a known world tends to bring in its first few famous
+characters and seldom the rest.
 
 A selected character's **portrait** is shown large at the left of their
 sheet, with their other pictures small under it and the sheet's fields to the

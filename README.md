@@ -369,7 +369,9 @@ Windows offers weaker privacy on the machine itself (see
    and rivers of lava). Setup opens first; Save, then choose who you are
    playing and the opening is written. Or choose **Draft a story from an
    idea** and describe a story in a sentence or two, or **Write a story from
-   scratch**, which walks through it a step at a time.
+   scratch**, which walks through it a step at a time, characters and their
+   portraits included. Set in a world that already exists? **Fill with lore
+   characters…** writes cards for its people.
 
 4. **Play.** Type what your character does or says and press Enter. The
    storyteller answers. Beside the story, a story with a map shows the map,

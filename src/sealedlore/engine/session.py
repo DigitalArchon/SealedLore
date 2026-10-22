@@ -75,6 +75,12 @@ from sealedlore.engine.director import (
     render_story_time_block,
 )
 from sealedlore.engine.ledger import build_ledger_messages, check_ledger, ledger_on, normalised
+from sealedlore.engine.lore_cast import (
+    LORE_CAST_MAX_TOKENS,
+    LoreCast,
+    build_lore_cast_messages,
+    parse_lore_cast,
+)
 from sealedlore.engine.lore_pick import (
     JEV_THRESHOLD,
     PICK_MAX_TOKENS,
@@ -3274,6 +3280,57 @@ class StorySession(
         )
         self.unreported_usage.append(self.priced(completed.usage, self.summarization_model))
         return parse_tiers(text)
+
+    # --- cards for a world's characters ---------------------------------------
+
+    def fill_lore_cast(self, lore: str, wanted: str = "") -> LoreCast:
+        """Cards for the people of a published world (engine/lore_cast.py),
+        added to the cast and supporting cards at once: the author edits,
+        moves or removes them like any other. On the authoring model.
+
+        The model is told the names of the cards it may know of, so a second
+        call adds others; never a plot-hidden one's, though a card of that
+        name is not added twice. Raises ProviderError or ValueError."""
+        self._refuse_in_chat("Lore characters")
+        self._refuse_in_private("Lore characters")
+        hidden = self.hidden_ids()
+        everyone = [*self.cast, *self.supporting]
+        known = [c.name for c in everyone if c.id not in hidden and c.name.strip()]
+        model = self.authoring_model
+        request = ChatRequest(
+            model=model,
+            extra_body=self.route_for("authoring"),
+            messages=build_lore_cast_messages(
+                lore, wanted=wanted, setting=self.story.world_bible, known=known, texts=self.texts
+            ),
+            params=self.side_params(model, max_tokens=LORE_CAST_MAX_TOKENS),
+        )
+        log_ref = self._log(
+            "lore_cast_request",
+            {"lore": lore, "wanted": wanted, "payload": self.provider.build_payload(request)},
+        )
+        text, completed = self.provider.complete(request)
+        self._log(
+            "lore_cast_response",
+            {"request_log_ref": log_ref, "text": text, "usage": completed.raw_usage},
+        )
+        self.unreported_usage.append(self.priced(completed.usage, model))
+        cut_off = completed.finish_reason == "length"
+        try:
+            result = parse_lore_cast(text, everyone)
+        except ValueError:
+            if cut_off:
+                raise ValueError(
+                    "the model ran out of room before it finished the cards: ask again, "
+                    "or name fewer at a time"
+                ) from None
+            raise
+        if cut_off:
+            result.warnings.append("the model ran out of room: ask again for the rest")
+        self.cast.extend(result.cast)
+        self.supporting.extend(result.supporting)
+        self.save()
+        return result
 
     # --- settings review ------------------------------------------------------
 

@@ -325,7 +325,7 @@ def test_the_cast_list_shows_its_names_and_keeps_a_dragged_height(app, tmp_path:
     window.resize(1920, 1080)
     window.show()
     window.open_story(story.id)
-    window.right_tabs.setCurrentWidget(window.cast_panel)
+    window.right_tabs.setCurrentWidget(window.cast_page)
     settle(app)
     panel = window.cast_panel
     row = panel.list.sizeHintForRow(1)
@@ -346,7 +346,7 @@ def test_the_cast_list_shows_its_names_and_keeps_a_dragged_height(app, tmp_path:
     again.resize(1920, 1080)
     again.show()
     again.open_story(story.id)
-    again.right_tabs.setCurrentWidget(again.cast_panel)
+    again.right_tabs.setCurrentWidget(again.cast_page)
     settle(app)
     assert abs(again.cast_panel.splitter.sizes()[0] - (top + 80)) <= 2
     again.close()

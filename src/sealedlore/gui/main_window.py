@@ -115,6 +115,7 @@ from sealedlore.gui.transcript import (
 from sealedlore.gui.usage_dialog import UsageDialog
 from sealedlore.gui.welcome import setup_missing, welcome_html
 from sealedlore.gui.window_area import AreaWindow
+from sealedlore.gui.window_cast import CastWindow
 from sealedlore.gui.window_chat import ChatWindow
 from sealedlore.gui.window_corrections import CorrectionWindow
 from sealedlore.gui.window_edit import MapEditWindow
@@ -243,6 +244,7 @@ MANUAL_URL = "https://github.com/DigitalArchon/SealedLore/blob/master/docs/manua
 
 
 class MainWindow(
+    CastWindow,
     ChatWindow,
     FindWindow,
     WorldWindow,
@@ -537,6 +539,7 @@ class MainWindow(
                 self.summaries_panel,
             )
         ]
+        self._init_cast()
         self._init_images()
         self._init_phone()
         self._init_videos()
@@ -551,7 +554,7 @@ class MainWindow(
         self.right_tabs.setTabVisible(0, False)
         self.right_tabs.addTab(self.people_page, "People")
         self.right_tabs.addTab(self.scene_panel, "Scene")
-        self.right_tabs.addTab(self.cast_panel, "Cast")
+        self.right_tabs.addTab(self.cast_page, "Cast")
         self.right_tabs.addTab(self.plot_panel, "Plot")
         self.right_tabs.addTab(self.lore_panel, "Lore")
         self.right_tabs.addTab(self.style_panel, "Style")
@@ -885,7 +888,7 @@ class MainWindow(
         """A new card, on the Cast page, its name ready to type."""
         if self.session is None or self._busy:
             return
-        self.right_tabs.setCurrentWidget(self.cast_panel)
+        self.right_tabs.setCurrentWidget(self.cast_page)
         self.cast_panel.add_character()
 
     def _refresh_people(self) -> None:
@@ -935,7 +938,7 @@ class MainWindow(
 
     def _open_profile(self, card_id: str) -> None:
         """A card on the People page: their profile, on the Cast page."""
-        self.right_tabs.setCurrentWidget(self.cast_panel)
+        self.right_tabs.setCurrentWidget(self.cast_page)
         self.cast_panel.select_character(card_id)
 
     def _choose_card_picture(self, card_id: str) -> None:
@@ -1039,24 +1042,35 @@ class MainWindow(
             provider_config.model if provider_config is not None and provider_config.model else None
         )
         guide = NewStoryGuide(self, model=model)
-        accepted = guide.exec() == QDialog.Accepted
-        bundle, full_setup = guide.bundle(), guide.full_setup
+        self._guide = guide
+        try:
+            accepted = guide.exec() == QDialog.Accepted
+        finally:
+            self._guide = None
+            self.return_cast_panel()
+        made, full_setup = guide.made and not guide.discarded, guide.full_setup
         guide.deleteLater()  # read; nothing else holds it
-        if not accepted or bundle is None:
+        if not made or self.session is None:
             return
-        if full_setup and not bundle.cast:
-            # A story with nobody to play yet: Setup, then the cast.
-            save_story_bundle(bundle, root=self.root)
-            self.stories.refresh(selected_id=bundle.story.id)
-            self.open_story(bundle.story.id)
-            self.open_setup()
+        if not accepted:
             self.statusBar().showMessage(
-                "Next: add the cast on the Cast page, then Story → Start story…", 12000
+                "Kept, not begun: Story → Start story… when it's ready", 10000
             )
             return
-        # Setup first when asked for, else straight to Start: who to play, and
-        # pictures for the cards, before the opening is written.
-        self._open_new_bundle(bundle, review=full_setup)
+        if full_setup:
+            if not self.open_setup():
+                self.statusBar().showMessage(
+                    "Not begun yet: Story → Start story… when it's ready", 8000
+                )
+                return
+            if not self.session.cast:
+                self.statusBar().showMessage(
+                    "Next: add the cast on the Cast page, then Story → Start story…", 12000
+                )
+                return
+        # Start: who to play, and pictures for the cards, before the opening
+        # is written.
+        self.start_story()
 
     def _open_new_bundle(self, bundle: StoryBundle, *, review: bool = False) -> None:
         """Save and open a story made from a file or a setup, and begin it.
@@ -3084,7 +3098,7 @@ class MainWindow(
     def _show_busy(self, text: str | None) -> None:
         if text is None:
             return
-        dialog = QProgressDialog(text, "Stop", 0, 0, self)
+        dialog = QProgressDialog(text, "Stop", 0, 0, self._dialog_parent())
         dialog.setWindowTitle("SealedLore")
         dialog.setWindowModality(Qt.WindowModal)
         dialog.setMinimumDuration(0)
@@ -3172,7 +3186,9 @@ class MainWindow(
         return True
 
     def _warn_plain(self, title: str, message: str) -> None:
-        box = QMessageBox(QMessageBox.Warning, title, message, QMessageBox.Ok, self)
+        box = QMessageBox(
+            QMessageBox.Warning, title, message, QMessageBox.Ok, self._dialog_parent()
+        )
         box.setTextFormat(Qt.PlainText)
         box.exec()
 

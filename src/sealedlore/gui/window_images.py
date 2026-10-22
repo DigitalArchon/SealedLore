@@ -289,7 +289,7 @@ class ImagesWindow:
             prefill=prefill,
             catalog=self.image_catalog,
             browse=self._browse_models,
-            parent=self,
+            parent=self._dialog_parent(),
             card=card,
             background=background,
         )
@@ -393,7 +393,7 @@ class ImagesWindow:
             lore=lore,
             catalog=self.image_catalog,
             browse=self._browse_pictures,
-            parent=self,
+            parent=self._dialog_parent(),
         )
         accepted = dialog.exec()
         chosen = dialog.chosen_model() if accepted else ""
@@ -445,7 +445,7 @@ class ImagesWindow:
             edit=what == "edit",
             catalog=self.image_catalog,
             browse=self._browse_pictures,
-            parent=self,
+            parent=self._dialog_parent(),
         )
         accepted = dialog.exec()
         request = dialog.request() if accepted else None
@@ -468,7 +468,7 @@ class ImagesWindow:
         name = card.name if isinstance(card, Character) else card.title
         if action == "show":
             if isinstance(card, Character):
-                self.right_tabs.setCurrentWidget(self.cast_panel)
+                self.right_tabs.setCurrentWidget(self.cast_page)
                 self.cast_panel.select_character(card.id)
             else:
                 self.right_tabs.setCurrentWidget(self.lore_panel)
@@ -893,7 +893,7 @@ class ImagesWindow:
             edit=True,
             catalog=self.image_catalog,
             browse=self._browse_pictures,
-            parent=self,
+            parent=self._dialog_parent(),
         )
         try:
             if not dialog.exec():

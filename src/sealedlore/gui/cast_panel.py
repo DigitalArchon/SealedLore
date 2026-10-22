@@ -40,6 +40,7 @@ from sealedlore.engine.dice import TIER_ORDER
 from sealedlore.gui import theme
 from sealedlore.gui.avatar_view import AvatarView
 from sealedlore.gui.fields import FormScroll, set_field_text
+from sealedlore.gui.lore_cast_dialog import FILL_LABEL
 from sealedlore.gui.portrait_view import PortraitView
 from sealedlore.gui.ref_images import CardIcons, RefImageStrip, StoryPictures
 from sealedlore.gui.sizing import GrowingText
@@ -82,6 +83,8 @@ class CastPanel(QWidget):
     avatar_requested = Signal(str, str)
     # (character id): a portrait chosen from a file went first on the card.
     portrait_added = Signal(str)
+    # Cards for a published world's people, written by a model.
+    lore_fill_requested = Signal()
 
     def __init__(self, pictures: StoryPictures | None = None) -> None:
         super().__init__()
@@ -114,6 +117,13 @@ class CastPanel(QWidget):
         buttons.addWidget(add_button)
         buttons.addWidget(self.remove_button)
         buttons.addWidget(self.move_button)
+        # Its own line: a fourth button abreast widened the Inspector.
+        self.fill_button = QPushButton(FILL_LABEL)
+        self.fill_button.setToolTip(
+            "For a story set in a world that already exists: the model writes cards for "
+            "its characters, and you change or remove any of them"
+        )
+        self.fill_button.clicked.connect(self.lore_fill_requested)
 
         top = QWidget()
         top_layout = QVBoxLayout(top)
@@ -121,7 +131,9 @@ class CastPanel(QWidget):
         top_layout.setSpacing(6)
         top_layout.addWidget(self.list, 1)
         top_layout.addLayout(buttons)
-        top_layout.addWidget(self._build_suggestions())
+        top_layout.addWidget(self.fill_button, 0, Qt.AlignLeft)
+        self.suggestions_box = self._build_suggestions()
+        top_layout.addWidget(self.suggestions_box)
 
         # The list over the sheet, a divider with a grip between them. The
         # list was given a fixed 150px share, and with supporting cards and
@@ -249,7 +261,7 @@ class CastPanel(QWidget):
         self.pictures.again_requested.connect(lambda ref: self._ask("again", ref))
         self.pictures.edit_requested.connect(lambda ref: self._ask("edit", ref))
         self.pictures.changed.connect(self._on_pictures_changed)
-        self.origin_note = QLabel("Card drafted by the model from the story. Check it.")
+        self.origin_note = QLabel("Card drafted by the model. Check it.")
         self.origin_note.setObjectName("hintLabel")
         self.origin_note.setWordWrap(True)
 

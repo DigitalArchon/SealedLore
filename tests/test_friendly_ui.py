@@ -16,7 +16,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QPoint, QRect, Qt  # noqa: E402
-from PySide6.QtWidgets import QApplication, QPushButton, QToolButton, QWidget  # noqa: E402
+from PySide6.QtWidgets import (  # noqa: E402
+    QApplication,
+    QDialog,
+    QPushButton,
+    QToolButton,
+    QWidget,
+)
 
 from sealedlore.engine.budget import BudgetReport  # noqa: E402
 from sealedlore.gui.composer import FEWER_LABEL, MORE_LABEL  # noqa: E402
@@ -29,7 +35,12 @@ from sealedlore.models.image import ImageRef  # noqa: E402
 from sealedlore.models.node import Usage  # noqa: E402
 from sealedlore.models.scene import OffstageCharacter, SceneState  # noqa: E402
 from sealedlore.models.story import Story  # noqa: E402
-from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
+from sealedlore.storage.paths import story_dir  # noqa: E402
+from sealedlore.storage.repository import (  # noqa: E402
+    StoryBundle,
+    load_story_bundle,
+    save_story_bundle,
+)
 from tests.conftest import make_exchange  # noqa: E402
 
 
@@ -51,6 +62,16 @@ def window(app, tmp_path: Path, story, cast):
     settle(app)
     yield window
     window.close()
+
+
+def wait_until(app: QApplication, condition, timeout: float = 20.0) -> None:
+    import time
+
+    deadline = time.monotonic() + timeout
+    while not condition():
+        assert time.monotonic() < deadline, "timed out"
+        app.processEvents()
+        time.sleep(0.005)
 
 
 def settle(app: QApplication) -> None:
@@ -235,7 +256,7 @@ def test_a_story_without_a_map_opens_on_its_people(app, window):
     # A click on a card is the profile, on the Cast page.
     page.cards["char-maela"].profile_requested.emit("char-maela")
     settle(app)
-    assert window.right_tabs.currentWidget() is window.cast_panel
+    assert window.right_tabs.currentWidget() is window.cast_page
     assert window.cast_panel._current.id == "char-maela"
 
 
@@ -293,16 +314,44 @@ def test_play_as_from_a_card(app, window):
 # --- a story from scratch ----------------------------------------------------------------
 
 
-def test_the_guide_builds_a_story_ready_to_start(app):
-    guide = NewStoryGuide(model="anthropic/claude-sonnet-4.6")
+def guide_to_characters(window, title: str = "The Long Night") -> NewStoryGuide:
+    guide = NewStoryGuide(window, model="anthropic/claude-sonnet-4.6")
+    window._guide = guide
+    # Closed with the window at the end: kept, with no question to answer.
+    guide._ask_leave = lambda: "keep"
+    guide.show()
     assert not guide.skip_button.isEnabled(), "a story needs a title"
-    guide.title.setText("The Long Night")
+    guide.title.setText(title)
     guide.world.setPlainText("A farm in a Canadian winter, after the end of the world.")
     guide.next_button.click()
-    guide.player_name.setText("John")
-    guide.player_about.setPlainText("Ex-military, thirty, tired.")
-    guide.others[0][0].setText("Elena")
-    guide.others[0][1].setText("A scavenger who knows the roads.")
+    return guide
+
+
+def test_the_guide_makes_the_story_and_its_characters_on_the_cast_page(app, window):
+    """The author (Oct 2026): the second step was a name and a line each for
+    three characters. The story is made after the first step now, and its
+    characters are made on the real Cast page, lent to the guide."""
+    guide = guide_to_characters(window)
+    settle(app)
+    story = window.session.story
+    assert guide.made and story.title == "The Long Night"
+    assert story.world_bible.startswith("A farm")
+    assert story.defaults.main_model == "anthropic/claude-sonnet-4.6"
+    panel = window.cast_panel
+    assert guide.isAncestorOf(panel), "the Cast page stands in the guide"
+    # A first card, its name ready to type.
+    assert [c.name for c in window.session.cast] == ["New character"]
+    panel.name.setText("John")
+    panel.summary.setPlainText("Ex-military, thirty, tired.")
+    panel.add_character()
+    panel.name.setText("Elena")
+    settle(app)
+    players = [guide.player.itemText(i) for i in range(guide.player.count())]
+    assert players[:2] == ["John", "Elena"] and players[-1].startswith("Nobody")
+    assert guide.player.currentText() == "John"
+    assert panel.fill_button.isVisible()
+    assert not panel.suggestions_box.isVisible(), "nothing to suggest from before the story"
+
     guide.next_button.click()
     guide.location.setText("The farmhouse kitchen")
     guide.opening.setPlainText("A knock at the door at dusk.")
@@ -312,13 +361,11 @@ def test_the_guide_builds_a_story_ready_to_start(app):
     guide.tense.setCurrentIndex(guide.tense.findData("present"))
     guide.length.setCurrentIndex(guide.length.findData("brief"))
     guide.next_button.click()
-    bundle = guide.bundle()
-    assert bundle is not None and not guide.full_setup
-    story: Story = bundle.story
-    assert story.title == "The Long Night" and story.world_bible.startswith("A farm")
-    assert story.defaults.main_model == "anthropic/claude-sonnet-4.6"
-    assert [c.name for c in bundle.cast] == ["John", "Elena"]
-    john = bundle.cast[0]
+    assert guide.result() == NewStoryGuide.Accepted and not guide.full_setup
+    story = window.session.story
+    john = window.session.cast[0]
+    assert [c.name for c in window.session.cast] == ["John", "Elena"]
+    assert john.summary == "Ex-military, thirty, tired."
     assert story.setup.suggested_character_id == john.id
     assert story.setup.starting_scene.present_character_ids == [john.id]
     assert story.setup.starting_scene.location == "The farmhouse kitchen"
@@ -328,6 +375,65 @@ def test_the_guide_builds_a_story_ready_to_start(app):
         "present",
         "brief",
     )
+    # The Cast page is back in the Inspector.
+    window.return_cast_panel()
+    assert window.cast_page.isAncestorOf(panel)
+    assert not panel.suggestions_box.isHidden()
+    saved = load_story_bundle(story.id, root=window.root)
+    assert saved.story.setup.opening_text == "A knock at the door at dusk."
+    guide.deleteLater()
+
+
+def test_the_guide_can_direct_without_a_character(app, window):
+    guide = guide_to_characters(window)
+    guide.player.setCurrentIndex(guide.player.count() - 1)
+    guide._finish()
+    setup = window.session.story.setup
+    assert setup.suggested_character_id is None
+    assert setup.starting_scene.present_character_ids == []
+    guide.deleteLater()
+
+
+def test_cancelling_the_guide_keeps_or_discards_the_story_made(app, window, monkeypatch):
+    guide = guide_to_characters(window, "Kept")
+    kept = window.session.story.id
+    guide.reject()
+    assert guide.result() == NewStoryGuide.Rejected and not guide.discarded
+    assert window.session.story.id == kept
+
+    guide = guide_to_characters(window, "Discarded")
+    gone = window.session.story.id
+    guide._ask_leave = lambda: "discard"
+    guide.reject()
+    settle(app)
+    assert guide.discarded and window.session is None
+    assert not story_dir(gone, window.root).exists()
+    assert window.cast_page.isAncestorOf(window.cast_panel)
+
+
+def test_lore_characters_fill_the_guide_s_cast(app, window, monkeypatch):
+    from sealedlore.gui.lore_cast_dialog import LoreCastDialog
+    from sealedlore.providers.mock import MockChatProvider
+    from tests.test_lore_cast import REPLY, WORLD
+
+    guide = guide_to_characters(window)
+    monkeypatch.setattr(window, "_current_provider", lambda: MockChatProvider([REPLY]))
+    monkeypatch.setattr(LoreCastDialog, "exec", lambda self: QDialog.Accepted)
+    monkeypatch.setattr(LoreCastDialog, "values", lambda self: (WORLD, "Maren Holt"))
+    shown = []
+    monkeypatch.setattr(window, "_say_lore_cast", lambda lore, result: shown.append(result))
+    window.cast_panel.fill_button.click()
+    wait_until(app, lambda: shown)
+    names = [c.name for c in window.session.cast]
+    assert "Maren Holt" in names and "Serrik Vaun" in names
+    assert [c.name for c in window.session.supporting] == [
+        "Old Tobin",
+        "Wolf of the Keep",
+        "Mrs. Holt",
+    ]
+    settle(app)
+    players = [guide.player.itemText(i) for i in range(guide.player.count())]
+    assert "Maren Holt" in players
     guide.deleteLater()
 
 
@@ -337,8 +443,10 @@ def test_new_story_runs_the_guide_then_start(app, window, monkeypatch):
 
     def fill(guide) -> int:
         guide.title.setText("From Scratch")
-        guide.player_name.setText("Ada")
-        guide._bundle = guide._build()
+        guide.next_button.click()
+        window.cast_panel.name.setText("Ada")
+        assert guide._finish()
+        guide.done(NewStoryGuide.Accepted)
         return NewStoryGuide.Accepted
 
     monkeypatch.setattr(NewStoryGuide, "exec", fill)
@@ -347,6 +455,7 @@ def test_new_story_runs_the_guide_then_start(app, window, monkeypatch):
     assert window.session.story.title == "From Scratch"
     assert [c.name for c in window.session.cast] == ["Ada"]
     assert started == ["From Scratch"]
+    assert window.cast_page.isAncestorOf(window.cast_panel)
 
 
 def test_a_story_with_nobody_yet_offers_to_add_someone(app, tmp_path):
@@ -361,7 +470,7 @@ def test_a_story_with_nobody_yet_offers_to_add_someone(app, tmp_path):
         assert window.right_tabs.currentWidget() is page and not page.cards
         page.tip_buttons["add"].click()
         settle(app)
-        assert window.right_tabs.currentWidget() is window.cast_panel
+        assert window.right_tabs.currentWidget() is window.cast_page
         assert [c.name for c in window.session.cast] == ["New character"]
     finally:
         window.close()
@@ -456,7 +565,7 @@ def test_the_panel_beside_the_story_is_titled_with_its_page(app, window):
 
     dock = window.inspector_dock
     assert dock.windowTitle() == f"People  ·  {PAGE_ABOUT['People']}"
-    window.right_tabs.setCurrentWidget(window.cast_panel)
+    window.right_tabs.setCurrentWidget(window.cast_page)
     assert dock.windowTitle().startswith("Cast  ·  ")
     assert "Inspector" not in dock.windowTitle()
     window._close_story()

@@ -4,18 +4,28 @@ It used to be a bare "Title" box and then the whole of Setup, six tabs
 deep, with the cast to be added afterwards on the Cast page (the author,
 Oct 18 2026: the window looked confusing to a new user). The guide asks for
 what a story needs to begin, in four short steps: the story and its world,
-who you play (and anyone else to start with), where and how it begins, and
-how it reads. Everything else keeps its default, and is in Setup and on the
-Cast page as before; "Skip to the full setup" makes the story with what is
-filled in and opens Setup instead.
+its characters, where and how it begins, and how it reads. Everything else
+keeps its default, and is in Setup and on the Cast page as before; "Skip to
+the full setup" opens Setup instead.
 
-The guide only builds the bundle (`bundle()`); the window saves, opens and
-starts it.
+**The story is made after the first step** (the author, Oct 2026): its
+characters are made on the real Cast page, lent to the guide by the window
+(`lend_cast_panel`), with everything a card has, pictures drawn or chosen
+included, and Fill with lore characters… for a story set in a world that
+already exists. The second step used to take a name and a line each for the
+author's character and two others, and a story in a canon world brought in
+the first few canon characters and seldom the rest. Cancel after the first
+step asks whether to keep the story made so far or move it to the trash.
+
+The guide changes the story through its host, the window (`GuideHost`); the
+window starts it, or opens Setup, once the guide is accepted.
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from typing import Protocol
+
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -24,6 +34,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
@@ -32,19 +43,39 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.response_style import PRESET_ORDER, PRESETS
 from sealedlore.gui.sizing import GrowingText, size_to_screen
-from sealedlore.models.character import Character
 from sealedlore.models.story import DEFAULT_RESPONSE_STYLE, Story
 from sealedlore.storage.repository import StoryBundle
 
-STEPS = ("The story", "Who you play", "How it begins", "How it reads")
-# Others to start with, beside the author's own; the Cast page takes more.
-OTHERS = 2
+STEPS = ("The story", "Characters", "How it begins", "How it reads")
+CHARACTERS_STEP = 1
 PERSONS = (
     ("Second person: “you walk in”", "second"),
     ("First person: “I walk in”", "first"),
     ("Third person: “she walks in”", "third"),
 )
 TENSES = (("Past: “you walked”", "past"), ("Present: “you walk”", "present"))
+NOBODY = "Nobody: I'll direct the story"
+CHARACTERS_ABOUT = (
+    "Make as many or as few characters as you like, in as much or as little "
+    "detail: a name is enough to begin. The more you put on their cards, the "
+    "more say you have in who they are and how they are written; anyone you "
+    "leave out, the storyteller makes up as the story needs them. Pictures can "
+    "be drawn or chosen for each card here too. Set in a world that already "
+    "exists? Fill with lore characters… writes cards for its people."
+)
+
+
+class GuideHost(Protocol):
+    """What the guide needs of the window (gui/window_cast.py)."""
+
+    session: object
+
+    def guide_make_story(self, bundle: StoryBundle) -> bool: ...
+    def guide_story_changed(self, *, reopen: bool = False) -> None: ...
+    def guide_discard_story(self) -> None: ...
+    def guide_busy(self) -> bool: ...
+    def lend_cast_panel(self) -> QWidget: ...
+    def return_cast_panel(self) -> None: ...
 
 
 def _hint(text: str) -> QLabel:
@@ -79,23 +110,31 @@ def _text(placeholder: str, *, lines: int = 3, fill: bool = False) -> GrowingTex
 
 class NewStoryGuide(QDialog):
     """Four steps to a story ready to start (see the module). After exec:
-    `bundle()` is the story made, `full_setup` whether the author asked for
-    the full Setup instead of starting."""
+    `made` whether the story was made, `full_setup` whether the author asked
+    for the full Setup instead of starting, `discarded` whether a story made
+    was moved to the trash on Cancel."""
 
-    def __init__(self, parent: QWidget | None = None, *, model: str | None = None) -> None:
-        super().__init__(parent)
+    def __init__(self, host: GuideHost, *, model: str | None = None) -> None:
+        super().__init__(host if isinstance(host, QWidget) else None)
         self.setWindowTitle("Write a story from scratch")
         self.setMinimumSize(620, 520)
+        self._host = host
         self._model = model
+        self.made = False
         self.full_setup = False
-        self._bundle: StoryBundle | None = None
+        self.discarded = False
+        self._panel: QWidget | None = None
+        self._map_when_made = False
+        self._player_timer = QTimer(self)
+        self._player_timer.setSingleShot(True)
+        self._player_timer.timeout.connect(self._fill_players)
 
         self.steps_label = QLabel()
         self.steps_label.setObjectName("guideSteps")
         self.steps_label.setTextFormat(Qt.RichText)
         self.stack = QStackedWidget()
         self.stack.addWidget(self._story_page())
-        self.stack.addWidget(self._player_page())
+        self.stack.addWidget(self._characters_page())
         self.stack.addWidget(self._opening_page())
         self.stack.addWidget(self._style_page())
 
@@ -136,7 +175,8 @@ class NewStoryGuide(QDialog):
         form.addRow("Title", self.title)
         self.world = _text(
             "Where and when the story is set, how its world works, what tone it has. "
-            "A few sentences is enough.",
+            "A few sentences is enough. Set in a world that already exists? Name it, "
+            "and say where this story stands in it.",
             lines=6,
             fill=True,
         )
@@ -156,33 +196,25 @@ class NewStoryGuide(QDialog):
         form.addRow("", self.map_box)
         return page
 
-    def _player_page(self) -> QWidget:
-        page, form = _page(fill=True)
-        form.addRow(
-            _hint(
-                "The character you play. The storyteller never speaks or acts for them. "
-                "Leave the name blank to direct the story without a character of your own."
-            )
+    def _characters_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(_hint(CHARACTERS_ABOUT))
+        row = QHBoxLayout()
+        row.addWidget(QLabel("You play"))
+        self.player = QComboBox()
+        self.player.setMinimumContentsLength(18)
+        self.player.setToolTip(
+            "The character you play. The storyteller never speaks or acts for them. "
+            "You can play someone else once the story has begun."
         )
-        self.player_name = QLineEdit()
-        self.player_name.setPlaceholderText("Name")
-        form.addRow("You play", self.player_name)
-        self.player_about = _text(
-            "Who they are: age, looks, what they can do, what they want.", lines=4, fill=True
-        )
-        form.addRow("Who they are", self.player_about)
-        form.addRow(_hint("Anyone else to start with (optional; the Cast page adds more):"))
-        self.others: list[tuple[QLineEdit, QLineEdit]] = []
-        for _ in range(OTHERS):
-            name = QLineEdit()
-            name.setPlaceholderText("Name")
-            about = QLineEdit()
-            about.setPlaceholderText("Who they are, in a line")
-            row = QHBoxLayout()
-            row.addWidget(name, 1)
-            row.addWidget(about, 2)
-            form.addRow("Someone else", row)
-            self.others.append((name, about))
+        row.addWidget(self.player, 1)
+        row.addStretch(1)
+        layout.addLayout(row)
+        # The window's Cast page stands here while this step shows.
+        self._panel_host = QVBoxLayout()
+        layout.addLayout(self._panel_host, 1)
         return page
 
     def _opening_page(self) -> QWidget:
@@ -236,6 +268,10 @@ class NewStoryGuide(QDialog):
 
     def _go(self, index: int) -> None:
         index = max(0, min(index, self.stack.count() - 1))
+        if self.made:
+            self._apply()
+        if index == CHARACTERS_STEP and not self._enter_characters():
+            return
         self.stack.setCurrentIndex(index)
         marks = []
         for number, name in enumerate(STEPS):
@@ -253,55 +289,165 @@ class NewStoryGuide(QDialog):
         self.skip_button.setEnabled(ready)
         self.next_button.setToolTip("" if ready else "The story needs a title")
 
+    def _waiting(self) -> bool:
+        """A job of the window's (lore characters being written) runs: the
+        story is the worker's until it is done."""
+        return self._host.guide_busy()
+
     def _next(self) -> None:
         if not self.title.text().strip():
             self.title.setFocus()
             return
+        if self._waiting():
+            return
         if self.stack.currentIndex() < self.stack.count() - 1:
             self._go(self.stack.currentIndex() + 1)
             return
-        self._bundle = self._build()
-        self.accept()
+        if self._finish():
+            self.accept()
 
     def _skip(self) -> None:
-        if not self.title.text().strip():
+        if not self.title.text().strip() or self._waiting():
             return
-        self._bundle = self._build()
+        if not self.made and not self._make():
+            return
         self.full_setup = True
-        self.accept()
+        if self._finish():
+            self.accept()
 
     # --- the story ------------------------------------------------------------
 
-    def bundle(self) -> StoryBundle | None:
-        return self._bundle
-
-    def _build(self) -> StoryBundle:
+    def _make(self) -> bool:
+        """The story, made with what the first step holds, and opened in the
+        window behind the guide."""
         story = Story(title=self.title.text().strip())
         if self._model:
             story.defaults.main_model = self._model
         story.world_bible = self.world.toPlainText().strip() or None
         story.defaults.world_map = self.map_box.isChecked()
+        self._map_when_made = story.defaults.world_map
+        self.made = self._host.guide_make_story(StoryBundle(story=story))
+        return self.made
+
+    def _story(self) -> Story | None:
+        session = self._host.session
+        return session.story if session is not None else None  # type: ignore[attr-defined]
+
+    def _cast(self) -> list:
+        session = self._host.session
+        return session.cast if session is not None else []  # type: ignore[attr-defined]
+
+    def _enter_characters(self) -> bool:
+        if not self.made and not self._make():
+            return False
+        if self._panel is None:
+            self._panel = self._host.lend_cast_panel()
+            self._panel_host.addWidget(self._panel)
+            self._panel.show()
+            model = self._panel.list.model()
+            for signal in (model.rowsInserted, model.rowsRemoved, model.dataChanged):
+                signal.connect(self._player_timer.start)
+            # The card's portrait at the left, the fields beside it: room.
+            size_to_screen(self, 0.62, 0.86)
+        if not self._cast():
+            # A card to begin with, its name ready to type: the author's own.
+            self._panel.add_character()
+        self._fill_players()
+        return True
+
+    def _fill_players(self) -> None:
+        story = self._story()
+        current = self.player.currentData()
+        if current is None and story is not None:
+            current = story.setup.suggested_character_id
+        self.player.blockSignals(True)
+        self.player.clear()
+        for character in self._cast():
+            self.player.addItem(character.name or "(unnamed)", character.id)
+        self.player.addItem(NOBODY, "")
+        index = self.player.findData(current) if current is not None else -1
+        self.player.setCurrentIndex(index if index >= 0 else 0)
+        self.player.blockSignals(False)
+
+    def _apply(self) -> None:
+        """Everything the steps hold, onto the story made."""
+        story = self._story()
+        if story is None:
+            return
+        story.title = self.title.text().strip() or story.title
+        story.world_bible = self.world.toPlainText().strip() or None
+        story.defaults.world_map = self.map_box.isChecked()
         story.style.person = self.person.currentData()
         story.style.tense = self.tense.currentData()
         story.style.response_style = self.length.currentData()
-        cast: list[Character] = []
-        name = self.player_name.text().strip()
-        if name:
-            player = Character(name=name, summary=self.player_about.toPlainText().strip() or None)
-            cast.append(player)
-            story.setup.suggested_character_id = player.id
-            # Where it begins, with them in it: the opening places the rest.
-            story.setup.starting_scene.present_character_ids = [player.id]
-        for other_name, other_about in self.others:
-            if other_name.text().strip():
-                cast.append(
-                    Character(
-                        name=other_name.text().strip(),
-                        summary=other_about.text().strip() or None,
-                    )
-                )
-        story.setup.starting_scene.location = self.location.text().strip() or None
-        story.setup.opening_text = self.opening.toPlainText().strip()
-        story.setup.opening_mode = "generate"
-        story.scene = story.setup.starting_scene.model_copy(deep=True)
-        return StoryBundle(story=story, cast=cast)
+        ids = {character.id for character in self._cast()}
+        player = self.player.currentData() or None
+        if player not in ids:
+            player = None
+        setup = story.setup
+        setup.suggested_character_id = player
+        # Where it begins, with them in it: the opening places the rest.
+        setup.starting_scene.present_character_ids = [player] if player else []
+        setup.starting_scene.location = self.location.text().strip() or None
+        setup.opening_text = self.opening.toPlainText().strip()
+        setup.opening_mode = "generate"
+        story.scene = setup.starting_scene.model_copy(deep=True)
+        self._host.guide_story_changed()
+
+    def _finish(self) -> bool:
+        if not self.made and not self._make():
+            return False
+        self._apply()
+        story = self._story()
+        if story is not None and story.defaults.world_map != self._map_when_made:
+            # A map turned on or off after the story was opened: open it again.
+            self._host.guide_story_changed(reopen=True)
+        return True
+
+    # --- leaving ----------------------------------------------------------------
+
+    def reject(self) -> None:
+        if self.made and not self.discarded:
+            if self._waiting():
+                return
+            answer = self._ask_leave()
+            if answer == "discard":
+                self._give_back()
+                self._host.guide_discard_story()
+                self.discarded = True
+            elif answer == "keep":
+                self._apply()
+            else:
+                return
+        super().reject()
+
+    def _ask_leave(self) -> str:
+        """Cancel with a story made: "keep", "discard" or "back"."""
+        box = QMessageBox(self)
+        box.setWindowTitle("Leave the guide")
+        box.setText("Keep the story made so far?")
+        box.setInformativeText(
+            "Kept, it is in your Stories list, not begun: Story → Start story… when it "
+            "is ready. Discarded, it goes to the Trash with its cards and pictures."
+        )
+        keep = box.addButton("Keep it", QMessageBox.AcceptRole)
+        discard = box.addButton("Discard it", QMessageBox.DestructiveRole)
+        box.addButton("Go back", QMessageBox.RejectRole)
+        box.setDefaultButton(keep)
+        box.exec()
+        clicked = box.clickedButton()
+        return "keep" if clicked is keep else "discard" if clicked is discard else "back"
+
+    def done(self, result: int) -> None:
+        self._give_back()
+        super().done(result)
+
+    def _give_back(self) -> None:
+        if self._panel is None:
+            return
+        model = self._panel.list.model()
+        for signal in (model.rowsInserted, model.rowsRemoved, model.dataChanged):
+            signal.disconnect(self._player_timer.start)
+        self._player_timer.stop()
+        self._panel = None
+        self._host.return_cast_panel()
