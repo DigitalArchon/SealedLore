@@ -29,6 +29,7 @@ from sealedlore.providers.images import (
     list_image_models,
     parse_image_models,
 )
+from sealedlore.providers.media_http import MediaTimedOut
 from sealedlore.storage.picture_store import DiskPictures, PictureStore
 from sealedlore.storage.repository import save_config
 
@@ -173,7 +174,22 @@ class ImageJob:
     worker: GenerationWorker | None = None
     records: list[GeneratedImage] = field(default_factory=list)
     error: str | None = None
+    timed_out: bool = False
     stopped: bool = False
+
+
+@dataclass
+class FailedPicture:
+    """A picture that didn't come back, kept until the author retries,
+    edits or dismisses it (for this run of the app only: the API log keeps
+    the error). Stopping isn't failing: a stopped job keeps nothing."""
+
+    job_id: str
+    request: ImageRequest
+    store: PictureStore
+    message: str
+    # Nothing came back in time: the service may still make it and charge.
+    timed_out: bool = False
 
 
 class ImageJobs(QObject):
@@ -187,6 +203,7 @@ class ImageJobs(QObject):
         super().__init__(parent)
         self.root = root
         self.jobs: dict[str, ImageJob] = {}
+        self.failures: dict[str, FailedPicture] = {}
 
     def start(
         self, request: ImageRequest, client: ImageClient, store: PictureStore | None = None
@@ -201,6 +218,8 @@ class ImageJobs(QObject):
                 job.records = run_image_request(job.client, job.request, store=job.store)
             except StreamCancelled:
                 job.stopped = True
+            except MediaTimedOut as exc:
+                job.error, job.timed_out = str(exc), True
             except Exception as exc:  # shown to the author, never lost
                 job.error = str(exc) or type(exc).__name__
             finally:
@@ -228,6 +247,20 @@ class ImageJobs(QObject):
             if story_id is None or job.request.story_id == story_id
         ]
 
+    def failed_for(self, story_id: str) -> list[FailedPicture]:
+        """The story's failed pictures still to be dealt with. A memory-only
+        chat's go with it."""
+        for job_id, failure in list(self.failures.items()):
+            if not failure.store.alive():
+                del self.failures[job_id]
+        return [f for f in self.failures.values() if f.request.story_id == story_id]
+
+    def dismiss(self, job_id: str) -> FailedPicture | None:
+        failure = self.failures.pop(job_id, None)
+        if failure is not None:
+            self.changed.emit()
+        return failure
+
     def stop(self, job_id: str) -> None:
         job = self.jobs.get(job_id)
         if job is not None:
@@ -254,6 +287,10 @@ class ImageJobs(QObject):
         elif job.stopped:
             self.failed.emit(job.id, story_id, "")
         else:
-            self.failed.emit(job.id, story_id, job.error or "no picture came back")
+            message = job.error or "no picture came back"
+            self.failures[job.id] = FailedPicture(
+                job.id, job.request, job.store, message, timed_out=job.timed_out
+            )
+            self.failed.emit(job.id, story_id, message)
         job.thread, job.worker = None, None
         self.changed.emit()

@@ -39,6 +39,11 @@ class SpendingCapReached(ProviderError):
     """The key's spending limit is reached; waiting a few seconds won't help."""
 
 
+class MediaTimedOut(ProviderError):
+    """Nothing came back within the time allowed. For a request that makes
+    something, the service may still make it, and charge for it."""
+
+
 def spending_cap(error: ProviderError) -> bool:
     return error.status_code == 429 and (error.retry_after or 0) > RETRY_MAX_SECONDS
 
@@ -172,6 +177,12 @@ class MediaHttp:
         except (httpx.HTTPError, OSError) as exc:
             if self._cancelled:
                 raise StreamCancelled() from exc
+            if isinstance(exc, httpx.TimeoutException) and not isinstance(
+                exc, httpx.ConnectTimeout
+            ):
+                raise MediaTimedOut(
+                    f"{_where(url)} sent no reply within {_minutes(self.timeout_seconds)}"
+                ) from exc
             raise ProviderError(f"{_where(url)} failed: {exc or type(exc).__name__}") from exc
         if self._cancelled:
             raise StreamCancelled()
@@ -193,6 +204,12 @@ class MediaHttp:
             raise ProviderError(
                 f"{_where(url)} returned a non-JSON body", body=response.text[:2000]
             ) from exc
+
+
+def _minutes(seconds: float) -> str:
+    if seconds < 120:
+        return f"{seconds:.0f} seconds"
+    return f"{seconds / 60:.0f} minutes"
 
 
 def _where(url: str) -> str:

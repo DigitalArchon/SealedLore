@@ -526,3 +526,28 @@ def test_a_version_one_archive_still_imports(tmp_path: Path, saved: StoryBundle)
     path.write_text(json.dumps(data))
     imported = import_archive(path, root=tmp_path)
     assert load_generated_images(imported.story.id, tmp_path) == []
+
+
+def test_a_picture_is_waited_for_twenty_minutes_and_a_timeout_is_never_resent():
+    """NanoGPT sends nothing until the picture is done, and Seedream once
+    took over the old five minutes: the picture was made and charged for,
+    and never received."""
+    from sealedlore.providers.images import IMAGE_TIMEOUT_SECONDS
+    from sealedlore.providers.media_http import MediaTimedOut
+
+    assert IMAGE_TIMEOUT_SECONDS == 1200
+    real = ImageClient("https://nano-gpt.com/api/v1", "key")
+    try:
+        timeout = real.http._get_client().timeout
+        assert timeout.read == 1200 and timeout.connect == 30
+    finally:
+        real.close()
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        raise httpx.ReadTimeout("The read operation timed out")
+
+    with pytest.raises(MediaTimedOut, match="20 minutes"):
+        image_client(handler).generate({"model": "m", "prompt": "p"})
+    assert len(calls) == 1

@@ -93,13 +93,23 @@ class PendingPicture:
     text: str
 
 
+@dataclass(frozen=True)
+class FailedPictureItem:
+    """A picture that didn't come back, where it was meant to appear."""
+
+    job_id: str
+    text: str
+    # What went wrong, and what Retry would send (shown as its tooltip).
+    detail: str
+    retry_tip: str = ""
+
+
 # The pictures anchored after a node (None: before the first): a finished
 # one as (record, its file), or one still being drawn.
 # A picture with its bytes (None: its file is missing), or one still being drawn.
 # A video (gui/video_view.VideoItem) comes the same way, done or not.
-PicturesFor = Callable[
-    [str | None], "Sequence[tuple[GeneratedImage, bytes | None] | PendingPicture | VideoItem]"
-]
+PictureItem = "tuple[GeneratedImage, bytes | None] | PendingPicture | FailedPictureItem | VideoItem"
+PicturesFor = Callable[[str | None], f"Sequence[{PictureItem}]"]
 
 
 def speaker_label_for(speaker_id: str, cast: Sequence[Character]) -> str:
@@ -817,6 +827,52 @@ class PendingPictureWidget(QFrame):
         layout.addWidget(stop)
 
 
+class FailedPictureWidget(QFrame):
+    """A picture that failed, in the place it was meant to appear: what went
+    wrong, and Retry (the same request again), Edit… (the picture dialog
+    with it filled in: another prompt, model or pictures) or Dismiss."""
+
+    action_requested = Signal(str, str)  # (job id, "retry" | "edit" | "dismiss")
+
+    def __init__(self, item: FailedPictureItem) -> None:
+        super().__init__()
+        self.setObjectName("message")
+        self.setProperty("kind", "picture")
+        self.job_id = item.job_id
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(14, 10, 14, 12)
+        header = QLabel(item.text)
+        header.setObjectName("messageHeader")
+        header.setWordWrap(True)
+        layout.addWidget(header)
+        detail = QLabel(item.detail)
+        detail.setObjectName("messageNote")
+        detail.setWordWrap(True)
+        detail.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(detail)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        for action, label, tip in (
+            ("retry", "Retry", item.retry_tip or "Send the same request again."),
+            (
+                "edit",
+                "Edit…",
+                "Open the picture dialog with this request filled in, to change the "
+                "prompt, the model or the pictures before drawing it again.",
+            ),
+            ("dismiss", "Dismiss", "Take this away from the story."),
+        ):
+            button = QToolButton()
+            button.setObjectName("messageAction")
+            button.setText(label)
+            button.setToolTip(tip)
+            button.clicked.connect(
+                lambda _=False, a=action: self.action_requested.emit(self.job_id, a)
+            )
+            row.addWidget(button)
+        layout.addLayout(row)
+
+
 class ColumnLayout(QVBoxLayout):
     """Tells its column when its measurements go stale."""
 
@@ -1028,6 +1084,7 @@ class TranscriptView(QScrollArea):
     video_requested = Signal(str)
     image_action_requested = Signal(str, str)
     stop_image_requested = Signal(str)
+    failed_picture_action = Signal(str, str)
     # (action, video id): a finished video's menu, or a pending one's button.
     video_action_requested = Signal(str, str)
     keep_full_requested = Signal(str, bool)
@@ -1289,6 +1346,12 @@ class TranscriptView(QScrollArea):
         self._place(widget)
         return widget
 
+    def add_failed_picture(self, item: FailedPictureItem) -> FailedPictureWidget:
+        widget = FailedPictureWidget(item)
+        widget.action_requested.connect(self.failed_picture_action)
+        self._place(widget)
+        return widget
+
     def add_aside(self, question: str, answer: str = "", *, aside_id: str = "") -> AsideWidget:
         widget = AsideWidget(question, answer, aside_id=aside_id)
         widget.delete_requested.connect(self.delete_aside_requested)
@@ -1322,6 +1385,8 @@ class TranscriptView(QScrollArea):
                     self.add_picture(*item)
                 elif isinstance(item, VideoItem):
                     self.add_video(item)
+                elif isinstance(item, FailedPictureItem):
+                    self.add_failed_picture(item)
                 else:
                     self.add_pending_picture(item.job_id, item.text)
 

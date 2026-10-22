@@ -1874,7 +1874,15 @@ reads it at full price. The dialog shows the
 whole request — model, size, count, listed price, the pictures in order, and
 the prompt, which you can edit — and nothing is sent until you press
 Generate. The picture is drawn in the background while you play on and lands
-in the **Media** tab, and can be set as the transcript's background (from
+after its passage and in the **Media** tab. Some models take minutes; the app
+waits up to 20 minutes, and **Stop** beside it stops waiting at any time. A
+picture that fails or doesn't come back in time is marked where it would have
+appeared, with **Retry** (the same request again, on the picture endpoint
+Settings has now: change the endpoint there first if you like), **Edit…**
+(the picture dialog with the request filled in, to change the prompt, model or
+pictures) and **Dismiss**. A picture that timed out may still have been made
+and charged for by the service, so look in your account there before you
+retry. A picture can be set as the transcript's background (from
 its ⋯ menu, or any picture file with View → Background picture…). Pictures
 are kept even when their passage is deleted; only their own Delete removes
 them, since they cost money. The Media tab shows every picture and video in

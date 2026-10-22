@@ -28,19 +28,20 @@ from sealedlore.gui.image_dialog import (
     named_for,
     save_picture_as,
 )
-from sealedlore.gui.image_jobs import ImageCatalog, ImageJobs
+from sealedlore.gui.image_jobs import FailedPicture, ImageCatalog, ImageJobs
 from sealedlore.gui.image_picker import pick_image_model
 from sealedlore.gui.images_panel import ImagesPanel
 from sealedlore.gui.isometric_view import IsometricDialog
 from sealedlore.gui.picture_variant import PictureVariantDialog, VariantSubject
 from sealedlore.gui.portraits_dialog import PortraitsDialog
 from sealedlore.gui.ref_images import PICTURE_FILTER, image_of, picture_bytes_of, pixmap_of
-from sealedlore.gui.transcript import PendingPicture
+from sealedlore.gui.transcript import FailedPictureItem, PendingPicture
 from sealedlore.gui.winprivacy import exclude_from_capture
 from sealedlore.ids import new_id
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, ImageRef
 from sealedlore.models.node import Usage
+from sealedlore.providers.images import IMAGE_TIMEOUT_SECONDS
 from sealedlore.storage.image_meta import picture_kind
 from sealedlore.storage.images import REFS_DIR
 from sealedlore.storage.picture_store import PictureStore, file_name
@@ -71,6 +72,7 @@ class ImagesWindow:
         )
         self.transcript.image_action_requested.connect(self._image_action)
         self.transcript.stop_image_requested.connect(self.image_jobs.stop)
+        self.transcript.failed_picture_action.connect(self._failed_picture_action)
         self.composer.image_requested.connect(lambda: self.generate_image())
 
     def _image_actions(self, story_menu) -> None:
@@ -156,6 +158,9 @@ class ImagesWindow:
                         "Play on; it appears here when it's done.",
                     )
                 )
+        for failure in self.image_jobs.failed_for(story_id):
+            if failure.request.anchor_node_id == anchor and not _passage_less(failure.request):
+                items.append(_failed_item(failure))
         return items + self._videos_for(anchor)
 
     def refresh_images(self) -> None:
@@ -261,20 +266,21 @@ class ImagesWindow:
         prefill: GeneratedImage | None = None,
         card=None,
         background: bool = False,
-    ) -> None:
+    ) -> bool:
         """`card`: a picture of that character alone, in the scene now, added
         to their card (In the scene… on the Cast page). `background`: a
-        picture to go behind the story's text (Media → the background)."""
+        picture to go behind the story's text (Media → the background).
+        True when a picture is being drawn."""
         if self.session is None:
-            return
+            return False
         if self._busy:
             self.statusBar().showMessage(
                 "A picture can be asked for once the story's current job is done.", 6000
             )
-            return
+            return False
         if self.session.config.images() is None:
             self._warn_plain("No endpoint", "Set up an endpoint in Settings first.")
-            return
+            return False
         if anchor_id is not None and not any(n.id == anchor_id for n in self.session.nodes):
             anchor_id = None
         dialog = ImageDialog(
@@ -310,16 +316,17 @@ class ImagesWindow:
         self.session.unreported_usage.clear()
         self._refresh_story_cost()
         if not accepted or request is None:
-            return
+            return False
         client = self.session.image_client()
         if client is None:
-            return
+            return False
         self.image_jobs.start(request, client, self.session.pictures)
         self.statusBar().showMessage(
             "Drawing the picture in the background. It appears after its passage when done.",
             8000,
         )
         self._refresh_image_views()
+        return True
 
     # --- pictures for the cards ------------------------------------------------
 
@@ -541,14 +548,71 @@ class ImagesWindow:
                 "A picture for another story is ready; it's in that story's Media tab.", 8000
             )
 
-    def _on_image_failed(self, _job_id: str, story_id: str, message: str) -> None:
+    def _on_image_failed(self, job_id: str, story_id: str, message: str) -> None:
+        failure = self.image_jobs.failures.get(job_id)
+        in_story = failure is not None and not _passage_less(failure.request)
+        if failure is not None and not in_story:
+            # A card's picture or a background has no place in the story to
+            # be marked in: the notice is all there is.
+            self.image_jobs.dismiss(job_id)
         if self.session is not None and self.session.story.id == story_id:
             self._refresh_story_cost()
             self._refresh_image_views()
         if not message:
             self.statusBar().showMessage("Stopped waiting for the picture.", 8000)
             return
-        self.statusBar().showMessage(f"The picture failed: {message}", 20000)
+        if failure is not None and failure.timed_out:
+            text = (
+                f"No picture came back within {_waited()}. The image service may still "
+                "finish it and charge for it."
+            )
+        else:
+            text = f"The picture failed: {message}"
+        if in_story:
+            text += " It's marked in the story, with Retry, Edit… and Dismiss."
+        self.statusBar().showMessage(text, 30000)
+
+    def _failed_picture_action(self, job_id: str, action: str) -> None:
+        """Retry, Edit… or Dismiss on a picture that failed, in the story."""
+        failure = self.image_jobs.failures.get(job_id)
+        session = self.session
+        if failure is None or session is None or session.story.id != failure.request.story_id:
+            return
+        if action == "dismiss":
+            self.image_jobs.dismiss(job_id)
+            self._refresh_image_views()
+        elif action == "retry":
+            # The request the author approved, sent again as it stands, on
+            # the picture endpoint as Settings has it now.
+            client = session.image_client()
+            if client is None:
+                self._warn_plain("No endpoint", "Set up an image endpoint in Settings first.")
+                return
+            self.image_jobs.dismiss(job_id)
+            self.image_jobs.start(failure.request, client, failure.store)
+            self.statusBar().showMessage("Drawing the picture again in the background.", 8000)
+            self._refresh_image_views()
+        elif action == "edit":
+            request = failure.request
+            card = None
+            if request.card_id is not None:
+                card = next(
+                    (c for c in (*session.cast, *session.supporting) if c.id == request.card_id),
+                    None,
+                )
+            prefill = GeneratedImage(
+                anchor_node_id=request.anchor_node_id,
+                file="",
+                prompt=request.prompt,
+                direction=request.direction,
+                model=request.model,
+                size=request.size,
+                references=list(request.references),
+                private_span=request.private_span,
+            )
+            if self.generate_image(anchor_id=request.anchor_node_id, prefill=prefill, card=card):
+                self.image_jobs.dismiss(job_id)
+                self._refresh_image_views()
 
     # --- a picture's menu --------------------------------------------------------
 
@@ -952,6 +1016,37 @@ class ImagesWindow:
 def _slug(name: str) -> str:
     """A name as part of a file name: "John Smith" as john-smith."""
     return "-".join("".join(c if c.isalnum() else " " for c in name).lower().split())
+
+
+def _waited() -> str:
+    return f"{IMAGE_TIMEOUT_SECONDS / 60:.0f} minutes"
+
+
+def _failed_item(failure: FailedPicture) -> FailedPictureItem:
+    request = failure.request
+    model = request.model.rsplit("/", 1)[-1]
+    if failure.timed_out:
+        detail = (
+            f"No picture came back within {_waited()}, so SealedLore stopped waiting. "
+            "The image service may still finish it and charge for it: look in your "
+            "account there before you retry."
+        )
+    else:
+        detail = f"It failed: {failure.message}"
+    price = (
+        f" (listed at ${request.listed_price:.3f} a picture)"
+        if request.listed_price is not None
+        else ""
+    )
+    return FailedPictureItem(
+        failure.job_id,
+        f"The picture from {model} ({request.size}) didn't come back.",
+        detail,
+        retry_tip=(
+            f"Send the same request again to {model}{price}, on the picture endpoint "
+            "Settings → Images has now. It is charged again."
+        ),
+    )
 
 
 def _passage_less(picture) -> bool:

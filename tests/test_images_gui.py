@@ -21,13 +21,14 @@ pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QEvent, Qt  # noqa: E402
 from PySide6.QtGui import QColor, QImage  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtWidgets import QApplication, QLabel  # noqa: E402
 
 from sealedlore.engine.images import ImageRequest  # noqa: E402
 from sealedlore.gui.image_dialog import ImageDialog  # noqa: E402
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.gui.ref_images import MAX_SIDE, picture_bytes  # noqa: E402
 from sealedlore.gui.transcript import (  # noqa: E402
+    FailedPictureWidget,
     ImageMessageWidget,
     PendingPictureWidget,
     PictureView,
@@ -792,3 +793,147 @@ def test_the_media_tab_keeps_its_thumbnails(app, window: MainWindow, tmp_path: P
     # Nothing listed: nothing kept.
     panel.set_images([], None, set())
     assert panel._thumbs == {} and len(decoded) == 3
+
+
+def failing_image_client(
+    error: Exception | None = None, calls: list | None = None, delay: float = 0.0
+) -> ImageClient:
+    def handler(request: httpx.Request) -> httpx.Response:
+        time.sleep(delay)
+        if calls is not None:
+            calls.append(request)
+        if error is not None:
+            raise error
+        return httpx.Response(500, text="the model is overloaded")
+
+    return ImageClient(
+        "https://nano-gpt.com/api/v1",
+        "key",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+
+def duellist_request(window: MainWindow, **changes) -> ImageRequest:
+    return ImageRequest(
+        **{
+            "story_id": window.session.story.id,
+            "model": "bytedance/seedream-v5.0-pro",
+            "prompt": "A duellist.",
+            "size": "16:9",
+            "n": 1,
+            "references": (),
+            "anchor_node_id": "a0",
+            "listed_price": 0.09,
+            **changes,
+        }
+    )
+
+
+def failed_widgets(app, window: MainWindow) -> list[FailedPictureWidget]:
+    window.reload_transcript()
+    flush(app)
+    return window.transcript.findChildren(FailedPictureWidget)
+
+
+def test_a_failed_picture_is_marked_where_it_was_meant_to_appear(app, window: MainWindow):
+    """Live (Oct 2026): a Seedream picture took over five minutes, the wait
+    gave up, and the only word was a status-bar notice that came and went.
+    Now the failure stands where the picture would have been, until the
+    author retries, edits or dismisses it."""
+    window.image_jobs.start(duellist_request(window), failing_image_client())
+    wait_for(app, lambda: not window.image_jobs.pending())
+    flush(app)
+    assert "Retry, Edit… and Dismiss" in window.statusBar().currentMessage()
+    widgets = failed_widgets(app, window)
+    assert len(widgets) == 1
+    texts = " ".join(label.text() for label in widgets[0].findChildren(QLabel))
+    assert "seedream-v5.0-pro" in texts and "HTTP 500" in texts
+    # After passage a0, where the picture would have gone.
+    column = window.transcript._layout
+    order = [column.itemAt(i).widget() for i in range(column.count() - 1)]
+    assert getattr(order[order.index(widgets[0]) - 1], "node_id", None) == "a0"
+    # Dismiss takes it away.
+    window.transcript.failed_picture_action.emit(widgets[0].job_id, "dismiss")
+    assert not failed_widgets(app, window)
+    assert not window.image_jobs.failures
+
+
+def test_retry_sends_the_same_request_again(app, window: MainWindow, monkeypatch):
+    request = duellist_request(window)
+    window.image_jobs.start(request, failing_image_client())
+    wait_for(app, lambda: not window.image_jobs.pending())
+    (widget,) = failed_widgets(app, window)
+    sent: list[ImageRequest] = []
+    start = window.image_jobs.start
+
+    def record(req, client, store=None):
+        sent.append(req)
+        return start(req, client, store)
+
+    monkeypatch.setattr(window.image_jobs, "start", record)
+    monkeypatch.setattr(window.session, "image_client", mock_image_client)
+    window.transcript.failed_picture_action.emit(widget.job_id, "retry")
+    assert sent == [request]
+    wait_for(app, lambda: not window.image_jobs.pending())
+    flush(app)
+    assert not failed_widgets(app, window)
+    assert len(load_generated_images(window.session.story.id, window.root)) == 1
+
+
+def test_edit_opens_the_dialog_with_the_request_and_replaces_the_failure(
+    app, window: MainWindow, monkeypatch
+):
+    use = window.session.image_ref_choices()[0].use
+    window.image_jobs.start(
+        duellist_request(window, references=(use,), direction="by torchlight"),
+        failing_image_client(),
+    )
+    wait_for(app, lambda: not window.image_jobs.pending())
+    (widget,) = failed_widgets(app, window)
+    asked: list[dict] = []
+
+    def generate_image(**kwargs):
+        asked.append(kwargs)
+        return False  # cancelled: the failure stays
+
+    monkeypatch.setattr(window, "generate_image", generate_image)
+    window.transcript.failed_picture_action.emit(widget.job_id, "edit")
+    (kwargs,) = asked
+    prefill = kwargs["prefill"]
+    assert kwargs["anchor_id"] == "a0"
+    assert prefill.prompt == "A duellist." and prefill.direction == "by torchlight"
+    assert prefill.model == "bytedance/seedream-v5.0-pro" and prefill.size == "16:9"
+    assert prefill.references == [use]
+    assert len(failed_widgets(app, window)) == 1
+
+    monkeypatch.setattr(window, "generate_image", lambda **_: True)
+    window.transcript.failed_picture_action.emit(widget.job_id, "edit")
+    assert not failed_widgets(app, window)
+
+
+def test_a_picture_that_timed_out_says_it_may_still_be_charged(app, window: MainWindow):
+    calls: list = []
+    client = failing_image_client(httpx.ReadTimeout("The read operation timed out"), calls)
+    window.image_jobs.start(duellist_request(window), client)
+    wait_for(app, lambda: not window.image_jobs.pending())
+    flush(app)
+    # Never sent twice: it may be being made.
+    assert len(calls) == 1
+    (failure,) = window.image_jobs.failures.values()
+    assert failure.timed_out
+    assert "may still finish it" in window.statusBar().currentMessage()
+    (widget,) = failed_widgets(app, window)
+    texts = " ".join(label.text() for label in widget.findChildren(QLabel))
+    assert "20 minutes" in texts and "charge" in texts
+
+
+def test_a_stopped_picture_or_one_with_no_passage_leaves_no_mark(app, window: MainWindow):
+    window.image_jobs.start(
+        duellist_request(window, anchor_node_id=None, background=True), failing_image_client()
+    )
+    job = window.image_jobs.start(duellist_request(window), failing_image_client(delay=0.5))
+    window.image_jobs.stop(job)
+    wait_for(app, lambda: not window.image_jobs.pending())
+    flush(app)
+    assert not window.image_jobs.failures
+    assert not failed_widgets(app, window)

@@ -33,10 +33,14 @@ from sealedlore.models.config import media_api
 from sealedlore.providers import wavespeed
 from sealedlore.providers.base import ProviderError
 from sealedlore.providers.http import make_client
-from sealedlore.providers.media_http import MediaHttp
+from sealedlore.providers.media_http import MediaHttp, MediaTimedOut
 
-# Seedream at 2k took ~20-60s live; a queue on the provider's side can add more.
-IMAGE_TIMEOUT_SECONDS = 300.0
+# How long a picture is waited for. NanoGPT's endpoint is synchronous and
+# sends nothing until the picture is done: Seedream 5.0 Pro took 109-150 s
+# live, and once past five minutes, when the old limit gave up and the
+# picture was made and charged for anyway (Oct 2026). Stop still ends the
+# wait at once (MediaHttp.cancel), so a long limit costs nothing.
+IMAGE_TIMEOUT_SECONDS = 1200.0
 # How often a WaveSpeed picture is asked after.
 POLL_SECONDS = 2.0
 
@@ -316,7 +320,7 @@ class ImageClient:
                     + (f": {prediction.error}" if prediction.error else "")
                 )
             if waited > self.http.timeout_seconds:
-                raise ProviderError("WaveSpeed: no picture after the time allowed")
+                raise MediaTimedOut("WaveSpeed: no picture after the time allowed")
             self.http.wait(POLL_SECONDS)
             waited += POLL_SECONDS
             prediction = wavespeed.result(self.http, prediction.id)
