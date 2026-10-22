@@ -19,6 +19,7 @@ certifi==2026.10.19 \
     #   httpcore
     #   httpx
     #   requests
+    #   tinfoil
 cffi==2.1.1 \
     --hash=sha256:046bfc24911b37851ee1b51aab8bffe713d89c68c6a057b09484ce9fd5f69b4e \
     --hash=sha256:06c72bb76605a4b0cd0aad6930b69d4baf7dd5d806cfc409b824191099700e66 \
@@ -621,9 +622,9 @@ numpy==2.5.3 \
     --hash=sha256:fc36dc566135b5eceec4cf89758fcb719266a019ef07dae1754ae7c9f617ef3e \
     --hash=sha256:ffdc76bfcae6b255dff75202c5e7feaf95b40246bc0a17944facc1fecf9f79ab
     # via -r requirements.in
-openai==3.19.2 \
-    --hash=sha256:66247fcd07266e72536e90656dc27f3b0bb1e9d8696d4013fc55402c0b96a5c2 \
-    --hash=sha256:de185f9834ad064d965ec42bd0766731cf66bceea16a7670294a835d207019e6
+openai==3.36.1 \
+    --hash=sha256:4c15b6765fe1792c5ad753556f44c7f82c2920c5e9e40219c0fca97369e923d3 \
+    --hash=sha256:ad8e5d56f20198915d98726ac1edb12ae38e7ecfa9bd560057e84642168b20c9
     # via tinfoil
 platformdirs==4.11.14 \
     --hash=sha256:0e706ec0a73a4ec023d11496153a4b6607a672f4b5027c23c3aefa9c9288c523 \
@@ -1069,13 +1070,13 @@ tiktoken==0.14.0 \
     --hash=sha256:f5e7665f6624e052e5e7f6a36919ab69279decdc976d7b16b4fa15e1897d0513 \
     --hash=sha256:f702e0aeeb6506e57687e881c59e844ebe8f0a6a097ddafe20e3ab25f387be4e
     # via -r requirements.in
-tinfoil==0.14.0 \
-    --hash=sha256:b88838a80210582c7dd6b307cd83e581ea21b245fb0dad79ac57202b2e9f2968 \
-    --hash=sha256:f04e1c0ed98e22619c03e6fc8b9a2cab60a4e9ed2001ffec58ab5cd848d77642
+tinfoil==0.15.0 \
+    --hash=sha256:6676e0014ef8a992b26d7f47d4e99f3a440ab6e38488d1f21f34b537d12869d8 \
+    --hash=sha256:dbc5012dd65ab5d2211b9f32a5bdb823550f0310ab79c4ab21175ab4dd4abccd
     # via -r requirements.in
-tinfoil-ehbp==0.3.2 \
-    --hash=sha256:9428f0c28a540528b534dd0fec9eeb4b632edc424a84d0dacf8d56d8d658ee1f \
-    --hash=sha256:b3ba148797d1638ccbb6fed63958c9a89af6c8d9b09d9fc4f185c1f681e45005
+tinfoil-ehbp==0.4.1 \
+    --hash=sha256:215ddc47a1f336efec813af7df7a11f56dbad120859dd236dce8513a0b81e090 \
+    --hash=sha256:cb76cd944daf94fa6ba1d3a4a99aa935dad9248a892e243fc160543c65f5a246
     # via
     #   -r requirements.in
     #   tinfoil

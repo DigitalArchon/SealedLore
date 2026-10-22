@@ -15,8 +15,10 @@ PySide6-Addons==6.11.2
 # OpenAI client; all pinned by hash below like everything else. The EHBP
 # library and its HPKE are named too: tinfoil accepts any tinfoil-ehbp>=0.3.0,
 # so a relock would otherwise take a newer one nobody has read.
-tinfoil==0.14.0
-tinfoil-ehbp==0.3.2
+# 0.15.0 and 0.4.1 (requests sealed in 64 KiB frames) were run against the
+# enclave on Oct 22 2026 before being adopted (SealedLoreDocs design/private.md).
+tinfoil==0.15.0
+tinfoil-ehbp==0.4.1
 pyhpke==0.6.5
 # API keys in the system keychain (storage/keychain.py), as the author's
 # DAToolkit does: on Linux through SecretStorage and jeepney (pure Python;
