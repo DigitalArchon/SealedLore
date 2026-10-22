@@ -5,7 +5,12 @@ similarity into the uncached tail, so only sometimes there — and the premise
 into the first Director turn. The world bible already had a place in the
 cached system block (§6.1); it just had no editor. This is it.
 
-Edits apply only on Save, so Cancel really cancels.
+Edits apply only on Save, so Cancel really cancels, except on the Characters
+tab: it is the Cast page itself, lent by the window (gui/window_cast.py),
+whose cards are saved as they are made, as they always were there. Before
+it, the full setup had no characters at all (the author, Oct 2026: from the
+new story guide's "Skip to the full setup…", a story's cast was a status-bar
+line away, on another page).
 """
 
 from __future__ import annotations
@@ -75,13 +80,18 @@ class SetupDialog(QDialog):
         first_message: Node | None = None,
         texts: PromptTexts = DEFAULT_TEXTS,
         parent: QWidget | None = None,
+        characters: QWidget | None = None,
     ) -> None:
+        """`cast`: the story's own list, read again whenever the Starting
+        scene tab is shown, since `characters` (the Cast page, lent) may
+        have changed it."""
         super().__init__(parent)
         self.setWindowTitle("Story setup")
         self.texts = texts
         self.setMinimumSize(640, 560)
-        size_to_screen(self, 0.5, 0.82)
+        size_to_screen(self, 0.62 if characters is not None else 0.5, 0.82)
         self.story = story
+        self._live_cast = cast
         self.cast = list(cast)
         self.first_message = first_message
 
@@ -94,10 +104,14 @@ class SetupDialog(QDialog):
             return
         self.tabs.addTab(self._about_tab(), "About")
         self.tabs.addTab(self._world_tab(), "World")
+        if characters is not None:
+            self.tabs.addTab(self._characters_tab(characters), "Characters")
         self.tabs.addTab(self._style_tab(), "Style")
         self.tabs.addTab(self._opening_tab(), "Opening")
-        self.tabs.addTab(self._scene_tab(), "Starting scene")
+        self.scene_tab = self._scene_tab()
+        self.tabs.addTab(self.scene_tab, "Starting scene")
         self.tabs.addTab(self._private_tab(), "Private scenes")
+        self.tabs.currentChanged.connect(self._on_tab_changed)
 
         self._add_buttons()
 
@@ -111,6 +125,45 @@ class SetupDialog(QDialog):
         layout.addWidget(buttons)
 
     # --- tabs -------------------------------------------------------------
+
+    def _characters_tab(self, panel: QWidget) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.addWidget(
+            _hint(
+                "The Cast page itself: as many or as few characters as you like, in as "
+                "much or as little detail. The more you put on their cards, the more say "
+                "you have in who they are. Set in a world that already exists? Fill with "
+                "lore characters… writes cards for its people. Cards are kept as you make "
+                "them, as on the Cast page: Cancel doesn't take them back."
+            )
+        )
+        layout.addWidget(panel, 1)
+        panel.show()
+        return widget
+
+    def _on_tab_changed(self, index: int) -> None:
+        """Back on the Starting scene with a cast that changed meanwhile: the
+        roster and the suggestion list it, choices kept."""
+        if self.tabs.widget(index) is not self.scene_tab:
+            return
+        live = list(self._live_cast)
+        if [(c.id, c.name, c.is_player_available) for c in live] == [
+            (c.id, c.name, c.is_player_available) for c in self.cast
+        ]:
+            return
+        present, absent = self._pinned()
+        suggested = self.suggested.currentData() if self.suggested is not None else None
+        self.cast = live
+        fresh = self._scene_tab(chosen=(present, absent, suggested))
+        index = self.tabs.indexOf(self.scene_tab)
+        self.tabs.blockSignals(True)
+        self.tabs.removeTab(index)
+        self.scene_tab.deleteLater()
+        self.scene_tab = fresh
+        self.tabs.insertTab(index, fresh, "Starting scene")
+        self.tabs.setCurrentIndex(index)
+        self.tabs.blockSignals(False)
 
     def _style_tab(self) -> QWidget:
         """The Style page's form, here too: a new story's opening is written in
@@ -429,15 +482,26 @@ class SetupDialog(QDialog):
             "passages toward it."
         )
 
-    def _scene_tab(self) -> QWidget:
+    def _scene_tab(
+        self, *, chosen: tuple[list[str], list[str], str | None] | None = None
+    ) -> QWidget:
+        """`chosen`: (pinned present, pinned absent, suggested), for the tab
+        built again for a cast that changed, which keeps the location, time
+        and situation boxes as they are typed."""
         widget = QWidget()
         layout = QVBoxLayout(widget)
         start = self.story.setup.starting_scene
+        present, absent, suggested_id = chosen or (
+            start.present_character_ids,
+            self.story.setup.absent_at_start,
+            self.story.setup.suggested_character_id,
+        )
 
         form = QFormLayout()
-        self.location = line_edit(start.location or "")
-        self.time_of_day = line_edit(start.time_of_day or "")
-        self.situation = GrowingText(start.situation or "", lines=2, most=8)
+        if chosen is None:
+            self.location = line_edit(start.location or "")
+            self.time_of_day = line_edit(start.time_of_day or "")
+            self.situation = GrowingText(start.situation or "", lines=2, most=8)
         form.addRow("Location", self.location)
         form.addRow("Time", self.time_of_day)
         form.addRow("Situation", self.situation)
@@ -453,8 +517,8 @@ class SetupDialog(QDialog):
             layout.addWidget(QLabel("Who is there at the start"))
             self.presence = StartPresence(
                 self.cast,
-                start.present_character_ids,
-                self.story.setup.absent_at_start,
+                present,
+                absent,
                 max_height=None,
             )
             layout.addWidget(self.presence, 1)
@@ -465,17 +529,17 @@ class SetupDialog(QDialog):
             self.suggested.addItem("No suggestion", None)
             for character in playable:
                 self.suggested.addItem(character.name, character.id)
-            index = self.suggested.findData(self.story.setup.suggested_character_id)
+            index = self.suggested.findData(suggested_id)
             self.suggested.setCurrentIndex(max(index, 0))
             suggested.addRow("Suggested character to play", self.suggested)
             layout.addLayout(suggested)
         if not self.cast:
             layout.addWidget(
                 _hint(
-                    "This story has no cast yet. Once it has (the Cast page beside the "
-                    "story), choose here or when you start who is there at the start and "
-                    "which character to suggest playing. Until then the opening places "
-                    "everyone."
+                    "This story has no cast yet. Once it has (the Characters tab, or the "
+                    "Cast page beside the story), choose here or when you start who is "
+                    "there at the start and which character to suggest playing. Until "
+                    "then the opening places everyone."
                 )
             )
             layout.addStretch(1)

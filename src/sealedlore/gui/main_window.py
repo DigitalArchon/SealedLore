@@ -1548,14 +1548,29 @@ class MainWindow(
             return False
         path = self.session.path()
         start_before = _how_it_starts(self.session.story)
+        # The Characters tab is the Cast page, lent (gui/window_cast.py).
+        lent = None if self.session.story.chat else self.lend_cast_panel()
         dialog = SetupDialog(
             self.session.story,
             self.session.cast,
             first_message=path[0] if path else None,
             texts=self.session.texts,
             parent=self,
+            characters=lent,
         )
-        if dialog.exec() != SetupDialog.Accepted:
+        self._setup_dialog = dialog
+        try:
+            accepted = dialog.exec() == SetupDialog.Accepted
+        finally:
+            self._setup_dialog = None
+            self.return_cast_panel()
+            dialog.deleteLater()
+        if lent is not None:
+            # Cards made on the tab were saved as they were made; the pages
+            # that list them follow, whether or not Setup was saved.
+            self.refresh_panels()
+            self._refresh_people()
+        if not accepted:
             return False
         self.session.forget_review_undo()
         self.session.story.updated_at = utc_now_iso()

@@ -437,6 +437,74 @@ def test_lore_characters_fill_the_guide_s_cast(app, window, monkeypatch):
     guide.deleteLater()
 
 
+def _tab(dialog, name: str):
+    return next(
+        dialog.tabs.widget(i) for i in range(dialog.tabs.count()) if dialog.tabs.tabText(i) == name
+    )
+
+
+def test_setup_has_the_cast_page_as_its_characters_tab(app, window, monkeypatch):
+    """The author (Oct 2026): Skip to the full setup… gave more detail on the
+    rest, and no characters at all. Setup's Characters tab is the Cast page,
+    lent, and the Starting scene tab lists whoever is made there."""
+    from sealedlore.gui.setup_dialog import SetupDialog
+
+    seen: dict = {}
+
+    def drive(dialog) -> int:
+        names = [dialog.tabs.tabText(i) for i in range(dialog.tabs.count())]
+        assert names[:3] == ["About", "World", "Characters"]
+        panel = window.cast_panel
+        assert _tab(dialog, "Characters").isAncestorOf(panel)
+        panel.add_character()
+        panel.name.setText("Maren Holt")
+        settle(app)
+        dialog.tabs.setCurrentWidget(_tab(dialog, "Starting scene"))
+        settle(app)
+        maren = next(c for c in window.session.cast if c.name == "Maren Holt")
+        seen["present"] = maren.id in dialog.presence._choices
+        seen["suggested"] = [dialog.suggested.itemText(i) for i in range(dialog.suggested.count())]
+        dialog.location.setText("The gatehouse")
+        dialog._save()
+        return SetupDialog.Accepted
+
+    monkeypatch.setattr(SetupDialog, "exec", drive)
+    offered = []
+    # The test's story has begun: a new starting scene offers a new playthrough.
+    monkeypatch.setattr(window, "_offer_new_playthrough", lambda: offered.append(True))
+    assert window.open_setup()
+    assert offered
+    assert seen["present"] and "Maren Holt" in seen["suggested"]
+    assert window.session.story.setup.starting_scene.location == "The gatehouse"
+    assert "Maren Holt" in [c.name for c in window.session.cast]
+    assert window.cast_page.isAncestorOf(window.cast_panel)
+
+
+def test_skipping_to_the_full_setup_from_the_first_step_reaches_start(app, window, monkeypatch):
+    from sealedlore.gui.setup_dialog import SetupDialog
+
+    started = []
+    monkeypatch.setattr(window, "start_story", lambda: started.append(window.session.story.title))
+
+    def setup(dialog) -> int:
+        window.cast_panel.add_character()
+        window.cast_panel.name.setText("Ada")
+        dialog._save()
+        return SetupDialog.Accepted
+
+    def guide(dialog) -> int:
+        dialog.title.setText("Skipped")
+        dialog.skip_button.click()
+        return dialog.result()
+
+    monkeypatch.setattr(SetupDialog, "exec", setup)
+    monkeypatch.setattr(NewStoryGuide, "exec", guide)
+    window.new_story()
+    settle(app)
+    assert [c.name for c in window.session.cast] == ["Ada"]
+    assert started == ["Skipped"]
+
+
 def test_new_story_runs_the_guide_then_start(app, window, monkeypatch):
     started = []
     monkeypatch.setattr(window, "start_story", lambda: started.append(window.session.story.title))

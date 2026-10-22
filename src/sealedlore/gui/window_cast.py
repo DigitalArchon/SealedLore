@@ -21,8 +21,9 @@ class CastWindow:
         the Inspector keeps its page (gui/new_story_guide.py)."""
         # (story id) -> the world and names last asked for, offered again.
         self._lore_cast_asked: dict[str, tuple[str, str]] = {}
-        # The new story guide while it is open: dialogs stand over it.
+        # The new story guide, and Setup, while open: dialogs stand over them.
         self._guide: QWidget | None = None
+        self._setup_dialog: QWidget | None = None
         self.cast_page = QWidget()
         layout = QVBoxLayout(self.cast_page)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -78,8 +79,9 @@ class CastWindow:
     # --- the guide borrows the Cast page -------------------------------------
 
     def lend_cast_panel(self) -> QWidget:
-        """The Cast page's panel, taken out to stand in a dialog; give it back
-        with `return_cast_panel`."""
+        """The Cast page's panel, taken out to stand in a dialog (the guide's
+        Characters step, Setup's Characters tab); give it back with
+        `return_cast_panel`."""
         self.cast_panel.setParent(None)
         # Suggestions come from the story's prose, and there is none yet.
         self.cast_panel.suggestions_box.setVisible(False)
@@ -153,9 +155,12 @@ class CastWindow:
         )
 
     def _dialog_parent(self) -> QWidget:
-        """A dialog opened from the guide stands over the guide."""
-        guide = getattr(self, "_guide", None)
-        return guide if guide is not None and guide.isVisible() else self
+        """A dialog opened from the guide or Setup (the Cast page lent to
+        them) stands over it."""
+        for host in (getattr(self, "_setup_dialog", None), getattr(self, "_guide", None)):
+            if host is not None and host.isVisible():
+                return host
+        return self
 
     def _say_lore_cast(self, lore: str, result) -> None:
         if not result.added:

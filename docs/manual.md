@@ -784,12 +784,16 @@ people (see Perspective and supporting characters).
 **Create the story** then goes to Start, which asks who you play and offers
 portraits for anyone still without one before the opening is written.
 Everything else keeps its default and is in Setup and on the Cast page;
-**Skip to the full setup…** opens Setup instead. **Cancel** after the first
-step asks whether to keep the story made so far (not begun, in your Stories)
-or discard it to the Trash.
+**Skip to the full setup…** opens Setup instead, characters included.
+**Cancel** after the first step asks whether to keep the story made so far
+(not begun, in your Stories) or discard it to the Trash.
 
 **Story → Setup…** holds what a story is built on:
 - **World**: the setting and its rules, sent with every turn and cached;
+- **Characters**: the Cast page itself, with every card's fields, portraits
+  and **Fill with lore characters…**. Cards are kept as you make them, as on
+  the Cast page, so Cancel doesn't take them back; the Starting scene tab
+  lists whoever you made here;
 - **Style**: length, perspective, person, tense and the rest, the same form as
   the Style page beside the story, so a new story's opening is written the way
   you want it;

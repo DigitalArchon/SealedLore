@@ -96,7 +96,10 @@ def tree(tmp_path_factory) -> Tree:
     window = MainWindow(root=tmp_path_factory.mktemp("readme"), use_mock=True)
     story = Story(title="README")
     settings = _tabs(SettingsDialog(window.config, story, window).tabs)
-    setup = _tabs(SetupDialog(story, [], parent=window).findChild(QTabWidget))
+    # As the window opens it: with the Cast page lent as its Characters tab.
+    lent = SetupDialog(story, [], parent=window, characters=window.lend_cast_panel())
+    setup = _tabs(lent.findChild(QTabWidget))
+    window.return_cast_panel()
     menus = {
         _clean(action.text()): _menu_tree(action.menu())
         for action in window.menuBar().actions()
