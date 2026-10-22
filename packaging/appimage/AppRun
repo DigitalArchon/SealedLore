@@ -44,6 +44,12 @@ if [ -z "${SSL_CERT_FILE:-}" ]; then
         fi
     done
 fi
+# requests, which tinfoil's attestation fetch uses, reads REQUESTS_CA_BUNDLE and
+# not SSL_CERT_FILE: the same bundle, so the host's trust decisions (emSign ECC
+# Root CA - G3, the eMudhra root distrusted in Oct 2026) hold there too.
+if [ -n "${SSL_CERT_FILE:-}" ] && [ -z "${REQUESTS_CA_BUNDLE:-}" ]; then
+    export REQUESTS_CA_BUNDLE="$SSL_CERT_FILE"
+fi
 
 if [ "${1:-}" = "cli" ]; then
     shift

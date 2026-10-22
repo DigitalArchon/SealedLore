@@ -22,3 +22,9 @@ pyhpke==0.6.5
 # DAToolkit does: on Linux through SecretStorage and jeepney (pure Python;
 # cryptography is tinfoil's already).
 keyring==25.7.0
+# The CA bundle httpx, requests and sigstore trust. 2026.10.19 drops emSign
+# ECC Root CA - G3, whose eMudhra intermediates had recoverable keys (Oct
+# 2026); the floor keeps a relock from standing still on an older one. Pinned
+# by hash below like everything else. The AppImage prefers the host's own CA
+# store (AppRun) and falls back to this.
+certifi>=2026.10.19

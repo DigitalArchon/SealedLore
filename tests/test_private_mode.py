@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import struct
+from pathlib import Path
 
 import httpx
 import pytest
@@ -17,6 +18,7 @@ import pytest
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.config import ProviderConfig
 from sealedlore.models.generation import GenerationParams
+from sealedlore.providers import private_mode as _private_mode
 from sealedlore.providers.base import (
     ChatRequest,
     ProviderError,
@@ -647,3 +649,37 @@ def test_a_retired_model_says_what_is_offered_instead():
     with pytest.raises(ModelRetired) as caught:
         provider.check_offered("private/glm-5-3-flash")
     assert caught.value.offered == ["private/glm-5-3", "private/kimi-k3"]
+
+
+MODULE = _private_mode
+
+PROXY_CONTRACT = Path(__file__).resolve().parent / "data" / "nanogpt_private_mode_proxy.json"
+
+
+def test_the_client_stays_within_the_reviewed_proxys_contract():
+    """NanoGPT's own client, @nanogpt/private-mode on npm, is the reference for the relay's
+    contract, and tests/data/nanogpt_private_mode_proxy.json records the release last read
+    (SealedLoreDocs/tools/private_mode_check compares it with npm's latest and refreshes the
+    record). This holds our side to it: every field we may seal is one the proxy lets through,
+    every x-nanogpt header we name is one it sends or reads, the preflight's fields and the
+    relay's paths are its."""
+    import inspect
+    import re
+
+    proxy = json.loads(PROXY_CONTRACT.read_text())
+    assert re.fullmatch(r"\d+\.\d+\.\d+", proxy["reviewed_version"])
+    fields = set(proxy["body_fields"])
+    assert MODULE.ALLOWED_FIELDS <= fields, MODULE.ALLOWED_FIELDS - fields
+    # The router-only cache field goes inside the sealed body (Tinfoil's SDK puts it there for
+    # the proxy, we put it there ourselves); it is not a field NanoGPT's filter sees.
+    assert MODULE.CACHE_SECRET_FIELD not in proxy["body_fields"]
+    source = inspect.getsource(MODULE)
+    headers = set(re.findall(r'"(x-nanogpt-[a-z-]+)"', source))
+    assert headers, "the client names no x-nanogpt header"
+    assert headers <= set(proxy["request_headers"]) | set(proxy["reply_headers"]), headers
+    assert f'"{proxy["reply_header_private_mode_value"]}"' in source
+    preflight = set(re.findall(r'"(cacheScope|upstreamModel|requestBodyBytes|operation)"', source))
+    known = set(proxy["preflight_request_fields"]) | set(proxy["preflight_reply_fields"])
+    assert preflight <= known
+    assert proxy["relay_paths"]["preflight"] == MODULE.RELAY_PATH + "/preflight"
+    assert proxy["relay_paths"]["chat"] == MODULE.RELAY_PATH + "/v1/chat/completions"

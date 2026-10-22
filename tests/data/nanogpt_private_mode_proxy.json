@@ -1,0 +1,92 @@
+{
+  "_about": "NanoGPT's own Private Mode client (@nanogpt/private-mode, npm) is the reference for the relay's contract. This records the release last read against this app's private-mode client; SealedLoreDocs/tools/private_mode_check compares it with npm's latest and the tests hold the client to it.",
+  "package": "@nanogpt/private-mode",
+  "reviewed_version": "0.2.26",
+  "reviewed_on": "2026-10-22",
+  "tinfoil_js": "1.1.12",
+  "ehbp_js": "0.3.1",
+  "body_fields": [
+    "chat_template_kwargs",
+    "frequency_penalty",
+    "function_call",
+    "functions",
+    "logit_bias",
+    "logprobs",
+    "max_tokens",
+    "messages",
+    "model",
+    "n",
+    "parallel_tool_calls",
+    "pii_check_options",
+    "presence_penalty",
+    "prompt_injection_check_options",
+    "reasoning_effort",
+    "response_format",
+    "seed",
+    "stop",
+    "stream",
+    "stream_options",
+    "temperature",
+    "tool_choice",
+    "tools",
+    "top_logprobs",
+    "top_p",
+    "user",
+    "web_search_options"
+  ],
+  "body_fields_note": "PRIVATE_TINFOIL_CHAT_COMPLETION_BODY_FIELDS in lib/requestTransforms.js: what the proxy lets through to the sealed body. user_cache_secret is not among them: Tinfoil's SDK puts it inside the sealed body.",
+  "request_headers": [
+    "authorization",
+    "content-type",
+    "accept",
+    "x-nanogpt-private-model",
+    "x-nanogpt-private-stream",
+    "x-nanogpt-private-cache-scope",
+    "x-nanogpt-private-proxy-version",
+    "x-query-source",
+    "x-team-id"
+  ],
+  "reply_headers": [
+    "x-request-id",
+    "x-nanogpt-private-mode",
+    "x-nanogpt-private-model-binding",
+    "ehbp-response-nonce",
+    "x-nanogpt-document-cost-usd"
+  ],
+  "reply_header_private_mode_value": "tinfoil",
+  "preflight_request_fields": [
+    "model",
+    "requestBodyBytes",
+    "operation"
+  ],
+  "preflight_reply_fields": [
+    "cacheScope",
+    "upstreamModel"
+  ],
+  "preflight_note": "The proxy reads only cacheScope (64 hex) and takes the upstream model from its bundled list; upstreamModel in the reply is what the relay was measured to answer (Sept 26 2026).",
+  "cache_scope_header_is": "sha256 hex of the preflight's cacheScope (lib/cacheScope.js)",
+  "models": [
+    "private/deepseek-v4-1-flash",
+    "private/kimi-k3",
+    "private/gpt-oss-120b",
+    "private/llama3-3-70b",
+    "private/glm-5-3",
+    "private/gemma4-31b",
+    "private/gemma4-31b:thinking"
+  ],
+  "relay_paths": {
+    "preflight": "/api/v1/private/tinfoil/preflight",
+    "chat": "/api/v1/private/tinfoil/v1/chat/completions",
+    "models": "/api/v1/private/tinfoil/models",
+    "attestation": "/api/v1/private/tinfoil",
+    "document_conversion": "/api/v1/private/tinfoil/v1/convert/file"
+  },
+  "not_implemented_here": [
+    "web_search_options and its pii/prompt-injection options",
+    "/v1/convert/file (PDF)",
+    "image inputs",
+    "json_schema rewriting",
+    "Kimi K3 output sizing",
+    "x-nanogpt-private-model-binding handling"
+  ]
+}
