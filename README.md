@@ -47,6 +47,11 @@ works as intended. Bug reports and pull requests are welcome; see
   Help), the sample plots reworded where it mattered, the plot director asked
   far less often, and the map's open country as sparse or as rich as you
   like.
+- **Characters from the start, and a known world's cast** (new in
+  2.0.0b4). Write a story from scratch makes your characters on the Cast page
+  itself, portraits and all, in as much or as little detail as you like. For
+  a story set in a world that already exists, **Fill with lore characters…**
+  writes cards for its people, the ones you name first.
 
 ### Play on a map
 
