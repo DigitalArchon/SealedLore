@@ -231,6 +231,10 @@ EDGE_CHOICES = 8
 EDGE_LANDING_ALONG = 3
 EDGE_LANDING_IN = 2
 EDGE_STEPS = {"north": (0, 1), "south": (0, -1), "east": (1, 0), "west": (-1, 0)}
+# The menu choices that are a move and nothing else: the storyteller is told
+# where they end ("from the house to the farm"); a walk up to someone keeps
+# the area's own name.
+MOVING_VERBS = ("travel", "walk", "enter", "leave", "stairs", "onward")
 
 
 @dataclass
@@ -1538,16 +1542,19 @@ class AreaRuntime:
         """(where it leads, its name) when the author's character stands in a
         door that leads into or out of a building."""
         state = self.area_state()
-        held = self.held_name()
-        me = state.spots.get(held or "")
+        me = state.spots.get(self.held_name() or "")
         area = self.area(me.area if me else None)
         if me is None or area is None:
             return None
-        world = self.world()
-        entrance = area.entrance_at(me.x, me.y)
+        return self._door_at(area, me.x, me.y, self.world())
+
+    def _door_at(self, area: Area, x: int, y: int, world: WorldMap) -> tuple[str, str] | None:
+        """(where it leads, its name) for a tile of `area` that is a door
+        into a building, a door out of one, or the stairs; None otherwise."""
+        entrance = area.entrance_at(x, y)
         if entrance is not None:
             return entrance.place_id, self.area_title(entrance.place_id, world)
-        if area.indoor and (me.x, me.y) in area.exits and area.parent is not None:
+        if area.indoor and (x, y) in area.exits and area.parent is not None:
             # Open country is named for the region it lies in, when it does.
             around = self.area(area.parent, world)
             holder = world.places.get(around.place_id) if around and around.window else None
@@ -1590,35 +1597,51 @@ class AreaRuntime:
         """Through the door the author's character stands in: into the
         building, or out of it to stand outside its door; up or down the
         stairs they stand on, to a step off the stairs on the other level."""
-        door = self.door_here()
-        if door is None:
-            return None
         state = self.area_state()
         held = self.held_name()
-        me = state.spots[held]
+        me = state.spots.get(held or "")
+        if me is None:
+            return None
         world, art = self.world(), self._art_read()
-        here = self.area(me.area, world, art)
+        through = self._through(state, held, me, world, art)
+        if through is None:
+            return None
+        spot, frm, to = through
+        state.spots[held] = spot
+        self._add_time(state, DOOR_SECONDS, frm, to)
+        self._set_live(state)
+        return state
+
+    def _through(
+        self, state: AreaState, held: str, at: Spot, world: WorldMap, art: WorldArt
+    ) -> tuple[Spot, str, str] | None:
+        """Where the author's character stands once through the door at
+        `at` (a door into a building, out of one, or the stairs), with the
+        names of where they set out from and where they arrive; None when
+        `at` is no door."""
+        here = self.area(at.area, world, art)
+        if here is None:
+            return None
+        door = self._door_at(here, at.x, at.y, world)
+        if door is None:
+            return None
         there = self.area(door[0], world, art)
-        if here is None or there is None:
+        if there is None:
             return None
         taken = {(s.x, s.y) for n, s in state.spots.items() if n != held and s.area == there.id}
-        stairs = here.entrance_at(me.x, me.y)
+        stairs = here.entrance_at(at.x, at.y)
         if stairs is not None and stairs.stairs:
-            x, y = stairs_landing(there, (me.x, me.y), taken)
-            state.spots[held] = Spot(area=there.id, x=x, y=y)
-            self._add_time(
-                state,
-                DOOR_SECONDS,
+            x, y = stairs_landing(there, (at.x, at.y), taken)
+            return (
+                Spot(area=there.id, x=x, y=y),
                 self.area_title(here.id, world),
                 self.area_title(there.id, world),
             )
-            self._set_live(state)
-            return state
         if not here.indoor:
-            entrance = here.entrance_at(me.x, me.y)
+            entrance = here.entrance_at(at.x, at.y)
             spot = inside_door(there, entrance.side if entrance else None) or self._way_in(there)
         else:
-            side = exit_side(here, me.x, me.y)
+            side = exit_side(here, at.x, at.y)
             spot = front_of(there, here.place_id, side)  # a moored vehicle's gangway too
             if spot is None:
                 # The outside plan has no box for this building (a plan kept
@@ -1632,10 +1655,7 @@ class AreaRuntime:
                 )
                 spot = point or self._way_in(there)
         x, y = stand_near(there, spot, taken)
-        state.spots[held] = Spot(area=there.id, x=x, y=y)
-        self._add_time(state, DOOR_SECONDS, here.name, there.name)
-        self._set_live(state)
-        return state
+        return Spot(area=there.id, x=x, y=y), here.name, there.name
 
     def travel_choices(self) -> list[tuple[str, str, int]]:
         """(place id, name, seconds on foot) for each known place the
@@ -1763,7 +1783,110 @@ class AreaRuntime:
             return x, y
         return stand_near(area, edge, set(), seed=held)
 
-    def map_action(self, verb: str, target: str, target_id: str = "", *, to: str = "") -> str:
+    def go_to_tile(self, x: int, y: int, *, beside: bool = False) -> str:
+        """Go here, on the play view: the turn's text for the composer, the
+        move kept with the live state and made when the turn is sent
+        (`stamp_turn`), as Travel… is. The author's character walks to the
+        tile (or to the nearest free tile beside it, `beside`); a door tile
+        takes them through it, into the building, out of it or by the
+        stairs. "" when there is no way there. The author's ruling (Oct 23
+        2026): the map is a view and a way to point, and nothing moves
+        without a turn."""
+        state = self.area_state()
+        held = self.held_name()
+        me = state.spots.get(held or "")
+        if held is None or me is None:
+            return ""
+        steps = self.walk_route(x, y, beside=beside)
+        if not steps:
+            return ""
+        world, art = self.world(), self._art_read()
+        area = self.area(me.area, world, art)
+        if area is None:
+            return ""
+        end = Spot(area=me.area, x=steps[-1][0], y=steps[-1][1])
+        seconds = walk_seconds(walk_metres(area, steps))
+        through = self._through(state, held, end, world, art) if not beside else None
+        if through is not None:
+            spot, _frm, to_name = through
+            there = self.area(spot.area, world, art)
+            stairs = area.entrance_at(end.x, end.y)
+            if stairs is not None and stairs.stairs:
+                verb = "stairs"
+            elif there is not None and there.indoor and not area.indoor:
+                verb = "enter"
+            else:
+                verb = "leave"
+            text = self.texts.fill(f"map.turn.{verb}", name=to_name)
+            state.action = MapAction(
+                verb=verb,  # type: ignore[arg-type]
+                target=to_name,
+                target_id=spot.area,
+                text=text,
+                spot=spot,
+                seconds=seconds + DOOR_SECONDS,
+                steps=[tuple(step) for step in steps],
+            )
+            self._set_live(state)
+            return text
+        point = tile_point(world, area, end.x, end.y)
+        token = mark_token(*point) if point is not None else f"({end.x}, {end.y})"
+        text = self.texts.fill("map.turn.walk", mark=token)
+        state.action = MapAction(
+            verb="walk",
+            target=token,
+            target_id=me.area,
+            text=text,
+            spot=end,
+            seconds=seconds,
+            steps=[tuple(step) for step in steps],
+        )
+        self._set_live(state)
+        return text
+
+    def go_past_edge(self, side: str) -> str:
+        """Walk on past this edge into the area that adjoins it: the turn's
+        text, the move made when the turn is sent (`stamp_turn`). "" when
+        the way is barred."""
+        beyond = self._beyond(side)
+        if beyond is None:
+            return ""
+        spot, metres = beyond
+        world, art = self.world(), self._art_read()
+        state = self.area_state()
+        held = self.held_name()
+        there = self.area(spot.area, world, art)
+        if held is None or there is None:
+            return ""
+        taken = {(s.x, s.y) for n, s in state.spots.items() if n != held and s.area == spot.area}
+        x, y = (spot.x, spot.y)
+        if (x, y) in taken:
+            x, y = stand_near(there, (x, y), taken)
+        name = there.name
+        if there.within:
+            name = f"{name} ({there.within})"
+        text = self.texts.fill("map.turn.onward", side=side, name=name)
+        state.action = MapAction(
+            verb="onward",
+            target=name,
+            target_id=spot.area,
+            text=text,
+            spot=Spot(area=spot.area, x=x, y=y),
+            seconds=walk_seconds(metres),
+            to=side,
+        )
+        self._set_live(state)
+        return text
+
+    def map_action(
+        self,
+        verb: str,
+        target: str,
+        target_id: str = "",
+        *,
+        to: str = "",
+        at: tuple[int, int] | None = None,
+    ) -> str:
         """The turn a menu choice writes (`map.turn.<verb>`), kept with the
         live state so the storyteller is told what it means when it is sent
         as written (or added to). `to`: who a Give hands the thing to."""
@@ -1783,12 +1906,30 @@ class AreaRuntime:
             text = self.texts.fill("map.turn.give", name=target, who=to_words)
         else:
             text = self.texts.fill(f"map.turn.{verb}", name=target)
+        # Done beside whoever or whatever it is for (`at`, their tile): the
+        # author's character walks up when the turn is sent, as a Go here does.
+        steps: list[tuple[int, int]] = []
+        spot = None
+        seconds = 0
+        held = self.held_name()
+        me = state.spots.get(held or "")
+        if at is not None and me is not None:
+            steps = [tuple(step) for step in self.walk_route(at[0], at[1], beside=True)]
+            area = self.area(me.area)
+            if len(steps) > 1 and area is not None:
+                spot = Spot(area=me.area, x=steps[-1][0], y=steps[-1][1])
+                seconds = walk_seconds(walk_metres(area, steps))
+            else:
+                steps = []
         state.action = MapAction(
             verb=verb,  # type: ignore[arg-type]
             target=target,
             target_id=target_id,
             text=text,
             to=to,
+            spot=spot,
+            seconds=seconds,
+            steps=steps,
         )
         self._set_live(state)
         return text
@@ -1911,17 +2052,21 @@ class AreaRuntime:
         world = self.world()
         to = None
         action = state.action
-        if action is not None and action.verb == "travel" and held is not None:
+        if action is not None and held is not None and (action.verb == "travel" or action.spot):
             # Set off, now that the turn goes: there, as far as the map has
-            # drawn it, the way's length on the clock.
+            # drawn it, the way's length on the clock. A travel, a Go here, a
+            # door gone through, the stairs, the edge walked past, or a walk
+            # up to whoever or whatever the menu's choice is done to.
             here = state.spots.get(held)
             frm = self.area(here.area, world) if here is not None else None
             if action.spot is not None:
                 state.spots[held] = action.spot
             else:
                 state.spots.pop(held, None)
-            self._add_time(state, action.seconds, frm.name if frm else "", action.target)
-            to = action.target_id or None
+            arrived = action.target if action.verb in MOVING_VERBS else (frm.name if frm else "")
+            self._add_time(state, action.seconds, frm.name if frm else "", arrived)
+            if action.verb == "travel":
+                to = action.target_id or None
         if self.story.plot is None and user_node.speaker_id in (
             DIRECTOR_SPEAKER_ID,
             NARRATOR_SPEAKER_ID,
@@ -2598,6 +2743,12 @@ class AreaRuntime:
         if turn is not None and action is not None and action.text in turn.content:
             if action.verb == "give":
                 action_line = self.texts.fill("map.action.give", name=action.target, who=action.to)
+            elif action.verb == "walk":
+                action_line = self.texts.fill("map.action.walk", mark=action.target)
+            elif action.verb == "onward":
+                action_line = self.texts.fill(
+                    "map.action.onward", side=action.to, name=action.target
+                )
             else:
                 action_line = self.texts.fill(f"map.action.{action.verb}", name=action.target)
         if me is None or area is None:

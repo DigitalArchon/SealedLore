@@ -64,7 +64,7 @@ class MapEditWindow:
         self.area_view.set_editing(True)
         self.area_view.edit_bar.set_back(None)
         self._sync_edit_undo()
-        self.refresh_area()
+        self.refresh_area(snap=True)
         if at_start:
             words = (
                 "Your map is drawn. Before you play, change anything you like: paint walls, "
@@ -86,7 +86,7 @@ class MapEditWindow:
         self.area_view.set_removing(False)
         self.area_view.set_editing(False)
         if refresh and hasattr(self, "refresh_area") and self.session is not None:
-            self.refresh_area()
+            self.refresh_area(snap=True)
 
     def _edit_outside(self) -> None:
         """Indoors: edit the ground round the building, without walking out."""
@@ -119,7 +119,7 @@ class MapEditWindow:
         else:
             self.area_view.edit_bar.set_back(None)
             self._edit_area_id = None
-        self.refresh_area()
+        self.refresh_area(snap=True)
 
     def _sync_edit_places(self) -> None:
         """The bar's ways about: outside a building being edited."""
@@ -159,7 +159,7 @@ class MapEditWindow:
             return True
         if self._busy:
             self.statusBar().showMessage("The story is being written: the map waits for it.", 5000)
-            self.refresh_area()
+            self.refresh_area(snap=True)
             return True
         problem = session.map_edit_problem()
         if problem is not None:
@@ -176,7 +176,7 @@ class MapEditWindow:
             self.area_view.set_undo(session.correction_undo)
             self.world_view.set_undo(session.correction_undo)
         self.refresh_world()
-        self.refresh_area()
+        self.refresh_area(snap=True)
         self._refresh_scene_panel()
 
     def _sync_edit_undo(self) -> None:
@@ -209,7 +209,7 @@ class MapEditWindow:
             return
         name, what = self._ask_building()
         if not name:
-            self.refresh_area()
+            self.refresh_area(snap=True)
             return
         place_id = self.session.add_building(area.id, x0, y0, x1, y1, name, what)
         if place_id is None:
@@ -306,13 +306,13 @@ class MapEditWindow:
                 self.area_view.edit_bar.set_back(
                     here.title if here is not None else "where you are"
                 )
-            self.refresh_area()
+            self.refresh_area(snap=True)
 
     def _edit_back(self) -> None:
         self._edit_area_id = None
         self.area_view.focus = None
         self.area_view.edit_bar.set_back(None)
-        self.refresh_area()
+        self.refresh_area(snap=True)
 
     def _edit_undo(self) -> None:
         if self._edit_blocked():

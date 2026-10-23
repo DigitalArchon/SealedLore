@@ -20,7 +20,25 @@ from pydantic import BaseModel, Field
 ThingVerb = Literal["use", "take", "destroy", "eat"]
 PersonVerb = Literal["talk", "look", "attack"]
 MapVerb = Literal[
-    "use", "take", "destroy", "eat", "talk", "look", "attack", "travel", "drop", "give"
+    "use",
+    "take",
+    "destroy",
+    "eat",
+    "talk",
+    "look",
+    "attack",
+    "travel",
+    "drop",
+    "give",
+    # Moving on the map (the author's ruling, Oct 23 2026: the map is a view
+    # and a way to point; nothing moves until the turn is sent): to a spot in
+    # the area, in through a building's door, out through it, by the stairs,
+    # on past the area's edge.
+    "walk",
+    "enter",
+    "leave",
+    "stairs",
+    "onward",
 ]
 Density = Literal["sparse", "normal", "full"]
 # What became of a thing (engine/session_area.py: a menu choice the author
@@ -93,7 +111,12 @@ class MapAction(BaseModel):
     # (`stamp_turn`), never before: a turn rewritten travels nowhere.
     spot: Spot | None = None
     seconds: int = 0
-    # Give: who the thing is handed to (as the map names them).
+    # The tiles the author's character walks in the area they set out from
+    # (a walk, a walk up to someone or something, the way to a door), for the
+    # play view to show once the turn goes; [] for a journey.
+    steps: list[tuple[int, int]] = Field(default_factory=list)
+    # Give: who the thing is handed to (as the map names them). Onward: the
+    # side of the area walked past ("north").
     to: str = ""
     # The thing's record before the turn's own was written
     # (`_record_action`; None for none), so Take back puts that back and

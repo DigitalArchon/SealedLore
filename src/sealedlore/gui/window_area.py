@@ -3,11 +3,15 @@ engine/session_area.py). A mixin for `MainWindow`, beside WorldWindow.
 
 The area is painted on a thread (gui/area_render.py: QImage and numpy only)
 and kept by what it was painted from, so walking never repaints it; a
-sprite that comes in for a thing in it repaints it once. Walking, doors and
-travel go through the session, which keeps where everyone stands; a menu
-choice walks the author's character up to whoever or whatever it is for
-(Look stays where it is) and puts its turn in the composer (the author's
-ruling: to be read, changed and sent).
+sprite that comes in for a thing in it repaints it once. Nothing moves
+until a turn is sent (the author's ruling, Oct 23 2026: the map is a view
+and a way to point, never a controller; moving by key or by click moved the
+figure with no turn, and the story heard of it only at the next send). A
+click on the ground, a building or a door, and a menu choice, put the turn
+in the composer with the move kept in the session's live state
+(`go_to_tile`, `map_action(at=)`); the turn sent moves them (`stamp_turn`),
+and `refresh_area` then shows the figure walking from where it stood to
+where the story has it, through the door when the areas differ.
 """
 
 from __future__ import annotations
@@ -22,7 +26,17 @@ from PySide6.QtCore import QObject, Qt, QTimer, Signal
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QDialog, QFileDialog, QInputDialog, QMessageBox
 
-from sealedlore.engine.area import Area, Placement, point_tile, tile_point
+from sealedlore.engine.area import (
+    Area,
+    Placement,
+    exit_side,
+    front_of,
+    inside_door,
+    path,
+    point_tile,
+    stairs_landing,
+    tile_point,
+)
 from sealedlore.engine.deck_plan import DRAWN_PIECES
 from sealedlore.engine.marks import mark_token, marks_in
 from sealedlore.engine.picture_shapes import FREE
@@ -93,7 +107,7 @@ class AreaWindow:
         self.area_view = AreaView()
         self.world_view.attach_play(self.area_view)
         self.world_view.play_ready = self._area_ready
-        self.area_view.walk_requested.connect(self._area_walk)
+        self.area_view.go_requested.connect(self._area_go)
         self.area_view.walk_finished.connect(self._area_walked)
         self.area_view.action_chosen.connect(self._area_action)
         self.area_view.travel_wanted.connect(self._area_travel_menu)
@@ -134,7 +148,9 @@ class AreaWindow:
         self._paint_threads: list[threading.Thread] = []
         self._walker_images: dict[tuple[str, str], QImage | None] = {}
         self._place_images: dict[tuple[str, str], QImage | None] = {}
-        self._area_pending: tuple[str, str, str] | None = None
+        # A walk being shown through a door: the area it arrives in, shown
+        # (with the walk on from its door) once the walk to the door is over.
+        self._area_then: str | None = None
         self._area_story: str | None = None
 
     # --- showing --------------------------------------------------------------
@@ -156,8 +172,12 @@ class AreaWindow:
             return None
         return story_dir(session.story.id, self.root) / "cache" / "cut"
 
-    def refresh_area(self) -> None:
-        """The area the author's character stands in, as the session has it."""
+    def refresh_area(self, *, snap: bool = False) -> None:
+        """The area the author's character stands in, as the session has it.
+        Where the figure shown and the session disagree on the author's
+        character, the figure walks over (a turn moved them, or the passage
+        did), unless `snap`: the author moved them by hand (a correction,
+        Edit Mode), and they are simply there."""
         session = self.session
         if session is None or not session.map_first or session.in_private:
             if session is not None and session.in_private:
@@ -192,9 +212,23 @@ class AreaWindow:
                 shown_id = editing_elsewhere
         area = session.area(shown_id) if shown_id is not None else None
         if me is None or area is None:
+            self._area_then = None
             self.area_view.set_message(self._no_area_words(session))
             return
         art = session.map_art_copy()
+        # A walk still shown goes on (its end refreshes the view): no new one
+        # is started, and the area isn't swapped under it.
+        walking = self.area_view.walking()
+        walk = (
+            None if snap or walking or shown_id != me.area else self._walk_shown(session, area, me)
+        )
+        if walk is not None and walk[0] != area.id:
+            # Through a door: the walk to it first, in the area being left; this
+            # area, with the walk on from its door, once there (`_area_walked`).
+            self._area_then = area.id
+            self.area_view.walk(walk[1])
+            return
+        self._area_then = None
         walkers = [
             Walker(
                 name,
@@ -207,6 +241,14 @@ class AreaWindow:
             for name, spot in state.spots.items()
             if spot.area == area.id
         ]
+        if walk is not None:
+            # The figure where the walk starts; it walks to where the session
+            # has them, and the walk's end refreshes the view.
+            x0, y0 = walk[1][0]
+            walkers = [
+                Walker(w.name, x0, y0, w.image, held=True, carded=w.carded) if w.held else w
+                for w in walkers
+            ]
         # Whoever is at a door from outside, shown at it (seen through it).
         if area.id == me.area:
             walkers += [
@@ -235,18 +277,22 @@ class AreaWindow:
         clock = session.map_clock()
         clock_text = f"Day {clock[0]}, {clock[1] // 60:02d}:{clock[1] % 60:02d}" if clock else ""
         self.area_view.set_locked(self._busy)
-        self.area_view.set_area(
-            area,
-            ground,
-            walkers,
-            key=key,
-            clock=clock_text,
-            minute=clock[1] if clock else None,
-            failed=failed,
-            places=places,
-            weather=session.world().weather,
-            things=self._thing_pictures(area, session, art),
-        )
+        if not (walking and self._area_then):
+            # (Walking to a door, the area being left stays shown until there.)
+            self.area_view.set_area(
+                area,
+                ground,
+                walkers,
+                key=key,
+                clock=clock_text,
+                minute=clock[1] if clock else None,
+                failed=failed,
+                places=places,
+                weather=session.world().weather,
+                things=self._thing_pictures(area, session, art),
+            )
+        if walk is not None:
+            self.area_view.walk(walk[1])
         self.area_view.set_edge(session.edge_here())
         self.area_view.set_carrying(session.carried_things(), session.people_in_reach())
         self.area_view.set_offer(session.tile_set_offer(art))
@@ -255,6 +301,65 @@ class AreaWindow:
         self._sync_map_edit()
         self._sync_marks()
         self.cast_panel.refresh_carrying()
+
+    def _walk_shown(self, session, area: Area, me) -> tuple[str, list[tuple[int, int]]] | None:
+        """How the figure gets from where the view shows the author's
+        character to where the session has them (`me`, in `area`): (the
+        area the walk is in, its tiles). In the same area, the route from
+        the figure's tile; from another area, the route to the door that
+        leads here (the walk on from this area's door follows, `_area_then`);
+        None when there is nothing to show (the same tile, no figure yet,
+        no door between, no way)."""
+        view = self.area_view
+        shown = view.held()
+        shown_area = view.area
+        if shown is None or shown_area is None or view.editing:
+            return None
+        state = session.area_state()
+        held = session.held_name()
+        if shown_area.id == area.id:
+            if (shown.x, shown.y) == (me.x, me.y):
+                return None
+            others = {(s.x, s.y) for n, s in state.spots.items() if n != held and s.area == area.id}
+            route = path(area, (shown.x, shown.y), (me.x, me.y), blocked=others)
+            return (area.id, route) if len(route) > 1 else None
+        if self._area_then == area.id:
+            # Arrived through the door: on from just inside (or outside) it.
+            start = self._door_landing(shown_area, area, shown)
+            if start is None or start == (me.x, me.y):
+                return None
+            route = path(area, start, (me.x, me.y))
+            return (area.id, route) if len(route) > 1 else None
+        door = self._door_toward(shown_area, area, shown)
+        if door is None:
+            return None
+        others = {
+            (s.x, s.y) for n, s in state.spots.items() if n != held and s.area == shown_area.id
+        }
+        route = path(shown_area, (shown.x, shown.y), door, blocked=others)
+        return (shown_area.id, route) if len(route) > 1 else None
+
+    @staticmethod
+    def _door_toward(here: Area, there: Area, me) -> tuple[int, int] | None:
+        """The door tile of `here` that leads to `there`, nearest `me`."""
+        doors = [(e.x, e.y) for e in here.entrances if e.place_id == there.id]
+        if not doors and here.indoor and here.parent == there.id:
+            doors = list(here.exits)
+        if not doors:
+            return None
+        return min(doors, key=lambda d: abs(d[0] - me.x) + abs(d[1] - me.y))
+
+    @staticmethod
+    def _door_landing(left: Area, here: Area, at) -> tuple[int, int] | None:
+        """Where someone coming from `left` through its door at `at` first
+        stands in `here`: just inside the door, in front of it outside, or
+        a step off the stairs."""
+        entrance = left.entrance_at(at.x, at.y)
+        if entrance is not None and entrance.stairs:
+            return stairs_landing(here, (at.x, at.y))
+        if not left.indoor:
+            return inside_door(here, entrance.side if entrance else None)
+        return front_of(here, left.place_id, exit_side(left, at.x, at.y))
 
     def _close_area(self) -> None:
         """The story is closing: nothing of its play view stays for the
@@ -271,7 +376,7 @@ class AreaWindow:
         self._area_failed.clear()
         self._walker_images.clear()
         self._place_images.clear()
-        self._area_pending = None
+        self._area_then = None
         self._area_story = None
 
     def _join_paint_threads(self, seconds: float = PAINT_JOIN_SECONDS) -> None:
@@ -509,11 +614,9 @@ class AreaWindow:
             self.world_view.locked = self._busy
 
     def _finish_walk_before_job(self) -> None:
-        """Before any job starts: a walk still animating ends where the
-        figure is and goes to the session, so the turn carries it and
-        nothing of the walk is written while the worker runs."""
+        """Before any job starts: a walk still being shown ends where the
+        figure is (a showing only: the session has them at its end already)."""
         if hasattr(self, "area_view") and self.area_view.walking():
-            self._area_pending = None  # a menu choice mid-walk: the job came first
             self.area_view.finish_walk()
         if getattr(self, "_map_editing", False):
             # A turn sent, or any job: the map is played on again.
@@ -528,58 +631,25 @@ class AreaWindow:
             else None
         )
 
-    # --- walking ----------------------------------------------------------------
+    # --- moving (a turn) ------------------------------------------------------------
 
-    def _area_walk(self, x: int, y: int, beside: bool) -> None:
-        session = self.session
-        if session is None or self._busy:
-            return
-        if self.area_view.walking():
-            # A click mid-walk: the walk so far goes to the session first, so
-            # the route starts where the figure stands (it started from the
-            # walk's start, and `walked` refused it: the click was lost and
-            # the figure snapped back). A menu choice being walked up to is
-            # dropped: the click is the author's new mind.
-            self._area_pending = None
-            before = self.area_view.area.id if self.area_view.area is not None else None
-            self.area_view.finish_walk()
-            after = self.area_view.area.id if self.area_view.area is not None else None
-            if after != before:
-                return  # the walk ended on a door and went through
-        steps = session.walk_route(x, y, beside=beside)
-        if not steps:
-            self.statusBar().showMessage("There's no way there from here.", 4000)
-            self._area_pending = None
-            return
-        self.area_view.walk(steps)
-
-    def _area_walked(self, steps: list) -> None:
+    def _area_go(self, x: int, y: int, beside: bool) -> None:
+        """Go here, in this area: the turn in the composer, the move made
+        when it is sent. Nothing moves now."""
         session = self.session
         if session is None or self._busy or session.in_private:
-            # A job runs: the worker is the only writer of the session. A
-            # private scene: the map is paused, and nothing of it is written.
             return
-        session.walked([tuple(s) for s in steps])
-        door = session.door_here()
-        pending, self._area_pending = self._area_pending, None
-        if door is not None and pending is None:
-            if session.go_through() is not None:
-                self.statusBar().showMessage(f"You go through to {door[1]}.", 4000)
-                # A building walked into is furnished, and its things drawn, now.
-                if not session.in_private:
-                    session.start_tile_art()
-                    self._sync_progress()
-        elif door is None and pending is None:
-            # The door of a building whose inside isn't drawn yet: said, or it
-            # looks like a dead door (the review, Oct 20 2026).
-            undrawn = session.undrawn_door_here()
-            if undrawn is not None:
-                why = "Draw the map is off" if not self.config.map_art else "the map draws it"
-                note = f"The inside of {undrawn} isn't drawn yet: {why}, "
-                self.statusBar().showMessage(note + "and the door works once it is.", 6000)
-        if pending is not None:
-            self._fill_turn(*pending)
-        self._design_ahead()
+        text = session.go_to_tile(x, y, beside=beside)
+        if not text:
+            self.statusBar().showMessage("There's no way there from here.", 4000)
+            return
+        self._put_turn(text)
+
+    def _area_walked(self, steps: list) -> None:
+        """The walk shown is over: the view as the session has it (through a
+        door, the area arrived in, with the walk on from its door)."""
+        if self.session is None:
+            return
         self.refresh_area()
 
     def _design_ahead(self) -> None:
@@ -594,15 +664,10 @@ class AreaWindow:
         session = self.session
         if session is None or self._busy:
             return
-        if verb in WALK_UP:
-            spot = self._target_tile(name, target_id)
-            if spot is not None:
-                steps = session.walk_route(*spot, beside=True)
-                if len(steps) > 1:
-                    self._area_pending = (verb, name, target_id)
-                    self.area_view.walk(steps)
-                    return
-        self._fill_turn(verb, name, target_id)
+        # Done beside whoever or whatever it is for: the walk up is the
+        # turn's, made when it is sent (Look stays where it is).
+        at = self._target_tile(name, target_id) if verb in WALK_UP else None
+        self._fill_turn(verb, name, target_id, at=at)
 
     def _target_tile(self, name: str, target_id: str) -> tuple[int, int] | None:
         area = self.area_view.area
@@ -615,11 +680,14 @@ class AreaWindow:
         person = next((w for w in self.area_view.walkers if w.name == name), None)
         return (person.x, person.y) if person is not None else None
 
-    def _fill_turn(self, verb: str, name: str, target_id: str) -> None:
+    def _fill_turn(
+        self, verb: str, name: str, target_id: str, *, at: tuple[int, int] | None = None
+    ) -> None:
         """The menu's turn in the composer, as the author's character, for
-        the author to read, change and send."""
+        the author to read, change and send; `at`, the tile of whoever or
+        whatever it is done to, is walked up to when it is sent."""
         session = self.session
-        text = session.map_action(verb, name, target_id)
+        text = session.map_action(verb, name, target_id, at=at)
         self._put_turn(text)
 
     def _put_turn(self, text: str) -> None:
@@ -698,7 +766,7 @@ class AreaWindow:
         if area is not None and spot is not None and spot.area == area.id:
             self.world_view.go_local()
             free = area.walkable(spot.x, spot.y, area.blocked())
-            self._area_walk(spot.x, spot.y, not free)
+            self._area_go(spot.x, spot.y, not free)
             return
         text = session.go_to_point(x, y)
         if text:
@@ -726,12 +794,11 @@ class AreaWindow:
         if session is None or self._busy:
             return
         if choice_id == "area":
-            if session.cross_edge(side) is not None:
-                self.refresh_area()
-                self.statusBar().showMessage(f"You walk on, {side}.", 4000)
-                session.start_tile_art()
-                self._design_ahead()
-                self._sync_progress()
+            # The turn that walks on; the move, the art and the regions ahead
+            # follow once it is sent (the worker starts the map's art).
+            text = session.go_past_edge(side)
+            if text:
+                self._put_turn(text)
             else:
                 self.statusBar().showMessage(f"The way {side} is barred here.", 4000)
             return

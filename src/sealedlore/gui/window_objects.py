@@ -196,7 +196,7 @@ class ObjectsWindow:
             )
             self.statusBar().showMessage(words, 10000)
             self._sync_world()
-            self.refresh_area()
+            self.refresh_area(snap=True)
 
         self._after_job = after
         self._start(

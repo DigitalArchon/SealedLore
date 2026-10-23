@@ -188,7 +188,7 @@ from sealedlore.tree import path_to
 # of its pages shows, after the page's name (`_sync_dock_title`).
 NO_STORY_TITLE = "Open a story to see its pages here"
 PAGE_ABOUT = {
-    "Map": "Where the story is; click to walk, right-click to mark a spot",
+    "Map": "Where the story is; click where to go, right-click to mark a spot",
     "People": "Who is in the story, by their faces",
     "Scene": "Who is here, where and when, as the story has it",
     "Cast": "Each character's sheet, portrait and skills",

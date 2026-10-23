@@ -78,7 +78,7 @@ def stand(window, spots: dict[str, tuple[str, int, int]]) -> None:
     for name, (area, x, y) in spots.items():
         state.spots[name] = Spot(area=area, x=x, y=y)
     session.story.area_live = LiveArea(leaf_id=session.story.active_leaf_id, state=state)
-    window.refresh_area()
+    window.refresh_area(snap=True)
 
 
 def test_a_map_story_opens_on_the_area_to_walk_on(window):
@@ -130,34 +130,127 @@ def test_region_and_world_never_put_the_play_view_back_on_the_way_out(app, windo
     assert not view.play_shown() and view.level() == "world"
 
 
-def test_walking_into_the_door_goes_outside_and_a_menu_choice_fills_the_composer(app, window):
+def finish_turn(app, window, replies: list[str]) -> None:
+    """The turn in the composer sent on the mock and run to its end."""
+    window._provider = MockChatProvider(replies)
+    window._refresh_composer()
+    window.send_turn()
+    assert window._busy
+    deadline = time.monotonic() + 20
+    while window._busy:
+        assert time.monotonic() < deadline, "the turn never finished"
+        app.processEvents()
+        time.sleep(0.005)
+    pump(app)
+
+
+def test_a_click_on_a_door_writes_the_turn_and_nothing_moves_until_it_is_sent(app, window):
+    """The author's ruling (Oct 23 2026): the map is a view and a way to
+    point. A click writes the turn; the turn sent makes the move."""
     session = window.session
     house = session.area("house")
     door = next(e for e in house.exits if e[1] == 23)
-    window._area_walk(*door, False)
+    before = session.area_state().spots["Serrik Vaun"]
+    window._area_go(*door, False)
+    assert window.composer.text() == "I go out to The farm."
+    assert session.area_state().spots["Serrik Vaun"] == before  # not yet
+    action = session.story.area_live.state.action
+    assert action.verb == "leave" and action.spot.area == "farm" and len(action.steps) > 1
+    assert action.steps[-1] == tuple(door)
+    finish_turn(app, window, ["She steps out.", "{}"])
+    stamped = next(n for n in reversed(session.nodes) if n.kind == "user").meta.area
+    assert stamped.spots["Serrik Vaun"].area == "farm"  # through the door, now that it went
+    assert stamped.walked >= 3 and "from The house to The farm" in stamped.walked_words
+    assert session.story.area_live is None
     walk_all(app, window)
-    me = session.area_state().spots["Serrik Vaun"]
-    assert me.area == "farm"  # through the door
     assert window.area_view.area.name == "The farm"
-    well = next(p for p in session.area("farm").placements if "well" in p.name)
-    window._area_action("use", well.name, well.id)
-    walk_all(app, window)
-    assert window.composer.text() == "I use the stone well."
     me = session.area_state().spots["Serrik Vaun"]
-    assert abs(me.x - well.x) <= 1 and abs(me.y - well.y) <= 1  # walked up to it first
+    assert (window.area_view.held().x, window.area_view.held().y) == (me.x, me.y)
+
+
+def test_a_menu_choice_walks_up_only_when_the_turn_is_sent(app, window):
+    session = window.session
+    house = session.area("house")
+    door = next(e for e in house.exits if e[1] == 23)
+    window._area_go(*door, False)
+    finish_turn(app, window, ["She steps out.", "{}"])
+    walk_all(app, window)
+    farm = session.area("farm")
+    well = next(p for p in farm.placements if "well" in p.name)
+    before = session.area_state().spots["Serrik Vaun"]
+    window._area_action("use", well.name, well.id)
+    assert window.composer.text() == "I use the stone well."
+    assert session.area_state().spots["Serrik Vaun"] == before  # the walk up is the turn's
+    action = session.story.area_live.state.action
+    assert action.verb == "use" and action.spot is not None and len(action.steps) > 1
+    finish_turn(app, window, ["She draws water.", "{}"])
+    stamped = next(n for n in reversed(session.nodes) if n.kind == "user").meta.area
+    me = stamped.spots["Serrik Vaun"]
+    assert abs(me.x - well.x) <= 1 and abs(me.y - well.y) <= 1  # walked up to it
     window._area_action("look", "Maela Orr", "")
     assert window.composer.text().startswith("I keep out of sight and watch Maela Orr")
+    assert session.story.area_live.state.action.spot is None  # Look stays put
 
 
-def test_walking_waits_while_the_story_is_being_written(app, window):
+def test_a_click_on_a_building_goes_in_by_its_door(app, window):
+    """The author (Oct 23 2026): on many of Brasshaven's buildings there was
+    no seeing where the door was, so no way in. Any tile of the building
+    will do: the turn goes to its door and in."""
+    session = window.session
+    house = session.area("house")
+    door = next(e for e in house.exits if e[1] == 23)
+    window._area_go(*door, False)
+    finish_turn(app, window, ["She steps out.", "{}"])
+    walk_all(app, window)
+    view = window.area_view
+    farm = view.area
+    assert farm.id == "farm" and "house" in farm.buildings
+    x0, y0, x1, y1 = farm.buildings["house"]
+    roof = ((x0 + x1) // 2, (y0 + y1) // 2)
+    assert view.building_at(*roof) == "house"
+    entrance = next(e for e in farm.entrances if e.place_id == "house")
+    assert view.door_of("house") == (entrance.x, entrance.y)
+    from PySide6.QtCore import QPointF
+
+    from sealedlore.gui.area_render import px_for
+
+    px = px_for(farm)
+    window.composer.input.setPlainText("")
+    view._clicked(
+        QPointF((roof[0] + 0.5) * px, (roof[1] + 0.5) * px), view.mapToGlobal(view.rect().center())
+    )
+    assert window.composer.text() == "I go into The house."
+    action = session.story.area_live.state.action
+    assert action.verb == "enter" and action.spot.area == "house"
+
+
+def test_going_waits_while_the_story_is_being_written(app, window):
     session = window.session
     before = session.area_state().spots["Serrik Vaun"]
+    window.composer.input.setPlainText("")
     window._busy = True
     window._sync_area_lock()
-    window._area_walk(before.x + 1, before.y + 1, False)
-    walk_all(app, window)
+    window._area_go(before.x + 1, before.y + 1, False)
+    assert window.composer.text() == "" and session.story.area_live is None
     assert session.area_state().spots["Serrik Vaun"] == before
     assert "being written" in window.area_view.hint.text()
+    window._busy = False
+    window._sync_area_lock()
+
+
+def test_no_key_walks(app, window):
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QKeyEvent
+
+    session = window.session
+    view = window.area_view
+    before = session.area_state().spots["Serrik Vaun"]
+    window.composer.input.setPlainText("")
+    for key in (Qt.Key_Up, Qt.Key_W, Qt.Key_Right, Qt.Key_D):
+        view.keyPressEvent(QKeyEvent(QKeyEvent.KeyPress, key, Qt.NoModifier))
+    assert not view.walking() and session.story.area_live is None
+    assert session.area_state().spots["Serrik Vaun"] == before
+    assert window.composer.text() == ""
 
 
 def test_an_area_is_drawn_from_its_tile_set_and_a_missing_sprite_is_still_seen(app):
@@ -319,15 +412,16 @@ def test_go_here_walks_within_the_area_and_travels_to_another(app, window):
             )
         )
     )
-    window.refresh_area()
+    window.refresh_area(snap=True)
     me = session.area_state().spots["Serrik Vaun"]
     assert me.area == "farm" and window.area_view.area.name == "The farm"
-    # Now in the farm: a spot in it is walked to.
+    # Now in the farm: a spot in it is a walk, written as a turn too.
     near = tile_point(session.world(), farm, 33, 50)
     window._go_point(*near)
-    walk_all(app, window)
-    me = session.area_state().spots["Serrik Vaun"]
-    assert abs(me.x - 33) + abs(me.y - 50) <= 1
+    assert window.composer.text().startswith("I walk over to ⌖(")
+    action = session.story.area_live.state.action
+    assert action.verb == "walk" and abs(action.spot.x - 33) + abs(action.spot.y - 50) <= 1
+    assert session.area_state().spots["Serrik Vaun"] == me  # until the turn is sent
 
 
 def test_me_centres_either_view_on_the_author_s_character(app, window):
@@ -365,7 +459,7 @@ def test_indoors_what_can_t_be_seen_is_shaded_and_someone_out_of_sight_is_hidden
     state.spots["Serrik Vaun"] = Spot(area="house", x=5, y=10)
     state.spots["Maela Orr"] = Spot(area="house", x=30, y=10)
     session.story.area_live = LiveArea(leaf_id=session.story.active_leaf_id, state=state)
-    window.refresh_area()
+    window.refresh_area(snap=True)
     assert not sees(view.area, (5, 10), (30, 10))
     assert not view.people["Maela Orr"].isVisible() and not view._tags["Maela Orr"].isVisible()
     px = px_for(view.area)
@@ -383,35 +477,42 @@ def test_indoors_what_can_t_be_seen_is_shaded_and_someone_out_of_sight_is_hidden
     assert view._shade.transformationMode() == Qt.SmoothTransformation
     state.spots["Maela Orr"] = Spot(area="house", x=7, y=10)
     session.story.area_live = LiveArea(leaf_id=session.story.active_leaf_id, state=state)
-    window.refresh_area()
+    window.refresh_area(snap=True)
     assert view.people["Maela Orr"].isVisible()
     assert view.person_at(QPointF(7.5 * px, 10.5 * px)).name == "Maela Orr"
 
 
-def test_a_turn_sent_mid_walk_carries_where_the_figure_is(app, window):
+def test_a_turn_sent_moves_the_character_and_the_figure_walks_there(app, window):
+    session = window.session
+    view = window.area_view
+    before = session.area_state().spots["Serrik Vaun"]
+    window._area_go(before.x + 6, before.y, False)
+    assert window.composer.text().startswith("I walk over to ⌖(")
+    action = session.story.area_live.state.action
+    assert action.verb == "walk" and (action.spot.x, action.spot.y) == (before.x + 6, before.y)
+    assert (view.held().x, view.held().y) == (before.x, before.y)  # not moved by the click
+    finish_turn(app, window, ["She crosses the room.", "{}"])
+    stamped = next(n for n in reversed(session.nodes) if n.kind == "user").meta.area
+    assert (stamped.spots["Serrik Vaun"].x, stamped.spots["Serrik Vaun"].y) == (
+        before.x + 6,
+        before.y,
+    )
+    assert session.story.area_live is None
+    # The figure sets off from where it stood and walks to where the story has them.
+    assert view.walking() and view._walked[0] == (before.x, before.y)
+    walk_all(app, window)
+    assert (view.held().x, view.held().y) == (before.x + 6, before.y)
+
+
+def test_a_turn_of_the_author_s_own_drops_the_move(app, window):
     session = window.session
     before = session.area_state().spots["Serrik Vaun"]
-    steps = session.walk_route(before.x + 6, before.y)
-    assert len(steps) > 4
-    window.area_view.walk(steps)
-    window.area_view._step()
-    window.area_view._step()  # two tiles shown
-    shown = (window.area_view.held().x, window.area_view.held().y)
-    assert shown != (before.x, before.y)
-    window._provider = MockChatProvider(["She stops.", "{}"])
-    window._refresh_composer()
-    window.composer.input.setPlainText("I stop.")
-    window.send_turn()
-    assert window._busy and not window.area_view.walking()
-    deadline = time.monotonic() + 20
-    while window._busy:
-        assert time.monotonic() < deadline, "the turn never finished"
-        app.processEvents()
-        time.sleep(0.005)
-    pump(app)
+    window._area_go(before.x + 6, before.y, False)
+    window.composer.input.setPlainText("I stay where I am and listen.")
+    finish_turn(app, window, ["Silence.", "{}"])
     stamped = next(n for n in reversed(session.nodes) if n.kind == "user").meta.area
-    assert (stamped.spots["Serrik Vaun"].x, stamped.spots["Serrik Vaun"].y) == shown
-    assert session.story.area_live is None  # nothing of the walk written during the job
+    assert stamped.action is None
+    assert (stamped.spots["Serrik Vaun"].x, stamped.spots["Serrik Vaun"].y) == (before.x, before.y)
 
 
 def test_pins_keep_the_turn_s_numbering_when_a_mark_lies_elsewhere(app, window):
@@ -425,25 +526,22 @@ def test_pins_keep_the_turn_s_numbering_when_a_mark_lies_elsewhere(app, window):
     pump(app)
 
 
-def test_walking_off_an_area_s_edge_offers_what_lies_that_way(app, window):
-    from PySide6.QtCore import Qt
-    from PySide6.QtGui import QKeyEvent
-
-    from sealedlore.models.area import LiveArea, Spot
-
+def test_leaving_past_an_area_s_edge_offers_what_lies_that_way_as_a_turn(app, window):
     session = window.session
-    state = session.area_state()
-    state.spots["Serrik Vaun"] = Spot(area="farm", x=30, y=0)
-    session.story.area_live = LiveArea(leaf_id=session.story.active_leaf_id, state=state)
-    window.refresh_area()
+    stand(window, {"Serrik Vaun": ("farm", 30, 0)})
     view = window.area_view
-    assert view.edge_button.isVisible() or view.edge_button.text() == "Leave north"
-    view.keyPressEvent(QKeyEvent(QKeyEvent.KeyPress, Qt.Key_Up, Qt.NoModifier))
+    assert view.edge_button.text() == "Leave north"
+    window._area_edge("north")
     labels = [a.text() for a in view.edge_menu.actions()]
     # The open country past the edge first (tests/test_open_country.py),
     # then the places that way.
     assert labels[0] == "Walk on into open country" and labels[1].startswith("Hellsville — ")
-    view.edge_menu.hide()
+    before = session.area_state().spots["Serrik Vaun"]
+    view.edge_menu.actions()[0].trigger()
+    assert window.composer.text() == "I walk on north, into open country."
+    action = session.story.area_live.state.action
+    assert action.verb == "onward" and action.to == "north" and action.spot.area != "farm"
+    assert session.area_state().spots["Serrik Vaun"] == before  # the turn moves them
     view.edge_menu.actions()[1].trigger()
     assert window.composer.text() == "I set off for Hellsville."
 
@@ -702,7 +800,7 @@ def test_the_tile_sets_are_offered_once_when_a_map_story_first_opens(app, window
     assert view.offer_design.text() == "Design a new set…"
     view.offer_close.click()
     assert session.story.tile_set_offered and view.offer.isHidden()
-    window.refresh_area()
+    window.refresh_area(snap=True)
     assert view.offer.isHidden()
     # Kept with the story: opened again, it isn't asked.
     window.open_story(session.story.id)
@@ -710,7 +808,7 @@ def test_the_tile_sets_are_offered_once_when_a_map_story_first_opens(app, window
     assert window.session.story.tile_set_offered and window.area_view.offer.isHidden()
     # The button opens the gallery, which answers it too.
     window.session.story.tile_set_offered = False
-    window.refresh_area()
+    window.refresh_area(snap=True)
     assert not window.area_view.offer.isHidden()
 
     class Gallery:
@@ -729,7 +827,7 @@ def test_the_tile_sets_are_offered_once_when_a_map_story_first_opens(app, window
     # A story whose set was chosen is never asked.
     window.session.story.tile_set_offered = False
     window.session.set_tile_set("doomsville")
-    window.refresh_area()
+    window.refresh_area(snap=True)
     assert window.area_view.offer.isHidden()
 
 
@@ -860,29 +958,24 @@ def test_rooms_are_lit_by_the_doorways_in_sight_and_the_rest_dimmed(app):
     assert mask.pixelColor(5, 8).alpha() == 0  # a wall tile of the first room, in sight
 
 
-def test_a_click_mid_walk_goes_on_from_where_the_figure_is(app, window):
-    """The route used to start from the walk's start while the figure was
-    mid-way, `walked` refused it, and the figure snapped back."""
+def test_a_click_while_the_figure_walks_routes_from_where_the_session_has_them(app, window):
+    """The walk shown is a showing: the session already has the character
+    at its end, and a new click's route starts there."""
     session = window.session
     view = window.area_view
     before = session.area_state().spots["Serrik Vaun"]
-    steps = session.walk_route(before.x + 6, before.y)
-    assert len(steps) > 4
-    view.walk(steps)
-    view._step()
-    view._step()
-    shown = (view.held().x, view.held().y)
-    window._area_pending = ("use", "the well", "well")  # a walk-up the click gives up
-    back = tuple(steps[1])  # a tile back the way (the start is a door)
-    window._area_walk(*back, False)
-    assert view.walking()
-    assert view._walked[0] == shown  # the new route starts where the figure stood
-    me = session.area_state().spots["Serrik Vaun"]
-    assert (me.x, me.y) == shown  # and the walk so far was told
-    assert window._area_pending is None and window.composer.text() == ""
-    walk_all(app, window)
-    me = session.area_state().spots["Serrik Vaun"]
-    assert (me.x, me.y) == back
+    view.walk_finished.disconnect(window._area_walked)
+    try:
+        view.walk(session.walk_route(before.x + 6, before.y))
+        view._step()
+        assert view.walking()
+        window._area_go(before.x + 2, before.y, False)
+        action = session.story.area_live.state.action
+        assert action.steps[0] == (before.x, before.y)
+        assert session.area_state().spots["Serrik Vaun"] == before
+    finally:
+        view.drop_walk()
+        view.walk_finished.connect(window._area_walked)
 
 
 def test_a_private_scene_forgets_a_walk_and_writes_nothing_of_the_map(app, window):
@@ -894,14 +987,16 @@ def test_a_private_scene_forgets_a_walk_and_writes_nothing_of_the_map(app, windo
     view._step()
     session.enter_private(keep="disk", provider=MockChatProvider([]), model="mock")
     assert session.in_private
-    window.refresh_area()
+    window.refresh_area(snap=True)
     assert not view.walking() and view.area is None
     assert "private scene" in view.hint.text()
     me = session.area_state().spots["Serrik Vaun"]
     assert (me.x, me.y) == (before.x, before.y)
     assert session.story.area_live is None
-    # A walk's end reaching the window in the scene writes nothing either.
+    # A walk's end reaching the window in the scene writes nothing either,
+    # and a click in the scene writes no turn.
     window._area_walked([(before.x, before.y), steps[1]])
+    window._area_go(before.x + 2, before.y, False)
     me = session.area_state().spots["Serrik Vaun"]
     assert (me.x, me.y) == (before.x, before.y) and session.story.area_live is None
 
@@ -930,7 +1025,7 @@ def test_a_failed_painting_is_logged_once_and_the_plain_map_stands_in(
     assert not window._area_painting
     with caplog.at_level(logging.ERROR, logger="sealedlore.gui"):
         for _ in range(3):  # refreshed again and again, painted once
-            window.refresh_area()
+            window.refresh_area(snap=True)
             window._join_paint_threads(5)
             pump(app)
     assert len(calls) == 1 and window._area_failed
@@ -941,7 +1036,7 @@ def test_a_failed_painting_is_logged_once_and_the_plain_map_stands_in(
     assert not any(t.is_alive() for t in window._paint_threads)
     # What it is painted from changing paints again.
     window._area_failed.clear()
-    window.refresh_area()
+    window.refresh_area(snap=True)
     window._join_paint_threads(5)
     assert len(calls) == 2
 
@@ -958,7 +1053,7 @@ def test_closing_the_story_leaves_nothing_of_its_play_view(app, window):
     assert window.session is None
     assert view.area is None and not view.walking() and view.people == {}
     assert window._area_images == {} and window._walker_images == {}
-    assert window._area_story is None and window._area_pending is None
+    assert window._area_story is None and window._area_then is None
 
 
 def test_new_portraits_on_several_cards_are_one_question_and_one_run(app, window, monkeypatch):
@@ -1075,16 +1170,16 @@ def test_the_time_of_day_lies_over_the_area(app, window, monkeypatch):
     session = window.session
     view = window.area_view
     monkeypatch.setattr(type(session), "map_clock", lambda self: (2, 0))
-    window.refresh_area()
+    window.refresh_area(snap=True)
     assert view.clock.text() == "Day 2, 00:00"
     assert view._tint is not None and view._tint.isVisible()
     assert view._tint.colour == midnight and view._tint.zValue() == 90
     assert view._tint.rect().width() == view.area.width * view.people["Serrik Vaun"].px
     monkeypatch.setattr(type(session), "map_clock", lambda self: (2, 12 * 60))
-    window.refresh_area()
+    window.refresh_area(snap=True)
     assert not view._tint.isVisible()
     monkeypatch.setattr(type(session), "map_clock", lambda self: None)
-    window.refresh_area()
+    window.refresh_area(snap=True)
     assert not view._tint.isVisible() and isinstance(view._tint.colour, QColor)
 
 
@@ -1098,6 +1193,7 @@ def test_walking_is_drawn_between_tiles_facing_the_way_it_goes(app, window):
     before = session.area_state().spots["Serrik Vaun"]
     steps = session.walk_route(before.x + 6, before.y)
     finished: list[list] = []
+    view.walk_finished.disconnect(window._area_walked)  # the view's own showing
     view.walk_finished.connect(lambda walked: finished.append(list(walked)))
     view.walk(steps)
     person = view.people["Serrik Vaun"]
@@ -1116,13 +1212,17 @@ def test_walking_is_drawn_between_tiles_facing_the_way_it_goes(app, window):
     view.finish_walk()
     assert not view.walking() and finished == [[tuple(steps[0]), tuple(steps[1])]]
     assert person.pos().x() == (steps[1][0] + 0.5) * px and person.bob == 0.0
-    # Walking back faces the other way.
-    back = session.walk_route(before.x, before.y)
+    # Walking back faces the other way (from where the figure stands: the
+    # session never moved, a showing is only a showing).
+    from sealedlore.engine.area import path
+
+    back = path(view.area, tuple(steps[1]), (before.x, before.y))
     view.walk(back)
     view._advance(0.2 / STEPS_PER_SECOND)
     assert back[1][0] < back[0][0] and person.mirrored
     view.drop_walk()
     assert not view.walking() and len(finished) == 1
+    view.walk_finished.connect(window._area_walked)
 
 
 def test_neighbours_names_are_lifted_apart_and_the_pointer_says_what_is_under_it(app, window):
@@ -1280,7 +1380,7 @@ def _house_with_a_lantern(window) -> None:
             place_id="house", spec=spec, rows=rows, objects=objects, labels=labels, made_at="2"
         )
     }
-    window.refresh_area()
+    window.refresh_area(snap=True)
 
 
 def test_a_thing_taken_leaves_the_floor_and_is_carried_dropped_or_given(app, window):
@@ -1397,7 +1497,7 @@ def test_weather_the_story_set_lies_over_an_outdoor_area_and_clear_weather_nothi
     session, view = window.session, window.area_view
     # Indoors (the house the story opens in): nothing drawn whatever the weather.
     session.story.world_base.weather = "snowing hard"
-    window.refresh_area()
+    window.refresh_area(snap=True)
     assert view.area.indoor and view.weather_shown() is None
     # Out in the yard: snow over the area, over the tint and under the names.
     stand(window, {"Serrik Vaun": ("farm", 30, 0)})
@@ -1409,7 +1509,7 @@ def test_weather_the_story_set_lies_over_an_outdoor_area_and_clear_weather_nothi
     assert view._weather.phase > 0
     # Clear weather: the layer goes and its timer with it.
     session.story.world_base.weather = "clear and cold"
-    window.refresh_area()
+    window.refresh_area(snap=True)
     assert view.weather_shown() is None and not view._weather_timer.isActive()
 
 
@@ -1713,13 +1813,12 @@ def test_opening_another_story_leaves_the_last_one_s_map_views(app, window, tmp_
     # Edit Mode looking at an area the map no longer has: back home, not nothing.
     window._edit_area_id = "nowhere"
     window.area_view.edit_bar.set_back("The farm")
-    window.refresh_area()
+    window.refresh_area(snap=True)
     assert window._edit_area_id is None and window.area_view.area is not None
     window._edit_area_id = "house"
-    window.refresh_area()
+    window.refresh_area(snap=True)
     assert window.area_view.area.id == "house"
     window._paint_waiting = "house"
-    window._area_pending = ("talk", "Maela Orr", "Maela Orr")
     window.open_objects()
     pump(app)
     assert window._objects_panel is not None and window._objects_panel.isVisible()
@@ -1732,7 +1831,7 @@ def test_opening_another_story_leaves_the_last_one_s_map_views(app, window, tmp_
     assert not window._map_editing and not view.editing and view.edit_bar.isHidden()
     assert not view.travel_button.isHidden()
     assert window._edit_area_id is None and window._paint_waiting is None
-    assert window._area_pending is None and window._objects_panel is None
+    assert window._area_then is None and window._objects_panel is None
     assert view.area is not None and view.area.id != "house"  # the new story's own
     assert window._world_drawn is not None and window._world_drawn != drawn
     assert window._drawn_art is not None

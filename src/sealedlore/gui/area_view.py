@@ -106,20 +106,9 @@ VERB_LABELS = {
     "destroy": "Destroy",
 }
 ZOOM_STEP = 1.25
-WALK_KEYS = {
-    Qt.Key_Left: (-1, 0),
-    Qt.Key_A: (-1, 0),
-    Qt.Key_Right: (1, 0),
-    Qt.Key_D: (1, 0),
-    Qt.Key_Up: (0, -1),
-    Qt.Key_W: (0, -1),
-    Qt.Key_Down: (0, 1),
-    Qt.Key_S: (0, 1),
-    Qt.Key_Plus: None,
-    Qt.Key_Equal: None,
-    Qt.Key_Minus: None,
-    Qt.Key_Home: None,
-}
+# The play view's own keys: zoom and ◎ Me. No key walks (the author, Oct 23
+# 2026: moving by key was "a big mistake"; a move is a turn, see `go_requested`).
+VIEW_KEYS = {Qt.Key_Plus, Qt.Key_Equal, Qt.Key_Minus, Qt.Key_Home}
 
 
 @dataclass
@@ -373,8 +362,8 @@ class _Graphics(QGraphicsView):
         super().mouseMoveEvent(event)
 
     def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt's name
-        # Walking and zoom keys are the play view's, not the scroll bars'.
-        if event.key() in WALK_KEYS:
+        # The zoom keys are the play view's, not the scroll bars'.
+        if event.key() in VIEW_KEYS:
             event.ignore()
             return
         super().keyPressEvent(event)
@@ -604,8 +593,11 @@ class _Pin(QGraphicsItem):
 
 
 class AreaView(QWidget):
-    # Walk to a tile (beside it, for a person or a thing).
-    walk_requested = Signal(int, int, bool)
+    # Go to a tile (beside it, for a person or a thing): the turn that walks
+    # the author's character there goes in the composer; nothing moves until
+    # it is sent (the author's ruling, Oct 23 2026: the map is a view and a
+    # way to point). A door tile takes them through it.
+    go_requested = Signal(int, int, bool)
     # A menu choice: the verb, who or what, its id ("" for a person).
     action_chosen = Signal(str, str, str)
     # Walking shown is done: the tiles walked.
@@ -1442,10 +1434,11 @@ class AreaView(QWidget):
         if self.editing:
             return ""  # the bar says what the tool in hand does
         return (
-            "Click to walk there; click a person or a thing for what you can do. Walk into a "
-            "door to go through it. Right-click a spot to mark it in your turn. Travel… for "
-            "another place. Drag the ground, or hold the middle button, to look around; wheel "
-            "to zoom; ◎ Me (Home) finds you. Drag a person or a thing to put the map right."
+            "Click where to go, a building to go inside, a door to go through it, or a person "
+            "or a thing for what you can do: the turn goes in the box below for you to send. "
+            "Right-click a spot to mark it in your turn. Travel… for another place. Drag the "
+            "ground, or hold the middle button, to look around; wheel to zoom; ◎ Me (Home) "
+            "finds you. Drag a person or a thing to put the map right."
         )
 
     def set_undo(self, words: str | None) -> None:
@@ -1699,20 +1692,6 @@ class AreaView(QWidget):
             action.setEnabled(not self.locked)
             action.triggered.connect(lambda _c=False, c=choice_id: self.edge_chosen.emit(side, c))
 
-    def _off_the_edge(self, x: int, y: int) -> str | None:
-        area = self.area
-        if area is None or area.indoor:
-            return None
-        if y < 0:
-            return "north"
-        if y >= area.height:
-            return "south"
-        if x < 0:
-            return "west"
-        if x >= area.width:
-            return "east"
-        return None
-
     def set_looks(self, choices: list[tuple[str, str]], current: str, chosen: str) -> None:
         """Look ▾'s entries: the gallery first (every set with its pictures,
         drawing a new one, removing an own one), then (name, title) of each
@@ -1750,7 +1729,9 @@ class AreaView(QWidget):
     def walk(self, steps: list[tuple[int, int]]) -> None:
         """Show the author's character walking these tiles; `walk_finished`
         once they are there. Drawn `FRAME_MS` apart, the figure between one
-        tile and the next, `STEPS_PER_SECOND` tiles a second."""
+        tile and the next, `STEPS_PER_SECOND` tiles a second. A showing
+        only: the session already has them where the walk ends (the turn
+        moved them), and the window refreshes the view once it is over."""
         self._stop_walking()
         if len(steps) < 2:
             self.walk_finished.emit(list(steps))
@@ -2049,7 +2030,51 @@ class AreaView(QWidget):
             self._thing_menu(thing, global_pos)
             return
         if tile is not None:
-            self.walk_requested.emit(tile[0], tile[1], False)
+            door = self.door_of_building_at(*tile)
+            if door is not None:
+                # A building's roof or wall: in by its door, wherever that is
+                # (the author, Oct 23 2026: on Brasshaven's buildings there was
+                # no seeing where the door was, so no way in).
+                self.go_requested.emit(door[0], door[1], False)
+                return
+            self.go_requested.emit(tile[0], tile[1], False)
+
+    def building_at(self, x: int, y: int) -> str | None:
+        """The place id of the building drawn over this tile of an outdoor
+        area (its roof or wall), or None: open ground, or indoors."""
+        area = self.area
+        if area is None or area.indoor or area.walkable(x, y):
+            return None
+        for place_id, (x0, y0, x1, y1) in area.buildings.items():
+            if x0 <= x <= x1 and y0 <= y <= y1:
+                return place_id
+        return None
+
+    def door_of(self, place_id: str) -> tuple[int, int] | None:
+        """The door tile of a building in this area: one that leads in
+        (`Entrance`), else a door drawn in its wall whose inside isn't drawn
+        yet (walking to it says so, `undrawn_door_here`)."""
+        area = self.area
+        if area is None:
+            return None
+        entrance = next((e for e in area.entrances if e.place_id == place_id), None)
+        if entrance is not None:
+            return entrance.x, entrance.y
+        box = area.buildings.get(place_id)
+        if box is None:
+            return None
+        x0, y0, x1, y1 = box
+        doors = [
+            (x, y)
+            for y in range(y0, y1 + 1)
+            for x in range(x0, x1 + 1)
+            if (x in (x0, x1) or y in (y0, y1)) and area.at(x, y) == "+"
+        ]
+        return doors[0] if doors else None
+
+    def door_of_building_at(self, x: int, y: int) -> tuple[int, int] | None:
+        place_id = self.building_at(x, y)
+        return self.door_of(place_id) if place_id is not None else None
 
     def _hovered(self, point: QPointF) -> None:
         """The tile under the pointer marked (gold where it can be walked
@@ -2071,6 +2096,12 @@ class AreaView(QWidget):
         self._hover.show()
         person = self.person_at(point)
         over = (person is not None and not person.held) or area.placement_at(x, y) is not None
+        building = self.building_at(x, y) if not over else None
+        if building is not None and self.door_of(building) is not None:
+            over = True
+            self._hover.setPen(QPen(QColor(GOLD.red(), GOLD.green(), GOLD.blue(), 200), 2))
+            name = area.names.get(building) or building
+            self.coords.setText(f"{name}: click to go inside")
         self.view.viewport().setCursor(Qt.PointingHandCursor if over else Qt.ArrowCursor)
 
     def _left(self) -> None:
@@ -2101,9 +2132,13 @@ class AreaView(QWidget):
         mark = menu.addAction("Mark this spot in your turn")
         mark.setEnabled(spot is not None)
         mark.triggered.connect(lambda: self.mark_requested.emit(*tile))
-        walk = menu.addAction("Walk here")
-        walk.setEnabled(not self.locked and not self.editing and self.area.walkable(*tile))
-        walk.triggered.connect(lambda: self.walk_requested.emit(tile[0], tile[1], False))
+        door = self.door_of_building_at(*tile)
+        walk = menu.addAction("Go inside" if door is not None else "Go here")
+        walk.setEnabled(
+            not self.locked and not self.editing and (door is not None or self.area.walkable(*tile))
+        )
+        goal = door if door is not None else tile
+        walk.triggered.connect(lambda: self.go_requested.emit(goal[0], goal[1], False))
         self._add_corrections(menu, None, tile)
         menu.setToolTipsVisible(True)
         self._show_menu(menu, global_pos)
@@ -2134,8 +2169,9 @@ class AreaView(QWidget):
                     lambda _c=False, v=verb: self.action_chosen.emit(v, person.name, "")
                 )
             menu.addSeparator()
-            walk = menu.addAction("Walk over")
-            walk.triggered.connect(lambda: self.walk_requested.emit(person.x, person.y, True))
+            walk = menu.addAction("Go over to them")
+            walk.setEnabled(not self.locked)
+            walk.triggered.connect(lambda: self.go_requested.emit(person.x, person.y, True))
         if not person.carded and not person.held and not UNKNOWN_LABEL.match(person.name):
             menu.addSection("No card yet")
             for words, to_cast in card_choices(person.name):
@@ -2160,9 +2196,10 @@ class AreaView(QWidget):
                 lambda _c=False, v=verb: self.action_chosen.emit(v, thing.name, thing.id)
             )
         menu.addSeparator()
-        walk = menu.addAction("Walk over")
+        walk = menu.addAction("Go over to it")
+        walk.setEnabled(not self.locked)
         cx, cy = thing.centre
-        walk.triggered.connect(lambda: self.walk_requested.emit(int(cx), int(cy), True))
+        walk.triggered.connect(lambda: self.go_requested.emit(int(cx), int(cy), True))
         self._add_mark(menu, mark)
         self._add_corrections(menu, ("thing", thing.id, _bare_name(thing.name)))
         menu.setToolTipsVisible(True)
@@ -2192,24 +2229,6 @@ class AreaView(QWidget):
 
     def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt's name
         if event.key() == Qt.Key_Escape and self.cancel_pending():
-            return
-        held = self.held()
-        step = WALK_KEYS.get(event.key())
-        if step is not None and self.editing:
-            return  # no walking while the map is edited
-        if step is not None and held is not None and not self.locked and not self.walking():
-            dx, dy = step
-            side = self._off_the_edge(held.x + dx, held.y + dy)
-            if side is not None:
-                # Walking on past the edge: where to.
-                self.set_edge(side)
-                self.edge_wanted.emit(side)
-                person = self.people.get(held.name)
-                point = person.scenePos() if person is not None else QPointF()
-                at = self.view.viewport().mapToGlobal(self.view.mapFromScene(point))
-                self.edge_menu.popup(at)
-                return
-            self.walk_requested.emit(held.x + dx, held.y + dy, False)
             return
         if event.key() in (Qt.Key_Plus, Qt.Key_Equal):
             self.view.zoom_by(ZOOM_STEP)

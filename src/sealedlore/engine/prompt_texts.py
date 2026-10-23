@@ -4826,6 +4826,115 @@ _text(
     (("name", "the place the spot is in"), ("mark", "the spot, as ⌖(east, north)")),
 )
 
+# Moving on the map is a turn (the author's ruling, Oct 23 2026: walking by
+# key or by click moved the figure at once with no turn, the story heard of
+# it only at the next send as "the walk since the last passage", and most of
+# the map's bugs sat on that seam; "the map is a view and a way to point").
+# A click on the ground, a building or past the edge writes the turn, the
+# character moves when it is sent (`stamp_turn`), and the play view walks
+# them there. The turns are worded as the author's own; what each means is
+# told under the positions as Travel's is. Not measured.
+_text(
+    "map.turn.walk",
+    MAP,
+    "Map-first: the turn Go here (in this area) writes",
+    "Put in the composer when the author clicks a spot in the area their character stands "
+    "in: they walk there, the way's length on foot.",
+    "I walk over to {mark}.",
+    (("mark", "the spot, as ⌖(east, north)"),),
+)
+_text(
+    "map.action.walk",
+    MAP,
+    "Map-first: what Go here (in this area) means",
+    "In the map section of the tail on a turn the author began by clicking a spot in their "
+    "area and sent as it was written (or added to).",
+    "The author chose Go here on the map: their character has walked over to the spot "
+    "marked {mark} and stands there now; this passage begins there. Whoever is about sees "
+    "them cross to it.",
+    (("mark", "the spot, as ⌖(east, north)"),),
+)
+_text(
+    "map.turn.enter",
+    MAP,
+    "Map-first: the turn Go inside writes",
+    "Put in the composer when the author clicks a building, or the door of one, on the map: "
+    "their character goes to its door and in.",
+    "I go into {name}.",
+    (("name", "the building"),),
+)
+_text(
+    "map.action.enter",
+    MAP,
+    "Map-first: what Go inside means",
+    "In the map section of the tail on a turn the author began with Go inside on the map and "
+    "sent as it was written (or added to).",
+    "The author chose Go inside on the map: their character has gone in through the door of "
+    "{name} and stands just inside it; this passage begins there. Whoever is inside sees "
+    "them come in.",
+    (("name", "the building"),),
+)
+_text(
+    "map.turn.leave",
+    MAP,
+    "Map-first: the turn Go out writes",
+    "Put in the composer when the author clicks a door out of the building their character "
+    "is in: they go out through it.",
+    "I go out to {name}.",
+    (("name", "what the door opens onto"),),
+)
+_text(
+    "map.action.leave",
+    MAP,
+    "Map-first: what Go out means",
+    "In the map section of the tail on a turn the author began with Go out on the map and "
+    "sent as it was written (or added to).",
+    "The author chose Go out on the map: their character has gone out through the door and "
+    "stands just outside it, in {name}; this passage begins there.",
+    (("name", "what the door opens onto"),),
+)
+_text(
+    "map.turn.stairs",
+    MAP,
+    "Map-first: the turn Take the stairs writes",
+    "Put in the composer when the author clicks the stairs on the map: their character goes "
+    "up or down them.",
+    "I take the stairs to {name}.",
+    (("name", "the level the stairs lead to"),),
+)
+_text(
+    "map.action.stairs",
+    MAP,
+    "Map-first: what Take the stairs means",
+    "In the map section of the tail on a turn the author began with the stairs on the map and "
+    "sent as it was written (or added to).",
+    "The author chose the stairs on the map: their character has taken them to {name} and "
+    "stands a step off them; this passage begins there.",
+    (("name", "the level the stairs lead to"),),
+)
+_text(
+    "map.turn.onward",
+    MAP,
+    "Map-first: the turn Walk on (past the edge) writes",
+    "Put in the composer when the author chooses to walk on past the edge of the area into "
+    "the country or the place that adjoins it.",
+    "I walk on {side}, into {name}.",
+    (
+        ("side", "the side of the area walked past (north, south, east, west)"),
+        ("name", "where it leads"),
+    ),
+)
+_text(
+    "map.action.onward",
+    MAP,
+    "Map-first: what Walk on (past the edge) means",
+    "In the map section of the tail on a turn the author began with Walk on past the edge "
+    "of the map and sent as it was written (or added to).",
+    "The author chose to walk on past the edge of the map: their character has walked on "
+    "{side} into {name}, as far as the map's distance says; this passage begins on arrival.",
+    (("side", "the side of the area walked past"), ("name", "where it leads")),
+)
+
 _text(
     "map.marks",
     MAP,

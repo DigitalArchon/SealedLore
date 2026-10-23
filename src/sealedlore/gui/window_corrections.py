@@ -48,7 +48,7 @@ class CorrectionWindow:
         self.area_view.set_undo(session.correction_undo)
         self.world_view.set_undo(session.correction_undo)
         self.refresh_world()
-        self.refresh_area()
+        self.refresh_area(snap=True)
         self._refresh_scene_panel()
 
     # --- the play view ----------------------------------------------------------
@@ -56,10 +56,10 @@ class CorrectionWindow:
     def _area_correct(self, action: str, args: tuple) -> None:
         session = self.session
         if action == "refresh":
-            self.refresh_area()
+            self.refresh_area(snap=True)
             return
         if self._correction_blocked():
-            self.refresh_area()  # a drag let go: back where it stood
+            self.refresh_area(snap=True)  # a drag let go: back where it stood
             return
         area = self.area_view.area
         if area is None:
