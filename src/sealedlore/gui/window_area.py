@@ -516,7 +516,7 @@ class AreaWindow:
             self._thing_images.clear()
         px = px_for(area)
         out = []
-        shown = loose_things(area) if loose else area.placements
+        shown = loose_things(area, session.area_state().things) if loose else area.placements
         for f in shown:
             if f.piece in DRAWN_PIECES:
                 continue  # the ground's own

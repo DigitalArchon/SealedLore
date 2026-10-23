@@ -123,8 +123,8 @@ class BackdropRuntime:
         world = self.world()
         place = world.places.get(area.place_id)
         parts = [area.title]
-        if place is not None and place.description:
-            parts.append(" ".join(place.description.split())[:400])
+        if place is not None and place.what:
+            parts.append(" ".join(place.what.split())[:400])
         setting = self.map_setting()
         if setting:
             parts.append(f"in {setting}")
@@ -193,7 +193,9 @@ class BackdropRuntime:
         model = self.role_model("image_prompt")
         if not model:
             return job.prompt, False
-        reads = self.reads_pictures(model)
+        # Shown the render unless the listing says the writer reads no
+        # pictures (unknown counts as yes, as the tile set designer takes it).
+        reads = self.reads_pictures(model) is not False
         shown = data_url(picture, MEDIA_TYPES[picture_kind(picture)]) if reads else None
         request = ChatRequest(
             model=model,

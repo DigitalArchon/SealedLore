@@ -18,37 +18,56 @@ and which picture is current. The session paints
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from sealedlore.engine.area import Area
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.takeable import thing_class
 from sealedlore.engine.world_pictures import PictureJob, area_plan, isometric_state
 from sealedlore.messages import ContentPart, PromptMessage
+from sealedlore.models.area import ThingRecord
 from sealedlore.models.world import MapPicture, WorldArt, WorldMap
 
 BACKDROP = "backdrop"
-# The square the picture is painted at: indoors the render is 1600 wide,
-# outdoors 2880; one shape in and out (grey bands above and below).
+# The square the picture is painted at, indoors (a 1600-wide render) and out
+# (2880): one shape in and out (grey bands above and below). 2048 outdoors
+# was tried and the endpoint refused the request as too large (HTTP 413,
+# Oct 23 2026) with the render as PNG; the measured paintings were 1536.
 INDOOR_SIDE = 1536
-OUTDOOR_SIDE = 2048
+OUTDOOR_SIDE = 1536
 # A job that failed this often is left (as the map's other pictures).
 GIVE_UP_AFTER = 2
 # How much of the expander's reply is kept as the prompt, in characters.
 PROMPT_MOST = 1800
 
 
-def loose_things(area: Area) -> list:
+def loose_things(area: Area, records: Mapping[str, ThingRecord] | None = None) -> list:
     """The placements drawn as sprites over a backdrop: whatever can be
-    carried, shoved or driven, and anything broken (its sprite shows it);
-    what is fixed in the building or the ground is in the painting."""
-    return [f for f in area.placements if f.broken or thing_class(f.name) != "fixed"]
+    carried or driven, anything broken, and anything the story has moved,
+    taken or put down (`records`, the area state's things by placement id).
+    The furniture, fixed or merely heavy, is in the painting: the Gilded
+    Gear painted with its workbench and shelves left out was a bare floor
+    with pixel sprites on it (Oct 23 2026)."""
+    moved = {
+        pid
+        for pid, r in (records or {}).items()
+        if r.state in ("dropped", "broken", "taken", "gone")
+    }
+    return [
+        f
+        for f in area.placements
+        if f.broken or f.id in moved or thing_class(f.name) in ("carried", "vehicle")
+    ]
 
 
-def fixed_things(area: Area) -> list:
-    """The placements the render sent to the painter carries: the fixed
-    ones, whole."""
-    return [f for f in area.placements if not f.broken and thing_class(f.name) == "fixed"]
+def painted_things(area: Area) -> list:
+    """The placements the render sent to the painter carries: everything
+    that stays put in the plan (fixed, and heavy furniture), whole."""
+    return [
+        f
+        for f in area.placements
+        if not f.broken and thing_class(f.name) not in ("carried", "vehicle")
+    ]
 
 
 def backdrop_state(world: WorldMap, area: Area) -> str:

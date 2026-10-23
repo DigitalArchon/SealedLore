@@ -4,9 +4,10 @@ painting as the play view's ground. QImage only, run on the painting's
 thread through the codec lock (gui/image_codec.py); the engine draws
 nothing.
 
-The render is the area's ground with the things fixed in it drawn on
-(`fixed_things`): what can be carried, shoved or driven stays off it and is a
-sprite over the painting, as people and place marks are. It is padded onto a
+The render is the area's ground with the things that stay put drawn on
+(`painted_things`: the fixed ones and the furniture): what can be carried or
+driven stays off it and is a sprite over the painting, as people, place
+marks and anything the story has since moved are. It is padded onto a
 grey square (one shape in and out for the image model; the request says the
 bands are padding), and the painting's bands are cut back off by the same
 share, so a map spot lands on the painting by a plain scale."""
@@ -17,7 +18,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QImage, QPainter
 
 from sealedlore.engine.area import Area
-from sealedlore.engine.backdrops import fixed_things
+from sealedlore.engine.backdrops import painted_things
 from sealedlore.gui.area_render import (
     Ground,
     TileSource,
@@ -40,13 +41,13 @@ def area_picture_size(area: Area) -> tuple[int, int]:
 
 
 def render_source(area: Area, source: TileSource, *, dress: bool = True) -> QImage:
-    """The area as the painter should see it: the ground and the fixed
-    things on it, nothing that moves."""
+    """The area as the painter should see it: the ground and the things
+    that stay put on it, nothing that is carried or driven."""
     ground = render_ground(area, source, dress=dress)
     px = px_for(area)
     image = ground.image.convertToFormat(QImage.Format_RGB32)
     p = QPainter(image)
-    for f in sorted(fixed_things(area), key=lambda f: f.y + f.h):
+    for f in sorted(painted_things(area), key=lambda f: f.y + f.h):
         picture = thing_picture(source, f, px, indoor=area.indoor)
         cx, foot = foot_of(f, px)
         left, top = int(round(cx + picture.dx)), int(round(foot + picture.dy))
@@ -72,9 +73,15 @@ def padded_square(image: QImage, side: int) -> QImage:
 
 
 def source_png(area: Area, source: TileSource, side: int, *, dress: bool = True) -> bytes | None:
-    """The render padded to a square `side` wide, as PNG, for the painter."""
+    """The render padded to a square `side` wide, for the painter: as JPEG
+    (the name is from when it was PNG: a 2048 square of outdoor tiles as
+    PNG made the request too large for the endpoint, HTTP 413)."""
     image = padded_square(render_source(area, source, dress=dress), side)
-    return encoded(image, "PNG") if not image.isNull() else None
+    return (
+        encoded(image.convertToFormat(QImage.Format_RGB32), "JPEG", 92)
+        if not image.isNull()
+        else None
+    )
 
 
 def trim_painting(data: bytes, area: Area) -> bytes:

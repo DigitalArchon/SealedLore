@@ -16,8 +16,8 @@ from sealedlore.engine.backdrops import (
     door_words,
     expanded_prompt,
     expander_messages,
-    fixed_things,
     loose_things,
+    painted_things,
 )
 from sealedlore.engine.world_pictures import area_plan
 from sealedlore.models.world import MapPicture
@@ -96,10 +96,16 @@ def test_fixed_things_are_painted_and_loose_ones_stay_sprites(tmp_path, story, c
         house_objects=[{"kind": "object", "name": "a brass lantern", "x": 6, "y": 6}],
     )
     house = session.area("house")
-    fixed = {f.name for f in fixed_things(house)}
+    painted = {f.name for f in painted_things(house)}
     loose = {f.name for f in loose_things(house)}
-    assert "a cast-iron stove" in fixed and "a brass lantern" in loose
-    assert not (fixed & loose) and len(fixed) + len(loose) == len(house.placements)
+    assert "a cast-iron stove" in painted and "a brass lantern" in loose
+    assert not (painted & loose) and len(painted) + len(loose) == len(house.placements)
+    # A thing the story moved or broke since is a sprite too, over the painting.
+    from sealedlore.models.area import ThingRecord
+
+    stove = next(f for f in house.placements if "stove" in f.name)
+    records = {stove.id: ThingRecord(state="dropped", name=stove.name, by="")}
+    assert stove in loose_things(house, records)
 
 
 def test_a_backdrop_is_wanted_only_with_map_pictures_on_and_none_current(tmp_path, story, cast):
