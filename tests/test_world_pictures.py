@@ -155,6 +155,10 @@ class FakeImages:
 def session(tmp_path: Path, monkeypatch, story, cast):
     FakeImages.sent = []
     monkeypatch.setattr(session_world_art, "ImageClient", FakeImages)
+    # The Region map's own pictures (places, things, postcards) are drawn
+    # only off the board: played on the map, each area shows its painting
+    # (Oct 23 2026). These tests are of the picture run itself.
+    monkeypatch.setattr(StorySession, "region_pictures", True)
     monkeypatch.setattr(session_world_art, "list_image_models", lambda *a, **k: [])
     nodes = make_exchange(1)
     nodes[-1].meta = NodeMeta(

@@ -234,6 +234,10 @@ def test_nothing_the_designer_made_is_drawn_before_its_region_is_explored(
     assert not [j for j in sprites if "orrery" in j.name or "harmonica" in j.name]
     session.mark_explored()  # the author's character stands in it
     assert region.key in session.world_art.explored
+    # The Region map's own pictures are off on the board (Oct 23 2026):
+    # turned on here, the designer's things and places are wanted once
+    # explored, and nothing before.
+    monkeypatch.setattr(type(session), "region_pictures", True)
     wanted = [j for j in session.map_picture_jobs(None) if j.subject_id in made]
     assert {j.subject_id for j in wanted if j.subject == "thing"} == {t.id for t in region.things}
     assert any(j.subject == "place" for j in wanted)  # the barn's sprite too

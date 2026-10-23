@@ -379,11 +379,23 @@ class WorldArtRuntime:
         art = art or self.map_art_copy()
         return max(0, self.config.map_picture_daily_limit - art.pictures_by_day.get(_today(), 0))
 
+    # The Region map's own pictures (places, things, postcards) for a story
+    # played on its map: off, since the board shows each area's painting.
+    # Tests of the picture run turn it on.
+    region_pictures = False
+
     def map_picture_jobs(self, limit: int | None = PICTURE_RUN) -> list[PictureJob]:
         """What the map at the leaf still needs from the image model, at
         most `limit` (None: all of it; the day's limit caps the run, not the
         wanting: `_start_map_pictures`)."""
         if not self.map_pictures_on:
+            return []
+        if self.map_first and not self.region_pictures:
+            # Played on the map, the Region is the board of each area's
+            # painting (engine/board.py) and the things are the play view's
+            # sprites: a picture of each place, each thing and a postcard
+            # besides were paid for and never seen (the author, Oct 23 2026:
+            # opening Brasshaven drew ten pictures and asked for more).
             return []
         art = self.map_art_copy()
         if limit is None:
