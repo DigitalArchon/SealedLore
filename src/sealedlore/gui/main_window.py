@@ -2263,10 +2263,14 @@ class MainWindow(
     def _default_branch_name(self) -> str:
         return next_branch_name(self.session.branch_list()) if self.session is not None else ""
 
-    def _rewrite_from(self, node_id: str, text: str, name: str = "") -> None:
+    def _rewrite_from(
+        self, node_id: str, text: str, name: str = "", ooc: str | None = None
+    ) -> None:
         """⋯ → New branch from here…: the message, changed or not, as the
         start of a new branch, under the name given (blank: "Branch N"). A
-        turn is answered at once; a passage is the author's, and waits."""
+        turn is answered at once; a passage is the author's, and waits.
+        `ooc`: the turn's OOC note as edited ("" for none); None keeps the
+        original's."""
         if self.session is None or self._busy:
             return
         if self.session.in_private:
@@ -2302,9 +2306,10 @@ class MainWindow(
         # with its answer streaming in below.
         self._show_nodes(before)
         label = speaker_label_for(node.speaker_id, self.session.cast)
-        self.transcript.add_message(label, text, kind_for(node.speaker_id), node.ooc)
+        shown_ooc = (ooc.strip() or None) if ooc is not None else node.ooc
+        self.transcript.add_message(label, text, kind_for(node.speaker_id), shown_ooc)
         self.statusBar().showMessage(told, 10000)
-        self._start(lambda: self.session.rewrite_from(node_id, text, name=name))
+        self._start(lambda: self.session.rewrite_from(node_id, text, name=name, ooc=ooc))
 
     def _scroll_to_node(self, node_id: str) -> None:
         if self._busy and self._streaming_job:
@@ -2964,12 +2969,14 @@ class MainWindow(
         self._reassemble_inspector()
         self.statusBar().showMessage("Summary saved as your words", 4000)
 
-    def _edit_node(self, node_id: str, content: str) -> None:
-        """Edit any message and report what it made stale — never block it (§5.3)."""
+    def _edit_node(self, node_id: str, content: str, ooc: str | None = None) -> None:
+        """Edit any message and report what it made stale — never block it
+        (§5.3). `ooc`: an author turn's OOC note as edited ("" clears it);
+        None leaves it as it was."""
         if self.session is None or self._busy:
             return
         try:
-            went_stale = self.session.edit_node(node_id, content)
+            went_stale = self.session.edit_node(node_id, content, ooc=ooc)
         except KeyError:
             return
         if went_stale:

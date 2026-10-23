@@ -229,12 +229,13 @@ class MessageWidget(QFrame):
     take_back_requested = Signal(str)
     # Toggle this passage as evidence for the next settings review.
     review_mark_requested = Signal(str)
-    edit_committed = Signal(str, str)
+    # (node id, text, the OOC note or None when the message has no such field).
+    edit_committed = Signal(str, str, object)
     # The editor closed without saving (the transcript may be rebuilt now).
     edit_closed = Signal()
     # ⋯ → New branch from here…: (node id, the new text, the branch's name or
     # "" for the next "Branch N"), as a new branch.
-    rewrite_committed = Signal(str, str, str)
+    rewrite_committed = Signal(str, str, str, object)
     delete_requested = Signal(str)
     reroll_requested = Signal(str)
     # (node id, +1 or -1): show the neighbouring take.
@@ -342,6 +343,9 @@ class MessageWidget(QFrame):
         self.body.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
         layout.addWidget(self.body)
 
+        self.kind = kind
+        self._ooc_text = ooc or ""
+        self._ooc_editor: QPlainTextEdit | None = None
         self.ooc: QLabel | None = None
         if ooc:
             self.ooc = TextBody(f"OOC — {ooc}")
@@ -514,6 +518,22 @@ class MessageWidget(QFrame):
         editor = QPlainTextEdit(self.body.source)
         editor.setObjectName("messageEditor")
         editor.setMinimumHeight(120)
+        # An author's turn carries its OOC note: edited with the text, and
+        # on a new branch from here (the author, Oct 2026: only Take back
+        # could change it; Edit and New branch from here kept it as it was).
+        ooc_editor: QPlainTextEdit | None = None
+        if self.kind != "assistant":
+            ooc_editor = QPlainTextEdit(self._ooc_text)
+            ooc_editor.setObjectName("oocEditor")
+            ooc_editor.setPlaceholderText(
+                "OOC note (optional): a fact or instruction for the storyteller, not dialogue"
+            )
+            ooc_editor.setToolTip(
+                "Out-of-character addendum: authoritative fact or instruction, attached to "
+                "this turn with the same authority as Direction. Blank for none."
+            )
+            ooc_editor.setMinimumHeight(60)
+            ooc_editor.setMaximumHeight(90)
 
         save = QPushButton("Save as a new branch" if rewrite else "Save")
         save.setObjectName("sendButton")
@@ -544,10 +564,15 @@ class MessageWidget(QFrame):
 
         index = self.layout_.indexOf(self.body)
         self.layout_.insertWidget(index + 1, editor)
-        self.layout_.insertWidget(index + 2, row)
+        if ooc_editor is not None:
+            self.layout_.insertWidget(index + 2, ooc_editor)
+            if self.ooc is not None:
+                self.ooc.hide()
+        self.layout_.insertWidget(index + (3 if ooc_editor is not None else 2), row)
         self.body.hide()
         self.edit_button.setEnabled(False)
         self._editor = editor
+        self._ooc_editor = ooc_editor
         self._edit_row = row
         self._save_button = save
         self._sync_save()
@@ -560,10 +585,15 @@ class MessageWidget(QFrame):
         self._editor = None
         self._branch_name = None
         self._save_button = None
+        if self._ooc_editor is not None:
+            self._ooc_editor.deleteLater()
+            self._ooc_editor = None
         if self._edit_row is not None:
             self._edit_row.deleteLater()
             self._edit_row = None
         self.body.show()
+        if self.ooc is not None:
+            self.ooc.show()
         self.edit_button.setEnabled(not self._busy)
         if not committing:
             self.edit_closed.emit()
@@ -596,13 +626,14 @@ class MessageWidget(QFrame):
         text = self._editor.toPlainText()
         rewriting = self._rewriting
         name = self._branch_name.text().strip() if self._branch_name is not None else ""
+        ooc = self._ooc_editor.toPlainText() if self._ooc_editor is not None else None
         self.cancel_edit(committing=True)
         # The window rebuilds the transcript from story state, so the widget
         # does not update itself here — one writer, as with generation.
         if rewriting:
-            self.rewrite_committed.emit(self.node_id, text, name)
+            self.rewrite_committed.emit(self.node_id, text, name, ooc)
         else:
-            self.edit_committed.emit(self.node_id, text)
+            self.edit_committed.emit(self.node_id, text, ooc)
 
 
 class AsideWidget(QFrame):
@@ -1074,11 +1105,12 @@ class TranscriptView(QScrollArea):
     regenerate_requested = Signal(str)
     take_back_requested = Signal(str)
     review_mark_requested = Signal(str)
-    edit_committed = Signal(str, str)
+    # (node id, text, the OOC note or None when the message has no such field).
+    edit_committed = Signal(str, str, object)
     delete_requested = Signal(str)
     delete_aside_requested = Signal(str)
     reroll_requested = Signal(str)
-    rewrite_committed = Signal(str, str, str)
+    rewrite_committed = Signal(str, str, str, object)
     variant_requested = Signal(str, int)
     illustrate_requested = Signal(str)
     video_requested = Signal(str)

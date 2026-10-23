@@ -784,7 +784,7 @@ people (see Perspective and supporting characters).
 **Create the story** then goes to Start, which asks who you play and offers
 portraits for anyone still without one before the opening is written.
 Everything else keeps its default and is in Setup and on the Cast page;
-**Skip to the full setup…** opens Setup instead, characters included.
+**Advanced setup…** opens Setup instead, characters included.
 **Cancel** after the first step asks whether to keep the story made so far
 (not begun, in your Stories) or discard it to the Trash.
 
@@ -1717,10 +1717,11 @@ summary covers it, the summary is marked out of date). The **⋯** menu on a
 message offers **Regenerate this passage** (any passage, not just the latest).
 
 A **branch** is a line of the story you split off on purpose. **Edit** on a
-message corrects it in place (a typo, a name); **⋯ → New branch from here…**,
-on any message, opens the same editor with a name field beside **Save as a
-new branch**: saving starts a new branch from that message, rewritten or as
-it is. A turn of yours is answered at once on the new branch; a passage is
+message corrects it in place (a typo, a name); on a turn of yours the editor
+carries its OOC note under the text, to change or clear; **⋯ → New branch
+from here…**, on any message, opens the same editor with a name field beside
+**Save as a new branch**: saving starts a new branch from that message,
+rewritten or as it is, note and all. A turn of yours is answered at once on the new branch; a passage is
 your own prose and waits for your next turn. The story as it was is kept,
 under its own name: the first line is **Main**, and a new branch is called
 what you type, or "Branch 2", "Branch 3"… if you leave the name blank (a name

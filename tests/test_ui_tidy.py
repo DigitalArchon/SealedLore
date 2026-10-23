@@ -1474,3 +1474,52 @@ def test_the_wheel_guard_reaches_controls_made_later(app, window: MainWindow):
     assert spin.value() == 50, "the wheel changed a value it was only passing over"
     assert area.verticalScrollBar().value() > 0
     area.close()
+
+
+def test_an_author_turn_s_ooc_note_is_edited_with_it_and_on_a_new_branch(app, window: MainWindow):
+    """The author (Oct 2026): a past turn's OOC note could only be changed by
+    Take back; Edit changed the body alone, and New branch from here… kept
+    the old note. The editor carries the note for an author's turn (blank
+    for none); a passage has no such field."""
+    from sealedlore.providers.mock import MockChatProvider
+
+    session = window.session
+    turn = next(n for n in session.nodes if n.id == "u1")
+    turn.ooc = "Keep it dark."
+    window.reload_transcript()
+    settle(app)
+    widget = window.transcript.message_widget("u1")
+    assert widget.ooc is not None and widget.ooc.text() == "OOC — Keep it dark."
+    widget.begin_edit()
+    assert widget._ooc_editor is not None and widget._ooc_editor.toPlainText() == "Keep it dark."
+    assert widget.ooc.isHidden()
+    widget._editor.setPlainText("Author turn 1, edited.")
+    widget._ooc_editor.setPlainText("Keep it darker.")
+    widget._commit_edit()
+    settle(app)
+    turn = next(n for n in session.nodes if n.id == "u1")
+    assert turn.content == "Author turn 1, edited." and turn.ooc == "Keep it darker."
+    # Cleared: the note is gone.
+    widget = window.transcript.message_widget("u1")
+    widget.begin_edit()
+    widget._ooc_editor.setPlainText("  ")
+    widget._commit_edit()
+    settle(app)
+    assert next(n for n in session.nodes if n.id == "u1").ooc is None
+    assert window.transcript.message_widget("u1").ooc is None
+    # A passage has no note to edit.
+    passage = window.transcript.message_widget("a0")
+    passage.begin_edit()
+    assert passage._ooc_editor is None
+    passage.cancel_edit()
+    # A new branch from the turn takes the note as rewritten.
+    window._current_provider = lambda: MockChatProvider(["The branch's reply."])
+    widget = window.transcript.message_widget("u1")
+    widget.begin_edit(rewrite=True)
+    widget._editor.setPlainText("Author turn 1, another way.")
+    widget._ooc_editor.setPlainText("A note for the branch.")
+    widget._commit_edit()
+    _wait_idle(app, window)
+    start = session.path()[2]
+    assert start.content == "Author turn 1, another way." and start.ooc == "A note for the branch."
+    assert window.transcript.message_widget(start.id).ooc.text() == "OOC — A note for the branch."

@@ -6,7 +6,7 @@ Oct 18 2026: the window looked confusing to a new user). The guide asks for
 what a story needs to begin, in four short steps: the story and its world,
 its characters, where and how it begins, and how it reads. Everything else
 keeps its default, and is in Setup and on the Cast page as before; "Skip to
-the full setup" opens Setup instead.
+the full setup" (Advanced setup… since Oct 2026) opens Setup instead.
 
 **The story is made after the first step** (the author, Oct 2026): its
 characters are made on the real Cast page, lent to the guide by the window
@@ -138,10 +138,12 @@ class NewStoryGuide(QDialog):
         self.stack.addWidget(self._opening_page())
         self.stack.addWidget(self._style_page())
 
-        self.skip_button = QPushButton("Skip to the full setup…")
+        # "Skip to the full setup…" read as if the full setup came later
+        # (the author, Oct 2026); it is the other way to set a story up.
+        self.skip_button = QPushButton("Advanced setup…")
         self.skip_button.setToolTip(
             "Make the story with what is filled in so far and open Setup, with every "
-            "option, instead"
+            "option, instead of this guide"
         )
         self.skip_button.clicked.connect(self._skip)
         self.back_button = QPushButton("Back")
@@ -249,11 +251,21 @@ class NewStoryGuide(QDialog):
         form.addRow("Tense", self.tense)
         self.length = QComboBox()
         for key in PRESET_ORDER:
-            if key == "custom":
-                continue
             self.length.addItem(f"{PRESETS[key].label}: {PRESETS[key].summary}", key)
         self.length.setCurrentIndex(max(0, self.length.findData(DEFAULT_RESPONSE_STYLE)))
         form.addRow("Passages", self.length)
+        # One's own length wording (the author, Oct 2026: the quick setup
+        # offered every preset but a custom one), as the Style page offers it.
+        self.custom_length = QLineEdit()
+        self.custom_length.setPlaceholderText("e.g. 'two tight paragraphs, dialogue-led'")
+        self.custom_length.setToolTip(
+            "Your own words for how long a passage should be, when Passages is Custom"
+        )
+        self.custom_length.setEnabled(False)
+        self.length.currentIndexChanged.connect(
+            lambda _i: self.custom_length.setEnabled(self.length.currentData() == "custom")
+        )
+        form.addRow("Custom length", self.custom_length)
         form.addRow(
             "",
             _hint(
@@ -380,6 +392,8 @@ class NewStoryGuide(QDialog):
         story.style.person = self.person.currentData()
         story.style.tense = self.tense.currentData()
         story.style.response_style = self.length.currentData()
+        if story.style.response_style == "custom":
+            story.style.length_target = self.custom_length.text().strip() or None
         ids = {character.id for character in self._cast()}
         player = self.player.currentData() or None
         if player not in ids:

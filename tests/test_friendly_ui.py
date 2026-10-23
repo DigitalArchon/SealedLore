@@ -359,10 +359,20 @@ def test_the_guide_makes_the_story_and_its_characters_on_the_cast_page(app, wind
     assert guide.next_button.text() == "Create the story"
     guide.person.setCurrentIndex(guide.person.findData("first"))
     guide.tense.setCurrentIndex(guide.tense.findData("present"))
+    # A length of one's own is offered here too (the author, Oct 2026).
+    assert not guide.custom_length.isEnabled()
+    guide.length.setCurrentIndex(guide.length.findData("custom"))
+    assert guide.custom_length.isEnabled()
+    guide.custom_length.setText("two tight paragraphs, dialogue-led")
     guide.length.setCurrentIndex(guide.length.findData("brief"))
+    assert not guide.custom_length.isEnabled()
+    guide.length.setCurrentIndex(guide.length.findData("custom"))
+    assert guide.skip_button.text() == "Advanced setup…"
     guide.next_button.click()
     assert guide.result() == NewStoryGuide.Accepted and not guide.full_setup
     story = window.session.story
+    assert story.style.response_style == "custom"
+    assert story.style.length_target == "two tight paragraphs, dialogue-led"
     john = window.session.cast[0]
     assert [c.name for c in window.session.cast] == ["John", "Elena"]
     assert john.summary == "Ex-military, thirty, tired."
@@ -373,7 +383,7 @@ def test_the_guide_makes_the_story_and_its_characters_on_the_cast_page(app, wind
     assert (story.style.person, story.style.tense, story.style.response_style) == (
         "first",
         "present",
-        "brief",
+        "custom",
     )
     # The Cast page is back in the Inspector.
     window.return_cast_panel()

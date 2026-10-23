@@ -1773,9 +1773,10 @@ class StorySession(
         return self.delete_from(start_id)
 
     def rewrite_from(
-        self, node_id: str, text: str, *, name: str | None = None
+        self, node_id: str, text: str, *, name: str | None = None, ooc: str | None = None
     ) -> Iterator[StreamEvent | SessionNotice | PassageDone]:
-        """Rewrite an earlier message as the start of a new branch.
+        """Rewrite an earlier message as the start of a new branch. `ooc`: the
+        turn's OOC note as rewritten ("" for none); None keeps the original's.
 
         The author's rule (Sept 2026): editing an earlier message forks (Edit
         corrects in place). The message's rewrite stands beside it with a
@@ -1807,7 +1808,7 @@ class StorySession(
                     speaker_id=original.speaker_id,
                     user_text=text,
                     controlled_character_id=meta.controlled_character_id,
-                    ooc=original.ooc,
+                    ooc=(ooc.strip() or None) if ooc is not None else original.ooc,
                     npc_scope=meta.npc_scope or self.story.defaults.npc_scope,
                     npc_scope_ids=tuple(meta.npc_scope_ids),
                     agency_mode=meta.agency_mode or self.story.defaults.agency_mode,
