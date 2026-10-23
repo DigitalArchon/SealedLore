@@ -1172,8 +1172,10 @@ def resolve_reply(
             delta.outside[label] = outside
             continue
         assert canonical is not None
-        if "outside" not in entry and _left_outside(
-            world, delta, canonical, place, quoted(entry) or ""
+        if (
+            "outside" not in entry
+            and not _at_a_spot_inside(reply, canonical)
+            and _left_outside(world, delta, canonical, place, quoted(entry) or "")
         ):
             outside = True
         delta.where[canonical] = place
@@ -1474,6 +1476,25 @@ _AT_THE_DOOR = re.compile(
     r"|towards?)\b",
     re.IGNORECASE,
 )
+
+
+def _at_a_spot_inside(reply: Mapping[str, Any], who: str) -> bool:
+    """The read also stood `who` at a spot ("at": the round table, the
+    counter), which is inside the building unless the spot's words put it at
+    its door: they are in, whatever flag was left off. Live (Brasshaven, Oct
+    23 2026), the inspector followed the author's character into the Copper
+    Kettle, the read put him at the table twice over, and `_left_outside`
+    kept him at the door in the Row, where the author's turns had left him."""
+    at = reply.get("at")
+    if not isinstance(at, dict):
+        return False
+    spot = at.get(who)
+    if not isinstance(spot, str) or not spot.strip():
+        return False
+    return _AT_THE_DOOR.search(spot) is None and not _DOORWAY.search(spot)
+
+
+_DOORWAY = re.compile(r"\b(door|doorway|threshold|entrance|gate)\b", re.IGNORECASE)
 
 
 def _left_outside(world: WorldMap, delta: WorldDelta, who: str, place: str, quote: str) -> bool:

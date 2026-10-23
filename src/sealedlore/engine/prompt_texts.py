@@ -4855,6 +4855,25 @@ _text(
     (("mark", "the spot, as ⌖(east, north)"),),
 )
 _text(
+    "map.turn.approach",
+    MAP,
+    "Map-first: the turn Go over to them writes",
+    "Put in the composer when the author chooses Go over to them (or to it) on someone's "
+    "or something's menu: their character walks up to them.",
+    "I walk over to {name}.",
+    (("name", "who or what it is"),),
+)
+_text(
+    "map.action.approach",
+    MAP,
+    "Map-first: what Go over to them means",
+    "In the map section of the tail on a turn the author began with Go over to them on the "
+    "map and sent as it was written (or added to).",
+    "The author chose to go over to {name} on the map: their character has walked up and "
+    "stands beside {name} now, and no more than that; this passage begins there.",
+    (("name", "who or what it is"),),
+)
+_text(
     "map.turn.enter",
     MAP,
     "Map-first: the turn Go inside writes",

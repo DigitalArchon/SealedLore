@@ -633,7 +633,13 @@ def test_at_an_area_s_edge_the_places_that_way_are_offered(tmp_path, story, cast
     # The open country past the edge (a window of the land, drawn as the
     # story goes there: tests/test_open_country.py), then the places that way.
     assert [c[1] for c in choices] == ["open country", "Hellsville"]  # 8 km north
-    assert session.edge_choices("south") == []  # the far side: still the farm
+    # The far side is offered too, from anywhere in the area (the author,
+    # Oct 23 2026): the walk across the farm to its south edge counted in.
+    south = session.edge_choices("south")
+    assert south[0][1] == "open country" and south[0][2] > choices[0][2]
+    tile, steps = session.edge_tile("south")
+    assert tile.y == session.area("farm").height - 1 and steps[0] == (30, 0)
+    assert steps[-1] == (tile.x, tile.y)
     state = session.cross_edge("north")  # open country adjoins everywhere
     assert state.spots["Serrik Vaun"].area.startswith("window:")
 

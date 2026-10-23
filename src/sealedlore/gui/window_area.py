@@ -293,7 +293,7 @@ class AreaWindow:
             )
         if walk is not None:
             self.area_view.walk(walk[1])
-        self.area_view.set_edge(session.edge_here())
+        self.area_view.set_edge(session.edge_here(), outdoor=not area.indoor)
         self.area_view.set_carrying(session.carried_things(), session.people_in_reach())
         self.area_view.set_offer(session.tile_set_offer(art))
         self.area_view.set_setup_offer(session.objects_offer_line())
@@ -633,13 +633,14 @@ class AreaWindow:
 
     # --- moving (a turn) ------------------------------------------------------------
 
-    def _area_go(self, x: int, y: int, beside: bool) -> None:
+    def _area_go(self, x: int, y: int, beside: bool, name: str = "") -> None:
         """Go here, in this area: the turn in the composer, the move made
-        when it is sent. Nothing moves now."""
+        when it is sent. Nothing moves now. `name`: who or what is gone over
+        to (`beside`), or the building whose door this is."""
         session = self.session
         if session is None or self._busy or session.in_private:
             return
-        text = session.go_to_tile(x, y, beside=beside)
+        text = session.go_to_tile(x, y, beside=beside, name=name)
         if not text:
             self.statusBar().showMessage("There's no way there from here.", 4000)
             return

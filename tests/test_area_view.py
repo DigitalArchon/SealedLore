@@ -1883,3 +1883,51 @@ def test_escape_cancels_what_the_play_view_has_pending_before_it_leaves(app, win
     QTest.keyClick(view.view, Qt.Key_Escape)
     pump(app)
     assert not window.world_view.play_shown() and window.world_view.level() == "region"
+
+
+def test_a_plan_only_building_is_clicked_by_its_roof_and_leave_works_from_anywhere(app, window):
+    """The author (Oct 23 2026): on many of Brasshaven's buildings there was
+    no seeing where the door was. Buildings the plan alone draws (no place of
+    their own yet) are clickable like the map's; and Leave ▾ is offered on
+    any outdoor area, a side at a time, since walking to the edge first would
+    cost a turn of its own."""
+    from PySide6.QtCore import QPointF
+
+    from sealedlore.engine.area import Area
+    from sealedlore.gui.area_render import px_for
+
+    view = window.area_view
+    rows = ["_" * 15, "__#######______", "__#.....#______", "__#.....+______", "__#######______"]
+    rows += ["_" * 15] * 3
+    yard = Area(
+        place_id="yard",
+        name="The yard",
+        indoor=False,
+        look="grass",
+        rows=rows,
+        tile_m=2.0,
+        objects={},
+        labels={"The Boilerworks": (4, 2)},
+    )
+    view.set_area(yard, None, [], key=("yard",))
+    assert view.building_at(4, 2) == "2,1,8,4" and view.building_at(12, 3) is None
+    assert view.building_name("2,1,8,4") == "The Boilerworks"
+    assert view.door_of("2,1,8,4") == (8, 3)
+    clicks: list = []
+    view.go_requested.connect(lambda x, y, beside, name: clicks.append((x, y, beside, name)))
+    px = px_for(yard)
+    view._clicked(QPointF(4.5 * px, 2.5 * px), view.mapToGlobal(view.rect().center()))
+    assert clicks == [(8, 3, False, "The Boilerworks")]
+    # Hovering says what the building is.
+    view._hovered(QPointF(4.5 * px, 2.5 * px))
+    assert view.coords.text() == "The Boilerworks: click to go inside"
+    # Leave ▾, with no edge stood on: a submenu a side.
+    view.set_edge(None, outdoor=True)
+    assert not view.edge_button.isHidden() and view.edge_button.text() == "Leave"
+    view.edge_menu.aboutToShow.emit()
+    assert [a.text() for a in view.edge_menu.actions()] == ["North", "East", "South", "West"]
+    view.set_edge_choices("south", [("area", "Walk on into open country")])
+    assert [a.text() for a in view._edge_menus["south"].actions()] == ["Walk on into open country"]
+    view.set_edge(None, outdoor=False)
+    assert view.edge_button.isHidden()
+    window.refresh_area(snap=True)

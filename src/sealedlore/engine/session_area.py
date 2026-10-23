@@ -231,6 +231,8 @@ EDGE_CHOICES = 8
 EDGE_LANDING_ALONG = 3
 EDGE_LANDING_IN = 2
 EDGE_STEPS = {"north": (0, 1), "south": (0, -1), "east": (1, 0), "west": (-1, 0)}
+# Edge tiles tried, nearest first, for one the author's character can reach.
+EDGE_TRIES = 12
 # The menu choices that are a move and nothing else: the storyteller is told
 # where they end ("from the house to the farm"); a walk up to someone keeps
 # the area's own name.
@@ -1783,15 +1785,18 @@ class AreaRuntime:
             return x, y
         return stand_near(area, edge, set(), seed=held)
 
-    def go_to_tile(self, x: int, y: int, *, beside: bool = False) -> str:
+    def go_to_tile(self, x: int, y: int, *, beside: bool = False, name: str = "") -> str:
         """Go here, on the play view: the turn's text for the composer, the
         move kept with the live state and made when the turn is sent
         (`stamp_turn`), as Travel… is. The author's character walks to the
-        tile (or to the nearest free tile beside it, `beside`); a door tile
-        takes them through it, into the building, out of it or by the
-        stairs. "" when there is no way there. The author's ruling (Oct 23
-        2026): the map is a view and a way to point, and nothing moves
-        without a turn."""
+        tile (or to the nearest free tile beside it, `beside`, `name` who or
+        what it is: "I walk over to Silas."); a door tile takes them through
+        it, into the building, out of it or by the stairs, and the door of a
+        building drawn on the plan with no inside yet (`name` the building)
+        is "I go into X.": the story takes them in, and the map draws it. ""
+        when there is no way there. The author's ruling (Oct 23 2026): the
+        map is a view and a way to point, and nothing moves without a
+        turn."""
         state = self.area_state()
         held = self.held_name()
         me = state.spots.get(held or "")
@@ -1829,12 +1834,20 @@ class AreaRuntime:
             )
             self._set_live(state)
             return text
-        point = tile_point(world, area, end.x, end.y)
-        token = mark_token(*point) if point is not None else f"({end.x}, {end.y})"
-        text = self.texts.fill("map.turn.walk", mark=token)
+        if name and beside:
+            verb, target = "approach", name
+            text = self.texts.fill("map.turn.approach", name=name)
+        elif name and area.at(end.x, end.y) == "+" and not area.indoor:
+            verb, target = "enter", name
+            text = self.texts.fill("map.turn.enter", name=name)
+        else:
+            point = tile_point(world, area, end.x, end.y)
+            target = mark_token(*point) if point is not None else f"({end.x}, {end.y})"
+            verb = "walk"
+            text = self.texts.fill("map.turn.walk", mark=target)
         state.action = MapAction(
-            verb="walk",
-            target=token,
+            verb=verb,  # type: ignore[arg-type]
+            target=target,
             target_id=me.area,
             text=text,
             spot=end,
@@ -1848,15 +1861,17 @@ class AreaRuntime:
         """Walk on past this edge into the area that adjoins it: the turn's
         text, the move made when the turn is sent (`stamp_turn`). "" when
         the way is barred."""
-        beyond = self._beyond(side)
-        if beyond is None:
+        edge = self.edge_tile(side)
+        beyond = self._beyond(side, edge[0]) if edge is not None else None
+        if beyond is None or edge is None:
             return ""
         spot, metres = beyond
         world, art = self.world(), self._art_read()
         state = self.area_state()
         held = self.held_name()
         there = self.area(spot.area, world, art)
-        if held is None or there is None:
+        here = self.area(edge[0].area, world, art)
+        if held is None or there is None or here is None:
             return ""
         taken = {(s.x, s.y) for n, s in state.spots.items() if n != held and s.area == spot.area}
         x, y = (spot.x, spot.y)
@@ -1872,7 +1887,8 @@ class AreaRuntime:
             target_id=spot.area,
             text=text,
             spot=Spot(area=spot.area, x=x, y=y),
-            seconds=walk_seconds(metres),
+            seconds=walk_seconds(metres + walk_metres(here, edge[1])),
+            steps=edge[1],
             to=side,
         )
         self._set_live(state)
@@ -3022,14 +3038,16 @@ class AreaRuntime:
             return "east"
         return None
 
-    def _beyond(self, side: str) -> tuple[Spot, float] | None:
+    def _beyond(self, side: str, at: Spot | None = None) -> tuple[Spot, float] | None:
         """The first tile of another area straight on past this edge, and
         how far it is: a place's plan within EDGE_REACH metres (across a
         gap of open country, as before windows), else the window of open
-        country just past the edge (the author: the world is limitless)."""
+        country just past the edge (the author: the world is limitless).
+        From `at` (a tile on the edge), else from where the author's
+        character stands."""
         world, art = self.world(), self._art_read()
         state = self.area_state()
-        me = state.spots.get(self.held_name() or "")
+        me = at if at is not None else state.spots.get(self.held_name() or "")
         area = self.area(me.area if me else None, world, art)
         start = tile_point(world, area, me.x, me.y) if me and area else None
         if start is None or area is None:
@@ -3086,22 +3104,57 @@ class AreaRuntime:
                     return x, y
         return None
 
+    def edge_tile(self, side: str) -> tuple[Spot, list[tuple[int, int]]] | None:
+        """The tile on this side's edge of the author's character's outdoor
+        area that they can walk to, nearest them, with the way there (one
+        tile when they stand on it); None indoors or with no way to that
+        edge. Leaving is offered from anywhere in the area (the author, Oct
+        23 2026: with moves as turns, walking to the edge first cost a turn
+        of its own)."""
+        state = self.area_state()
+        me = state.spots.get(self.held_name() or "")
+        area = self.area(me.area if me else None)
+        if me is None or area is None or area.indoor:
+            return None
+        if side == "north":
+            tiles = [(x, 0) for x in range(area.width)]
+        elif side == "south":
+            tiles = [(x, area.height - 1) for x in range(area.width)]
+        elif side == "west":
+            tiles = [(0, y) for y in range(area.height)]
+        elif side == "east":
+            tiles = [(area.width - 1, y) for y in range(area.height)]
+        else:
+            return None
+        blocked = area.blocked()
+        tiles = [t for t in tiles if area.walkable(t[0], t[1], blocked)]
+        tiles.sort(key=lambda t: abs(t[0] - me.x) + abs(t[1] - me.y))
+        for x, y in tiles[:EDGE_TRIES]:
+            steps = self.walk_route(x, y)
+            if steps:
+                return Spot(area=me.area, x=x, y=y), [tuple(step) for step in steps]
+        return None
+
     def edge_choices(self, side: str) -> list[tuple[str, str, int]]:
         """Where the author's character can go on past this edge: ("area",
         its name, seconds) for an area straight on that adjoins this one,
         then ("place id", name, seconds on foot) for the known places that
-        lie that way, nearest first."""
+        lie that way, nearest first. From anywhere in the area: the walk to
+        the edge is counted in."""
         out: list[tuple[str, str, int]] = []
-        beyond = self._beyond(side)
         world = self.world()
         art = self._art_read()
-        if beyond is not None:
+        edge = self.edge_tile(side)
+        beyond = self._beyond(side, edge[0]) if edge is not None else None
+        if beyond is not None and edge is not None:
             spot, metres = beyond
             there = self.area(spot.area, world, art)
             name = there.name if there is not None else "open country"
             if there is not None and there.within:
                 name = f"{name} ({there.within})"
-            out.append(("area", name, int(metres / WALK_M_PER_S)))
+            here = self.area(edge[0].area, world, art)
+            walk = walk_metres(here, edge[1]) if here is not None else 0.0
+            out.append(("area", name, int((metres + walk) / WALK_M_PER_S)))
         me = self.held_point()
         if me is None:
             return out

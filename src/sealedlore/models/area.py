@@ -35,6 +35,7 @@ MapVerb = Literal[
     # the area, in through a building's door, out through it, by the stairs,
     # on past the area's edge.
     "walk",
+    "approach",
     "enter",
     "leave",
     "stairs",

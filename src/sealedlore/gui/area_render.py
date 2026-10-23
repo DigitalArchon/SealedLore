@@ -1326,6 +1326,38 @@ def _bridges(p: QPainter, area: Area, source: TileSource, px: int) -> None:
             p.fillRect(X + px - t, Y, t, px, rail)
 
 
+def _side_door(
+    p: QPainter, x: int, y: int, px: int, *, on_east: bool = False, on_north: bool = False
+) -> None:
+    """A building's door in its east, west or north wall, where the roof
+    hides the wall itself: a door panel standing proud of the roof's edge at
+    the door's tile, framed light, with a lit knob, and a stone step on the
+    ground outside it, so the way in reads at a glance."""
+    frame = QColor(230, 200, 140)
+    panel = QColor(74, 47, 28)
+    knob = QColor(246, 207, 110)
+    step = QColor(150, 140, 125, 220)
+    if on_north:
+        # Above the roof's far edge: the top of the door and its step beyond.
+        door = QRectF(x * px + px * 0.2, y * px - px * 0.75, px * 0.6, px * 0.55)
+        p.fillRect(QRectF(x * px + px * 0.1, y * px - px * 1.05, px * 0.8, px * 0.3), step)
+    elif on_east:
+        door = QRectF((x + 1) * px - px * 0.1, y * px + px * 0.1, px * 0.5, px * 0.85)
+        p.fillRect(QRectF((x + 1) * px + px * 0.35, y * px + px * 0.2, px * 0.4, px * 0.7), step)
+    else:
+        door = QRectF(x * px - px * 0.4, y * px + px * 0.1, px * 0.5, px * 0.85)
+        p.fillRect(QRectF(x * px - px * 0.75, y * px + px * 0.2, px * 0.4, px * 0.7), step)
+    p.fillRect(door.adjusted(-1.5, -1.5, 1.5, 1.5), frame)
+    p.fillRect(door, panel)
+    p.fillRect(
+        QRectF(
+            door.x() + door.width() * 0.2, door.y() + door.height() * 0.15, 1.5, door.height() * 0.7
+        ),
+        QColor(93, 60, 37),
+    )
+    p.fillRect(QRectF(door.right() - door.width() * 0.3, door.center().y() - 1, 2, 2), knob)
+
+
 def _render_outdoor(area: Area, source: TileSource) -> Ground:
     np = _np()
     info = source.info
@@ -1561,17 +1593,17 @@ def _render_outdoor(area: Area, source: TileSource) -> Ground:
                     p.fillRect(glass, QColor(255, 210, 130))
                     p.fillRect(QRectF(glass.x(), glass.y(), glass.width(), 1.5), edge)
                     lights.append(((x + 0.5) * px, Y1 + px * 0.6, px * 3.5))
-            # Doors in the other walls: a step out of the roof's shadow.
+            # Doors in the other walls: a door drawn on that wall, with a lit
+            # knob and a step out of the roof's shadow. They were a faint
+            # translucent step alone, and the author (Oct 23 2026) could not
+            # see where Brasshaven's buildings were entered.
             for y in range(y0, y1):
                 for x in (x0, x1):
                     if at(x, y) == "+":
-                        dx = -px * 0.3 if x == x0 else px * 0.6
-                        p.fillRect(
-                            QRectF(x * px + dx, y * px, px * 0.7, px), QColor(60, 50, 40, 160)
-                        )
+                        _side_door(p, x, y, px, on_east=x == x1)
             for x in range(x0, x1 + 1):
                 if at(x, y0) == "+":
-                    p.fillRect(QRectF(x * px, Y0 - px * 0.6, px, px * 0.3), QColor(60, 50, 40, 160))
+                    _side_door(p, x, y0, px, on_north=True)
     for sprite, X, Y in flames:
         p.drawImage(X, Y, sprite)
     p.end()

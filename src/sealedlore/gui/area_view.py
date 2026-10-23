@@ -597,7 +597,7 @@ class AreaView(QWidget):
     # the author's character there goes in the composer; nothing moves until
     # it is sent (the author's ruling, Oct 23 2026: the map is a view and a
     # way to point). A door tile takes them through it.
-    go_requested = Signal(int, int, bool)
+    go_requested = Signal(int, int, bool, str)
     # A menu choice: the verb, who or what, its id ("" for a person).
     action_chosen = Signal(str, str, str)
     # Walking shown is done: the tiles walked.
@@ -711,15 +711,19 @@ class AreaView(QWidget):
         self.edge_button = QToolButton()
         self.edge_button.setObjectName("viewToggleButton")
         self.edge_button.setToolTip(
-            "You are at the edge of this area: walk on into the next, or set off for a place "
-            "that lies this way"
+            "Leave this area: walk on past one of its edges into what adjoins it, or set "
+            "off for a place that lies that way. The turn goes in the box below."
         )
         self.edge_button.setPopupMode(QToolButton.InstantPopup)
+        # Standing on an edge, that side's choices; anywhere else, a submenu
+        # a side (the author, Oct 23 2026: with moves as turns, walking to
+        # the edge first cost a turn of its own).
         self.edge_menu = QMenu(self)
-        self.edge_menu.aboutToShow.connect(lambda: self.edge_wanted.emit(self._edge or ""))
+        self.edge_menu.aboutToShow.connect(self._fill_edge_menu)
         self.edge_button.setMenu(self.edge_menu)
         self.edge_button.hide()
         self._edge: str | None = None
+        self._edge_menus: dict[str, QMenu] = {}
         self.me_button = QToolButton()
         self.me_button.setObjectName("viewToggleButton")
         self.me_button.setText("◎ Me")
@@ -899,6 +903,9 @@ class AreaView(QWidget):
         # figure stands on the last), and how far it is to the next (0-1).
         self._steps: list[tuple[int, int]] = []
         self._walked: list[tuple[int, int]] = []
+        # The plan's own buildings (`_plan_boxes`), for the area they were found in.
+        self._boxes_for: str | None = None
+        self._boxes: list[tuple[int, int, int, int]] = []
         self._progress = 0.0
         self._timer = QTimer(self)
         self._timer.setInterval(FRAME_MS)
@@ -1674,21 +1681,39 @@ class AreaView(QWidget):
                 lambda _c=False, pid=picture_id: self.painting_chosen.emit(pid)
             )
 
-    def set_edge(self, side: str | None) -> None:
-        """The author's character stands on this side's edge (None: not on one)."""
+    def set_edge(self, side: str | None, *, outdoor: bool = False) -> None:
+        """The author's character stands on this side's edge (None: not on
+        one); `outdoor`, the area has edges to leave by at all."""
         self._edge = side
-        self.edge_button.setText(f"Leave {side}" if side else "")
-        self.edge_button.setVisible(side is not None and not self.editing)
+        self.edge_button.setText(f"Leave {side}" if side else "Leave")
+        self.edge_button.setVisible((side is not None or outdoor) and not self.editing)
+
+    def _fill_edge_menu(self) -> None:
+        """On an edge, that side's choices asked for; elsewhere, one submenu
+        a side, each filled as it opens."""
+        if self._edge:
+            self.edge_wanted.emit(self._edge)
+            return
+        self.edge_menu.clear()
+        self._edge_menus = {}
+        for side in ("north", "east", "south", "west"):
+            sub = QMenu(side.capitalize(), self.edge_menu)
+            sub.aboutToShow.connect(lambda s=side: self.edge_wanted.emit(s))
+            self.edge_menu.addMenu(sub)
+            self._edge_menus[side] = sub
 
     def set_edge_choices(self, side: str, choices: list[tuple[str, str]]) -> None:
-        """The edge menu's entries: (an id, what it says)."""
-        self.edge_menu.clear()
+        """The edge menu's entries for this side: (an id, what it says)."""
+        menu = self._edge_menus.get(side) if not self._edge else self.edge_menu
+        if menu is None:
+            return
+        menu.clear()
         if not choices:
-            action = self.edge_menu.addAction(f"Nothing known lies {side} of here")
+            action = menu.addAction(f"Nothing known lies {side} of here")
             action.setEnabled(False)
             return
         for choice_id, label in choices:
-            action = self.edge_menu.addAction(label)
+            action = menu.addAction(label)
             action.setEnabled(not self.locked)
             action.triggered.connect(lambda _c=False, c=choice_id: self.edge_chosen.emit(side, c))
 
@@ -2030,37 +2055,85 @@ class AreaView(QWidget):
             self._thing_menu(thing, global_pos)
             return
         if tile is not None:
-            door = self.door_of_building_at(*tile)
+            building = self.building_at(*tile)
+            door = self.door_of(building) if building is not None else None
             if door is not None:
                 # A building's roof or wall: in by its door, wherever that is
                 # (the author, Oct 23 2026: on Brasshaven's buildings there was
                 # no seeing where the door was, so no way in).
-                self.go_requested.emit(door[0], door[1], False)
+                self.go_requested.emit(door[0], door[1], False, self.building_name(building))
                 return
-            self.go_requested.emit(tile[0], tile[1], False)
+            self.go_requested.emit(tile[0], tile[1], False, "")
 
     def building_at(self, x: int, y: int) -> str | None:
-        """The place id of the building drawn over this tile of an outdoor
-        area (its roof or wall), or None: open ground, or indoors."""
+        """The building drawn over this tile of an outdoor area (its roof or
+        wall): the place id of one the map has, else, for one the plan alone
+        draws (Brasshaven's works and depots: no place of its own until the
+        story goes there), its box as "x0,y0,x1,y1"; None on open ground, or
+        indoors."""
         area = self.area
-        if area is None or area.indoor or area.walkable(x, y):
+        if area is None or area.indoor:
             return None
         for place_id, (x0, y0, x1, y1) in area.buildings.items():
             if x0 <= x <= x1 and y0 <= y <= y1:
                 return place_id
+        for x0, y0, x1, y1 in self._plan_boxes():
+            if x0 <= x <= x1 and y0 <= y <= y1:
+                return f"{x0},{y0},{x1},{y1}"
         return None
 
-    def door_of(self, place_id: str) -> tuple[int, int] | None:
-        """The door tile of a building in this area: one that leads in
-        (`Entrance`), else a door drawn in its wall whose inside isn't drawn
-        yet (walking to it says so, `undrawn_door_here`)."""
+    def _plan_boxes(self) -> list[tuple[int, int, int, int]]:
+        """The buildings the plan draws (walled rings the picture roofs),
+        kept per area."""
+        area = self.area
+        if area is None:
+            return []
+        if self._boxes_for != area.id:
+            from sealedlore.gui.area_render import _building_boxes
+
+            self._boxes_for, self._boxes = area.id, _building_boxes(area)
+        return self._boxes
+
+    def _box_of(self, building: str) -> tuple[int, int, int, int] | None:
         area = self.area
         if area is None:
             return None
-        entrance = next((e for e in area.entrances if e.place_id == place_id), None)
+        if building in area.buildings:
+            return area.buildings[building]
+        try:
+            x0, y0, x1, y1 = (int(v) for v in building.split(","))
+        except ValueError:
+            return None
+        return x0, y0, x1, y1
+
+    def building_name(self, building: str) -> str:
+        """What the building is called: the map's name, else the plan's
+        label inside its box, else ""."""
+        area = self.area
+        if area is None:
+            return ""
+        if building in area.buildings:
+            return area.names.get(building) or ""
+        box = self._box_of(building)
+        if box is None:
+            return ""
+        x0, y0, x1, y1 = box
+        for label, (lx, ly) in area.labels.items():
+            if x0 <= lx <= x1 and y0 <= ly <= y1:
+                return label
+        return ""
+
+    def door_of(self, building: str) -> tuple[int, int] | None:
+        """The door tile of a building in this area: one that leads in
+        (`Entrance`), else a door drawn in its wall whose inside isn't drawn
+        yet (a map building's, `undrawn_door_here`; or a plan-only one's)."""
+        area = self.area
+        if area is None:
+            return None
+        entrance = next((e for e in area.entrances if e.place_id == building), None)
         if entrance is not None:
             return entrance.x, entrance.y
-        box = area.buildings.get(place_id)
+        box = self._box_of(building)
         if box is None:
             return None
         x0, y0, x1, y1 = box
@@ -2073,8 +2146,8 @@ class AreaView(QWidget):
         return doors[0] if doors else None
 
     def door_of_building_at(self, x: int, y: int) -> tuple[int, int] | None:
-        place_id = self.building_at(x, y)
-        return self.door_of(place_id) if place_id is not None else None
+        building = self.building_at(x, y)
+        return self.door_of(building) if building is not None else None
 
     def _hovered(self, point: QPointF) -> None:
         """The tile under the pointer marked (gold where it can be walked
@@ -2100,7 +2173,7 @@ class AreaView(QWidget):
         if building is not None and self.door_of(building) is not None:
             over = True
             self._hover.setPen(QPen(QColor(GOLD.red(), GOLD.green(), GOLD.blue(), 200), 2))
-            name = area.names.get(building) or building
+            name = self.building_name(building) or "this building"
             self.coords.setText(f"{name}: click to go inside")
         self.view.viewport().setCursor(Qt.PointingHandCursor if over else Qt.ArrowCursor)
 
@@ -2132,13 +2205,17 @@ class AreaView(QWidget):
         mark = menu.addAction("Mark this spot in your turn")
         mark.setEnabled(spot is not None)
         mark.triggered.connect(lambda: self.mark_requested.emit(*tile))
-        door = self.door_of_building_at(*tile)
-        walk = menu.addAction("Go inside" if door is not None else "Go here")
+        building = self.building_at(*tile)
+        door = self.door_of(building) if building is not None else None
+        name = self.building_name(building) if building is not None else ""
+        walk = menu.addAction(
+            f"Go into {name}" if door and name else "Go inside" if door else "Go here"
+        )
         walk.setEnabled(
             not self.locked and not self.editing and (door is not None or self.area.walkable(*tile))
         )
         goal = door if door is not None else tile
-        walk.triggered.connect(lambda: self.go_requested.emit(goal[0], goal[1], False))
+        walk.triggered.connect(lambda: self.go_requested.emit(goal[0], goal[1], False, name))
         self._add_corrections(menu, None, tile)
         menu.setToolTipsVisible(True)
         self._show_menu(menu, global_pos)
@@ -2171,7 +2248,9 @@ class AreaView(QWidget):
             menu.addSeparator()
             walk = menu.addAction("Go over to them")
             walk.setEnabled(not self.locked)
-            walk.triggered.connect(lambda: self.go_requested.emit(person.x, person.y, True))
+            walk.triggered.connect(
+                lambda: self.go_requested.emit(person.x, person.y, True, person.name)
+            )
         if not person.carded and not person.held and not UNKNOWN_LABEL.match(person.name):
             menu.addSection("No card yet")
             for words, to_cast in card_choices(person.name):
@@ -2199,7 +2278,9 @@ class AreaView(QWidget):
         walk = menu.addAction("Go over to it")
         walk.setEnabled(not self.locked)
         cx, cy = thing.centre
-        walk.triggered.connect(lambda: self.go_requested.emit(int(cx), int(cy), True))
+        walk.triggered.connect(
+            lambda: self.go_requested.emit(int(cx), int(cy), True, _bare_name(thing.name))
+        )
         self._add_mark(menu, mark)
         self._add_corrections(menu, ("thing", thing.id, _bare_name(thing.name)))
         menu.setToolTipsVisible(True)
