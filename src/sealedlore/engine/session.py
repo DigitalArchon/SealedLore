@@ -152,6 +152,7 @@ from sealedlore.engine.scene_update import (
 )
 from sealedlore.engine.session_archival import LEDGER_MAX_TOKENS, ArchivalRuntime
 from sealedlore.engine.session_area import AreaRuntime
+from sealedlore.engine.session_backdrops import BackdropRuntime
 from sealedlore.engine.session_corrections import CorrectionRuntime
 from sealedlore.engine.session_edit import MapEditRuntime
 from sealedlore.engine.session_images import ImageRuntime
@@ -446,6 +447,7 @@ class StorySession(
     PlotRuntime,
     WorldRuntime,
     WorldArtRuntime,
+    BackdropRuntime,
     RegionRuntime,
     MapApprovalRuntime,
     AreaRuntime,

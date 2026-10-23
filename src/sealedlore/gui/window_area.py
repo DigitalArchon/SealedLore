@@ -37,6 +37,7 @@ from sealedlore.engine.area import (
     stairs_landing,
     tile_point,
 )
+from sealedlore.engine.backdrops import loose_things
 from sealedlore.engine.deck_plan import DRAWN_PIECES
 from sealedlore.engine.marks import mark_token, marks_in
 from sealedlore.engine.picture_shapes import FREE
@@ -55,6 +56,7 @@ from sealedlore.gui.area_render import (
     thing_picture,
 )
 from sealedlore.gui.area_view import AreaView, PlaceMark, Walker
+from sealedlore.gui.backdrop_render import backdrop_ground, source_png, trim_painting
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.isometric_view import IsometricDialog, made_when
 from sealedlore.gui.map_art import picture_sprite, pixel_art
@@ -267,13 +269,35 @@ class AreaWindow:
         # (no record of what became of them), so it stays as they move.
         built = session.built_area(area.id)
         avoid = list(built.placements) if built is not None else list(area.placements)
-        key = self._area_key(area, session, art, avoid)
-        ground = self._area_images.get(key)
-        failed = key in self._area_failed
-        if ground is None and not failed:
-            self._paint(area, key, avoid)
-        elif area.window and me.area == area.id:
-            self._paint_ahead(area, me, session, art)
+        # A painted backdrop (engine/backdrops.py) is the ground when the
+        # area has one of the map as it is now; else the tiles, and one is
+        # painted in the background when the map's pictures allow.
+        backdrop = session.backdrop_of(area)
+        if backdrop is not None:
+            key = ("backdrop", backdrop.id, area.id, px_for(area))
+            ground = self._area_images.get(key)
+            failed = key in self._area_failed
+            if ground is None and not failed:
+                ground = backdrop_ground(session.pictures.read(backdrop.file), area)
+                if ground is None:
+                    self._area_failed.add(key)
+                    failed = True
+                else:
+                    self._area_images[key] = ground
+                    while len(self._area_images) > PAINTED_KEPT:
+                        self._area_images.pop(next(iter(self._area_images)))
+            if failed:  # a backdrop that can't be read: the tiles stand in
+                backdrop = None
+        if backdrop is None:
+            key = self._area_key(area, session, art, avoid)
+            ground = self._area_images.get(key)
+            failed = key in self._area_failed
+            if ground is None and not failed:
+                self._paint(area, key, avoid)
+            elif area.window and me.area == area.id:
+                self._paint_ahead(area, me, session, art)
+            if area.id == me.area and session.backdrop_wanted(area):
+                self._start_backdrop(area, session)
         clock = session.map_clock()
         clock_text = f"Day {clock[0]}, {clock[1] // 60:02d}:{clock[1] % 60:02d}" if clock else ""
         self.area_view.set_locked(self._busy)
@@ -289,7 +313,7 @@ class AreaWindow:
                 failed=failed,
                 places=places,
                 weather=session.world().weather,
-                things=self._thing_pictures(area, session, art),
+                things=self._thing_pictures(area, session, art, loose=backdrop is not None),
             )
         if walk is not None:
             self.area_view.walk(walk[1])
@@ -478,9 +502,13 @@ class AreaWindow:
             if key not in self._area_images and key not in self._area_failed:
                 self._paint(other, key, avoid)
 
-    def _thing_pictures(self, area: Area, session, art) -> list[tuple[Placement, ThingPicture]]:
+    def _thing_pictures(
+        self, area: Area, session, art, *, loose: bool = False
+    ) -> list[tuple[Placement, ThingPicture]]:
         """Each thing in the area with its picture, drawn once and kept for
-        as long as the tile set's pictures are the same."""
+        as long as the tile set's pictures are the same. `loose`: over a
+        painted backdrop, only what the painting doesn't hold (what can be
+        carried, shoved or driven, and anything broken: `loose_things`)."""
         set_key = self._set_key(session, art)
         if self._thing_source_key != set_key:
             self._thing_source_key = set_key
@@ -488,7 +516,8 @@ class AreaWindow:
             self._thing_images.clear()
         px = px_for(area)
         out = []
-        for f in area.placements:
+        shown = loose_things(area) if loose else area.placements
+        for f in shown:
             if f.piece in DRAWN_PIECES:
                 continue  # the ground's own
             look = (f.name, f.w, f.h, f.kind, f.broken, px, area.indoor)
@@ -500,6 +529,24 @@ class AreaWindow:
                 self._thing_images[look] = picture
             out.append((f, picture))
         return out
+
+    def _start_backdrop(self, area: Area, session) -> None:
+        """Paint the area's backdrop in the background: the render the
+        painter is sent is made on the painting's thread from the tile set
+        as it is now, and the painting is trimmed to the area's shape there
+        too (gui/backdrop_render.py)."""
+        info, read = session.tile_set()
+        source = TileSource(info, read, cut_dir=self._cut_dir())
+        dress = session.story.defaults.map_density != "sparse"
+
+        def render(side: int) -> bytes | None:
+            try:
+                return source_png(area, source, side, dress=dress)
+            except Exception:  # noqa: BLE001 - said in the log, the tiles stand in
+                log.exception("The backdrop of %r couldn't be rendered", area.name)
+                return None
+
+        session.start_backdrop(area, render, lambda data: trim_painting(data, area))
 
     def _paint(self, area: Area, key: object, avoid: list[Placement]) -> None:
         if key in self._area_painting or key in self._area_failed:

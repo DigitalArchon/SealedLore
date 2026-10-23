@@ -255,7 +255,17 @@ class MapPicture(BaseModel):
     # "texture": a texture by its role ("out-roof-stone"), drawn on the fly
     # for a material the set has none of.
     subject: Literal[
-        "person", "place", "thing", "postcard", "isometric", "walker", "item", "texture"
+        "person",
+        "place",
+        "thing",
+        "postcard",
+        "isometric",
+        "walker",
+        "item",
+        "texture",
+        # The play view's ground: the program's render of an area repainted
+        # keeping its layout (engine/backdrops.py); `subject_id` the area's id.
+        "backdrop",
     ]
     # A place's or thing's id; a person's name; an item's slug.
     subject_id: str

@@ -54,7 +54,7 @@ class Person:
 class PictureJob:
     key: str
     subject: Literal[
-        "person", "place", "thing", "postcard", "isometric", "walker", "item", "texture"
+        "person", "place", "thing", "postcard", "isometric", "walker", "item", "texture", "backdrop"
     ]
     subject_id: str
     name: str

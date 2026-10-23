@@ -4954,6 +4954,110 @@ _text(
     (("side", "the side of the area walked past"), ("name", "where it leads")),
 )
 
+# Painted backdrops (engine/backdrops.py; the author, Oct 23 2026: Klein and
+# the storybook look, with the bakeoff's expander). Measured in SealedLoreDocs
+# tools/testbed/data/painted_backdrops: from the program's top-down render,
+# Klein Edit kept the layout in the storybook, ink, diorama and noir looks at
+# 1.1¢ a picture; the request's "keep every wall… exactly where it is, seen
+# from directly above" clause is the one the measurement used. The expander
+# is BFL's own upsampler instruction for its editing model (public, on
+# huggingface: flux-3-image-klein-pup), which the bakeoff found raised the
+# keep rate over NanoGPT's expansion; the facts lines are the bakeoff's
+# "facts" request, told for this app's renders.
+_text(
+    "map.backdrop.style",
+    MAP,
+    "Backdrop: the look",
+    "The look every backdrop is painted in (the author's choice, Oct 23 2026: the storybook "
+    "look won by eye in both areas measured).",
+    "a warm hand-painted storybook illustration: soft gouache brushwork, gentle lighting, "
+    "rich but muted colours, visible texture in wood, stone, earth and cloth",
+)
+_text(
+    "map.backdrop.request",
+    MAP,
+    "Backdrop: the request",
+    "The short request the expander turns into the painter's instruction, and the prompt "
+    "itself when no model that reads pictures is set: the look, the place in words, what the "
+    "render shows, and the rule that the layout stays.",
+    "Repaint this picture as {style}. It is {words}. {facts} The mid-grey bands above and "
+    "below the picture are padding and stay plain grey. Keep every wall, room, doorway, "
+    "building, path and object exactly where it is in the picture, with the same shapes and "
+    "sizes, seen from directly above as in the picture. No people, no writing, no labels, no "
+    "borders.",
+    (
+        ("style", "the look (map.backdrop.style)"),
+        ("words", "the place in words: the area's name and what the map knows of it"),
+        ("facts", "what the render shows (map.backdrop.facts.indoor or .outdoor)"),
+    ),
+)
+_text(
+    "map.backdrop.facts.indoor",
+    MAP,
+    "Backdrop: what an indoor render shows",
+    "The facts line for an indoor area's render, in the request.",
+    "What the picture shows: a top-down view of the inside of one building with the roof "
+    "removed; the flat bands are the tops of walls, the lower face of the south wall is seen "
+    "at the bottom; the open areas are floors, never ground; each gap in a wall is an open "
+    "doorway, and there are no other openings; the furniture stands where it is.{doors}",
+    (("doors", "where its doors are (door_words), or nothing"),),
+)
+_text(
+    "map.backdrop.facts.outdoor",
+    MAP,
+    "Backdrop: what an outdoor render shows",
+    "The facts line for an outdoor area's render, in the request.",
+    "What the picture shows: a top-down map of open ground; buildings are roofed boxes with "
+    "their front wall showing at the bottom and their doors drawn as framed panels, kept "
+    "exactly there; paths and roads, trees, rocks, fences and water stay where they "
+    "are.{doors}",
+    (("doors", "where the buildings' doors are (door_words), or nothing"),),
+)
+_text(
+    "map.backdrop.expander",
+    MAP,
+    "Backdrop: the expander",
+    "The system message of the call that turns the request into the painter's instruction: "
+    "BFL's published upsampler instruction for its image-editing model, verbatim. Sent to the "
+    "prompt writer (Settings → Models) with the render as the first image.",
+    (
+        "You are the prompt upsampler of an image-editing model. You see the reference "
+        "image(s), attached in order (the first image, the second image, ...), and the user's "
+        "short request. Expand it into ONE detailed, self-contained instruction: the caption "
+        "the editing model receives together with the same images. Output only the instruction "
+        "as one continuous English prose block, with no greetings, explanations, Markdown, "
+        "JSON, coordinates, ids or angle-bracket tokens. Read a vague or conversational request "
+        "as the most plausible edit of the supplied images.\n\n"
+        "Pick the voice by task shape. When one reference stays and gets bounded changes, write "
+        'an imperative editing instruction on it ("Remove the ...", "Change the ... to ...", '
+        '"Zoom in on ..."); a whole-image transformation opens with its scope ("Convert the '
+        'entire image into ...", "Apply a ... filter over the entire scene", "Horizontally flip '
+        'the entire image so that ...", "Shift the camera viewpoint to ...", then where the '
+        "major elements should now be). When the references are drawn into a newly composed "
+        "frame (combining subjects, a new scene, a garment, object or style donor), write a "
+        'generation request ("Create a photograph of ...", "Create an anime-style illustration '
+        'of ...", "Generate a new image featuring ...") that says what to take from each image, '
+        "by ordinal, and what is newly generated.\n\n"
+        "Keep every explicit edit, constraint, count, position, style cue and piece of wording, "
+        "and decide what is left open as one concrete plan. Ground everything in what is "
+        "actually visible: identify each referent unambiguously by its real appearance, never "
+        "mention content that is not there, and use every image the user attached. State every "
+        "end state concretely (which color, how large, which pose, which material) and give new "
+        "content enough appearance to be generated. Cover the knock-on effects of the change "
+        "(shadows, reflections, occlusion, perspective, scale, lighting) and say what fills a "
+        "removed region. A zoom-in names what stays in frame and which neighbors are cropped "
+        "out; an outpainting continues the scene in the same medium. Describe the change, not "
+        "the whole scene, and close an editing instruction with one compact clause naming what "
+        "stays unchanged; transferred people keep their identity, face and accessories unless "
+        "asked otherwise. Transcribe on-image text verbatim in its original language inside "
+        "double quotes, with line breaks as \\n, and match the original font, size and color "
+        "when replacing it. Name recognizable public figures, brands and landmarks you can see. "
+        "Directions are frame-relative; use no evaluative or quality words. Typical length is "
+        "50 to 150 words.\n\n"
+        "Output only the instruction."
+    ),
+)
+
 _text(
     "map.marks",
     MAP,

@@ -98,6 +98,8 @@ def job_words(job: PictureJob) -> str:
         return "a ground or roof texture"
     if job.subject == "isometric":
         return f"painting {job.name}"
+    if job.subject == "backdrop":
+        return f"the backdrop of {job.name}"
     return job.name
 
 
@@ -265,6 +267,7 @@ class WorldArtRuntime:
             "tile": getattr(self, "_tile_thread", None),
             "pictures": self._picture_thread,
             "painting": self._isometric_thread,
+            "backdrop": getattr(self, "_backdrop_thread", None),
             "regions": getattr(self, "_region_thread", None),
         }
         return "; ".join(
@@ -284,6 +287,10 @@ class WorldArtRuntime:
     @property
     def map_art_running(self) -> bool:
         thread = self._art_thread
+        return thread is not None and thread.is_alive()
+
+    def backdrop_running(self) -> bool:
+        thread = getattr(self, "_backdrop_thread", None)
         return thread is not None and thread.is_alive()
 
     def map_art_failed(self) -> list[str]:
@@ -703,11 +710,13 @@ class WorldArtRuntime:
         info: ImageModelInfo | None = None,
         plan: bytes | None = None,
         extra: dict | None = None,
+        finish: Callable[[bytes], bytes] | None = None,
     ) -> None:
         """One map picture: counted against the day's limit first, drawn,
         stripped, kept. `model` and `info` stand in for the map picture
         model's; `plan` is the picture of the map to paint from (the
-        isometric view), sent before any reference."""
+        isometric view, a backdrop), sent before any reference; `finish`
+        cuts a backdrop's padding off (and it is stripped again after)."""
         model = model or self.config.map_picture_model
         art = self.world_art
         with self._lock():
@@ -747,7 +756,9 @@ class WorldArtRuntime:
         try:
             reply = client.generate(payload)
             data = strip_metadata(reply.images[0])
-        except (ProviderError, MetadataError, IndexError) as exc:
+            if finish is not None:
+                data = strip_metadata(finish(data))
+        except (ProviderError, MetadataError, IndexError, ValueError) as exc:
             if self._art_stop:
                 return
             with self._lock():
@@ -908,7 +919,16 @@ class WorldArtRuntime:
             getattr(self, "_own_set_client", None),
             getattr(self, "_asset_client", None),
         ]
-        for client in (self._picture_client, self._isometric_client, *tile_clients):
+        backdrop_clients = [
+            getattr(self, "_backdrop_client", None),
+            getattr(self, "_backdrop_text", None),
+        ]
+        for client in (
+            self._picture_client,
+            self._isometric_client,
+            *tile_clients,
+            *backdrop_clients,
+        ):
             if client is not None:
                 try:
                     client.cancel()
@@ -922,6 +942,7 @@ class WorldArtRuntime:
             getattr(self, "_region_thread", None),
             getattr(self, "_own_set_thread", None),
             getattr(self, "_asset_thread", None),
+            getattr(self, "_backdrop_thread", None),
         )
         for thread in threads:
             if thread is not None and wait_seconds > 0:
