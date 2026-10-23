@@ -80,6 +80,10 @@ ready for full proper playthroughs yet.
   trusts emSign ECC Root CA - G3, the eMudhra root whose intermediates were
   found to have recoverable keys in October 2026, and Private Mode's client
   is on Tinfoil's current SDK, checked against NanoGPT's own.
+- **Three small fixes from play** (2.0.0b6). The quick setup offers a
+  passage length of your own; its other way in is called **Advanced setup…**;
+  and a past turn's OOC note is edited with the turn, and goes with a new
+  branch from it.
 
 ### Play on a map
 
