@@ -13,6 +13,30 @@ works as intended. Bug reports and pull requests are welcome; see
 [CONTRIBUTING.md](CONTRIBUTING.md). Free software under the AGPL (see
 [Licence](#licence)).
 
+### Beta Features Status
+
+Simple Chat is complete and should be a bug free experience. While simple by
+design, it offers features useful to basic roleplay chat. Auto summarization,
+branching, easy creation of pictures and videos, swapping mid chat to private 
+AI models with TEE and E2EE models with Tinfoil, and in memory only chat modes.
+All those are working properly and I don't expect many changes to this mode.
+
+Starting a full story from scratch or from a premise is also fully function
+and works well. Most updates to this mode will improve improved prompting,
+tweaks to features to get better responses and so on. Nothing is broken,
+but improvements will come regularly.
+
+Stories with a human authored plot. This also works quite well at the moment,
+most improvements here will be related to better integrating the plots into
+the story. Making it more natural, more consistent, etc. As above, nothing
+is broken, but there are definitely improvements to be made here.
+
+Stories with a map. THIS is very much an early beta level feature. It does 
+basically function, and I expect it to develop quickly. But there is a big gap 
+here between technically functional, and actually fun to play. So please
+do give it a go and provide any feedback about it. But, but aware it is not
+ready for full proper playthroughs yet.
+
 ### New in version 2
 
 - **Play on a map.** A story can be played on a map drawn in pixel art to
