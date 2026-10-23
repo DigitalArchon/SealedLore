@@ -265,7 +265,18 @@ def can_be_taken(name: str) -> bool:
 
 
 def is_vehicle(name: str) -> bool:
-    return VEHICLES.search(name.lower()) is not None
+    return VEHICLES.search(name.lower()) is not None and WRECKED.search(name.lower()) is None
+
+
+# A vehicle that is no vehicle any more: a wreck on the highway, a rusted
+# hulk in the barn. Fixed (it moves on Direction or Fiat alone), and so
+# painted into an area's backdrop with the rest of what stays put (Oct 23
+# 2026: the gas station's painting had no wrecks, since every vehicle was a
+# sprite over it).
+WRECKED = re.compile(
+    r"\b(wrecked|wreck|burnt-out|burned-out|burnt out|rusted|rusting|jackknifed|derelict|"
+    r"crashed|overturned|dead|gutted|stripped)\b"
+)
 
 
 def thing_class(name: str) -> str:
@@ -274,6 +285,8 @@ def thing_class(name: str) -> str:
     never disagree."""
     if is_vehicle(name):
         return "vehicle"
+    if VEHICLES.search(name.lower()) is not None:
+        return "fixed"  # a wreck (`WRECKED`)
     if can_be_taken(name):
         return "carried"
     if BUILT_IN.search(name.lower()) is not None:

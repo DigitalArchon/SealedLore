@@ -30,11 +30,13 @@ from sealedlore.models.world import MapPicture, WorldArt, WorldMap
 
 BACKDROP = "backdrop"
 # The square the picture is painted at, indoors (a 1600-wide render) and out
-# (2880): one shape in and out (grey bands above and below). 2048 outdoors
-# was tried and the endpoint refused the request as too large (HTTP 413,
-# Oct 23 2026) with the render as PNG; the measured paintings were 1536.
+# (2880): one shape in and out (grey bands above and below). The measured
+# paintings were 1536; outdoors 2048 since Oct 23 2026: a 120x72 area gets
+# 17 px a tile instead of 13, and Tinker's Row came back crisper (chimneys,
+# smoke, roof tiles) at 1.4¢ against 1.1¢. The render goes as JPEG: a 2048
+# PNG was refused as too large (HTTP 413).
 INDOOR_SIDE = 1536
-OUTDOOR_SIDE = 1536
+OUTDOOR_SIDE = 2048
 # A job that failed this often is left (as the map's other pictures).
 GIVE_UP_AFTER = 2
 # How much of the expander's reply is kept as the prompt, in characters.
@@ -88,6 +90,24 @@ def current_backdrop(world: WorldMap, art: WorldArt, area: Area) -> MapPicture |
     plan = area_plan(world, art, area.place_id)
     made = plan.made_at if plan is not None else ""
     for picture in reversed(backdrops_of(art, area.id)):
+        if picture.state != state:
+            continue
+        if made and picture.plan and picture.plan != made:
+            continue
+        return picture
+    return None
+
+
+def current_backdrop_of(world: WorldMap, art: WorldArt, place_id: str) -> MapPicture | None:
+    """`current_backdrop` for a place's own plan by its id (the board,
+    gui/world_view.py, which has no built area in hand): the latest
+    painting of it under its state, from the plan it has."""
+    if place_id not in world.places:
+        return None
+    state = isometric_state(world, place_id)
+    plan = area_plan(world, art, place_id)
+    made = plan.made_at if plan is not None else ""
+    for picture in reversed(backdrops_of(art, place_id)):
         if picture.state != state:
             continue
         if made and picture.plan and picture.plan != made:

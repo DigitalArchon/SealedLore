@@ -70,10 +70,14 @@ def test_the_request_names_the_look_the_place_and_every_door(tmp_path, story, ca
     assert "the door of The house in its" in door_words(farm)
     text = backdrop_request(house, words="the inside of The house", style="a storybook look")
     assert text.startswith(
-        "Repaint this picture as a storybook look. It is the inside of The house."
+        "Repaint this picture as a storybook look: a lavishly detailed illustrated game map of "
+        "the inside of The house, seen from directly above."
     )
     assert "top-down view of the inside of one building" in text
-    assert "Keep every wall, room, doorway, building, path and object exactly where it is" in text
+    assert (
+        "Keep the layout: every building, wall, fence, road, path, doorway, water and rock" in text
+    )
+    assert "Everything else is yours to make beautiful" in text
     assert "No people, no writing" in text
     job = backdrop_job(session.world(), session.map_art_copy(), house, words="x", style="y")
     assert job.subject == "backdrop" and job.subject_id == "house" and job.key == "backdrop:house"

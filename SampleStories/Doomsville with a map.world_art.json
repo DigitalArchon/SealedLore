@@ -176,29 +176,87 @@
      "features": [
       {
        "kind": "area",
-       "fill": "ice",
+       "fill": "trees",
        "shape": "rect",
-       "x": 5,
-       "y": 19,
+       "x": 0,
+       "y": 0,
+       "w": 40,
+       "h": 2
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "rect",
+       "x": 0,
+       "y": 2,
+       "w": 4,
+       "h": 22
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 34,
+       "y": 18,
        "w": 6,
-       "h": 4
+       "h": 6
+      },
+      {
+       "kind": "area",
+       "fill": "brush",
+       "shape": "rect",
+       "x": 4,
+       "y": 3,
+       "w": 7,
+       "h": 9
+      },
+      {
+       "kind": "area",
+       "fill": "brush",
+       "shape": "rect",
+       "x": 4,
+       "y": 13,
+       "w": 7,
+       "h": 8
+      },
+      {
+       "kind": "area",
+       "fill": "brush",
+       "shape": "rect",
+       "x": 36,
+       "y": 3,
+       "w": 4,
+       "h": 14
+      },
+      {
+       "kind": "area",
+       "fill": "ice",
+       "shape": "ellipse",
+       "x": 4,
+       "y": 16,
+       "w": 10,
+       "h": 6
       },
       {
        "kind": "fence",
        "points": [
         [
-         4,
-         18
+         12,
+         4
         ],
         [
-         11,
-         18
+         33,
+         4
         ]
        ],
        "gaps": [
         [
-         8,
-         18
+         19,
+         4
+        ],
+        [
+         20,
+         4
         ]
        ]
       },
@@ -206,12 +264,18 @@
        "kind": "fence",
        "points": [
         [
-         4,
-         18
+         12,
+         20
         ],
         [
-         4,
-         23
+         33,
+         20
+        ]
+       ],
+       "gaps": [
+        [
+         32,
+         20
         ]
        ]
       },
@@ -219,25 +283,32 @@
        "kind": "fence",
        "points": [
         [
-         11,
-         18
+         12,
+         4
         ],
         [
-         11,
-         23
+         12,
+         20
         ]
-       ]
+       ],
+       "gaps": []
       },
       {
        "kind": "fence",
        "points": [
         [
-         4,
-         23
+         33,
+         4
         ],
         [
-         11,
-         23
+         33,
+         20
+        ]
+       ],
+       "gaps": [
+        [
+         33,
+         14
         ]
        ]
       },
@@ -245,12 +316,26 @@
        "kind": "road",
        "points": [
         [
-         20,
-         23
+         19,
+         0
         ],
         [
-         20,
-         5
+         19,
+         6
+        ]
+       ],
+       "width": 2
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         21,
+         6
+        ],
+        [
+         21,
+         11
         ]
        ],
        "width": 1
@@ -259,12 +344,12 @@
        "kind": "road",
        "points": [
         [
-         20,
-         8
+         21,
+         11
         ],
         [
-         23,
-         10
+         25,
+         11
         ]
        ],
        "width": 1
@@ -273,156 +358,183 @@
        "kind": "road",
        "points": [
         [
-         20,
+         25,
+         11
+        ],
+        [
+         25,
          13
-        ],
-        [
-         30,
-         16
         ]
        ],
        "width": 1
       },
       {
        "kind": "building",
-       "name": "The farmhouse",
-       "x": 18,
-       "y": 6,
-       "w": 5,
-       "h": 3,
+       "name": "woodshed",
+       "x": 22,
+       "y": 14,
+       "w": 3,
+       "h": 2,
        "doors": [
         {
          "side": "north",
-         "at": 2
+         "at": 1
         }
        ],
-       "windows": [
-        {
-         "side": "north",
-         "at": 1
-        },
-        {
-         "side": "north",
-         "at": 2
-        },
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "outhouse",
+       "x": 14,
+       "y": 13,
+       "w": 2,
+       "h": 2,
+       "doors": [
         {
          "side": "east",
          "at": 1
-        },
-        {
-         "side": "west",
-         "at": 1
         }
-       ]
+       ],
+       "windows": []
       },
       {
        "kind": "building",
-       "name": "The barn",
-       "x": 30,
-       "y": 15,
-       "w": 5,
-       "h": 3,
+       "name": "chicken coop",
+       "x": 29,
+       "y": 6,
+       "w": 3,
+       "h": 2,
        "doors": [
         {
-         "side": "west",
+         "side": "south",
          "at": 1
         }
        ],
-       "windows": [
-        {
-         "side": "south",
-         "at": 2
-        }
-       ]
+       "windows": []
       },
       {
        "kind": "object",
        "name": "well",
-       "x": 17,
-       "y": 11
+       "x": 21,
+       "y": 12
+      },
+      {
+       "kind": "object",
+       "name": "woodpile",
+       "x": 25,
+       "y": 15
       },
       {
        "kind": "object",
        "name": "haystack",
-       "x": 27,
-       "y": 16
-      },
-      {
-       "kind": "object",
-       "name": "frozen trough",
        "x": 28,
-       "y": 18
-      },
-      {
-       "kind": "object",
-       "name": "bare oak",
-       "x": 14,
-       "y": 4
+       "y": 17
       },
       {
        "kind": "object",
        "name": "scarecrow",
-       "x": 24,
-       "y": 19
+       "x": 7,
+       "y": 8
+      },
+      {
+       "kind": "object",
+       "name": "bare oak",
+       "x": 15,
+       "y": 9
+      },
+      {
+       "kind": "object",
+       "name": "frozen trough",
+       "x": 27,
+       "y": 9
       },
       {
        "kind": "object",
        "name": "plough",
-       "x": 26,
-       "y": 13
+       "x": 31,
+       "y": 17
+      },
+      {
+       "kind": "object",
+       "name": "snowed-under car",
+       "x": 36,
+       "y": 15
+      },
+      {
+       "kind": "object",
+       "name": "propane tank",
+       "x": 16,
+       "y": 7
       }
      ]
     },
     "rows": [
-     "........................................",
-     "........................................",
-     "........................................",
-     "........................................",
-     "..............4.........................",
-     "....................=...................",
-     "..................#W+W#.................",
-     "..................W___W.................",
-     "..................#####.................",
-     "....................===.................",
-     "....................=..=................",
-     ".................1..=...................",
-     "....................=...................",
-     "....................==....6.............",
-     "....................=.====..............",
-     "....................=.....===.#####.....",
-     "....................=......2.=+___#.....",
-     "....................=.........##W##.....",
-     "....%%%%.%%%........=.......3...........",
-     "....%~~~~~~%........=...5...............",
-     "....%~~~~~~%........=...................",
-     "....%~~~~~~%........=...................",
-     "....%~~~~~~%........=...................",
-     "....%%%%%%%%........=..................."
+     "TTTTTTTTTTTTTTTTTTT==TTTTTTTTTTTTTTTTTTT",
+     "TTTTTTTTTTTTTTTTTTT==TTTTTTTTTTTTTTTTTTT",
+     "TTTT...............==...................",
+     "TTTT,,,,,,,........==...............,,,,",
+     "TTTT,,,,,,,.%%%%%%%==%%%%%%%%%%%%%..,,,,",
+     "TTTT,,,,,,,.%......==............%..,,,,",
+     "TTTT,,,,,,,.%......===.......###.%..,,,,",
+     "TTTT,,,,,,,.%...9####=.......#+#.%..,,,,",
+     "TTTT,,,4,,,.%....#__#=...........%..,,,,",
+     "TTTT,,,,,,,.%..5.##+#=.....6.....%..,,,,",
+     "TTTT,,,,,,,.%........=...........%..,,,,",
+     "TTTT,,,,,,,.%........=====.......%..,,,,",
+     "TTTT........%........1...#######.%..,,,,",
+     "TTTT,,,,,,,.%.##.........#_____#.%..,,,,",
+     "TTTT,,,,,,,.%.#+......#+##_____#....,,,,",
+     "TTTT,,,,,,,.%.........######+###.%..8,,,",
+     "TTTT,,~~~~~~%....................%..,,,,",
+     "TTTT,~~~~~~~%...............3..7.%......",
+     "TTTT~~~~~~~~%~...................%.TTTT.",
+     "TTTT~~~~~~~~%~...................%TTTTTT",
+     "TTTT,~~~~~~~%%%%%%%%%%%%%%%%%%%%.%TTTTTT",
+     "TTTT..~~~~~~......................TTTTTT",
+     "TTTT..............................TTTTTT",
+     "TTTT...............................TTTT."
     ],
     "objects": {
      "1": "well",
-     "2": "haystack",
-     "3": "frozen trough",
-     "4": "bare oak",
-     "5": "scarecrow",
-     "6": "plough"
+     "2": "woodpile",
+     "3": "haystack",
+     "4": "scarecrow",
+     "5": "bare oak",
+     "6": "frozen trough",
+     "7": "plough",
+     "8": "snowed-under car",
+     "9": "propane tank"
     },
     "labels": {
-     "The farmhouse": [
-      20,
+     "woodshed": [
+      23,
+      15
+     ],
+     "outhouse": [
+      15,
+      14
+     ],
+     "chicken coop": [
+      30,
       7
      ],
+     "The farmhouse": [
+      19,
+      8
+     ],
      "The barn": [
-      32,
-      16
+      28,
+      14
      ],
      "The frozen pond": [
-      8,
-      21
+      9,
+      19
      ]
     },
-    "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-14T20:40:22.135132+00:00"
+    "model": "showcase",
+    "made_at": "2026-10-23T20:11:04.621194+00:00",
+    "levels": []
    }
   },
   "44685240-e21f-5878-9b9c-276755d0b86e": {
@@ -434,180 +546,287 @@
      "features": [
       {
        "kind": "area",
-       "fill": "ice",
-       "shape": "rect",
+       "fill": "trees",
+       "shape": "ellipse",
        "x": 0,
-       "y": 9,
-       "w": 40,
-       "h": 5
-      },
-      {
-       "kind": "area",
-       "fill": "brush",
-       "shape": "ellipse",
-       "x": 2,
-       "y": 14,
-       "w": 10,
-       "h": 7
-      },
-      {
-       "kind": "area",
-       "fill": "brush",
-       "shape": "ellipse",
-       "x": 28,
-       "y": 2,
+       "y": 0,
        "w": 9,
-       "h": 6
+       "h": 7
       },
       {
        "kind": "area",
        "fill": "trees",
        "shape": "ellipse",
        "x": 30,
-       "y": 15,
-       "w": 9,
+       "y": 0,
+       "w": 10,
+       "h": 6
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 0,
+       "y": 17,
+       "w": 8,
        "h": 7
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 31,
+       "y": 18,
+       "w": 9,
+       "h": 6
+      },
+      {
+       "kind": "area",
+       "fill": "brush",
+       "shape": "rect",
+       "x": 9,
+       "y": 2,
+       "w": 9,
+       "h": 4
+      },
+      {
+       "kind": "area",
+       "fill": "brush",
+       "shape": "rect",
+       "x": 24,
+       "y": 1,
+       "w": 6,
+       "h": 3
+      },
+      {
+       "kind": "area",
+       "fill": "brush",
+       "shape": "rect",
+       "x": 8,
+       "y": 19,
+       "w": 10,
+       "h": 3
+      },
+      {
+       "kind": "area",
+       "fill": "brush",
+       "shape": "rect",
+       "x": 26,
+       "y": 19,
+       "w": 6,
+       "h": 4
+      },
+      {
+       "kind": "area",
+       "fill": "rock",
+       "shape": "rect",
+       "x": 2,
+       "y": 8,
+       "w": 4,
+       "h": 2
+      },
+      {
+       "kind": "area",
+       "fill": "rock",
+       "shape": "rect",
+       "x": 34,
+       "y": 14,
+       "w": 4,
+       "h": 2
+      },
+      {
+       "kind": "area",
+       "fill": "rock",
+       "shape": "rect",
+       "x": 27,
+       "y": 8,
+       "w": 3,
+       "h": 2
+      },
+      {
+       "kind": "area",
+       "fill": "brush",
+       "shape": "rect",
+       "x": 0,
+       "y": 9,
+       "w": 40,
+       "h": 1
+      },
+      {
+       "kind": "area",
+       "fill": "brush",
+       "shape": "rect",
+       "x": 0,
+       "y": 15,
+       "w": 40,
+       "h": 1
+      },
+      {
+       "kind": "area",
+       "fill": "ice",
+       "shape": "rect",
+       "x": 0,
+       "y": 10,
+       "w": 40,
+       "h": 5
+      },
+      {
+       "kind": "area",
+       "fill": "rock",
+       "shape": "rect",
+       "x": 14,
+       "y": 10,
+       "w": 2,
+       "h": 1
+      },
+      {
+       "kind": "area",
+       "fill": "rock",
+       "shape": "rect",
+       "x": 25,
+       "y": 14,
+       "w": 2,
+       "h": 1
       },
       {
        "kind": "road",
        "points": [
         [
-         0,
-         3
+         19,
+         0
         ],
         [
-         16,
-         3
+         19,
+         23
         ]
        ],
        "width": 2
       },
       {
-       "kind": "passage",
+       "kind": "fence",
        "points": [
         [
-         4,
-         12
+         18,
+         10
         ],
         [
-         10,
-         16
-        ],
-        [
-         16,
-         20
+         18,
+         14
         ]
        ],
-       "width": 1
+       "gaps": []
       },
       {
-       "kind": "building",
-       "name": "Bridge",
-       "x": 6,
-       "y": 8,
-       "w": 12,
-       "h": 7,
-       "doors": [
-        {
-         "side": "west",
-         "at": 3
-        },
-        {
-         "side": "east",
-         "at": 3
-        }
+       "kind": "fence",
+       "points": [
+        [
+         21,
+         10
+        ],
+        [
+         21,
+         14
+        ]
        ],
-       "windows": []
-      },
-      {
-       "kind": "area",
-       "fill": "rubble",
-       "shape": "rect",
-       "x": 6,
-       "y": 8,
-       "w": 12,
-       "h": 2
+       "gaps": []
       },
       {
        "kind": "object",
-       "name": "snowdrift",
-       "x": 4,
-       "y": 15
-      },
-      {
-       "kind": "object",
-       "name": "wrecked cart",
+       "name": "wrecked car",
        "x": 20,
-       "y": 12
+       "y": 5
       },
       {
        "kind": "object",
-       "name": "bones",
-       "x": 25,
-       "y": 14
+       "name": "road sign, shot through",
+       "x": 17,
+       "y": 3
       },
       {
        "kind": "object",
-       "name": "barrel",
-       "x": 8,
+       "name": "abandoned sled",
+       "x": 23,
        "y": 17
       },
       {
        "kind": "object",
-       "name": "barricade",
-       "x": 18,
+       "name": "cold campfire",
+       "x": 10,
        "y": 7
       },
       {
        "kind": "object",
-       "name": "corpse",
-       "x": 12,
-       "y": 19
+       "name": "fallen pine",
+       "x": 29,
+       "y": 17
+      },
+      {
+       "kind": "object",
+       "name": "snowdrift",
+       "x": 16,
+       "y": 20
+      },
+      {
+       "kind": "object",
+       "name": "culvert pipe",
+       "x": 24,
+       "y": 9
+      },
+      {
+       "kind": "object",
+       "name": "frozen deer carcass",
+       "x": 6,
+       "y": 13
+      },
+      {
+       "kind": "object",
+       "name": "stacked firewood",
+       "x": 11,
+       "y": 18
       }
      ]
     },
     "rows": [
-     "........................................",
-     "........................................",
-     "..............................,,,,,.....",
-     "==================...........,,,,,,,....",
-     "=================...........,,,,,,,,,...",
-     "............................,,,,,,,,,...",
-     ".............................,,,,,,,....",
-     "..................5...........,,,,,.....",
-     "......::::::::::::......................",
-     "~~~~~~::::::::::::~~~~~~~~~~~~~~~~~~~~~~",
-     "~~~~~~#__________#~~~~~~~~~~~~~~~~~~~~~~",
-     "~~~~~~+__________+~~~~~~~~~~~~~~~~~~~~~~",
-     "~~~~_~#__________#~~2~~~~~~~~~~~~~~~~~~~",
-     "~~~~~_#__________#~~~~~~~~~~~~~~~~~~~~~~",
-     "....,,############.......3..............",
-     "...,1,,,__,.....................TTTTT...",
-     "..,,,,,,,,_,...................TTTTTTT..",
-     "..,,,,,,4,,__.................TTTTTTTTT.",
-     "..,,,,,,,,,,._................TTTTTTTTT.",
-     "...,,,,,,,,.6.__..............TTTTTTTTT.",
-     "....,,,,,,......_..............TTTTTTT..",
-     "................................TTTTT...",
-     "........................................",
-     "........................................"
+     "..TTTTT............==...........TTTTTT..",
+     ".TTTTTTT...........==...,,,,,,.TTTTTTTT.",
+     "TTTTTTTTT,,,,,,,,,.==...,,,,,,TTTTTTTTTT",
+     "TTTTTTTTT,,,,,,,,2.==...,,,,,,TTTTTTTTTT",
+     "TTTTTTTTT,,,,,,,,,.==..........TTTTTTTT.",
+     ".TTTTTTT.,,,,,,,,,.=1...........TTTTTT..",
+     "..TTTTT............==...................",
+     "..........4........==...................",
+     "..^^^^.............==......^^^..........",
+     ",,,,,,,,,,,,,,,,,,,==,,,7,,,,,,,,,,,,,,,",
+     "~~~~~~~~~~~~~~^^~~%==%~~~~~~~~~~~~~~~~~~",
+     "~~~~~~~~~~~~~~~~~~%==%~~~~~~~~~~~~~~~~~~",
+     "~~~~~~~~~~~~~~~~~~%==%~~~~~~~~~~~~~~~~~~",
+     "~~~~~~8~~~~~~~~~~~%==%~~~~~~~~~~~~~~~~~~",
+     "~~~~~~~~~~~~~~~~~~%==%~~~^^~~~~~~~~~~~~~",
+     ",,,,,,,,,,,,,,,,,,,==,,,,,,,,,,,,,,,,,,,",
+     "...................==...................",
+     "..TTTT.............==..3.....5..........",
+     ".TTTTTT....9.......==............TTTTT..",
+     "TTTTTTTT,,,,,,,,,,.==.....,,,,,,TTTTTTT.",
+     "TTTTTTTT,,,,,,,,6,.==.....,,,,,,TTTTTTTT",
+     "TTTTTTTT,,,,,,,,,,.==.....,,,,,,TTTTTTTT",
+     ".TTTTTT............==.....,,,,,,TTTTTTT.",
+     "..TTTT.............==............TTTTT.."
     ],
     "objects": {
-     "1": "snowdrift",
-     "2": "wrecked cart",
-     "3": "bones",
-     "4": "barrel",
-     "5": "barricade",
-     "6": "corpse"
+     "1": "wrecked car",
+     "2": "road sign, shot through",
+     "3": "abandoned sled",
+     "4": "cold campfire",
+     "5": "fallen pine",
+     "6": "snowdrift",
+     "7": "culvert pipe",
+     "8": "frozen deer carcass",
+     "9": "stacked firewood"
     },
-    "labels": {
-     "Bridge": [
-      12,
-      11
-     ]
-    },
-    "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-14T20:40:30.552070+00:00"
+    "labels": {},
+    "model": "showcase",
+    "made_at": "2026-10-23T20:11:04.621194+00:00",
+    "levels": []
    }
   },
   "4460da54-f44d-59cb-ba89-2b224e6466ef": {
@@ -904,7 +1123,8 @@
      ]
     },
     "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-14T20:47:40.927118+00:00"
+    "made_at": "2026-10-14T20:47:40.927118+00:00",
+    "levels": []
    }
   },
   "052cc80b-504a-5a32-b3ec-d76d2713733d": {
@@ -1197,7 +1417,8 @@
      ]
     },
     "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-14T20:47:45.765687+00:00"
+    "made_at": "2026-10-14T20:47:45.765687+00:00",
+    "levels": []
    }
   },
   "3d510125-2878-5feb-9b9b-41c25992393b": {
@@ -1523,7 +1744,8 @@
      ]
     },
     "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-14T20:47:47.381926+00:00"
+    "made_at": "2026-10-14T20:47:47.381926+00:00",
+    "levels": []
    }
   },
   "a3f8414e-f7dc-581a-b9f1-fc0f98688d84": {
@@ -1534,344 +1756,1401 @@
      "ground": "snow",
      "features": [
       {
-       "kind": "road",
-       "points": [
-        [
-         39,
-         2
-        ],
-        [
-         39,
-         45
-        ]
-       ],
-       "width": 3
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 0,
+       "y": 0,
+       "w": 14,
+       "h": 12
       },
       {
-       "kind": "road",
-       "points": [
-        [
-         0,
-         28
-        ],
-        [
-         37,
-         28
-        ]
-       ],
-       "width": 2
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 66,
+       "y": 0,
+       "w": 14,
+       "h": 10
       },
       {
-       "kind": "road",
-       "points": [
-        [
-         42,
-         28
-        ],
-        [
-         79,
-         30
-        ]
-       ],
-       "width": 2
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 0,
+       "y": 38,
+       "w": 12,
+       "h": 10
       },
       {
-       "kind": "road",
-       "points": [
-        [
-         39,
-         17
-        ],
-        [
-         47,
-         18
-        ]
-       ],
-       "width": 1
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 68,
+       "y": 36,
+       "w": 12,
+       "h": 12
       },
       {
-       "kind": "road",
-       "points": [
-        [
-         31,
-         30
-        ],
-        [
-         31,
-         36
-        ]
-       ],
-       "width": 1
+       "kind": "area",
+       "fill": "brush",
+       "shape": "rect",
+       "x": 1,
+       "y": 14,
+       "w": 12,
+       "h": 20
       },
       {
-       "kind": "road",
+       "kind": "area",
+       "fill": "brush",
+       "shape": "rect",
+       "x": 67,
+       "y": 12,
+       "w": 12,
+       "h": 20
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 6,
+       "y": 32,
+       "w": 5,
+       "h": 3
+      },
+      {
+       "kind": "wall",
        "points": [
         [
-         39,
-         33
+         6,
+         32
         ],
         [
-         49,
+         10,
+         32
+        ]
+       ],
+       "gaps": [
+        [
+         8,
+         32
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         6,
+         32
+        ],
+        [
+         6,
          34
         ]
        ],
+       "gaps": []
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 22,
+       "y": 46,
+       "w": 4,
+       "h": 2
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         22,
+         46
+        ],
+        [
+         25,
+         46
+        ]
+       ],
+       "gaps": [
+        [
+         24,
+         46
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         22,
+         46
+        ],
+        [
+         22,
+         47
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 30,
+       "y": 45,
+       "w": 5,
+       "h": 3
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         30,
+         45
+        ],
+        [
+         34,
+         45
+        ]
+       ],
+       "gaps": [
+        [
+         32,
+         45
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         30,
+         45
+        ],
+        [
+         30,
+         47
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 48,
+       "y": 46,
+       "w": 5,
+       "h": 2
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         48,
+         46
+        ],
+        [
+         52,
+         46
+        ]
+       ],
+       "gaps": [
+        [
+         50,
+         46
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         48,
+         46
+        ],
+        [
+         48,
+         47
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 56,
+       "y": 45,
+       "w": 4,
+       "h": 3
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         56,
+         45
+        ],
+        [
+         59,
+         45
+        ]
+       ],
+       "gaps": [
+        [
+         58,
+         45
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         56,
+         45
+        ],
+        [
+         56,
+         47
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 66,
+       "y": 26,
+       "w": 4,
+       "h": 3
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         66,
+         26
+        ],
+        [
+         69,
+         26
+        ]
+       ],
+       "gaps": [
+        [
+         68,
+         26
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         66,
+         26
+        ],
+        [
+         66,
+         28
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 67,
+       "y": 31,
+       "w": 5,
+       "h": 3
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         67,
+         31
+        ],
+        [
+         71,
+         31
+        ]
+       ],
+       "gaps": [
+        [
+         69,
+         31
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         67,
+         31
+        ],
+        [
+         67,
+         33
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 4,
+       "y": 25,
+       "w": 4,
+       "h": 3
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         4,
+         25
+        ],
+        [
+         7,
+         25
+        ]
+       ],
+       "gaps": [
+        [
+         6,
+         25
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         4,
+         25
+        ],
+        [
+         4,
+         27
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 10,
+       "y": 28,
+       "w": 3,
+       "h": 3
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         10,
+         28
+        ],
+        [
+         12,
+         28
+        ]
+       ],
+       "gaps": [
+        [
+         11,
+         28
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         10,
+         28
+        ],
+        [
+         10,
+         30
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         16,
+         4
+        ],
+        [
+         63,
+         4
+        ]
+       ],
+       "gaps": [
+        [
+         39,
+         4
+        ],
+        [
+         40,
+         4
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         16,
+         43
+        ],
+        [
+         63,
+         43
+        ]
+       ],
+       "gaps": [
+        [
+         39,
+         43
+        ],
+        [
+         40,
+         43
+        ]
+       ]
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         16,
+         4
+        ],
+        [
+         16,
+         43
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         63,
+         4
+        ],
+        [
+         63,
+         43
+        ]
+       ],
+       "gaps": [
+        [
+         63,
+         23
+        ],
+        [
+         63,
+         24
+        ]
+       ]
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         39,
+         0
+        ],
+        [
+         39,
+         47
+        ]
+       ],
+       "width": 2
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         17,
+         23
+        ],
+        [
+         79,
+         23
+        ]
+       ],
+       "width": 2
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         27,
+         6
+        ],
+        [
+         27,
+         41
+        ]
+       ],
        "width": 1
       },
       {
-       "kind": "wall",
+       "kind": "road",
        "points": [
         [
-         20,
-         3
+         52,
+         6
         ],
         [
-         60,
-         3
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         60,
-         3
-        ],
-        [
-         60,
-         44
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         60,
-         44
-        ],
-        [
-         20,
-         44
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         20,
-         44
-        ],
-        [
-         20,
-         3
-        ]
-       ]
-      },
-      {
-       "kind": "fence",
-       "points": [
-        [
-         42,
-         45
-        ],
-        [
-         42,
-         47
+         52,
+         41
         ]
        ],
-       "gaps": [
-        [
-         42,
-         46
-        ]
-       ]
+       "width": 1
       },
       {
-       "kind": "fence",
+       "kind": "road",
        "points": [
         [
-         36,
-         45
+         17,
+         12
         ],
         [
-         36,
-         47
+         38,
+         12
         ]
        ],
-       "gaps": [
+       "width": 1
+      },
+      {
+       "kind": "road",
+       "points": [
         [
-         36,
-         46
+         41,
+         35
+        ],
+        [
+         62,
+         35
         ]
-       ]
+       ],
+       "width": 1
       },
       {
-       "kind": "object",
-       "name": "car barricade",
-       "x": 38,
-       "y": 46
-      },
-      {
-       "kind": "object",
-       "name": "tyre stack",
-       "x": 41,
-       "y": 46
-      },
-      {
-       "kind": "object",
-       "name": "scrap pile",
+       "kind": "building",
+       "name": "house",
        "x": 36,
-       "y": 47
+       "y": 6,
+       "w": 3,
+       "h": 3,
+       "doors": [
+        {
+         "side": "east",
+         "at": 1
+        }
+       ],
+       "windows": []
       },
       {
-       "kind": "object",
-       "name": "water tower",
-       "x": 56,
-       "y": 8
+       "kind": "building",
+       "name": "house",
+       "x": 37,
+       "y": 10,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "east",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "shed",
+       "x": 35,
+       "y": 13,
+       "w": 4,
+       "h": 2,
+       "doors": [
+        {
+         "side": "east",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "house",
+       "x": 36,
+       "y": 16,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "east",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "cabin",
+       "x": 36,
+       "y": 19,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "east",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "house",
+       "x": 37,
+       "y": 25,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "east",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "bunkhouse",
+       "x": 35,
+       "y": 31,
+       "w": 4,
+       "h": 2,
+       "doors": [
+        {
+         "side": "east",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "house",
+       "x": 36,
+       "y": 34,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "east",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "house",
+       "x": 41,
+       "y": 6,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "cabin",
+       "x": 41,
+       "y": 9,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "house",
+       "x": 41,
+       "y": 19,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "bunkhouse",
+       "x": 41,
+       "y": 31,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "house",
+       "x": 41,
+       "y": 36,
+       "w": 3,
+       "h": 3,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "house",
+       "x": 18,
+       "y": 20,
+       "w": 3,
+       "h": 3,
+       "doors": [
+        {
+         "side": "south",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "bunkhouse",
+       "x": 22,
+       "y": 20,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "south",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "house",
+       "x": 25,
+       "y": 20,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "south",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "workshop",
+       "x": 28,
+       "y": 20,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "south",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "house",
+       "x": 31,
+       "y": 20,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "south",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "house",
+       "x": 44,
+       "y": 20,
+       "w": 3,
+       "h": 3,
+       "doors": [
+        {
+         "side": "south",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "storehouse",
+       "x": 48,
+       "y": 20,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "south",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "house",
+       "x": 53,
+       "y": 20,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "south",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "bunkhouse",
+       "x": 57,
+       "y": 20,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "south",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "house",
+       "x": 24,
+       "y": 13,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "east",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "workshop",
+       "x": 24,
+       "y": 25,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "east",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "house",
+       "x": 24,
+       "y": 29,
+       "w": 2,
+       "h": 3,
+       "doors": [
+        {
+         "side": "east",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "house",
+       "x": 24,
+       "y": 34,
+       "w": 2,
+       "h": 3,
+       "doors": [
+        {
+         "side": "east",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "house",
+       "x": 53,
+       "y": 7,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "shed",
+       "x": 53,
+       "y": 11,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "house",
+       "x": 53,
+       "y": 15,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "cabin",
+       "x": 53,
+       "y": 25,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "house",
+       "x": 53,
+       "y": 29,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "bunkhouse",
+       "x": 53,
+       "y": 33,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "house",
+       "x": 53,
+       "y": 37,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         20,
+         7
+        ],
+        [
+         20,
+         16
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         20,
+         16
+        ],
+        [
+         26,
+         16
+        ]
+       ],
+       "gaps": [
+        [
+         23,
+         16
+        ]
+       ]
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "rect",
+       "x": 18,
+       "y": 8,
+       "w": 2,
+       "h": 2
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "rect",
+       "x": 18,
+       "y": 14,
+       "w": 2,
+       "h": 2
+      },
+      {
+       "kind": "area",
+       "fill": "brush",
+       "shape": "rect",
+       "x": 55,
+       "y": 26,
+       "w": 6,
+       "h": 3
+      },
+      {
+       "kind": "area",
+       "fill": "brush",
+       "shape": "rect",
+       "x": 55,
+       "y": 30,
+       "w": 6,
+       "h": 3
+      },
+      {
+       "kind": "area",
+       "fill": "brush",
+       "shape": "rect",
+       "x": 18,
+       "y": 37,
+       "w": 6,
+       "h": 4
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         54,
+         25
+        ],
+        [
+         61,
+         25
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         54,
+         33
+        ],
+        [
+         61,
+         33
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "rect",
+       "x": 45,
+       "y": 38,
+       "w": 3,
+       "h": 2
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "rect",
+       "x": 30,
+       "y": 7,
+       "w": 2,
+       "h": 2
       },
       {
        "kind": "object",
        "name": "steeple",
-       "x": 28,
-       "y": 14
+       "x": 24,
+       "y": 8
       },
       {
        "kind": "object",
-       "name": "lantern",
-       "x": 35,
-       "y": 28
-      },
-      {
-       "kind": "object",
-       "name": "lantern",
-       "x": 44,
-       "y": 29
-      },
-      {
-       "kind": "object",
-       "name": "lantern",
-       "x": 39,
-       "y": 40
-      },
-      {
-       "kind": "object",
-       "name": "lantern",
-       "x": 39,
-       "y": 12
-      },
-      {
-       "kind": "object",
-       "name": "watch fire",
-       "x": 39,
-       "y": 4
+       "name": "water tower",
+       "x": 58,
+       "y": 9
       },
       {
        "kind": "object",
        "name": "well",
-       "x": 39,
-       "y": 24
+       "x": 42,
+       "y": 22
+      },
+      {
+       "kind": "object",
+       "name": "watch fire",
+       "x": 41,
+       "y": 5
+      },
+      {
+       "kind": "object",
+       "name": "watch fire",
+       "x": 38,
+       "y": 42
+      },
+      {
+       "kind": "object",
+       "name": "car barricade",
+       "x": 36,
+       "y": 44
+      },
+      {
+       "kind": "object",
+       "name": "tyre stack",
+       "x": 42,
+       "y": 44
+      },
+      {
+       "kind": "object",
+       "name": "scrap pile",
+       "x": 64,
+       "y": 22
+      },
+      {
+       "kind": "object",
+       "name": "lantern",
+       "x": 37,
+       "y": 25
       }
      ]
     },
     "rows": [
-     "................................................................................",
-     "................................................................................",
-     ".......................................===......................................",
-     "....................#########################################...................",
-     "....................#..................===..................#...................",
-     "....................#..................===..................#...................",
-     "....................#..................===..................#...................",
-     "....................#..................===..................#...................",
-     "....................#..................===..............4...#...................",
-     "....................#..................===..................#...................",
-     "....................#..................===..................#...................",
-     "....................#..................===..................#...................",
-     "....................#..................9==..................#...................",
-     "....................#..................===..................#...................",
-     "....................#......####........===..................#...................",
-     "....................#......#__#........===..................#...................",
-     "....................#......##+#........===..................#...................",
-     "....................#..................====....####.........#...................",
-     "....................#..................===.====#__#.........#...................",
-     "....................#..................===.....##+#.........#...................",
-     "....................#..................===..................#...................",
-     "....................#..................===..................#...................",
-     "....................#..................===..................#...................",
-     "....................#..................===..................#...................",
-     "....................#..................===..................#...................",
-     "....................#..................===..................#...................",
-     "....................#..................===..................#...................",
-     "....................#..................===..................#...................",
-     "====================#==============6=================.......#...................",
-     "====================#=================.=====7===============#==========.........",
-     "....................#..........=.......===..........========#===================",
-     "....................#..........=.......===..................#.........==========",
-     "....................#..........=.......===..................#...................",
-     "....................#..........=.......=====................#...................",
-     "....................#..........=.......===..======####......#...................",
-     "....................#..........=.......===........#__#......#...................",
-     "....................#..........=.......===........##+#......#...................",
-     "....................#........####......===..................#...................",
-     "....................#........#__#......===..................#...................",
-     "....................#........##+#......===..................#...................",
-     "....................#..................8==..................#...................",
-     "....................#..................===..................#...................",
-     "....................#..................===..................#...................",
-     "....................#..................===..................#...................",
-     "....................#########################################...................",
-     "....................................%..===%.....................................",
-     "......................................1=.2......................................",
-     "....................................3..=..%....................................."
+     "....TTTTTT.............................==.............................TTTTTT....",
+     "..TTTTTTTTTT...........................==...........................TTTTTTTTTT..",
+     ".TTTTTTTTTTTT..........................==..........................TTTTTTTTTTTT.",
+     ".TTTTTTTTTTTT..........................==.........................TTTTTTTTTTTTTT",
+     "TTTTTTTTTTTTTT..#######################==#######################..TTTTTTTTTTTTTT",
+     "TTTTTTTTTTTTTT..#......................==4.....................#..TTTTTTTTTTTTTT",
+     "TTTTTTTTTTTTTT..#..........=........###==##.........=..........#..TTTTTTTTTTTTTT",
+     "TTTTTTTTTTTTTT..#...%......=..TT....#_+==+#.........=###.......#...TTTTTTTTTTTT.",
+     ".TTTTTTTTTTTT...#.TT%...1..=..TT....###==...........=+##.......#....TTTTTTTTTT..",
+     ".TTTTTTTTTTTT...#.TT%####..=...........==###........=.....2....#......TTTTTT....",
+     "..TTTTTTTTTT....#...%#__#..=.........##==+##........=..........#................",
+     "....TTTTTT......#...%##+#..=.........#+==...........=###.......#................",
+     "................#===%====================...........=+##.......#...,,,,,,,,,,,,.",
+     "................#...%...##.=.......####==...........=..........#...,,,,,,,,,,,,.",
+     ".,,,,,,,,,,,,...#.TT%...#+.=.......###+==...........=..........#...,,,,,,,,,,,,.",
+     ".,,,,,,,,,,,,...#.TT%......=...........==.####......=##........#...,,,,,,,,,,,,.",
+     ".,,,,,,,,,,,,...#...%%%.%%%=........###==.#__#......=+#........#...,,,,,,,,,,,,.",
+     ".,,,,,,,,,,,,...#..........=........##+==.##+#......=..........#...,,,,,,,,,,,,.",
+     ".,,,,,,,,,,,,...#..........=...........==...........=..........#...,,,,,,,,,,,,.",
+     ".,,,,,,,,,,,,...#..........=........###==##.........=..........#...,,,,,,,,,,,,.",
+     ".,,,,,,,,,,,,...#.###.##.##=##.###..##+==+#.###.##..=###.###...#...,,,,,,,,,,,,.",
+     ".,,,,,,,,,,,,...#.#_#.#+.#+=#+.#+#.....==...#_#.#+..=#+#.#+#...#...,,,,,,,,,,,,.",
+     ".,,,,,,,,,,,,...#.#+#......=...........==.3.#+#.....=..........#8..,,,,,,,,,,,,.",
+     ".,,,,,,,,,,,,...#===============================================================",
+     ".,,,,,,,,,,,,...#===============================================================",
+     ".,,,##:#,,,,,...#.......##.=.........9#==...........=#%%%%%%%%.#...,,,,,,,,,,,,.",
+     ".,,,#:::,,,,,...#.......#+.=.........#+==.####......=+#,,,,,,..#..##:#,,,,,,,,,.",
+     ".,,,#:::,,,,,...#..........=...........==.#__#......=..,,,,,,..#..#:::,,,,,,,,,.",
+     ".,,,,,,,,,#:#...#..........=...........==.##+#......=..,,,,,,..#..#:::,,,,,,,,,.",
+     ".,,,,,,,,,#::...#.......##.=...........==...........=###.......#...,,,,,,,,,,,,.",
+     ".,,,,,,,,,#::...#.......#+.=...........==...........=+#,,,,,,..#...,,,,,,,,,,,,.",
+     ".,,,,,,,,,,,,...#.......##.=.......####==##.........=..,,,,,,..#...##:##,,,,,,,.",
+     ".,,,,,##:##,,...#..........=.......###+==+#.........=..,,,,,,..#...#::::........",
+     ".,,,,,#::::,,...#..........=...........==...........=#%%%%%%%%.#...#::::........",
+     "......#::::.....#.......##.=........###==...........=+#........#................",
+     "................#.......#+.=........##+========================#................",
+     "................#.......##.=...........==###........=..........#........TTTT....",
+     "................#.,,,,,,...=.....####..==+_#........=###.......#......TTTTTTTT..",
+     "...TTTTTT.......#.,,,,,,...=.....#__#..==###.TTT....=+##.......#.....TTTTTTTTTT.",
+     "..TTTTTTTT......#.,,,,,,...=.....##+#..==....TTT....=..........#.....TTTTTTTTTT.",
+     ".TTTTTTTTTT.....#.,,,,,,...=...........==...........=..........#....TTTTTTTTTTTT",
+     "TTTTTTTTTTTT....#..........=...........==...........=..........#....TTTTTTTTTTTT",
+     "TTTTTTTTTTTT....#.....................5==......................#....TTTTTTTTTTTT",
+     "TTTTTTTTTTTT....#######################==#######################....TTTTTTTTTTTT",
+     "TTTTTTTTTTTT........................6..==.7..........................TTTTTTTTTT.",
+     ".TTTTTTTTTT...................##:##....==...............##:#.........TTTTTTTTTT.",
+     "..TTTTTTTT............##:#....#::::....==.......##:##...#:::..........TTTTTTTT..",
+     "...TTTTTT.............#:::....#::::....==.......#::::...#:::............TTTT...."
     ],
     "objects": {
-     "1": "car barricade",
-     "2": "tyre stack",
-     "3": "scrap pile",
-     "4": "water tower",
-     "5": "steeple",
-     "6": "lantern",
-     "7": "lantern",
-     "8": "lantern",
+     "1": "steeple",
+     "2": "water tower",
+     "3": "well",
+     "4": "watch fire",
+     "5": "watch fire",
+     "6": "car barricade",
+     "7": "tyre stack",
+     "8": "scrap pile",
      "9": "lantern"
     },
     "labels": {
+     "house": [
+      54,
+      38
+     ],
+     "shed": [
+      54,
+      12
+     ],
+     "cabin": [
+      54,
+      26
+     ],
+     "bunkhouse": [
+      54,
+      34
+     ],
+     "workshop": [
+      25,
+      26
+     ],
+     "storehouse": [
+      49,
+      21
+     ],
      "The diner": [
-      31,
+      35,
       38
      ],
      "The clinic": [
-      52,
-      35
+      44,
+      16
      ],
      "The church": [
-      29,
-      15
+      23,
+      10
      ],
      "The general store": [
-      49,
-      18
+      44,
+      27
      ],
      "The south gate": [
-      39,
-      46
+      40,
+      44
      ],
      "Main street": [
       40,
       29
      ],
      "The water tower": [
-      57,
+      58,
       8
      ],
      "The north gate": [
-      39,
-      1
+      40,
+      3
      ]
     },
-    "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-14T20:47:52.128726+00:00"
+    "model": "showcase",
+    "made_at": "2026-10-23T20:11:04.621194+00:00",
+    "levels": []
    }
   },
   "340babf7-cb13-50ff-9bc6-7e62562f78e8": {
@@ -2153,7 +3432,8 @@
      ]
     },
     "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-14T20:48:01.023660+00:00"
+    "made_at": "2026-10-14T20:48:01.023660+00:00",
+    "levels": []
    }
   },
   "8e038cdb-bddd-51cd-8a87-13b93e946124": {
@@ -2407,7 +3687,8 @@
      ]
     },
     "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-14T20:48:03.842701+00:00"
+    "made_at": "2026-10-14T20:48:03.842701+00:00",
+    "levels": []
    }
   },
   "12b94aab-62a5-5f99-9b6d-e4c705b6f829": {
@@ -2694,7 +3975,1048 @@
      ]
     },
     "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-14T20:48:05.720201+00:00"
+    "made_at": "2026-10-14T20:48:05.720201+00:00",
+    "levels": []
+   }
+  },
+  "17c4eb3e-b1d7-5157-a9e4-c7bb68f56690": {
+   "": {
+    "place_id": "17c4eb3e-b1d7-5157-a9e4-c7bb68f56690",
+    "state": "",
+    "spec": {
+     "ground": "snow",
+     "features": [
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 23,
+       "y": 19,
+       "w": 5,
+       "h": 4
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 0,
+       "y": 15,
+       "w": 7,
+       "h": 3
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 12,
+       "y": 15,
+       "w": 6,
+       "h": 4
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 25,
+       "y": 4,
+       "w": 8,
+       "h": 6
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 33,
+       "y": 12,
+       "w": 5,
+       "h": 4
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 21,
+       "y": 2,
+       "w": 9,
+       "h": 3
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 19,
+       "y": 0,
+       "w": 5,
+       "h": 3
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 24,
+       "y": 13,
+       "w": 6,
+       "h": 6
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 8,
+       "y": 11,
+       "w": 7,
+       "h": 6
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 8,
+       "y": 15,
+       "w": 4,
+       "h": 3
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 27,
+       "y": 9,
+       "w": 5,
+       "h": 5
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 22,
+       "y": 17,
+       "w": 7,
+       "h": 6
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 14,
+       "y": 10,
+       "w": 8,
+       "h": 6
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 27,
+       "y": 8,
+       "w": 9,
+       "h": 3
+      },
+      {
+       "kind": "area",
+       "fill": "rock",
+       "shape": "ellipse",
+       "x": 20,
+       "y": 17,
+       "w": 3,
+       "h": 3
+      },
+      {
+       "kind": "area",
+       "fill": "rock",
+       "shape": "ellipse",
+       "x": 13,
+       "y": 20,
+       "w": 2,
+       "h": 3
+      },
+      {
+       "kind": "area",
+       "fill": "rock",
+       "shape": "ellipse",
+       "x": 7,
+       "y": 2,
+       "w": 4,
+       "h": 2
+      },
+      {
+       "kind": "area",
+       "fill": "rock",
+       "shape": "ellipse",
+       "x": 30,
+       "y": 2,
+       "w": 5,
+       "h": 3
+      },
+      {
+       "kind": "area",
+       "fill": "rock",
+       "shape": "ellipse",
+       "x": 26,
+       "y": 4,
+       "w": 4,
+       "h": 1
+      },
+      {
+       "kind": "area",
+       "fill": "rock",
+       "shape": "ellipse",
+       "x": 27,
+       "y": 13,
+       "w": 2,
+       "h": 2
+      },
+      {
+       "kind": "area",
+       "fill": "rock",
+       "shape": "ellipse",
+       "x": 2,
+       "y": 12,
+       "w": 2,
+       "h": 1
+      },
+      {
+       "kind": "area",
+       "fill": "rock",
+       "shape": "ellipse",
+       "x": 17,
+       "y": 16,
+       "w": 4,
+       "h": 3
+      },
+      {
+       "kind": "area",
+       "fill": "rock",
+       "shape": "ellipse",
+       "x": 19,
+       "y": 0,
+       "w": 3,
+       "h": 1
+      },
+      {
+       "kind": "area",
+       "fill": "brush",
+       "shape": "rect",
+       "x": 2,
+       "y": 14,
+       "w": 7,
+       "h": 5
+      },
+      {
+       "kind": "area",
+       "fill": "brush",
+       "shape": "rect",
+       "x": 28,
+       "y": 2,
+       "w": 7,
+       "h": 4
+      },
+      {
+       "kind": "area",
+       "fill": "ice",
+       "shape": "ellipse",
+       "x": 12,
+       "y": 17,
+       "w": 6,
+       "h": 4
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         0,
+         12
+        ],
+        [
+         10,
+         12
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         10,
+         12
+        ],
+        [
+         10,
+         8
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         10,
+         8
+        ],
+        [
+         22,
+         8
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         22,
+         8
+        ],
+        [
+         22,
+         4
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         22,
+         4
+        ],
+        [
+         30,
+         4
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         30,
+         4
+        ],
+        [
+         30,
+         7
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         30,
+         7
+        ],
+        [
+         36,
+         7
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "area",
+       "fill": "rock",
+       "shape": "ellipse",
+       "x": 33,
+       "y": 2,
+       "w": 7,
+       "h": 6
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         36,
+         7
+        ],
+        [
+         39,
+         7
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "building",
+       "name": "hunter's blind",
+       "x": 6,
+       "y": 4,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "south",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "collapsed cabin",
+       "x": 33,
+       "y": 18,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "object",
+       "name": "cairn",
+       "x": 11,
+       "y": 11
+      },
+      {
+       "kind": "object",
+       "name": "deer carcass",
+       "x": 15,
+       "y": 6
+      },
+      {
+       "kind": "object",
+       "name": "bear trap, sprung",
+       "x": 24,
+       "y": 10
+      },
+      {
+       "kind": "object",
+       "name": "dead campfire",
+       "x": 29,
+       "y": 9
+      },
+      {
+       "kind": "object",
+       "name": "fallen fire tower",
+       "x": 4,
+       "y": 20
+      },
+      {
+       "kind": "object",
+       "name": "hunting stand",
+       "x": 20,
+       "y": 2
+      },
+      {
+       "kind": "object",
+       "name": "stripped bones",
+       "x": 35,
+       "y": 13
+      },
+      {
+       "kind": "object",
+       "name": "split boulder",
+       "x": 26,
+       "y": 15
+      }
+     ]
+    },
+    "rows": [
+     "...................^^^T.................",
+     "...................TTTTT................",
+     ".......^^^^.........6TTTTTTT,,,,,,,^^^..",
+     ".......^^^^..........TTTTTTT,,,,,^^^^^^^",
+     "......##..............=========,,^^^^^^^",
+     "......#+..............=...TT,,=,,^^^^^^^",
+     "...............2......=..TTTTT=TT^^^^^^^",
+     "......................=..TTTTT=====^====",
+     "..........=============...TTTTTTTTT.....",
+     "..........=................TT4TTTTTT....",
+     "..........=.....TTTT....3..TTTTTTTT.....",
+     "..........=1T..TTTTTT......TTTTT........",
+     "===========TTTTTTTTTTT.....TTTTT..TTT...",
+     "........TTTTTTTTTTTTTT...TT^^TT..TT7TT..",
+     "..,,,,,,,TTTTTTTTTTTT...TTT^^T...TTTTT..",
+     ".T,,,,,,,TTTTTTTTTTT....TT8TTT....TTT...",
+     "TT,,,,,,,TTTTTTTTT^^....TTTTTT..........",
+     ".T,,,,,,,TT.T~~~~^^^^^^.TTTTTT..........",
+     "..,,,,,,,...~~~~~~^^^^^TTTTTT....###....",
+     "............~~~~~~..^^^TTTTTT....+##....",
+     "....5........~~~~.....TTTTTTT...........",
+     ".............^^.......TTTTTTT...........",
+     ".............^^.........TTT.............",
+     "........................................"
+    ],
+    "objects": {
+     "1": "cairn",
+     "2": "deer carcass",
+     "3": "bear trap, sprung",
+     "4": "dead campfire",
+     "5": "fallen fire tower",
+     "6": "hunting stand",
+     "7": "stripped bones",
+     "8": "split boulder"
+    },
+    "labels": {
+     "hunter's blind": [
+      7,
+      5
+     ],
+     "collapsed cabin": [
+      34,
+      19
+     ]
+    },
+    "model": "showcase",
+    "made_at": "2026-10-23T20:11:04.621194+00:00",
+    "levels": []
+   }
+  },
+  "8b8173a7-7911-588d-9583-71ca7805dd5d": {
+   "": {
+    "place_id": "8b8173a7-7911-588d-9583-71ca7805dd5d",
+    "state": "",
+    "spec": {
+     "ground": "rock",
+     "features": [
+      {
+       "kind": "passage",
+       "points": [
+        [
+         12,
+         23
+        ],
+        [
+         12,
+         17
+        ]
+       ],
+       "width": 2
+      },
+      {
+       "kind": "area",
+       "fill": "floor",
+       "shape": "rect",
+       "x": 10,
+       "y": 15,
+       "w": 6,
+       "h": 3
+      },
+      {
+       "kind": "passage",
+       "points": [
+        [
+         15,
+         16
+        ],
+        [
+         22,
+         16
+        ]
+       ],
+       "width": 2
+      },
+      {
+       "kind": "passage",
+       "points": [
+        [
+         22,
+         16
+        ],
+        [
+         22,
+         7
+        ]
+       ],
+       "width": 2
+      },
+      {
+       "kind": "area",
+       "fill": "floor",
+       "shape": "ellipse",
+       "x": 21,
+       "y": 3,
+       "w": 9,
+       "h": 7
+      },
+      {
+       "kind": "passage",
+       "points": [
+        [
+         29,
+         5
+        ],
+        [
+         36,
+         5
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "area",
+       "fill": "floor",
+       "shape": "ellipse",
+       "x": 35,
+       "y": 2,
+       "w": 6,
+       "h": 6
+      },
+      {
+       "kind": "passage",
+       "points": [
+        [
+         10,
+         16
+        ],
+        [
+         4,
+         16
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "area",
+       "fill": "floor",
+       "shape": "ellipse",
+       "x": 0,
+       "y": 12,
+       "w": 7,
+       "h": 7
+      },
+      {
+       "kind": "area",
+       "fill": "water",
+       "shape": "ellipse",
+       "x": 1,
+       "y": 13,
+       "w": 5,
+       "h": 4
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 19,
+       "y": 9,
+       "w": 3,
+       "h": 2
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 21,
+       "y": 19,
+       "w": 3,
+       "h": 2
+      },
+      {
+       "kind": "object",
+       "name": "Ben's stove",
+       "x": 23,
+       "y": 4
+      },
+      {
+       "kind": "object",
+       "name": "bedroll",
+       "x": 27,
+       "y": 4
+      },
+      {
+       "kind": "object",
+       "name": "crates of supplies",
+       "x": 24,
+       "y": 7
+      },
+      {
+       "kind": "object",
+       "name": "lantern",
+       "x": 25,
+       "y": 5
+      },
+      {
+       "kind": "object",
+       "name": "rifle rack",
+       "x": 28,
+       "y": 7
+      },
+      {
+       "kind": "object",
+       "name": "water barrels",
+       "x": 5,
+       "y": 11
+      },
+      {
+       "kind": "object",
+       "name": "rockfall",
+       "x": 20,
+       "y": 9
+      },
+      {
+       "kind": "object",
+       "name": "tripwire with cans",
+       "x": 12,
+       "y": 18
+      },
+      {
+       "kind": "object",
+       "name": "firewood stack",
+       "x": 37,
+       "y": 3
+      }
+     ]
+    },
+    "rows": [
+     "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+     "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+     "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^____",
+     "^^^^^^^^^^^^^^^^^^^^^^^_____^^^^^^^__9__",
+     "^^^^^^^^^^^^^^^^^^^^^^_1___2_^^^^^^_____",
+     "^^^^^^^^^^^^^^^^^^^^^____4______________",
+     "^^^^^^^^^^^^^^^^^^^^^_________^^^^^_____",
+     "^^^^^^^^^^^^^^^^^^^^^___3___5_^^^^^^____",
+     "^^^^^^^^^^^^^^^^^^^^^^_______^^^^^^^^^^^",
+     "^^^^^^^^^^^^^^^^^^^:7:______^^^^^^^^^^^^",
+     "^^^^^^^^^^^^^^^^^^^:::__^^^^^^^^^^^^^^^^",
+     "^^^^^6^^^^^^^^^^^^^^^^__^^^^^^^^^^^^^^^^",
+     "^^___^^^^^^^^^^^^^^^^^__^^^^^^^^^^^^^^^^",
+     "^_~~~_^^^^^^^^^^^^^^^^__^^^^^^^^^^^^^^^^",
+     "_~~~~~_^^^^^^^^^^^^^^^__^^^^^^^^^^^^^^^^",
+     "_~~~~~_^^^______^^^^^^__^^^^^^^^^^^^^^^^",
+     "__~~~___________________^^^^^^^^^^^^^^^^",
+     "^_____^^^^_____________^^^^^^^^^^^^^^^^^",
+     "^^___^^^^^^^8_^^^^^^^^^^^^^^^^^^^^^^^^^^",
+     "^^^^^^^^^^^^__^^^^^^^:::^^^^^^^^^^^^^^^^",
+     "^^^^^^^^^^^^__^^^^^^^:::^^^^^^^^^^^^^^^^",
+     "^^^^^^^^^^^^__^^^^^^^^^^^^^^^^^^^^^^^^^^",
+     "^^^^^^^^^^^^__^^^^^^^^^^^^^^^^^^^^^^^^^^",
+     "^^^^^^^^^^^^__^^^^^^^^^^^^^^^^^^^^^^^^^^"
+    ],
+    "objects": {
+     "1": "Ben's stove",
+     "2": "bedroll",
+     "3": "crates of supplies",
+     "4": "lantern",
+     "5": "rifle rack",
+     "6": "water barrels",
+     "7": "rockfall",
+     "8": "tripwire with cans",
+     "9": "firewood stack"
+    },
+    "labels": {
+     "The cave mouth": [
+      12,
+      21
+     ],
+     "The main chamber": [
+      25,
+      6
+     ]
+    },
+    "model": "showcase",
+    "made_at": "2026-10-23T20:11:04.621194+00:00",
+    "levels": []
+   }
+  },
+  "8fd935e3-bffc-5712-bdf9-8d40bdcb0ac6": {
+   "": {
+    "place_id": "8fd935e3-bffc-5712-bdf9-8d40bdcb0ac6",
+    "state": "",
+    "spec": {
+     "ground": "snow",
+     "features": [
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 0,
+       "y": 0,
+       "w": 7,
+       "h": 5
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 33,
+       "y": 19,
+       "w": 7,
+       "h": 5
+      },
+      {
+       "kind": "area",
+       "fill": "brush",
+       "shape": "rect",
+       "x": 0,
+       "y": 18,
+       "w": 12,
+       "h": 6
+      },
+      {
+       "kind": "area",
+       "fill": "brush",
+       "shape": "rect",
+       "x": 28,
+       "y": 0,
+       "w": 12,
+       "h": 6
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         0,
+         10
+        ],
+        [
+         39,
+         10
+        ]
+       ],
+       "width": 5
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 0,
+       "y": 12,
+       "w": 40,
+       "h": 1
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         0,
+         13
+        ],
+        [
+         39,
+         13
+        ]
+       ],
+       "width": 2
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         8,
+         6
+        ],
+        [
+         8,
+         9
+        ]
+       ],
+       "width": 2
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         8,
+         6
+        ],
+        [
+         20,
+         6
+        ]
+       ],
+       "width": 2
+      },
+      {
+       "kind": "area",
+       "fill": "floor",
+       "shape": "rect",
+       "x": 6,
+       "y": 2,
+       "w": 16,
+       "h": 5
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 22,
+       "y": 1,
+       "w": 6,
+       "h": 4
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         22,
+         1
+        ],
+        [
+         25,
+         1
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         22,
+         2
+        ],
+        [
+         22,
+         4
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         27,
+         2
+        ],
+        [
+         27,
+         3
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "wall",
+       "points": [
+        [
+         24,
+         7
+        ],
+        [
+         28,
+         7
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 10,
+       "y": 16,
+       "w": 3,
+       "h": 2
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 30,
+       "y": 16,
+       "w": 4,
+       "h": 2
+      },
+      {
+       "kind": "object",
+       "name": "wrecked sedan",
+       "x": 5,
+       "y": 11
+      },
+      {
+       "kind": "object",
+       "name": "jackknifed truck",
+       "x": 14,
+       "y": 10
+      },
+      {
+       "kind": "object",
+       "name": "burnt-out bus",
+       "x": 25,
+       "y": 11
+      },
+      {
+       "kind": "object",
+       "name": "wrecked car",
+       "x": 33,
+       "y": 12
+      },
+      {
+       "kind": "object",
+       "name": "wrecked car",
+       "x": 19,
+       "y": 14
+      },
+      {
+       "kind": "object",
+       "name": "rusted gas pump",
+       "x": 11,
+       "y": 4
+      },
+      {
+       "kind": "object",
+       "name": "rusted gas pump",
+       "x": 16,
+       "y": 4
+      },
+      {
+       "kind": "object",
+       "name": "toppled sign",
+       "x": 4,
+       "y": 4
+      },
+      {
+       "kind": "object",
+       "name": "pile of tyres",
+       "x": 31,
+       "y": 3
+      }
+     ]
+    },
+    "rows": [
+     ".TTTTT......................,,,,,,,,,,,,",
+     "TTTTTTT...............####::,,,,,,,,,,,,",
+     "TTTTTT________________#::::#,,,,,,,,,,,,",
+     "TTTTTT________________#::::#,,,9,,,,,,,,",
+     ".TTT8T_____6____7_____#:::::,,,,,,,,,,,,",
+     "......________________......,,,,,,,,,,,,",
+     "......________________..................",
+     "........=============...#####...........",
+     "........==..............................",
+     "........==..............................",
+     "==============2=========================",
+     "=====1===================3==============",
+     ":::::::::::::::::::::::::::::::::4::::::",
+     "========================================",
+     "===================5====================",
+     "........................................",
+     "..........:::.................::::......",
+     "..........:::.................::::......",
+     ",,,,,,,,,,,,............................",
+     ",,,,,,,,,,,,......................TTTTT.",
+     ",,,,,,,,,,,,.....................TTTTTTT",
+     ",,,,,,,,,,,,.....................TTTTTTT",
+     ",,,,,,,,,,,,.....................TTTTTTT",
+     ",,,,,,,,,,,,......................TTTTT."
+    ],
+    "objects": {
+     "1": "wrecked sedan",
+     "2": "jackknifed truck",
+     "3": "burnt-out bus",
+     "4": "wrecked car",
+     "5": "wrecked car",
+     "6": "rusted gas pump",
+     "7": "rusted gas pump",
+     "8": "toppled sign",
+     "9": "pile of tyres"
+    },
+    "labels": {},
+    "model": "showcase",
+    "made_at": "2026-10-23T20:11:04.621194+00:00",
+    "levels": []
    }
   }
  },
@@ -3015,42 +5337,6 @@
  "failures": {},
  "pictures": [
   {
-   "id": "36e00049-cc6f-4770-9425-345171bd0b81",
-   "subject": "isometric",
-   "subject_id": "44685240-e21f-5878-9b9c-276755d0b86e",
-   "name": "The creek crossing",
-   "state": "",
-   "file": "pictures/map/doomsville-creek-crossing-isometric.jpg",
-   "from_picture": null,
-   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: A pale frozen creek cuts across the scene, its surface a dull grey-blue streaked with white. A low wooden bridge spans it, half swallowed by deep snowdrifts so that only its planks and low rails break the white. Around the crossing, drifts pile against a wrecked wooden cart lying overturned on the bank. Scattered bones, some half-buried, dot the snow near the bridge, and a single barrel stands upright at one end. A rough barricade of piled timber and debris blocks part of the approach, and a corpse lies sprawled in the snow beside it, dark against the white. Cold, flat winter light with faint blue shadows softens every edge. The ground: snow-covered country in winter. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
-   "model": "qwen-image",
-   "made_at": "2026-10-15T02:13:37.472036+00:00"
-  },
-  {
-   "id": "88cff8b0-66f4-44b6-af7b-4847816d5ce2",
-   "subject": "isometric",
-   "subject_id": "a3f8414e-f7dc-581a-b9f1-fc0f98688d84",
-   "name": "Hellsville",
-   "state": "",
-   "file": "pictures/map/doomsville-hellsville-isometric.jpg",
-   "from_picture": null,
-   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: A small walled town seen from above at night, its perimeter closed by barricades of cars, stacked tyres and scrap except at gateways to north and south, with a single road running between them. Along this main street an old diner glows with mismatched lanterns; four more lanterns mark buildings nearby, among them a general store and another narrow shopfront building. A weathered church steeple rises as the second-tallest structure; a water tower on tall legs stands highest, both showing above the walls. Rooftops and ground lie dark under cold night light, dotted with the warm points of lanterns. The ground: snow-covered country in winter. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
-   "model": "qwen-image",
-   "made_at": "2026-10-15T02:14:50.716412+00:00"
-  },
-  {
-   "id": "aca6ba08-21d4-47ac-b6d5-af64c2977c4d",
-   "subject": "isometric",
-   "subject_id": "b637a244-e18f-5caf-b588-6cd5a28043c4",
-   "name": "The farm",
-   "state": "",
-   "file": "pictures/map/doomsville-farm-isometric.jpg",
-   "from_picture": null,
-   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: A snow-covered farmstead enclosed by a sagging wooden fence. A two-storey farmhouse with grey, weathered white paint and one hanging shutter stands near the road, its porch on the north side. Behind it, a barn with a newer, intact roof. A frozen pond lies at the rear of the property. Scattered across the deep snow: a well, a haystack, a frozen trough, a bare oak tree, a scarecrow, and an old plough. Everything is blanketed in white, the wooden structures standing dark against the snow under cold winter light. The ground: snow-covered country in winter. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
-   "model": "qwen-image",
-   "made_at": "2026-10-15T02:23:50.253251+00:00"
-  },
-  {
    "id": "229d3eb7-a394-4a2c-8747-76bce4d22cfa",
    "subject": "walker",
    "subject_id": "Ben",
@@ -3143,20 +5429,6 @@
    "scene": ""
   },
   {
-   "id": "c7e79427-0ce4-43cb-9609-ae5fd34e71cf",
-   "subject": "backdrop",
-   "subject_id": "a3f8414e-f7dc-581a-b9f1-fc0f98688d84",
-   "name": "Hellsville",
-   "state": "",
-   "file": "pictures/map/doomsville-with-a-map-hellsville-backdrop.jpg",
-   "from_picture": null,
-   "prompt": "Convert the entire image into a warm hand-painted storybook illustration using soft gouache brushwork, gentle amber and lantern-gold nighttime lighting, and rich but muted colours — deep ochres, earthy umbers, dusty sage greens, warm stone greys and faded terracottas — with visible painted texture throughout wood planking, stone walls, packed-earth ground, cloth and bark. The top-down map layout stays exactly as it is: every building footprint, roofed box, wall, room, interior partition, path, road, crossroads, fence line, tree cluster, rock scatter and water feature remains in precisely the same position, shape and size as seen directly from above. The rectangular walled perimeter of the small town of Hellsville sits centred in the picture, its barricade walls rendered as rough-hewn timber and mortared stone with gouache texture; a cylindrical water tower rises just inside the south wall and a narrow church steeple pokes above the north wall, both visible as small overhead silhouettes above their rooftops. The cross-shaped dirt road junction at the centre of the town is warm pale sand lit by pools of soft lantern-glow. Each building is a roofed box in top-down view with its south-facing front wall shown at the bottom edge of that box and a framed door panel set into that south wall: the diner's door in its south wall, the clinic's door in its south wall, the church's door in its south wall, the general store's door in its south wall, each door drawn as a small rectangular framed panel with a warm wood-brown fill. Rooftops show gentle brushed texture — dark weathered shingle or corrugated iron in muted blue-grey. Snow-dusted ground and snow-capped tree crowns outside and inside the walls are repainted in soft off-white with blue-grey shadows, brushy and loose.",
-   "model": "blackforestlabs/flux-3/klein/edit-image",
-   "made_at": "2026-10-23T18:58:12.320124+00:00",
-   "plan": "2026-10-14T20:47:52.128726+00:00",
-   "scene": ""
-  },
-  {
    "id": "f1d2db25-faec-483f-8419-16e42ef6b233",
    "subject": "backdrop",
    "subject_id": "340babf7-cb13-50ff-9bc6-7e62562f78e8",
@@ -3199,34 +5471,6 @@
    "scene": ""
   },
   {
-   "id": "d684d285-cc5f-404a-a15f-3af1c2b7ab30",
-   "subject": "backdrop",
-   "subject_id": "b637a244-e18f-5caf-b588-6cd5a28043c4",
-   "name": "The farm",
-   "state": "",
-   "file": "pictures/map/doomsville-with-a-map-the-farm-backdrop.jpg",
-   "from_picture": null,
-   "prompt": "Convert the entire image into a warm hand-painted storybook illustration rendered in soft gouache with visible brushwork, gentle diffused lighting, and rich but muted colours throughout, preserving the top-down map perspective exactly as it appears in the source image with every element in its precise position and at its exact shape and size. The ground across the whole map becomes deep-snow terrain painted in muted blue-whites and cool creamy tones with faint earth showing through in patches, textured with short soft strokes. The dense scatter of snow-laden trees covering most of the map stays in place, repainted as overhead silhouettes of dark slate-grey and desaturated olive branches dusted with thick gouache white snow, each clump showing individual brushwork. Scattered rocks remain as rounded muted-stone shapes with soft shadow edges. The farmhouse, the upper-centre rectangular roofed box with its framed door panel on its north wall, is repainted with a worn timber-plank roof in muted ochre-brown showing visible wood grain texture, its front south-facing wall at the bottom edge of the box showing weathered pale boards, and its door as a dark-framed recessed panel on the north wall. The barn, the lower-right rectangular roofed box with its door on its west wall, is painted with a sagging dark-red-brown timber roof textured with gouache strokes, its west wall showing a heavy framed door panel. Both roofs cast soft short shadows onto the snow beneath them.",
-   "model": "blackforestlabs/flux-3/klein/edit-image",
-   "made_at": "2026-10-23T19:02:15.166249+00:00",
-   "plan": "2026-10-14T20:40:22.135132+00:00",
-   "scene": ""
-  },
-  {
-   "id": "981b9323-2202-48f8-8293-4482b99647bd",
-   "subject": "backdrop",
-   "subject_id": "44685240-e21f-5878-9b9c-276755d0b86e",
-   "name": "The creek crossing",
-   "state": "",
-   "file": "pictures/map/doomsville-with-a-map-the-creek-crossing-backdrop.jpg",
-   "from_picture": null,
-   "prompt": "Repaint the entire image as a warm hand-painted storybook illustration using soft gouache brushwork with visible bristle texture throughout. The top-down map layout must remain absolutely identical: the low wooden bridge spanning the frozen creek sits in the left-centre exactly where it is, its dark stone-filled deck and timber-post supports rendered in muted umber and charcoal with visible wood grain and frost-dusted stonework texture; the frozen creek itself runs horizontally across the scene in pale blue-grey with soft milky ice brushwork, half burying the bridge's supports; the snow-dusted open ground to the left of the bridge keeps its same footprint, rendered in warm off-white over cold grey-brown earth with soft gouache hatching; the small wooden crate above the bridge centre stays in position, painted in warm honey-brown with dark wood-grain strokes; the frost-crusted wooden barrel and the second small crate to the lower-left remain exactly placed, in the same muted amber-brown tones; the glowing pale-blue icy object at the far left stays where it is, rendered as a softly luminous frost-blue cube with gentle warm reflected light; scattered bare-branched deciduous trees and snow-laden conifers across the right half and upper edges keep their exact positions and silhouettes, painted in desaturated olive, slate and warm grey with dry-brush snow on every bough; rocks and earth-mounds stay in place with rough gouache texture in terracotta-grey; the overall lighting is overcast winter warmth — a diffuse amber-grey sky light casting no hard shadows, with soft warm bounce light touching the undersides of snow clumps in pale cream. The mid-grey horizontal bands above and below the picture remain plain flat mid-grey, unpainted.",
-   "model": "blackforestlabs/flux-3/klein/edit-image",
-   "made_at": "2026-10-23T19:02:46.333896+00:00",
-   "plan": "2026-10-14T20:40:30.552070+00:00",
-   "scene": ""
-  },
-  {
    "id": "3223616a-7312-4599-ae85-06fc62c92099",
    "subject": "backdrop",
    "subject_id": "4460da54-f44d-59cb-ba89-2b224e6466ef",
@@ -3252,6 +5496,90 @@
    "model": "blackforestlabs/flux-3/klein/edit-image",
    "made_at": "2026-10-23T19:03:47.763567+00:00",
    "plan": "2026-10-14T20:47:45.765687+00:00",
+   "scene": ""
+  },
+  {
+   "id": "0a52860d-3721-4053-9d2e-dab5a6244572",
+   "subject": "backdrop",
+   "subject_id": "b637a244-e18f-5caf-b588-6cd5a28043c4",
+   "name": "The farm",
+   "state": "",
+   "file": "pictures/map/doomsville-with-a-map-the-farm-backdrop.jpg",
+   "from_picture": null,
+   "prompt": "Convert the entire image into a warm hand-painted storybook illustration rendered in soft gouache with visible dry-brush texture, gentle diffused winter lighting, and rich but muted colours, keeping the flat top-down map viewpoint and every layout element exactly where it sits in the reference: all buildings, fences, paths, the frozen pond, rocks, and tree clusters remain in the same positions, shapes and proportions. Paint the open ground as deep midwinter snow: uneven drifts of blue-white and warm cream, compressed boot-and-sled tracks cutting through where paths run, wind-scoured patches of iron-grey frozen earth showing beneath thin snow near the fence line, and faint blue cast-shadows from fences and trees stretching across the surface. The sagging wooden fence encircling the yard should read as weathered grey timber, planks bowing and gapped, dusted with snow on their upper edges. The frozen pond to the west sits as a smooth plate of pale steel-blue ice veined with darker cracks, ringed by a thin crust of snow-covered reeds painted in ochre and dry sienna. The farmhouse — the smaller rectangular building in the upper-centre area — gets a steeply pitched roof of mossy dark-slate shingles heaped with snow overhanging the eaves; its south wall, visible as the front face, shows a framed plank door of faded barn-red with a rusted iron latch, set exactly where the pixel door sits, flanked by a single small shuttered window; a thin wisp of grey-blue smoke curls from a stone chimney above the roof ridge, and a faint warm amber lamplight spills from the window onto the snow below.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-23T20:18:50.495670+00:00",
+   "plan": "2026-10-23T20:11:04.621194+00:00",
+   "scene": ""
+  },
+  {
+   "id": "19750ca2-e3af-4787-88bd-eda6a4ecc6c1",
+   "subject": "backdrop",
+   "subject_id": "a3f8414e-f7dc-581a-b9f1-fc0f98688d84",
+   "name": "Hellsville",
+   "state": "",
+   "file": "pictures/map/doomsville-with-a-map-hellsville-backdrop.jpg",
+   "from_picture": null,
+   "prompt": "Convert the entire image into a warm hand-painted storybook illustration rendered in soft gouache with visible dry-brush texture throughout, preserving every element of the top-down map layout exactly — every building footprint, wall, fence line, road, path, tree cluster, rock, and water feature stays in precisely the same position, shape, and size as in the reference image, with no labels, no text, no people, and no decorative borders added anywhere in the painted area. The mid-grey horizontal bands above and below the map image are padding and must remain plain flat mid-grey, unpainted and untouched. The overall lighting is deep winter night: a blue-black sky-ambient underlies everything, cut by pools of warm amber lamplight spilling from the two visible lanterns near the central crossroads and the south gate, casting soft elliptical orange-gold halos across snow-dusted cobblestones and casting long cool blue-grey shadows behind every building and wall. Thin wisps of pale smoke curl from one or two chimney stacks on the rooftops nearest the lanterns. Ground treatment: the earth outside the walled town is snow-covered scrubland rendered in muted slate-blue and cream, with shallow drifts mounding against the outer perimeter wall and wind-scoured bare patches of frozen mud showing in ochre-brown between. Inside the town the main north-south and east-west roads are worn cobblestone, painted in dark blue-grey with frost collected in the mortar gaps, tyre-track ruts pressed into the snow at the verges, and small puddles of meltwater iced over and reflecting the lamplight in milky amber. Side paths are compacted dirt, cracked and pale.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-23T20:20:29.989099+00:00",
+   "plan": "2026-10-23T20:11:04.621194+00:00",
+   "scene": ""
+  },
+  {
+   "id": "34c87b16-30b4-4c46-a78a-ec9f4499fc09",
+   "subject": "backdrop",
+   "subject_id": "17c4eb3e-b1d7-5157-a9e4-c7bb68f56690",
+   "name": "The hills",
+   "state": "",
+   "file": "pictures/map/doomsville-with-a-map-the-hills-backdrop.jpg",
+   "from_picture": null,
+   "prompt": "Convert the entire image into a warm hand-painted storybook illustration in soft gouache, viewed directly from above, keeping every element exactly in its current position, shape and size, with the plain mid-grey padding bands above and below left as flat grey with no painting over them. The wooded limestone hills of a post-apocalyptic winter world, four years abandoned: paint the snow-covered hillside ground in layered gouache strokes of muted ivory, ash-blue and pale ochre, showing packed snow cracked open over limestone outcrops, frozen mud ruts along every path and road, shallow icy puddles catching dull winter light in the open clearings, and drifts banked against fences and rock edges. Every path and road stays exactly where it is but gains visible tyre tracks and boot-shaped depressions pressed into the snow, long since frozen and untouched. Fences become weathered split-timber or rusted wire, posts leaning slightly from frost-heave. The broad frozen pond or stream patch in the lower-centre becomes dark grey-green ice with white stress cracks radiating from the banks. Every tree stays exactly in place but becomes a real tree seen from above: dense snow-laden spruce and fir crowns painted as soft dark-green rosettes ringed with white, bare deciduous branches like ink-wash tangles dusted with frost, casting short blue-grey shadows across the snow beneath them in the low winter light. Rounded limestone boulders and rock outcrops keep their positions but gain warm stone colour, mossy ochre undersides and blue-white snow caps.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-23T20:21:13.855006+00:00",
+   "plan": "2026-10-23T20:11:04.621194+00:00",
+   "scene": ""
+  },
+  {
+   "id": "0f44cb07-729e-47ed-aea2-bed7d246b405",
+   "subject": "backdrop",
+   "subject_id": "8b8173a7-7911-588d-9583-71ca7805dd5d",
+   "name": "The Hidden Caves",
+   "state": "",
+   "file": "pictures/map/doomsville-with-a-map-the-hidden-caves-backdrop.jpg",
+   "from_picture": null,
+   "prompt": "Repaint the entire map panel (leaving the plain mid-grey bands above and below untouched) as a warm hand-painted gouache storybook illustration viewed from directly overhead, set inside the limestone cave system known as The Hidden Caves in the post-apocalyptic world of Doomsville — a natural underground refuge carved into a rocky hillside among pine forest, occupied by a lone survivor named Ben roughly four years after civilisation collapsed. Every element stays precisely in its current position, shape and size. The cave-floor ground between and around the stone-flagged passages becomes rough, hand-painted bare earth and limestone rubble — ochre, umber and cool grey — with visible brush texture, scattered grit, hairline cracks in the rock, dried mud pooling in low corners, and faint bootprint tracks pressed into the dusty soil. The dark blurred cave-dirt surround outside the flagged areas is painted as raw limestone cavern floor with visible strata lines, loose pebbles, patches of pale calcite and deep shadow fading toward the edges. The paved stone corridors and chamber floors keep their irregular flagstone layout but are rendered with gouache in warm ash-grey and blue-grey tones, individual stones shaded with subtle depth, mortar cracks picked out in dark umber, and small puddles of seepage water catching a faint amber glow from implied torch or lantern light somewhere off the map edge, casting soft warm pools across two or three flags. The large irregular chamber at upper-centre and the smaller chambers at left and upper-right become cave rooms with gently rounded rocky walls painted in layered warm stone tones, their edges ragged and organic.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-23T20:21:55.447062+00:00",
+   "plan": "2026-10-23T20:11:04.621194+00:00",
+   "scene": ""
+  },
+  {
+   "id": "943efd5d-57b6-45b7-a244-faaa3ef7247c",
+   "subject": "backdrop",
+   "subject_id": "44685240-e21f-5878-9b9c-276755d0b86e",
+   "name": "The creek crossing",
+   "state": "",
+   "file": "pictures/map/doomsville-with-a-map-the-creek-crossing-backdrop.jpg",
+   "from_picture": null,
+   "prompt": "Repaint the reference image as a warm hand-painted storybook illustration in soft gouache, viewed directly from above, preserving every element's exact position, shape and size while transforming the rendering into richly textured, muted-warm painterly art for a post-apocalyptic winter survival setting called Doomsville, four years after a zombie plague. The two mid-grey horizontal padding bands at the very top and very bottom of the frame stay plain flat grey, untouched. The map interior: the vertical road running north–south and the horizontal road running east–west cross at centre; paint both as cracked, frost-heaved asphalt dusted with wind-blown snow, tyre tracks pressed into thin ice along the centreline, weeds splitting the tarmac edges. The creek crossing sits where the roads meet — paint it as a low stone-and-concrete bridge, its parapet half-buried under packed snow, the frozen creek beneath rendered as dull blue-grey cracked ice with dark water glinting through fissures, the ice surface scarred with old footprints and drag marks. The creek band itself, running left to right across the middle third of the image, becomes a wide frozen watercourse: fractured grey-blue ice plates, reed stems poking through snowdrifts at the banks, dusted with fine powder snow; a large boulder mid-creek left of centre sits exactly where it appears, painted as a rounded granite mass capped with a snow dome. A second boulder-cluster to the right of the crossing stays in place, same shapes, snow-loaded.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-23T20:36:54.765838+00:00",
+   "plan": "2026-10-23T20:11:04.621194+00:00",
+   "scene": ""
+  },
+  {
+   "id": "d9ec9c37-383e-4afc-88a4-666f075cf1a7",
+   "subject": "backdrop",
+   "subject_id": "8fd935e3-bffc-5712-bdf9-8d40bdcb0ac6",
+   "name": "The gas station",
+   "state": "",
+   "file": "pictures/map/doomsville-with-a-map-the-gas-station-backdrop.jpg",
+   "from_picture": null,
+   "prompt": "Convert the entire image into a warm hand-painted storybook illustration in soft gouache, keeping the mid-grey padding bands above and below completely plain and unchanged, and preserving every element of the top-down map layout — every building footprint, road band, path, fence line, ruined vehicle, fuel pump island, concrete forecourt, rock cluster, snow-dusted shrub, and stand of bare winter trees — in exactly the same position, shape, and size as in the reference. Repaint the ground with rich muted gouache texture: the cracked diamond-grid concrete forecourt in the upper-left rendered as scorched, frost-heaved slabs with soot stains and weeds splitting the joints; the two-lane highway running horizontally across the mid-section painted as bleached asphalt with faded lane markings, frost-cracked edges, and windblown snow collecting in the cracks; the surrounding open ground as frozen dead scrubland in ochre, ash-brown, and dusty sage, dusted with thin snow, showing tyre ruts and boot trails pressed into mud beneath. The burnt-out gas station structures become charred timber-and-cinder-block shells viewed from directly above: collapsed corrugated roofing in rust-orange and charcoal, buckled steel canopy over the pump island, the pump housings melted and soot-blackened, the small attached shop reduced to scorched walls with gaping window holes painted as dark framed voids. Cast long cold shadows northward from every structure and vehicle. The abandoned cars and the bus on and beside the highway are painted as rusted hulks with broken glass glinting frosty white, doors hanging, snow settled on their roofs. The circular concrete object upper-right becomes a rusted underground-tank vent collar.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-23T20:37:30.589677+00:00",
+   "plan": "2026-10-23T20:11:04.621194+00:00",
    "scene": ""
   }
  ],
@@ -4856,5 +7184,6 @@
    }
   }
  },
- "tile_set": "abandoned"
+ "tile_set": "abandoned",
+ "chosen_views": {}
 }

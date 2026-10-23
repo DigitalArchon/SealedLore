@@ -231,6 +231,9 @@ class Area:
     # plan, "H" plating, "R" rock, "E" an engine, " " none (engine/deck_plan.py;
     # drawn by gui/deck_look.py, never walked on: the rows keep " " there).
     hull: list[str] = field(default_factory=list)
+    # A place under the ground (a cave, a mine: `_UNDERGROUND`), whose rock
+    # is solid: drawn as rock faces, not boulders on open ground.
+    underground: bool = False
 
     @property
     def id(self) -> str:
@@ -1234,6 +1237,9 @@ def build_area(
         exits=exits,
         parent=ground_round(world, art, place, look),
         repairs=repairs,
+        underground=not indoor
+        and look == "rock"
+        and _UNDERGROUND.search(f"{place.name} {place.what}") is not None,
     )
     area.placements = _object_placements(area)
     if indoor and generated:

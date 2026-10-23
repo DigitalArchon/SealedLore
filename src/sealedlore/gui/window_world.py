@@ -173,7 +173,9 @@ class WorldWindow:
             if not keep_view:
                 self.world_view.go_local()
         else:
-            self.world_view.set_world(world, session.map_art_copy(), held, keep_view=keep_view)
+            self.world_view.set_world(
+                world, session.map_art_copy(), held, keep_view=keep_view, board=session.map_first
+            )
             self._world_drawn = key
             self._drawn_art = art
         # Map-first play: the area to walk on (gui/window_area.py).

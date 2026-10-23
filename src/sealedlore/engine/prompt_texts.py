@@ -4973,6 +4973,15 @@ _text(
     "a warm hand-painted storybook illustration: soft gouache brushwork, gentle lighting, "
     "rich but muted colours, visible texture in wood, stone, earth and cloth",
 )
+# The showcase wording (Oct 23 2026, the author: each area "beautiful and
+# creatively detailed"): the first wording ("keep every wall ... exactly
+# where it is", nothing more) had Klein repaint the tiles as a flat
+# watercolour of a tile map. Told what it may invent (the ground as it truly
+# looks, shadows, smoke, lamplight, real roofs) and what it must keep (the
+# layout), it painted Tinker's Row and the hills richer with the layout held
+# (by eye, two areas; not blind-judged). A richer style line changed nothing:
+# the edit model stays close to its picture, and the words that move it are
+# what it may add.
 _text(
     "map.backdrop.request",
     MAP,
@@ -4980,11 +4989,16 @@ _text(
     "The short request the expander turns into the painter's instruction, and the prompt "
     "itself when no model that reads pictures is set: the look, the place in words, what the "
     "render shows, and the rule that the layout stays.",
-    "Repaint this picture as {style}. It is {words}. {facts} The mid-grey bands above and "
-    "below the picture are padding and stay plain grey. Keep every wall, room, doorway, "
-    "building, path and object exactly where it is in the picture, with the same shapes and "
-    "sizes, seen from directly above as in the picture. No people, no writing, no labels, no "
-    "borders.",
+    "Repaint this picture as {style}: a lavishly detailed illustrated game map of {words}, "
+    "seen from directly above. {facts} The mid-grey bands above and below the picture are "
+    "padding and stay plain grey. Keep the layout: every building, wall, fence, road, path, "
+    "doorway, water and rock exactly where it is in the picture, with the same shapes and "
+    "sizes. Everything else is yours to make beautiful: paint the ground as it would truly "
+    "look in this place and season, with texture, tracks, drifts, puddles, cracks or cobbles, "
+    "cast shadows, weathering, lamplight and chimney smoke where there are lamps and chimneys, "
+    "and small telling details that fit the place. Buildings get real roofs, doors and windows "
+    "in the style of the setting; trees and rocks become real trees and rocks. No people, no "
+    "writing, no labels, no borders.",
     (
         ("style", "the look (map.backdrop.style)"),
         ("words", "the place in words: the area's name and what the map knows of it"),

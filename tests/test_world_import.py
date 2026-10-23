@@ -277,7 +277,7 @@ def test_the_storyteller_is_told_the_map_the_file_drew(tmp_path: Path):
     session, jane = mapped_session(tmp_path)
     text = map_section(session, jane)
     assert "Jane is at: The farm\n" in text  # the start, before any read
-    assert "The barn (building, 130 m east)" in text  # from where the file put them
+    assert "The barn (building, 51 m east)" in text  # from where the file put them
     assert "Hellsville (settlement, 8.0 km / 5 miles north)" in text
     assert "The Hidden Caves" not in text  # the plot is keeping them hidden
     assert "- Pickup truck: The barn" in text  # the barn is in the farm
@@ -290,7 +290,7 @@ def test_in_town_the_file_s_own_words_stand_over_the_reads(tmp_path: Path):
     text = map_section(session, jane)
     assert "Jane is at: The diner, in Hellsville" in text
     assert "now the town's meeting hall" in text and "where Jane stood" not in text
-    assert "The clinic (building, 380 m east): Elena Ruiz's clinic, in what was the" in text
+    assert "The clinic (building, 270 m north): Elena Ruiz's clinic, in what was the" in text
 
 
 def test_the_map_stays_in_the_tail_and_off_with_the_map(tmp_path: Path):

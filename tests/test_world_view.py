@@ -22,12 +22,14 @@ from sealedlore.gui.world_view import (  # noqa: E402
     ISO_Z,
     MIN_PLACE_PX,
     WorldView,
+    _TagItem,
     place_card,
     shown_plans,
     visible_names,
 )
 from sealedlore.models.node import NodeMeta  # noqa: E402
 from sealedlore.models.world import (  # noqa: E402
+    MapPicture,
     PlaceLayout,
     TerrainPatch,
     WorldArt,
@@ -688,7 +690,10 @@ def window(app, tmp_path: Path, story, cast):
 def test_a_story_that_keeps_a_map_opens_on_it_with_the_room_it_needs(window):
     assert window.world_shown() and window.world_button.isChecked()
     assert window.stories_dock.isHidden() and not window.composer.isHidden()
-    assert {i.place.name for i in window.world_view._items} == {"Hellsville", "Diner", "Farmhouse"}
+    # Map-first: the map is the board (engine/board.py), its items the areas
+    # (the town, the farmhouse); the diner is inside the town's painting.
+    assert window.world_view.board
+    assert {i.place.name for i in window.world_view._items} == {"Hellsville", "Farmhouse"}
     # The held character (Serrik) has no place yet: the map opens on the region.
     assert window.world_view.region_button.isChecked()
     assert not window.stories_list_action.isChecked()  # View → Stories list brings it back
@@ -1381,3 +1386,47 @@ def test_the_region_s_land_is_kept_per_map_and_rendered_once(app, monkeypatch):
     view.wait_for_land(30)
     assert len(view._land_cache) == 3 and calls == {"gui": 0, "bg": 63}
     assert not any(key in first for key in view._land_cache)
+
+
+def test_on_the_board_each_area_shows_its_painting_at_every_level(app):
+    """The board (engine/board.py; the author, Oct 23 2026): for map-first
+    play the Region and World lay the areas out by direction, not to scale,
+    each under its backdrop painting, its name under it and framed where the
+    character is; what is inside an area is in its painting, not an item;
+    nothing on it writes a position into the story."""
+    from sealedlore.engine.board import NODE_M
+    from tests.test_world_pictures import png
+
+    view = WorldView()
+    view.resize(900, 700)
+    world = town()
+    world.start = "farm"
+    farm_plan = PlaceLayout(place_id="farm", rows=["." * 40] * 24, spec={"ground": "snow"})
+    town_plan = PlaceLayout(place_id="town", rows=["." * 80] * 48, spec={"ground": "snow"})
+    backdrop = MapPicture(
+        subject="backdrop", subject_id="town", name="Hellsville", file="images/map/b.jpg"
+    )
+    art = WorldArt(layouts={"farm": {"": farm_plan}, "town": {"": town_plan}}, pictures=[backdrop])
+    view.picture_reader = lambda path: png(50, 30) if path == backdrop.file else None
+    view.set_world(world, art, "Jane", keep_view=False, board=True)
+    assert view.board
+    # The story's map is untouched; the view's is the board: both nodes
+    # the same width, the town a step north of the farm (8 km on the map).
+    assert world.places["town"].size == 1500
+    assert view.world.places["town"].size == view.world.places["farm"].size == NODE_M
+    assert view.world.places["town"].y > view.world.places["farm"].y
+    # Items for the areas only: the diner is inside the town's painting.
+    assert {i.place.name for i in view._items} == {"Hellsville", "Farmhouse"}
+    view.go_region()
+    QApplication.processEvents()
+    assert view.level() == "region"
+    assert view._plans["town"].isVisible() and view._plans["farm"].isVisible()
+    assert "town" in view._backdrops and view._plans["town"].backdrop is not None
+    items = {i.place.name: i for i in view._items}
+    assert items["Hellsville"].frame is not None and items["Hellsville"].ringed  # Jane's there
+    assert items["Farmhouse"].frame is not None and not items["Farmhouse"].ringed
+    # No name tags on the plans (every house of a town was a smear), no
+    # badges of the old Paintings layer.
+    tags = {c.text() for c in view._plans["town"].childItems() if isinstance(c, _TagItem)}
+    assert tags <= {"Jane", "Marcus"}  # the people's, never a place's
+    assert not any(b.isVisible() for b in view._badges.values())

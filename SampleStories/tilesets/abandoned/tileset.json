@@ -14,7 +14,8 @@
  "lava": false,
  "deck": false,
  "grounds": [
-  "snow"
+  "snow",
+  "rock"
  ],
  "decor_lights": [
   true,

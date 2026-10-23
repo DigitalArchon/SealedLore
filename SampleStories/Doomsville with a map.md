@@ -114,7 +114,7 @@ and a sagging fence around the yard. From the road it looks abandoned.
 ## The farm
 - kind: site
 - at: 0, 0
-- size: 0.4
+- size: 0.24
 - way: The north road | north
 
 An isolated farm in deep snow, five miles south of Hellsville: a house, a barn
@@ -122,16 +122,18 @@ and a frozen pond behind a sagging wooden fence.
 
 ## The farmhouse
 - kind: building
+- size: 0.025
 - in: The farm
-- at: 0, 0.05
+- at: -0.005, 0.022
 
 Two storeys of white paint gone to grey, one shutter hanging. The porch is on
 the north side, facing the road. Someone still lives here.
 
 ## The barn
 - kind: building
+- size: 0.04
 - in: The farm
-- at: 0.12, -0.04
+- at: 0.050, -0.012
 - thing: Pickup truck | rusted, flat tyres, no fuel
 
 Newer than the house, its roof still holding.
@@ -139,7 +141,7 @@ Newer than the house, its roof still holding.
 ## The frozen pond
 - kind: area
 - in: The farm
-- at: -0.12, -0.09
+- at: -0.066, -0.042
 - size: 0.06
 
 ## The north road
@@ -155,7 +157,7 @@ Hellsville. Snow drifts across it where the fences have come down.
 ## The creek crossing
 - kind: site
 - at: 0.15, 2.6
-- size: 0.1
+- size: 0.12
 - way: The north road | west, beside it
 
 A low bridge over a frozen creek, half buried. Good cover; a bad place to be
@@ -164,7 +166,7 @@ caught.
 ## Hellsville
 - kind: settlement
 - at: 0, 8
-- size: 1.5
+- size: 0.9
 - known: yes
 - way: The north road | south
 - way: The east road | east
@@ -175,8 +177,8 @@ over its barricades from miles off.
 ## The south gate
 - kind: site
 - in: Hellsville
-- at: 0, -0.6
-- size: 0.1
+- at: -0.007, -0.223
+- size: 0.03
 
 A barricade of cars, tyres and scrap across the south road, with a gate the
 watch opens for anyone they believe.
@@ -184,13 +186,13 @@ watch opens for anyone they believe.
 ## Main street
 - kind: route
 - in: Hellsville
-- at: 0, -0.1
-- size: 0.12
+- at: -0.007, -0.054
+- size: 0.03
 
 ## The diner
 - kind: building
 - in: Hellsville
-- at: -0.18, -0.25
+- at: -0.059, -0.158
 
 The old diner, now the town's meeting hall, lit by mismatched lanterns. Marcus
 Webb holds court at the back table.
@@ -198,34 +200,34 @@ Webb holds court at the back table.
 ## The clinic
 - kind: building
 - in: Hellsville
-- at: 0.2, -0.2
+- at: 0.043, 0.089
 
 Elena Ruiz's clinic, in what was the hardware store.
 
 ## The church
 - kind: building
 - in: Hellsville
-- at: -0.22, 0.18
+- at: -0.194, 0.157
 
 Its weathered steeple is the tallest thing in town after the water tower.
 
 ## The water tower
 - kind: site
 - in: Hellsville
-- at: 0.3, 0.3
+- at: 0.205, 0.176
 - size: 0.05
 
 ## The general store
 - kind: building
 - in: Hellsville
-- at: 0.15, 0.12
+- at: 0.043, -0.035
 - thing: The town's stores | rationed, counted every evening
 
 ## The north gate
 - kind: site
 - in: Hellsville
-- at: 0, 0.6
-- size: 0.1
+- at: -0.007, 0.238
+- size: 0.03
 
 ## The east road
 - kind: route
@@ -238,22 +240,26 @@ The road east out of Hellsville, toward the hills and whatever lies past them.
 ## The hills
 - kind: area
 - at: 4.8, 8.6
-- size: 3
+- size: 0.8
 - way: Hellsville | west, about three miles
+- way: The Hidden Caves | east, up the slope
 
 Wooded limestone hills east of town. People from Hellsville don't go up there
 much any more.
 
 ## The Hidden Caves
 - kind: site
-- in: The hills
-- at: 0.4, 0.5
+- at: 5.2, 9.1
 - size: 0.2
+- way: The hills | west, down the slope
+
+A rocky hillside among the pines, with a narrow opening into the limestone that
+Ben has made his home.
 
 ## The cave mouth
 - kind: area
 - in: The Hidden Caves
-- at: -0.04, -0.04
+- at: -0.040, -0.046
 - size: 0.02
 
 A narrow opening in a rocky hillside among pines.
@@ -261,7 +267,7 @@ A narrow opening in a rocky hillside among pines.
 ## The main chamber
 - kind: room
 - in: The Hidden Caves
-- at: 0.02, 0.02
+- at: 0.025, 0.031
 - size: 0.03
 - thing: Ben's supplies | stacked, well kept
 
@@ -277,7 +283,7 @@ work it.
 - kind: site
 - in: The old highway
 - at: 0.1, -0.5
-- size: 0.08
+- size: 0.24
 
 A burnt-out gas station beside the highway, picked over long ago.
 

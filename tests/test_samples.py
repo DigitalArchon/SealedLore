@@ -548,16 +548,20 @@ def test_a_sample_s_shipped_map_art_fits_its_map():
         walkers = {p.subject_id for p in with_files.pictures if p.subject == "walker"}
         assert walkers <= {c.name for c in scenario.cast}
         assert sorted(files) == sorted(p.file for p in with_files.pictures)
-        # A showcase: every area with a plan comes with its isometric view
-        # (the author, Oct 15 2026: several areas each, not the start alone).
+        # A showcase: every area with a plan comes with its painting: its
+        # backdrop (the play view's ground and the board's picture of it,
+        # engine/backdrops.py; the author, Oct 23 2026), else, for the
+        # samples from before backdrops, its isometric view (Oct 15 2026).
         world = applied(WorldMap(), scenario.world_base, base=True)
         areas = {
             pid
             for pid in art.layouts
             if pid in world.places and (local_area(world, pid) or world.places[pid]).id == pid
         }
-        viewed = {p.subject_id for p in with_files.pictures if p.subject == "isometric"}
-        assert areas <= viewed, f"{path.name}: no view of {sorted(areas - viewed)}"
+        painted = {
+            p.subject_id for p in with_files.pictures if p.subject in ("backdrop", "isometric")
+        }
+        assert areas <= painted, f"{path.name}: no painting of {sorted(areas - painted)}"
 
 
 def test_every_sample_character_comes_with_its_portrait():
@@ -585,10 +589,11 @@ def test_every_sample_character_comes_with_its_portrait():
             )
 
 
-def test_a_sample_s_map_shows_each_area_s_own_view_over_it(app, tmp_path: Path):
-    """Brasshaven, looked at over the Ashcombe Works: Isometric lays the
-    works' own view over the works (it used to show Tinker's Row, where the
-    story is), each painted area is marked before Isometric is pressed."""
+def test_a_sample_s_map_is_the_board_of_its_paintings(app, tmp_path: Path):
+    """Brasshaven on the board (engine/board.py; the author, Oct 23 2026):
+    every area shows its own backdrop painting at the Region level, the
+    works' over the works, with no badge of the old Paintings layer; the
+    story's own map keeps its distances."""
     window = MainWindow(root=tmp_path, use_mock=True)
     window.open_setup = lambda *a, **k: False
     window.resize(1600, 1000)
@@ -596,14 +601,20 @@ def test_a_sample_s_map_shows_each_area_s_own_view_over_it(app, tmp_path: Path):
     session = window.session
     window.show_world(True)
     view = window.world_view
-    works = next(p for p in session.world().places.values() if p.name == "The Ashcombe Works")
+    assert view.board
+    world = session.world()
+    works = next(p for p in world.places.values() if p.name == "The Ashcombe Works")
+    row = next(p for p in world.places.values() if p.name == "Tinker's Row")
+    assert abs(works.x - row.x) > 1000  # the story's map, in metres
+    view.go_region()
+    QApplication.processEvents()
+    for pid in (works.id, row.id):
+        plan = view._plans[pid]
+        assert plan.isVisible() and plan.backdrop is not None, world.places[pid].name
+    assert view.world.places[works.id].size == view.world.places[row.id].size
+    assert not any(b.isVisible() for b in view._badges.values())
     view.go_to(works.id)
     assert view.area_in_view().id == works.id
-    assert view._badges[works.id].isVisible() and not view._isos[works.id].isVisible()
-    view.iso_button.setChecked(True)
-    assert view._isos[works.id].isVisible()
-    assert view._isos[works.id].sceneBoundingRect() == view._plans[works.id].rect()
-    assert view.iso_bar.offer.text() == "The Ashcombe Works: its painting."
     window._chat_allows_close = lambda: True
     window.close()
 

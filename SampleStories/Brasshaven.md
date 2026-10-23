@@ -191,7 +191,7 @@ carry a message.
 ## Tinker's Row
 - kind: settlement
 - at: 0, 0
-- size: 0.6
+- size: 0.36
 - known: yes
 - way: The Pier Tramway | north
 
@@ -201,7 +201,7 @@ brass signs, steaming pipes, chimneys and gas lamps.
 ## The Gilded Gear
 - kind: building
 - in: Tinker's Row
-- at: 0, 0
+- at: -0.016, 0.015
 - thing: Workbench | cluttered with gears, tools and half-built clockwork
 
 Adelaide Quill's workshop: a narrow two-storey brick building with a big
@@ -210,7 +210,7 @@ round brass gear over its door, its windows full of clockwork.
 ## The Copper Kettle
 - kind: building
 - in: Tinker's Row
-- at: -0.12, 0.08
+- at: -0.070, -0.039
 
 A tiny tearoom and tavern where artificers argue over plans, its windows
 fogged with steam.
@@ -218,7 +218,7 @@ fogged with steam.
 ## The tram stop
 - kind: site
 - in: Tinker's Row
-- at: 0.1, 0.18
+- at: -0.003, 0.099
 - size: 0.03
 
 An iron shelter where the cog tram stops before climbing the pier.
@@ -235,7 +235,7 @@ A cogged rail line climbing the iron piers between districts.
 ## The Engine Cathedral
 - kind: site
 - at: 0.8, 2.4
-- size: 0.5
+- size: 0.4
 - known: yes
 - way: The Ashcombe Works | east, along Furnace Street
 - way: The Skyport | north, by the great lift
@@ -245,14 +245,15 @@ rising above the whole city.
 
 ## The Engine hall
 - kind: building
+- size: 0.08
 - in: The Engine Cathedral
-- at: 0, 0
+- at: 0.000, 0.006
 - thing: The Great Engine | pistons as tall as houses, running without pause
 
 ## The Ashcombe Works
 - kind: site
 - at: 2, 2.2
-- size: 0.7
+- size: 0.5
 - known: yes
 
 House Ashcombe's factories: smokestacks, foundries and warehouses behind
@@ -260,8 +261,9 @@ iron railings, with automatons marching in and out of their gates.
 
 ## Ashcombe Hall
 - kind: building
+- size: 0.06
 - in: The Ashcombe Works
-- at: 0.2, 0.2
+- at: 0.130, 0.082
 
 Lady Ashcombe's mansion, a grand house of white stone and brass beside her
 factories, with its own mooring tower.
@@ -269,7 +271,7 @@ factories, with its own mooring tower.
 ## The Skyport
 - kind: site
 - at: 0.6, 3.6
-- size: 0.6
+- size: 0.45
 - known: yes
 
 A forest of iron mooring towers on the city's highest pier, with airships
@@ -278,14 +280,14 @@ of every size tied to them.
 ## The Wayward Lark's mooring
 - kind: site
 - in: The Skyport
-- at: -0.15, -0.1
+- at: -0.166, -0.026
 - size: 0.05
 - thing: The Wayward Lark | Captain Thorne's airship, ready to fly
 
 ## The Undercroft
 - kind: area
 - at: 0.2, -1.4
-- size: 1.5
+- size: 0.4
 
 A shanty town of catwalks and scaffolding in the dark beneath the piers,
 full of steam vents and dripping pipes.

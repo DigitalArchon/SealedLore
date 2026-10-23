@@ -49,6 +49,7 @@ from sealedlore.gui.area_render import (
     Ground,
     ThingPicture,
     TileSource,
+    _building_boxes,
     px_for,
     render_ground,
     sprite_image,
@@ -593,12 +594,18 @@ class AreaWindow:
         world = session.world()
         by_name = {key(p.name): p for p in world.places.values()}
         boxed = {key(n) for n in area.names.values()} | {key(area.name)}
+        roofs = _building_boxes(area) if not area.indoor else []
         marks: list[PlaceMark] = []
         own = key(area.name)
         for name, (x, y) in area.labels.items():
             if key(name) in boxed:
                 continue
             place = by_name.get(key(name))
+            if place is None and any(x0 <= x <= x1 and y0 <= y <= y1 for x0, y0, x1, y1 in roofs):
+                # The plan's own building, drawn roofed: its name shows on
+                # hover (a showcase town has forty of them; a diamond on
+                # every roof was clutter, Oct 23 2026).
+                continue
             if place is None and (
                 key(name).startswith(own) or head_noun(name) == head_noun(area.name)
             ):

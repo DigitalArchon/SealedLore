@@ -345,7 +345,8 @@
      ]
     },
     "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-15T00:36:27.489999+00:00"
+    "made_at": "2026-10-15T00:36:27.489999+00:00",
+    "levels": []
    }
   },
   "577329da-8261-500f-b79b-fb1c795b8be8": {
@@ -589,7 +590,8 @@
      ]
     },
     "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-15T00:36:31.331545+00:00"
+    "made_at": "2026-10-15T00:36:31.331545+00:00",
+    "levels": []
    }
   },
   "0b14db0f-84e0-595d-9d72-2ea912b6f8e6": {
@@ -601,77 +603,83 @@
      "features": [
       {
        "kind": "area",
-       "fill": "floor",
+       "fill": "dark",
        "shape": "rect",
-       "x": 17,
+       "x": 0,
        "y": 0,
-       "w": 6,
+       "w": 3,
        "h": 24
       },
       {
        "kind": "area",
-       "fill": "floor",
+       "fill": "dark",
        "shape": "rect",
-       "x": 25,
-       "y": 0,
-       "w": 6,
-       "h": 5
-      },
-      {
-       "kind": "area",
-       "fill": "floor",
-       "shape": "rect",
-       "x": 8,
-       "y": 4,
-       "w": 7,
-       "h": 13
-      },
-      {
-       "kind": "area",
-       "fill": "floor",
-       "shape": "rect",
-       "x": 15,
-       "y": 9,
-       "w": 3,
-       "h": 3
-      },
-      {
-       "kind": "area",
-       "fill": "floor",
-       "shape": "rect",
-       "x": 23,
-       "y": 16,
-       "w": 5,
+       "x": 0,
+       "y": 20,
+       "w": 40,
        "h": 4
       },
       {
        "kind": "area",
-       "fill": "floor",
+       "fill": "dark",
        "shape": "rect",
-       "x": 28,
-       "y": 5,
-       "w": 4,
-       "h": 12
+       "x": 37,
+       "y": 0,
+       "w": 3,
+       "h": 8
       },
       {
-       "kind": "area",
-       "fill": "floor",
-       "shape": "rect",
-       "x": 28,
-       "y": 10,
-       "w": 5,
-       "h": 2
+       "kind": "fence",
+       "points": [
+        [
+         3,
+         0
+        ],
+        [
+         3,
+         19
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         3,
+         19
+        ],
+        [
+         36,
+         19
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         36,
+         0
+        ],
+        [
+         36,
+         7
+        ]
+       ],
+       "gaps": []
       },
       {
        "kind": "road",
        "points": [
         [
-         19,
-         23
+         20,
+         0
         ],
         [
-         19,
-         16
+         20,
+         19
         ]
        ],
        "width": 2
@@ -680,12 +688,12 @@
        "kind": "road",
        "points": [
         [
-         8,
-         10
+         4,
+         6
         ],
         [
-         23,
-         10
+         35,
+         6
         ]
        ],
        "width": 1
@@ -693,13 +701,13 @@
       {
        "kind": "road",
        "points": [
+        [
+         4,
+         13
+        ],
         [
          19,
-         4
-        ],
-        [
-         19,
-         17
+         13
         ]
        ],
        "width": 1
@@ -708,12 +716,12 @@
        "kind": "road",
        "points": [
         [
-         28,
-         5
+         22,
+         14
         ],
         [
-         28,
-         16
+         35,
+         14
         ]
        ],
        "width": 1
@@ -722,326 +730,485 @@
        "kind": "road",
        "points": [
         [
-         12,
-         4
+         9,
+         7
         ],
         [
-         12,
-         16
+         9,
+         18
         ]
        ],
        "width": 1
       },
       {
-       "kind": "building",
-       "name": "The Gilded Gear",
-       "x": 19,
-       "y": 11,
-       "w": 4,
-       "h": 3,
-       "doors": [
-        {
-         "side": "west",
-         "at": 1
-        }
-       ],
-       "windows": [
-        {
-         "side": "west",
-         "at": 1
-        },
-        {
-         "side": "south",
-         "at": 1
-        },
-        {
-         "side": "south",
-         "at": 2
-        }
-       ]
-      },
-      {
-       "kind": "building",
-       "name": "The Copper Kettle",
-       "x": 11,
-       "y": 6,
-       "w": 4,
-       "h": 3,
-       "doors": [
-        {
-         "side": "east",
-         "at": 1
-        }
-       ],
-       "windows": [
-        {
-         "side": "east",
-         "at": 1
-        },
-        {
-         "side": "south",
-         "at": 1
-        },
-        {
-         "side": "north",
-         "at": 1
-        }
-       ]
-      },
-      {
-       "kind": "wall",
+       "kind": "road",
        "points": [
         [
-         26,
-         0
+         30,
+         7
         ],
         [
-         29,
-         0
+         30,
+         18
         ]
        ],
-       "gaps": [
-        [
-         27,
-         0
-        ]
-       ]
-      },
-      {
-       "kind": "building",
-       "name": "Quill's storeroom",
-       "x": 25,
-       "y": 12,
-       "w": 3,
-       "h": 4,
-       "doors": [
-        {
-         "side": "west",
-         "at": 1
-        }
-       ],
-       "windows": [
-        {
-         "side": "west",
-         "at": 2
-        }
-       ]
+       "width": 1
       },
       {
        "kind": "building",
        "name": "Bolt & Filament works",
-       "x": 8,
-       "y": 5,
+       "x": 17,
+       "y": 3,
        "w": 3,
-       "h": 4,
+       "h": 3,
        "doors": [
         {
          "side": "east",
          "at": 1
         }
        ],
-       "windows": [
-        {
-         "side": "east",
-         "at": 2
-        }
-       ]
+       "windows": []
       },
       {
        "kind": "building",
-       "name": "The Boilerworks",
-       "x": 8,
-       "y": 12,
+       "name": "the Boilerworks",
+       "x": 16,
+       "y": 14,
        "w": 4,
-       "h": 4,
+       "h": 2,
        "doors": [
         {
          "side": "east",
          "at": 1
         }
        ],
-       "windows": [
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "Marrow's clock shop",
+       "x": 22,
+       "y": 1,
+       "w": 3,
+       "h": 2,
+       "doors": [
         {
-         "side": "east",
-         "at": 2
-        },
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "the lens grinder",
+       "x": 22,
+       "y": 4,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "Pennyfeather's pawnshop",
+       "x": 22,
+       "y": 7,
+       "w": 3,
+       "h": 3,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "the automaton repair shop",
+       "x": 22,
+       "y": 11,
+       "w": 3,
+       "h": 3,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "Tallow & Wick candlemakers",
+       "x": 22,
+       "y": 15,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "Tallow & Wick candlemakers",
+       "x": 4,
+       "y": 4,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "south",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "the Constabulary post",
+       "x": 8,
+       "y": 4,
+       "w": 4,
+       "h": 2,
+       "doors": [
         {
          "side": "south",
          "at": 2
         }
-       ]
+       ],
+       "windows": []
       },
       {
        "kind": "building",
-       "name": "Cogwright's chandlery",
-       "x": 29,
-       "y": 5,
-       "w": 3,
-       "h": 4,
+       "name": "Hobb's pie shop",
+       "x": 26,
+       "y": 4,
+       "w": 4,
+       "h": 2,
        "doors": [
         {
-         "side": "west",
+         "side": "south",
+         "at": 2
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "a brass foundry",
+       "x": 31,
+       "y": 4,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "south",
          "at": 1
         }
        ],
-       "windows": [
-        {
-         "side": "west",
-         "at": 2
-        }
-       ]
+       "windows": []
       },
       {
        "kind": "building",
-       "name": "Lamplighter's depot",
-       "x": 29,
+       "name": "Pennyfeather's pawnshop",
+       "x": 4,
        "y": 11,
-       "w": 3,
-       "h": 4,
+       "w": 2,
+       "h": 2,
        "doors": [
         {
-         "side": "west",
+         "side": "south",
          "at": 1
         }
        ],
-       "windows": [
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "the automaton repair shop",
+       "x": 7,
+       "y": 11,
+       "w": 2,
+       "h": 2,
+       "doors": [
         {
-         "side": "west",
-         "at": 2
+         "side": "south",
+         "at": 1
         }
-       ]
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "Tallow & Wick candlemakers",
+       "x": 10,
+       "y": 11,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "south",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "Hobb's pie shop",
+       "x": 26,
+       "y": 12,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "south",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "a brass foundry",
+       "x": 31,
+       "y": 12,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "south",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "the Row's pump house",
+       "x": 26,
+       "y": 15,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "north",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "a cooperage",
+       "x": 31,
+       "y": 15,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "north",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "area",
+       "fill": "floor",
+       "shape": "rect",
+       "x": 24,
+       "y": 8,
+       "w": 5,
+       "h": 4
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 33,
+       "y": 16,
+       "w": 2,
+       "h": 2
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 5,
+       "y": 16,
+       "w": 2,
+       "h": 2
       },
       {
        "kind": "object",
        "name": "iron tram shelter",
-       "x": 27,
+       "x": 20,
        "y": 1
       },
       {
        "kind": "object",
-       "name": "gas lamp",
-       "x": 18,
-       "y": 8
-      },
-      {
-       "kind": "object",
-       "name": "gas lamp",
-       "x": 20,
-       "y": 15
-      },
-      {
-       "kind": "object",
-       "name": "gas lamp",
-       "x": 11,
-       "y": 10
-      },
-      {
-       "kind": "object",
-       "name": "gas lamp",
-       "x": 27,
+       "name": "clockwork statue",
+       "x": 26,
        "y": 9
       },
       {
        "kind": "object",
-       "name": "brass sign: The Gilded Gear",
-       "x": 18,
-       "y": 12
-      },
-      {
-       "kind": "object",
-       "name": "steaming pipe run",
-       "x": 16,
-       "y": 10
-      },
-      {
-       "kind": "object",
-       "name": "chimney",
-       "x": 10,
-       "y": 13
-      },
-      {
-       "kind": "object",
-       "name": "chimney",
-       "x": 30,
+       "name": "gas lamp",
+       "x": 19,
        "y": 6
       },
       {
        "kind": "object",
-       "name": "mooring bollard",
-       "x": 21,
-       "y": 23
+       "name": "gas lamp",
+       "x": 22,
+       "y": 13
+      },
+      {
+       "kind": "object",
+       "name": "gas lamp",
+       "x": 9,
+       "y": 13
+      },
+      {
+       "kind": "object",
+       "name": "gas lamp",
+       "x": 30,
+       "y": 7
+      },
+      {
+       "kind": "object",
+       "name": "steaming pipe run",
+       "x": 12,
+       "y": 8
+      },
+      {
+       "kind": "object",
+       "name": "public pump",
+       "x": 7,
+       "y": 11
+      },
+      {
+       "kind": "object",
+       "name": "coal cart",
+       "x": 32,
+       "y": 10
       }
      ]
     },
     "rows": [
-     ".................______.._#_##_.........",
-     ".................______..__1___.........",
-     ".................______..______.........",
-     ".................______..______.........",
-     "........____=__..__=___..______.........",
-     "........###_=__..__=___.....=###........",
-     "........#_+#W##..__=___.....=+9#........",
-     "........#_W#__+..__=___.....=W_#........",
-     "........####W##.._2=___.....=###........",
-     "........____=______=___....5=___........",
-     "........===4====7=======....=____.......",
-     "........____=______####.....=###_.......",
-     "........####=__.._6+__#..###=+_#........",
-     "........#_8+=__..__#WW#..+_#=W_#........",
-     "........#__W=__..__=___..W_#=###........",
-     "........##W#=__..__=3__..###=___........",
-     "........____=__..__==_______=___........",
-     ".................__==_______............",
-     ".................__==_______............",
-     ".................__==_______............",
-     ".................__==__.................",
-     ".................__==__.................",
-     ".................__==__.................",
-     ".................__==__................."
+     "   %................==..............%   ",
+     "   %................1=###...........%   ",
+     "   %................==+##...........%   ",
+     "   %.............###==..............%   ",
+     "   %###.####.....#_+==###.####.###..%   ",
+     "   %#+#.##+#.....###==+##.##+#.#+#..%   ",
+     "   %===============3================%   ",
+     "   %.....=..........==###.....6.....%   ",
+     "   %.....=..7.......==+______.=.........",
+     "   %.....=......####==##__2__.=.........",
+     "   %.....=......#__#==.._____.=.9.......",
+     "   %##.8#=##....##+#==##_____.=.........",
+     "   %#+.#+=#+........==+_#.##..=##.......",
+     "   %=====5============4##.#+..=#+.......",
+     "   %.....=......####================....",
+     "   %.....=####..###+==###.#+#.=#+.......",
+     "   %.::..=#__#......==+##.###.=##::.....",
+     "   %.::..=##+#......==........=..::.....",
+     "   %.....=..........==........=.........",
+     "   %%%%%%%%%%%%%%%%%==%%%%%%%%%%%%%%%...",
+     "                    =                   ",
+     "                                        ",
+     "                                        ",
+     "                                        "
     ],
     "objects": {
      "1": "iron tram shelter",
-     "2": "gas lamp",
+     "2": "clockwork statue",
      "3": "gas lamp",
      "4": "gas lamp",
      "5": "gas lamp",
-     "6": "brass sign: The Gilded Gear",
+     "6": "gas lamp",
      "7": "steaming pipe run",
-     "8": "chimney",
-     "9": "chimney"
+     "8": "public pump",
+     "9": "coal cart"
     },
     "labels": {
-     "The Gilded Gear": [
-      21,
+     "Bolt & Filament works": [
+      18,
+      4
+     ],
+     "the Boilerworks": [
+      18,
+      15
+     ],
+     "Marrow's clock shop": [
+      23,
+      2
+     ],
+     "the lens grinder": [
+      23,
+      5
+     ],
+     "Pennyfeather's pawnshop": [
+      5,
       12
      ],
-     "The Copper Kettle": [
-      13,
-      7
+     "the automaton repair shop": [
+      8,
+      12
      ],
-     "Quill's storeroom": [
-      26,
-      14
+     "Tallow & Wick candlemakers": [
+      11,
+      12
      ],
-     "Bolt & Filament works": [
-      9,
-      7
-     ],
-     "The Boilerworks": [
+     "the Constabulary post": [
       10,
-      14
+      5
      ],
-     "Cogwright's chandlery": [
-      30,
-      7
-     ],
-     "Lamplighter's depot": [
-      30,
+     "Hobb's pie shop": [
+      27,
       13
+     ],
+     "a brass foundry": [
+      32,
+      13
+     ],
+     "the Row's pump house": [
+      27,
+      16
+     ],
+     "a cooperage": [
+      32,
+      16
+     ],
+     "The Gilded Gear": [
+      18,
+      10
+     ],
+     "The Copper Kettle": [
+      12,
+      16
+     ],
+     "The tram stop": [
+      20,
+      1
      ]
     },
-    "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-15T00:36:34.493850+00:00"
+    "model": "showcase",
+    "made_at": "2026-10-23T20:11:36.331810+00:00",
+    "levels": []
    }
   },
   "8ed0e87a-f711-53e4-b4f1-629bdd6c3250": {
@@ -1049,223 +1216,380 @@
     "place_id": "8ed0e87a-f711-53e4-b4f1-629bdd6c3250",
     "state": "",
     "spec": {
-     "ground": "floor",
+     "ground": "cobble",
      "features": [
+      {
+       "kind": "area",
+       "fill": "floor",
+       "shape": "rect",
+       "x": 4,
+       "y": 4,
+       "w": 32,
+       "h": 16
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         3,
+         3
+        ],
+        [
+         36,
+         3
+        ]
+       ],
+       "gaps": [
+        [
+         20,
+         3
+        ],
+        [
+         21,
+         3
+        ]
+       ]
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         3,
+         20
+        ],
+        [
+         36,
+         20
+        ]
+       ],
+       "gaps": [
+        [
+         19,
+         20
+        ],
+        [
+         20,
+         20
+        ]
+       ]
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         3,
+         3
+        ],
+        [
+         3,
+         20
+        ]
+       ],
+       "gaps": [
+        [
+         3,
+         12
+        ]
+       ]
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         36,
+         3
+        ],
+        [
+         36,
+         20
+        ]
+       ],
+       "gaps": [
+        [
+         36,
+         11
+        ],
+        [
+         36,
+         12
+        ]
+       ]
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         0,
+         11
+        ],
+        [
+         39,
+         11
+        ]
+       ],
+       "width": 2
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         20,
+         0
+        ],
+        [
+         20,
+         4
+        ]
+       ],
+       "width": 2
+      },
+      {
+       "kind": "road",
+       "points": [
+        [
+         19,
+         20
+        ],
+        [
+         19,
+         23
+        ]
+       ],
+       "width": 2
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 6,
+       "y": 14,
+       "w": 5,
+       "h": 4
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 28,
+       "y": 14,
+       "w": 5,
+       "h": 4
+      },
       {
        "kind": "area",
        "fill": "dark",
        "shape": "rect",
        "x": 0,
-       "y": 0,
-       "w": 40,
-       "h": 24
+       "y": 21,
+       "w": 8,
+       "h": 3
       },
       {
        "kind": "area",
-       "fill": "floor",
+       "fill": "dark",
        "shape": "rect",
-       "x": 2,
-       "y": 6,
-       "w": 36,
-       "h": 14
+       "x": 32,
+       "y": 21,
+       "w": 8,
+       "h": 3
       },
       {
        "kind": "building",
-       "name": "Engine Hall",
-       "x": 18,
-       "y": 11,
+       "name": "stokers' barracks",
+       "x": 5,
+       "y": 5,
+       "w": 5,
+       "h": 3,
+       "doors": [
+        {
+         "side": "south",
+         "at": 2
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "the Engine chapel",
+       "x": 29,
+       "y": 5,
        "w": 4,
        "h": 3,
        "doors": [
         {
-         "side": "west",
-         "at": 1
-        },
-        {
-         "side": "east",
-         "at": 1
-        }
-       ],
-       "windows": [
-        {
-         "side": "north",
-         "at": 1
-        },
-        {
-         "side": "north",
-         "at": 2
-        },
-        {
-         "side": "south",
-         "at": 1
-        },
-        {
          "side": "south",
          "at": 2
         }
-       ]
-      },
-      {
-       "kind": "object",
-       "name": "Chimney Tower",
-       "x": 19,
-       "y": 11
-      },
-      {
-       "kind": "object",
-       "name": "Great Engine",
-       "x": 20,
-       "y": 12
-      },
-      {
-       "kind": "passage",
-       "points": [
-        [
-         20,
-         10
-        ],
-        [
-         20,
-         6
-        ]
        ],
-       "width": 2
+       "windows": []
       },
       {
-       "kind": "object",
-       "name": "Great Lift",
-       "x": 20,
-       "y": 7
-      },
-      {
-       "kind": "passage",
-       "points": [
-        [
-         22,
-         13
-        ],
-        [
-         36,
-         13
-        ]
+       "kind": "building",
+       "name": "the gauge house",
+       "x": 12,
+       "y": 5,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "south",
+         "at": 1
+        }
        ],
-       "width": 2
+       "windows": []
       },
       {
-       "kind": "wall",
-       "points": [
-        [
-         22,
-         12
-        ],
-        [
-         36,
-         12
-        ]
-       ]
+       "kind": "building",
+       "name": "the coal office",
+       "x": 25,
+       "y": 16,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "north",
+         "at": 1
+        }
+       ],
+       "windows": []
       },
       {
-       "kind": "wall",
-       "points": [
-        [
-         22,
-         15
-        ],
-        [
-         36,
-         15
-        ]
-       ]
+       "kind": "building",
+       "name": "pump house",
+       "x": 11,
+       "y": 16,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "north",
+         "at": 1
+        }
+       ],
+       "windows": []
       },
       {
        "kind": "object",
-       "name": "Furnace Street Gates",
-       "x": 36,
+       "name": "great lift up to the Skyport",
+       "x": 20,
+       "y": 1
+      },
+      {
+       "kind": "object",
+       "name": "chimney tower",
+       "x": 24,
+       "y": 8
+      },
+      {
+       "kind": "object",
+       "name": "gantry crane",
+       "x": 8,
        "y": 13
       },
       {
        "kind": "object",
-       "name": "Tramway Dock",
-       "x": 19,
-       "y": 6
+       "name": "coal heap",
+       "x": 7,
+       "y": 15
       },
       {
        "kind": "object",
-       "name": "Boiler",
+       "name": "coal heap",
+       "x": 30,
+       "y": 15
+      },
+      {
+       "kind": "object",
+       "name": "pressure gauge stand",
        "x": 15,
-       "y": 12
+       "y": 7
       },
       {
        "kind": "object",
-       "name": "Coal Store",
-       "x": 12,
-       "y": 10
+       "name": "steaming pipe run",
+       "x": 24,
+       "y": 7
       },
       {
        "kind": "object",
-       "name": "Gantry Crane",
-       "x": 25,
-       "y": 12
+       "name": "coal cart",
+       "x": 27,
+       "y": 13
       },
       {
        "kind": "object",
-       "name": "Pressure Gauges",
-       "x": 26,
-       "y": 16
-      },
-      {
-       "kind": "object",
-       "name": "Vent Fan",
-       "x": 33,
-       "y": 8
+       "name": "smokestack",
+       "x": 31,
+       "y": 9
       }
      ]
     },
     "rows": [
-     "                                        ",
-     "                                        ",
-     "                                        ",
-     "                                        ",
-     "                                        ",
-     "                                        ",
-     "  _________________5__________________  ",
-     "  __________________3_________________  ",
-     "  ____________________________________  ",
-     "  ____________________________________  ",
-     "  __________7_________________________  ",
-     "  ________________#WW#________________  ",
-     "  _____________6__+__+###8###########_  ",
-     "  ________________#WW#______________4_  ",
-     "  ____________________________________  ",
-     "  ____________________###############_  ",
-     "  ________________________9___________  ",
-     "  ____________________________________  ",
-     "  ____________________________________  ",
-     "  ____________________________________  ",
-     "                                        ",
-     "                                        ",
-     "                                        ",
-     "                                        "
+     "....................==..................",
+     "....................1=..................",
+     "....................==..................",
+     "...%%%%%%%%%%%%%%%%%==%%%%%%%%%%%%%%%...",
+     "...%________________==______________%...",
+     "...%_#####__###_____=________####___%...",
+     "...%_#___#__#+#______________#__#___%...",
+     "...%_##+##_____6________7____##+#___%...",
+     "...%____________________2___________%...",
+     "...%____________########_______9____%...",
+     "...%____________#______#____________%...",
+     "================#______#================",
+     "================#______#================",
+     "...%____3_______####+###___8________%...",
+     "...%__:::::_________________:::::___%...",
+     "...%__:4:::_________________::5::___%...",
+     "...%__:::::#+#___________#+#:::::___%...",
+     "...%__:::::###___________###:::::___%...",
+     "...%________________________________%...",
+     "...%________________________________%...",
+     "...%%%%%%%%%%%%%%%%==%%%%%%%%%%%%%%%%...",
+     "        ...........==...........        ",
+     "        ...........==...........        ",
+     "        ...........==...........        "
     ],
     "objects": {
-     "1": "Chimney Tower",
-     "2": "Great Engine",
-     "3": "Great Lift",
-     "4": "Furnace Street Gates",
-     "5": "Tramway Dock",
-     "6": "Boiler",
-     "7": "Coal Store",
-     "8": "Gantry Crane",
-     "9": "Pressure Gauges"
+     "1": "great lift up to the Skyport",
+     "2": "chimney tower",
+     "3": "gantry crane",
+     "4": "coal heap",
+     "5": "coal heap",
+     "6": "pressure gauge stand",
+     "7": "steaming pipe run",
+     "8": "coal cart",
+     "9": "smokestack"
     },
     "labels": {
+     "stokers' barracks": [
+      7,
+      6
+     ],
+     "the Engine chapel": [
+      31,
+      6
+     ],
+     "the gauge house": [
+      13,
+      6
+     ],
+     "the coal office": [
+      26,
+      17
+     ],
+     "pump house": [
+      12,
+      17
+     ],
      "The Engine hall": [
       20,
-      12
+      11
      ]
     },
-    "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-15T00:36:35.520080+00:00"
+    "model": "showcase",
+    "made_at": "2026-10-23T20:11:36.331810+00:00",
+    "levels": []
    }
   },
   "85c1473f-0693-5a5d-be7b-c161eccb8ace": {
@@ -1554,7 +1878,8 @@
      ]
     },
     "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-15T00:36:38.569596+00:00"
+    "made_at": "2026-10-15T00:36:38.569596+00:00",
+    "levels": []
    }
   },
   "de95d84b-d756-58df-b3de-3f30effc79dc": {
@@ -1565,15 +1890,98 @@
      "ground": "cobble",
      "features": [
       {
+       "kind": "area",
+       "fill": "floor",
+       "shape": "rect",
+       "x": 6,
+       "y": 2,
+       "w": 28,
+       "h": 18
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         5,
+         1
+        ],
+        [
+         34,
+         1
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         5,
+         20
+        ],
+        [
+         34,
+         20
+        ]
+       ],
+       "gaps": [
+        [
+         18,
+         20
+        ],
+        [
+         19,
+         20
+        ]
+       ]
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         5,
+         1
+        ],
+        [
+         5,
+         20
+        ]
+       ],
+       "gaps": [
+        [
+         5,
+         10
+        ],
+        [
+         5,
+         11
+        ]
+       ]
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         34,
+         1
+        ],
+        [
+         34,
+         20
+        ]
+       ],
+       "gaps": []
+      },
+      {
        "kind": "road",
        "points": [
         [
          0,
-         20
+         10
         ],
         [
-         39,
-         20
+         18,
+         10
         ]
        ],
        "width": 2
@@ -1582,458 +1990,342 @@
        "kind": "road",
        "points": [
         [
-         26,
-         0
+         18,
+         2
         ],
         [
-         26,
-         20
+         18,
+         19
         ]
        ],
        "width": 2
       },
       {
        "kind": "area",
-       "fill": "rubble",
+       "fill": "brush",
        "shape": "rect",
-       "x": 0,
-       "y": 0,
+       "x": 1,
+       "y": 2,
        "w": 4,
+       "h": 7
+      },
+      {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "ellipse",
+       "x": 0,
+       "y": 12,
+       "w": 5,
+       "h": 8
+      },
+      {
+       "kind": "area",
+       "fill": "brush",
+       "shape": "rect",
+       "x": 26,
+       "y": 3,
+       "w": 7,
        "h": 4
       },
       {
+       "kind": "area",
+       "fill": "trees",
+       "shape": "rect",
+       "x": 27,
+       "y": 5,
+       "w": 3,
+       "h": 2
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 8,
+       "y": 15,
+       "w": 4,
+       "h": 3
+      },
+      {
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 13,
+       "y": 16,
+       "w": 3,
+       "h": 2
+      },
+      {
+       "kind": "area",
+       "fill": "dark",
+       "shape": "rect",
+       "x": 0,
+       "y": 21,
+       "w": 40,
+       "h": 3
+      },
+      {
+       "kind": "area",
+       "fill": "dark",
+       "shape": "rect",
+       "x": 35,
+       "y": 0,
+       "w": 5,
+       "h": 21
+      },
+      {
        "kind": "building",
-       "name": "Great Foundry",
-       "x": 3,
-       "y": 2,
-       "w": 14,
-       "h": 9,
-       "doors": [
-        {
-         "side": "south",
-         "at": 6
-        },
-        {
-         "side": "east",
-         "at": 7
-        }
-       ],
-       "windows": [
-        {
-         "side": "south",
-         "at": 2
-        },
-        {
-         "side": "south",
-         "at": 10
-        }
-       ]
-      },
-      {
-       "kind": "object",
-       "name": "smokestack",
-       "x": 5,
-       "y": 0
-      },
-      {
-       "kind": "object",
-       "name": "smokestack",
-       "x": 9,
-       "y": 0
-      },
-      {
-       "kind": "object",
-       "name": "smokestack",
-       "x": 14,
-       "y": 0
-      },
-      {
-       "kind": "building",
-       "name": "Boiler House",
-       "x": 19,
+       "name": "the Great Foundry",
+       "x": 7,
        "y": 3,
-       "w": 6,
-       "h": 6,
-       "doors": [
-        {
-         "side": "south",
-         "at": 2
-        }
-       ],
-       "windows": [
-        {
-         "side": "west",
-         "at": 4
-        }
-       ]
-      },
-      {
-       "kind": "object",
-       "name": "smokestack",
-       "x": 21,
-       "y": 1
-      },
-      {
-       "kind": "building",
-       "name": "Warehouse of Cogs",
-       "x": 4,
-       "y": 15,
-       "w": 11,
-       "h": 6,
-       "doors": [
-        {
-         "side": "north",
-         "at": 5
-        },
-        {
-         "side": "east",
-         "at": 3
-        }
-       ],
-       "windows": [
-        {
-         "side": "south",
-         "at": 4
-        }
-       ]
-      },
-      {
-       "kind": "building",
-       "name": "Pattern Shop",
-       "x": 18,
-       "y": 15,
-       "w": 7,
+       "w": 8,
        "h": 5,
        "doors": [
         {
+         "side": "south",
+         "at": 4
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "the assembly shed",
+       "x": 7,
+       "y": 11,
+       "w": 7,
+       "h": 3,
+       "doors": [
+        {
          "side": "north",
          "at": 3
         }
        ],
-       "windows": [
-        {
-         "side": "south",
-         "at": 2
-        },
-        {
-         "side": "south",
-         "at": 4
-        }
-       ]
+       "windows": []
       },
       {
        "kind": "building",
-       "name": "Automaton Assembly Shed",
-       "x": 28,
-       "y": 13,
-       "w": 9,
-       "h": 6,
+       "name": "warehouse A",
+       "x": 21,
+       "y": 3,
+       "w": 5,
+       "h": 3,
        "doors": [
         {
          "side": "west",
-         "at": 3
-        },
-        {
-         "side": "south",
-         "at": 4
+         "at": 1
         }
        ],
-       "windows": [
-        {
-         "side": "north",
-         "at": 4
-        }
-       ]
+       "windows": []
       },
       {
        "kind": "building",
-       "name": "Ashcombe Hall",
-       "x": 30,
-       "y": 0,
+       "name": "warehouse B",
+       "x": 21,
+       "y": 7,
+       "w": 5,
+       "h": 3,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "the automaton shed",
+       "x": 21,
+       "y": 13,
+       "w": 6,
+       "h": 4,
+       "doors": [
+        {
+         "side": "west",
+         "at": 2
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "gatehouse",
+       "x": 3,
+       "y": 8,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "east",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "the counting house",
+       "x": 28,
+       "y": 12,
        "w": 4,
        "h": 3,
        "doors": [
         {
-         "side": "south",
-         "at": 2
-        }
-       ],
-       "windows": [
-        {
-         "side": "east",
-         "at": 1
-        },
-        {
          "side": "west",
          "at": 1
         }
-       ]
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "boiler house",
+       "x": 15,
+       "y": 3,
+       "w": 2,
+       "h": 3,
+       "doors": [
+        {
+         "side": "south",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "object",
+       "name": "Furnace Street gates",
+       "x": 5,
+       "y": 10
+      },
+      {
+       "kind": "object",
+       "name": "smokestack",
+       "x": 9,
+       "y": 2
+      },
+      {
+       "kind": "object",
+       "name": "smokestack",
+       "x": 12,
+       "y": 2
       },
       {
        "kind": "object",
        "name": "mooring tower",
-       "x": 35,
-       "y": 1
-      },
-      {
-       "kind": "road",
-       "points": [
-        [
-         20,
-         12
-        ],
-        [
-         26,
-         12
-        ],
-        [
-         26,
-         9
-        ]
-       ],
-       "width": 1
-      },
-      {
-       "kind": "passage",
-       "points": [
-        [
-         17,
-         6
-        ],
-        [
-         19,
-         6
-        ]
-       ],
-       "width": 1
-      },
-      {
-       "kind": "passage",
-       "points": [
-        [
-         26,
-         9
-        ],
-        [
-         26,
-         12
-        ],
-        [
-         30,
-         12
-        ]
-       ],
-       "width": 1
-      },
-      {
-       "kind": "passage",
-       "points": [
-        [
-         9,
-         11
-        ],
-        [
-         9,
-         15
-        ]
-       ],
-       "width": 2
-      },
-      {
-       "kind": "passage",
-       "points": [
-        [
-         25,
-         12
-        ],
-        [
-         25,
-         15
-        ]
-       ],
-       "width": 1
-      },
-      {
-       "kind": "fence",
-       "points": [
-        [
-         1,
-         1
-        ],
-        [
-         1,
-         19
-        ]
-       ],
-       "gaps": [
-        [
-         1,
-         12
-        ]
-       ]
-      },
-      {
-       "kind": "fence",
-       "points": [
-        [
-         1,
-         19
-        ],
-        [
-         37,
-         19
-        ]
-       ],
-       "gaps": [
-        [
-         9,
-         19
-        ],
-        [
-         31,
-         19
-        ]
-       ]
-      },
-      {
-       "kind": "fence",
-       "points": [
-        [
-         37,
-         19
-        ],
-        [
-         37,
-         1
-        ]
-       ],
-       "gaps": [
-        [
-         37,
-         12
-        ]
-       ]
-      },
-      {
-       "kind": "fence",
-       "points": [
-        [
-         37,
-         1
-        ],
-        [
-         27,
-         1
-        ],
-        [
-         27,
-         8
-        ]
-       ],
-       "gaps": [
-        [
-         29,
-         1
-        ]
-       ]
+       "x": 32,
+       "y": 2
       },
       {
        "kind": "object",
-       "name": "iron gate",
-       "x": 1,
-       "y": 12
-      },
-      {
-       "kind": "object",
-       "name": "iron gate",
-       "x": 9,
-       "y": 19
-      },
-      {
-       "kind": "object",
-       "name": "iron gate",
-       "x": 31,
-       "y": 19
+       "name": "gantry crane",
+       "x": 19,
+       "y": 13
       },
       {
        "kind": "object",
        "name": "coal heap",
-       "x": 20,
-       "y": 11
+       "x": 16,
+       "y": 17
       },
       {
        "kind": "object",
-       "name": "water tank",
-       "x": 12,
-       "y": 13
+       "name": "clockwork statue",
+       "x": 30,
+       "y": 9
+      },
+      {
+       "kind": "object",
+       "name": "boiler",
+       "x": 16,
+       "y": 6
+      },
+      {
+       "kind": "object",
+       "name": "gas lamp",
+       "x": 20,
+       "y": 10
       }
      ]
     },
     "rows": [
-     "::::.1...2....3...........==..####......",
-     ":%::.................4....=%%.W__W%%%%..",
-     ":%:##############.........=%..##+#...%..",
-     ":%:#____________#..######.=%.........%..",
-     ".%.#____________#..#____#.=%.........%..",
-     ".%.#____________#..#____#.=%.........%..",
-     ".%.#____________#_______#.=%.........%..",
-     ".%.#____________#..W____#.=%.........%..",
-     ".%.#____________#..##+###.=%.........%..",
-     ".%.#____________+........._=.........%..",
-     ".%.##W###+###W###........._=.........%..",
-     ".%.......__.........9....._=.........%..",
-     ".6.......__.........=====______.........",
-     ".%.......__.............._==####W####%..",
-     ".%.......__.............._==#_______#%..",
-     ".%..#####__####...###+###_==#_______#%..",
-     ".%..#_________#...#_____#.==+_______#%..",
-     ".%..#_________#...#_____#.==#_______#%..",
-     ".%..#_________+...#_____#.==####+####%..",
-     ".%%%%%%%%7____#...##W#W##.==...8%%%%%%..",
-     "====####W######=========================",
-     "========================================",
-     "........................................",
-     "........................................"
+     "...................................     ",
+     ".....%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%     ",
+     ".,,,,%___2__3_____==____________4_%     ",
+     ".,,,,%_##########_==_#####,,,,,,,_%     ",
+     ".,,,,%_#______###_==_+___#,,#####_%     ",
+     ".,,,,%_#______##+_==_#####,T#___#_%     ",
+     ".,,,,%_#______#_8_==______,T##+##_%     ",
+     ".,,,,%_####+###___==_#####________%     ",
+     ".,,##%____________==_+___#________%     ",
+     "...#+%____________==_#####____7___%     ",
+     "=====1==============9_____________%     ",
+     "=======###+###======______________%     ",
+     ".TTT.%_#_____#____==________####__%     ",
+     ".TTT.%_#######____=5_######_+__#__%     ",
+     "TTTTT%____________==_#____#_####__%     ",
+     "TTTTT%__::::______==_+____#_______%     ",
+     "TTTTT%__::::_:::__==_######_______%     ",
+     "TTTTT%__::::_:::6_==______________%     ",
+     ".TTT.%____________==______________%     ",
+     ".TTT.%____________==______________%     ",
+     ".....%%%%%%%%%%%%%=.%%%%%%%%%%%%%%%     ",
+     "                                        ",
+     "                                        ",
+     "                                        "
     ],
     "objects": {
-     "1": "smokestack",
+     "1": "Furnace Street gates",
      "2": "smokestack",
      "3": "smokestack",
-     "4": "smokestack",
-     "5": "mooring tower",
-     "6": "iron gate",
-     "7": "iron gate",
-     "8": "iron gate",
-     "9": "coal heap"
+     "4": "mooring tower",
+     "5": "gantry crane",
+     "6": "coal heap",
+     "7": "clockwork statue",
+     "8": "boiler",
+     "9": "gas lamp"
     },
     "labels": {
-     "Great Foundry": [
+     "the Great Foundry": [
+      11,
+      5
+     ],
+     "the assembly shed": [
       10,
-      6
+      12
      ],
-     "Boiler House": [
-      22,
-      6
+     "warehouse A": [
+      23,
+      4
      ],
-     "Warehouse of Cogs": [
-      9,
-      18
+     "warehouse B": [
+      23,
+      8
      ],
-     "Pattern Shop": [
-      21,
-      17
+     "the automaton shed": [
+      24,
+      15
      ],
-     "Automaton Assembly Shed": [
-      32,
-      16
+     "gatehouse": [
+      4,
+      9
+     ],
+     "the counting house": [
+      30,
+      13
+     ],
+     "boiler house": [
+      16,
+      4
      ],
      "Ashcombe Hall": [
-      32,
-      1
+      30,
+      5
      ]
     },
-    "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-15T00:36:41.889794+00:00"
+    "model": "showcase",
+    "made_at": "2026-10-23T20:11:36.331810+00:00",
+    "levels": []
    }
   },
   "71f341d8-d0e1-580f-ab6e-26a1e1d52d75": {
@@ -2292,7 +2584,8 @@
      ]
     },
     "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-15T00:36:46.580289+00:00"
+    "made_at": "2026-10-15T00:36:46.580289+00:00",
+    "levels": []
    }
   },
   "3de664bb-929a-5f6b-9d8c-d010af9532f5": {
@@ -2300,18 +2593,119 @@
     "place_id": "3de664bb-929a-5f6b-9d8c-d010af9532f5",
     "state": "",
     "spec": {
-     "ground": "floor",
+     "ground": "cobble",
      "features": [
+      {
+       "kind": "area",
+       "fill": "dark",
+       "shape": "rect",
+       "x": 0,
+       "y": 0,
+       "w": 40,
+       "h": 2
+      },
+      {
+       "kind": "area",
+       "fill": "dark",
+       "shape": "rect",
+       "x": 0,
+       "y": 22,
+       "w": 40,
+       "h": 2
+      },
+      {
+       "kind": "area",
+       "fill": "dark",
+       "shape": "rect",
+       "x": 0,
+       "y": 0,
+       "w": 2,
+       "h": 24
+      },
+      {
+       "kind": "area",
+       "fill": "dark",
+       "shape": "rect",
+       "x": 38,
+       "y": 0,
+       "w": 2,
+       "h": 24
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         2,
+         2
+        ],
+        [
+         37,
+         2
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         2,
+         21
+        ],
+        [
+         37,
+         21
+        ]
+       ],
+       "gaps": [
+        [
+         19,
+         21
+        ],
+        [
+         20,
+         21
+        ]
+       ]
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         2,
+         2
+        ],
+        [
+         2,
+         21
+        ]
+       ],
+       "gaps": []
+      },
+      {
+       "kind": "fence",
+       "points": [
+        [
+         37,
+         2
+        ],
+        [
+         37,
+         21
+        ]
+       ],
+       "gaps": []
+      },
       {
        "kind": "road",
        "points": [
         [
          20,
-         2
+         19
         ],
         [
          20,
-         21
+         23
         ]
        ],
        "width": 2
@@ -2320,200 +2714,219 @@
        "kind": "road",
        "points": [
         [
-         8,
+         4,
          12
         ],
         [
-         32,
+         35,
          12
         ]
        ],
-       "width": 1
+       "width": 2
       },
       {
        "kind": "road",
        "points": [
         [
-         8,
-         19
+         20,
+         4
         ],
         [
-         19,
+         20,
          19
         ]
        ],
-       "width": 1
+       "width": 2
       },
       {
        "kind": "area",
-       "fill": "floor",
+       "fill": "rubble",
        "shape": "rect",
-       "x": 20,
-       "y": 1,
-       "w": 4,
-       "h": 4
+       "x": 29,
+       "y": 15,
+       "w": 3,
+       "h": 2
       },
       {
-       "kind": "object",
-       "name": "great lift down to the Engine Cathedral",
-       "x": 21,
-       "y": 2
-      },
-      {
-       "kind": "object",
-       "name": "mooring tower",
-       "x": 4,
-       "y": 3
-      },
-      {
-       "kind": "object",
-       "name": "mooring tower",
-       "x": 12,
-       "y": 3
-      },
-      {
-       "kind": "object",
-       "name": "mooring tower",
-       "x": 28,
-       "y": 3
-      },
-      {
-       "kind": "object",
-       "name": "mooring tower",
-       "x": 35,
-       "y": 4
-      },
-      {
-       "kind": "object",
-       "name": "mooring tower",
-       "x": 5,
-       "y": 8
-      },
-      {
-       "kind": "object",
-       "name": "mooring tower",
-       "x": 26,
-       "y": 8
-      },
-      {
-       "kind": "object",
-       "name": "mooring tower",
-       "x": 34,
-       "y": 10
-      },
-      {
-       "kind": "object",
-       "name": "mooring tower",
-       "x": 4,
-       "y": 14
-      },
-      {
-       "kind": "object",
-       "name": "mooring tower",
-       "x": 13,
-       "y": 15
-      },
-      {
-       "kind": "object",
-       "name": "mooring tower",
-       "x": 27,
-       "y": 16
-      },
-      {
-       "kind": "object",
-       "name": "mooring tower",
-       "x": 34,
-       "y": 18
-      },
-      {
-       "kind": "object",
-       "name": "mooring tower",
-       "x": 5,
-       "y": 21
-      },
-      {
-       "kind": "object",
-       "name": "mooring tower",
-       "x": 26,
-       "y": 21
+       "kind": "area",
+       "fill": "rubble",
+       "shape": "rect",
+       "x": 8,
+       "y": 16,
+       "w": 2,
+       "h": 2
       },
       {
        "kind": "building",
-       "name": "harbourmaster's office",
-       "x": 29,
-       "y": 5,
+       "name": "the customs house",
+       "x": 22,
+       "y": 15,
        "w": 5,
-       "h": 4,
+       "h": 3,
        "doors": [
-        {
-         "side": "south",
-         "at": 2
-        }
-       ],
-       "windows": [
         {
          "side": "west",
          "at": 1
-        },
-        {
-         "side": "north",
-         "at": 2
         }
-       ]
+       ],
+       "windows": []
       },
       {
        "kind": "building",
-       "name": "rope and chain store",
-       "x": 3,
-       "y": 18,
-       "w": 4,
+       "name": "The Drifting Anchor",
+       "x": 13,
+       "y": 15,
+       "w": 5,
        "h": 3,
        "doors": [
         {
          "side": "east",
          "at": 1
         }
-       ]
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "the cargo hall",
+       "x": 24,
+       "y": 5,
+       "w": 8,
+       "h": 4,
+       "doors": [
+        {
+         "side": "south",
+         "at": 4
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "harbourmaster's office",
+       "x": 9,
+       "y": 5,
+       "w": 4,
+       "h": 3,
+       "doors": [
+        {
+         "side": "south",
+         "at": 2
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "signal tower",
+       "x": 34,
+       "y": 17,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "ticket office",
+       "x": 15,
+       "y": 8,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "east",
+         "at": 1
+        }
+       ],
+       "windows": []
       },
       {
        "kind": "object",
-       "name": "coiled mooring cables",
-       "x": 17,
+       "name": "great lift down to the Engine Cathedral",
+       "x": 20,
+       "y": 20
+      },
+      {
+       "kind": "object",
+       "name": "mooring tower",
+       "x": 6,
+       "y": 4
+      },
+      {
+       "kind": "object",
+       "name": "mooring tower",
+       "x": 15,
+       "y": 4
+      },
+      {
+       "kind": "object",
+       "name": "mooring tower",
+       "x": 34,
+       "y": 4
+      },
+      {
+       "kind": "object",
+       "name": "mooring tower",
+       "x": 30,
+       "y": 10
+      },
+      {
+       "kind": "object",
+       "name": "mooring tower",
+       "x": 6,
+       "y": 19
+      },
+      {
+       "kind": "object",
+       "name": "mooring mast",
+       "x": 5,
+       "y": 14
+      },
+      {
+       "kind": "object",
+       "name": "gantry crane",
+       "x": 33,
        "y": 13
       },
       {
        "kind": "object",
-       "name": "crane",
-       "x": 22,
-       "y": 15
+       "name": "chain hoist gantry frame",
+       "x": 11,
+       "y": 11
       }
      ]
     },
     "rows": [
-     "________________________________________",
-     "________________________________________",
-     "_____________________1__________________",
-     "____2_______3_______________4___________",
-     "___________________________________5____",
-     "____________________==_______##W##______",
-     "____________________==_______W___#______",
-     "____________________==_______#___#______",
-     "_____6______________==____7__##+##______",
-     "____________________==__________________",
-     "____________________==____________8_____",
-     "____________________==__________________",
-     "________=========================_______",
-     "____________________==__________________",
-     "____9_______________==__________________",
-     "____________________==__________________",
-     "____________________==__________________",
-     "____________________==__________________",
-     "___####_____________==__________________",
-     "___#__+_==============__________________",
-     "___####_____________==__________________",
-     "____________________==__________________",
-     "____________________=___________________",
-     "________________________________________"
+     "                                        ",
+     "                                        ",
+     "  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%  ",
+     "  %..................................%  ",
+     "  %...2........3....==............4..%  ",
+     "  %......####.......==..########.....%  ",
+     "  %......#__#.......==..#______#.....%  ",
+     "  %......##+#.......==..#______#.....%  ",
+     "  %............###..==..####+###.....%  ",
+     "  %............##+..==...............%  ",
+     "  %.................==........5......%  ",
+     "  %........9........==...............%  ",
+     "  %.=================================%  ",
+     "  %.=============================8==.%  ",
+     "  %..7..............==...............%  ",
+     "  %..........#####..==#####..:::.....%  ",
+     "  %.....::...#___+..==+___#..:::.....%  ",
+     "  %.....::...#####..==#####.......##.%  ",
+     "  %.................==............+#.%  ",
+     "  %...6.............==...............%  ",
+     "  %.................1=...............%  ",
+     "  %%%%%%%%%%%%%%%%%.==%%%%%%%%%%%%%%%%  ",
+     "                    ==                  ",
+     "                    ==                  "
     ],
     "objects": {
      "1": "great lift down to the Engine Cathedral",
@@ -2522,26 +2935,451 @@
      "4": "mooring tower",
      "5": "mooring tower",
      "6": "mooring tower",
-     "7": "mooring tower",
-     "8": "mooring tower",
-     "9": "mooring tower"
+     "7": "mooring mast",
+     "8": "gantry crane",
+     "9": "chain hoist gantry frame"
     },
     "labels": {
-     "harbourmaster's office": [
-      31,
+     "the customs house": [
+      24,
+      16
+     ],
+     "The Drifting Anchor": [
+      15,
+      16
+     ],
+     "the cargo hall": [
+      28,
       7
      ],
-     "rope and chain store": [
-      5,
-      19
+     "harbourmaster's office": [
+      11,
+      6
+     ],
+     "signal tower": [
+      35,
+      18
+     ],
+     "ticket office": [
+      16,
+      9
      ],
      "The Wayward Lark's mooring": [
-      10,
-      19
+      5,
+      14
      ]
     },
-    "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-15T00:37:12.544427+00:00"
+    "model": "showcase",
+    "made_at": "2026-10-23T20:11:36.331810+00:00",
+    "levels": []
+   }
+  },
+  "047dcaca-4423-5582-a9bf-c69f0e36ab65": {
+   "": {
+    "place_id": "047dcaca-4423-5582-a9bf-c69f0e36ab65",
+    "state": "",
+    "spec": {
+     "ground": "cobble",
+     "features": [
+      {
+       "kind": "area",
+       "fill": "dark",
+       "shape": "rect",
+       "x": 0,
+       "y": 0,
+       "w": 40,
+       "h": 24
+      },
+      {
+       "kind": "area",
+       "fill": "rock",
+       "shape": "ellipse",
+       "x": 4,
+       "y": 3,
+       "w": 4,
+       "h": 4
+      },
+      {
+       "kind": "area",
+       "fill": "rock",
+       "shape": "ellipse",
+       "x": 30,
+       "y": 4,
+       "w": 4,
+       "h": 4
+      },
+      {
+       "kind": "area",
+       "fill": "rock",
+       "shape": "ellipse",
+       "x": 18,
+       "y": 16,
+       "w": 4,
+       "h": 4
+      },
+      {
+       "kind": "area",
+       "fill": "rock",
+       "shape": "ellipse",
+       "x": 33,
+       "y": 17,
+       "w": 3,
+       "h": 3
+      },
+      {
+       "kind": "area",
+       "fill": "rock",
+       "shape": "ellipse",
+       "x": 6,
+       "y": 18,
+       "w": 3,
+       "h": 3
+      },
+      {
+       "kind": "area",
+       "fill": "floor",
+       "shape": "rect",
+       "x": 8,
+       "y": 8,
+       "w": 24,
+       "h": 8
+      },
+      {
+       "kind": "area",
+       "fill": "floor",
+       "shape": "rect",
+       "x": 10,
+       "y": 2,
+       "w": 6,
+       "h": 6
+      },
+      {
+       "kind": "area",
+       "fill": "floor",
+       "shape": "rect",
+       "x": 25,
+       "y": 15,
+       "w": 9,
+       "h": 6
+      },
+      {
+       "kind": "area",
+       "fill": "floor",
+       "shape": "rect",
+       "x": 2,
+       "y": 9,
+       "w": 6,
+       "h": 6
+      },
+      {
+       "kind": "passage",
+       "points": [
+        [
+         0,
+         11
+        ],
+        [
+         39,
+         11
+        ]
+       ],
+       "width": 2
+      },
+      {
+       "kind": "passage",
+       "points": [
+        [
+         13,
+         0
+        ],
+        [
+         13,
+         23
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "passage",
+       "points": [
+        [
+         28,
+         8
+        ],
+        [
+         28,
+         23
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "passage",
+       "points": [
+        [
+         8,
+         16
+        ],
+        [
+         8,
+         23
+        ]
+       ],
+       "width": 1
+      },
+      {
+       "kind": "building",
+       "name": "lean-to",
+       "x": 9,
+       "y": 9,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "south",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "shanty",
+       "x": 14,
+       "y": 9,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "south",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "the Drowned Rat",
+       "x": 17,
+       "y": 9,
+       "w": 3,
+       "h": 2,
+       "doors": [
+        {
+         "side": "south",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "shanty",
+       "x": 21,
+       "y": 9,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "south",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "the pipe-fitter's",
+       "x": 24,
+       "y": 9,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "south",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "the pipe-fitter's",
+       "x": 29,
+       "y": 16,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "shanty",
+       "x": 29,
+       "y": 19,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "west",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "a fence's shack",
+       "x": 11,
+       "y": 2,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "east",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "building",
+       "name": "shanty",
+       "x": 11,
+       "y": 5,
+       "w": 2,
+       "h": 2,
+       "doors": [
+        {
+         "side": "east",
+         "at": 1
+        }
+       ],
+       "windows": []
+      },
+      {
+       "kind": "object",
+       "name": "steaming pipe run",
+       "x": 16,
+       "y": 15
+      },
+      {
+       "kind": "object",
+       "name": "steaming pipe run",
+       "x": 26,
+       "y": 9
+      },
+      {
+       "kind": "object",
+       "name": "gas lamp",
+       "x": 14,
+       "y": 10
+      },
+      {
+       "kind": "object",
+       "name": "gas lamp",
+       "x": 27,
+       "y": 13
+      },
+      {
+       "kind": "object",
+       "name": "oil drum barrel",
+       "x": 3,
+       "y": 10
+      },
+      {
+       "kind": "object",
+       "name": "coal heap",
+       "x": 30,
+       "y": 16
+      },
+      {
+       "kind": "object",
+       "name": "iron gate",
+       "x": 13,
+       "y": 8
+      },
+      {
+       "kind": "object",
+       "name": "dripping pipe",
+       "x": 9,
+       "y": 2
+      },
+      {
+       "kind": "object",
+       "name": "brazier",
+       "x": 20,
+       "y": 12
+      }
+     ]
+    },
+    "rows": [
+     "             _                          ",
+     "             _                          ",
+     "         8_##___                        ",
+     "     ^^   _#+___                        ",
+     "    ^^^^  ______               ^^       ",
+     "    ^^^^  _##___              ^^^^      ",
+     "     ^^   _#+___              ^^^^      ",
+     "          ______               ^^       ",
+     "        _____7__________________        ",
+     "  _______###__##_###_##_##2_____        ",
+     "  _5_____#+#__3+_#+#_#+_#+______        ",
+     "________________________________________",
+     "____________________9___________________",
+     "  _________________________4____        ",
+     "  ______________________________        ",
+     "        ________1_________________      ",
+     "        _    _     ^^    ____#6___      ",
+     "        _    _    ^^^^   ____+#___^^    ",
+     "      ^^_    _    ^^^^   _________^^    ",
+     "      ^^_    _     ^^    ____##___^^    ",
+     "      ^^_    _           ____+#___      ",
+     "        _    _              _           ",
+     "        _    _              _           ",
+     "        _    _              _           "
+    ],
+    "objects": {
+     "1": "steaming pipe run",
+     "2": "steaming pipe run",
+     "3": "gas lamp",
+     "4": "gas lamp",
+     "5": "oil drum barrel",
+     "6": "coal heap",
+     "7": "iron gate",
+     "8": "dripping pipe",
+     "9": "brazier"
+    },
+    "labels": {
+     "lean-to": [
+      10,
+      10
+     ],
+     "shanty": [
+      12,
+      6
+     ],
+     "the Drowned Rat": [
+      18,
+      10
+     ],
+     "the pipe-fitter's": [
+      30,
+      17
+     ],
+     "a fence's shack": [
+      12,
+      3
+     ]
+    },
+    "model": "showcase",
+    "made_at": "2026-10-23T20:11:36.331810+00:00",
+    "levels": []
    }
   }
  },
@@ -2706,54 +3544,6 @@
  "failures": {},
  "pictures": [
   {
-   "id": "c9e90bb7-8256-4b59-a795-5341c0f84b91",
-   "subject": "isometric",
-   "subject_id": "8ed0e87a-f711-53e4-b4f1-629bdd6c3250",
-   "name": "The Engine Cathedral",
-   "state": "",
-   "file": "pictures/map/brasshaven-engine-cathedral-isometric.jpg",
-   "from_picture": null,
-   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: A vast rectangular hall of riveted iron ribs and pale glass panes fills the view, daylight falling through its long roof to a colossal chimney tower of dark iron that rises above every surrounding rooftop. Inside the hall a huge engine of iron stands at the centre, ringed by pressure gauges on piped stands. A boiler and a coal store heaped with black coal sit against one wall, and an overhead gantry crane on raised rails spans the engine from end to end. A platform lift with an iron cage occupies one corner. On the street side tall iron gates open the wall, and beside them a walled dock with tram rails meets the building. The ground: indoors. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
-   "model": "qwen-image",
-   "made_at": "2026-10-15T02:10:41.747622+00:00"
-  },
-  {
-   "id": "2c2c4133-3d9d-4a87-a132-5e443ba7fb27",
-   "subject": "isometric",
-   "subject_id": "de95d84b-d756-58df-b3de-3f30effc79dc",
-   "name": "The Ashcombe Works",
-   "state": "",
-   "file": "pictures/map/brasshaven-ashcombe-works-isometric.jpg",
-   "from_picture": null,
-   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: An isometric view of a walled industrial compound behind iron railings, with three iron gates set into the fence line. Inside, four tall smokestacks rise from brick foundry buildings, their chimneys trailing smoke. Long warehouse structures with pitched roofs stand among the foundries. A coal heap sits near one of the gates. Beside the factories stands a grand mansion of white stone trimmed with brass, with a tall mooring tower rising beside it. Rows of mechanical automatons march in and out through the iron gates. Daylight falls across the scene, casting long shadows from the smokestacks and the mooring tower over the grey rooftops and the pale stone of the mansion. The ground: cobbled streets. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
-   "model": "qwen-image",
-   "made_at": "2026-10-15T02:10:55.918129+00:00"
-  },
-  {
-   "id": "57a60a9c-4f87-4e98-8dc3-3b5f90ed8354",
-   "subject": "isometric",
-   "subject_id": "3de664bb-929a-5f6b-9d8c-d010af9532f5",
-   "name": "The Skyport",
-   "state": "",
-   "file": "pictures/map/brasshaven-skyport-isometric.jpg",
-   "from_picture": null,
-   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: A broad, open pier at the city's highest point, its deck laid bare to the sky. Rising from the platform stand seven tall iron mooring towers, grey and weathered, skeletal frames spread evenly across the surface. Around and above them, airships of every size ride tethered, their rounded envelopes and rigging lines crossing over the deck below. At one edge of the pier sits a single great lift, a large shafted structure breaking the otherwise open platform. No walls or roofs clutter the surface; the towers, the moored vessels, and the lone lift dominate the view, all hard iron lines against the exposed deck. The ground: indoors. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
-   "model": "qwen-image",
-   "made_at": "2026-10-15T02:11:32.283154+00:00"
-  },
-  {
-   "id": "eded8e9e-813c-4f80-a75b-d089fefd8e0f",
-   "subject": "isometric",
-   "subject_id": "0b14db0f-84e0-595d-9d72-2ea912b6f8e6",
-   "name": "Tinker's Row",
-   "state": "",
-   "file": "pictures/map/brasshaven-tinkers-row-isometric.jpg",
-   "from_picture": null,
-   "prompt": "Redraw this game map as an isometric view: 16-bit pixel art in the style of Stardew Valley, the same place seen from above at an angle. Keep its layout: every building, wall, path, fence, water and open ground where the map has it, the same size and shape, in the same places relative to each other. Add nothing the map does not show. What is on it: An isometric view of a narrow district of cobbled lanes on wooden piers over water. A two-storey brick building with a large round brass gear mounted above its door, its windows filled with clockwork devices. Beside it, a tiny tearoom building with fogged, steam-covered windows. An iron tram shelter stands along the lane. Steaming pipes run between buildings, and two brick chimneys rise from the rooftops. Brass signs hang over doorways. Four gas lamps line the crooked lanes, casting warm light. The scene is rendered in warm browns, coppers, and brass tones, with steam drifting across the cobblestones. The ground: cobbled streets. Full-bleed scene, atmospheric light. No writing of any kind: no labels, names, captions, arrows or signs, and no border.",
-   "model": "nano-banana-pro-edit",
-   "made_at": "2026-10-15T02:30:43.405989+00:00"
-  },
-  {
    "id": "522a55a7-5c9f-4a6a-9b2f-b01c4839ecbc",
    "subject": "walker",
    "subject_id": "Lady Imogen Ashcombe",
@@ -2846,48 +3636,6 @@
    "scene": ""
   },
   {
-   "id": "aaf10c28-ac52-40e1-8251-7c64c8b1777b",
-   "subject": "backdrop",
-   "subject_id": "0b14db0f-84e0-595d-9d72-2ea912b6f8e6",
-   "name": "Tinker's Row",
-   "state": "",
-   "file": "pictures/map/brasshaven-tinker-s-row-backdrop.jpg",
-   "from_picture": null,
-   "prompt": "Repaint the entire image as a warm hand-painted storybook illustration in soft gouache, preserving every element's exact position, shape and size as seen from directly overhead, with no perspective shift. The top-down map layout stays identical: the cross-shaped junction of broad brick-paved lanes meeting at centre, the six roofed workshop buildings arranged as rectangular boxes around that junction, and the wide cobblestone surround filling the remaining open ground. Every wall footprint, room boundary, doorway opening and interior detail remains exactly where it is. Render the brick-paved road surface in warm ochre and burnt sienna with visible individual brick strokes and faint mortar lines picked out in pale cream gouache. The cobblestone surround becomes muted slate-grey and dusty taupe rounded stones with soft brushed shadows between them, showing natural variation in tone. Each building roof is repainted in deep slate-blue with visible layered gouache strokes suggesting overlapping tiles or corrugated metal, edged along the south-facing front wall by a rich terracotta-red fascia band trimmed with dull brass rivets and fittings, warm golden-amber gas-lamp glow pools painted as soft radial washes on the lane surface below each lamp position. The bucket near centre lane becomes a pale birch-wood pail with a brass rim. The crate objects on rooftops are warm honey-coloured timber with visible wood-grain brushwork. The dark recessed doorway of The Gilded Gear sits in its west wall, painted as a deep umber framed panel with brass hinges; the door of The Copper Kettle sits in its east wall as the same framed panel form. The small mechanical fitting at the north-east building top is rendered as a muted pewter-grey iron bracket.",
-   "model": "blackforestlabs/flux-3/klein/edit-image",
-   "made_at": "2026-10-23T18:57:39.227290+00:00",
-   "plan": "2026-10-15T00:36:34.493850+00:00",
-   "scene": ""
-  },
-  {
-   "id": "6f1b51f8-b0f8-4c0d-9438-214fa7a5394e",
-   "subject": "backdrop",
-   "subject_id": "8ed0e87a-f711-53e4-b4f1-629bdd6c3250",
-   "name": "The Engine Cathedral",
-   "state": "",
-   "file": "pictures/map/brasshaven-the-engine-cathedral-backdrop.jpg",
-   "from_picture": null,
-   "prompt": "Convert the entire image into a warm hand-painted storybook illustration rendered in soft gouache brushwork, with gentle amber and ochre lighting, rich but muted colours, and visible painted texture throughout, keeping the exact top-down map perspective and every element precisely in place. The wide rectangular open ground occupying the centre of the frame becomes warm terracotta and burnt-sienna brick, its coursed surface painted with soft horizontal gouache strokes that preserve the brick-grid pattern and the slight tonal variations of the original; the surrounding cobblestone border becomes muted slate-grey cobbles with individually dabbed paint texture showing mortar lines. The two parallel horizontal red-orange rail structures running east across the map keep their positions, lengths and widths, repainted as dark crimson iron rails with flecks of rust and warm reflected light along their upper edges. The large central building — the Engine Cathedral hall — retains its rectangular footprint, its dark steel-blue roof rendered with layered gouache suggesting iron and glass panels; its south-facing front wall, shown at the bottom of the building, is painted as sooty dark stone with two warm lantern-glow door panels glowing amber, representing the west and east doors of the hall. The small scattered box-like objects across the open ground — the dark cube at upper centre, the pair of stacked crates near it, the dark cube to the left, the golden lantern-box left of centre, the crate right of centre, the golden doorframe structure at the far right, and the small circular fixture on the lower rail — each keep their exact positions and are repainted in gouache with warm wood-brown, aged brass and dark iron tones, with soft cast shadows pooling beneath them on the brick.",
-   "model": "blackforestlabs/flux-3/klein/edit-image",
-   "made_at": "2026-10-23T18:58:10.424626+00:00",
-   "plan": "2026-10-15T00:36:35.520080+00:00",
-   "scene": ""
-  },
-  {
-   "id": "2fe63708-60d3-44b2-9722-47d76677a87f",
-   "subject": "backdrop",
-   "subject_id": "de95d84b-d756-58df-b3de-3f30effc79dc",
-   "name": "The Ashcombe Works",
-   "state": "",
-   "file": "pictures/map/brasshaven-the-ashcombe-works-backdrop.jpg",
-   "from_picture": null,
-   "prompt": "Repaint the entire image as a warm hand-painted storybook illustration in soft gouache, preserving the strict top-down map perspective exactly as seen. The mid-grey padding bands at the top and bottom of the frame remain plain flat grey, unchanged. Every structure, wall, room, path, doorway and object stays in precisely the same position, shape and size as in the original. The cobblestone ground across the whole map area becomes warm earthy taupe with visible gouache texture and subtle variation, like worn flagstone rendered in muted ochre and umber. The large open rectangular enclosure in the upper-left, outlined in terracotta-red walls, becomes Ashcombe Hall: its red-brick perimeter walls rendered with soft brushwork showing mortar lines and slight weathering, the interior courtyard in pale dusty stone. Its south wall carries a framed door panel painted as a heavy iron-banded timber door in dark walnut brown. The three large warehouse-foundry buildings with slate-blue corrugated roofs become richly painted industrial rooftops in muted teal-slate with visible brush striations suggesting corrugated iron, their amber ridge lines rendered as warm brass trim. Their south-facing front walls, shown as deep russet-red bands at their bases, become rough fired-brick facades with framed doorway panels: heavy cast-iron gates hung in dark iron-grey frames. Scattered brass dome-topped lamp-posts and chimney stubs across the ground are painted in warm burnished gold with soft shadow beneath each. Iron-railing fences along the perimeter and internal boundaries are rendered as slender dark-iron lines with hand-painted finials. A T-shaped brick structure at centre becomes warm terracotta brick with visible mortar texture. The small item at map-centre becomes a dark iron fitting.",
-   "model": "blackforestlabs/flux-3/klein/edit-image",
-   "made_at": "2026-10-23T18:58:41.452367+00:00",
-   "plan": "2026-10-15T00:36:41.889794+00:00",
-   "scene": ""
-  },
-  {
    "id": "fff23786-5206-4acf-8a54-fc0451dc8815",
    "subject": "backdrop",
    "subject_id": "71f341d8-d0e1-580f-ab6e-26a1e1d52d75",
@@ -2899,20 +3647,6 @@
    "model": "blackforestlabs/flux-3/klein/edit-image",
    "made_at": "2026-10-23T18:59:09.191080+00:00",
    "plan": "2026-10-15T00:36:46.580289+00:00",
-   "scene": ""
-  },
-  {
-   "id": "17c336cb-3c77-45e9-99bb-da8260922fba",
-   "subject": "backdrop",
-   "subject_id": "3de664bb-929a-5f6b-9d8c-d010af9532f5",
-   "name": "The Skyport",
-   "state": "",
-   "file": "pictures/map/brasshaven-the-skyport-backdrop.jpg",
-   "from_picture": null,
-   "prompt": "Convert the entire image into a warm hand-painted storybook illustration using soft gouache brushwork, gentle diffused overhead lighting, and rich but muted colours with visible painted texture throughout, while keeping every element exactly where it is, at the same size and shape, viewed directly from above. The broad open ground filling the map area is rendered as aged timber planking — a vast elevated pier deck — in warm amber, ochre and burnt sienna, with individual plank lines suggested by loose, slightly varied gouache strokes showing wood grain and weathering. Scattered across this deck at their exact existing positions are the iron mooring towers: squat, rivet-studded cast-iron columns with splayed bases and ring-bolt caps, painted in dark slate-grey with rust-orange streaks, their top-down silhouettes kept identical to the original small square-bracket shapes. The larger of the two buildings in the upper-right and lower-left retain their rectangular rooftop footprints: slate-blue corrugated-iron roofs painted with horizontal brushstrokes in deep teal and dusty navy, and their south-facing front walls rendered as muted brick-red fascia panels with framed door openings shown as darker rectangular panels with warm ochre trim, all in their exact original positions and proportions. The ground texture evokes a high city pier of Brasshaven — an industrial-Victorian steam-age skyport — with faint rope coils, iron cleats and mooring ring shadows suggested in the gouache without adding any figures or text. The upper and lower mid-grey padding bands remain flat, plain, neutral grey with no marks or texture. No people, no writing, no labels, no borders are added anywhere.",
-   "model": "blackforestlabs/flux-3/klein/edit-image",
-   "made_at": "2026-10-23T18:59:41.677153+00:00",
-   "plan": "2026-10-15T00:37:12.544427+00:00",
    "scene": ""
   },
   {
@@ -2941,6 +3675,76 @@
    "model": "blackforestlabs/flux-3/klein/edit-image",
    "made_at": "2026-10-23T19:01:32.900822+00:00",
    "plan": "2026-10-15T00:36:31.331545+00:00",
+   "scene": ""
+  },
+  {
+   "id": "b3a7fc3d-f6ab-46fc-aa75-b31d36e1697f",
+   "subject": "backdrop",
+   "subject_id": "0b14db0f-84e0-595d-9d72-2ea912b6f8e6",
+   "name": "Tinker's Row",
+   "state": "",
+   "file": "pictures/map/brasshaven-tinker-s-row-backdrop.jpg",
+   "from_picture": null,
+   "prompt": "Repaint the image as a warm hand-painted storybook illustration in soft gouache, preserving every element of the layout exactly — every building footprint, wall, road, path, fence, doorway, and open ground area remains in precisely the same position, shape and size as shown. The mid-grey bands at the top and bottom of the canvas stay plain flat grey, unchanged. The black border region inside the grey but outside the map area stays dark. Only the visual treatment changes. The ground throughout the cobbled district of Tinker's Row becomes richly textured hand-painted setts of warm amber-grey stone, slightly uneven, with mortar cracks, oil-stained puddles catching lamplight, and the gentle worn hollows of a well-trodden pier district. The narrow lanes between buildings show cart-rut grooves, scattered brass filings, a dropped rivet or two, and faint chimney-soot deposits near pipe outlets. Cast shadows from buildings fall softly across the cobbles in warm amber-ochre afternoon light, consistent with a low southerly sun. All the rectangular building footprints — shown as flat boxes with blue-grey roofing and red front-wall bands — become proper workshop rooftops viewed from directly above: dark slate-grey or patinated copper-green pitched roofs with visible ridge lines, moss at the seams, weathered lead flashings, and squat brick chimney stacks trailing thin wisps of pale grey-cream smoke upward. Front walls (the south-facing red bands) become rendered stone or dark brick facades at the foot of each roof, each with a recessed framed door panel and one or two small brass-framed windows with warm amber glow leaking through frosted glass.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-23T20:23:22.846507+00:00",
+   "plan": "2026-10-23T20:11:36.331810+00:00",
+   "scene": ""
+  },
+  {
+   "id": "07e9dbe2-b3be-4907-abda-eb2ba5e636bc",
+   "subject": "backdrop",
+   "subject_id": "8ed0e87a-f711-53e4-b4f1-629bdd6c3250",
+   "name": "The Engine Cathedral",
+   "state": "",
+   "file": "pictures/map/brasshaven-the-engine-cathedral-backdrop.jpg",
+   "from_picture": null,
+   "prompt": "Repaint the reference image as a warm hand-painted storybook illustration in soft gouache, with visible brushwork, gentle overhead lighting, rich but muted colours, and tactile texture throughout, while keeping the layout pixel-faithful: every building footprint, wall line, fence, road, path, doorway, water feature and rock stays exactly where it is at exactly the same shape and size. The map area itself: the large rectangular enclosure that fills the centre of the image becomes the interior courtyard of the Engine Cathedral of Brasshaven, painted as worn dark-amber engineering brick laid in a herringbone pattern, cracked at the joints, oil-stained near the machinery clusters, with a faint sheen of condensation and scattered coal-dust. The golden dashed border around the enclosure becomes a low brass-capped stone kerb, catching warm lamp-glow from below. The outer surround of cobblestone-textured grey ground becomes soot-darkened city cobbles, wet and gleaming, with iron drain covers and tram-ruts pressed into the stone. Buildings: the six dark-blue-striped rectangular structures with red lower bands become the rooftops of iron-and-glass engine housings seen from directly above — their tops painted as riveted iron panels in deep slate-blue with amber brass bolt-heads along the seams, their red lower bands rendered as painted cast-iron fascias with green valve-handle details becoming actual small brass stopcocks and pressure gauges. The two lower-left and lower-right structures sit on patches of pale grey stone that become flagged maintenance yards, each centred on a dark lump that becomes a squat iron boiler dome, surrounded by scattered yellow lumps repainted as brass fittings, copper pipe coils and oily rags.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-23T20:24:06.633527+00:00",
+   "plan": "2026-10-23T20:11:36.331810+00:00",
+   "scene": ""
+  },
+  {
+   "id": "6fdf8cc4-7787-4c2e-9da9-20f21068569b",
+   "subject": "backdrop",
+   "subject_id": "de95d84b-d756-58df-b3de-3f30effc79dc",
+   "name": "The Ashcombe Works",
+   "state": "",
+   "file": "pictures/map/brasshaven-the-ashcombe-works-backdrop.jpg",
+   "from_picture": null,
+   "prompt": "Convert the entire image into a warm hand-painted storybook illustration rendered in soft gouache with visible dry-brush texture throughout, keeping every element — every building footprint, wall, fence line, road, path, doorway position, water patch, rock cluster and tree cluster — in exactly the same position, shape and size as in the pixel-art reference, while repainting everything in rich but muted Gilded-Age industrial tones with gentle overhead lighting and soft cast shadows. The mid-grey bands above and the near-black band below the map are padding: repaint them as flat, plain mid-grey on all sides, no detail, no content. The map itself occupies the same rectangle as in the reference. Paint the enclosing perimeter wall as mortared dark-grey stone with iron-railing sections along the top edge; the interior compound ground becomes worn, soot-stained dark-amber brick cobbles, cracked and oil-stained near the building entrances, with shallow puddles catching a dull amber glow from gas-lanterns mounted on short iron posts at the courtyard crossing — place those lanterns exactly where the small glowing object at the centre-cross and the golden object to the right already stand. A faint haze of coal smoke drifts from squat iron smokestacks rising from the rooftops of the six large rectangular buildings, each smokestack trailing a smudged charcoal plume toward the upper-right as though caught by a westerly breeze. The six large rectangular buildings keep their footprints. Their roofs become dark slate-grey corrugated iron with riveted ridge-caps, rust-streaked, topped by the smokestacks.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-23T20:24:54.174732+00:00",
+   "plan": "2026-10-23T20:11:36.331810+00:00",
+   "scene": ""
+  },
+  {
+   "id": "a9c2276c-71ad-4ca8-8203-b9af90e9cb7b",
+   "subject": "backdrop",
+   "subject_id": "3de664bb-929a-5f6b-9d8c-d010af9532f5",
+   "name": "The Skyport",
+   "state": "",
+   "file": "pictures/map/brasshaven-the-skyport-backdrop.jpg",
+   "from_picture": null,
+   "prompt": "Convert the entire image into a warm hand-painted storybook illustration in soft gouache with visible brushwork, gentle overhead lighting, and rich but muted colours, repainting every element of the top-down game map while preserving the layout with pixel-perfect fidelity: every building footprint, wall, fence, road, path, doorway, water feature and rock remains exactly where it is in the reference, at exactly the same shape and size. The wide cobblestone pier ground — currently rendered as flat grey tessellated stone — becomes aged, smoke-darkened basalt cobbles with iron-grey mortar, cracked at the joints, stained with rust streaks from chain and cable, scattered with wind-blown coal dust and the faint ghost of grease tracks where cargo carts have rolled; puddles sit in low joints, reflecting a warm amber-tinted overcast sky. The glowing dot-and-dash border running along the bottom edge and bottom-centre gap reads as a row of brass mooring-light lanterns set flush into the pier's lip, each casting a small honey-coloured pool onto nearby cobbles. The five large roofed rectangular buildings (three upper, two lower, plus the smaller one at lower-right) are repainted as high-altitude dockside warehouses of Brasshaven's Gilded Age: corrugated dark-slate roofs banded with aged copper ridge-caps, the roofing painted in deep teal and charcoal with warm brass trim lines exactly following the original stripe pattern; their south-facing front walls are broad brick facades in deep burgundy-red brick with arched loading-bay doors framed in wrought-iron — the door panels remain exactly where they are drawn, now rendered as heavy riveted iron doors with small brass portholes above. Each building casts a short, soft north-cast shadow onto the cobbles.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-23T20:25:36.775967+00:00",
+   "plan": "2026-10-23T20:11:36.331810+00:00",
+   "scene": ""
+  },
+  {
+   "id": "6d6807cf-e3ef-4945-bd60-4f94a4c89056",
+   "subject": "backdrop",
+   "subject_id": "047dcaca-4423-5582-a9bf-c69f0e36ab65",
+   "name": "The Undercroft",
+   "state": "",
+   "file": "pictures/map/brasshaven-the-undercroft-backdrop.jpg",
+   "from_picture": null,
+   "prompt": "Convert the entire image into a warm hand-painted storybook illustration rendered in soft gouache with visible brushwork, gentle lamplight, and rich but muted colours, preserving every element of the layout exactly — every catwalk platform, scaffolding bridge, building footprint, roofed box, framed door panel, barrel, bucket, and tree cluster stays in precisely its current position, shape and size, and the flat mid-grey bands at the top and bottom of the image remain plain mid-grey padding unchanged. Reinterpret the setting as The Undercroft of Brasshaven in the twenty-third year of the Gilded Age: a shanty town of wide timber catwalk platforms and narrow scaffolding bridges suspended in permanent darkness above an unseen void, viewed directly from above. The broad orange-brown platform surfaces become age-darkened hardwood planking with visible grain, iron nail heads, knothole stains, standing puddles of oily water catching amber light, and slow wisps of steam rising from grated vents set into the boards. Where the current image shows open dark void between platforms, paint deep blue-black darkness fading to near-black, with the faintest suggestion of dripping condensation and distant pipe-work far below. Edges of every catwalk and bridge show rough-cut timber ends, iron bracket mounts bolted to unseen stone piers, and fraying rope lashings. Buildings become low shanty structures of salvaged timber, corrugated iron sheeting, and scavenged brick, their roofs seen from above as patchwork surfaces of dark slate-grey tin, tarpaper, and mossy shingle with rusted flashing at ridges.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-23T20:26:23.192353+00:00",
+   "plan": "2026-10-23T20:11:36.331810+00:00",
    "scene": ""
   }
  ],
@@ -3828,5 +4632,6 @@
    }
   }
  },
- "tile_set": "brasshaven"
+ "tile_set": "brasshaven",
+ "chosen_views": {}
 }

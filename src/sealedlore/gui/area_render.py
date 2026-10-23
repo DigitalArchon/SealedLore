@@ -62,6 +62,10 @@ OUTDOOR_PX = 24
 # Scorched ground under fire, and rubble's grey-brown, as tints over the floor.
 SCORCH = (28, 16, 10)
 RUBBLE_TINT = (96, 84, 72)
+# The void beyond a pier's edge or a cliff (" " out of doors, off a deck),
+# and the solid rock of a cave or a mine (`Area.underground`).
+VOID = (14, 15, 20)
+SOLID_ROCK = (62, 56, 52)
 
 # Flat colours for a texture a set lacks.
 FALLBACK = {
@@ -1385,7 +1389,13 @@ def _render_outdoor(area: Area, source: TileSource) -> Ground:
     trees_mask = g == "T"
     layers = [
         ("out-pave", np.isin(g, list("_+")) & ~roofed, 0.2, px * 12, False),
-        ("out-canopy", np.isin(g, ["^"]), 0.45, px * 16, False),
+        (
+            "out-canopy",
+            np.isin(g, ["^"]) if not area.underground else np.zeros_like(roofed),
+            0.45,
+            px * 16,
+            False,
+        ),
         ("out-canopy", trees_mask if not info.lava else np.zeros_like(roofed), 0.4, px * 16, True),
         ("out-water", np.isin(g, ["~", BRIDGE]), 0.3, px * 16, False),
         ("out-road", g == "=", 0.15, px * 18, False),
@@ -1418,6 +1428,14 @@ def _render_outdoor(area: Area, source: TileSource) -> Ground:
         ash = _soft(ruined, 41, px, 0.3)[..., None]
         img = img * (1 - 0.6 * ash) + np.array(RUBBLE_TINT, np.float32) * 0.6 * ash
     img *= (0.9 + 0.16 * _noise(H, W, px * 19, 7))[..., None]
+    if area.underground:  # the rock mass round a cave's passages: solid, dark
+        mass = _soft(g == "^", 43, px, 0.25)[..., None]
+        rock = np.array(SOLID_ROCK, np.float32) * (0.75 + 0.5 * _noise(H, W, px * 5, 11))[..., None]
+        img = img * (1 - mass) + rock * mass
+    void = g == " "
+    if void.any():  # off a deck a blank tile is the void: the drop off a pier, a chasm
+        gone = _soft(void, 47, px, 0.15)[..., None]
+        img = img * (1 - gone) + np.array(VOID, np.float32) * gone
     # 2. shadows of buildings, walls and trees, cast south-east
     solid = (np.isin(g, list("#W+")) | roofed).astype(np.float32)
     occl = _upsample(np.maximum(solid, trees_mask.astype(np.float32) * 0.7), px)
@@ -1454,7 +1472,7 @@ def _render_outdoor(area: Area, source: TileSource) -> Ground:
                 stand.append(((y + 1) * px, "tree", (x, y)))
             elif c == "," and r < 0.55:
                 stand.append(((y + 1) * px, "bush", (x, y)))
-            elif c == "^" and r < 0.18:
+            elif c == "^" and r < 0.18 and not area.underground:
                 stand.append(((y + 1) * px, "rock", (x, y)))
             elif c == ":" and r < 0.22:
                 stand.append(((y + 1) * px, "rubble", (x, y)))

@@ -69,6 +69,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.backdrops import current_backdrop_of
+from sealedlore.engine.board import board_world, is_node
 from sealedlore.engine.marks import chain_words, place_at
 from sealedlore.engine.world_art import (
     containers,
@@ -126,6 +128,8 @@ PLACE_SIZES = (16, 20, 24, 32, 40, 48, 64, 80, 96)
 # On the local map a plan is drawn once it is this wide on screen; smaller,
 # its place's picture stands for it. Never on the region or the world.
 PLAN_MIN_PX = 96
+# On the board (engine/board.py) an area's painting shows at every level, once this wide.
+BOARD_PLAN_MIN_PX = 24
 # A building's inside takes its roof's place once its footprint is this
 # wide on screen (or with See inside on).
 INTERIOR_SHOWN_AT = 320
@@ -182,6 +186,7 @@ VEIL_Z = 2.97
 # land (the Ninth Furnace's) the colour of the unexplored fog beside it.
 VEIL = "#5c6170"
 VEIL_ALPHA = 150
+BOARD_VEIL_ALPHA = 60
 SIGHT_EDGE = "#f6cf6e"
 # A land colour for the legend's swatches, as the program draws grass.
 LEGEND_LAND = "#7d8a5c"
@@ -295,8 +300,19 @@ class _PlaceItem(QGraphicsItem):
         # How far the name is moved down, out from under another's
         # (`map_labels.stack_labels`, laid at every zoom by the view).
         self.shift = 0.0
+        # On the board: the painting's size on screen that the name sits
+        # under and the ring frames (no picture or mark drawn), else None.
+        self.frame: tuple[float, float] | None = None
         self._fonts()
         self.set_pixels(MIN_PLACE_PX)
+
+    def set_frame(self, width: float | None, height: float | None) -> None:
+        frame = (width, height) if width is not None and height is not None else None
+        if frame == self.frame:
+            return
+        self.prepareGeometryChange()
+        self.frame = frame
+        self.update()
 
     def _fonts(self) -> None:
         self._font = QFont()
@@ -382,6 +398,8 @@ class _PlaceItem(QGraphicsItem):
         self.update()
 
     def _half(self) -> float:
+        if self.frame is not None:
+            return self.frame[1] / 2
         return self.pixels / 2 if self.pixmap is not None else max(7.0, self.pixels / 4)
 
     def label_block(self) -> tuple[float, float, float]:
@@ -406,15 +424,24 @@ class _PlaceItem(QGraphicsItem):
     def boundingRect(self) -> QRectF:
         half = self._half()
         height = half + 6 + LABEL_GAP + self.shift + 2 * self._line + 2
-        return QRectF(-self._width / 2 - 2, -half - 6, self._width + 4, height)
+        width = max(self._width, self.frame[0] if self.frame is not None else 0.0)
+        return QRectF(-width / 2 - 6, -half - 6, width + 12, height)
 
     def paint(self, painter: QPainter, _option, _widget=None) -> None:
         half = self._half()
-        if self.ringed:
+        if self.frame is not None:
+            if self.ringed:
+                painter.setPen(QPen(QColor("#f6cf6e"), 3))
+                painter.setBrush(Qt.NoBrush)
+                w, h = self.frame
+                painter.drawRoundedRect(QRectF(-w / 2 - 4, -h / 2 - 4, w + 8, h + 8), 6, 6)
+        elif self.ringed:
             painter.setPen(QPen(QColor("#f6cf6e"), 3))
             painter.setBrush(Qt.NoBrush)
             painter.drawEllipse(QPointF(0, 0), half + 5, half + 5)
-        if self.pixmap is not None:
+        if self.frame is not None:
+            pass  # the painting under it is the plan's own picture
+        elif self.pixmap is not None:
             painter.drawPixmap(
                 int(-self.pixmap.width() / 2), int(-self.pixmap.height() / 2), self.pixmap
             )
@@ -445,7 +472,8 @@ class _VeilItem(QGraphicsItem):
     take the haze too and look known. Never hit by a click or a hover (its
     shape is empty), so what lies under it answers."""
 
-    def __init__(self, known: QPainterPath, sight: QRectF) -> None:
+    def __init__(self, known: QPainterPath, sight: QRectF, *, light: bool = False) -> None:
+        self.light = light
         super().__init__()
         clear = QPainterPath()
         clear.addRect(sight)
@@ -461,7 +489,7 @@ class _VeilItem(QGraphicsItem):
         return QPainterPath()
 
     def paint(self, painter: QPainter, _option, _widget=None) -> None:
-        painter.fillPath(self.veiled, _veil_colour())
+        painter.fillPath(self.veiled, _veil_colour(self.light))
         edge = QPen(QColor(SIGHT_EDGE), 2)
         edge.setCosmetic(True)
         painter.setPen(edge)
@@ -469,9 +497,11 @@ class _VeilItem(QGraphicsItem):
         painter.drawRect(self.sight)
 
 
-def _veil_colour() -> QColor:
+def _veil_colour(light: bool = False) -> QColor:
+    """The fog over known country the character isn't in; `light` on the
+    board, where each area's painting is the point of the map."""
     veil = QColor(VEIL)
-    veil.setAlpha(VEIL_ALPHA)
+    veil.setAlpha(BOARD_VEIL_ALPHA if light else VEIL_ALPHA)
     return veil
 
 
@@ -550,6 +580,8 @@ class _PlanItem(QGraphicsPixmapItem):
         )
         # What stands in it, held here as well as by the scene (see WorldView).
         self.dressed: list[QGraphicsItem] = []
+        # On the board, its backdrop painting, drawn in place of the tiles.
+        self.backdrop: QImage | None = None
         self.setTransformationMode(Qt.FastTransformation)
         self.setShapeMode(QGraphicsPixmapItem.BoundingRectShape)
         self.setScale(self.tile / TILE)
@@ -579,7 +611,23 @@ class _PlanItem(QGraphicsPixmapItem):
         """Drawn in `ground`'s look, in the tile set's `colours` where it
         gives them (the farmhouse the one colour here and on the play view)."""
         self.ground, self.roofs, self.cleared, self.colours = ground, roofs, cleared, colours
-        self.setPixmap(tiles_pixmap(self.drawn_rows(), ground, roofs, cleared, colours))
+        tiles = tiles_pixmap(self.drawn_rows(), ground, roofs, cleared, colours)
+        if self.backdrop is not None and not self.backdrop.isNull():
+            # The painting at the tiles' size, so the item's scale and the
+            # dressing's pixels stay the tiles' (an indoor painting is a
+            # wall's face taller than its tiles: the extra is cut off).
+            image = self.backdrop
+            wanted = tiles.height() / max(tiles.width(), 1)
+            if image.width() and image.height() / image.width() > wanted + 0.02:
+                image = image.copy(0, 0, image.width(), max(1, round(image.width() * wanted)))
+            self.setTransformationMode(Qt.SmoothTransformation)
+            self.setPixmap(
+                QPixmap.fromImage(
+                    image.scaled(tiles.size(), Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+                )
+            )
+            return
+        self.setPixmap(tiles)
 
     def drawn_rows(self) -> tuple[str, ...]:
         """The rows as drawn: a deck's blank between its rooms is floor
@@ -1143,6 +1191,9 @@ class WorldView(QWidget):
         # pruned to the map's own patches on every build, so another story's
         # go with it.
         self._land_cache: dict[tuple, QPixmap] = {}
+        # The areas by direction, not to scale (`set_world(board=True)`).
+        self.board = False
+        self._backdrops: dict[str, QImage] = {}
         # Where each patch of land lies (scene rect), known before its
         # picture is: the ground and the veil are sized from these.
         self._land_rects: list[QRectF] = []
@@ -1182,12 +1233,21 @@ class WorldView(QWidget):
     # --- what is shown ---------------------------------------------------------
 
     def set_world(
-        self, world: WorldMap, art: WorldArt, held: str | None, *, keep_view: bool = True
+        self,
+        world: WorldMap,
+        art: WorldArt,
+        held: str | None,
+        *,
+        keep_view: bool = True,
+        board: bool = False,
     ) -> None:
         """Show this map. `keep_view` holds the zoom and place in view (a
         redraw as art comes in, a page flip); off, it opens on the local
-        map where the story is now."""
-        self.world, self.art, self.held = world, art, held
+        map where the story is now. `board`: the areas laid out by
+        direction, not to scale (engine/board.py), each under its painting,
+        with no land between them (map-first play: the author, Oct 23 2026)."""
+        self.board = board
+        self.world, self.art, self.held = (board_world(world) if board else world), art, held
         center = self.view.mapToScene(self.view.viewport().rect().center())
         transform = self.view.transform()
         fitted = self._fitted
@@ -1338,6 +1398,7 @@ class WorldView(QWidget):
         self._land_rects = []
         self._ground = None
         self._isos = {}
+        self._backdrops = {}
         self._badges = {}
         self.people = []
         self._pins = []
@@ -1364,12 +1425,21 @@ class WorldView(QWidget):
             self._sync_buttons()
             return
         self._open = self._out_of_the_fog()
-        self._build_land()
-        self._build_links()
-        self._build_ground()
-        self._build_plans()
-        self._build_isometric()
-        self._build_places()
+        if self.board:
+            # No land: the areas on a flat board, each under its painting.
+            self._build_links()
+            self._build_plans()
+            self._build_board_ground()
+            self._build_backdrops()
+            self._build_isometric()
+            self._build_places()
+        else:
+            self._build_land()
+            self._build_links()
+            self._build_ground()
+            self._build_plans()
+            self._build_isometric()
+            self._build_places()
         bounds = QRectF()
         for item in self.scene.items():
             if (
@@ -1434,13 +1504,16 @@ class WorldView(QWidget):
         if place_id is not None:
             where = menu.addAction(chain_words(self.world, place_id))
             where.setEnabled(False)
-        mark = menu.addAction("Mark this spot in your turn")
-        mark.triggered.connect(lambda: self.mark_requested.emit(x, y))
-        go = menu.addAction("Go here")
-        go.setEnabled(place_id is not None and not self.locked and self.here() is not None)
-        go.setToolTip("Set off for this spot: the way's length on foot moves the clock")
-        go.triggered.connect(lambda: self.go_requested.emit(x, y))
-        if not self.locked:
+        if not self.board:
+            # The board's spots aren't the story's: marks and moves are the
+            # play view's there (Travel… for another area).
+            mark = menu.addAction("Mark this spot in your turn")
+            mark.triggered.connect(lambda: self.mark_requested.emit(x, y))
+            go = menu.addAction("Go here")
+            go.setEnabled(place_id is not None and not self.locked and self.here() is not None)
+            go.setToolTip("Set off for this spot: the way's length on foot moves the clock")
+            go.triggered.connect(lambda: self.go_requested.emit(x, y))
+        if not self.locked and not self.board:
             menu.addSection("Correct the map")
             add = menu.addAction("Add a place here…")
             add.setToolTip(
@@ -1457,6 +1530,8 @@ class WorldView(QWidget):
                 ("Merge into…", "merge", "It is the same place as another: one map entry"),
                 ("Remove from the map", "remove", "What was inside it goes to its parent"),
             ):
+                if action == "move" and self.board:
+                    continue
                 entry = menu.addAction(label)
                 entry.setToolTip(tip)
                 if action == "move":
@@ -1506,7 +1581,7 @@ class WorldView(QWidget):
             known.addRect(land)
         for item in [*ground, *self._plans.values(), *self._isos.values()]:
             known.addRect(item.sceneBoundingRect())
-        self._veil = _VeilItem(known.simplified(), sight)
+        self._veil = _VeilItem(known.simplified(), sight, light=self.board)
         self.scene.addItem(self._veil)
 
     def _colours(self) -> LookColours | None:
@@ -1637,6 +1712,55 @@ class WorldView(QWidget):
         self.scene.addItem(item)
         self._ground = item
 
+    def _build_board_ground(self) -> None:
+        """The board's flat ground under every area and the ways between
+        them, in the land's base colour, fading into the fog at its edge."""
+        rect = QRectF()
+        for plan in self._plans.values():
+            rect = rect.united(plan.rect())
+        for item in self._links:
+            rect = rect.united(item.sceneBoundingRect())
+        if rect.isEmpty():
+            return
+        colours = self._colours()
+        base = colours.base if colours is not None else None
+        if base is None:
+            by_ground: dict[str, float] = {}
+            for patch in self.art.terrain:
+                by_ground[patch.ground] = by_ground.get(patch.ground, 0.0) + patch.side**2
+            main = max(by_ground, key=by_ground.get) if by_ground else ""
+            base = LOOKS.get(main, LOOKS[""]).base
+        fade = GROUND_FADE * min(rect.width(), rect.height())
+        rect = rect.adjusted(-fade, -fade, fade, fade)
+        longer = max(rect.width(), rect.height())
+        width = max(1, round(GROUND_PX * rect.width() / longer))
+        height = max(1, round(GROUND_PX * rect.height() / longer))
+        item = QGraphicsPixmapItem(
+            ground_pixmap(width, height, base, max(1, round(fade * GROUND_PX / longer)))
+        )
+        item.setTransformationMode(Qt.SmoothTransformation)
+        item.setShapeMode(QGraphicsPixmapItem.BoundingRectShape)
+        item.setTransform(QTransform.fromScale(rect.width() / width, rect.height() / height))
+        item.setPos(rect.topLeft())
+        item.setZValue(GROUND_Z)
+        self.scene.addItem(item)
+        self._ground = item
+
+    def _build_backdrops(self) -> None:
+        """On the board, each area's current backdrop painting (engine/
+        backdrops.py) is its plan's picture: the play view's ground, seen
+        from the Region and the World, with the plan's people and names
+        over it. An area with none shows its plan's tiles."""
+        self._backdrops = {}
+        for pid, plan in self._area_plans().items():
+            picture = current_backdrop_of(self.world, self.art, pid)
+            image = self._iso_image(picture) if picture is not None else None
+            if picture is None or image is None:
+                continue
+            self._iso_images[picture.id] = image
+            plan.backdrop = image
+            self._backdrops[pid] = image
+
     def _build_links(self) -> None:
         world = self.world
         pen = QPen(QColor("#e8dfc4"), 1.5, Qt.DashLine)
@@ -1761,6 +1885,8 @@ class WorldView(QWidget):
             spot = position(world, place.id)
             if spot is None or place.id not in shown:
                 continue
+            if self.board and not is_node(world, place):
+                continue  # inside a node's painting, or a way between nodes
             painted = place.id in self._isos
             item = _PlaceItem(
                 place,
@@ -1828,12 +1954,17 @@ class WorldView(QWidget):
         # Shown only because the story changed them: nobody stands inside.
         self._changed_only: set[str] = set()
         for pid, plan in self._plans.items():
-            if level != "local" or not plan.rect().intersects(near):
-                continue  # the region and the world draw places, not plans
+            if (level != "local" and not self.board) or not plan.rect().intersects(near):
+                continue  # the region and the world draw places, not plans (off the board)
             if pid not in self._open:
                 continue  # still in the fog
             on_screen = plan.width_m * scale
-            is_inside = plan.place.kind == "building"
+            # A building that is an area of the board's own (a lone
+            # farmhouse) is shown as any area: its inside is where the
+            # story is played.
+            is_inside = plan.place.kind == "building" and not (
+                self.board and is_node(self.world, plan.place)
+            )
             if is_inside:
                 parent = self._plans.get(plan.place.inside or "")
                 parent_shown = parent is not None and parent.width_m * scale >= PLAN_MIN_PX
@@ -1844,7 +1975,7 @@ class WorldView(QWidget):
                     show = True
                     self._changed_only.add(pid)
             else:
-                show = on_screen >= PLAN_MIN_PX
+                show = on_screen >= (BOARD_PLAN_MIN_PX if self.board else PLAN_MIN_PX)
             if show:
                 shown_plans.add(pid)
         # An area's roofs come off where an inside is shown; the picture of
@@ -1882,6 +2013,20 @@ class WorldView(QWidget):
         here = self.here()
         for item in self._items:
             place = item.place
+            if self.board:
+                # A node on the board: its name under its painting (its
+                # plan), framed when the character is there; its sprite
+                # only while its plan is too small to draw.
+                plan = self._plans.get(place.id)
+                if place.id in shown_plans and plan is not None:
+                    rect = plan.rect()
+                    item.set_frame(rect.width() * scale, rect.height() * scale)
+                else:
+                    item.set_frame(None, None)
+                    item.set_pixels(_snapped(size_of(place) * scale))
+                item.setVisible(True)
+                item.set_big(level == "world")
+                continue
             carried = place.id in shown_plans or (place.inside or "") in shown_plans
             if level == "world":
                 visible = place.kind in WORLD_KINDS and not carried
@@ -1952,7 +2097,12 @@ class WorldView(QWidget):
         place's name carries a ◆, `_PlaceItem.painted`)."""
         for pid, badge in self._badges.items():
             plan = self._plans.get(pid)
-            shown = not self._isos[pid].isVisible() and pid in shown_plans and plan is not None
+            shown = (
+                not self.board  # the board's areas show their own paintings
+                and not self._isos[pid].isVisible()
+                and pid in shown_plans
+                and plan is not None
+            )
             if shown:
                 badge.at_corner(plan.rect().topLeft())
             badge.setVisible(shown)
@@ -1979,7 +2129,11 @@ class WorldView(QWidget):
         layout = plan.layout
         plan.ground = ground
         rows = plan.drawn_rows()
-        pictured = self._pictured_buildings(rows, layout.labels, opened) if roofs else {}
+        pictured = (
+            self._pictured_buildings(rows, layout.labels, opened)
+            if roofs and plan.backdrop is None
+            else {}
+        )
         cleared = tuple(sorted({*opened, *pictured}))
         plan.render(ground, roofs, cleared, self._colours())
         for (x0, x1, _y0, y1), image in pictured.items():
@@ -1997,8 +2151,10 @@ class WorldView(QWidget):
         stood = self._stand(plan, list(standing), spots, [*roofed, *fronts], rows)
         own = {_key(n) for n in (plan.place.name, *plan.place.aliases)}
         for name, (x, y) in layout.labels.items():
-            if _key(name) in own:
-                continue  # the plan's own place: its parent or the card names it
+            if _key(name) in own or self.board:
+                # The plan's own place (its parent or the card names it); on
+                # the board every name in forty-odd houses was a smear.
+                continue
             tag = _TagItem(name.split("(")[0].strip())
             tag.setParentItem(plan)
             plan.dressed.append(tag)

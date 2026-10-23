@@ -116,7 +116,7 @@ def test_a_thing_s_picture_is_found_with_or_without_its_article():
         ("worn couch by the hearth", "couch-with-patched-cushions"),
         # Not another kind of the thing ("rifle rack", a "hydroponic planter
         # bed" for a bed), nor of another material, state or contents.
-        ("leaning rifle rack", None),
+        ("leaning rifle rack", "rifle-rack"),  # the showcase caves' rack (Oct 23 2026)
         ("small bedside crate", None),
         ("crates of salvaged timber", None),
         ("wardrobe with missing door", None),
