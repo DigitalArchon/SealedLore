@@ -20,6 +20,7 @@ import threading
 from collections.abc import Sequence
 
 from sealedlore.engine.images import ImageRequest
+from sealedlore.engine.picture_use import from_picture_direction, keep_picture
 from sealedlore.engine.portraits import (
     PORTRAIT_BATCH,
     PORTRAIT_MAX_TOKENS,
@@ -230,6 +231,29 @@ class PortraitRuntime:
     def scene_direction(self, character: Character) -> str:
         """The direction for a picture of one character as they are now."""
         return self.texts.fill("pictures.scene_of", name=character.name)
+
+    def picture_from_direction(self, card: Card) -> str:
+        """The direction for a picture drawn from a part of a picture of the
+        story kept on the card (engine/picture_use.py): a portrait of the
+        person shown, or the place shown with nobody in it."""
+        return from_picture_direction(card, self.texts)
+
+    def keep_card_picture(
+        self, card: Card, data: bytes, suffix: str, *, caption: str, how: str
+    ) -> ImageRef:
+        """A picture the story made (or a part of it, already prepared: hidden
+        data removed, scaled) kept on the card as `how` says
+        (`picture_use.KEEPS`), written under images/refs and saved. The card
+        moved on, as by hand: the review's undo is forgotten, as when a drawn
+        picture lands."""
+        ref_id = new_id()
+        relative = f"{REFS_DIR}/{ref_id}{suffix}"
+        self.pictures.write(relative, data)
+        ref = ImageRef(id=ref_id, file=relative, caption=caption.strip())
+        keep_picture(card, ref, how)
+        self.forget_review_undo()
+        self.save()
+        return ref
 
     def portraits_landed(self) -> set[str]:
         """The cards with a portrait drawn and not yet taken onto them: it

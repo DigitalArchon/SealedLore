@@ -51,8 +51,10 @@ from sealedlore.engine.image_variants import (
 )
 from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.places import PLACE_CAPTION, PLACE_CAPTION_AGAIN, place_size, place_title
+from sealedlore.engine.portraits import portrait_size
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.session_images import DEFAULT_MAX_REFS
+from sealedlore.engine.session_portraits import PORTRAIT_CAPTION
 from sealedlore.engine.world_pictures import picture_size
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.image_jobs import ImageCatalog
@@ -69,7 +71,7 @@ from sealedlore.gui.ref_images import (
 from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.character import Character
-from sealedlore.models.image import GeneratedImage, RefUse
+from sealedlore.models.image import GeneratedImage, ImageRef, RefUse
 from sealedlore.models.lore import LoreEntry
 from sealedlore.providers.images import ImageModelInfo, parse_image_models
 from sealedlore.storage.image_meta import picture_kind
@@ -101,6 +103,7 @@ class ImageDialog(QDialog):
         place_mode: bool = False,
         place: LoreEntry | None = None,
         location: str = "",
+        source: ImageRef | None = None,
     ) -> None:
         """`card`: a picture of this character alone, as they are now in the
         story (In the scene… on their card): the direction says so, their
@@ -112,18 +115,27 @@ class ImageDialog(QDialog):
         for its lore entry `place` (made on Generate when there is none),
         shown behind the story while the scene is there; with a picture
         already, the same place again as it is now, the last picture sent as
-        a reference (engine/places.py)."""
+        a reference (engine/places.py). `source`: a picture kept on the card
+        or the place from a picture of the story (engine/picture_use.py):
+        it goes as the one reference, and the direction asks for a portrait
+        of the person it shows, or the place it shows with nobody in it; the
+        drawing becomes the portrait, or the place's current picture."""
         super().__init__(parent)
         self.card = card
         self.background = background
         self.place_mode = place_mode
         self.place = place
         self.location = location
+        self.source = source
         self.again = place is not None and bool(place.reference_images)
         # A lore entry made for the place on Generate: the window refreshes.
         self.made_place = False
-        if card is not None:
+        if card is not None and source is not None:
+            title = f"A portrait of {card.name} from the picture"
+        elif card is not None:
             title = f"{card.name} in the scene"
+        elif place_mode and source is not None:
+            title = f"{place.title if place is not None else 'The place'} from the picture"
         elif place_mode:
             name = place.title if place is not None else place_title(location) or "this place"
             title = f"New picture of {name}" if self.again else f"Picture of {name}"
@@ -166,7 +178,11 @@ class ImageDialog(QDialog):
             self._prefill(prefill)
         # A place's picture is a card's: the portrait model draws it (FLUX.3
         # Klein by default; the author, Oct 24 2026: Klein for all of these).
-        first_model = session.config.portrait_model if place_mode else session.config.image_model
+        first_model = (
+            session.config.portrait_model
+            if place_mode or source is not None
+            else session.config.image_model
+        )
         self._fill_models(prefill.model if prefill is not None else first_model)
         if prefill is not None:
             self._select_size(prefill.size)
@@ -187,7 +203,20 @@ class ImageDialog(QDialog):
                 "A picture to stand behind the story's text: it becomes the background once "
                 "it is drawn, and the old one stays in Media when it was drawn here."
             )
-        if self.place_mode:
+        if self.card is not None and self.source is not None:
+            what = (
+                f"A portrait of {self.card.name} drawn from the part of the picture you kept, "
+                "which goes with the prompt as image 1: it becomes their portrait, and the "
+                "part stays among their pictures."
+            )
+        elif self.place_mode and self.source is not None:
+            what = (
+                "A picture of the place shown in the part you kept, which goes with the "
+                "prompt as image 1, with nobody in it: it becomes the place's picture, shown "
+                "behind the story's text while the story is there, and the part stays among "
+                "the place's pictures."
+            )
+        elif self.place_mode:
             what = (
                 "A picture of the place itself, as it is now, with nobody in it: it goes on "
                 "the place's lore entry (made for it if there is none) and stands behind the "
@@ -386,17 +415,43 @@ class ImageDialog(QDialog):
     def _for_card(self, card: Character) -> None:
         """In the scene…: the direction, and the character's own pictures as
         the references (their portrait first), kept whatever the writer
-        lists."""
-        self.direction.setPlainText(self.session.scene_direction(card))
-        uses = [c.use for c in self._choices if c.use.owner_id == card.id]
-        self._set_refs(uses[: max(1, self._max_refs())])
+        lists. With a `source`, a portrait from that picture alone."""
+        if self.source is not None:
+            self.direction.setPlainText(self.session.picture_from_direction(card))
+            self._set_refs([self._source_use(card)])
+        else:
+            self.direction.setPlainText(self.session.scene_direction(card))
+            uses = [c.use for c in self._choices if c.use.owner_id == card.id]
+            self._set_refs(uses[: max(1, self._max_refs())])
         self._refs_edited = True
         self._written_with = [use.ref_id for use in self._refs]
+
+    def _source_use(self, card) -> RefUse:
+        """The kept part as the one reference (it is on the card now)."""
+        source = self.source
+        found = [c.use for c in self._choices if c.use.ref_id == source.id]
+        if found:
+            return found[0]
+        person = isinstance(card, Character)
+        return RefUse(
+            owner_kind="character" if person else "lore",
+            owner_id=card.id,
+            owner_name=card.name if person else card.title,
+            ref_id=source.id,
+            file=source.file,
+            caption=source.caption,
+        )
 
     def _for_place(self) -> None:
         """A picture of the place: the direction, and for a place with a
         picture already, that picture as the reference (the same place as
-        it is now)."""
+        it is now). With a `source`, the place shown in that picture."""
+        if self.source is not None and self.place is not None:
+            self.direction.setPlainText(self.session.picture_from_direction(self.place))
+            self._set_refs([self._source_use(self.place)])
+            self._refs_edited = True
+            self._written_with = [use.ref_id for use in self._refs]
+            return
         name = self.place.title if self.place is not None else place_title(self.location)
         self.direction.setPlainText(self.session.place_direction(name, again=self.again))
         if self.again and self.place is not None:
@@ -479,6 +534,8 @@ class ImageDialog(QDialog):
             wanted = picture_size(info, landscape=True)  # wide, behind the text
         elif self.place_mode and not current and info is not None:
             wanted = place_size(info)  # wide, or the largest square (Klein)
+        elif self.card is not None and self.source is not None and not current and info is not None:
+            wanted = portrait_size(info)  # a portrait, tall where the model draws one
         if wanted not in sizes and sizes:
             wanted = (
                 self.session.config.image_size
@@ -783,12 +840,18 @@ class ImageDialog(QDialog):
         card_id = self.card.id if self.card is not None else None
         card_first = False
         card_caption = SCENE_CAPTION if self.card is not None else ""
+        if self.card is not None and self.source is not None:
+            # Drawn from the part kept: it is the portrait now.
+            card_first, card_caption = True, PORTRAIT_CAPTION
         if self.place_mode:
             # The entry the picture is kept on, made now when there is none.
             if self.place is None:
                 self.place = self.session.ensure_place_entry(self.place_name.text(), self.location)
                 self.made_place = True
             card_id = self.place.id
+            # A first picture goes first; after that the newest, last, is the
+            # place's (engine/places.py). Drawn from a kept part, the part
+            # is already on the entry: the drawing goes after it, newest.
             card_first = not self.place.reference_images
             card_caption = PLACE_CAPTION_AGAIN if self.again else PLACE_CAPTION
         self.request = ImageRequest(
@@ -801,8 +864,13 @@ class ImageDialog(QDialog):
             n=self.count.value(),
             references=tuple(self._sent_refs()),
             # A background pictures no passage: it stands behind them all;
-            # nor does a place's picture, kept on its entry.
-            anchor_node_id=None if self.background or self.place_mode else self.anchor_id,
+            # nor does a place's picture, kept on its entry, nor a portrait
+            # drawn from a kept part.
+            anchor_node_id=(
+                None
+                if self.background or self.place_mode or self.source is not None
+                else self.anchor_id
+            ),
             direction=self.direction.toPlainText().strip(),
             listed_price=info.price(size) if info is not None else None,
             private_span=self.session.open_span.id if self.session.in_private else None,

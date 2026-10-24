@@ -42,6 +42,11 @@ played on one goes on as a story without it.
   draws one for the place you are at, or a new one from the last as the place
   is now (the bar after the brawl). The samples come with a picture of each
   of their places. See [Pictures of places](#pictures-of-places) below.
+- **A picture kept as a card's own** (new in 2.0.0b7). Right-click any
+  picture and choose **Use as a character's picture…** or **Use as a place's
+  picture…**: frame the one person, or the place without the people, and keep
+  it as their portrait or the place's picture, or have a portrait or a
+  picture of the place drawn from the part you framed.
 - **Every character with a face.** A portrait for each character, drawn from
   their card when you start, and the People page beside the story shows who
   is here by their faces.

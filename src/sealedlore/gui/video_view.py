@@ -412,7 +412,7 @@ VIDEO_ACTIONS = (
     ("save", "Save video as…"),
     ("-", ""),
     ("continue", "Continue from its last frame…"),
-    ("frame", "Use its last frame as a reference picture for…"),
+    ("frame", "Use its last frame as a card's picture…"),
     ("again", "Generate again…"),
     ("-", ""),
     ("delete", "Delete video"),

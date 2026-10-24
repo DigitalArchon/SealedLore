@@ -1480,6 +1480,27 @@ farmhouse's), so an entry called "The diner" with a keyword "diner" catches
 "the diner's back room". **Settings → Images → Place pictures** turns the
 background off; the pictures stay on their entries.
 
+### A picture kept as a card's own
+
+When a picture of the scene gets a character or a place just right, keep it:
+right-click any picture (in the story, in Media, a card's picture there, the
+background, a picture added from disk, or a video's last frame) and choose
+**Use as a character's picture…** or **Use as a place's picture…**. The
+dialog lists the cards (the character you play, or the place the scene is
+at, first; a place no entry names gets a new lore entry, as **Picture of this
+place…** makes one) and shows the picture with a frame over it: drag it round
+the one person for a portrait, or round the place without the people in it,
+in the shape portraits or place pictures are drawn in or any shape at all, or
+**Use the whole picture**. Then say what it becomes: the card's picture from
+now on (a character's portrait, shown first on their card; a place's current
+picture, shown behind the story while the story is there), one more picture
+among the card's, or a reference that a new picture is drawn from at once.
+That last choice opens the picture dialog with the part you framed as image 1
+and a direction you can change: for a character, a portrait of the person
+shown in it; for a place, the same place with nobody in it. The picture drawn
+becomes the portrait, or the place's current picture, and the part you kept
+stays among the card's pictures.
+
 ## Videos
 
 **Story → Generate video…**, **Video…** in the Media tab, or **Video of this

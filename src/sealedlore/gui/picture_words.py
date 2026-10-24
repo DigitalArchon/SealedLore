@@ -16,6 +16,9 @@ AGAIN_LABEL = "Same prompt again…"
 EDIT_LABEL = "Change this picture…"
 # Their portrait sent with them as they are now in the story.
 SCENE_LABEL = "In a scene…"
+# A picture, or a part of it, kept as a card's own (gui/picture_use.py).
+USE_CHARACTER_LABEL = "Use as a character's picture…"
+USE_PLACE_LABEL = "Use as a place's picture…"
 # The captions over the two kinds on a card.
 FROM_WORDS = "From words:"
 SENDS_PICTURE = "Sends this picture:"

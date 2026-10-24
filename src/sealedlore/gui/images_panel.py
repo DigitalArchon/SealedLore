@@ -35,7 +35,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from sealedlore.gui.picture_words import AGAIN_LABEL, EDIT_LABEL
+from sealedlore.gui.picture_words import (
+    AGAIN_LABEL,
+    EDIT_LABEL,
+    USE_CHARACTER_LABEL,
+    USE_PLACE_LABEL,
+)
 from sealedlore.gui.ref_images import thumbnail_of
 from sealedlore.gui.transcript import IMAGE_ACTIONS, picture_caption
 from sealedlore.gui.video_view import VIDEO_ACTIONS, video_caption
@@ -89,7 +94,7 @@ class ImagesPanel(QWidget):
     generate_video_requested = Signal()
     save_all_requested = Signal()
     # (action, card id, picture id) for a card's picture: "open", "show"
-    # (on its page), "save", "again", "edit".
+    # (on its page), "save", "again", "edit", "character", "place".
     card_action_requested = Signal(str, str, str)
     # An action on the background (BACKGROUND_ACTIONS).
     background_action_requested = Signal(str)
@@ -412,6 +417,9 @@ class ImagesPanel(QWidget):
         menu = QMenu(self)
         if item.data(Qt.UserRole + 1) == "added":
             for key, text in ADDED_ACTIONS:
+                if key == "-":
+                    menu.addSeparator()
+                    continue
                 menu.addAction(text).triggered.connect(
                     lambda _checked=False, k=key: self.added_action_requested.emit(k, image_id)
                 )
@@ -458,6 +466,11 @@ CARD_ACTIONS = (
     ("-", ""),
     ("again", AGAIN_LABEL),
     ("edit", EDIT_LABEL),
+    ("-", ""),
+    # Another card's: the place in a character's scene picture, the person
+    # in a place's (gui/picture_use.py).
+    ("character", USE_CHARACTER_LABEL),
+    ("place", USE_PLACE_LABEL),
 )
 BACKGROUND_ACTIONS = (
     ("open", "See it whole"),
@@ -466,6 +479,8 @@ BACKGROUND_ACTIONS = (
     ("draw", "Draw a new background…"),
     ("edit", EDIT_LABEL),
     ("file", "Choose a file instead…"),
+    ("-", ""),
+    ("place", USE_PLACE_LABEL),
     ("-", ""),
     ("clear", "Clear the background"),
 )
@@ -479,6 +494,9 @@ MAP_ACTIONS = (
 ADDED_ACTIONS = (
     ("open", "See it whole"),
     ("save", "Save picture as…"),
+    ("-", ""),
+    ("character", USE_CHARACTER_LABEL),
+    ("place", USE_PLACE_LABEL),
 )
 
 

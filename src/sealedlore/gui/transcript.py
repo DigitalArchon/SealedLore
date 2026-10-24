@@ -32,7 +32,7 @@ from sealedlore.engine.dice import chip_text
 from sealedlore.engine.reasoning import caught_note
 from sealedlore.gui import theme
 from sealedlore.gui.markdown_text import markdown_html, shown_text
-from sealedlore.gui.picture_words import EDIT_LABEL
+from sealedlore.gui.picture_words import EDIT_LABEL, USE_CHARACTER_LABEL, USE_PLACE_LABEL
 from sealedlore.gui.ref_images import pixmap_of, pixmap_within
 from sealedlore.gui.video_view import PendingVideoWidget, VideoItem, VideoMessageWidget
 from sealedlore.models.aside import Aside
@@ -822,7 +822,8 @@ IMAGE_ACTIONS = (
     ("prompt", "Show the prompt"),
     ("save", "Save as…"),
     ("-", ""),
-    ("reference", "Use as a reference picture for…"),
+    ("character", USE_CHARACTER_LABEL),
+    ("place", USE_PLACE_LABEL),
     ("background", "Set as background"),
     ("again", "Generate again…"),
     ("edit", EDIT_LABEL),

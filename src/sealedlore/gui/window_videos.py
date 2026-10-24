@@ -420,7 +420,7 @@ class VideosWindow:
             )
             self.generate_video(anchor_id=self.session.story.active_leaf_id, start=start)
         elif action == "frame" and video.last_frame:
-            self._use_as_reference(store.read(video.last_frame))
+            self._use_picture(store.read(video.last_frame))
         elif action == "again":
             self.generate_video(anchor_id=video.anchor_node_id, prefill=video)
         elif action == "delete":

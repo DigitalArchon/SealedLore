@@ -18,13 +18,13 @@ from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
-    QInputDialog,
     QMessageBox,
     QToolButton,
     QVBoxLayout,
 )
 
 from sealedlore.engine.picture_shapes import BACKGROUND
+from sealedlore.engine.picture_use import KEEP_DRAW
 from sealedlore.engine.places import newest_picture
 from sealedlore.engine.world_art import out_of_the_fog
 from sealedlore.engine.world_pictures import shown_view
@@ -40,18 +40,18 @@ from sealedlore.gui.image_jobs import FailedPicture, ImageCatalog, ImageJobs
 from sealedlore.gui.image_picker import pick_image_model
 from sealedlore.gui.images_panel import ImagesPanel
 from sealedlore.gui.isometric_view import IsometricDialog
+from sealedlore.gui.picture_use import CHARACTER, PLACE, UsePictureDialog
 from sealedlore.gui.picture_variant import PictureVariantDialog, VariantSubject
 from sealedlore.gui.portraits_dialog import PortraitsDialog
-from sealedlore.gui.ref_images import PICTURE_FILTER, image_of, picture_bytes_of, pixmap_of
+from sealedlore.gui.ref_images import PICTURE_FILTER, image_of, pixmap_of
 from sealedlore.gui.transcript import FailedPictureItem, PendingPicture
 from sealedlore.gui.winprivacy import exclude_from_capture
-from sealedlore.ids import new_id
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, ImageRef
+from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import Usage
 from sealedlore.providers.images import IMAGE_TIMEOUT_SECONDS
 from sealedlore.storage.image_meta import picture_kind
-from sealedlore.storage.images import REFS_DIR
 from sealedlore.storage.picture_store import PictureStore, file_name
 from sealedlore.storage.repository import save_config
 
@@ -348,12 +348,17 @@ class ImagesWindow:
         card=None,
         background: bool = False,
         place: bool = False,
+        place_entry: LoreEntry | None = None,
+        source: ImageRef | None = None,
     ) -> bool:
         """`card`: a picture of that character alone, in the scene now, added
         to their card (In the scene… on the Cast page). `background`: a
         picture to go behind the story's text (Media → the background).
         `place`: a picture of the place the scene is at, for its lore entry
-        (engine/places.py). True when a picture is being drawn."""
+        (engine/places.py), or of `place_entry`. `source`: a picture kept on
+        the card or entry to draw from (gui/picture_use.py): a portrait of
+        the person it shows, or the place it shows with nobody in it. True
+        when a picture is being drawn."""
         if self.session is None:
             return False
         if self._busy:
@@ -376,8 +381,15 @@ class ImagesWindow:
             card=card,
             background=background,
             place_mode=place,
-            place=self.session.current_place() if place else None,
-            location=(self.session.story.scene.location or "") if place else "",
+            place=(place_entry or self.session.current_place()) if place else None,
+            location=(
+                (self.session.story.scene.location or "")
+                if place and place_entry is None
+                else place_entry.title
+                if place_entry is not None
+                else ""
+            ),
+            source=source,
         )
         if self._shows_private():
             exclude_from_capture(dialog, True)  # the private model's prompt
@@ -554,6 +566,9 @@ class ImagesWindow:
             return
         if action in ("again", "edit"):
             self._on_card_picture(card_id, ref_id, action)
+            return
+        if action in (CHARACTER, PLACE):
+            self._use_picture(session.pictures.read(ref.file), action)
             return
         name = card.name if isinstance(card, Character) else card.title
         if action == "show":
@@ -738,8 +753,8 @@ class ImagesWindow:
             box.exec()
         elif action == "save":
             save_picture_as(self, data, file_name(image.file))
-        elif action == "reference":
-            self._use_as_reference(data)
+        elif action in (CHARACTER, PLACE):
+            self._use_picture(data, action)
         elif action == "background" and data is not None:
             self._set_background_data(data, picture_kind(data) or ".png", drawn_as=image.id)
         elif action == "again":
@@ -836,42 +851,65 @@ class ImagesWindow:
             f"Saved {written} picture{'s' if written != 1 else ''} to {folder}{note}", 8000
         )
 
-    def _use_as_reference(self, data: bytes | None) -> None:
-        if self.session is None or data is None:
+    def _use_picture(self, data: bytes | None, kind: str | None = None) -> None:
+        """Use as a character's picture… / Use as a place's picture… on any
+        picture (a story picture's menu, Media, a video's last frame): the
+        author frames the part that matters and says what it becomes
+        (gui/picture_use.py); it goes on the card, and, asked for, the
+        picture dialog opens to draw a portrait or a picture of the place
+        from it."""
+        session = self.session
+        if session is None or data is None or session.story.chat:
             return
         if self._busy:
             self.statusBar().showMessage("Wait for the story's current job to finish.", 6000)
             return
-        owners: list[tuple[str, object]] = [
-            (f"Character: {character.name}", character)
-            for character in [*self.session.cast, *self.session.supporting]
-        ] + [(f"Lore: {entry.title}", entry) for entry in self.session.bundle.lore]
-        if not owners:
+        if session.in_private:
+            self.statusBar().showMessage("Pictures wait until the private scene ends.", 6000)
             return
-        labels = [label for label, _ in owners]
-        choice, ok = QInputDialog.getItem(
-            self, "Use as a reference picture", "A picture of:", labels, 0, False
-        )
-        if not ok:
+        characters, lore = session.picture_cards()
+        if not characters and not lore and not (session.story.scene.location or "").strip():
+            self.statusBar().showMessage("No card to keep it on yet.", 6000)
             return
-        owner = owners[labels.index(choice)][1]
-        caption, ok = QInputDialog.getText(self, "Caption", "What the picture shows (optional):")
-        if not ok:
-            return
-        # Prepared as any added picture is: a large one is scaled down.
-        ref_id = new_id()
+        dialog = UsePictureDialog(session, data, kind, self._dialog_parent())
         try:
-            prepared, suffix = picture_bytes_of(data, picture_kind(data) or ".png")
-            relative = f"{REFS_DIR}/{ref_id}{suffix}"
-            self.session.pictures.write(relative, prepared)
-        except (OSError, ValueError) as exc:
-            self._warn_plain("Couldn't add the picture", str(exc))
+            if not dialog.exec() or dialog.result_use is None:
+                return
+            use = dialog.result_use
+        finally:
+            dialog.deleteLater()  # with its picture
+        if session is not self.session:
             return
-        ref = ImageRef(id=ref_id, file=relative, caption=caption.strip())
-        owner.reference_images.append(ref)
-        self.session.save()
-        self.refresh_panels()
-        self.statusBar().showMessage(f"Added to {choice.split(': ', 1)[1]}'s pictures.", 6000)
+        card = use.card
+        made = False
+        if card is None:
+            # A lore entry for the scene's location, as Picture of this place… makes.
+            card = session.ensure_place_entry(use.new_title, session.story.scene.location or "")
+            made = True
+        try:
+            ref = session.keep_card_picture(
+                card, use.data, use.suffix, caption=use.caption, how=use.how
+            )
+        except (OSError, ValueError) as exc:
+            self._warn_plain("Couldn't keep the picture", str(exc))
+            return
+        name = card.name if isinstance(card, Character) else card.title
+        if made:
+            self.refresh_panels()
+        else:
+            self.cast_panel.refresh_pictures()
+            self.lore_panel.refresh_pictures()
+            self.people_page.forget_pictures()
+            self._refresh_people()
+            self.refresh_images()
+        # The place's picture changed: behind the story, if the story is there.
+        self._sync_place_picture()
+        self.statusBar().showMessage(f"Kept on {name}'s card.", 6000)
+        if use.how == KEEP_DRAW:
+            if isinstance(card, Character):
+                self.generate_image(card=card, source=ref)
+            else:
+                self.generate_image(place=True, place_entry=card, source=ref)
 
     # --- the background ----------------------------------------------------------
 
@@ -971,6 +1009,8 @@ class ImagesWindow:
             self._edit_picture(VariantSubject.of_background(relative, session.background_picture()))
         elif action == "file":
             self.choose_background()
+        elif action == PLACE:
+            self._use_picture(data, PLACE)
         elif action == "clear":
             self.clear_background()
 
@@ -1051,6 +1091,8 @@ class ImagesWindow:
         data = session.pictures.read(ref.file)
         if action == "save":
             save_picture_as(self, data, file_name(ref.file))
+        elif action in (CHARACTER, PLACE):
+            self._use_picture(data, action)
         else:
             self._show_whole(ref.caption or "Added picture", data)
 

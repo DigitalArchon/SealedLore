@@ -3705,6 +3705,40 @@ _text(
 )
 
 
+# A part of a picture of the story kept as a card's reference, and a new
+# picture drawn from it (the author, Oct 24 2026: a player who likes how a
+# character came out in a picture of the scene wants that as their portrait;
+# who likes the place wants it as the place's picture, without the people).
+# The story's own prompt writer is given this as the author's direction, the
+# part as image 1; the author may change it first. Not measured.
+_text(
+    "pictures.from_picture.person",
+    PICTURES,
+    "Card pictures: a portrait from a picture",
+    "The direction given to the picture prompt writer for a portrait drawn from the person "
+    "shown in a part of a picture of the story, sent as image 1; the author can change it "
+    "before it is written.",
+    "A portrait of {name}, the person shown in image 1: the same face, hair, build, skin "
+    "and clothes as in that picture, head and shoulders, looking at the viewer, in a "
+    "plain setting. Nobody else in the picture, and no writing of any kind.",
+    (("name", "The character's name"),),
+)
+
+_text(
+    "pictures.from_picture.place",
+    PICTURES,
+    "Card pictures: a place from a picture",
+    "The direction given to the picture prompt writer for a picture of the place shown in a "
+    "part of a picture of the story, sent as image 1, with nobody in it; the author can "
+    "change it before it is written.",
+    "A picture of {place}, the place shown in image 1: the same place, with the same "
+    "layout, materials, light and weather, seen from the same viewpoint, but with nobody "
+    "in it: leave every person out and show what stands behind them. No signs, names or "
+    "writing of any kind.",
+    (("place", "The place's name"),),
+)
+
+
 # --- Video -----------------------------------------------------------------
 # A video prompt is not a picture prompt: a picture is one frozen moment, a
 # video is a few seconds of one continuous shot, so the writer is told the
