@@ -23,10 +23,22 @@ class StoryListing:
     messages: int
     updated: str  # story.json's updated_at, "" when it has none
     chat: bool = False
+    # A visual story (played on its map as a game): opened in its own window.
+    visual: bool = False
     keeps_map: bool = False
     # A story that can't be read: why. It is still listed, so it can be
     # looked into or deleted.
     error: str | None = None
+
+
+def story_mode(story_id: str, root: Path | None = None) -> str:
+    """A saved story's mode ("story", "chat", "visual"), read from its
+    story.json alone; "story" when it can't be read."""
+    try:
+        story = read_json(stories_dir(root) / story_id / "story.json")
+    except (OSError, ValueError):
+        return "story"
+    return str(story.get("mode") or "story") if isinstance(story, dict) else "story"
 
 
 def story_listings(root: Path | None = None) -> list[StoryListing]:
@@ -51,9 +63,13 @@ def story_listings(root: Path | None = None) -> list[StoryListing]:
                     messages=len(nodes) if isinstance(nodes, list) else 0,
                     updated=str(story.get("updated_at") or ""),
                     chat=story.get("mode") == "chat",
-                    keeps_map=maps_offered()
-                    and isinstance(defaults, dict)
-                    and bool(defaults.get("world_map")),
+                    visual=story.get("mode") == "visual",
+                    keeps_map=story.get("mode") == "visual"
+                    or (
+                        maps_offered()
+                        and isinstance(defaults, dict)
+                        and bool(defaults.get("world_map"))
+                    ),
                 )
             )
         except (OSError, ValueError) as exc:

@@ -1501,6 +1501,25 @@ shown in it; for a place, the same place with nobody in it. The picture drawn
 becomes the portrait, or the place's current picture, and the part you kept
 stays among the card's pictures.
 
+## Visual Stories
+
+A separate way to play, early and growing: a world to play in on its map,
+with the visuals centre stage. The start page lists the visual stories under
+the samples (Doomsville, to begin with). Choose who you play and the game
+opens in a window of its own: the place you are in fills it, painted; the
+column at the right holds the log (what happens, what people say) and the
+line you type; your portrait, the place and the clock sit under the view.
+Click where to go and your character walks there; click a building to go
+inside or a door to go through it (the view fades through); **Travel…** sets
+off for another place and **Leave** walks on past an edge, the clock moving
+by the way's length. Everything is saved as you go, so closing the window
+(back to your stories; the story is in the Stories list and opens the game
+again) loses nothing. The people you meet, and the plot, will be the model's;
+walking, doors, what you carry, what you can see and hear, and fights will be
+the game's own rules. In this version only the walking, the doors, the
+journeys and the clock are in: nothing is asked of a model yet, and the line
+says so.
+
 ## Videos
 
 **Story → Generate video…**, **Video…** in the Media tab, or **Video of this

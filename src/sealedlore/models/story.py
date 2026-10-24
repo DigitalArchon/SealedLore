@@ -118,7 +118,9 @@ class StoryDefaults(BaseModel):
 
 
 OpeningMode = Literal["generate", "as_written"]
-StoryMode = Literal["story", "chat"]
+# "visual": a story played on its map as a game (engine/session_visual.py,
+# gui/visual_window.py; the author, Oct 24 2026), a mode of its own.
+StoryMode = Literal["story", "chat", "visual"]
 ChatKeep = Literal["disk", "memory"]
 
 
@@ -252,3 +254,9 @@ class Story(BaseModel):
     @property
     def chat(self) -> bool:
         return self.mode == "chat"
+
+    @property
+    def visual(self) -> bool:
+        """A visual story: played on its map as a game, whatever the map
+        flag says for ordinary stories (`keeps_map`)."""
+        return self.mode == "visual"

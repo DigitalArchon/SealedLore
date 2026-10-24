@@ -129,8 +129,9 @@ class WorldRuntime:
 
     @property
     def map_on(self) -> bool:
-        """The story keeps a map: the author turned it on (a simple chat may too)."""
-        return keeps_map(self.story.defaults)
+        """The story keeps a map: the author turned it on (a simple chat may
+        too); a visual story is played on its map whatever the flag says."""
+        return self.story.visual or keeps_map(self.story.defaults)
 
     @property
     def chat_name(self) -> str:

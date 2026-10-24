@@ -166,6 +166,7 @@ from sealedlore.engine.session_reasoning import ReasoningRuntime
 from sealedlore.engine.session_rebuild import RebuildRuntime
 from sealedlore.engine.session_recall import RecallRuntime
 from sealedlore.engine.session_regions import RegionRuntime
+from sealedlore.engine.session_visual import VisualRuntime
 from sealedlore.engine.session_world import WorldRuntime
 from sealedlore.engine.session_world_art import WorldArtRuntime
 from sealedlore.engine.tokens import TokenEstimator, updated_correction_factor
@@ -451,6 +452,7 @@ class StorySession(
     RegionRuntime,
     MapApprovalRuntime,
     AreaRuntime,
+    VisualRuntime,
     CorrectionRuntime,
     MapEditRuntime,
     ObjectsRuntime,

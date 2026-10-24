@@ -113,6 +113,7 @@ from sealedlore.gui.transcript import (
     speaker_label_for,
 )
 from sealedlore.gui.usage_dialog import UsageDialog
+from sealedlore.gui.visual_window import VisualWindow, player_choices
 from sealedlore.gui.welcome import setup_missing, welcome_html
 from sealedlore.gui.window_area import AreaWindow
 from sealedlore.gui.window_cast import CastWindow
@@ -158,7 +159,8 @@ from sealedlore.storage.archive import (
     write_archive,
 )
 from sealedlore.storage.images import is_video_file, reference_files, without_videos
-from sealedlore.storage.paths import data_home, samples_dir, story_dir
+from sealedlore.storage.library import story_mode
+from sealedlore.storage.paths import VISUAL_SAMPLES, data_home, samples_dir, story_dir
 from sealedlore.storage.repository import (
     StoryBundle,
     copy_story,
@@ -1128,6 +1130,85 @@ class MainWindow(
             self.import_file()
         elif kind == start_page.SAMPLE:
             self.import_sample(Path(str(value)))
+        elif kind == start_page.VISUAL:
+            self.open_visual_sample(Path(str(value)))
+
+    # --- visual stories (gui/visual_window.py) ------------------------------------
+
+    def open_visual_sample(self, path: Path) -> None:
+        """A new visual story from its plot file (the start page's Visual
+        Stories): the file's map and art, the character chosen, and the
+        game's window over this one."""
+        if self._busy or not self._private_allows_close():
+            return
+        parsed = self._read_plot_file(path)
+        if parsed is None:
+            return
+        if parsed.scenario.world_base is None:
+            self._warn_plain("No map", f"{path.name} has no map to play on.")
+            return
+        provider_config = self.config.active_provider()
+        model = provider_config.model if provider_config and provider_config.model else None
+        names = {
+            p: n for n, p in ((n, samples_dir() / f"{s}.md") for n, s in VISUAL_SAMPLES.items())
+        }
+        bundle = bundle_from_scenario(parsed.scenario, main_model=model, title=names.get(path))
+        bundle.world_art, files = load_sidecar(path)
+        bundle.pending_files.update(files)
+        story = bundle.story
+        story.mode = "visual"
+        choices = player_choices(bundle.cast, story.setup.choose_one_of)
+        if not choices:
+            self._warn_plain("Nobody to play", f"{path.name} has no character to play as.")
+            return
+        player = choices[0]
+        if len(choices) > 1:
+            labels = [c.name for c in choices]
+            label, ok = QInputDialog.getItem(self, "Who do you play?", "Play as:", labels, 0, False)
+            if not ok:
+                return
+            player = choices[labels.index(label)]
+        story.held_character_id = player.id
+        if player.id not in story.scene.present_character_ids:
+            story.scene.present_character_ids.append(player.id)
+        save_story_bundle(bundle, root=self.root)
+        self.stories.refresh(selected_id=story.id)
+        self.open_visual_story(story.id)
+
+    def open_visual_story(self, story_id: str) -> None:
+        """Play a visual story in its own window; this one hides until it closes."""
+        if self._busy or not self._private_allows_close():
+            return
+        try:
+            session = StorySession.load(
+                story_id,
+                self.config,
+                self._current_provider(),
+                root=self.root,
+                estimator=self.estimator,
+                learn_corrections=not self.use_mock,
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            self._warn_plain("Could not open story", str(exc))
+            return
+        if not session.story.visual:
+            session.close(wait_seconds=0)
+            self.open_story(story_id)
+            return
+        self.visual_window = VisualWindow(
+            session, self.config, self.root, on_close=self._visual_closed
+        )
+        self.hide()
+        self.visual_window.showMaximized()
+
+    def _visual_closed(self) -> None:
+        """The game's window closed: back to the stories."""
+        window = getattr(self, "visual_window", None)
+        self.visual_window = None
+        if window is not None:
+            window.deleteLater()
+        self.stories.refresh()
+        self.show()
 
     def import_sample(self, path: Path) -> None:
         """A new story from a sample plot file, exactly as File → Import… would.
@@ -1685,6 +1766,9 @@ class MainWindow(
 
     def open_story(self, story_id: str) -> None:
         if self._busy:
+            return
+        if story_mode(story_id, self.root) == "visual":
+            self.open_visual_story(story_id)
             return
         # Leaving a memory-only chat or scene loses it, whichever story opens
         # next (the same one again comes back from disk, without it): asked.

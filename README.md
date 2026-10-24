@@ -42,6 +42,12 @@ played on one goes on as a story without it.
   draws one for the place you are at, or a new one from the last as the place
   is now (the bar after the brawl). The samples come with a picture of each
   of their places. See [Pictures of places](#pictures-of-places) below.
+- **Visual Stories** (new in 2.0.0b7, early). A separate way to play: a
+  world on its map, the visuals centre stage, the model for the people you
+  meet and the plot, the game's own rules for everything else. The start
+  page lists them under the samples, Doomsville first. In this version only
+  the walking, the doors, the journeys and the clock are in. See [Visual
+  Stories](docs/manual.md#visual-stories) in the manual.
 - **A picture kept as a card's own** (new in 2.0.0b7). Right-click any
   picture and choose **Use as a character's picture…** or **Use as a place's
   picture…**: frame the one person, or the place without the people, and keep

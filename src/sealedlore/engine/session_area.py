@@ -3462,7 +3462,11 @@ class AreaRuntime:
         """(day, minute of the day) on the map's clock: the plot's, when the
         story has a plot; else the walking and the time the passages told.
         Shown to the author; never to the storyteller."""
-        if self.story.plot is not None:
+        if self.story.visual:
+            # No passages move the plot's clock in a visual story: the walking,
+            # the doors and the journeys are all of it, from the plot's start.
+            minutes = self.visual_start_minute() + self.area_state().seconds // 60
+        elif self.story.plot is not None:
             try:
                 minutes = self.chronicle.minutes
             except AttributeError:
