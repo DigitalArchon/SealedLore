@@ -1520,7 +1520,8 @@ the game's own rules. Journeys go only between the places the world was
 designed with, never into the open country between them, and a click while
 you walk turns you at once. Outdoors the weather the world was designed with
 falls over the place, and the light follows the hour; a hit flashes your
-figure red, and whoever goes down lies where they fell.
+figure red, and whoever goes down lies where they fell. Doomsville's
+characters walk with stride frames of their own, drawn from their sprites.
 
 The game keeps its own rules, with no model behind them. Right-click a thing
 to **take it**, to take what a look found in it, or to **break it** (a noise

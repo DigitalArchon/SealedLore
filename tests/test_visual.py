@@ -1492,3 +1492,46 @@ def test_a_place_the_keeper_names_loosely_is_found():
     assert _place_named(world, "The Farm - House").id == "house"
     assert _place_named(world, "the farm's barn").id == "farm"
     assert _place_named(world, "the moon") is None
+
+
+def test_stride_frames_are_a_walker_s_own_and_never_their_picture():
+    from sealedlore.models.world import MapPicture, WorldArt
+
+    art = WorldArt()
+    art.pictures = [
+        MapPicture(subject="walker", subject_id="John", name="John", file="a.webp"),
+        MapPicture(subject="walker", subject_id="John", name="John", state="walk:2", file="c.webp"),
+        MapPicture(subject="walker", subject_id="John", name="John", state="walk:1", file="b.webp"),
+    ]
+    assert art.picture_for("walker", "John").file == "a.webp"
+    assert [p.file for p in art.walker_frames("John")] == ["b.webp", "c.webp"]
+    assert art.walker_frames("Jane") == []
+
+
+def test_doomsville_s_walkers_stride_with_their_own_frames(app, tmp_path: Path, monkeypatch):
+    from PySide6.QtWidgets import QInputDialog
+
+    main = MainWindow(root=tmp_path, use_mock=True)
+    main.config.map_art = False
+    monkeypatch.setattr(QInputDialog, "getItem", lambda *a, **k: ("John", True))
+    main._current_provider().responses = [GREETING] * 4
+    main.open_visual_sample(SAMPLES / "Doomsville with a map.md")
+    pump(app)
+    game = main.visual_window
+    session = game.session
+    files = session.walker_frame_files("John")
+    assert len(files) == 2 and all(f.endswith(".webp") for f in files)
+    person = game.area_view.people["John"]
+    assert person.frames.has("walk")
+    standing, _m = person.frames.frame("east", "east", "stand", 0)
+    first, _m = person.frames.frame("east", "east", "walk", 0)
+    second, _m = person.frames.frame("east", "east", "walk", 1)
+    assert first is not standing and second is not first
+    assert person.frames.frame("east", "east", "walk", 2)[0] is first  # the stride repeats
+    # An avatar the author chose instead has no frames that fit it.
+    art = session.map_art_copy()
+    art.tile_overrides["walker/John"] = "pictures/map/walker-jane.webp"
+    assert session.walker_frame_files("John", art) == []
+    game.close()
+    pump(app)
+    main.close()

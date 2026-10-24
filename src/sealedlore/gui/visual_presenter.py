@@ -148,6 +148,7 @@ class VisualPresenter(QObject):
                 self._walker_image(name, art),
                 held=name == held,
                 carded=name == held or session.has_card(name),
+                frames=self._walker_frames(name, art),
             )
             for name, spot in state.spots.items()
             if spot.area == area.id
@@ -155,7 +156,9 @@ class VisualPresenter(QObject):
         if walk is not None:
             x0, y0 = walk[1][0]
             walkers = [
-                Walker(w.name, x0, y0, w.image, held=True, carded=w.carded) if w.held else w
+                Walker(w.name, x0, y0, w.image, held=True, carded=w.carded, frames=w.frames)
+                if w.held
+                else w
                 for w in walkers
             ]
         walkers += [
@@ -185,7 +188,15 @@ class VisualPresenter(QObject):
         ]
         walkers = [
             Walker(
-                w.name, w.x, w.y, w.image, held=w.held, door=w.door, carded=w.carded, fallen=True
+                w.name,
+                w.x,
+                w.y,
+                w.image,
+                held=w.held,
+                door=w.door,
+                carded=w.carded,
+                fallen=True,
+                frames=w.frames,
             )
             if w.name in state.people_down
             else w
@@ -508,6 +519,24 @@ class VisualPresenter(QObject):
         painter.end()
         self._walker_images[cache_key] = tinted
         return tinted
+
+    def _walker_frames(self, name: str, art) -> list[QImage]:
+        """A person's stride frames (`walker_frame_files`), one list per
+        set of files, so the view can tell a change by identity."""
+        session = self.session
+        files = tuple(session.walker_frame_files(name, art))
+        if not files:
+            return []
+        cache_key = (name, "frames", files)
+        found = self._walker_images.get(cache_key)
+        if found is None:
+            found = [
+                image
+                for image in (sprite_image(session.pictures.read(f)) for f in files)
+                if image is not None
+            ]
+            self._walker_images[cache_key] = found
+        return found
 
     def _walker_image(self, name: str, art) -> QImage | None:
         session = self.session

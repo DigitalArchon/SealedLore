@@ -265,10 +265,10 @@ class PersonSprite(Sprite):
             painter.translate(0, -self.px * 0.1)
             painter.rotate(-82 if self.side == "east" else 82)
             painter.setOpacity(0.75)
-        elif self.pose == "walk" and not self.frames.has("walk"):
-            # A stride from one picture: a lean each way on alternate tiles,
-            # with the bob (step 5 of the visual stories' design: walking
-            # frames drop in through `Frames` when drawn).
+        elif self.pose == "walk":
+            # A stride: a lean each way on alternate tiles, with the bob; the
+            # walking frames, when drawn (Doomsville's), alternate under it
+            # (Klein's strides are subtle at sprite size, so the lean stays).
             painter.rotate(STRIDE_LEAN if self.step % 2 else -STRIDE_LEAN)
         if picture is None:
             painter.setPen(QColor(20, 20, 26))

@@ -242,6 +242,10 @@ class PlaceLayout(BaseModel):
         return next((lv for lv in self.levels if lv.index == index), None)
 
 
+# A walker picture's state for a stride frame: "walk:1", "walk:2"…
+FRAME_STATE = "walk:"
+
+
 class MapPicture(BaseModel):
     """A picture an image model drew for the map (`Config.map_pictures_mode`): a
     person's avatar, a place or a thing standing on the map (the view cuts it
@@ -505,13 +509,36 @@ class WorldArt(BaseModel):
     def picture_for(
         self, subject: str, subject_id: str, state: str | None = None
     ) -> MapPicture | None:
-        """The latest picture of this subject in `state` (any state when None)."""
+        """The latest picture of this subject in `state` (any state when
+        None, a walker's stride frames aside: they are never the picture of
+        them, `walker_frames`)."""
         found = [
             p
             for p in self.pictures
-            if p.subject == subject and p.subject_id == subject_id and state in (None, p.state)
+            if p.subject == subject
+            and p.subject_id == subject_id
+            and state in (None, p.state)
+            and not (state is None and p.state.startswith(FRAME_STATE))
         ]
         return found[-1] if found else None
+
+    def walker_frames(self, name: str) -> list[MapPicture]:
+        """A person's walking pictures, in stride order: walker pictures
+        whose state is "walk:1", "walk:2"… (a visual story's step 5; drawn
+        from the standing sprite, so they fit it)."""
+        frames = [
+            p
+            for p in self.pictures
+            if p.subject == "walker" and p.subject_id == name and p.state.startswith(FRAME_STATE)
+        ]
+
+        def order(p: MapPicture) -> int:
+            try:
+                return int(p.state[len(FRAME_STATE) :])
+            except ValueError:
+                return 0
+
+        return sorted(frames, key=order)
 
     def sprite_for(self, subject_id: str, state: str | None = None) -> WorldSprite | None:
         """The sprite of a place or thing in `state` (any state when None),

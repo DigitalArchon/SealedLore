@@ -595,6 +595,16 @@ class AreaRuntime:
         portrait = card.reference_images[0].file if card and card.reference_images else None
         return not _avatar_stands(self._art_read(), name, portrait)
 
+    def walker_frame_files(self, name: str, art: WorldArt | None = None) -> list[str]:
+        """The files of a person's stride frames, when their standing sprite
+        is the one they were drawn from (an avatar the author chose or drew
+        instead has none that fit)."""
+        art = art or self._art_read()
+        standing = art.picture_for("walker", name)
+        if standing is None or self.walker_file(name, art) != standing.file:
+            return []
+        return [p.file for p in art.walker_frames(name)]
+
     def walker_asset(self, name: str) -> tuple[bytes | None, str]:
         """A person's avatar on the map as the Cast page shows it: its file,
         or None when a stand-in walks for them, and where it came from (as

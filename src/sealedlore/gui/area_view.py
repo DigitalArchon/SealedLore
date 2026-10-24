@@ -18,7 +18,7 @@ import math
 import random
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from PySide6.QtCore import (
     QElapsedTimer,
@@ -142,6 +142,8 @@ class Walker:
     # Down: drawn lying where they fell (a visual story's dead put down, a
     # person beaten).
     fallen: bool = False
+    # Their stride frames (pictures in order), when drawn: shown as they walk.
+    frames: list = field(default_factory=list)
 
 
 @dataclass
@@ -415,13 +417,20 @@ def _person(walker: Walker, px: int, indoor: bool) -> PersonSprite:
     came out blurred); one smaller than that height is scaled up by whole
     pixels first."""
     height = int(px * PERSON_TILES[indoor])
-    image = walker.image
-    pixmap = None
-    if image is not None and not image.isNull():
+
+    def fitted(image: QImage | None) -> QPixmap | None:
+        if image is None or image.isNull():
+            return None
         if image.height() < height:
             image = pixel_scaled(image, height)
-        pixmap = QPixmap.fromImage(image)
-    return PersonSprite(walker, px, height, Frames.single(pixmap))
+        return QPixmap.fromImage(image)
+
+    pixmap = fitted(walker.image)
+    frames = Frames.single(pixmap)
+    walking = [pm for pm in (fitted(f) for f in walker.frames) if pm is not None]
+    if walking and pixmap is not None:
+        frames.pictures[("east", "walk")] = walking
+    return PersonSprite(walker, px, height, frames)
 
 
 class _PlaceItem(QGraphicsItem):
@@ -1280,6 +1289,7 @@ class AreaView(QWidget):
                 person is None
                 or person.walker.image is not walker.image
                 or person.walker.fallen != walker.fallen
+                or person.walker.frames is not walker.frames
             ):
                 if person is not None:
                     self.scene.removeItem(person)
@@ -1857,8 +1867,7 @@ class AreaView(QWidget):
         nx, ny = self._steps[0]
         person.face(nx - held.x, ny - held.y)
         person.set_pose("walk", len(self._walked))
-        if not person.frames.has("walk"):
-            person.set_bob(1.0 if len(self._walked) % 2 else 0.0)
+        person.set_bob(1.0 if len(self._walked) % 2 else 0.0)
 
     def _show_at(self, held: Walker, x: float, y: float) -> None:
         """The author's character's figure and name at this spot (between
