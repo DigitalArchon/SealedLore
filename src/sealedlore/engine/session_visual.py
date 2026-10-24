@@ -29,6 +29,32 @@ from sealedlore.engine.area import (
     walk_metres,
     walk_seconds,
 )
+from sealedlore.engine.chronicle import (
+    armed,
+    day_of,
+    eligible,
+    happen,
+    initial_chronicle,
+    resolve_due,
+    set_fact,
+    set_place,
+)
+from sealedlore.engine.dice import explain, roll_for
+from sealedlore.engine.keeper import (
+    KEEPER_MAX_TOKENS,
+    KeeperReply,
+    Op,
+    Ruling,
+    action_messages,
+    aftermaths,
+    armed_text,
+    direction_messages,
+    facts_text,
+    moment_messages,
+    parse_keeper,
+    parse_ruling,
+    variant_for,
+)
 from sealedlore.engine.levels import place_of_area
 from sealedlore.engine.look import (
     LOOK_MAX_TOKENS,
@@ -75,6 +101,7 @@ from sealedlore.engine.world_art import is_window
 from sealedlore.engine.world_layout import position
 from sealedlore.ids import new_id
 from sealedlore.models.area import Found, Spot, ThingRecord
+from sealedlore.models.plot import Chronicle
 from sealedlore.models.visual import DoorState, NpcGoal, PersonSheet, VisualDesign
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError
 from sealedlore.threads import BackgroundThread
@@ -815,7 +842,11 @@ class VisualRuntime:
         card. They stand where the design put them and where their intents
         took them (`settle` keeps their spots)."""
         design = self.visual_design()
-        return [name for name in design.people if self.has_card(name)]
+        # As stored, never settled: `settle` asks this while settling.
+        live = self.story.area_live
+        placed = live.state.placed if live is not None else []
+        names = [name for name in design.people if self.has_card(name)]
+        return names + [n for n in placed if n not in names and self.has_card(n)]
 
     def visual_sheet(self, name: str) -> PersonSheet:
         return sheet_of(name, self.visual_design().people)
@@ -1211,3 +1242,485 @@ class VisualRuntime:
             return
         state.greeted.append(f"{name}@{me.area}")
         self._set_live(state)
+
+    # --- the plot keeper (engine/keeper.py) ---------------------------------------
+
+    def visual_stored_chronicle(self) -> Chronicle:
+        """The plot's state as stored on the live area state, unsettled (for
+        `hidden_ids`, which the map's fold asks while settling)."""
+        live = self.story.area_live
+        stored = live.state.chronicle if live is not None else None
+        if stored is not None:
+            return stored
+        plot = self.story.plot
+        return initial_chronicle(plot) if plot is not None else Chronicle()
+
+    def visual_chronicle(self) -> Chronicle:
+        """The plot's state as the game has it: the stored one (or the
+        plot's start), its minutes the game's clock, the player's place the
+        plot's place they stand in."""
+        plot = self.story.plot
+        state = self.area_state()
+        chronicle = state.chronicle
+        if plot is None:
+            return chronicle or Chronicle()
+        if chronicle is None:
+            chronicle = initial_chronicle(plot)
+        chronicle.minutes = plot.start_minutes + state.seconds // 60
+        chronicle.held_id = self.story.held_character_id
+        place = self._plot_place(state)
+        if place is not None and chronicle.place != place:
+            set_place(chronicle, place)
+        return chronicle
+
+    def _plot_place(self, state) -> str | None:
+        """The plot's place the player stands in: the innermost map place
+        of their spot, or one holding it, named in the plot's places."""
+        plot = self.story.plot
+        me = state.spots.get(self.held_name() or "")
+        if plot is None or me is None:
+            return None
+        names = {p.name for p in plot.places}
+        world = self.world()
+        place_id = self.place_of_spot(me, world) or place_of_area(me.area) or me.area
+        seen: set[str] = set()
+        while place_id and place_id not in seen:
+            seen.add(place_id)
+            place = world.places.get(place_id)
+            if place is None:
+                break
+            if place.name in names:
+                return place.name
+            place_id = place.inside or ""
+        return None
+
+    def _save_chronicle(self, state, chronicle: Chronicle) -> None:
+        state.chronicle = chronicle
+        self._set_live(state)
+
+    def visual_plot_check(self) -> tuple[list[str], str]:
+        """After anything that moved the game: what the plot's code decides
+        (offscreen happenings, windows closed), and whether the keeper
+        should be asked now: on arriving somewhere the plot knows with an
+        event armed there, on a new day with one due, or when one is
+        overdue. (The lines for the log, why to ask or "")."""
+        plot = self.story.plot
+        if plot is None:
+            return [], ""
+        state = self.area_state()
+        chronicle = self.visual_chronicle()
+        days = self.plot_days()
+        result = resolve_due(plot, chronicle, days, node_id=None)
+        lines: list[str] = []
+        for event, _variant in result.happened:
+            if event.aftermath:
+                lines.append(event.aftermath)
+        items = [
+            i
+            for i in armed(plot, chronicle, days, mentioned=[chronicle.place or ""])
+            if "begin" in i.kinds
+        ]
+        why = ""
+        if any(i.overdue for i in items):
+            why = "an event is overdue"
+        place = chronicle.place or ""
+        day = day_of(chronicle.minutes)
+        here = [
+            i
+            for i in items
+            if (i.event.place or any(v.place for v in i.variants)) in (None, place)
+            or (i.event.place or "") == place
+        ]
+        if place and place not in state.plot_arrivals:
+            state.plot_arrivals.append(place)
+            if here and not why:
+                why = f"the player has just arrived at {place}"
+        if day not in state.plot_days_seen:
+            state.plot_days_seen.append(day)
+            if not why and any(
+                i.event.kind == "timed" and days.get(i.event.id, day + 1) <= day for i in items
+            ):
+                why = f"day {day} has come"
+        self._save_chronicle(state, chronicle)
+        return lines, why
+
+    def visual_state_text(self) -> str:
+        """Where things stand, for the keeper."""
+        state = self.area_state()
+        area, me = self._visual_me(state)
+        held = self.held_name() or "the player"
+        chronicle = self.visual_chronicle()
+        clock = self.map_clock()
+        when = f"day {clock[0]}, {clock[1] // 60:02d}:{clock[1] % 60:02d}" if clock else "?"
+        where = area.title if area is not None else "nowhere"
+        plot_place = chronicle.place or "no place the plot names"
+        people = [
+            f"{n}" + (f" ({state.moods[n]})" if n in state.moods else "")
+            for n, sp in state.spots.items()
+            if area is not None and sp.area == area.id and n != held and n not in state.people_down
+        ]
+        dead = sum(
+            1
+            for c in state.creatures.values()
+            if area is not None and c.area == area.id and c.state != "down"
+        )
+        carried = [
+            bare(r.name) + (f" ×{r.count}" if r.count > 1 else "")
+            for _i, r in self.visual_inventory()
+        ]
+        companions = ", ".join(state.companions) or "nobody"
+        visited = ", ".join(chronicle.visited) or "nowhere yet"
+        return (
+            f"{held} is at {where} ({plot_place}); it is {when}; wounds {state.wounds}. "
+            f"With them: {companions}. Here too: {', '.join(people) or 'nobody'}; "
+            f"the dead here: {dead}. "
+            f"Carrying: {', '.join(carried) or 'nothing'}. Places visited: {visited}."
+        )
+
+    def _keeper_messages(self, kind: str, line: str):
+        plot = self.story.plot
+        chronicle = self.visual_chronicle()
+        days = self.plot_days()
+        names = {c.id: f"{c.name}: {c.summary or ''}" for c in (*self.cast, *self.supporting)}
+        names.update({e.id: f"{e.title} (a place or lore)" for e in self.bundle.lore})
+        items = [i for i in armed(plot, chronicle, days, mentioned=None)] if plot else []
+        common = dict(
+            world=self.story.world_bible,
+            state=self.visual_state_text(),
+            armed=armed_text(items, days, chronicle, names) if plot else "(no plot)",
+            happened=aftermaths(plot, chronicle) if plot else "(no plot)",
+            facts=facts_text(chronicle),
+            texts=self.texts,
+        )
+        if kind == "direction":
+            return direction_messages(line=line, **common)
+        if kind == "action":
+            return action_messages(line=line, **common)
+        return moment_messages(reason=line, **common)
+
+    def start_keeper(self, kind: str, line: str, done: Callable[[object, str], None]) -> bool:
+        """Ask the keeper on a thread: `kind` "moment" (why), "direction"
+        (the Director's words) or "action" (what the player attempts).
+        `done` gets a `KeeperReply` or a `Ruling` (or None and why) on the
+        thread; `apply_keeper_reply` / `apply_ruling` make it real."""
+        if self.in_private or (self.story.plot is None and kind == "moment"):
+            return False
+        messages = self._keeper_messages(kind, line)
+        model = self.role_model("keeper")
+        request = ChatRequest(
+            model=model,
+            extra_body=self.route_for("keeper", model),
+            messages=messages,
+            params=self.side_params(model, max_tokens=KEEPER_MAX_TOKENS),
+        )
+        detached = getattr(self.provider, "detached", None)
+        text = detached() if callable(detached) else self.provider
+        thread = BackgroundThread(
+            target=self._keeper_run,
+            args=(text, request, kind, done, text is not self.provider),
+            name="visual-keeper",
+            daemon=True,
+        )
+        self._keeper_thread = thread
+        thread.start()
+        return True
+
+    def _keeper_run(
+        self, text: ChatProvider, request: ChatRequest, kind: str, done, own: bool
+    ) -> None:
+        reply = None
+        problem = ""
+        events = self.story.plot.events if self.story.plot is not None else []
+        try:
+            log_ref = self._log(
+                "keeper_request", {"kind": kind, "payload": self.provider.build_payload(request)}
+            )
+            try:
+                answer, completed = text.complete(request)
+                self._log(
+                    "keeper_response",
+                    {"request_log_ref": log_ref, "text": answer, "usage": completed.raw_usage},
+                )
+                self.unreported_usage.append(self.priced(completed.usage, request.model))
+                reply = (
+                    parse_ruling(answer, events)
+                    if kind == "action"
+                    else parse_keeper(answer, events)
+                )
+            except (ProviderError, ValueError) as exc:
+                problem = str(exc)[:300]
+                self._log("keeper_error", {"request_log_ref": log_ref, "error": problem})
+        except Exception as exc:  # noqa: BLE001 - a thread dies silently otherwise
+            problem = f"{type(exc).__name__}: {exc}"[:300]
+            self._log("keeper_error", {"error": problem})
+        finally:
+            if own:
+                _close_quietly(text)
+        done(reply, problem)
+
+    def apply_keeper_reply(self, reply: KeeperReply) -> list[str]:
+        """Events fired (happened in the chronicle, their facts set, whoever
+        they bring in on the board) and the scripts applied (GUI thread)."""
+        lines: list[str] = []
+        for firing in reply.fired:
+            lines += self._fire(firing.event, firing.variant)
+            lines += self.apply_script(firing.script)
+        lines += self.apply_script(reply.script)
+        if reply.note:
+            lines.append(reply.note)
+        if reply.dropped:
+            lines.append(
+                "(The keeper asked for things the game can't do: "
+                + ", ".join(reply.dropped[:4])
+                + ".)"
+            )
+        return lines
+
+    def apply_ruling(self, ruling: Ruling, line: str) -> list[str]:
+        """An unusual action ruled on: the roll made by the dice, the
+        outcome's script applied."""
+        lines: list[str] = []
+        if ruling.note:
+            lines.append(ruling.note)
+        if not ruling.possible:
+            lines += self.apply_script(ruling.failure)
+            return lines or ["That can't be done here."]
+        succeeded = True
+        if ruling.difficulty:
+            character = next((c for c in self.cast if c.id == self.story.held_character_id), None)
+            state = self.area_state()
+            roll = roll_for(
+                character,
+                ruling.skill or None,
+                ruling.difficulty,
+                random.Random(f"{line}:{state.seconds}"),
+            )  # type: ignore[arg-type]
+            succeeded = roll.band in ("critical_success", "success", "success_at_a_cost")
+            lines.append(explain(roll, self.held_name() or "You"))
+        lines += self.apply_script(ruling.success if succeeded else ruling.failure)
+        for firing in ruling.fired:
+            lines += self._fire(firing.event, firing.variant)
+            lines += self.apply_script(firing.script)
+        return lines
+
+    def _fire(self, title: str, variant_title: str) -> list[str]:
+        plot = self.story.plot
+        if plot is None:
+            return []
+        event = next((e for e in plot.events if e.title == title), None)
+        if event is None:
+            return []
+        state = self.area_state()
+        chronicle = self.visual_chronicle()
+        variant = variant_for(event, variant_title, eligible(event, chronicle))
+        happen(chronicle, event, variant, node_id=None, revealed=True)
+        self._save_chronicle(state, chronicle)
+        # Whoever it brings in with no place of the design's stands beside the player.
+        self.visual_lay_out()
+        state = self.area_state()
+        lines = []
+        for item_id in (*event.brings, *variant.brings):
+            card = next((c for c in (*self.cast, *self.supporting) if c.id == item_id), None)
+            if (
+                card is not None
+                and card.name not in state.spots
+                and card.name not in state.people_down
+            ):
+                lines += self._stand_person(state, card.name, "beside the player")
+        self._set_live(state)
+        return lines
+
+    def _place_spot(self, state, where: str) -> Spot | None:
+        """A tile for `where`: a place by name (its anchor on its area, else
+        the area's middle), or beside the player."""
+        area, me = self._visual_me(state)
+        words = where.strip().casefold()
+        if not words or any(
+            w in words for w in ("beside", "here", "player", "with them", "next to")
+        ):
+            if area is None or me is None:
+                return None
+            taken = area.blocked() | {(s.x, s.y) for s in state.spots.values() if s.area == area.id}
+            x, y = stand_near(area, (me.x, me.y), taken | {(me.x, me.y)})
+            return Spot(area=area.id, x=x, y=y)
+        target = self._visual_area_named(where)
+        if target is None:
+            # A place named loosely: the one whose name holds the words.
+            world = self.world()
+            place = next((p for p in world.places.values() if words in p.name.casefold()), None)
+            target = self._visual_area_named(place.name) if place is not None else None
+        if target is None:
+            return None
+        world = self.world()
+        place = next((p for p in world.places.values() if p.name.casefold() == words), None)
+        at = anchor_of(target, world, place.id) if place is not None else None
+        taken = target.blocked() | {(s.x, s.y) for s in state.spots.values() if s.area == target.id}
+        x, y = stand_near(target, at or (target.width // 2, target.height // 2), taken)
+        return Spot(area=target.id, x=x, y=y)
+
+    def _stand_person(self, state, who: str, where: str) -> list[str]:
+        card = self.visual_card(who)
+        if card is None:
+            return [f"(The keeper named {who}, who is nobody in this story.)"]
+        spot = self._place_spot(state, where)
+        if spot is None:
+            return []
+        state.spots[card.name] = spot
+        if card.name not in state.placed:
+            state.placed.append(card.name)
+        for thing in self.visual_sheet(card.name).carries:
+            if not any(r.by == card.name and r.name == thing for r in state.things.values()):
+                state.things[ITEM_PREFIX + new_id()] = ThingRecord(
+                    state="taken", name=thing, by=card.name, kind=kind_of(thing)
+                )
+        return []
+
+    def _doors_of_place(self, state, where: str) -> list[DoorState]:
+        inside = self._visual_area_named(where)
+        if inside is None:
+            return []
+        world, art = self.world(), self._art_read()
+        outside = self.area(inside.parent, world, art) if inside.parent else None
+        if outside is None:
+            return []
+        found = []
+        for entrance in outside.entrances:
+            if entrance.place_id == inside.id:
+                key = door_id(outside.id, entrance.x, entrance.y)
+                found.append(state.doors.setdefault(key, DoorState()))
+        return found
+
+    def apply_script(self, ops: list[Op]) -> list[str]:
+        """The keeper's operations, in order, on the live state; the lines
+        the player reads."""
+        state = self.area_state()
+        lines: list[str] = []
+        held = self.held_name() or ""
+        area, me = self._visual_me(state)
+        for op in ops:
+            kind = op.op
+            if kind == "note":
+                lines.append(op.get("text"))
+            elif kind == "say":
+                who, text = op.get("who"), op.get("text")
+                if text:
+                    lines.append(f"{who}: {text}")
+                    state.talks.setdefault(who, []).append([who, text])
+            elif kind == "spawn":
+                lines += self._stand_person(state, op.get("who"), op.get("where"))
+            elif kind == "spawn_dead":
+                spot = self._place_spot(state, op.get("where"))
+                target = self.area(spot.area, things=state.things) if spot is not None else None
+                if target is not None:
+                    taken = target.blocked() | {
+                        (s.x, s.y) for s in state.spots.values() if s.area == target.id
+                    }
+                    for creature in spawn_creatures(
+                        target, "the dead", op.count(1), 4, taken, f"{target.id}:{state.seconds}"
+                    ):
+                        state.creatures[creature.id] = creature
+                    lines.append(f"The dead: {op.count(1)} more at {target.name}.")
+            elif kind == "move":
+                who, where = op.get("who"), op.get("where").casefold()
+                card = self.visual_card(who)
+                if card is None:
+                    continue
+                if any(w in where for w in ("away", "out", "gone", "leaves")):
+                    state.spots.pop(card.name, None)
+                    state.goals.pop(card.name, None)
+                    if card.name in state.companions:
+                        state.companions.remove(card.name)
+                else:
+                    spot = self._place_spot(state, op.get("where"))
+                    if spot is not None:
+                        state.spots[card.name] = spot
+                        if card.name not in state.placed:
+                            state.placed.append(card.name)
+            elif kind == "remove":
+                card = self.visual_card(op.get("who"))
+                if card is not None:
+                    state.spots.pop(card.name, None)
+                    state.goals.pop(card.name, None)
+                    if card.name in state.companions:
+                        state.companions.remove(card.name)
+            elif kind == "place":
+                spot = self._place_spot(state, op.get("where"))
+                what = op.get("what")
+                if spot is not None and what:
+                    state.things[ITEM_PREFIX + new_id()] = ThingRecord(
+                        state="dropped",
+                        name=what,
+                        spot=spot,
+                        count=op.count(1),
+                        kind=kind_of(what, op.get("kind")),
+                    )
+            elif kind == "give":
+                what = op.get("what")
+                if what and held:
+                    state.things[ITEM_PREFIX + new_id()] = ThingRecord(
+                        state="taken",
+                        name=what,
+                        by=held,
+                        count=op.count(1),
+                        kind=kind_of(what, op.get("kind")),
+                    )
+                    lines.append(f"You now have {what}.")
+            elif kind == "take_away":
+                want = set(re.findall(r"[a-z]+", op.get("what").lower())) - {"the", "a", "an"}
+                for record in state.things.values():
+                    if (
+                        record.state == "taken"
+                        and record.by == held
+                        and want & set(re.findall(r"[a-z]+", record.name.lower()))
+                    ):
+                        record.state = "gone"
+                        lines.append(f"The {bare(record.name)} is gone from your hands.")
+                        break
+            elif kind == "break":
+                want = set(re.findall(r"[a-z]+", op.get("what").lower())) - {"the", "a", "an"}
+                if area is not None:
+                    for thing in area.placements:
+                        if want & set(re.findall(r"[a-z]+", thing.name.lower())):
+                            record = state.things.setdefault(
+                                thing.id, ThingRecord(state="broken", name=thing.name)
+                            )
+                            record.state = "broken"
+                            lines.append(f"The {bare(thing.name)} is broken.")
+                            break
+            elif kind in ("unlock", "lock", "seal", "unseal"):
+                for door in self._doors_of_place(state, op.get("where")):
+                    if kind == "unlock":
+                        door.locked, door.sealed = False, False
+                    elif kind == "lock":
+                        door.locked, door.key = True, op.get("key")
+                    elif kind == "seal":
+                        door.locked, door.sealed = True, True
+                    else:
+                        door.sealed = False
+            elif kind == "reveal":
+                chronicle = self.visual_chronicle()
+                want = op.get("what").casefold()
+                for item in (*self.cast, *self.supporting, *self.bundle.lore):
+                    name = getattr(item, "name", None) or getattr(item, "title", "")
+                    if name.casefold() == want and item.id not in chronicle.brought_in:
+                        chronicle.brought_in.append(item.id)
+                state.chronicle = chronicle
+            elif kind == "set_fact":
+                chronicle = self.visual_chronicle()
+                set_fact(chronicle, op.get("fact"), op.get("value"))
+                state.chronicle = chronicle
+            elif kind == "wound":
+                state.wounds += op.count(1)
+            elif kind == "heal":
+                state.wounds = max(0, state.wounds - op.count(1))
+            elif kind == "clock":
+                state.seconds += op.count(0) * 60
+            elif kind == "end":
+                state.ended = op.get("text") or "The story ends here."
+                lines.append(state.ended)
+        if state.wounds >= self.visual_design().player_hits:
+            state.dead = True
+            lines.append("That was one wound too many. You are dead.")
+        self._set_live(state)
+        self.visual_lay_out()  # a revealed place's people stand in it
+        return lines

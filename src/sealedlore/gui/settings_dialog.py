@@ -454,6 +454,7 @@ class SettingsDialog(QDialog):
             "map_art": "Map art model",
             "look": "Look model",
             "npc": "People model",
+            "keeper": "Plot keeper model",
         }
         return [(labels.get(role, role), field) for role, field in self._route_fields.items()]
 
@@ -941,6 +942,14 @@ class SettingsDialog(QDialog):
             "One call a line. Blank uses the story's model."
         )
         form.addRow("People model", self.npc_model)
+        self.keeper_model = self._routed_field(self.config.keeper_model or "")
+        self.keeper_model.setPlaceholderText("same as the story's model")
+        self.keeper_model.setToolTip(
+            "In a visual story, keeps the plot: when an event is due, when you direct the "
+            "story, or when you attempt something the game has no rule for, it answers with "
+            "a script of changes the game carries out. Blank uses the story's model."
+        )
+        form.addRow("Plot keeper model", self.keeper_model)
 
         self.recommended = QPushButton("Use recommended models")
         self.recommended.setToolTip(
@@ -981,6 +990,7 @@ class SettingsDialog(QDialog):
             "map_art": self.map_art_model,
             "look": self.look_model,
             "npc": self.npc_model,
+            "keeper": self.keeper_model,
         }
         for role, field in self._route_fields.items():
             field.set_route(self.config.model_routes.get(role))
@@ -2099,6 +2109,7 @@ class SettingsDialog(QDialog):
         self.config.region_model = self._role_model(self.region_model) or None
         self.config.look_model = self._role_model(self.look_model) or None
         self.config.npc_model = self._role_model(self.npc_model) or None
+        self.config.keeper_model = self._role_model(self.keeper_model) or None
         self.config.open_country = self.open_country.currentData()
         self.config.map_art = self.map_art.isChecked()
         self.config.cache_control_mode = self.cache_mode.currentText()  # type: ignore[assignment]

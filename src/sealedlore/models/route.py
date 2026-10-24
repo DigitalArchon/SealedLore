@@ -35,6 +35,8 @@ ROUTE_ROLES: dict[str, str | None] = {
     "look": "story",
     # A visual story's people (engine/npc.py): the story model's unless set.
     "npc": "story",
+    # A visual story's plot keeper (engine/keeper.py): the story model's unless set.
+    "keeper": "story",
 }
 
 

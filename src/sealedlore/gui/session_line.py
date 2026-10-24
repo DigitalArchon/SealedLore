@@ -29,6 +29,7 @@ ROLE_NAMES = {
     "map_art": "Map art",
     "look": "Look",
     "npc": "People",
+    "keeper": "Plot keeper",
 }
 
 

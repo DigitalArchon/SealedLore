@@ -44,6 +44,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.area import Placement
+from sealedlore.engine.keeper import Ruling
 from sealedlore.engine.look import LookReply, Rect
 from sealedlore.engine.npc import NpcReply
 from sealedlore.gui.area_render import px_for
@@ -63,9 +64,11 @@ FADE_MS = 220
 PORTRAIT = QSize(72, 96)
 # Verbs done beside whoever or whatever they are for.
 WALK_UP = ("talk", "attack", "use", "take", "eat", "destroy")
-# The line, with nobody to talk to, and with someone.
-LINE_HINT = "Right-click a person and Talk to them, then say what you say here"
-TALK_HINT = "Say something to {name} (Enter)"
+# The line: an action with nobody to talk to, words to someone, a Direction.
+LINE_HINT = "Say what you attempt (the game rules on it), or Talk to someone first"
+TALK_HINT = "Say something to {name} (Enter); start with /d to direct the story instead"
+DIRECT_HINT = "Direct the story: what you say is so (Enter)"
+DIRECTOR_PREFIX = "/d"
 # The picture of a part sent to the Look's model: no wider than this.
 LOOK_PICTURE_SIDE = 768
 # A thing looked at: its footprint and a tile round it.
@@ -247,6 +250,12 @@ class _TalkDone(QObject):
     done = Signal(str, object, str)
 
 
+class _KeeperDone(QObject):
+    """The keeper's reply: (the kind, the line, the reply or None, the problem)."""
+
+    done = Signal(str, str, object, str)
+
+
 class _Fade(QWidget):
     """Black over the view, at an opacity the animation sets."""
 
@@ -333,6 +342,21 @@ class VisualWindow(QMainWindow):
         self.line = QLineEdit()
         self.line.setPlaceholderText(LINE_HINT)
         self.line.returnPressed.connect(self._line_sent)
+        self.director_tool = QToolButton()
+        self.director_tool.setText("Director")
+        self.director_tool.setCheckable(True)
+        self.director_tool.setToolTip(
+            "What you type is so: the story's keeper makes it happen on the board, whatever "
+            "it takes (or start a line with /d)"
+        )
+        self.director_tool.toggled.connect(self._director_toggled)
+        line_row = QHBoxLayout()
+        line_row.setContentsMargins(0, 0, 0, 0)
+        line_row.addWidget(self.line, 1)
+        line_row.addWidget(self.director_tool)
+        self._keeper_signal = _KeeperDone()
+        self._keeper_signal.done.connect(self._kept)
+        self._keeper_pending: str | None = None
         side = QWidget()
         side.setObjectName("visualSide")
         side_layout = QVBoxLayout(side)
@@ -340,7 +364,7 @@ class VisualWindow(QMainWindow):
         side_layout.setSpacing(6)
         side_layout.addWidget(self.talking)
         side_layout.addWidget(self.log, 1)
-        side_layout.addWidget(self.line)
+        side_layout.addLayout(line_row)
         side.setMinimumWidth(SIDE_MIN)
 
         # Under the view: the player, where they are, the clock.
@@ -488,6 +512,11 @@ class VisualWindow(QMainWindow):
         if self._talking_to is not None and not session.talk_target(self._talking_to)[0]:
             self._set_talking(None)
         self._greet_newcomers()
+        plot_lines, why = session.visual_plot_check()
+        for line in plot_lines:
+            self.say(line, kind="note")
+        if why:
+            self._ask_keeper("moment", why)
 
     def _died(self) -> None:
         self.area_view.set_locked(True)
@@ -848,10 +877,22 @@ class VisualWindow(QMainWindow):
         session = self.session
         if session is None:
             return
+        directing = self.director_tool.isChecked() or text.lower().startswith(DIRECTOR_PREFIX)
+        if directing:
+            words = (
+                text[len(DIRECTOR_PREFIX) :].strip()
+                if text.lower().startswith(DIRECTOR_PREFIX)
+                else text
+            )
+            if words:
+                self.line.clear()
+                self.say(f"Director: {words}", kind="you")
+                self._ask_keeper("direction", words)
+            return
         if self._talking_to is None:
-            self.say(text, kind="you")
-            self.say("Nobody is listening: right-click a person and Talk to them first.")
             self.line.clear()
+            self.say(f"{session.held_name()} attempts: {text}", kind="you")
+            self._ask_keeper("action", text)
             return
         if self._talk_pending is not None:
             self.statusBar().showMessage(f"{self._talking_to} is still answering.", 4000)
@@ -864,6 +905,80 @@ class VisualWindow(QMainWindow):
         self.line.clear()
         self.say(f"{session.held_name()}: {text}", kind="you")
         self._ask_person(self._talking_to, text)
+
+    # --- the plot keeper (engine/keeper.py) ------------------------------------------
+
+    def _director_toggled(self, on: bool) -> None:
+        if on:
+            self.line.setPlaceholderText(DIRECT_HINT)
+        elif self._talking_to is not None:
+            self.line.setPlaceholderText(TALK_HINT.format(name=self._talking_to))
+        else:
+            self.line.setPlaceholderText(LINE_HINT)
+        self.line.setFocus()
+
+    def _ask_keeper(self, kind: str, line: str) -> None:
+        """A moment of the plot, a Direction or an unusual action goes to
+        the keeper on a thread; one at a time."""
+        session = self.session
+        if session is None:
+            return
+        if self._keeper_pending is not None:
+            self.statusBar().showMessage("The story's keeper is still at work: one moment.", 4000)
+            return
+        started = session.start_keeper(
+            kind,
+            line,
+            lambda reply, problem, k=kind, w=line: self._keeper_signal.done.emit(
+                k, w, reply, problem
+            ),
+        )
+        if not started:
+            if kind != "moment":
+                self.say("The game has no rule for that, and nobody to ask.")
+            return
+        self._keeper_pending = kind
+        self.statusBar().showMessage(
+            f"The story's keeper is at work, with {session.role_model('keeper')}…"
+        )
+
+    def _kept(self, kind: str, line: str, reply, problem: str) -> None:
+        session = self.session
+        self._keeper_pending = None
+        if session is None:
+            return
+        self.statusBar().clearMessage()
+        if reply is None:
+            if kind != "moment":
+                self.say(f"Nothing comes of it ({problem or 'no answer'}).")
+            return
+        if isinstance(reply, Ruling):
+            lines = session.apply_ruling(reply, line)
+        else:
+            lines = session.apply_keeper_reply(reply)
+        self.presenter.refresh(snap=True)
+        self._after_action(lines)
+        ended = session.area_state().ended
+        if ended and not session.area_state().dead:
+            self._ended(ended)
+
+    def _ended(self, words: str) -> None:
+        self.area_view.set_locked(True)
+        box = QMessageBox(self)
+        box.setWindowTitle("The end")
+        box.setText(words + "\n\nStart again from the opening, or close the game.")
+        again = box.addButton("Start again", QMessageBox.AcceptRole)
+        box.addButton("Close", QMessageBox.RejectRole)
+        box.exec()
+        if box.clickedButton() is again and self.session is not None:
+            self.session.visual_reset()
+            self.session.visual_lay_out()
+            self.log.clear()
+            self.area_view.set_locked(False)
+            self.presenter.refresh(snap=True)
+            self._after_action(["You start again."])
+        else:
+            self.close()
 
     # --- the people (engine/npc.py) --------------------------------------------------
 
@@ -956,6 +1071,7 @@ class VisualWindow(QMainWindow):
         self._settle_figure()
         self._look_pending = None
         self._talk_pending = None
+        self._keeper_pending = None
         self.presenter.close()
         session, self.session = self.session, None
         if session is not None:

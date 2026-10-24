@@ -1551,6 +1551,22 @@ decides it. They see what you do in front of them, and are told. **Attack
 them** is the same fight, started by you. One call to the model a line, the
 story model unless **Settings → Models → People model** names another.
 
+**The plot** is kept by the story's keeper (the story model unless **Settings
+→ Models → Plot keeper model** names another). The plot file's facts,
+timeline and events are the game's: the program keeps the clock, knows where
+you are, and decides what is due. When you arrive somewhere an event waits,
+a day comes with one due, or one is overdue, the keeper is asked, and
+answers with a script of changes the game carries out: people appear and
+speak, things are placed, doors unlock, a hidden place opens, a fact is set,
+the dead come. The keeper also takes two things from you. **Director** beside
+the line (or a line starting with `/d`) makes what you say so, whatever it
+takes: the Director has full command. And a line with nobody to talk to is
+an **attempt**: the keeper rules whether it can be done here with what you
+have, what roll it takes, and what happens on success and on failure; the
+dice roll, and the outcome is implemented on the board, so a wall climbed
+puts you over it and something found is in your hands. The keeper can end
+the story; a fresh start is offered.
+
 The one thing the model does so far is **look**. Press **Look at…** and drag
 a frame round any part of the place (or right-click a thing and choose
 **Look at it closely**): the model is shown that part of the picture and

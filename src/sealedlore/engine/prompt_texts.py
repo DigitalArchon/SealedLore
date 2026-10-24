@@ -3873,6 +3873,101 @@ _text(
 )
 
 
+# The plot keeper of a visual story (engine/keeper.py; the author, Oct 24
+# 2026): the plot's events, a Director line and an unusual action each come
+# back as a script of fixed operations the program applies. Unmeasured.
+
+_text(
+    "keeper.system",
+    VISUAL,
+    "The keeper: the rules",
+    "The system prompt of a visual story's plot keeper: what it is, the operations it may "
+    "use, and how to use them.",
+    "You keep the plot of a top-down game set in the world below. The program keeps every "
+    "rule (where everyone stands, what they carry, the dead, fights, doors, the clock); you "
+    "decide what the plot does, and you say it as a script of operations the program "
+    "carries out, in order. You never write prose for the player to read beyond short "
+    'notes; the people speak through "say". Be concrete: a thing has a plain name and a '
+    "kind (food, drink, weapon, tool, light, key, fuel, clothing, medicine, ammunition, "
+    'paper, container); a place is one of the world\'s by name, or "beside the player"; a '
+    "person is one of the story's characters by name. Use only these operations, with the "
+    "fields given:\n{ops}\n\nAn event you fire happens: its facts are set and whoever it "
+    "brings in is on the board, by the program; your script tells it (where people stand, "
+    'what they say, what appears). Fire an event only when its "when" holds now, or it is '
+    "overdue. Keep scripts short: a handful of operations.",
+    (("ops", "The operations, one a line"),),
+)
+
+_text(
+    "keeper.moment",
+    VISUAL,
+    "The keeper: a moment",
+    "The user message when the plot is asked about a moment: where things stand, the "
+    "events that could happen, what has happened, the facts, and why now.",
+    "WHERE THINGS STAND:\n{state}\n\nEVENTS THAT COULD HAPPEN NOW:\n{armed}\n\n"
+    "WHAT HAS HAPPENED:\n{happened}\n\nTHE FACTS: {facts}\n\nWHY YOU ARE ASKED: {reason}\n\n"
+    'Reply with one JSON object and nothing else: {"fire": [{"event": "its title", '
+    '"variant": "its variant\'s title or """, "script": [operations]}], "script": '
+    '[operations outside any event, usually none], "note": "a line for the player, or '
+    '"""}. Fire nothing when nothing should happen yet.',
+    (
+        ("state", "Where things stand"),
+        ("armed", "The events that could happen now"),
+        ("happened", "What has happened"),
+        ("facts", "The plot's facts"),
+        ("reason", "Why the keeper is asked now"),
+    ),
+)
+
+_text(
+    "keeper.direction",
+    VISUAL,
+    "The keeper: a Direction",
+    "The user message for a Director line: what the player, as the author of the story, "
+    "says is so. Done as said.",
+    "WHERE THINGS STAND:\n{state}\n\nEVENTS THAT COULD HAPPEN NOW:\n{armed}\n\n"
+    "WHAT HAS HAPPENED:\n{happened}\n\nTHE FACTS: {facts}\n\nTHE PLAYER, AS THE AUTHOR OF "
+    "THE STORY, DIRECTS: {line}\n\nThe Director has full command: make it so, as nearly "
+    "as the operations allow, however unlikely. Reply with one JSON object and nothing "
+    'else: {"script": [operations], "fire": [events this also brings about, usually '
+    'none], "note": "what the player sees happen, one or two lines"}.',
+    (
+        ("state", "Where things stand"),
+        ("armed", "The events that could happen now"),
+        ("happened", "What has happened"),
+        ("facts", "The plot's facts"),
+        ("line", "The Director's words"),
+    ),
+)
+
+_text(
+    "keeper.action",
+    VISUAL,
+    "The keeper: an action",
+    "The user message for an action the rules have no verb for: the player says what "
+    "they attempt; the keeper rules whether it can be done, what roll it takes, and what "
+    "happens either way.",
+    "WHERE THINGS STAND:\n{state}\n\nEVENTS THAT COULD HAPPEN NOW:\n{armed}\n\n"
+    "WHAT HAS HAPPENED:\n{happened}\n\nTHE FACTS: {facts}\n\nTHE PLAYER'S CHARACTER "
+    "ATTEMPTS: {line}\n\nRule on it as a fair game master: is it possible here and now, "
+    "with what they have? If it is, what does it take (a roll of a skill against a "
+    "difficulty: trivial, easy, standard, hard or desperate; or no roll when it can't "
+    "fail), and what happens on success and on failure, as operations? A result that "
+    "puts them somewhere is a move; something found is a give or a place; someone held "
+    "or subdued is a say and a move. Reply with one JSON object and nothing else: "
+    '{"possible": true, "roll": {"skill": "strength", "difficulty": "standard"} or null, '
+    '"success": [operations], "failure": [operations], "note": "what the player sees, '
+    'one or two lines, before the outcome", "fire": [events this brings about, usually none]}.',
+    (
+        ("state", "Where things stand"),
+        ("armed", "The events that could happen now"),
+        ("happened", "What has happened"),
+        ("facts", "The plot's facts"),
+        ("line", "What the player attempts"),
+    ),
+)
+
+
 # --- Video -----------------------------------------------------------------
 # A video prompt is not a picture prompt: a picture is one frozen moment, a
 # video is a few seconds of one continuous shot, so the writer is told the

@@ -17,6 +17,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from sealedlore.models.plot import Chronicle
 from sealedlore.models.visual import Creature, DoorState, NpcGoal
 
 ThingVerb = Literal["use", "take", "destroy", "eat"]
@@ -217,6 +218,15 @@ class AreaState(BaseModel):
     # The design's people stood on the map so far (one whose place the plot
     # still hides is stood once it is on the map).
     placed: list[str] = Field(default_factory=list)
+    # The plot's state (engine/keeper.py): a visual story has no passages
+    # to snapshot it on, so it lives here; its minutes follow the clock.
+    chronicle: Chronicle | None = None
+    # The plot places the player has been told of as entered (a moment of
+    # the plot is asked once per arrival), and the days the keeper has seen.
+    plot_arrivals: list[str] = Field(default_factory=list)
+    plot_days_seen: list[int] = Field(default_factory=list)
+    # The story's end, when the keeper ended it: the words.
+    ended: str = ""
 
 
 class LiveArea(BaseModel):

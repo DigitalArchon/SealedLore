@@ -705,7 +705,7 @@ class StorySession(
             found = list(self._route_checks.items())
         roles_by_key: dict[tuple[str, str], list[str]] = {}
         for role in ROUTE_ROLES:
-            if role in ("look", "npc") and not self.story.visual:
+            if role in ("look", "npc", "keeper") and not self.story.visual:
                 continue  # a visual story's alone
             _role, model = self._role_in_use(role)
             body = self.route_for(role)
@@ -743,6 +743,7 @@ class StorySession(
             "map_art": self.config.map_art_model,
             "look": self.config.look_model,
             "npc": self.config.npc_model,
+            "keeper": self.config.keeper_model,
         }
         role = role_in_use(role, own)
         if self.story.chat and is_tee(self.model):

@@ -28,6 +28,7 @@ from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.gui.visual_window import VisualWindow, player_choices  # noqa: E402
 from sealedlore.models.area import Found, LiveArea, Spot, ThingRecord  # noqa: E402
 from sealedlore.models.character import Character  # noqa: E402
+from sealedlore.models.plot import Plot  # noqa: E402
 from sealedlore.models.story import keeps_map  # noqa: E402
 from sealedlore.models.visual import (  # noqa: E402
     CreatureSpawn,
@@ -234,10 +235,17 @@ def test_travel_sets_off_and_arrives(app, window: MainWindow):
 
 def test_the_line_needs_a_listener_and_a_menu_verb_without_rules_says_so(app, window: MainWindow):
     game = window.visual_window
+    # With nobody to talk to, the line is an attempt the keeper rules on;
+    # the mock's stock reply is no ruling, so nothing comes of it.
     game.line.setText("Hello?")
     game.line.returnPressed.emit()
+    assert game._keeper_pending == "action"
+    end = time.monotonic() + 10
+    while time.monotonic() < end and game._keeper_pending is not None:
+        pump(app)
+        time.sleep(0.01)
     words = game.log.toPlainText()
-    assert "Hello?" in words and "Nobody is listening" in words
+    assert "Serrik Vaun attempts: Hello?" in words and "Nothing comes of it" in words
     game.area_view.action_chosen.emit("use", "a stove", "nope")
     assert "Use a stove: not in the game yet" in game.log.toPlainText()
 
@@ -948,3 +956,240 @@ def test_doomsville_s_people_stand_in_their_places(app, tmp_path: Path, monkeypa
     game.close()
     pump(app)
     main.close()
+
+
+# --- step 4: the plot keeper (engine/keeper.py) ---------------------------------
+
+
+def _plot():
+    from sealedlore.models.plot import Assignment, EventDef, EventVariant, FactDef, PlaceDef
+
+    return Plot(
+        start_minutes=15 * 60,
+        facts=[FactDef(name="town", initial="standing", values=["standing", "fallen"])],
+        places=[PlaceDef(name="Hellsville"), PlaceDef(name="The farm")],
+        events=[
+            EventDef(
+                id="welcome",
+                title="Welcome to the town",
+                kind="optional",
+                pacing="any",
+                place="Hellsville",
+                trigger="The player's character arrives at the town.",
+                tell="Someone comes out to meet them.",
+                brings=["char-idris"],
+                variants=[EventVariant()],  # the one way it goes, as the parser makes it
+            ),
+            EventDef(
+                id="fall",
+                title="The fall",
+                kind="timed",
+                window=(2, 2),
+                must_happen=True,
+                tell="The dead come down on the town.",
+                variants=[
+                    EventVariant(title="Held", sets=[Assignment(fact="town", value="standing")]),
+                    EventVariant(title="Fallen", sets=[Assignment(fact="town", value="fallen")]),
+                ],
+            ),
+        ],
+    )
+
+
+@pytest.fixture
+def plotted(app, tmp_path: Path, story, cast):
+    bundle, art = _visual_bundle(story, cast)
+    bundle.story.visual_design = _peopled_design()
+    bundle.story.visual_design.people["Captain Idris"].place = ""
+    bundle.story.scene.present_character_ids = ["char-serrik"]
+    bundle.story.plot = _plot()
+    cast[2].plot_hidden = True  # Captain Idris: the welcome brings him
+    save_story_bundle(bundle, root=tmp_path)
+    save_world_art(story.id, art, tmp_path)
+    main = MainWindow(root=tmp_path, use_mock=True)
+    main.config.map_art = False
+    main._current_provider().responses = [GREETING]
+    main.open_story(story.id)
+    pump(app)
+    game = main.visual_window
+    _answer(game, GREETING)
+    yield game
+    game.close()
+    pump(app)
+    main.close()
+
+
+def _keeper_answer(game, reply: str, deadline: float = 10.0) -> None:
+    game.session.provider.responses = [reply]
+    end = time.monotonic() + deadline
+    while time.monotonic() < end and game._keeper_pending is not None:
+        pump(QApplication.instance())
+        time.sleep(0.01)
+
+
+def test_the_plot_s_state_is_the_game_s_and_a_direction_is_done_as_said(plotted: VisualWindow):
+    session = plotted.session
+    chronicle = session.visual_chronicle()
+    assert chronicle.facts == {"town": "standing"} and chronicle.place == "The farm"
+    assert "char-idris" in session.hidden_ids()  # hidden until the welcome
+    # A Direction: the keeper's script, applied.
+    script = (
+        '{"script": [{"op": "note", "text": "A crate stands by the door."}, '
+        '{"op": "place", "what": "a crate of tinned peaches", "where": "beside the player", '
+        '"count": 1, "kind": "food"}, {"op": "give", "what": "a hunting rifle", "kind": "weapon"}, '
+        '{"op": "set_fact", "fact": "town", "value": "fallen"}, {"op": "dance"}], '
+        '"note": "So it is."}'
+    )
+    session.provider.responses = [script]
+    plotted.line.setText("/d A crate of peaches appears beside me, and I find a rifle.")
+    plotted.line.returnPressed.emit()
+    assert plotted._keeper_pending == "direction"
+    _keeper_answer(plotted, script)
+    request = session.provider.requests[-1]
+    assert request.messages[0].text.startswith("You keep the plot of a top-down game")
+    assert "THE STORY, DIRECTS: A crate of peaches appears" in request.messages[1].text
+    words = plotted.log.toPlainText()
+    assert "Director: A crate" in words and "A crate stands by the door." in words
+    assert "You now have a hunting rifle." in words and "So it is." in words
+    assert "can't do: dance" in words
+    state = session.area_state()
+    assert any(
+        r.name == "a crate of tinned peaches" and r.state == "dropped"
+        for r in state.things.values()
+    )
+    assert [r.name for _i, r in session.visual_inventory()] == ["a hunting rifle"]
+    assert session.visual_chronicle().facts["town"] == "fallen"
+    house = session.area("house")
+    assert any(p.name == "a crate of tinned peaches" for p in house.placements)
+
+
+def test_an_unusual_action_is_ruled_on_rolled_and_implemented(plotted: VisualWindow):
+    session = plotted.session
+    ruling = (
+        '{"possible": true, "roll": {"skill": "strength", "difficulty": "trivial"}, '
+        '"success": [{"op": "note", "text": "The boards give."}, '
+        '{"op": "give", "what": "a rusty hatchet", "kind": "weapon"}], '
+        '"failure": [{"op": "wound", "count": 1}], "note": "You set your shoulder to it."}'
+    )
+    session.provider.responses = [ruling]
+    plotted.line.setText("I tear the boards off the window.")
+    plotted.line.returnPressed.emit()
+    assert plotted._keeper_pending == "action"
+    _keeper_answer(plotted, ruling)
+    request = session.provider.requests[-1]
+    assert "ATTEMPTS: I tear the boards off the window." in request.messages[1].text
+    words = plotted.log.toPlainText()
+    assert "Serrik Vaun attempts: I tear the boards" in words
+    assert "You set your shoulder to it." in words
+    assert "rolled" in words.lower() or "roll" in words.lower()
+    # A trivial roll succeeds (the dice: 95% chance): the hatchet is in hand.
+    assert [r.name for _i, r in session.visual_inventory()] == [
+        "a rusty hatchet"
+    ] or session.area_state().wounds == 1
+    # Impossible: nothing but the note.
+    refused = (
+        '{"possible": false, "roll": null, "success": [], "failure": [], '
+        '"note": "There is no window here."}'
+    )
+    session.provider.responses = [refused]
+    plotted.line.setText("I fly to the moon.")
+    plotted.line.returnPressed.emit()
+    _keeper_answer(plotted, refused)
+    assert "There is no window here." in plotted.log.toPlainText()
+
+
+def test_arriving_where_an_event_waits_asks_the_keeper_and_firing_it_brings_people(
+    plotted: VisualWindow,
+):
+    session = plotted.session
+    # Walk out and travel to the town: the plot's place changes, the welcome is armed there.
+    house = session.area("house")
+    door = house.exits[0]
+    plotted.area_view.go_requested.emit(door[0], door[1], False, "")
+    walk_all(QApplication.instance(), plotted.area_view)
+    deadline = time.monotonic() + 6
+    while time.monotonic() < deadline and plotted._fading is not None:  # the door's fade
+        pump(QApplication.instance())
+        time.sleep(0.01)
+    script = (
+        '{"fire": [{"event": "Welcome to the town", "variant": "", "script": ['
+        '{"op": "say", "who": "Captain Idris", "text": "Far enough. Who are you?"}]}], '
+        '"script": [], "note": "A man with a rifle steps out of the gate."}'
+    )
+    session.provider.responses = [script]
+    plotted.area_view.travel_chosen.emit("town")
+    deadline = time.monotonic() + 6
+    while time.monotonic() < deadline and plotted._fading is not None:
+        pump(QApplication.instance())
+        time.sleep(0.01)
+    assert plotted._keeper_pending == "moment" or "Captain Idris" in plotted.log.toPlainText()
+    _keeper_answer(plotted, script)
+    request = next(
+        r for r in reversed(session.provider.requests) if "WHY YOU ARE ASKED" in r.messages[1].text
+    )
+    assert "arrived at Hellsville" in request.messages[1].text
+    assert "## Welcome to the town" in request.messages[1].text
+    words = plotted.log.toPlainText()
+    assert "Captain Idris: Far enough. Who are you?" in words
+    assert "A man with a rifle steps out of the gate." in words
+    chronicle = session.visual_chronicle()
+    assert chronicle.events["welcome"].state == "happened"
+    assert "char-idris" not in session.hidden_ids()
+    # Brought in with no place of the design's: beside the player, on the map.
+    state = session.area_state()
+    me = state.spots["Serrik Vaun"]
+    idris = state.spots["Captain Idris"]
+    assert idris.area == me.area and max(abs(idris.x - me.x), abs(idris.y - me.y)) <= 2
+    assert "Captain Idris" in session.visual_people()
+    # Asked once per arrival: back and forth doesn't ask again.
+    lines, why = session.visual_plot_check()
+    assert why == ""
+
+
+def test_the_keeper_can_end_the_story(plotted: VisualWindow, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    session = plotted.session
+    chosen = {}
+
+    def exec_(self):
+        chosen["buttons"] = [b.text() for b in self.buttons()]
+        self._clicked = self.buttons()[0]
+        return 0
+
+    monkeypatch.setattr(QMessageBox, "exec", exec_)
+    monkeypatch.setattr(QMessageBox, "clickedButton", lambda self: self._clicked)
+    script = (
+        '{"script": [{"op": "end", "text": "The dead find you in your sleep. It is over."}], '
+        '"note": ""}'
+    )
+    session.provider.responses = [script]
+    plotted.line.setText("/d I die in my sleep.")
+    plotted.line.returnPressed.emit()
+    _keeper_answer(plotted, script)
+    assert chosen["buttons"] == ["Start again", "Close"]
+    assert not session.area_state().ended  # started again
+    assert "You start again." in plotted.log.toPlainText()
+
+
+def test_the_keeper_s_reply_is_held_to_the_operations():
+    from sealedlore.engine.keeper import OPS, parse_keeper, parse_ruling
+
+    events = _plot().events
+    reply = parse_keeper(
+        '{"fire": [{"event": "the fall", "variant": "FALLEN", '
+        '"script": [{"op": "note", "text": "x"}]}, {"event": "nothing", "script": []}], '
+        '"script": [{"op": "fly"}, {"op": "give", "what": "a key", "count": "2"}], '
+        '"note": " n "}',
+        events,
+    )
+    assert [(f.event, f.variant) for f in reply.fired] == [("The fall", "Fallen")]
+    assert [o.op for o in reply.script] == ["give"] and reply.script[0].count() == 2
+    assert reply.note == "n" and reply.dropped == ["event 'nothing'", "fly"]
+    ruling = parse_ruling(
+        '{"possible": true, "roll": {"skill": "x", "difficulty": "very hard"}}', events
+    )
+    assert ruling.difficulty == "desperate" and ruling.success == [] and ruling.possible
+    assert set(OPS) >= {"note", "say", "spawn", "give", "reveal", "end"}
+    with pytest.raises(ValueError):
+        parse_keeper("no", events)
