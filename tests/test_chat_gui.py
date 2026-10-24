@@ -55,8 +55,6 @@ def make_chat(
     *,
     model="anthropic/claude-sonnet-4.6",
     keep="disk",
-    world_map=False,
-    name="",
 ):
     class Dialog(window_chat.NewChatDialog):
         def exec(self):  # noqa: A003 - Qt naming
@@ -65,8 +63,6 @@ def make_chat(
             self.prompt.setPlainText("You are a patient tutor.")
             self.tail.setPlainText("Answer in one paragraph.")
             self.keep.setCurrentIndex(self.keep.findData(keep))
-            self.world_map.setChecked(world_map)
-            self.chat_character.setText(name)
             return window_chat.NewChatDialog.Accepted
 
     monkeypatch.setattr(window_chat, "NewChatDialog", Dialog)
@@ -781,53 +777,6 @@ def test_an_encrypted_chat_on_a_retired_model_says_to_choose_another(app, window
     # Another model: its own attestation decides, and the warning is gone.
     window._chat_model_changed()
     assert session.tee_block is None and window._retired_model is None
-
-
-def test_a_chat_may_keep_a_map_and_opens_on_it(app, window, monkeypatch):
-    """The author (Oct 2026): a chat may keep a map as a story does. Made
-    with the map, the chat opens on the Map page and tracks the user by the
-    name given; Setup keeps both, and turning the map off takes the page
-    away."""
-    make_chat(window, monkeypatch, world_map=True, name="Ada")
-    session = window.session
-    assert session.story.chat and session.map_on
-    assert session.story.chat_character == "Ada" and session.chat_name == "Ada"
-    tabs = window.right_tabs
-    assert tabs.isTabVisible(tabs.indexOf(window.world_view))
-    assert tabs.currentWidget() is window.world_view
-    assert window.map_layout and not window.world_button.isHidden()
-    assert window.world_view.held == "Ada"
-
-    dialog = SetupDialog(session.story, session.cast)
-    names = [dialog.tabs.tabText(i) for i in range(dialog.tabs.count())]
-    assert names == ["About", "System prompt"]
-    assert dialog.world_map.isChecked() and dialog.chat_character.text() == "Ada"
-    dialog.chat_character.setText("")
-    dialog.world_map.setChecked(False)
-    assert not dialog.chat_character.isEnabled()
-    dialog._save()
-    dialog.deleteLater()
-    assert not session.map_on and session.chat_name == "You"
-    window._sync_world()
-    assert not tabs.isTabVisible(tabs.indexOf(window.world_view))
-    assert window.world_button.isHidden() and not window.map_layout
-
-
-def test_a_chat_without_a_map_shows_no_map_page(app, window, monkeypatch):
-    make_chat(window, monkeypatch)
-    tabs = window.right_tabs
-    assert not window.session.map_on
-    assert not tabs.isTabVisible(tabs.indexOf(window.world_view))
-    assert window.world_button.isHidden()
-
-
-def test_the_new_chat_dialog_asks_the_name_only_with_the_map(app):
-    dialog = window_chat.NewChatDialog(model="z-ai/glm-5.3")
-    assert not dialog.world_map.isChecked() and not dialog.chat_character.isEnabled()
-    dialog.world_map.setChecked(True)
-    assert dialog.chat_character.isEnabled()
-    assert dialog.chat_character.placeholderText() == "You"
-    dialog.deleteLater()
 
 
 # --- the review of Oct 20 2026 ---------------------------------------------------

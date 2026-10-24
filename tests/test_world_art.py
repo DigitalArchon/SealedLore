@@ -20,18 +20,10 @@ from sealedlore.engine.world import applied, place_delta
 from sealedlore.engine.world_art import (
     LAYOUT_HEIGHT,
     LAYOUT_WIDTH,
-    TERRAIN_TILES,
-    WAY_PATCH_SIDE,
-    ArtJob,
-    adopt,
     clean_svg,
-    finish,
-    fixed_in_plan,
     local_area,
-    plan_art,
     plan_rect,
     rasterise,
-    with_fixed,
 )
 from sealedlore.models.config import Config, ProviderConfig
 from sealedlore.models.world import (
@@ -41,11 +33,10 @@ from sealedlore.models.world import (
     WorldLink,
     WorldMap,
     WorldPlace,
-    WorldSprite,
     WorldThing,
 )
 from sealedlore.providers.mock import MockChatProvider
-from sealedlore.storage.repository import StoryBundle, read_api_log, save_story_bundle
+from sealedlore.storage.repository import StoryBundle, save_story_bundle
 from sealedlore.storage.world_art import load_world_art
 
 TRUCK = (
@@ -177,91 +168,6 @@ def test_a_plan_lies_on_the_map_where_its_place_is():
     assert (width, height) == (40.0, 24.0) and (west, north) == (-20.0, 62.0)
 
 
-def test_the_map_s_buildings_are_fixed_in_a_plan_where_the_map_has_them():
-    world = doomsville()
-    fixed = {f["name"]: f for f in fixed_in_plan(world, world.places["farm"])}
-    house, barn, pond = fixed["The farmhouse"], fixed["The barn"], fixed["The frozen pond"]
-    # Ten-metre tiles: the farmhouse 50 m north of the middle is 5 rows up.
-    assert (house["kind"], house["x"], house["y"], house["w"], house["h"]) == (
-        "building",
-        18,
-        6,
-        4,
-        3,
-    )
-    assert barn["x"] == 30 and barn["y"] == 15 and pond["kind"] == "place" and pond["w"] == 6
-    spec = {
-        "ground": "snow",
-        "features": [
-            {
-                "kind": "building",
-                "name": "the farmhouse",
-                "x": 2,
-                "y": 2,
-                "w": 8,
-                "h": 6,
-                "doors": [{"side": "north", "at": 7}],
-            },
-            {"kind": "building", "name": "A shed", "x": 30, "y": 2, "w": 4, "h": 3},
-            {"kind": "area", "fill": "ice", "x": 8, "y": 15, "w": 6, "h": 4},
-        ],
-    }
-    kept = with_fixed(spec, list(fixed.values()))
-    names = [(f.get("name"), f["x"], f["y"]) for f in kept["features"] if f["kind"] == "building"]
-    # The model's farmhouse is dropped and drawn where the map has it, with its door kept
-    # on a side it has; the shed it invented stays; the barn gets a door of its own.
-    assert ("the farmhouse", 2, 2) not in names and ("A shed", 30, 2) in names
-    house_drawn = next(f for f in kept["features"] if f.get("name") == "The farmhouse")
-    assert (house_drawn["x"], house_drawn["y"]) == (18, 6)
-    assert house_drawn["doors"] == [{"side": "north", "at": 2}]  # clamped into its 4 tiles
-    barn_drawn = next(f for f in kept["features"] if f.get("name") == "The barn")
-    assert barn_drawn["doors"] == [{"side": "south", "at": 2}]
-    job = next(
-        j for j in plan_art(world, WorldArt(), here="house", setting="x") if j.key == "layout:farm"
-    )
-    ask = job.messages[1].text
-    assert "where they stay" in ask and "The farmhouse (building): x 18-21, y 6-8" in ask
-    plan = finish(job, json.dumps(spec), model="m", made_at="t")
-    assert plan.rows[6][18:22] == "##+#" and plan.labels["The farmhouse"] == [20, 7]
-    assert plan.labels["The frozen pond"] == [8, 21]  # named where the map has it, undrawn
-
-
-def test_the_local_area_and_the_building_s_inside_are_planned_at_the_start():
-    world = doomsville()
-    keys = [j.key for j in plan_art(world, WorldArt(), here=None, setting="x")]
-    assert "layout:farm" in keys and "layout:house" in keys and "layout:town" not in keys
-    # Land round every place the story knows of, and along the way between them.
-    assert "terrain:farm" in keys and "terrain:town" in keys
-    along = [k for k in keys if k.startswith("terrain:farm:town:")]
-    # Every WAY_PATCH_SIDE along the five miles, except where the town's own
-    # land (six km wide) already covers the way.
-    assert len(along) == 3 and WAY_PATCH_SIDE == 1600.0
-    assert "terrain:hills" not in keys and "layout:hills" not in keys  # country, not a spot
-
-
-def test_a_way_too_long_for_patches_gets_none():
-    """A link read in light-years planned 3e13 patches and hung the thread
-    (the review, Oct 15 2026): past MAX_WAY_PATCHES a way gets no land of
-    its own, and the land round each end is drawn as before."""
-    import time
-
-    from sealedlore.engine.world_art import MAX_WAY_PATCHES
-    from sealedlore.models.world import WorldLink
-
-    world = doomsville()
-    far = WorldPlace(id="bajor", name="Bajor", kind="settlement", x=4.7e16, y=0.0)
-    world.places["bajor"] = far
-    world.seen.append("bajor")
-    world.links.append(WorldLink(a="farm", b="bajor", distance="five light-years"))
-    started = time.monotonic()
-    keys = [j.key for j in plan_art(world, WorldArt(), here=None, setting="x")]
-    assert time.monotonic() - started < 2
-    assert not any(k.startswith("terrain:farm:bajor:") for k in keys)
-    assert "terrain:bajor" in keys and "terrain:farm" in keys
-    assert len([k for k in keys if k.startswith("terrain:farm:town:")]) == 3  # as before
-    assert MAX_WAY_PATCHES * WAY_PATCH_SIDE > 50_000
-
-
 def test_a_drawing_reply_s_numbers_can_t_hang_or_crash_the_parser():
     """ "w": 1e9 ran the building loop for the rest of the session and 1e999
     overflowed round (the review, Oct 15 2026): held to the grid."""
@@ -285,101 +191,6 @@ def test_a_drawing_reply_s_numbers_can_t_hang_or_crash_the_parser():
     assert "Vast" in labels
 
 
-def test_land_along_a_way_never_counts_as_its_first_place_s_own():
-    """A road patch is kept under the way's first place; if that place's own
-    land failed and the road's came in first, the place still gets its own."""
-    from sealedlore.models.world import TerrainPatch
-
-    world = doomsville()
-    jobs = plan_art(world, WorldArt(), here=None, setting="x")
-    road = next(j for j in jobs if j.key.startswith("terrain:farm:town:"))
-    assert road.subject_id == "farm" and road.patch is not None
-    x, y, side = road.patch
-    art = WorldArt(terrain=[TerrainPatch(place_id="farm", x=x, y=y, side=side, rows=["."])])
-    keys = [j.key for j in plan_art(world, art, here=None, setting="x")]
-    assert "terrain:farm" in keys and road.key not in keys
-
-
-def test_a_building_the_story_changed_is_planned_anew_though_nobody_went_in():
-    """The barn blown up while Jane stood in the yard: its plan is drawn in
-    its new state (an edit of the old, with fire offered), so the local map
-    shows the ruin; an unchanged building nobody entered gets none."""
-    world = doomsville()
-    barn = next(p for p in world.places.values() if p.kind == "building" and p.id != "house")
-    world.places[barn.id] = barn.model_copy(update={"state": "blown up and burning"})
-    keys = [j.key for j in plan_art(world, WorldArt(), here="house", setting="x")]
-    assert f"layout:{barn.id}:blown up and burning" in keys
-    before = PlaceLayout(place_id=barn.id, rows=["#"], spec={"features": []})
-    jobs = plan_art(world, WorldArt(layouts={barn.id: {"": before}}), here="house", setting="x")
-    job = next(j for j in jobs if j.key == f"layout:{barn.id}:blown up and burning")
-    assert '"fill": "fire"' in job.messages[-1].text
-    world.places[barn.id] = barn  # unchanged again: planned, for it stands in the farm
-    keys = [j.key for j in plan_art(world, WorldArt(), here="house", setting="x")]
-    assert f"layout:{barn.id}" in keys  # every building of the area the story is in
-    # A building in another area, unchanged and never entered, gets none.
-    shop = WorldPlace(id="shop", name="The store", kind="building", inside="town", x=0.0, y=8100.0)
-    world.places[shop.id] = shop
-    keys = [j.key for j in plan_art(world, WorldArt(), here="house", setting="x")]
-    assert not any(k.startswith("layout:shop") for k in keys)
-
-
-def test_a_place_that_isn_t_a_building_is_told_how_to_lay_out_a_station():
-    """Live, Deep Space 9 came back as rooms floating in open space."""
-    world = doomsville()
-    jobs = {j.key: j for j in plan_art(world, WorldArt(), here="house", setting="x")}
-    farm, house = jobs["layout:farm"].messages[-1].text, jobs["layout:house"].messages[-1].text
-    assert "space station, a ship or a sealed habitat" in farm
-    assert "space station" not in house and "inside of the building" in house
-
-
-def test_the_map_s_progress_is_what_the_running_threads_have_left(tmp_path: Path, story, cast):
-    import threading
-
-    session = StorySession(
-        StoryBundle(story=story, cast=cast),
-        Config(),
-        MockChatProvider(),
-        root=tmp_path,
-        learn_corrections=False,
-    )
-    assert session.map_art_progress() == (0, 0)
-    release = threading.Event()
-    session._art_thread = threading.Thread(target=release.wait)
-    session._art_thread.start()
-    session._art_total, session._art_done = 5, 2
-    session._picture_total, session._picture_done = 3, 1  # its thread isn't running
-    assert session.map_art_progress() == (2, 5)
-    release.set()
-    session._art_thread.join()
-    assert session.map_art_progress() == (0, 0)
-
-
-def test_land_is_drawn_round_the_local_area_not_the_country_it_is_in():
-    """The caves in the hills: land round the caves (the hills are wider
-    than a local area), never a 12 km patch of hills that would cover the
-    road to town and keep it from its own land."""
-    world = doomsville()
-    world.visited = {"Jane": ["caves"]}
-    world.where = {"Jane": "caves"}
-    keys = [j.key for j in plan_art(world, WorldArt(), here="caves", setting="x")]
-    assert "terrain:caves" in keys and "terrain:hills" not in keys
-    assert "layout:caves" in keys and "layout:hills" not in keys
-
-
-def test_land_on_land_already_drawn_is_dropped():
-    from sealedlore.models.world import TerrainPatch
-
-    art = WorldArt()
-    adopt(art, TerrainPatch(place_id="farm", x=0, y=0, side=1600, rows=["."]))
-    adopt(art, TerrainPatch(place_id="farm", x=500, y=0, side=1600, rows=["."]))
-    adopt(art, TerrainPatch(place_id="farm", x=1600, y=0, side=1600, rows=["."]))
-    assert [(p.x, p.y) for p in art.terrain] == [(0, 0), (1600, 0)]
-    # A small patch (a creek crossing's 400 m) never keeps larger land away.
-    adopt(art, TerrainPatch(place_id="creek", x=3000, y=0, side=400, rows=["."]))
-    adopt(art, TerrainPatch(place_id="road", x=3000, y=100, side=1600, rows=["."]))
-    assert [p.side for p in art.terrain] == [1600, 1600, 400, 1600]
-
-
 # --- what needs drawing ----------------------------------------------------------
 
 
@@ -394,90 +205,6 @@ def farm_world() -> WorldMap:
     delta = WorldDelta(places=[farm, yard, porch, hills], things=[truck], where={"Jane": "farm"})
     place_delta(WorldMap(), delta, "Jane")
     return applied(WorldMap(), delta)
-
-
-def test_the_story_s_places_get_land_and_a_layout_and_sprites_nearest_first():
-    jobs = plan_art(farm_world(), WorldArt(), here="farm", setting="a frozen winter")
-    keys = [job.key for job in jobs]
-    assert keys[0] == "terrain:farm"
-    assert keys[1] == "layout:farm"
-    assert "sprite:farm" in keys and "sprite:truck:rusty" in keys
-    assert "sprite:yard" not in keys and "sprite:hills" not in keys  # drawn as land
-    assert "layout:hills" not in keys  # never visited
-    ask = jobs[0].messages[-1].text
-    assert "Draw the land around: Farmhouse, a building" in ask and "a frozen winter" in ask
-    layout = jobs[1].messages
-    assert "One tile is about" in layout[0].text
-    assert "- Back room (area): x " in layout[1].text  # placed, so told where it stays
-    assert "porch" not in layout[1].text
-    assert "Pickup truck (rusty)" in layout[1].text
-
-
-def test_what_is_drawn_is_never_asked_again_nor_what_keeps_failing():
-    world = farm_world()
-    art = WorldArt(
-        layouts={"farm": {"": PlaceLayout(place_id="farm", rows=["."])}},
-        sprites=[
-            WorldSprite(subject="place", subject_id="farm", name="Farmhouse", svg="<svg/>"),
-            WorldSprite(
-                subject="thing",
-                subject_id="truck",
-                name="Pickup truck",
-                state="rusty",
-                svg="<svg/>",
-            ),
-        ],
-        failures={"terrain:farm": 2},
-    )
-    assert plan_art(world, art, here="farm", setting="x") == []
-
-
-def test_a_changed_thing_is_drawn_as_an_edit_of_its_last_sprite():
-    world = farm_world()
-    world.things["truck"].state = "burnt out"
-    first = WorldSprite(
-        subject="thing", subject_id="truck", name="Pickup truck", state="rusty", svg="<svg>A</svg>"
-    )
-    art = WorldArt(
-        sprites=[first], layouts={"farm": {"": PlaceLayout(place_id="farm", rows=["."])}}
-    )
-    (job,) = [j for j in plan_art(world, art, here="farm", setting="x") if j.subject_id == "truck"]
-    assert job.key == "sprite:truck:burnt out" and job.from_sprite == first.id
-    roles = [m.role for m in job.messages]
-    assert roles == ["system", "user", "assistant", "user"]
-    assert "<svg>A</svg>" in job.messages[2].text
-    assert "Now draw the same Pickup truck, burnt out." in job.messages[3].text
-
-
-def test_a_finished_drawing_is_checked_and_kept_once():
-    sprite = finish(
-        ArtJob("sprite:truck:rusty", "sprite", [], "truck", name="Pickup truck", subject="thing"),
-        TRUCK,
-        model="art/model",
-        made_at="now",
-    )
-    assert isinstance(sprite, WorldSprite) and "<rect" in sprite.svg
-    with pytest.raises(ValueError):
-        finish(ArtJob("sprite:x", "sprite", [], "x"), "I can't draw that.", model="m", made_at="t")
-    land = finish(
-        ArtJob("terrain:farm", "terrain", [], "farm", patch=(0.0, 0.0, 400.0)),
-        json.dumps(
-            {
-                "ground": "snow",
-                "features": [
-                    {"kind": "area", "fill": "trees", "x": 0, "y": 0, "w": 5, "h": 5},
-                    {"kind": "building", "x": 10, "y": 10, "w": 5, "h": 5},
-                ],
-            }
-        ),
-        model="m",
-        made_at="t",
-    )
-    assert len(land.rows) == TERRAIN_TILES and "#" not in "".join(land.rows)  # land only
-    art = WorldArt()
-    adopt(art, land)
-    adopt(art, land.model_copy(update={"id": "other", "rows": ["~"]}))
-    assert len(art.terrain) == 1 and art.terrain[0].rows == land.rows  # never redrawn
 
 
 # --- in the session ---------------------------------------------------------------
@@ -508,9 +235,7 @@ def make_session(tmp_path: Path, story, cast, responses, *, art: bool = True) ->
         active_provider_name="nano",
         min_cacheable_tokens=1,
         scene_model="small/scene",
-        map_art_model="art/model",
         scene_reads="manual",
-        map_art=art,
     )
     return StorySession(
         bundle,
@@ -526,110 +251,6 @@ def turn() -> TurnRequest:
     return TurnRequest(
         speaker_id="char-serrik", user_text="I climb out.", controlled_character_id="char-serrik"
     )
-
-
-def test_after_a_read_the_map_is_drawn_and_kept(tmp_path: Path, story, cast):
-    # The passage, the read, then the land and the yard's layout (an area: no sprite).
-    session = make_session(tmp_path, story, cast, [PASSAGE, READ, LAND, LAND])
-    list(session.send(turn()))
-
-    art_requests = [r for r in session.provider.requests if r.model == "art/model"]
-    assert len(art_requests) == 2
-    kept = load_world_art(session.story.id, tmp_path)
-    assert len(kept.terrain) == 1 and len(kept.layouts) == 1
-    kinds = [e["kind"] for e in read_api_log(session.story.id, root=tmp_path)]
-    assert kinds.count("map_art_request") == 2 and kinds.count("map_art_response") == 2
-    assert session.map_art_jobs() == []  # nothing left to draw
-
-
-def test_a_failed_drawing_is_counted_and_let_be(tmp_path: Path, story, cast):
-    session = make_session(tmp_path, story, cast, [PASSAGE, READ, "no", "no"])
-    list(session.send(turn()))
-    assert session.world_art.failures == {
-        f"terrain:{next(iter(session.world().places))}": 1,
-        f"layout:{next(iter(session.world().places))}": 1,
-    }
-    kinds = [e["kind"] for e in read_api_log(session.story.id, root=tmp_path)]
-    assert kinds.count("map_art_refused") == 2
-
-
-def test_with_drawing_off_nothing_is_drawn(tmp_path: Path, story, cast):
-    session = make_session(tmp_path, story, cast, [PASSAGE, READ], art=False)
-    list(session.send(turn()))
-    assert all(r.model != "art/model" for r in session.provider.requests)
-    assert session.map_art_jobs() == []
-
-
-def test_nothing_is_drawn_in_a_private_scene(tmp_path: Path, story, cast):
-    session = make_session(tmp_path, story, cast, [PASSAGE, READ], art=False)
-    list(session.send(turn()))
-    session.config.map_art = True
-    session.enter_private(keep="memory", provider=MockChatProvider(["x"]), model="local/m")
-    assert session.map_art_jobs() == []
-    assert not session.start_map_art()
-
-
-def test_a_backup_and_a_copy_carry_the_art(tmp_path: Path, story, cast):
-    from sealedlore.storage.repository import copy_story
-
-    session = make_session(tmp_path, story, cast, [PASSAGE, READ, LAND, LAND])
-    list(session.send(turn()))
-    copy = copy_story(session.story.id, title="Copy", root=tmp_path)
-    assert len(load_world_art(copy.story.id, tmp_path).layouts) == 1
-
-
-def test_land_already_drawn_is_never_drawn_again_under_a_neighbour():
-    farm = WorldPlace(id="farm", name="Farmhouse", kind="building", x=0.0, y=0.0)
-    barn = WorldPlace(id="barn", name="Barn", kind="building", x=60.0, y=0.0)
-    town = WorldPlace(id="town", name="Hellsville", kind="settlement", x=0.0, y=8000.0)
-    world = WorldMap(
-        places={"farm": farm, "barn": barn, "town": town},
-        visited={"Jane": ["farm", "barn", "town"]},
-    )
-    keys = [j.key for j in plan_art(world, WorldArt(), here="farm", setting="x")]
-    land = [k for k in keys if k.startswith("terrain:")]
-    assert "terrain:town" in land
-    assert len([k for k in land if k in ("terrain:farm", "terrain:barn")]) == 1
-
-
-def test_a_barn_blown_up_is_drawn_blown_up_as_an_edit_of_itself():
-    from sealedlore.engine.world import resolve_reply
-
-    barn = WorldPlace(id="barn", name="Barn", kind="building", x=0.0, y=0.0)
-    world = WorldMap(places={"barn": barn}, visited={"Jane": ["barn"]})
-    intact = WorldSprite(subject="place", subject_id="barn", name="Barn", svg="<svg>BARN</svg>")
-    plan = {"ground": "dirt", "features": [{"kind": "building", "x": 1, "y": 1, "w": 6, "h": 4}]}
-    art = WorldArt(
-        sprites=[intact],
-        layouts={"barn": {"": PlaceLayout(place_id="barn", spec=plan, rows=["."])}},
-    )
-    source = "The charge went off and the barn blew apart, its roof falling in."
-    delta, refused = resolve_reply(
-        world,
-        {"places": [{"name": "Barn", "state": "blown up", "quote": "the barn blew apart"}]},
-        source=source,
-        people=[],
-    )
-    assert refused == []
-    world = applied(world, delta)
-    assert world.places["barn"].state == "blown up"
-    assert (world.places["barn"].x, world.places["barn"].y) == (0.0, 0.0)  # it doesn't move
-
-    jobs = {j.key: j for j in plan_art(world, art, here="barn", setting="x")}
-    sprite, layout = jobs["sprite:barn:blown up"], jobs["layout:barn:blown up"]
-    assert sprite.from_sprite == intact.id and "<svg>BARN</svg>" in sprite.messages[2].text
-    assert "Now draw the same Barn, blown up." in sprite.messages[-1].text
-    assert json.loads(layout.messages[2].text) == plan
-    assert "Now lay out the same Barn, blown up. Keep what still stands" in layout.messages[3].text
-
-    # Drawn, both states are kept: a branch where it still stands shows it standing.
-    adopt(art, finish(sprite, TRUCK, model="m", made_at="t"))
-    adopt(art, finish(layout, json.dumps(plan), model="m", made_at="t"))
-    assert art.sprite_for("barn", "").svg == "<svg>BARN</svg>"
-    assert art.sprite_for("barn", "blown up").from_sprite == intact.id
-    assert set(art.layouts["barn"]) == {"", "blown up"}
-    left = [j.key for j in plan_art(world, art, here="barn", setting="x")]
-    assert left == ["terrain:barn"]  # the land stays; the ruin is in the barn's plan
 
 
 def test_art_a_bundle_carries_is_written_with_the_story_and_a_restart_keeps_it(
@@ -663,57 +284,6 @@ def test_art_a_bundle_carries_is_written_with_the_story_and_a_restart_keeps_it(
     assert load_sidecar_art(plot).terrain[0].place_id == "farm"
     sidecar_art_path(plot).write_text("{not json", encoding="utf-8")
     assert load_sidecar_art(plot) is None
-
-
-def test_a_restart_or_a_scenario_keeps_the_map_pictures_with_their_files(
-    tmp_path: Path, story, cast
-):
-    """What was drawn for a story stays drawn in its new playthrough and in
-    its scenario file: map pictures come with their files. The day's count
-    and the failures are the old story's own; a picture whose file is gone
-    is left out, or it would never be drawn again."""
-    from sealedlore.models.world import MapPicture
-    from sealedlore.storage.images import read_story_file, write_story_file
-    from sealedlore.storage.scenario import (
-        bundle_from_scenario,
-        fresh_playthrough,
-        read_scenario,
-        scenario_from_bundle,
-        write_scenario,
-    )
-    from sealedlore.storage.world_art import carried_story_art, save_world_art
-    from tests.test_world_pictures import png
-
-    story.defaults.world_map = True
-    save_story_bundle(StoryBundle(story=story, cast=cast), root=tmp_path)
-    write_story_file(story.id, "images/map/jane.png", png(), tmp_path)
-    art = WorldArt(
-        pictures=[
-            MapPicture(
-                subject="person", subject_id="Jane", name="Jane", file="images/map/jane.png"
-            ),
-            MapPicture(subject="place", subject_id="barn", name="Barn", file="images/map/gone.png"),
-        ],
-        pictures_by_day={"2026-10-14": 12},
-        failures={"layout:farm": 3},
-    )
-    save_world_art(story.id, art, tmp_path)
-    carried, files = carried_story_art(story.id, tmp_path)
-    assert [p.subject_id for p in carried.pictures] == ["Jane"]
-    assert set(files) == {"images/map/jane.png"}
-    assert carried.pictures_by_day == {} and carried.failures == {}
-    # A new playthrough writes the picture's file beside its record.
-    again = fresh_playthrough(StoryBundle(story=story, cast=cast), "again", files, carried)
-    save_story_bundle(again, root=tmp_path)
-    assert load_world_art(again.story.id, tmp_path).pictures[0].file == "images/map/jane.png"
-    assert read_story_file(again.story.id, "images/map/jane.png", tmp_path) is not None
-    # A scenario file carries it too; a record whose file isn't in the file is dropped.
-    path = tmp_path / "farm.sealedlore-scenario.json"
-    write_scenario(path, scenario_from_bundle(again, files, carried))
-    scenario = read_scenario(path)
-    assert bundle_from_scenario(scenario).world_art.pictures[0].subject_id == "Jane"
-    scenario.reference_files.clear()
-    assert bundle_from_scenario(scenario).world_art.pictures == []
 
 
 def test_art_read_from_a_file_is_cleaned_as_drawn_art_is(tmp_path: Path):
@@ -757,130 +327,6 @@ def test_art_read_from_a_file_is_cleaned_as_drawn_art_is(tmp_path: Path):
     shipped = load_sidecar_art(plot)
     assert shipped is not None
     assert (shipped.pictures, shipped.pictures_by_day, shipped.failures) == ([], {}, {})
-
-
-def test_a_sample_s_map_pictures_come_from_files_beside_it(tmp_path: Path, story):
-    """A sample ships its isometric views as files beside the plot file,
-    named as a picture line names one. Each is read stripped into the new
-    story's map pictures; one missing, or reaching out of the plot file's
-    folder, is left out with its record."""
-    from sealedlore.models.world import MapPicture
-    from sealedlore.storage.world_art import load_sidecar, sidecar_art_path
-    from tests.test_world_pictures import png
-
-    folder = tmp_path / "samples"
-    (folder / "pictures" / "map").mkdir(parents=True)
-    picture = png()
-    assert b"tEXt" in picture
-    (folder / "pictures" / "map" / "farm-isometric.png").write_bytes(picture)
-    (tmp_path / "secret.png").write_bytes(picture)
-    (folder / "pictures" / "map" / "link.png").symlink_to(tmp_path / "secret.png")
-    plot = folder / "Farm.md"
-
-    def shipped(file: str, subject_id: str = "farm") -> MapPicture:
-        return MapPicture(subject="isometric", subject_id=subject_id, name="F", file=file)
-
-    sidecar_art_path(plot).write_text(
-        WorldArt(
-            pictures=[
-                shipped("pictures/map/farm-isometric.png"),
-                shipped("pictures/map/missing.png", "a"),
-                shipped("../secret.png", "b"),
-                shipped("/etc/passwd", "c"),
-                shipped("pictures/map/link.png", "d"),
-            ],
-            pictures_by_day={"2026-10-14": 3},
-        ).model_dump_json(),
-        encoding="utf-8",
-    )
-    art, files = load_sidecar(plot)
-    assert art is not None and art.pictures_by_day == {}
-    [kept] = art.pictures
-    assert (kept.subject_id, kept.file) == ("farm", "images/map/farm-isometric.png")
-    assert list(files) == ["images/map/farm-isometric.png"]
-    assert b"tEXt" not in files[kept.file] and files[kept.file].startswith(b"\x89PNG")
-
-    # Written with the story, where the map's own pictures are.
-    save_story_bundle(StoryBundle(story=story, world_art=art, pending_files=files), root=tmp_path)
-    assert load_world_art(story.id, tmp_path).picture_for("isometric", "farm") is not None
-    assert (tmp_path / "stories" / story.id / kept.file).read_bytes() == files[kept.file]
-
-    # Two of one name from different folders: both kept, the second under
-    # its own record's name (it was dropped, record and all).
-    for sub in ("a", "b"):
-        (folder / "pictures" / "map" / sub).mkdir()
-        (folder / "pictures" / "map" / sub / "view.png").write_bytes(picture)
-    sidecar_art_path(plot).write_text(
-        WorldArt(
-            pictures=[shipped("pictures/map/a/view.png"), shipped("pictures/map/b/view.png", "t")]
-        ).model_dump_json(),
-        encoding="utf-8",
-    )
-    art, files = load_sidecar(plot)
-    assert len(art.pictures) == 2 and len(files) == 2
-    assert sorted(p.file for p in art.pictures) == sorted(files)
-
-
-def test_a_town_gets_a_finer_grid_and_a_building_s_plan_is_its_inside():
-    from sealedlore.engine.world_art import plan_grid
-
-    world = doomsville()
-    assert plan_grid(world.places["town"]) == (80, 48) and plan_grid(world.places["farm"]) == (
-        40,
-        24,
-    )
-    west, north, width, height = plan_rect(world, world.places["town"])
-    assert (width, height) == (1500.0, 900.0)  # 18.75 m tiles, not 37.5
-    world.visited = {"Jane": ["town", "house"]}
-    jobs = {j.key: j for j in plan_art(world, WorldArt(), here="town", setting="x")}
-    assert "80 tiles wide" in jobs["layout:town"].messages[0].text
-    assert jobs["layout:town"].extra["grid"] == (80, 48)
-    assert "This is the inside of the building" in jobs["layout:house"].messages[1].text
-    assert "inside of the building" not in jobs["layout:farm"].messages[1].text
-    plan = finish(
-        jobs["layout:town"], json.dumps({"ground": "dirt", "features": []}), model="m", made_at="t"
-    )
-    assert len(plan.rows) == 48 and len(plan.rows[0]) == 80
-
-
-def test_land_is_told_the_ground_of_the_land_drawn_nearest():
-    from sealedlore.models.world import TerrainPatch
-
-    world = doomsville()
-    art = WorldArt(
-        terrain=[TerrainPatch(place_id="farm", x=0, y=0, side=1600, rows=["."], ground="snow")]
-    )
-    jobs = {j.key: j for j in plan_art(world, art, here="house", setting="a dead land")}
-    ask = jobs["terrain:town"].messages[1].text
-    assert "a dead land. The land already drawn nearest here is snow" in ask
-
-
-def test_a_deck_s_blank_inside_its_hull_and_its_narrow_gaps_are_floor():
-    """Deep Space 9 (the author, Oct 15 2026): rooms joined by nothing but
-    space, people standing in space. Space outside the hull stays space."""
-    from sealedlore.engine.world_art import decked, standing_spot
-
-    rows = (
-        "          ",
-        " ######## ",
-        " #__ ___# ",
-        " #      # ",
-        " #__  __# ",
-        " ######## ",
-        "          ",
-        "          ",
-        "          ",
-        " ##  ##   ",
-    )
-    deck = decked(rows)
-    assert deck[2] == " #______# "  # a one-tile gap: floor
-    assert deck[3] == " #______# " and deck[4] == " #______# "  # enclosed: floor
-    assert deck[0] == "          " and deck[7] == "          "  # outside: space
-    assert deck[9] == " ##__##   "  # a two-tile gap between rooms: a corridor
-    # Someone placed on space or a wall stands on the nearest floor instead.
-    assert standing_spot(rows, (3, 3)) in {(3, 2), (3, 4)}
-    assert standing_spot(deck, (3, 3)) == (3, 3)
-    assert standing_spot(deck, (1, 3)) == (2, 3)
 
 
 def test_a_place_as_it_was_never_borrows_a_changed_state_s_drawing():

@@ -26,8 +26,6 @@ from PySide6.QtWidgets import (
 from sealedlore.engine.picture_shapes import BACKGROUND
 from sealedlore.engine.picture_use import KEEP_DRAW
 from sealedlore.engine.places import newest_picture
-from sealedlore.engine.world_art import out_of_the_fog
-from sealedlore.engine.world_pictures import shown_view
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.image_dialog import (
     FitPicture,
@@ -39,11 +37,10 @@ from sealedlore.gui.image_dialog import (
 from sealedlore.gui.image_jobs import FailedPicture, ImageCatalog, ImageJobs
 from sealedlore.gui.image_picker import pick_image_model
 from sealedlore.gui.images_panel import ImagesPanel
-from sealedlore.gui.isometric_view import IsometricDialog
 from sealedlore.gui.picture_use import CHARACTER, PLACE, UsePictureDialog
 from sealedlore.gui.picture_variant import PictureVariantDialog, VariantSubject
 from sealedlore.gui.portraits_dialog import PortraitsDialog
-from sealedlore.gui.ref_images import PICTURE_FILTER, image_of, pixmap_of
+from sealedlore.gui.ref_images import PICTURE_FILTER, pixmap_of
 from sealedlore.gui.transcript import FailedPictureItem, PendingPicture
 from sealedlore.gui.winprivacy import exclude_from_capture
 from sealedlore.models.character import Character
@@ -73,7 +70,6 @@ class ImagesWindow:
         self.images_panel.save_all_requested.connect(self.save_all_pictures)
         self.images_panel.card_action_requested.connect(self._card_picture_action)
         self.images_panel.background_action_requested.connect(self._background_action)
-        self.images_panel.map_action_requested.connect(self._map_picture_action)
         self.images_panel.added_action_requested.connect(self._added_picture_action)
         self.transcript.illustrate_requested.connect(
             lambda node_id: self.generate_image(anchor_id=node_id)
@@ -264,8 +260,6 @@ class ImagesWindow:
             lore=lore,
             background=session.story.background_image,
             background_drawn_as=session.story.background_drawn_as,
-            map_pictures=self._map_pictures(),
-            shown_views=self._shown_views(),
             drawn_for_cards=self._drawn_for_cards(),
             added=list(session.story.reference_images),
         )
@@ -291,45 +285,6 @@ class ImagesWindow:
             *session.bundle.lore,
         ]
         return {ref.drawn_as for card in cards for ref in card.reference_images if ref.drawn_as}
-
-    def _map_pictures(self) -> list:
-        """The map's paintings and postcards of places out of the fog
-        as the story stands, as the map shows them (a place the plot still
-        hides is not on it; one the story hasn't reached is under the fog:
-        a sample's views of places not yet reached were listed and saved)."""
-        session = self.session
-        if session is None or not session.map_on:
-            return []
-        held = session.map_held_name(session.story.held_character_id)
-        sight = out_of_the_fog(session.world(), held)
-        # Avatars too (the author, Oct 17 2026: every avatar drawn, in Media,
-        # the one in use marked), of the cards the author may see.
-        names = {c.name for c in session.visible_cast()} | {
-            c.name for c in session.visible_supporting()
-        }
-        return [
-            picture
-            for picture in session.map_art_copy().pictures
-            if (picture.subject in ("isometric", "postcard") and picture.subject_id in sight)
-            or (picture.subject == "walker" and picture.subject_id in names)
-        ]
-
-    def _shown_views(self) -> set[str]:
-        """The paintings laid over the map now, one per area."""
-        session = self.session
-        if session is None or not session.map_on:
-            return set()
-        world, art = session.world(), session.map_art_copy()
-        areas = {p.subject_id for p in art.pictures if p.subject == "isometric"}
-        shown = (shown_view(world, art, area_id) for area_id in areas)
-        views = {picture.id for picture in shown if picture is not None}
-        # The avatar walking for each person now.
-        walking = {
-            p.id
-            for p in art.pictures
-            if p.subject == "walker" and p.file == session.walker_file(p.subject_id, art)
-        }
-        return views | walking
 
     def _refresh_image_views(self) -> None:
         """The Media tab now; the transcript once no passage is streaming into
@@ -599,7 +554,6 @@ class ImagesWindow:
             self._refresh_people()
             self.refresh_images()
             self.statusBar().showMessage(f"Picture ready: {', '.join(names)}.", 8000)
-            self._offer_avatars(list(self.session.portraits_taken))
             # A place's picture landed: behind the story, if the story is there.
             self._sync_place_picture()
         try:
@@ -616,14 +570,6 @@ class ImagesWindow:
     def _on_image_jobs_changed(self) -> None:
         count = len(self.image_jobs.pending())
         self.status_strip.set_pictures(count)
-        session = self.session
-        if session is not None:
-            # A card's avatar waits for the portrait being drawn for it.
-            session.portraits_coming = frozenset(
-                job.request.card_id
-                for job in self.image_jobs.pending(session.story.id)
-                if job.request.card_id and job.request.card_first
-            )
 
     def _on_image_finished(
         self, _job_id: str, story_id: str, records: list, store: PictureStore
@@ -796,17 +742,12 @@ class ImagesWindow:
                 for number, ref in enumerate(owner.reference_images, start=1):
                     suffix = Path(ref.file).suffix
                     cards.append((ref.file, f"{kind}-{slug or 'card'}-{number}{suffix}"))
-        # The background, unless it is a copy of a picture saved above; and
-        # the map's paintings and postcards (map-painting-the-farm.jpg).
+        # The background, unless it is a copy of a picture saved above.
         background = session.story.background_image
         if background and not any(i.id == session.story.background_drawn_as for i in images):
             cards.append((background, f"background{Path(background).suffix}"))
         for number, ref in enumerate(session.story.reference_images, start=1):
             cards.append((ref.file, f"added-{number}{Path(ref.file).suffix}"))
-        for picture in self._map_pictures():
-            kind = "painting" if picture.subject == "isometric" else "postcard"
-            suffix = Path(picture.file).suffix
-            cards.append((picture.file, f"map-{kind}-{_slug(picture.name) or 'place'}{suffix}"))
         if not images and not videos and not cards:
             return
         chosen = QFileDialog.getExistingDirectory(self, "Save all pictures", str(Path.home()))
@@ -1095,46 +1036,6 @@ class ImagesWindow:
             self._use_picture(data, action)
         else:
             self._show_whole(ref.caption or "Added picture", data)
-
-    def _map_picture_action(self, action: str, picture_id: str) -> None:
-        """A painting or a postcard in the Media tab: see it whole,
-        show it on the map (a view laid over its area, or chosen as the one
-        over it: "use"), or save it."""
-        session = self.session
-        if session is None:
-            return
-        picture = next((p for p in session.map_art_copy().pictures if p.id == picture_id), None)
-        if picture is None:
-            return
-        if action == "save":
-            save_picture_as(self, session.pictures.read(picture.file), file_name(picture.file))
-        elif action == "use" and picture.subject == "walker":
-            if session.use_walker_picture(picture.subject_id, picture.id):
-                self._walker_images.clear()
-                self.refresh_area()
-                self.cast_panel.refresh_avatar()
-                self.refresh_images()
-        elif action == "show" and picture.subject == "walker":
-            self.show_world(True)  # they walk on the play view
-        elif action == "use" and picture.subject == "isometric":
-            self.show_isometric_view(picture.subject_id, picture.id)
-            self.show_world(True)
-            self.world_view.go_to(picture.subject_id)
-            self.world_view.iso_button.setChecked(True)
-        elif action == "show":
-            self.show_world(True)
-            self.world_view.go_to(picture.subject_id)
-            if picture.subject == "isometric":
-                self.world_view.iso_button.setChecked(True)
-        elif picture.subject == "isometric":
-            image = image_of(session.pictures.read(picture.file))
-            if not image.isNull():
-                dialog = IsometricDialog(picture.name, image, picture.model, self)
-                dialog.setAttribute(Qt.WA_DeleteOnClose)
-                dialog.exec()
-        else:
-            what = "an avatar" if picture.subject == "walker" else "a postcard"
-            self._show_whole(f"{picture.name}: {what}", session.pictures.read(picture.file))
 
     # --- closing -------------------------------------------------------------
 

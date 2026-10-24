@@ -358,59 +358,6 @@ def test_the_media_tab_shows_every_picture_by_cast_lore_and_story(app):
     assert panel.list.count() == 2 and panel.cast_heading.isHidden()
 
 
-def test_the_media_tab_puts_the_background_first_and_the_map_s_pictures_apart(app):
-    """The author: the background goes in with the story's pictures, to be
-    seen, saved, drawn anew or edited; the map's isometric views and
-    postcards have a section of their own. A background drawn here shows as
-    the background, not twice."""
-    from sealedlore.gui.images_panel import BACKGROUND_ACTIONS, CARD_ACTIONS, ImagesPanel
-    from sealedlore.models.image import GeneratedImage
-    from sealedlore.models.world import MapPicture
-
-    store = MemoryPictures(lambda _kind, _body: "")
-    for name in ("background", "b", "s", "iso", "card"):
-        store.write(f"images/{name}.png", PNG)
-    drawn = GeneratedImage(
-        id="b", file="images/b.png", prompt="A town.", model="m", size="1k", background=True
-    )
-    scene = GeneratedImage(id="s", file="images/s.png", prompt="A road.", model="m", size="1k")
-    views = [
-        MapPicture(
-            subject="isometric",
-            subject_id="farm",
-            name="The farm",
-            file="images/iso.png",
-            model="qwen-image",
-            made_at="2026-10-15T01:00:00",
-        ),
-        MapPicture(subject="postcard", subject_id="barn", name="The barn", file="images/card.png"),
-    ]
-    panel = ImagesPanel()
-    asked: list[str] = []
-    panel.background_action_requested.connect(asked.append)
-    panel.set_images(
-        [drawn, scene],
-        store,
-        set(),
-        [],
-        background="images/background.png",
-        background_drawn_as="b",
-        map_pictures=views,
-    )
-    ids = [panel.list.item(i).data(Qt.UserRole) for i in range(panel.list.count())]
-    assert ids == ["background", "s"]  # first, and standing for the picture drawn as it
-    assert panel.story_heading.text() == "STORY · 2" and panel.map_heading.text() == "MAP · 2"
-    assert panel.map_list.item(0).text() == "Painting\nThe farm"
-    panel.list.itemActivated.emit(panel.list.item(0))
-    assert asked == ["open"]
-    assert {"draw", "edit", "save", "clear"} <= {key for key, _ in BACKGROUND_ACTIONS}
-    assert {"again", "edit"} <= {key for key, _ in CARD_ACTIONS}  # as on the card's own page
-    # No background: the picture drawn as one is the story's again.
-    panel.set_images([drawn, scene], store, set(), [])
-    ids = [panel.list.item(i).data(Qt.UserRole) for i in range(panel.list.count())]
-    assert sorted(ids) == ["b", "s"] and panel.map_heading.isHidden()
-
-
 def test_an_edit_of_a_story_picture_keeps_the_scene_and_goes_after_its_passage(
     app, tmp_path: Path, story, cast
 ):

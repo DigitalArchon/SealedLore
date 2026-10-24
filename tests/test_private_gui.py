@@ -196,23 +196,6 @@ def test_a_private_scene_freezes_the_scene_and_plot_controls(app, window: MainWi
         assert widget.isEnabled()
 
 
-def test_a_private_scene_pauses_the_map_where_it_stands(app, window: MainWindow, monkeypatch):
-    """The author (Oct 15 2026): the map stays in the window, paused, and in
-    no way touches the scene; it catches up once the scene has ended."""
-    window.session.story.defaults.world_map = True
-    window._sync_world()
-    assert window.map_layout and window.world_view.pause_note.isHidden()
-    started: list[bool] = []
-    monkeypatch.setattr(window.session, "start_map_art", lambda: started.append(True))
-    window.begin_private()
-    assert window.in_private and window.map_layout  # still there, not taken away
-    assert not window.world_view.pause_note.isHidden()
-    window._sync_world()
-    assert started == []  # nothing drawn while the scene is open
-    window.end_private()
-    assert window.world_view.pause_note.isHidden() and started
-
-
 def test_without_an_endpoint_the_window_never_falls_back_to_the_mock(app, tmp_path, story, cast):
     from sealedlore.providers.base import UnconfiguredProvider
 

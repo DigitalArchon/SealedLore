@@ -14,8 +14,8 @@ phones use.
 - **A phone's turn is the desktop's own**: built from the composer's turn
   with the phone's choices put in, and sent through `_submit_turn`, queued
   during the background reads as the composer's is.
-- Version 1 is for text stories and chats: the API refuses a story that
-  keeps a map whatever is shared.
+- Version 1 is for text stories and chats: the API refuses a visual story
+  whatever is shared.
 """
 
 from __future__ import annotations
@@ -39,7 +39,6 @@ from sealedlore.gui.transcript import message_kind, speaker_label
 from sealedlore.ids import utc_now_iso
 from sealedlore.models.config import PhoneDevice
 from sealedlore.models.node import CHAT_USER_ID
-from sealedlore.models.story import keeps_map
 from sealedlore.phone import views
 from sealedlore.phone.api import Api, PhoneTurn, Refused, Retake, StoryRow
 from sealedlore.phone.page import page_files
@@ -640,7 +639,7 @@ class _Backend:
             title=story.title,
             messages=len(self.service.entries),
             chat=story.chat,
-            keeps_map=keeps_map(story.defaults),
+            keeps_map=story.visual,
         )
 
     def story_rows(self) -> list[StoryRow]:

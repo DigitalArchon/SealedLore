@@ -42,13 +42,6 @@ RECOMMENDED_MODELS: dict[str, str] = {
     # waits ~2.5s. The plot's clock read runs on the scene model.
     "plot_model": "deepseek/deepseek-v4.1-flash",
     "lore_model": "deepseek/deepseek-v4.1-flash",
-    # The map read after each passage (the author's choice, Oct 17 2026): the
-    # quickest by three times, included in the subscription; judged a little
-    # below GLM 5.3 and Kimi K3 on replays.
-    "map_model": "deepseek/deepseek-v4.1-flash",
-    # The map's sprites and local layouts: its whole areas were ranked first
-    # by both blind judges, sent its lowest reasoning level.
-    "map_art_model": "z-ai/glm-5.3-flash",
 }
 
 
@@ -160,37 +153,6 @@ RECOMMENDED_IMAGE_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
             "changed John's face on two of three against FLUX.3 Klein.",
         ),
     ),
-    # Paintings of a place (Paintings on the map, Paint this place… on the
-    # play view): given the program's own picture of the area as it is now
-    # and asked for a faithful, finished rendering of it (the author, Oct 17
-    # 2026: FLUX.3 Klein the default, Seedream and Nano Banana the enhanced
-    # choices). The layout scores are from the isometric render's blind
-    # judging (SealedLoreDocs design/map.md, Oct 15 2026); the play view's
-    # picture is not yet measured.
-    "map_isometric_model": (
-        RecommendedModel(
-            id="blackforestlabs/flux-3/klein/text-to-image",
-            tag="default",
-            label="FLUX.3 Klein",
-            note="The sprites' model, given the picture of the place to paint from, at about a "
-            "cent a painting; FLUX.2 klein kept the layout at 3.1 of 5 from the program's "
-            "render.",
-        ),
-        RecommendedModel(
-            id="bytedance/seedream-v5.0-pro",
-            label="Seedream 5.0 Pro",
-            tag="enhanced",
-            note="The most faithful of those tried (3.5, the building count exact) and among "
-            "the best looking, at about $0.09 a painting.",
-        ),
-        RecommendedModel(
-            id="nano-banana-pro",
-            label="Nano Banana Pro",
-            tag="enhanced",
-            note="Kept the layout and showed the story's changes (the barn on fire) with the "
-            "first prompt, at about $0.14 a painting, the dearest of those tried.",
-        ),
-    ),
 }
 
 
@@ -290,49 +252,6 @@ RECOMMENDED_TEXT_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
             "7-9), with the fewest contradictions of the lore, but outside the subscription.",
         ),
     ),
-    "map_model": (
-        RecommendedModel(
-            id=RECOMMENDED_MODELS["map_model"],
-            label="DeepSeek V4.1 Flash",
-            tag="recommended",
-            note="The quickest map read by three times (under 2s, so the map catches up "
-            "first after a passage), the best at leaving alone what was only nudged, and "
-            "included in a NanoGPT subscription. Judged a little below GLM 5.3 and Kimi K3 on "
-            "replays: trusted 4.0-4.3 of 5 against their 4.4-4.7, with more wrong entries.",
-        ),
-        RecommendedModel(
-            id="z-ai/glm-5.3",
-            label="GLM 5.3",
-            note="Trusted more on judged replays (4.4-4.5 of 5, a third of the wrong entries) "
-            "and included in the subscription, but about 6s a read, and on some hosts it has "
-            "reasoned thousands of tokens a read.",
-        ),
-        RecommendedModel(
-            id="moonshotai/kimi-k3",
-            label="Kimi K3",
-            tag="premium",
-            note="Judged best (trusted 4.6-4.7 of 5, the fewest wrong and missed entries), "
-            "about 4s a read, but outside the subscription at about 0.8¢ a read, and about 1 "
-            "read in 12 came back empty when something had moved.",
-        ),
-    ),
-    "map_art_model": (
-        RecommendedModel(
-            id=RECOMMENDED_MODELS["map_art_model"],
-            label="GLM 5.3 Flash",
-            tag="recommended",
-            note="Drew the best areas: ranked first in 3 of 4 by both blind judges, the best "
-            "looking and the easiest to walk, about 5.5s a sprite at its lowest reasoning "
-            "level, and included in a NanoGPT subscription. Now and then a drawing fails "
-            "and is asked for again.",
-        ),
-        RecommendedModel(
-            id="deepseek/deepseek-v4.1-flash",
-            label="DeepSeek V4.1 Flash",
-            note="Second on the same areas, and it drew a building's upper floor where GLM "
-            "5.3 Flash didn't. Included in the subscription.",
-        ),
-    ),
 }
 
 
@@ -361,7 +280,6 @@ SceneLedger = Literal["every_turn", "manual"]
 LoreSelector = Literal["picker", "jev", "similarity"]
 # How much the world designer puts in each region of open country
 # (engine/regions.py OPEN_COUNTRY): Settings → Models → Open country.
-OpenCountry = Literal["sparse", "normal", "rich"]
 
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
@@ -866,75 +784,11 @@ class Config(BaseModel):
     # author sees the clock and what has happened, nothing still to come.
     show_plot_spoilers: bool = False
 
-    # The map (models/world.py), in stories that turn it on: after each
-    # passage a small model reads the places it went to or described, how
-    # they connect, who is where and the things that matter. Blank means the
-    # scene model.
-    map_model: str | None = None
-    # The model that draws the map: sprites and the layout of each place, in
-    # the background. Blank means the map model.
-    map_art_model: str | None = None
-    # Whether the map is drawn (sprites, layouts, the land around places), in
-    # the background after each map read. Off, the map is kept and shown
-    # plainly, with no calls for art.
-    map_art: bool = True
-    # Map pictures from an image model (Settings → Images): avatars, buildings,
-    # things, roofs and postcards, whatever the map needs as play reaches it.
-    # "auto": drawn in the background under a standing approval; "ask": what
-    # the map wants waits on the Map page, with the price, until the author
-    # approves it; "off": none (the map art model's own sprites stand in).
-    # On by default since Oct 17 2026 (the author: the game must compensate
-    # for new graphics on the fly); it was a tickbox, off by default, whose
-    # saved False was nobody's choice, so it is a new field and the old one
-    # is left unread. Story pictures still ask each time. The limit is per
-    # story and day; the subscription allows ~100.
-    map_pictures_mode: Literal["auto", "ask", "off"] = "auto"
-    # In "auto": how many pictures may be drawn at once without asking; more
-    # than that wait on the Map page as in "ask" (the author, Oct 19 2026: an
-    # old story opened after map pictures went automatic drew 33 at once).
-    # 0: never ask.
-    map_pictures_ask_over: int = Field(default=10, ge=0)
-    # A text-only record of places, who is where and what was taken or
-    # broken, in the storyteller's tail of a story that keeps no map
-    # (`engine/world.render_place_record`): what the map read found, with
-    # nothing the program worked out. Measured Oct 24 2026 (SealedLoreDocs
-    # design/map.md); not in Settings, and not yet keeping itself (the read
-    # that fills it runs for a map), until the measurement says it pays.
-    place_record: bool = False
     # A picture of the place the scene is at, kept on its lore entry (the
     # author, Oct 24 2026), shown behind the story's text while the scene is
     # there, in place of the story's own background; the story's own comes
     # back where the place has none. Settings → Images.
     location_backgrounds: bool = True
-    # Every map picture: the play view's things, textures, roofs and the
-    # avatars (from the portrait, by the model's editing version: engine/
-    # image_variants.py), a story's own tile set, and the Region map's
-    # pictures and postcards. FLUX.3 Klein, open weights, ~1¢ a picture (the
-    # author, Oct 17 2026: Klein, not Qwen; Qwen's paintings drew roofs as
-    # black-and-white noise). Until Oct 18 2026 the play view's pictures had
-    # two models of their own, map_tile_model and map_sprite_model, in
-    # config.json alone, so this field (the only one in Settings) changed
-    # none of them; a saved config's are left unread.
-    map_picture_model: str = "blackforestlabs/flux-3/klein/text-to-image"
-    map_picture_daily_limit: int = 40
-    # Paintings of a place (Paintings on the map, Paint this place… on the
-    # play view), painted from the program's own picture of the area as it
-    # is now when the author asks, never on its own. FLUX.3 Klein (its edit
-    # version is sent, since the area's picture goes: engine/image_variants.py),
-    # as for the sprites (the author's call, Oct 17 2026); Qwen Image
-    # the free alternative, Seedream 5.0 Pro and Nano Banana Pro the enhanced
-    # ones (RECOMMENDED_IMAGE_MODELS, SealedLoreDocs design/map.md). A story
-    # whose config still names "flux-2-klein-9b" keeps painting with it. The
-    # field keeps its old name so saved configs read as before.
-    map_isometric_model: str = "blackforestlabs/flux-3/klein/text-to-image"
-    # The model that designs a story's own tile set from the author's
-    # description (engine/tile_draw.py: the set's words and a prompt for every
-    # picture, shown with the price before anything is drawn). Blank means
-    # Claude Opus 5.5 on NanoGPT (the author's ruling, Oct 16 2026), else the
-    # map art model. Chosen in the designer (Look ▾ → Tile sets…).
-    tileset_model: str | None = None
-    # The world designer's model (engine/regions.py): blank, the story model.
-    region_model: str | None = None
     # A visual story's Look (engine/look.py): the model that is shown a part
     # of the area and says what the player sees and finds there. Blank, the
     # story model; one that reads no pictures is sent the words alone.
@@ -947,12 +801,6 @@ class Config(BaseModel):
     # the plot's events, a Director line or an unusual action into a script
     # the program applies. Blank, the story model.
     keeper_model: str | None = None
-    # How much it puts in each region (regions.OPEN_COUNTRY: places, things
-    # and people at most). "rich" is what every region had before Oct 21 2026
-    # (5, 8, 3); live, the Doomsville map sample's ring round the farm held 13
-    # people and ~30 things in a story about scarcity, so "normal" is fewer.
-    # Only new designs: a region designed already keeps what it has.
-    open_country: OpenCountry = "normal"
 
     # Pictures (engine/image_prompt.py, providers/images.py). The image model
     # takes reference pictures: Seedream 5.0 Pro was the author's pick for

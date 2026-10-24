@@ -11,7 +11,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from sealedlore.models.story import maps_offered
 from sealedlore.storage.atomic import read_json
 from sealedlore.storage.paths import is_safe_story_id, stories_dir
 
@@ -55,7 +54,7 @@ def story_listings(root: Path | None = None) -> list[StoryListing]:
             if not isinstance(story, dict):
                 raise ValueError("no story.json")
             nodes = read_json(entry / "nodes.json", [])
-            defaults = story.get("defaults")
+            story.get("defaults")
             out.append(
                 StoryListing(
                     id=entry.name,
@@ -64,12 +63,7 @@ def story_listings(root: Path | None = None) -> list[StoryListing]:
                     updated=str(story.get("updated_at") or ""),
                     chat=story.get("mode") == "chat",
                     visual=story.get("mode") == "visual",
-                    keeps_map=story.get("mode") == "visual"
-                    or (
-                        maps_offered()
-                        and isinstance(defaults, dict)
-                        and bool(defaults.get("world_map"))
-                    ),
+                    keeps_map=story.get("mode") == "visual",
                 )
             )
         except (OSError, ValueError) as exc:

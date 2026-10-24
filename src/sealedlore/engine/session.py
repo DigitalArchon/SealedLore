@@ -152,23 +152,17 @@ from sealedlore.engine.scene_update import (
 )
 from sealedlore.engine.session_archival import LEDGER_MAX_TOKENS, ArchivalRuntime
 from sealedlore.engine.session_area import AreaRuntime
-from sealedlore.engine.session_backdrops import BackdropRuntime
-from sealedlore.engine.session_corrections import CorrectionRuntime
-from sealedlore.engine.session_edit import MapEditRuntime
+from sealedlore.engine.session_art import ArtRuntime
 from sealedlore.engine.session_images import ImageRuntime
-from sealedlore.engine.session_map_approval import MapApprovalRuntime
 from sealedlore.engine.session_merge import MergeRuntime, _close
-from sealedlore.engine.session_objects import ObjectsRuntime
 from sealedlore.engine.session_plot import NoticeSeverity, PlotRuntime, SessionNotice
 from sealedlore.engine.session_portraits import PortraitRuntime
 from sealedlore.engine.session_private import PrivateRuntime
 from sealedlore.engine.session_reasoning import ReasoningRuntime
 from sealedlore.engine.session_rebuild import RebuildRuntime
 from sealedlore.engine.session_recall import RecallRuntime
-from sealedlore.engine.session_regions import RegionRuntime
 from sealedlore.engine.session_visual import VisualRuntime
 from sealedlore.engine.session_world import WorldRuntime
-from sealedlore.engine.session_world_art import WorldArtRuntime
 from sealedlore.engine.tokens import TokenEstimator, updated_correction_factor
 from sealedlore.engine.validators import locate_quote, mentions
 from sealedlore.ids import new_id, utc_now_iso
@@ -447,15 +441,9 @@ class _SceneRead:
 class StorySession(
     PlotRuntime,
     WorldRuntime,
-    WorldArtRuntime,
-    BackdropRuntime,
-    RegionRuntime,
-    MapApprovalRuntime,
+    ArtRuntime,
     AreaRuntime,
     VisualRuntime,
-    CorrectionRuntime,
-    MapEditRuntime,
-    ObjectsRuntime,
     MergeRuntime,
     ArchivalRuntime,
     RebuildRuntime,
@@ -739,8 +727,6 @@ class StorySession(
             "lore": self.config.lore_model,
             "authoring": self.config.authoring_model,
             "image_prompt": self.config.image_prompt_model,
-            "map": self.config.map_model,
-            "map_art": self.config.map_art_model,
             "look": self.config.look_model,
             "npc": self.config.npc_model,
             "keeper": self.config.keeper_model,
@@ -892,9 +878,6 @@ class StorySession(
                 nodes_by_id=index_nodes(self.nodes),
                 estimator=self.estimator,
                 options=self.assembly_options(),
-                # The chat's map, when it keeps one, before the message as in
-                # a story's tail; empty otherwise.
-                the_map=self.map_context(nodes, None),
             )
             self.last_prompt = prompt
             return prompt
@@ -909,30 +892,6 @@ class StorySession(
                 turn,
                 story_time=render_story_time_block(
                     plot, chronicle_at(nodes, plot), texts=self.texts
-                ),
-            )
-        if not turn.the_map:
-            turn = replace(
-                turn,
-                the_map=self.map_context(
-                    nodes, turn.controlled_character_id, turn_node_id=turn.turn_node_id
-                ),
-            )
-        if turn.scene is None:
-            # A map story: the card with the map's word on who is where.
-            scene = self.map_scene(
-                nodes, turn.controlled_character_id, turn_node_id=turn.turn_node_id
-            )
-            if scene is not None:
-                turn = replace(turn, scene=scene)
-        if not turn.fixed_reminder:
-            turn = replace(
-                turn,
-                fixed_reminder=self.fixed_reminder(
-                    nodes,
-                    turn.controlled_character_id,
-                    turn_node_id=turn.turn_node_id,
-                    text=turn.user_text,
                 ),
             )
         prompt = assemble_prompt(
@@ -1458,8 +1417,6 @@ class StorySession(
             # A chat's first message usually sets it up: kept in full unless
             # the author says otherwise.
             user_node.meta.keep_full = True
-        # The walking done since the last turn goes with this one.
-        self.stamp_turn(user_node)
         self._attach(user_node, parent=history[-1] if history else None)
         turn = replace(turn, turn_node_id=user_node.id)
 
@@ -2584,16 +2541,6 @@ class StorySession(
         if node.kind == "assistant":
             # What was found in the old text may no longer be in it.
             self.prune_shortcuts(node)
-        elif node.meta.area is not None and self.map_first:
-            # The spots the turn marks are its text's: resolved again on the
-            # map the turn was written on (a mark edited in or out).
-            before = self._world_on(self._path_to(node.parent_id)) if node.parent_id else None
-            node.meta.area.marks = self.resolve_marks(
-                content,
-                before if before is not None else self.world(),
-                self.map_art_copy(),
-                node.meta.area,
-            )
 
         went_stale = mark_stale(self.bundle.summaries, node_id)
         # A part is merged again, not rebuilt: its chapters stand in meanwhile.
@@ -3821,8 +3768,6 @@ class StorySession(
             scene_log=log_on_path(self.story.scene_log, history),
             estimator=self.estimator,
             options=options or self.assembly_options(),
-            the_map=self.map_context(history, self.story.held_character_id),
-            scene=self.map_scene(history, self.story.held_character_id),
         )
         self.last_prompt = prompt
         return prompt
@@ -3961,8 +3906,13 @@ class StorySession(
     def restore_memory(self, files: dict[str, bytes], log: list[dict[str, Any]]) -> None:
         """A memory-only chat brought back from its backup, in memory: its
         pictures and its log, as they were exported."""
-        self._memory_pictures = MemoryPictures(self._log, self.restore_memory_art(files))
+        self._memory_pictures = MemoryPictures(self._log, files)
         self.memory_log.extend(log)
+
+    def backup_files(self) -> dict[str, bytes]:
+        """Everything a backup carries beside the bundle: the pictures and
+        their records."""
+        return self.pictures.all_files()
 
     @property
     def memory_only(self) -> bool:
@@ -4011,12 +3961,6 @@ class StorySession(
         wait mostly froze the window), then whatever it has is logged as not
         adopted.
         """
-        # The map's art is kept piece by piece as it comes back: stopping it
-        # loses only what is still out. The window's close waits for the
-        # threads (the art signal must not fire into a window being torn down),
-        # and nothing calls back into it once the story is left.
-        self.on_map_art = None
-        self.stop_map_art(wait_seconds)
         job = self._archive_job
         if job is not None:
             job.done.wait(wait_seconds)

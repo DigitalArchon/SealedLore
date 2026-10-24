@@ -362,19 +362,6 @@ class PlotRuntime:
         """The reads after a passage (`_read_after_turn`), then a note for any
         model they caught reasoning though asked for nothing."""
         yield from self._read_after_turn()
-        joined = self.join_named_newcomer()
-        if joined:
-            yield SessionNotice(f"Map: the newcomer is {joined}.")
-        followed = self.follow_company()
-        if followed:
-            yield SessionNotice(f"Map: with the others, to {followed}.")
-        gone = self.leave_with_scene_read()
-        if gone:
-            yield SessionNotice(
-                "Map: "
-                + ", ".join(gone)
-                + " put outside, as the scene read saw them go (Undo is in the map's menu)."
-            )
         passage = self.last_result.node if self.last_result is not None else None
         for note in self.reasoning_notices(passage):
             yield SessionNotice(note)
@@ -400,9 +387,7 @@ class PlotRuntime:
         2026). Nothing waits on its answer, so holding it costs nothing.
         """
         if self.story.chat:
-            # A simple chat has no scene and no plot; its map, when it keeps
-            # one, is read like a story's (session_world.py).
-            yield from self.update_world_after_turn()
+            # A simple chat has no scene and no plot: nothing to read.
             return
         reads: list[tuple[object, Callable[..., Iterator[SessionNotice]]]] = []
         scene = self._prepare_scene_read()
@@ -415,9 +400,6 @@ class PlotRuntime:
             reads.append((chronicle, self.update_chronicle_after_turn))
         elif self.story.plot is not None:
             yield from self._settle_without_read()
-        world = self._prepare_world_read()
-        if world is not None:
-            reads.append((world, self.update_world_after_turn))
         make_sibling = getattr(self.provider, "sibling", None)
         if len(reads) < 2 or not callable(make_sibling):
             for pending, finish in reads:
@@ -493,12 +475,6 @@ class PlotRuntime:
             if author is not None and author.meta.chronicle is not None
             else 0
         )
-        # Map-first: the walking since the last passage is on the clock too
-        # (`walk_into_plot`) and stays there: the read counts on from after
-        # it, and is told so. Rewound with the skip, the walk was lost on
-        # every read (the second review).
-        walked = self.walk_minutes(author) if author is not None else 0
-        skipped = max(0, skipped - walked)
         at_least = None
         if skipped > 0:
             at_least = before.minutes
@@ -537,7 +513,6 @@ class PlotRuntime:
                 places=places,
                 held=held.name if held is not None else None,
                 authors_events=render_authors_candidates(plot, offered),
-                walked=walked,
                 texts=self.texts,
             ),
             params=self.side_params(self.scene_model, max_tokens=CHRONICLE_MAX_TOKENS),
@@ -947,9 +922,6 @@ class PlotRuntime:
         # Conditions are about the character the author now holds.
         switched = take_viewpoint(chronicle, turn.controlled_character_id)
         skipped = self._author_skip(user_node, chronicle)
-        # Map-first: the walking and travel since the last passage move the
-        # plot's clock too (the author's ruling: the map keeps the time).
-        skipped = bool(self.walk_into_plot(user_node, chronicle)) or skipped
         resolution = resolve_due(plot, chronicle, days, node_id=user_node.id)
         fired = list(resolution.happened)
         gap = list(resolution.gap)
@@ -1070,14 +1042,9 @@ class PlotRuntime:
 
     def _rest_moment(self, chronicle: Chronicle, path: Sequence[Node]) -> str:
         """The moment a declined event rests in (`chronicle.rest_moment`): the
-        author's character's place among the plot's places, or on the map
-        when the story keeps one and the plot has them nowhere, and who is
-        in the scene, by card where a card answers to the name."""
+        author's character's place among the plot's places, and who is in
+        the scene, by card where a card answers to the name."""
         place = chronicle.place
-        if place is None and self.map_on:
-            name = self.map_held_name(chronicle.held_id or self.story.held_character_id)
-            where = self._world_read(path).where.get(name) if name else None
-            place = f"map:{where}" if where else None
         scene = self.story.scene
         cards = [*self.cast, *self.supporting]
         people = list(scene.present_character_ids)
@@ -1450,7 +1417,6 @@ class PlotRuntime:
 _READ_WORDS = {
     "update_scene_after_turn": "the scene",
     "update_chronicle_after_turn": "the clock and facts",
-    "update_world_after_turn": "the map",
 }
 
 

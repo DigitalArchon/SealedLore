@@ -21,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QGraphicsItem
 
 from sealedlore.engine.area import Placement
@@ -41,6 +41,19 @@ OTHER_SIDE = {"east": "west", "west": "east"}
 # Where a carried thing is held, as shares of the carrier's height up from
 # their foot and of their width out to their front.
 CARRIED_AT = (0.42, 0.3)
+
+
+def pixel_scaled(image: QImage, height: int) -> QImage:
+    """The sprite at about `height`: by a whole number of pixels each way
+    when shown larger (crisp), smoothly when shown smaller."""
+    if image.isNull() or image.height() <= 0:
+        return image
+    if image.height() >= height:
+        return image.scaledToHeight(height, Qt.SmoothTransformation)
+    factor = max(1, height // image.height())
+    return image.scaled(
+        image.width() * factor, image.height() * factor, Qt.KeepAspectRatio, Qt.FastTransformation
+    )
 
 
 def facing_of(dx: float, dy: float, was: str) -> str:

@@ -10,16 +10,13 @@ from collections import deque
 
 import pytest
 
-from sealedlore.engine.area import build_area, build_level
 from sealedlore.engine.deck_plan import (
-    DECK_TILE_M,
     USES,
     VIEW_USES,
     generate,
     parse_brief,
     use_of,
 )
-from sealedlore.engine.world_art import ArtJob, deck_layout, finish, plan_art
 from sealedlore.models.world import WorldArt, WorldMap, WorldPlace
 
 BRIEF = {
@@ -180,62 +177,6 @@ def _station() -> tuple[WorldMap, WorldArt]:
     return world, WorldArt()
 
 
-def test_a_station_in_space_is_asked_for_a_brief_and_its_rooms_get_no_plans():
-    world, art = _station()
-    jobs = plan_art(world, art, here="st", setting="a trading station in deep space")
-    layouts = [j for j in jobs if j.kind == "layout"]
-    assert [j.key for j in layouts] == ["layout:st"]  # the bar is one of its rooms
-    job = layouts[0]
-    assert job.extra["deck"] and ("The Rusty Comet", "a bar") in job.extra["named"]
-    assert job.extra["ring"]  # "a ring-shaped trading station"
-    # A station whose words name no ring is a block whatever the brief says.
-    world.places["st"].what = "an independent trading station in orbit round a gas giant"
-    plain = next(j for j in plan_art(world, art, here="st", setting="s") if j.kind == "layout")
-    assert plain.extra["ring"] is False
-    assert finish(plain, json.dumps(BRIEF), model="m", made_at="1").spec["shape"] == "block"
-    assert "rooms" in job.messages[0].text and "The Rusty Comet" in job.messages[-1].text
-    # A sailing ship is no station: no sign of space, its plan drawn as shapes.
-    sloop = WorldPlace(
-        id="sl", name="The Sea Sprite", kind="vehicle", what="a sloop with two decks", size=30.0
-    )
-    sea = WorldMap(places={"sl": sloop}, seen=["sl"], visited={"Ann": ["sl"]}, where={"Ann": "sl"})
-    sea_jobs = [j for j in plan_art(sea, WorldArt(), here="sl", setting="the age of sail")]
-    assert all(not j.extra.get("deck") for j in sea_jobs if j.kind == "layout")
-
-
-def test_the_brief_becomes_a_plan_with_its_decks_and_areas_with_named_rooms():
-    world, art = _station()
-    job = ArtJob(
-        "layout:st",
-        "layout",
-        [],
-        "st",
-        name="Halcyon Reach",
-        extra={"deck": True, "named": [("The Rusty Comet", "a bar")]},
-    )
-    layout = finish(job, json.dumps(BRIEF), model="m", made_at="1")
-    assert layout.spec["deck"] and sorted(lv.index for lv in layout.levels) == [-1, 1]
-    art.layouts["st"] = {"": layout}
-    area = build_area(world, art, "st")
-    assert area is not None and area.indoor and area.look == "space"
-    assert area.tile_m == DECK_TILE_M
-    uses = {r.name: r.use for r in area.rooms}
-    assert uses["The Promenade"] == "promenade" and uses["The Rusty Comet"] == "dining"
-    assert "corridor" in uses.values()
-    # The ring's open middle stays space: the drawn-plan filler leaves it be.
-    assert sum(row.count(" ") for row in area.rows) > sum(
-        row.count(" ") for row in layout.rows[:1] + layout.rows[-1:]
-    )
-    upper = build_level(world, art, "st", 1)
-    assert upper is not None and {r.use for r in upper.rooms} >= {"command"}
-    assert any(e.stairs for e in area.entrances)  # the lifts lead to the other decks
-    # Every deck again from a new brief on a redraw: never the tile shapes.
-    art.redraw = ["st"]
-    redraw = [j for j in plan_art(world, art, here="st", setting="s") if j.key.endswith("redraw")]
-    assert redraw and redraw[0].extra.get("deck")
-    assert deck_layout is not None
-
-
 def test_a_deck_s_corridor_never_takes_a_room_s_use_from_its_label():
     # Live (Oct 17 2026): an L-shaped stretch of a ring's corridor held the
     # customs post's label in its box and was drawn as security, in red.
@@ -247,33 +188,6 @@ def test_a_deck_s_corridor_never_takes_a_room_s_use_from_its_label():
     name_rooms([customs, stretch], {"Customs and Security Post": (17, 31)}, records)
     assert (customs.name, customs.use) == ("Customs and Security Post", "security")
     assert stretch.use == "corridor"
-
-
-def test_a_deck_is_drawn_in_its_rooms_colours_and_a_house_as_before():
-    from PySide6.QtWidgets import QApplication
-
-    from sealedlore.engine.tile_sets import TileSetInfo
-    from sealedlore.gui.area_render import TileSource, render_area
-
-    _app = QApplication.instance() or QApplication([])  # noqa: F841 - Qt images need it
-    world, art = _station()
-    job = ArtJob("layout:st", "layout", [], "st", extra={"deck": True, "named": []})
-    art.layouts["st"] = {"": finish(job, json.dumps(BRIEF), model="m", made_at="1")}
-    area = build_area(world, art, "st")
-    source = TileSource(TileSetInfo(name="plain", deck=True), lambda role: None)
-    image = render_area(area, source)
-    assert image.width() == area.width * 40 and not image.isNull()
-
-    def colour_at(room_name: str):
-        room = next(r for r in area.rooms if r.name == room_name)
-        return image.pixelColor(int((room.cx + 0.5) * 40), int((room.cy + 0.5) * 40))
-
-    # The infirmary is drawn pale, the security office dark.
-    assert colour_at("Infirmary").lightness() > colour_at("Security Office").lightness()
-    for room in area.rooms:
-        room.use = ""
-    plain = render_area(area, source)
-    assert plain.size() == image.size() and plain != image
 
 
 # --- The hull's mass, the bow and stern, the rock, the set pieces --------------------
@@ -357,24 +271,6 @@ def test_a_ship_has_its_bridge_at_the_bow_and_its_engines_at_the_stern():
     assert sides == {True, False}
 
 
-def test_an_outpost_dug_into_an_asteroid_is_set_in_rock():
-    plan = generate(parse_brief(json.dumps({**BRIEF, "shape": "cross"})), "carver", hull="rock")
-    assert plan.hull == "rock"
-    for deck in plan.decks.values():
-        assert set(_marks(deck).values()) == {"R"}
-    rock = WorldPlace(
-        id="rock",
-        name="Carver's Rock",
-        kind="site",
-        what="a small mining outpost dug into an asteroid in the belt",
-    )
-    from sealedlore.engine.world_art import deck_hull
-
-    assert deck_hull(WorldMap(places={"rock": rock}), rock) == "rock"
-    world, _art = _station()
-    assert deck_hull(world, world.places["st"]) == ""  # the brief says
-
-
 def _enclosed(deck) -> list[set[tuple[int, int]]]:
     """The patches of open space inside a deck: no hull, nothing built, and
     not reached from the frame's edge."""
@@ -425,69 +321,3 @@ def test_a_ring_keeps_one_open_middle_and_a_block_is_rooms_all_through():
             assert (room.box[0], room.box[1]) in reached, (deck.name, room.name)
             assert deck.rows[room.door[1]][room.door[0]] == "+"
     assert parse_brief('{"decks": [{"index": 0, "rooms": [{"name": "Bar"}]}]}').shape == "block"
-
-
-def test_set_pieces_stand_in_their_rooms_and_the_furniture_keeps_clear_of_them():
-    plan = generate(parse_brief(json.dumps(SHIP)), "lark")
-    pieces = {
-        r.use: [(p.name, p.piece) for p in r.pieces] for d in plan.decks.values() for r in d.rooms
-    }
-    assert ("the reactor core", "reactor") in pieces["engineering"]
-    assert all(kind == "beds" for _n, kind in pieces["garden"]) and pieces["garden"]
-    assert [n for n, _k in pieces["hangar"]] == ["a small shuttlecraft"]
-    assert any(n == "a stout captain's chair" for n, _k in pieces["command"])
-    for deck in plan.decks.values():
-        for room in deck.rooms:
-            x0, y0, x1, y1 = room.box
-            for p in room.pieces:
-                px0, py0, px1, py1 = p.box
-                assert x0 <= px0 <= px1 <= x1 and y0 <= py0 <= py1 <= y1, (room.name, p.name)
-    # In the area they are placements the furniture is placed round.
-    world, art = _station()
-    job = ArtJob("layout:st", "layout", [], "st", extra={"deck": True, "named": []})
-    ring = {**BRIEF}
-    ring["decks"] = [*BRIEF["decks"]]
-    ring["decks"][0] = {
-        **BRIEF["decks"][0],
-        "rooms": [*BRIEF["decks"][0]["rooms"], {"name": "Main Engineering", "use": "engineering"}],
-    }
-    art.layouts["st"] = {"": finish(job, json.dumps(ring), model="m", made_at="1")}
-    area = build_area(world, art, "st")
-    reactor = next(p for p in area.placements if p.piece == "reactor")
-    room = area.rooms[reactor.room]
-    assert "the reactor core" in room.objects  # the furnisher is told it is there
-    assert area.hull and len(area.hull) == len(area.rows)
-    from sealedlore.engine.area import furnish
-    from sealedlore.models.area import FurnishItem, FurnishPlan, FurnishRoom
-
-    plan_ = FurnishPlan(
-        place_id="st",
-        rooms=[
-            FurnishRoom(
-                room=room.index,
-                purpose="engineering",
-                items=[FurnishItem(name="a workbench", w=2, h=1, where="middle", count=6)],
-            )
-        ],
-    )
-    placed = furnish(area, plan_, "full")
-    assert placed and not set(reactor.tiles()) & {t for f in placed for t in f.tiles()}
-
-
-def test_the_station_set_has_its_set_pieces_and_its_hull():
-    """The shipped station set has a sprite for every set piece the deck plan
-    places from sprites, and the hull's and an asteroid's textures."""
-    from sealedlore.engine.deck_plan import CHAIR, CONSOLE, HOLO, SHUTTLE
-    from sealedlore.engine.tile_sets import item_slugs
-    from sealedlore.storage.tile_sets import asset_names, read_asset, sets_folder
-
-    folder = sets_folder()
-    assert folder is not None
-    station = folder / "station"
-    items = {name.removeprefix("items/") for name in asset_names(station, "items")}
-    for name in (CONSOLE, CHAIR, SHUTTLE, HOLO):
-        assert set(item_slugs(name)) & items, name
-    assert read_asset(station, "hull") and read_asset(station, "rock")
-    # Nothing a station hasn't: the old set's monitor and wooden furniture.
-    words = json.loads((station / "tileset.json").read_text())["words"]
-    assert "glowing screen" not in words["decor0"] or "flat" in words["decor0"]

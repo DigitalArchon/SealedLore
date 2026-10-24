@@ -29,7 +29,6 @@ from sealedlore.gui.visual_window import VisualWindow, player_choices  # noqa: E
 from sealedlore.models.area import Found, LiveArea, Spot, ThingRecord  # noqa: E402
 from sealedlore.models.character import Character  # noqa: E402
 from sealedlore.models.plot import Plot  # noqa: E402
-from sealedlore.models.story import keeps_map  # noqa: E402
 from sealedlore.models.visual import (  # noqa: E402
     CreatureSpawn,
     ItemSpawn,
@@ -45,8 +44,6 @@ from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa
 from sealedlore.storage.world_art import save_world_art  # noqa: E402
 from tests.test_area import world_and_art  # noqa: E402
 from tests.test_samples import SAMPLES  # noqa: E402
-
-pytestmark = pytest.mark.maps_withdrawn
 
 
 @pytest.fixture
@@ -82,7 +79,6 @@ def window(app, tmp_path: Path, story, cast):
     save_story_bundle(bundle, root=tmp_path)
     save_world_art(story.id, art, tmp_path)
     main = MainWindow(root=tmp_path, use_mock=True)
-    main.config.map_art = False
     main.open_story(story.id)
     pump(app)
     yield main
@@ -102,7 +98,6 @@ def walk_all(app, view) -> None:
 
 def test_a_visual_story_is_played_on_its_map_whatever_the_flag_says(tmp_path, story, cast):
     bundle, art = _visual_bundle(story, cast)
-    assert not keeps_map(bundle.story.defaults)  # ordinary stories: withdrawn
     save_story_bundle(bundle, root=tmp_path)
     save_world_art(story.id, art, tmp_path)
     assert story_mode(story.id, tmp_path) == "visual"
@@ -152,8 +147,6 @@ def test_the_game_s_window_opens_on_the_area_and_the_main_window_hides(window: M
     assert "Day 1, 16:00" in game.where.text() and "The house" in game.where.text()
     assert view.clock.text() == "Day 1, 16:00"
     # None of the story window's tools.
-    assert view.look_button.isHidden() and view.edit_button.isHidden()
-    assert view.objects_button.isHidden() and view.paintings_button.isHidden()
     assert "turn" not in view.hint.text()
 
 
@@ -289,7 +282,6 @@ def test_doomsville_opens_as_a_visual_story(app, tmp_path: Path, monkeypatch):
     from PySide6.QtWidgets import QInputDialog
 
     main = MainWindow(root=tmp_path / "data", use_mock=True)
-    main.config.map_art = False
     monkeypatch.setattr(QInputDialog, "getItem", lambda *a, **k: ("Jane", True))
     main.open_visual_sample(SAMPLES / "Doomsville with a map.md")
     pump(app)
@@ -491,7 +483,6 @@ def game(app, tmp_path: Path, story, cast):
     save_story_bundle(bundle, root=tmp_path)
     save_world_art(story.id, art, tmp_path)
     main = MainWindow(root=tmp_path, use_mock=True)
-    main.config.map_art = False
     main.open_story(story.id)
     pump(app)
     game = main.visual_window
@@ -717,7 +708,6 @@ def test_doomsville_s_sheet_comes_with_the_story(app, tmp_path: Path, monkeypatc
     from PySide6.QtWidgets import QInputDialog
 
     main = MainWindow(root=tmp_path / "data", use_mock=True)
-    main.config.map_art = False
     monkeypatch.setattr(QInputDialog, "getItem", lambda *a, **k: ("John", True))
     main.open_visual_sample(SAMPLES / "Doomsville with a map.md")
     pump(app)
@@ -793,7 +783,6 @@ def peopled(app, tmp_path: Path, story, cast):
     save_story_bundle(bundle, root=tmp_path)
     save_world_art(story.id, art, tmp_path)
     main = MainWindow(root=tmp_path, use_mock=True)
-    main.config.map_art = False
     # The greeting is scripted before the game opens: she may be in sight
     # from where the design stands her, and is greeted at once.
     main._current_provider().responses = [GREETING]
@@ -962,7 +951,6 @@ def test_doomsville_s_people_stand_in_their_places(app, tmp_path: Path, monkeypa
     from PySide6.QtWidgets import QInputDialog
 
     main = MainWindow(root=tmp_path / "data", use_mock=True)
-    main.config.map_art = False
     monkeypatch.setattr(QInputDialog, "getItem", lambda *a, **k: ("John", True))
     main.open_visual_sample(SAMPLES / "Doomsville with a map.md")
     pump(app)
@@ -1040,7 +1028,6 @@ def plotted(app, tmp_path: Path, story, cast):
     save_story_bundle(bundle, root=tmp_path)
     save_world_art(story.id, art, tmp_path)
     main = MainWindow(root=tmp_path, use_mock=True)
-    main.config.map_art = False
     main._current_provider().responses = [GREETING]
     main.open_story(story.id)
     pump(app)
@@ -1423,7 +1410,6 @@ def test_doomsville_s_townspeople_have_cards_and_stand_in_the_town(
     from PySide6.QtWidgets import QInputDialog
 
     main = MainWindow(root=tmp_path, use_mock=True)
-    main.config.map_art = False
     monkeypatch.setattr(QInputDialog, "getItem", lambda *a, **k: ("John", True))
     main._current_provider().responses = [GREETING] * 4
     main.open_visual_sample(SAMPLES / "Doomsville with a map.md")
@@ -1538,7 +1524,6 @@ def test_doomsville_s_walkers_stride_with_their_own_frames(app, tmp_path: Path, 
     from PySide6.QtWidgets import QInputDialog
 
     main = MainWindow(root=tmp_path, use_mock=True)
-    main.config.map_art = False
     monkeypatch.setattr(QInputDialog, "getItem", lambda *a, **k: ("John", True))
     main._current_provider().responses = [GREETING] * 4
     main.open_visual_sample(SAMPLES / "Doomsville with a map.md")
@@ -1561,3 +1546,67 @@ def test_doomsville_s_walkers_stride_with_their_own_frames(app, tmp_path: Path, 
     game.close()
     pump(app)
     main.close()
+
+
+def test_walking_is_drawn_between_tiles_facing_the_way_it_goes(app, window: MainWindow):
+    """The play view's walk animation (gui/area_view.py), on the game's
+    window: the figure between one tile and the next at `STEPS_PER_SECOND`,
+    facing the way it goes, on its tile once a tile's time has passed."""
+    from sealedlore.gui.area_render import px_for
+    from sealedlore.gui.area_view import STEPS_PER_SECOND
+
+    game = window.visual_window
+    session, view = game.session, game.area_view
+    px = px_for(view.area)
+    before = session.area_state().spots["Serrik Vaun"]
+    steps = [tuple(s) for s in session.walk_route(before.x + 6, before.y)]
+    assert len(steps) > 2
+    view.drop_walk()
+    view.walk(steps)
+    person = view.people["Serrik Vaun"]
+    assert view.walking() and view._timer.interval() <= 20  # about 60 Hz
+    view._advance(0.5 / STEPS_PER_SECOND)
+    assert (view.held().x, view.held().y) == steps[0]  # on its tile until the next
+    (x0, y0), (x1, y1) = steps[0], steps[1]
+    assert abs(person.pos().x() - (x0 + (x1 - x0) * 0.5 + 0.5) * px) < 1e-6
+    assert abs(person.pos().y() - (y0 + (y1 - y0) * 0.5 + 1.0) * px) < 1e-6
+    assert person.mirrored == (x1 < x0) and person.pose == "walk"
+    assert view._tags["Serrik Vaun"].pos().x() == person.pos().x()
+    view._advance(0.6 / STEPS_PER_SECOND)  # past the tile
+    assert (view.held().x, view.held().y) == steps[1]
+    view.drop_walk()
+    assert not view.walking() and person.bob == 0.0
+
+
+def test_indoors_someone_out_of_sight_is_hidden_and_the_rooms_are_shaded(app, window: MainWindow):
+    """The fog of war indoors (gui/area_view.py `_sync_sight`): the shade
+    over what the player can't see, and a person behind a wall not shown."""
+    from PySide6.QtCore import QPointF
+
+    from sealedlore.engine.area import sees
+    from sealedlore.gui.area_render import px_for
+    from sealedlore.gui.area_view import SHADE_ALPHA, lit_rooms
+
+    game = window.visual_window
+    session, view = game.session, game.area_view
+    assert view.area is not None and view.area.indoor and view._shade is not None
+    state = session.area_state()
+    state.spots["Serrik Vaun"] = Spot(area="house", x=5, y=10)
+    state.spots["Maela Orr"] = Spot(area="house", x=30, y=10)
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    game.presenter.refresh(snap=True)
+    assert not sees(view.area, (5, 10), (30, 10))
+    assert not view.people["Maela Orr"].isVisible()
+    px = px_for(view.area)
+    assert view.person_at(QPointF(30.5 * px, 10.5 * px)) is None
+    mine, theirs = view.area.room_at(5, 10), view.area.room_at(30, 10)
+    assert mine is not None and theirs is not None and mine.index != theirs.index
+    assert mine.index in lit_rooms(view.area, (5, 10))
+    mask = view._shade_mask
+    assert mask.pixelColor(5, 10).alpha() == 0
+    assert mask.pixelColor(39, 10).alpha() == SHADE_ALPHA
+    state.spots["Maela Orr"] = Spot(area="house", x=7, y=10)
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    game.presenter.refresh(snap=True)
+    assert view.people["Maela Orr"].isVisible()
+    assert view.person_at(QPointF(7.5 * px, 10.5 * px)).name == "Maela Orr"

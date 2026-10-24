@@ -824,7 +824,7 @@ its picture and its line: Doomsville there is the same as importing
 Furnace show other kinds of world (grimdark science fiction, traditional
 fantasy, steampunk and a hellscape), each with a plot, a background picture,
 and a picture of every card and every place (a `# Map` section in a plot file
-is read and kept, unused while the map is withdrawn). Rather than
+is what a Visual Story plays on; an ordinary story ignores it). Rather than
 write the format by hand, **File → Plot file editor…** writes it for you: the
 world, opening, characters, places, lore, facts and events each get a form,
 conditions and what an event brings or sets are picked from what the file
@@ -1117,15 +1117,15 @@ all the fields for you to approve, for when the card has drifted.
 | Normal (default) | people pursue their own aims, anyone with a stake acts on it, earlier choices catch up |
 | Eventful | most passages bring something: an arrival, news, a complication |
 
-## The map (withdrawn for now)
+## The map of the earlier betas
 
-The earlier 2.0 betas could play a story on a pixel-art map. The map is
-withdrawn in this version while it is redesigned as a mode of its own, with
-rules of its own: nothing offers one, and a story that was played on a map
-goes on as a story without it, with everything it has (its characters, plot,
-lore, pictures and branches); the map's record and art stay with it, unused.
-In its place a story keeps a picture of each place it goes to: see "Pictures
-of places".
+The earlier 2.0 betas could play a story on a pixel-art map that grew as the
+story went. That map is gone from ordinary stories: nothing offers one, and
+a story that was played on a map goes on as a story without it, with
+everything it has (its characters, plot, lore, pictures and branches). A
+story keeps a picture of each place it goes to instead (see "Pictures of
+places"), and the map lives on as Visual Stories: a game on a map designed
+in advance, with rules of its own (see "Visual Stories").
 
 ## Branches, takes and export
 

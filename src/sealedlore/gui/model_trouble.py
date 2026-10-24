@@ -99,8 +99,6 @@ TROUBLE_ROLE_NAMES = {
     "plot": "Plot",
     "lore": "Lore",
     "image_prompt": "Image prompt writer",
-    "map": "Map reads",
-    "map_art": "Map art",
     "look": "Look (visual stories)",
     "npc": "People (visual stories)",
     "keeper": "Plot keeper (visual stories)",

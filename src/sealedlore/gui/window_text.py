@@ -154,7 +154,6 @@ class TextSizeWindow:
             self.reload_transcript()  # the welcome's links are in the theme's colour
         if self.map_shown():
             self.refresh_map(keep_view=True)
-        self.refresh_world(keep_view=True)
         self._fit_centre_width()
         screen = self.screen()
         if screen is not None:

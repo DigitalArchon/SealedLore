@@ -48,7 +48,6 @@ from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, ImageRef
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.video import GeneratedVideo
-from sealedlore.models.world import MapPicture
 from sealedlore.storage.picture_store import PictureStore
 
 GALLERY_THUMB = 150
@@ -98,8 +97,6 @@ class ImagesPanel(QWidget):
     card_action_requested = Signal(str, str, str)
     # An action on the background (BACKGROUND_ACTIONS).
     background_action_requested = Signal(str)
-    # (action, map picture id) for an isometric view or a postcard (MAP_ACTIONS).
-    map_action_requested = Signal(str, str)
     # (action, picture id) for a picture added from disk to no card
     # (`Story.reference_images`, ADDED_ACTIONS).
     added_action_requested = Signal(str, str)
@@ -124,13 +121,9 @@ class ImagesPanel(QWidget):
             gallery.customContextMenuRequested.connect(
                 lambda position, g=gallery: self._card_menu(g, position)
             )
-        self.map_list = _Gallery(CARD_THUMB)
-        self.map_list.itemActivated.connect(lambda item: self._map_action("open", item))
-        self.map_list.customContextMenuRequested.connect(self._map_menu)
         self.cast_heading = _heading()
         self.lore_heading = _heading()
         self.story_heading = _heading()
-        self.map_heading = _heading()
         self.hint = QLabel(
             "No pictures or videos yet. Picture… beside Send (or Story → Draw a picture…) "
             "pictures what is happening, and Story → Generate video… makes a few seconds of "
@@ -167,7 +160,6 @@ class ImagesPanel(QWidget):
             (self.cast_heading, self.cast_list),
             (self.lore_heading, self.lore_list),
             (self.story_heading, self.list),
-            (self.map_heading, self.map_list),
         ):
             sections.addWidget(heading)
             sections.addWidget(gallery)
@@ -195,8 +187,6 @@ class ImagesPanel(QWidget):
         lore: list[LoreEntry] | None = None,
         background: str | None = None,
         background_drawn_as: str = "",
-        map_pictures: list[MapPicture] | None = None,
-        shown_views: set[str] | None = None,
         drawn_for_cards: set[str] | None = None,
         added: list[ImageRef] | None = None,
     ) -> None:
@@ -206,10 +196,7 @@ class ImagesPanel(QWidget):
         too (a hidden card's drawing showed under Story, its prompt with it).
         `background`: the background's file, first among the story's,
         standing for the picture it was drawn as; `added`: the pictures
-        added from disk to no card. `map_pictures`: the map's views and
-        postcards (those of places the author may see); `shown_views`: the
-        paintings laid over the map now, said so (an area may have
-        several, and any can be shown from here)."""
+        added from disk to no card."""
         cast, lore = cast or [], lore or []
         on_cards = {ref.drawn_as for card in (*cast, *lore) for ref in card.reference_images}
         on_cards |= drawn_for_cards or set()
@@ -276,44 +263,10 @@ class ImagesPanel(QWidget):
                     gallery.addItem(item)
             counts[word] = gallery.count()
         counts["Story"] = self.list.count()
-        self.map_list.clear()
-        for picture in sorted(map_pictures or [], key=lambda p: p.made_at, reverse=True):
-            kind = {"isometric": "Painting", "postcard": "Postcard", "walker": "Avatar"}.get(
-                picture.subject, "Picture"
-            )
-            on_map = picture.id in (shown_views or set())
-            walker = picture.subject == "walker"
-            marked = (
-                "\n✓ walks on the map" if on_map and walker else "\n✓ on the map" if on_map else ""
-            )
-            item = QListWidgetItem(f"{kind}\n{picture.name}" + marked)
-            item.setData(Qt.UserRole, picture.id)
-            item.setData(Qt.UserRole + 1, picture.subject)
-            made = "drawn" if walker else "painted"
-            item.setToolTip(
-                f"{kind} of {picture.name}"
-                + (f", {made} by {picture.model}" if picture.model else ", your own picture")
-                + (
-                    ", the one walking for them now"
-                    if on_map and walker
-                    else "; right-click to have it walk for them"
-                    if walker
-                    else ", the one laid over the map now"
-                    if on_map
-                    else "; right-click to lay it over the map"
-                    if picture.subject == "isometric"
-                    else ""
-                )
-            )
-            if store is not None:
-                item.setIcon(self._icon(store.read(picture.file), picture.file, CARD_THUMB))
-            self.map_list.addItem(item)
-        counts["Map"] = self.map_list.count()
         for heading, gallery, word in (
             (self.cast_heading, self.cast_list, "Cast"),
             (self.lore_heading, self.lore_list, "Lore"),
             (self.story_heading, self.list, "Story"),
-            (self.map_heading, self.map_list, "Map"),
         ):
             heading.setText(f"{word.upper()} · {counts[word]}")
             shown = counts[word] > 0
@@ -375,28 +328,6 @@ class ImagesPanel(QWidget):
                 lambda _checked=False, k=key: self.card_action_requested.emit(k, card_id, ref_id)
             )
         menu.exec(gallery.viewport().mapToGlobal(position))
-
-    def _map_action(self, action: str, item: QListWidgetItem | None) -> None:
-        if item is not None:
-            self.map_action_requested.emit(action, item.data(Qt.UserRole))
-
-    def _map_menu(self, position: QPoint) -> None:
-        item = self.map_list.itemAt(position)
-        if item is None:
-            return
-        picture_id = item.data(Qt.UserRole)  # read now, as `_card_menu`
-        isometric = item.data(Qt.UserRole + 1) == "isometric"
-        walker = item.data(Qt.UserRole + 1) == "walker"
-        menu = QMenu(self)
-        for key, text in MAP_ACTIONS:
-            if key == "use" and walker:
-                text = "Use as the avatar"
-            elif key == "use" and not isometric:
-                continue  # a postcard is the place's one picture
-            menu.addAction(text).triggered.connect(
-                lambda _checked=False, k=key: self.map_action_requested.emit(k, picture_id)
-            )
-        menu.exec(self.map_list.viewport().mapToGlobal(position))
 
     def _activate(self, item: QListWidgetItem) -> None:
         kind = item.data(Qt.UserRole + 1)
@@ -483,13 +414,6 @@ BACKGROUND_ACTIONS = (
     ("place", USE_PLACE_LABEL),
     ("-", ""),
     ("clear", "Clear the background"),
-)
-MAP_ACTIONS = (
-    ("open", "See it whole"),
-    ("show", "Show on the map"),
-    # A painting's alone: chosen as the one laid over its area.
-    ("use", "Show this painting on the map"),
-    ("save", "Save picture as…"),
 )
 ADDED_ACTIONS = (
     ("open", "See it whole"),

@@ -299,7 +299,7 @@ def test_the_speed_test_puts_each_role_on_its_own_endpoint(app):
     assert scene.settings.api_key == "ant-key"
     # The plot and map roles fall back to the scene model, and with it its
     # endpoint; the lore model has a default of its own.
-    assert set(scene.roles) >= {"Scene", "Plot", "Map", "Map art"}
+    assert set(scene.roles) >= {"Scene", "Plot"}
     dialog.deleteLater()
 
 

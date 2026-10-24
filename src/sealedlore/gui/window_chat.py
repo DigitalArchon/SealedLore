@@ -59,11 +59,8 @@ class ChatWindow:
             chat_prompt=dialog.prompt.toPlainText().strip(),
             chat_tail=dialog.tail.toPlainText().strip(),
             chat_keep=dialog.keep_choice(),
-            chat_character=dialog.chat_character.text().strip(),
         )
         story.defaults.main_model = dialog.model.text().strip()
-        # A chat may keep a map as a story does (the author, Oct 2026).
-        story.defaults.world_map = dialog.world_map.isChecked()
         # The chat's own route: on the chat, never in the settings (a chat
         # kept in memory teaches them nothing).
         story.defaults.main_route = dialog.route()

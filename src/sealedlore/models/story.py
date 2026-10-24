@@ -76,19 +76,6 @@ class StyleDirectives(BaseModel):
 # with one plays on as a story without it: `keeps_map` is what every reader
 # asks, so the saved choice stands for the day the flag goes back on. The
 # tests turn it on (conftest) to keep the map code covered meanwhile.
-MAPS_OFFERED = False
-
-
-def maps_offered() -> bool:
-    """Whether a map may be kept at all, read when asked (tests turn it on)."""
-    return MAPS_OFFERED
-
-
-def keeps_map(defaults: StoryDefaults) -> bool:
-    """Whether a story is played with its map: it chose one, and maps are offered."""
-    return MAPS_OFFERED and defaults.world_map
-
-
 class StoryDefaults(BaseModel):
     agency_mode: AgencyMode = "contested"
     npc_scope: NpcScope = "all"

@@ -425,7 +425,6 @@ def build_read_messages(
     places: Sequence[str] = (),
     held: str | None = None,
     authors_events: str = "",
-    walked: int = 0,
     texts: PromptTexts = DEFAULT_TEXTS,
 ) -> list[PromptMessage]:
     """Only what the read has to judge: the clock, the place among `places`
@@ -435,7 +434,6 @@ def build_read_messages(
     body = [
         *([f"THE AUTHOR'S CHARACTER: {held}"] if held else []),
         f"THE CLOCK, before the author's turn: {format_clock(chronicle.minutes)}",
-        *([texts.fill("plot.chronicle_read.walked", minutes=str(walked))] if walked > 0 else []),
         "THE PLACES: " + (", ".join(places) or "(none)") + ", or elsewhere. "
         f"Before the author's turn: {chronicle.place or 'elsewhere'}.",
     ]

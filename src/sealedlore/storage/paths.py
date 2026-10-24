@@ -13,8 +13,6 @@ import re
 import sys
 from pathlib import Path
 
-from sealedlore.models.story import maps_offered
-
 APP_DIR_NAME = "sealedlore"
 WINDOWS_APP_DIR_NAME = "SealedLore"
 
@@ -79,11 +77,10 @@ def sample_stories(folder: Path | None = None) -> list[tuple[str, Path]]:
         for path in folder.glob("*.md")
         if path.is_file() and path.name not in GUIDES
     ]
-    if not maps_offered():
-        # The map is withdrawn while it is redesigned (models/story.py): a
-        # sample that is the same story with a map is not offered; the rest
-        # play as stories with a plot, their `# Map` unused.
-        found = [item for item in found if item[0] not in MAP_ONLY_SAMPLES]
+    # A sample that is the same story with a map is played as a visual story
+    # (`VISUAL_SAMPLES`), never offered as a story of its own; the rest play
+    # as stories with a plot, their `# Map` unused.
+    found = [item for item in found if item[0] not in MAP_ONLY_SAMPLES]
     return sorted(found, key=lambda item: item[0].casefold())
 
 

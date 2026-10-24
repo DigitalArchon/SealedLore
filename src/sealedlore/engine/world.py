@@ -22,31 +22,25 @@ import re
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from typing import Any
 
-from sealedlore.engine.jsonreply import extract_json
-from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.scene_state import same_person
-from sealedlore.engine.takeable import FIXED_MARK, can_be_taken, fixed_thing, is_vehicle, same_thing
+from sealedlore.engine.takeable import same_thing
 from sealedlore.engine.tile_sets import head_noun
-from sealedlore.engine.validators import locate_quote
 from sealedlore.engine.world_layout import (
     bearing,
     describe_metres,
     geometry_conflicts,
     is_close,
-    meets,
     metres,
     moves,
     place_new,
     position,
     size_of,
 )
-from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.character import Character
 from sealedlore.models.node import Node
 from sealedlore.models.world import (
     PlaceKind,
     WorldDelta,
-    WorldLink,
     WorldMap,
     WorldPlace,
     WorldThing,
@@ -113,34 +107,6 @@ def _road_words(name: str) -> frozenset[str]:
     return frozenset(w.removesuffix("'s") for w in words) - _ROAD_NOISE
 
 
-def known_road(
-    world: WorldMap, name: str, kind: str | None, pending: Sequence[WorldPlace] = ()
-) -> str | None:
-    """The one route on the map (or added in the same reply) that a new
-    road's name is another name for, else None. Live (Oct 18 2026), the
-    read added "river road south" for the walk out of the village and, on
-    the way back, "the river road" beside it: two routes for one road.
-    Only a route (or a place of no kind) named with a road word, only into
-    a route, and only when the words that say which road are shared (one
-    name's in the other's: "the old river road" is the "river road") and
-    exactly one route answers."""
-    if kind not in (None, "route"):
-        return None
-    mine = _road_words(name)
-    if not mine & _ROAD_WORDS or not mine - _ROAD_WORDS:
-        return None
-    found = []
-    for place in [*world.places.values(), *pending]:
-        if place.kind != "route":
-            continue
-        for known in (place.name, *place.aliases):
-            theirs = _road_words(known)
-            if theirs - _ROAD_WORDS and (mine <= theirs or theirs <= mine):
-                found.append(place.id)
-                break
-    return found[0] if len(set(found)) == 1 else None
-
-
 def _find_thing(
     world: WorldMap, name: str, near: Collection[str] | None = None
 ) -> WorldThing | None:
@@ -176,85 +142,6 @@ def _near_places(world: WorldMap, delta: WorldDelta, people: Sequence[Character]
 def place_name(world: WorldMap, place_id: str | None) -> str:
     place = world.places.get(place_id or "")
     return place.name if place is not None else "(not on the map)"
-
-
-def render_map(world: WorldMap) -> str:
-    """The map as the read is shown it: places as a tree, then links, who is
-    where, and the things."""
-    lines = ["PLACES"]
-    shown: set[str] = set()
-
-    def under(parent: str | None, depth: int) -> None:
-        for place in world.places.values():
-            top = place.inside is None or place.inside not in world.places
-            if place.id in shown:
-                continue
-            if (parent is None and top) or (parent is not None and place.inside == parent):
-                shown.add(place.id)
-                label = f"{'  ' * depth}- {place.name} ({place.kind or 'place'})"
-                lines.append(f"{label}: {place.what}" if place.what else label)
-                under(place.id, depth + 1)
-
-    under(None, 0)
-    for place in world.places.values():  # a loop of "inside" no read should make
-        if place.id not in shown:
-            lines.append(f"- {place.name} ({place.kind or 'place'})")
-    if len(lines) == 1:
-        lines.append("(none yet)")
-    lines.append("")
-    lines.append("LINKS")
-    for link in world.links:
-        text = f"- {place_name(world, link.a)} -> {place_name(world, link.b)}: "
-        text += link.direction or "direction unknown"
-        lines.append(text + (f", {link.distance}" if link.distance else ""))
-    if not world.links:
-        lines.append("(none yet)")
-    lines.append("")
-    lines.append("WHO IS WHERE")
-    for who, place_id in world.where.items():
-        outside = " (outside it)" if who in world.outside else ""
-        lines.append(f"- {who}: {place_name(world, place_id)}{outside}")
-    if not world.where:
-        lines.append("(nobody placed yet)")
-    lines.append("")
-    lines.append("THINGS")
-    for thing in world.things.values():
-        where = (
-            f"carried by {thing.carried_by}" if thing.carried_by else place_name(world, thing.at)
-        )
-        lines.append(f"- {thing.name}: {where}" + (f", {thing.state}" if thing.state else ""))
-    if not world.things:
-        lines.append("(none yet)")
-    return "\n".join(lines)
-
-
-def build_world_read_messages(
-    *,
-    world: WorldMap,
-    people: Sequence[str],
-    held: str | None,
-    author_label: str,
-    author_turn: str,
-    passage: str,
-    texts: PromptTexts = DEFAULT_TEXTS,
-    note: str = "",
-    last: str = "",
-) -> list[PromptMessage]:
-    """`note`: a line after the author's character, for a simple chat (who
-    "I" and "you" are, `map_read.chat`); nothing for a story. `last`: after
-    the passage, where the read reads it last (`map_read.outside`)."""
-    user = (
-        f"THE MAP BEFORE THE PASSAGE\n\n{render_map(world)}\n\n"
-        f"PEOPLE: {', '.join(people) or '(none named yet)'}\n"
-        f"The author's character: {held or 'not set'}\n"
-        + (f"{note}\n" if note else "")
-        + f"\n{author_label.upper()}:\n{author_turn}\n\n"
-        f"THE LATEST PASSAGE:\n{passage}" + (f"\n\n{last}" if last else "")
-    )
-    return [
-        PromptMessage(role="system", parts=(ContentPart(text=texts["map_read.system"]),)),
-        PromptMessage(role="user", parts=(ContentPart(text=user),)),
-    ]
 
 
 # --- The map here, for the storyteller -------------------------------------
@@ -383,196 +270,7 @@ def _nearest(
     return [p for p in places if p.id in keep]
 
 
-def render_map_context(
-    world: WorldMap,
-    held: str | None,
-    texts: PromptTexts = DEFAULT_TEXTS,
-    *,
-    fixed: Collection[str] = (),
-    mark_fixed: bool = False,
-    whole: Collection[str] = (),
-) -> str:
-    """The local map for the storyteller's tail: where the author's character
-    is (the start before any read), what is inside it, what else is around
-    it at each level up, the ways between them, and the things here. `world`
-    is `established`; `fixed` are the places a plot file put, whose distance
-    and bearing are given, from the nearest of them the character is in.
-    `mark_fixed`: a thing that can't be taken is marked so, on a turn that
-    may not move it. `whole`: places listed whatever their number (the
-    world designer's regions); every other level is cut to the nearest
-    MAP_LIST_LIMIT. Empty without a place."""
-    here_id = world.where.get(held or "") or world.start
-    chain = _chain(world, here_id)
-    if not chain:
-        return ""
-    here = chain[0]
-    origin = next((p.id for p in chain if p.id in fixed), None)
-    lines = [SECTION_MAP_HEADING, texts["map.context"], ""]
-    who = held or "The author's character"  # a Question before anyone is held
-    verb = "are" if who.lower() == "you" else "is"  # a chat's user, unnamed
-    outside = "just outside " if held is not None and held in world.outside else ""
-    lines.append(
-        f"{who} {verb} at: {outside}" + here.name + "".join(f", in {o.name}" for o in chain[1:])
-    )
-    if here.what or here.state:
-        said = " ".join(here.what.split())
-        if here.state:
-            said = (said + " " if said else "") + f"Now: {' '.join(here.state.split())}."
-        lines.append("  " + said)
-    inside = _nearest(
-        world, here.id, [p for p in world.places.values() if p.inside == here.id], whole
-    )
-    if inside:
-        lines.append("Inside it: " + "; ".join(_around(world, origin, p, fixed) for p in inside))
-    shown = {p.id for p in chain} | {p.id for p in inside}
-    for level, outer in enumerate([*chain[1:], None]):
-        parent = outer.id if outer is not None else None
-        around = _nearest(
-            world,
-            here.id,
-            [
-                p
-                for p in world.places.values()
-                if p.inside == parent and p.id != chain[level].id and p.id not in shown
-            ],
-            whole,
-        )
-        if around:
-            label = f"Also in {outer.name}" if outer is not None else "Elsewhere on the map"
-            lines.append(f"{label}: " + "; ".join(_around(world, origin, p, fixed) for p in around))
-            shown |= {p.id for p in around}
-    ways = [
-        f"- from {place_name(world, k.a)} to {place_name(world, k.b)}"
-        + (f": {words}" if (words := ", ".join(w for w in (k.direction, k.distance) if w)) else "")
-        for k in world.links
-        if k.a in shown or k.b in shown
-    ]
-    if ways:
-        lines.append("Ways between them:")
-        lines += ways[: MAP_LIST_LIMIT * 2]
-    near = {p.id for p in chain} | {p.id for p in inside}
-    things = [
-        t
-        for t in reversed(list(world.things.values()))  # the newest first
-        # Carried by the held character, never "carried by nobody": with no
-        # one held yet, every thing on the map was "here".
-        if (held is not None and t.carried_by == held) or (t.at is not None and t.at in near)
-    ]
-    carried = [t for t in things if t.carried_by == held]
-    things = (carried + [t for t in things if t.carried_by != held])[:MAP_LIST_LIMIT]
-    if things:
-        lines.append("Things here:")
-        for thing in things:
-            at = (
-                f"carried by {thing.carried_by}"
-                if thing.carried_by
-                else place_name(world, thing.at)
-            )
-            stays = mark_fixed and not thing.carried_by and fixed_thing(thing.name)
-            lines.append(
-                f"- {thing.name}: {at}"
-                + (f", {thing.state}" if thing.state else "")
-                + (f", {FIXED_MARK}" if stays else "")
-            )
-    return "\n".join(lines)
-
-
-def render_place_record(
-    world: WorldMap,
-    held: str | None,
-    texts: PromptTexts = DEFAULT_TEXTS,
-    *,
-    exclude: Collection[str] = (),
-) -> str:
-    """A text-only record for the storyteller's tail, in the map's place
-    when the story keeps no map: the places the story has established (what
-    each is, what is inside it, the ways between them in the story's own
-    words), who is where, and what is carried, broken or lying somewhere. No
-    distances in metres, no bearings, no positions: nothing the program
-    worked out, only what the reads took from the prose. `exclude`: places
-    left out (the world designer's). Empty when the record holds nothing.
-    Measured against the plain story (SealedLoreDocs design/map.md, Oct 24
-    2026, "A text-only record")."""
-    places = [p for p in world.places.values() if p.id not in exclude]
-    by_id = {p.id: p for p in places}
-    if not places and not world.where and not world.things:
-        return ""
-    lines = [SECTION_RECORD_HEADING, texts["record.context"], ""]
-    who = held or "The author's character"
-    verb = "are" if who.lower() == "you" else "is"
-
-    def chain_words(place_id: str | None) -> str:
-        chain = [p for p in _chain(world, place_id) if p.id in by_id]
-        return ", in ".join(p.name for p in chain)
-
-    here_id = world.where.get(held or "") or world.start
-    here_words = chain_words(here_id)
-    if here_words:
-        outside = "just outside " if held is not None and held in world.outside else ""
-        lines.append(f"{who} {verb} at: {outside}{here_words}")
-    # The places the character is in first, then the rest as the map has them.
-    chain_ids = [p.id for p in _chain(world, here_id)]
-    ordered = sorted(
-        places, key=lambda p: chain_ids.index(p.id) if p.id in chain_ids else len(chain_ids)
-    )
-    listed = ordered[:RECORD_LIMIT]
-    if listed:
-        lines.append("Places the story has established:")
-    for place in listed:
-        head = f"- {place.name} ({place.kind or 'place'}"
-        parent = by_id.get(place.inside or "")
-        if parent is not None:
-            head += f", in {parent.name}"
-        head += ")"
-        said = [" ".join(place.what.split())] if place.what.strip() else []
-        if place.state:
-            said.append(f"Now: {' '.join(place.state.split())}")
-        inside = [q.name for q in places if q.inside == place.id]
-        if inside:
-            said.append(f"Inside it: {', '.join(inside)}")
-        what = " ".join(s if s.endswith((".", "!", "?")) else s + "." for s in said)
-        lines.append(f"{head}: {what}" if what else head)
-    shown = {p.id for p in listed}
-    ways = [
-        f"- from {place_name(world, k.a)} to {place_name(world, k.b)}: {words}"
-        for k in world.links
-        if (k.a in shown or k.b in shown)
-        and (words := ", ".join(w for w in (k.direction, k.distance) if w))
-    ]
-    if ways:
-        lines.append("Ways between them, as the story told them:")
-        lines += ways[:RECORD_LIMIT]
-    others = [
-        f"- {name}: " + ("just outside " if name in world.outside else "") + chain_words(pid)
-        for name, pid in world.where.items()
-        if name != held and pid in by_id
-    ]
-    if others:
-        lines.append("Who is where:")
-        lines += others[:RECORD_LIMIT]
-    things = [
-        t
-        for t in reversed(list(world.things.values()))  # the newest first
-        if t.carried_by or (t.at is not None and t.at in by_id)
-    ]
-    if things:
-        lines.append("Things, as the story left them:")
-        for thing in things[:RECORD_LIMIT]:
-            at = (
-                f"carried by {thing.carried_by}"
-                if thing.carried_by
-                else f"at {place_name(world, thing.at)}"
-            )
-            lines.append(f"- {thing.name}: {at}" + (f", {thing.state}" if thing.state else ""))
-    return "\n".join(lines)
-
-
 # --- The reply, held to account ----------------------------------------------
-
-
-def parse_world_reply(text: str) -> dict[str, Any]:
-    """The read's JSON object; ValueError when there is none."""
-    return extract_json(text, dict, "map changes")
 
 
 def _entries(reply: dict[str, Any], field: str) -> list[dict[str, Any]]:
@@ -673,11 +371,6 @@ def several(described: str) -> bool:
     return head.endswith("s") and not head.endswith(("ss", "us", "is", "'s"))
 
 
-def _sex_of(text: str) -> set[str]:
-    words = set(re.findall(r"[a-z]+", text.lower()))
-    return ({"f"} if words & _FEMALE else set()) | ({"m"} if words & _MALE else set())
-
-
 # Words a place's name shares with any passage, never enough to name it.
 _PLACE_NOISE = _ROAD_NOISE | frozenset("old new place area land lands".split())
 # Places someone walks about inside, whatever grid cells they span; a region
@@ -696,45 +389,6 @@ def _names_place(text: str, place: WorldPlace) -> bool:
     return False
 
 
-def _elsewhere(
-    world: WorldMap,
-    delta: WorldDelta,
-    place_id: str,
-    region: tuple[float, float, float],
-    source: str,
-    entry: dict[str, Any],
-) -> bool:
-    """Whether a `where` entry puts someone standing in `region` in a place
-    lying wholly in other regions, which its passage doesn't name. A place
-    with no spot yet (new in this reply) or a road (a line, through many
-    regions) is never elsewhere."""
-    place = next((p for p in delta.places if p.id == place_id), None) or world.places.get(place_id)
-    centre = position_any(world, delta, place_id)
-    if place is None or centre is None or place.kind == "route":
-        return False
-    if meets(centre, size_of(place) / 2, region):
-        return False
-    # A place in something that reaches the region they stand in (a house
-    # in a town three cells wide) is not elsewhere: the grid is for open
-    # country. Live (Oct 18 2026) Ines walked across Marrowgate to the
-    # reeve's hall and the read's move was refused as another region's.
-    # Only a town, a site or a building counts, and the walk stops at the
-    # first wide place: the designed regions lie inside the story's region
-    # (a forest, a desert, the delta), which reaches every cell, and
-    # counting it let "The fields were empty." take John to the North
-    # Woodlot again.
-    for outer in _chain(world, place.inside)[:8]:
-        if outer.kind not in _REACHES_ACROSS:
-            break
-        around = position_any(world, delta, outer.id)
-        if around is not None and meets(around, size_of(outer) / 2, region):
-            return False
-    quote = _text(entry.get("quote"))
-    span = locate_quote(source, quote) if quote else None
-    around = _sentences_to(source, span[1]) if span is not None else quote
-    return not _names_place(around, place)
-
-
 def _sentences_to(source: str, end: int) -> str:
     """The sentence the quote ends in, and the one before it."""
     head = source[:end]
@@ -743,15 +397,6 @@ def _sentences_to(source: str, end: int) -> str:
     rest = source[end:]
     stop = re.search(r"[.!?…]['\"”’]?(\s|$)", rest)
     return source[start : end + (stop.end() if stop else len(rest))]
-
-
-def _other_sex(described: str, around: str) -> bool:
-    """Whether the passage around a naming speaks only of the other sex than
-    the unknown's description. Live (Oct 17 2026): the watchwoman at the
-    gate, "a lean woman in her forties", was named Marcus Webb from
-    '"Marcus Webb," he said'."""
-    theirs, here = _sex_of(described), _sex_of(around)
-    return len(theirs) == 1 and len(here) == 1 and theirs != here
 
 
 def _parents_first(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -835,435 +480,6 @@ def _furniture_folded(world: WorldMap, reply: dict[str, Any]) -> tuple[dict[str,
             (n, folded[key(n)]) for n in (_text(e.get("name")) for e in entries) if key(n) in folded
         )
     ]
-
-
-def resolve_reply(
-    world: WorldMap,
-    reply: dict[str, Any],
-    *,
-    source: str,
-    people: Sequence[Character],
-    author_says: bool = False,
-    marked: Mapping[str, tuple[float, float]] | None = None,
-    moves_fixed: bool | None = None,
-    standing_in: Mapping[str, tuple[float, float, float]] | None = None,
-    together: Collection[str] = (),
-) -> tuple[WorldDelta, list[str]]:
-    """What the reply changes, as a delta on `world`, and what was refused
-    and why (for the log and the panel). `source` is the author's turn and
-    the passage: every entry's quote must be found in it.
-
-    `author_says`: the turn is the author's Direction or Narration, which
-    state what is so (the author, Oct 16 2026: "The Director must be able to
-    make as broad and complete changes as possible"). Then, and only then, a
-    place already on the map may be taken off it ("gone"), renamed ("was"
-    beside its new "name", or "renamed"), resized ("size"), put inside
-    another ("inside") or moved: to a spot the author marked (`marked`: the
-    spots the reply's place entries name, by the entry's name as compared
-    with `key`, resolved by the session from the turn's marks), or by a link
-    with a direction and a distance from a place that has its spot. On any
-    other turn those are refused, said in `refused`, and the map stands:
-    places are placed once (engine/world_layout.py).
-
-    `moves_fixed`: the turn may move a thing that can't be taken
-    (engine/takeable.py: the town's stores, a statue, a well): the author's
-    Direction or Narration, or a turn under Fiat (the author, Oct 17 2026).
-    On any other turn such a thing stays where it is and only its state may
-    change: live, the read moved "The town's stores" from Hellsville into
-    the farmhouse on a passage that only named them. None: as `author_says`.
-
-    `standing_in`: in a story the world designer builds (engine/regions.py),
-    the region of its grid (west, north, side) each person stands in now. A
-    place lying wholly in other regions is where someone is only when the
-    passage names it, in the quote's sentence or the one before: live (Oct
-    18 2026), John went out onto his own fields, the read took "The fields
-    were empty." for the North Woodlot, the designed region next door whose
-    words said dead farmland, and the map had him there.
-
-    `together`: by the map's names, who was in the author's character's
-    scene before this passage. A place one of them is put in, within reach
-    of where they stand, is within reach of the others going there with
-    them; never of anyone else."""
-    # `added` is always a list from here: a delta that changes known places
-    # and makes none must still skip their copies on a fold without them.
-    delta = WorldDelta(added=[])
-    reply, refused = _furniture_folded(world, reply)
-    marked = marked or {}
-    if moves_fixed is None:
-        moves_fixed = author_says
-
-    def quoted(entry: dict[str, Any]) -> str | None:
-        quote = _text(entry.get("quote"))
-        span = locate_quote(source, quote) if quote else None
-        return source[span[0] : span[1]] if span else None
-
-    def unplace(place: WorldPlace) -> None:
-        place.x, place.y = None, None
-        if place.id not in delta.moved:
-            delta.moved.append(place.id)
-
-    # Places first, so links and people can name places added in this reply.
-    # A "renamed" entry is a place entry with "was" beside its new name.
-    entries = _parents_first(
-        _entries(reply, "places")
-        + [
-            {"name": e.get("now"), "was": e.get("was"), "quote": e.get("quote")}
-            for e in _entries(reply, "renamed")
-        ]
-    )
-    for entry in entries:
-        name = _text(entry.get("name"))
-        if not name or quoted(entry) is None:
-            refused.append(f"place {name or '(unnamed)'}: no quote found")
-            continue
-        kind = _text(entry.get("kind")).lower() or None
-        if kind not in PLACE_KINDS:
-            kind = None
-        existing = find_place(world, name, delta.places)
-        road_alias = False
-        if existing is None and not _text(entry.get("was")):
-            existing = known_road(world, name, kind, delta.places)
-            road_alias = existing is not None
-        inside_name = _text(entry.get("inside"))
-        inside = find_place(world, inside_name, delta.places) if inside_name else None
-        was = _text(entry.get("was"))
-        rename: str | None = None
-        if was:
-            old_id = find_place(world, was, delta.places)
-            if old_id is None:
-                refused.append(f"rename {was} -> {name}: {was} is not on the map")
-            elif existing is not None and existing != old_id:
-                refused.append(f"rename {was} -> {name}: {name} is another place's name")
-                existing = old_id
-            elif not author_says:
-                refused.append(f"rename {was} -> {name}: {_ONLY_AUTHOR} renames a place")
-                existing = old_id  # the entry is about the old place, under its name
-            else:
-                existing = old_id
-                rename = name
-        if existing is not None:
-            pending = next((p for p in delta.places if p.id == existing), None)
-            old = pending or world.places[existing]
-            changed = old.model_copy(deep=True)
-            # What a place is, its kind and where it is stand once known (an
-            # imported map's are the author's): a later passage's words for it
-            # were the moment's ("where four people have set an ambush", "at the
-            # far end of the street, south of where Jane stood"). What a passage
-            # does to it is its state.
-            changed.what = changed.what or _text(entry.get("what"))
-            state = _text(entry.get("state"))
-            if state and changed.state and _RESTORED.search(state):
-                state = ""  # rebuilt, repaired: as it was, not a state of its own
-                changed.state = ""
-            changed.state = state or changed.state
-            changed.kind = changed.kind or kind  # type: ignore[assignment]
-            known_places = {**world.places, **{p.id: p for p in delta.places}}
-            if road_alias and key(name) not in {key(a) for a in changed.aliases}:
-                # Another name for a road the map has: kept, so a later read
-                # naming it so finds the road at once.
-                changed.aliases.append(name)
-            if rename is not None and key(rename) != key(changed.name):
-                # The old name stays an alias: a later read (or the author)
-                # naming it so finds this place rather than making a second.
-                if changed.name not in changed.aliases:
-                    changed.aliases.append(changed.name)
-                changed.name = rename
-                delta.renamed[existing] = rename
-            # Another name for a known road says nothing new of where it is.
-            renest = (
-                not road_alias
-                and inside is not None
-                and inside != changed.inside
-                and not _would_loop(world, delta, changed.id, inside)
-            )
-            if (
-                # A vehicle (or a room in one) has no spot of its own and
-                # goes where the passage docks it; once in a bay, it stayed
-                # there for good (the review, Oct 15 2026).
-                (changed.inside is None or moves(known_places, changed))
-                and changed.x is None  # a placed place has its spot: never moved
-                and renest
-            ):
-                changed.inside = inside
-            elif renest and not author_says:
-                refused.append(f"place {name}: {_ONLY_AUTHOR} puts a place inside another")
-            elif renest:  # the author's say: inside it, placed there anew
-                changed.inside = inside
-                if not moves(known_places, changed):
-                    unplace(changed)
-            size = None if road_alias else _size(entry.get("size"))
-            if size is not None and size != size_of(changed):
-                if author_says:
-                    changed.size = size
-                else:
-                    refused.append(f"place {name}: {_ONLY_AUTHOR} resizes a place")
-            spot = marked.get(key(name)) or (marked.get(key(was)) if was else None)
-            if spot is not None and not moves(known_places, changed):
-                if author_says:
-                    changed.x, changed.y = spot  # the session fits it in what is there
-                    if changed.id not in delta.moved:
-                        delta.moved.append(changed.id)
-                else:
-                    refused.append(f"place {name}: {_ONLY_AUTHOR} moves a place")
-            delta.places = [p for p in delta.places if p.id != existing] + [changed]
-        else:
-            delta.places.append(
-                WorldPlace(
-                    name=name,
-                    kind=kind,  # type: ignore[arg-type]
-                    inside=inside,
-                    what=_text(entry.get("what")),
-                    state=_text(entry.get("state")),
-                    # The read's sense of scale, when it has one: without it
-                    # a vast castle got a building's 40 m and the four-tile
-                    # box that goes with it (the author's castle, Oct 15 2026).
-                    # The layout clamps it to its parent (world_layout.place_one).
-                    size=_size(entry.get("size")),
-                )
-            )
-            delta.added.append(delta.places[-1].id)
-    for entry in _entries(reply, "gone"):
-        name = _text(entry.get("name"))
-        if not name or quoted(entry) is None:
-            refused.append(f"gone {name or '(unnamed)'}: no quote found")
-            continue
-        gone = find_place(world, name, delta.places)
-        if gone is None:
-            refused.append(f"gone {name}: not on the map")
-            continue
-        if not author_says:
-            refused.append(f"gone {name}: {_ONLY_AUTHOR} removes a place")
-            continue
-        delta.places = [p for p in delta.places if p.id != gone]
-        if delta.added is not None and gone in delta.added:
-            delta.added.remove(gone)  # made and unmade in one reply: nothing
-            continue
-        delta.renamed.pop(gone, None)
-        if gone in delta.moved:
-            delta.moved.remove(gone)
-        if gone not in delta.removed:
-            delta.removed.append(gone)
-    for entry in _entries(reply, "links"):
-        label = f"{_text(entry.get('from'))} -> {_text(entry.get('to'))}"
-        quote = quoted(entry)
-        if quote is None:
-            refused.append(f"link {label}: no quote found")
-            continue
-        a = find_place(world, entry.get("from"), delta.places)
-        b = find_place(world, entry.get("to"), delta.places)
-        if a is None or b is None or a == b:
-            refused.append(f"link {label}: a place not on the map")
-            continue
-        if a in delta.removed or b in delta.removed:
-            refused.append(f"link {label}: taken off the map")
-            continue
-        if _is_vehicle(world, delta, a) or _is_vehicle(world, delta, b):
-            refused.append(f"link {label}: a vehicle moves, so it has no fixed link")
-            continue
-        direction = _said(entry.get("direction"))
-        words = _DIRECTIONS.findall(direction or "")
-        if direction and words and not any(w.lower() in quote.lower() for w in words):
-            direction = None  # a direction its own quote doesn't carry is a guess
-        distance = _said(entry.get("distance"))
-        mover = _link_mover(world, delta, a, b, direction, distance) if author_says else None
-        old = next(
-            (link for link in [*world.links, *delta.links] if {link.a, link.b} == {a, b}),
-            None,
-        )
-        if old is not None and mover is None:
-            if old.distance and distance and key(distance) != key(old.distance):
-                delta.conflicts.append(
-                    f"{place_name_any(world, delta, a)} – {place_name_any(world, delta, b)}: "
-                    f"the map keeps {old.distance}; the passage says {distance}"
-                )
-                distance = old.distance
-            distance = distance or old.distance
-            if direction is None and old.direction and old.a == a:
-                direction = old.direction
-        if mover is not None:
-            # The author's say: the place is where the link puts it, placed
-            # again from the other end (`place_new` reads this link first).
-            unplace(mover)
-            delta.places = [p for p in delta.places if p.id != mover.id] + [mover]
-        delta.links = [k for k in delta.links if {k.a, k.b} != {a, b}]
-        delta.links.append(WorldLink(a=a, b=b, direction=direction, distance=distance))
-    named_people = [n for n in world.where if not is_unknown(n)]
-
-    # A place someone in the company standing within reach of it is put in
-    # this reply is within reach of the rest of the company going there with
-    # them (live, Oct 18 2026: a Narration took Adelaide and Silas up the
-    # rail to the Skyport; the read moved Silas and forgot Adelaide, and on
-    # the next passage her move into their carriage was refused as another
-    # region's, her own spot being three kilometres behind). The company
-    # only: anyone standing in the next region, restated where they are,
-    # would otherwise open it to every misread. By the map's names, as
-    # `standing_in` is kept ("Silas" is "Silas Brack").
-    def map_name(who: str) -> str:
-        if any(same_person(who, c) for c in people):
-            return person_name(who, people, named_people)
-        return unknown_for(who, world, delta) or person_name(who, people, named_people)
-
-    company = set(together)
-    shared: set[str] = set()
-    if standing_in and company:
-        for entry in _entries(reply, "where"):
-            who = _text(entry.get("who"))
-            name = map_name(who) if who else None
-            place = find_place(world, entry.get("place"), delta.places)
-            region = standing_in.get(name) if name in company else None
-            if place is not None and region is not None and quoted(entry) is not None:
-                if not _elsewhere(world, delta, place, region, source, entry):
-                    shared.add(place)
-    for entry in _entries(reply, "where"):
-        who = _text(entry.get("who"))
-        # A name starts with a capital; a description ("the woman") doesn't.
-        # `islower`, not `not isupper`: a script with no case (CJK) is a name too.
-        # Someone in the story is a name whatever it looks like: "The Hollow
-        # King" was refused as a description (the review, Oct 15 2026).
-        known = any(same_person(who, c) for c in people) if who else False
-        label = None if known or not who else unknown_for(who, world, delta)
-        described = (
-            bool(who)
-            and not known
-            and label is None
-            and (_NOT_A_NAME.match(who) is not None or who[0].islower() or is_unknown(who))
-        )
-        if not who or (described and (is_unknown(who) or not _describes_one(who))):
-            refused.append(f"where {who or '(nobody)'}: not a name")
-            continue
-        if quoted(entry) is None:
-            refused.append(f"where {who}: no quote found")
-            continue
-        place = find_place(world, entry.get("place"), delta.places)
-        if place is None:
-            refused.append(f"where {who} @ {_text(entry.get('place'))}: not on the map")
-            continue
-        if place in delta.removed:
-            refused.append(f"where {who} @ {_text(entry.get('place'))}: taken off the map")
-            continue
-        canonical = (
-            None
-            if label is not None or described
-            else person_name(
-                who, people, [*named_people, *(n for n in delta.where if not is_unknown(n))]
-            )
-        )
-        # Someone new has no region yet; the rest stand where they stand.
-        region = (standing_in or {}).get(label or canonical or "")
-        if (
-            region is not None
-            and not (place in shared and (label or canonical) in company)
-            and _elsewhere(world, delta, place, region, source, entry)
-        ):
-            refused.append(
-                f"where {who} @ {_text(entry.get('place'))}: in another region than they "
-                "stand in, and the passage doesn't name it"
-            )
-            continue
-        if described:
-            # Placed but not named: shown as Unknown 1, 2… until a passage
-            # names them (the author, Oct 17 2026), the description kept so
-            # the next read knows them.
-            label = next_unknown(world, delta)
-            delta.unknowns[label] = who[0].lower() + who[1:] if _ARTICLE.match(who) else who
-        outside = entry.get("outside") is True
-        if label is not None:
-            delta.where[label] = place
-            delta.outside[label] = outside
-            continue
-        assert canonical is not None
-        if (
-            "outside" not in entry
-            and not _at_a_spot_inside(reply, canonical)
-            and _left_outside(world, delta, canonical, place, quoted(entry) or "")
-        ):
-            outside = True
-        delta.where[canonical] = place
-        delta.outside[canonical] = outside
-    for entry in _entries(reply, "named"):
-        label = unknown_for(_text(entry.get("who")), world, delta)
-        name = _text(entry.get("name"))
-        if label is None or not name or _NOT_A_NAME.match(name) or name[0].islower():
-            refused.append(
-                f"named {_text(entry.get('who')) or '(nobody)'}: no such unknown or name"
-            )
-            continue
-        quote = _text(entry.get("quote"))
-        span = locate_quote(source, quote) if quote else None
-        if span is None:
-            refused.append(f"named {label} {name}: no quote found")
-            continue
-        said = {**world.unknowns, **delta.unknowns}.get(label, "")
-        if _other_sex(said, _sentences_to(source, span[1])):
-            refused.append(f"named {label} {name}: the passage names someone else")
-            continue
-        canonical = person_name(name, people, named_people)
-        delta.named[label] = canonical
-        delta.unknowns.pop(label, None)
-        if label in delta.where:
-            delta.where.setdefault(canonical, delta.where.pop(label))
-        if label in delta.outside:
-            delta.outside.setdefault(canonical, delta.outside.pop(label))
-    near_people = _near_places(world, delta, people)
-    for entry in _entries(reply, "things"):
-        name = _text(entry.get("name"))
-        if not name or quoted(entry) is None:
-            refused.append(f"thing {name or '(unnamed)'}: no quote found")
-            continue
-        at = _text(entry.get("at"))
-        at_place = find_place(world, at, delta.places) if at else None
-        near = near_people | {p.id for p in _chain(world, at_place)} if at_place else near_people
-        existing = _find_thing(world, name, near)
-        thing = existing.model_copy(deep=True) if existing is not None else WorldThing(name=name)
-        if at.lower().startswith("carried by"):
-            holder = at[len("carried by") :].strip()
-            holder = person_name(holder, people, [*world.where, *delta.where])
-            if can_be_taken(thing.name) or is_vehicle(thing.name):
-                thing.carried_by = holder
-                thing.at = None
-            else:
-                # Too heavy to carry off (an anvil, a boulder): dragged along,
-                # it is where they are (the replay, Oct 17 2026: an anvil
-                # "carried by" its dragger was taken into her hands).
-                thing.at = delta.where.get(holder) or world.where.get(holder) or thing.at
-                thing.carried_by = None
-        elif at:
-            found = find_place(world, at, delta.places)
-            if found is not None or existing is None:
-                thing.at = found
-                thing.carried_by = None
-            # A place the map hasn't ("the anvil on its stump"): a known thing
-            # stays where it was (it was taken off the map, the replay).
-        if thing.at in delta.removed:  # as the fold leaves it: where the place was
-            thing.at = world.places[thing.at].inside
-        held = (
-            existing is not None
-            and not moves_fixed
-            and existing.carried_by is None
-            and (thing.at, thing.carried_by) != (existing.at, existing.carried_by)
-            and fixed_thing(existing.name)
-        )
-        if held:
-            refused.append(
-                f"thing {existing.name}: can't be taken, so it moves only on the author's "
-                "Direction or Narration, or a turn under Fiat"
-            )
-            thing.at, thing.carried_by = existing.at, existing.carried_by
-        thing.state = _text(entry.get("state")) or thing.state
-        if held and thing == existing:
-            continue  # its move refused, and nothing else about it changed
-        delta.things = [t for t in delta.things if t.id != thing.id] + [thing]
-    weather = _weather_entry(reply)
-    if weather is not None:
-        words = _text(weather.get("now"))
-        if not words:
-            pass  # null, or nothing said: the weather is as it was
-        elif quoted(weather) is None:
-            refused.append(f"weather {words}: no quote found")
-        else:
-            delta.weather = words
-    refused += _drop_named_only(delta, marked, author_says=author_says)
-    return delta, refused
 
 
 # Kinds too wide to put beside the story on a guess (`_drop_named_only`).
@@ -1478,54 +694,7 @@ _AT_THE_DOOR = re.compile(
 )
 
 
-def _at_a_spot_inside(reply: Mapping[str, Any], who: str) -> bool:
-    """The read also stood `who` at a spot ("at": the round table, the
-    counter), which is inside the building unless the spot's words put it at
-    its door: they are in, whatever flag was left off. Live (Brasshaven, Oct
-    23 2026), the inspector followed the author's character into the Copper
-    Kettle, the read put him at the table twice over, and `_left_outside`
-    kept him at the door in the Row, where the author's turns had left him."""
-    at = reply.get("at")
-    if not isinstance(at, dict):
-        return False
-    spot = at.get(who)
-    if not isinstance(spot, str) or not spot.strip():
-        return False
-    return _AT_THE_DOOR.search(spot) is None and not _DOORWAY.search(spot)
-
-
 _DOORWAY = re.compile(r"\b(door|doorway|threshold|entrance|gate)\b", re.IGNORECASE)
-
-
-def _left_outside(world: WorldMap, delta: WorldDelta, who: str, place: str, quote: str) -> bool:
-    """The read gave no "outside" for someone it put at a building: whether
-    the passage leaves them outside it all the same. The read writes the flag
-    only when someone is outside (`map_read.outside`), and once in six
-    openings of Doomsville with a map it left it off for John on the porch
-    ("The porch boards creaked under new weight, and from inside came…"),
-    who was then stood inside a house he had not entered. Someone who was
-    elsewhere, or at its door, goes in only when the quote shows them going in;
-    someone placed for the first time is outside when the quote puts them at
-    its porch, steps or yard. A room is inside its building: someone the read
-    puts in one is in it unless the quote has them at its door (the lab test,
-    Oct 18 2026: Maren, outside at the inn's stable yard, was read in its
-    front room as the passage had her, and was kept out in the street)."""
-    found = world.places.get(place) or next((p for p in delta.places if p.id == place), None)
-    if found is None or found.kind not in ("building", "room"):
-        return False
-    if _GOING_IN.search(quote):
-        return False
-    if found.kind == "room":
-        return _AT_THE_DOOR.search(quote) is not None
-    before = world.where.get(who)
-    if before is not None:
-        if place in {p.id for p in _chain(world, before)[1:]}:
-            # From a room of the building to the building: inside it all
-            # along (live, Oct 18 2026: Silas came through the back-room
-            # curtain into the workshop and was stood outside in the Row).
-            return False
-        return before != place or who in world.outside
-    return _AT_THE_DOOR.search(quote) is not None
 
 
 def is_unknown(name: str) -> bool:
@@ -1581,51 +750,27 @@ def person_name(name: str, people: Sequence[Character], placed: Iterable[str]) -
     return name
 
 
-def describe_delta(world: WorldMap, delta: WorldDelta) -> str:
-    """One line for the status bar: what the passage changed on the map."""
-    parts: list[str] = []
-    new = [p.name for p in delta.places if p.id not in world.places]
-    if new:
-        parts.append("new " + ", ".join(new))
-    changed_state = [
-        f"{p.name} now {p.state or 'as it was'}"
-        for p in delta.places
-        if p.id in world.places and p.state != world.places[p.id].state
-    ]
-    parts.extend(changed_state)
-    # The author's Direction: taken off, renamed, moved, resized, put inside.
-    gone = [world.places[pid].name for pid in delta.removed if pid in world.places]
-    if gone:
-        parts.append("gone: " + ", ".join(gone))
-    for pid, new_name in delta.renamed.items():
-        if pid in world.places:
-            parts.append(f"{world.places[pid].name} now {new_name}")
-    for pid in delta.moved:
-        if pid in world.places:
-            parts.append(f"{place_name_any(world, delta, pid)} moved")
-    after = applied(world, delta)
-    for p in delta.places:
-        old = world.places.get(p.id)
-        if old is None:
-            continue
-        if p.size is not None and p.size != size_of(old):
-            parts.append(f"{p.name} now {describe_metres(p.size)}")
-        if p.inside != old.inside and p.inside is not None:
-            parts.append(f"{p.name} now in {place_name_any(world, delta, p.inside)}")
-    for who, place_id in delta.where.items():
-        if world.where.get(who) != place_id:
-            parts.append(f"{who} at {place_name(after, place_id)}")
-    changed = [t.name for t in delta.things]
-    if changed:
-        parts.append("things: " + ", ".join(changed))
-    if delta.weather is not None and delta.weather != world.weather:
-        parts.append(f"weather now {delta.weather}")
-    if delta.conflicts:
-        parts.append(f"{len(delta.conflicts)} distance kept against the passage")
-    return "; ".join(parts) if parts else "no change"
-
-
 # --- Folding ------------------------------------------------------------------
+
+
+def place_delta(
+    world: WorldMap,
+    delta: WorldDelta,
+    held: str | None,
+    near_point: tuple[float, float] | None = None,
+) -> None:
+    """Give the delta's new places their positions, for good, and note any
+    stated distance the map's established places disagree with. `held`: the
+    author's character, beside whom a place with nothing else to go on sits
+    (`near_point`: exactly where they stand, when the program knows)."""
+    near = world.where.get(held or "")
+    place_new(world, delta.places, delta.links, near, near_point)
+    # A way that moved a place (the author's Direction) is its new spot, not
+    # a disagreement with where the map had it.
+    standing = [k for k in delta.links if k.a not in delta.moved and k.b not in delta.moved]
+    for note in geometry_conflicts(world, standing):
+        if note not in delta.conflicts:
+            delta.conflicts.append(note)
 
 
 def applied(
@@ -1826,26 +971,6 @@ def _prune(world: WorldMap) -> None:
             thing.at = None
     world.seen = [pid for pid in world.seen if pid in places]
     world.visited = {who: [p for p in ps if p in places] for who, ps in world.visited.items()}
-
-
-def place_delta(
-    world: WorldMap,
-    delta: WorldDelta,
-    held: str | None,
-    near_point: tuple[float, float] | None = None,
-) -> None:
-    """Give the delta's new places their positions, for good, and note any
-    stated distance the map's established places disagree with. `held`: the
-    author's character, beside whom a place with nothing else to go on sits
-    (`near_point`: exactly where they stand, when the program knows)."""
-    near = world.where.get(held or "")
-    place_new(world, delta.places, delta.links, near, near_point)
-    # A way that moved a place (the author's Direction) is its new spot, not
-    # a disagreement with where the map had it.
-    standing = [k for k in delta.links if k.a not in delta.moved and k.b not in delta.moved]
-    for note in geometry_conflicts(world, standing):
-        if note not in delta.conflicts:
-            delta.conflicts.append(note)
 
 
 def world_at(

@@ -30,9 +30,10 @@ most improvements here will be related to better integrating the plots into
 the story. Making it more natural, more consistent, etc. As above, nothing
 is broken, but there are definitely improvements to be made here.
 
-Stories on a map are withdrawn for now. The map of the earlier 2.0 betas is
-being redesigned as a mode of its own, with rules of its own; a story that was
-played on one goes on as a story without it.
+The map of the earlier 2.0 betas is gone from ordinary stories: a story that
+was played on one goes on as a story without it. What the map became is
+Visual Stories (below): a game played on a map designed in advance, with
+rules of its own.
 
 ### New in version 2
 
@@ -83,15 +84,6 @@ played on one goes on as a story without it.
   itself, portraits and all, in as much or as little detail as you like. For
   a story set in a world that already exists, **Fill with lore characters…**
   writes cards for its people, the ones you name first.
-- **The map is a view, and it is painted** (2.1.0b1, for testing). Nothing on
-  the map moves by itself any more: click where to go, a building to go in,
-  a door, a person or a thing, and the turn goes in the box for you to send;
-  the move is made when it goes, and your figure walks there. Each area you
-  stand in is painted once as a storybook illustration from the map itself,
-  with the people and things standing on it where the map has them. The
-  Region map is a board of those paintings, laid out by direction rather
-  than to scale. Doomsville with a map and Brasshaven come with every area
-  designed and painted.
 - **A distrusted root out of the bundle** (2.0.0b5). The AppImage no longer
   trusts emSign ECC Root CA - G3, the eMudhra root whose intermediates were
   found to have recoverable keys in October 2026, and Private Mode's client

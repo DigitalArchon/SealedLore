@@ -82,5 +82,4 @@ select = ["E", "F", "I", "UP", "B"]
 testpaths = ["tests"]
 markers = [
     "real_crop: the crop dialog is driven by the test, not answered for it",
-    "maps_withdrawn: the app as shipped, with no map offered (models/story.MAPS_OFFERED)",
 ]

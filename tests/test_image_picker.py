@@ -131,25 +131,17 @@ def test_recommended_models_are_offered_beside_the_field_with_their_notes(app):
     from sealedlore.gui.model_picker import ModelField
     from sealedlore.models.config import RECOMMENDED_IMAGE_MODELS, recommended_model
 
-    choices = RECOMMENDED_IMAGE_MODELS["map_isometric_model"]
-    # Paintings of a place (the author, Oct 17 2026): FLUX.3 Klein, as for
-    # the sprites, with Seedream and Nano Banana enhanced; each named as the
-    # model, its edit version sent for it (the author, Oct 18 2026).
-    assert choices[0].id == Config().map_isometric_model == Config().map_picture_model
+    choices = RECOMMENDED_IMAGE_MODELS["portrait_model"]
+    # FLUX.3 Klein by default (the author, Oct 18 2026), each named as the
+    # model, its edit version sent for it when a picture goes.
+    assert choices[0].id == Config().portrait_model
     assert choices[0].id == "blackforestlabs/flux-3/klein/text-to-image"
-    assert [c.id for c in choices if c.tag == "enhanced"] == [
-        "bytedance/seedream-v5.0-pro",
-        "nano-banana-pro",
-    ]
-    assert "$0.09" in recommended_model("map_isometric_model", choices[1].id).note
-    assert "$0.14" in recommended_model("map_isometric_model", choices[2].id).note
-    # Not Qwen (the author, Oct 17 2026: its paintings drew roofs as noise).
-    assert recommended_model("map_isometric_model", "qwen-image") is None
-    assert "klein" in Config().map_picture_model
+    assert recommended_model("portrait_model", choices[0].id) is choices[0]
+    assert recommended_model("portrait_model", "no-such-model") is None
     field = ModelField("", recommended=choices)
     actions = [a for a in field.recommended_button.menu().actions() if not a.isSeparator()]
     assert actions[0].text() == "FLUX.3 Klein (default)"
-    assert not actions[1].isEnabled() and "layout" in actions[1].text()  # the note
+    assert not actions[1].isEnabled() and "klein" in actions[1].text()  # the note
     premium = next(a for a in actions if a.text().startswith("Seedream 5.0 Pro"))
     premium.trigger()
     assert field.text() == "bytedance/seedream-v5.0-pro"
@@ -172,8 +164,6 @@ def test_the_text_model_fields_offer_what_was_measured_for_them(app):
         ("scene_model", dialog.scene_model),
         ("plot_model", dialog.plot_model),
         ("lore_model", dialog.lore_model),
-        ("map_model", dialog.map_model),
-        ("map_art_model", dialog.map_art_model),
     ):
         assert field.recommended_button is not None, role
         first = RECOMMENDED_TEXT_MODELS[role][0].id

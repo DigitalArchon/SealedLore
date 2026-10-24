@@ -213,14 +213,16 @@ def test_the_state_and_who_may_ask(app, tmp_path, sockets, story, cast):
     window.close()
 
 
-def test_a_story_that_keeps_a_map_stays_off_the_phone(app, tmp_path, sockets, story, cast):
-    mapped = story.model_copy(
-        update={"defaults": story.defaults.model_copy(update={"world_map": True})}
-    )
-    window, phone = open_window(tmp_path, sockets, mapped, cast, [])
-    assert window.phone_shared(story.id)
-    assert phone.ask("GET", "/api/transcript")[0] == 423
-    assert phone.ask("GET", "/api/stories")[1] == {"stories": []}
+def test_a_visual_story_stays_off_the_phone(app, tmp_path, sockets, story, cast):
+    """A visual story (played on its map in its own window) is never served,
+    shared or not: phones play text stories and chats."""
+    visual = story.model_copy(update={"id": "visual", "title": "On the map", "mode": "visual"})
+    save_story_bundle(StoryBundle(story=visual, cast=cast), root=tmp_path)
+    window, phone = open_window(tmp_path, sockets, story, cast, [])
+    window.config.phone.shared_stories = [story.id, "visual"]
+    assert window.phone_shared("visual")
+    listed = phone.ask("GET", "/api/stories")[1]["stories"]
+    assert [s["id"] for s in listed] == [story.id]
     window.close()
 
 

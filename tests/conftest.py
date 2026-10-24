@@ -142,28 +142,6 @@ class RefusingImages:
 
 
 @pytest.fixture(autouse=True)
-def _no_image_model(monkeypatch):
-    from sealedlore.engine import session_area, session_world_art
-
-    monkeypatch.setattr(session_world_art, "ImageClient", RefusingImages)
-    monkeypatch.setattr(session_area, "ImageClient", RefusingImages)
-    monkeypatch.setattr(session_world_art, "list_image_models", lambda *a, **k: [])
-
-
-@pytest.fixture(autouse=True)
-def _maps_offered(request, monkeypatch):
-    """The map is withdrawn from the app while it is redesigned
-    (`models/story.MAPS_OFFERED`, Oct 24 2026), but its code stays and is
-    kept covered: every test runs with maps offered unless it is marked
-    `maps_withdrawn`, which tests the app as shipped."""
-    from sealedlore.models import story as story_model
-
-    on = request.node.get_closest_marker("maps_withdrawn") is None
-    monkeypatch.setattr(story_model, "MAPS_OFFERED", on)
-    yield
-
-
-@pytest.fixture(autouse=True)
 def memory_keychain():
     from sealedlore.storage import keychain
 

@@ -183,43 +183,6 @@ def test_a_place_stored_without_a_position_is_placed_when_the_map_is_folded():
     assert world_at([node]).model_dump() == world.model_dump()
 
 
-def test_a_vehicle_has_no_spot_of_its_own_and_is_where_the_story_left_it():
-    from sealedlore.engine.world import resolve_reply
-    from sealedlore.engine.world_layout import position
-
-    station, bay = place("Station", "settlement"), None
-    world = grow(WorldMap(), WorldDelta(places=[station]))
-    bay = place("Docking bay three", "room", inside=station.id)
-    ship = place("Sable Crest", "vehicle")
-    world = grow(world, WorldDelta(places=[bay, ship]))
-    assert world.places[ship.id].x is None
-    assert position(world, ship.id) is None  # nowhere yet
-
-    source = "The Sable Crest settled into docking bay three. It was two hours to the lane."
-    delta, refused = resolve_reply(
-        world,
-        {
-            "places": [
-                {"name": "Sable Crest", "inside": "Docking bay three", "quote": "settled into"}
-            ],
-            "links": [
-                {
-                    "from": "Sable Crest",
-                    "to": "Station",
-                    "distance": "two hours",
-                    "quote": "It was two hours to the lane.",
-                }
-            ],
-        },
-        source=source,
-        people=[],
-    )
-    world = grow(world, delta)
-    assert world.links == []
-    assert any("vehicle" in note for note in refused)
-    assert position(world, ship.id) == position(world, bay.id)
-
-
 def test_a_room_inside_a_vehicle_moves_with_it():
     from sealedlore.engine.world_layout import position
 

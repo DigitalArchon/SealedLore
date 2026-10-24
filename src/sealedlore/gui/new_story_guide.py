@@ -27,7 +27,6 @@ from typing import Protocol
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QDialog,
     QFormLayout,
@@ -43,7 +42,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.response_style import PRESET_ORDER, PRESETS
 from sealedlore.gui.sizing import GrowingText, size_to_screen
-from sealedlore.models.story import DEFAULT_RESPONSE_STYLE, Story, maps_offered
+from sealedlore.models.story import DEFAULT_RESPONSE_STYLE, Story
 from sealedlore.storage.repository import StoryBundle
 
 STEPS = ("The story", "Characters", "How it begins", "How it reads")
@@ -124,7 +123,6 @@ class NewStoryGuide(QDialog):
         self.full_setup = False
         self.discarded = False
         self._panel: QWidget | None = None
-        self._map_when_made = False
         self._player_timer = QTimer(self)
         self._player_timer.setSingleShot(True)
         self._player_timer.timeout.connect(self._fill_players)
@@ -190,13 +188,6 @@ class NewStoryGuide(QDialog):
                 "sometimes can go in Lore later."
             ),
         )
-        self.map_box = QCheckBox("Keep a map of the places the story goes")
-        self.map_box.setToolTip(
-            "The story is played on a map that grows as it goes, drawn as you play. "
-            "It can be turned on or off later in Setup."
-        )
-        if maps_offered():  # the map is withdrawn while it is redesigned
-            form.addRow("", self.map_box)
         return page
 
     def _characters_page(self) -> QWidget:
@@ -337,8 +328,6 @@ class NewStoryGuide(QDialog):
         if self._model:
             story.defaults.main_model = self._model
         story.world_bible = self.world.toPlainText().strip() or None
-        story.defaults.world_map = self.map_box.isChecked()
-        self._map_when_made = story.defaults.world_map
         self.made = self._host.guide_make_story(StoryBundle(story=story))
         return self.made
 
@@ -389,7 +378,6 @@ class NewStoryGuide(QDialog):
             return
         story.title = self.title.text().strip() or story.title
         story.world_bible = self.world.toPlainText().strip() or None
-        story.defaults.world_map = self.map_box.isChecked()
         story.style.person = self.person.currentData()
         story.style.tense = self.tense.currentData()
         story.style.response_style = self.length.currentData()
@@ -413,10 +401,6 @@ class NewStoryGuide(QDialog):
         if not self.made and not self._make():
             return False
         self._apply()
-        story = self._story()
-        if story is not None and story.defaults.world_map != self._map_when_made:
-            # A map turned on or off after the story was opened: open it again.
-            self._host.guide_story_changed(reopen=True)
         return True
 
     # --- leaving ----------------------------------------------------------------

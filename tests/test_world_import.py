@@ -13,7 +13,7 @@ from sealedlore.engine.plot_md import parse_plot_markdown
 from sealedlore.engine.prompt import SECTION_MAP, TurnRequest
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
-from sealedlore.engine.world import applied, resolve_reply, world_at
+from sealedlore.engine.world import applied, world_at
 from sealedlore.models.config import Config, ProviderConfig
 from sealedlore.models.node import NodeMeta
 from sealedlore.models.world import WorldDelta
@@ -135,26 +135,6 @@ def test_a_plot_hidden_place_and_all_in_it_stay_off_the_map_until_revealed():
     assert not {"The caves", "Cave mouth"} & {p.name for p in hidden.places.values()}
 
 
-def test_a_read_naming_a_place_of_the_map_lifts_its_fog_and_adds_no_second():
-    world = world_at([], scenario().world_base)
-    town = place(world, "Hellsville")
-    farm = place(world, "Farm")
-    source = "She walked north and came in through the south gate of Hellsville."
-    delta, _ = resolve_reply(
-        world,
-        {
-            "where": [{"who": "Jane", "place": "Hellsville", "quote": "came in through"}],
-            "places": [{"name": "Farm", "what": "behind her", "quote": "She walked north"}],
-        },
-        source=source,
-        people=[],
-    )
-    after = applied(world, delta)
-    assert len(after.places) == len(world.places)
-    assert farm.id in after.seen and town.id in after.seen
-    assert (after.places[farm.id].x, after.places[farm.id].y) == (0.0, 0.0)  # never moved
-
-
 def test_a_new_playthrough_keeps_the_map(tmp_path: Path):
     bundle = bundle_from_scenario(scenario())
     assert bundle.story.defaults.world_map and bundle.story.world_base is not None
@@ -171,7 +151,6 @@ def test_in_play_the_map_starts_from_the_file_and_the_plot_keeps_its_secret(tmp_
         providers=[ProviderConfig(name="nano", base_url="https://nano-gpt.com/api/v1")],
         active_provider_name="nano",
         scene_reads="manual",
-        map_art=False,
     )
     session = StorySession(
         bundle,
@@ -202,36 +181,6 @@ def test_the_mapped_sample_imports_with_its_map():
     assert json.loads(base.model_dump_json())  # it serialises
 
 
-def test_a_read_never_rewrites_what_a_place_of_the_map_is():
-    # Live, reads rewrote the author's places with the moment's words: the
-    # diner became "at the far end of the street, south of where Jane stood".
-    world = world_at([], scenario().world_base)
-    town = place(world, "Hellsville")
-    town.what = "A small walled town."
-    source = "Hellsville's gate shuddered under each blow, the barricade burning."
-    delta, _ = resolve_reply(
-        world,
-        {
-            "places": [
-                {
-                    "name": "Hellsville",
-                    "kind": "building",
-                    "inside": "Farm",
-                    "what": "The gate shuddered under each blow",
-                    "state": "the barricade burning",
-                    "quote": "gate shuddered under each blow",
-                }
-            ]
-        },
-        source=source,
-        people=[],
-    )
-    after = applied(world, delta).places[town.id]
-    assert after.what == "A small walled town." and after.kind == "settlement"
-    assert after.inside is None  # never moved into the farm
-    assert after.state == "the barricade burning"  # what the passage did to it
-
-
 def mapped_session(tmp_path: Path, *, where: str | None = None, rewrite: str = ""):
     """The mapped sample in play, one exchange in; `where` puts Jane at a
     place of the map, `rewrite` has the read describe it in its own words."""
@@ -252,7 +201,6 @@ def mapped_session(tmp_path: Path, *, where: str | None = None, rewrite: str = "
         providers=[ProviderConfig(name="nano", base_url="https://nano-gpt.com/api/v1")],
         active_provider_name="nano",
         scene_reads="manual",
-        map_art=False,
     )
     session = StorySession(
         bundle,
@@ -273,26 +221,6 @@ def map_section(session, jane) -> str:
     return found.text if found is not None else ""
 
 
-def test_the_storyteller_is_told_the_map_the_file_drew(tmp_path: Path):
-    session, jane = mapped_session(tmp_path)
-    text = map_section(session, jane)
-    assert "Jane is at: The farm\n" in text  # the start, before any read
-    assert "The barn (building, 51 m east)" in text  # from where the file put them
-    assert "Hellsville (settlement, 8.0 km / 5 miles north)" in text
-    assert "The Hidden Caves" not in text  # the plot is keeping them hidden
-    assert "- Pickup truck: The barn" in text  # the barn is in the farm
-    assert "The town's stores" not in text  # a thing is listed only where it is
-    assert "Hellsville: north, five miles" not in text  # no way the file doesn't draw
-
-
-def test_in_town_the_file_s_own_words_stand_over_the_reads(tmp_path: Path):
-    session, jane = mapped_session(tmp_path, where="The diner", rewrite="south of where Jane stood")
-    text = map_section(session, jane)
-    assert "Jane is at: The diner, in Hellsville" in text
-    assert "now the town's meeting hall" in text and "where Jane stood" not in text
-    assert "The clinic (building, 270 m north): Elena Ruiz's clinic, in what was the" in text
-
-
 def test_the_map_stays_in_the_tail_and_off_with_the_map(tmp_path: Path):
     session, jane = mapped_session(tmp_path)
     system = session.assemble(
@@ -301,45 +229,6 @@ def test_the_map_stays_in_the_tail_and_off_with_the_map(tmp_path: Path):
     assert "THE MAP HERE" not in system.text  # the tail only: the cache prefix holds
     session.story.defaults.world_map = False
     assert map_section(session, jane) == ""
-
-
-def test_a_map_grown_from_the_story_is_sent_in_its_words_without_distances(tmp_path: Path):
-    from sealedlore.models.world import WorldLink, WorldPlace
-
-    session, jane = mapped_session(tmp_path)
-    session.story.world_base = None  # plain Doomsville: the story grows the map
-    house = WorldPlace(id="h", name="farmhouse", kind="building", what="grey", x=0.0, y=0.0)
-    barn = WorldPlace(id="b", name="barn", kind="building", what="a broken door", x=20.0, y=5.0)
-    kitchen = WorldPlace(id="k", name="kitchen", kind="room", inside="h", x=0.0, y=0.0)
-    session.nodes[-1].meta = NodeMeta(
-        world=WorldDelta(
-            places=[house, barn, kitchen],
-            links=[WorldLink(a="h", b="b", direction="west", distance="twenty yards")],
-            where={"Jane": "k"},
-        )
-    )
-    text = map_section(session, jane)
-    assert "Jane is at: kitchen, in farmhouse" in text
-    assert "barn (building): a broken door" in text  # where code put it is a guess
-    assert "- from farmhouse to barn: west, twenty yards" in text
-
-
-def test_the_story_never_re_measures_two_places_of_the_file(tmp_path: Path):
-    from sealedlore.models.world import WorldLink
-
-    session, jane = mapped_session(tmp_path)
-    world = world_at([], session.story.world_base)
-    creek, town = place(world, "The creek crossing"), place(world, "Hellsville")
-    session.nodes[-1].meta = NodeMeta(
-        world=WorldDelta(
-            links=[WorldLink(a=creek.id, b=town.id, distance="some two miles or more")],
-            where={"Jane": creek.id},
-        )
-    )
-    text = map_section(session, jane)
-    assert "Jane is at: The creek crossing" in text
-    assert "two miles or more" not in text  # the file says where both are
-    assert "Hellsville (settlement, 5.4 km / 3.4 miles north)" in text
 
 
 def test_a_map_s_places_have_the_same_ids_at_every_import():

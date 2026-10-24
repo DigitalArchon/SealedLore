@@ -23,7 +23,6 @@ from sealedlore.models.embedding import EmbeddingCacheEntry
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import Node
 from sealedlore.models.prompt_edit import PromptEdit
-from sealedlore.models.scene import SceneState
 from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
 from sealedlore.models.supporting import SupportingCast
@@ -318,29 +317,6 @@ def copy_story(story_id: str, *, title: str, root: Path | None = None) -> StoryB
     for record in read_api_log(story_id, root=root):
         append_api_log(bundle.story.id, record, root=root)
     copy_image_files(story_id, bundle.story.id, root)
-    return bundle
-
-
-def copy_without_map(
-    story_id: str, *, title: str, scene: SceneState | None, root: Path | None = None
-) -> StoryBundle:
-    """A complete copy (`copy_story`) to play on without the map: the map
-    switched off, so nothing is read, drawn or sent for it, and `scene` (the
-    card as the map had it, `StorySession.scene_without_map`) on the latest
-    message, so the next passage starts where the map had everyone. The
-    map's record and art stay in the copy, unused: Setup's Keep a map
-    brings them back. The original is untouched."""
-    bundle = copy_story(story_id, title=title, root=root)
-    story = bundle.story
-    story.defaults.world_map = False
-    story.area_live = None
-    leaf = next((n for n in bundle.nodes if n.id == story.active_leaf_id), None)
-    if scene is not None:
-        if leaf is not None:
-            scene = scene.model_copy(update={"set_at_node_id": leaf.id})
-            leaf.meta.scene = scene.model_copy(deep=True)
-        story.scene = scene.model_copy(deep=True)
-    save_story_bundle(bundle, root=root)
     return bundle
 
 

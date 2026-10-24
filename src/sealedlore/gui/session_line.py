@@ -25,8 +25,6 @@ ROLE_NAMES = {
     "lore": "Lore picks",
     "authoring": "Authoring",
     "image_prompt": "Picture prompts",
-    "map": "Map reads",
-    "map_art": "Map art",
     "look": "Look",
     "npc": "People",
     "keeper": "Plot keeper",

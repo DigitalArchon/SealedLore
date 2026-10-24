@@ -63,17 +63,6 @@ def test_the_shipped_samples_are_offered_and_import_cleanly():
         assert parsed.ok, f"{path.name}: " + "; ".join(p.describe() for p in parsed.problems)
 
 
-def test_the_samples_of_worlds_of_want_say_things_are_scarce():
-    """`scarce: yes` helps the world designer in a world of want and makes a
-    world without scarcity plainer, so only the samples set in one say it."""
-    scarce = {
-        path.name
-        for _name, path in sample_stories(SAMPLES)
-        if parse_plot_markdown(path.read_text(encoding="utf-8")).scenario.scarce
-    }
-    assert scarce == {"Doomsville with a map.md", "The Ashen Reach.md"}
-
-
 def _quiet_armed(plot, chronicle, day: int = 1) -> set[str]:
     from sealedlore.engine.chronicle import armed
 
@@ -590,36 +579,6 @@ def test_every_sample_character_comes_with_its_portrait():
             )
 
 
-def test_a_sample_s_map_is_the_board_of_its_paintings(app, tmp_path: Path):
-    """Brasshaven on the board (engine/board.py; the author, Oct 23 2026):
-    every area shows its own backdrop painting at the Region level, the
-    works' over the works, with no badge of the old Paintings layer; the
-    story's own map keeps its distances."""
-    window = MainWindow(root=tmp_path, use_mock=True)
-    window.open_setup = lambda *a, **k: False
-    window.resize(1600, 1000)
-    window._import_plot_file(SAMPLES / "Brasshaven.md")
-    session = window.session
-    window.show_world(True)
-    view = window.world_view
-    assert view.board
-    world = session.world()
-    works = next(p for p in world.places.values() if p.name == "The Ashcombe Works")
-    row = next(p for p in world.places.values() if p.name == "Tinker's Row")
-    assert abs(works.x - row.x) > 1000  # the story's map, in metres
-    view.go_region()
-    QApplication.processEvents()
-    for pid in (works.id, row.id):
-        plan = view._plans[pid]
-        assert plan.isVisible() and plan.backdrop is not None, world.places[pid].name
-    assert view.world.places[works.id].size == view.world.places[row.id].size
-    assert not any(b.isVisible() for b in view._badges.values())
-    view.go_to(works.id)
-    assert view.area_in_view().id == works.id
-    window._chat_allows_close = lambda: True
-    window.close()
-
-
 def test_the_guide_s_front_matter_parses_as_written():
     """The review: copied as written, the guide's example front matter was an
     import error (its notes were `#`, read as part of each value)."""
@@ -662,25 +621,6 @@ def test_the_writing_guide_s_place_gate_is_doomsville_s_own():
     assert example.variants[0].requires[0].place == "Hellsville"
 
 
-def test_media_lists_only_the_views_the_map_shows(app, tmp_path: Path):
-    """The review: Media's Map section listed (and Save all wrote) the views
-    of places the map keeps under the fog, the vox relay among them."""
-    window = MainWindow(root=tmp_path, use_mock=True)
-    window.open_setup = lambda *a, **k: False
-    window._import_plot_file(SAMPLES / "The Ashen Reach.md")
-    window.refresh_images()
-    items = [
-        window.images_panel.map_list.item(i).text().split("\n")
-        for i in range(window.images_panel.map_list.count())
-    ]
-    views = [parts[1] for parts in items if parts[0] == "Painting"]
-    assert sorted(views) == ["Hollowmouth", "Shaft Nine"]
-    # The sample's avatars are listed too (Oct 17 2026), one per character.
-    assert sum(parts[0] == "Avatar" for parts in items) >= 2
-    window._chat_allows_close = lambda: True
-    window.close()
-
-
 def test_a_map_sample_is_ready_to_play_on_its_map():
     """Map-first play (engine/area.py): a sample that keeps a map ships its
     tile set, every building with a plan furnished, a walking sprite for
@@ -713,105 +653,3 @@ def test_a_map_sample_is_ready_to_play_on_its_map():
                 assert any(read_asset(folder, f"items/{s}") for s in item_slugs(thing.name)), (
                     f"{path.name}: {area.name}: no sprite for {thing.name!r}"
                 )
-
-
-def test_every_building_on_a_sample_s_map_can_be_entered_and_left(tmp_path: Path):
-    """The author (Oct 18 2026): John couldn't leave AfterDark's farmhouse,
-    and no story, sample or new, should have a building you can't get into
-    and out of. Every place with an inside drawn: a door in from the ground
-    round it, every way out onto ground, a way out walkable from the door."""
-    from sealedlore.engine.session import StorySession
-    from sealedlore.engine.world_art import is_deck
-    from sealedlore.models.config import Config
-    from sealedlore.providers.mock import MockChatProvider
-    from sealedlore.storage.repository import load_story_bundle, save_story_bundle
-    from sealedlore.storage.scenario import bundle_from_scenario
-    from sealedlore.storage.world_art import load_sidecar, sidecar_art_path
-    from tests.test_open_country import ways_in_and_out
-
-    checked, problems = 0, []
-    for path in sorted(SAMPLES.glob("*.md")):
-        if not sidecar_art_path(path).exists():
-            continue
-        art, _files = load_sidecar(path)
-        scenario = parse_plot_markdown(path.read_text(encoding="utf-8")).scenario
-        bundle = bundle_from_scenario(scenario)
-        bundle.world_art = art
-        save_story_bundle(bundle, root=tmp_path)
-        session = StorySession(
-            load_story_bundle(bundle.story.id, root=tmp_path),
-            Config(map_art=False),
-            MockChatProvider(),
-            root=tmp_path,
-            learn_corrections=False,
-        )
-        session.save = lambda *a, **k: None
-        session.story.held_character_id = session.story.held_character_id or session.cast[0].id
-        world, art = session.world(), session.map_art_copy()
-        for pid, place in world.places.items():
-            if place.kind not in ("building", "room", "vehicle"):
-                continue
-            if art.layout_shown(pid, place.state) is None or is_deck(world, art, pid):
-                continue
-            if not session.area(pid, world, art).indoor:
-                continue
-            checked += 1
-            problems += [f"{path.stem}: {p}" for p in ways_in_and_out(session, pid)]
-    assert checked >= 20
-    assert problems == []
-
-
-def test_a_village_in_a_forest_has_a_way_out_on_every_side(tmp_path: Path):
-    """The review (Oct 20 2026): The Silverwood's Fernhollow could not be
-    left by its west edge: none of the village's ground reached it, and the
-    land past it was solid trees. An outdoor plan has a way cut to each edge
-    (`area.edges_open`, as a region of open country has), and the ground is
-    cleared round a place's yard on the land (`area.ways_round`)."""
-    from sealedlore.engine.area import path as walk
-    from sealedlore.engine.session import StorySession
-    from sealedlore.models.area import Spot
-    from sealedlore.models.config import Config
-    from sealedlore.providers.mock import MockChatProvider
-    from sealedlore.storage.repository import load_story_bundle, save_story_bundle
-    from sealedlore.storage.scenario import bundle_from_scenario
-    from sealedlore.storage.world_art import load_sidecar
-
-    sample = SAMPLES / "The Silverwood.md"
-    art, _files = load_sidecar(sample)
-    bundle = bundle_from_scenario(parse_plot_markdown(sample.read_text(encoding="utf-8")).scenario)
-    bundle.world_art = art
-    save_story_bundle(bundle, root=tmp_path)
-    session = StorySession(
-        load_story_bundle(bundle.story.id, root=tmp_path),
-        Config(map_art=False),
-        MockChatProvider(),
-        root=tmp_path,
-        learn_corrections=False,
-    )
-    session.save = lambda *a, **k: None
-    session.story.held_character_id = session.story.held_character_id or session.cast[0].id
-    held = session.held_name()
-    start = session.area_state().spots[held]
-    village = session.area(start.area)
-    assert village.name == "Fernhollow"
-    assert any("west edge" in r for r in village.repairs)
-    edges = {
-        "north": [(x, 0) for x in range(village.width)],
-        "south": [(x, village.height - 1) for x in range(village.width)],
-        "west": [(0, y) for y in range(village.height)],
-        "east": [(village.width - 1, y) for y in range(village.height)],
-    }
-    for side, tiles in edges.items():
-        reached = [t for t in tiles if walk(village, (start.x, start.y), t)]
-        assert reached, f"no way from the green to the {side} edge"
-        x, y = reached[len(reached) // 2]
-        state = session.area_state()
-        state.spots[held] = Spot(area=village.id, x=x, y=y)
-        session._set_live(state)
-        assert session.cross_edge(side) is not None, f"the way {side} is barred"
-        landed = session.area_state().spots[held]
-        land = session.area(landed.area)
-        assert land.window and land.walkable(landed.x, landed.y)
-        state = session.area_state()
-        state.spots[held] = start
-        session._set_live(state)

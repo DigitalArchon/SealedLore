@@ -95,8 +95,7 @@ def _duration(seconds: int) -> str:
 
 
 class VisualAreaView(AreaView):
-    """The play view with the game's own words, and none of the story
-    window's tools (tile sets, paintings, objects, Edit Mode); and Look: a
+    """The play view with the game's own words; and Look: a
     frame dragged over a part of the area (`look_drawn`), or a thing's menu
     (`look_thing`)."""
 
@@ -105,14 +104,7 @@ class VisualAreaView(AreaView):
 
     def __init__(self) -> None:
         super().__init__()
-        for button in (
-            self.look_button,
-            self.paintings_button,
-            self.objects_button,
-            self.edit_button,
-            self.carry_button,
-        ):
-            button.hide()
+        self.carry_button.hide()
         self.looking = False
         # The window supplies what a thing is known to hold (its record's
         # contents) and the uses the keeper granted it (its menu's verbs).

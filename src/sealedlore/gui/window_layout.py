@@ -10,7 +10,7 @@ from then on the widths are theirs, and both they and the window's size are
 kept in the config (`Config.window`) for the next launch.
 
 The Stories list is put away while a story is open (the author, Oct 15
-2026: more room for the story, as a story with a map first did), unless the
+2026: more room for the story), unless the
 author brings it back (Stories above the transcript, or View → Stories
 list): that choice is kept for every story (`Config.stories_list`). With no
 story open it is always shown, since it is how a story is opened.
@@ -41,9 +41,6 @@ INSPECTOR_SHARE = 0.27
 # 450 since the Cast card sets the portrait beside its fields (Oct 15
 # 2026; the author: assume 1080p, not a 1366px laptop).
 INSPECTOR_WIDTHS = (450, 520)
-# A story that keeps a map gives the Inspector, with the map on it, half the
-# window (the author's call).
-MAP_SHARE = 0.5
 # With the Stories list put away (as it is while a story is open, unless the
 # author brings it back) the Inspector takes the room it left: the author
 # wanted the pages beside the story less cramped and more graphical.
@@ -249,7 +246,7 @@ class LayoutWindow:
             self._share_timer.start()
 
     def _reshare_docks(self) -> None:
-        """Share the width out again (the window laid out for a map or not)."""
+        """Share the width out again."""
         self._share_timer.start()
 
     def _share_docks(self) -> None:
@@ -268,7 +265,6 @@ class LayoutWindow:
         centre = self.centralWidget()
         separator = self.style().pixelMetric(QStyle.PM_DockWidgetSeparatorExtent, None, self)
         centre_min = max(centre.minimumWidth(), centre.minimumSizeHint().width())
-        on_map = getattr(self, "map_layout", False)
         saved = self.config.window
         by_hand = self._docks_set_by_hand and saved is not None and saved.inspector_width
         if not inspector.isVisible():
@@ -283,9 +279,7 @@ class LayoutWindow:
                 self.resizeDocks([stories], [want_s], Qt.Horizontal)
             return
         if not stories.isVisible():
-            if on_map:
-                want_i = max(round(width * MAP_SHARE), INSPECTOR_WIDTHS[0])
-            elif by_hand:
+            if by_hand:
                 # A width the author dragged before, kept from the last time:
                 # applied with no story open only, it was lost to the share
                 # whenever one was.
@@ -294,19 +288,6 @@ class LayoutWindow:
                 want_i = _clamp(width * INSPECTOR_ALONE_SHARE, INSPECTOR_ALONE_WIDTHS)
             want_i = min(want_i, max(INSPECTOR_WIDTHS[0], width - centre_min - separator))
             self.resizeDocks([inspector], [want_i], Qt.Horizontal)
-            return
-        if on_map:
-            # Brought back by hand: the list takes its share from the story.
-            want_i = max(round(width * MAP_SHARE), INSPECTOR_WIDTHS[0])
-            want_s = _clamp(width * STORIES_SHARE, STORIES_WIDTHS)
-            widths = share_width(
-                width,
-                centre_min,
-                2 * separator,
-                (want_s, stories.minimumSizeHint().width()),
-                (want_i, inspector.minimumSizeHint().width()),
-            )
-            self.resizeDocks([stories, inspector], list(widths), Qt.Horizontal)
             return
         if by_hand:
             want_s, want_i = saved.stories_width, saved.inspector_width

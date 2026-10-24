@@ -6,7 +6,6 @@ after the summary of their part."""
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -137,176 +136,7 @@ def test_nothing_but_turns_and_summaries_reach_any_model(tmp_path):
     assert session.bundle.summaries, "nothing was archived"
 
 
-MAP_READ = DEFAULT_TEXTS["map_read.system"]
 # Found in a dumped payload (its newlines escaped): the opening words.
-MAP_READ_OPENING = MAP_READ[:60]
-
-
-def test_a_chat_with_a_map_calls_its_map_read_and_nothing_else(tmp_path):
-    """The author (Oct 2026): a chat may keep a map. Every other side call
-    stays off; the map read goes out after each reply like a story's."""
-    config = make_config(
-        scene_reads="every_turn",
-        story_ledger=True,
-        suggest_characters=True,
-        lore_selector="picker",
-        archive_chunk_turns=2,
-        map_art=False,
-    )
-    # JSON everywhere: a reply the map read can parse, long enough to archive.
-    filler = json.dumps({"places": [], "note": "and a little more. " * 20})
-    session, provider = chat_session(tmp_path, [filler] * 40, config=config)
-    session.story.defaults.world_map = True
-    session.story.defaults.context_token_budget = 900
-    for i in range(6):
-        say(session, f"Question {i}: " + "tell me more. " * 10)
-    kinds = []
-    for request in provider.requests:
-        system = request.messages[0].text if request.messages[0].role == "system" else ""
-        kinds.append(
-            "summary"
-            if system == CHAT_SUMMARISER
-            else "map"
-            if system == MAP_READ
-            else "turn"
-            if system.startswith(PROMPT)
-            else system
-        )
-    assert set(kinds) <= {"turn", "summary", "map"}, kinds
-    assert kinds.count("turn") == 6 and kinds.count("map") == 6 and "summary" in kinds
-    assert session.bundle.summaries, "nothing was archived"
-
-
-def test_a_chats_private_part_pauses_its_map_and_the_summary_is_read(tmp_path):
-    """As a story's scene does: no map read, drawing or painting while the
-    part is open, and once the summary is approved the map read is sent the
-    summary, never the part."""
-    config = make_config(map_art=False)
-    session, main = chat_session(tmp_path, ["You walk in.", "{}", "Noted.", "{}"], config=config)
-    session.story.defaults.world_map = True
-    say(session, "I walk into the tavern.")
-    reads_before = sum(MAP_READ_OPENING in json.dumps(p) for p in main.payloads)
-    assert reads_before == 1
-    private = enter(session)
-    say(session, f"I whisper {MARKER} to the barkeep.")
-    assert sum(MAP_READ_OPENING in json.dumps(p) for p in main.payloads) == reads_before
-    assert session.map_art_jobs() == [] and session.map_picture_jobs() == []
-    assert session.map_context(session.path(), None) == ""
-    private.responses = ["They agreed to meet at dawn by the old well."]
-    list(session.close_private(session.summarise_private()))
-    reads = [p for p in main.payloads if MAP_READ_OPENING in json.dumps(p)]
-    assert len(reads) == reads_before + 1
-    assert "meet at dawn by the old well" in json.dumps(reads[-1])
-    assert MARKER not in json.dumps(main.payloads)
-
-
-def test_a_tee_chats_map_is_read_by_its_own_model_and_draws_no_map_pictures(tmp_path):
-    """A TEE chat is private throughout: its map's read and art go to its own
-    model, and map pictures (an image endpoint, not private) stay off."""
-    config = Config(
-        providers=[
-            ProviderConfig(
-                name="nano", base_url="https://nano-gpt.com/api/v1", model="m", api_key="k"
-            )
-        ],
-        active_provider_name="nano",
-        min_cacheable_tokens=1,
-        map_model="small/map",
-        map_art_model="small/art",
-        map_art=True,
-        map_pictures_mode="auto",
-    )
-    session, provider = chat_session(tmp_path, ["Hi.", "{}"], config=config)
-    session.story.defaults.world_map = True
-    session.story.defaults.main_model = "TEE/gemma-3-27b"
-    session.private_tee = FakeTee(signed=True)
-    assert session.map_model == "TEE/gemma-3-27b" and session.map_art_model == "TEE/gemma-3-27b"
-    assert not session.map_pictures_on
-    say(session, "Hello")
-    assert {request.model for request in provider.requests} == {"TEE/gemma-3-27b"}
-    session.story.defaults.main_model = "z-ai/glm-5.3"
-    assert session.map_model == "small/map" and session.map_pictures_on
-
-
-def test_a_tee_chats_isometric_view_is_refused_and_its_writer_is_its_own(tmp_path):
-    config = Config(
-        providers=[
-            ProviderConfig(
-                name="nano", base_url="https://nano-gpt.com/api/v1", model="m", api_key="k"
-            )
-        ],
-        active_provider_name="nano",
-        min_cacheable_tokens=1,
-        image_prompt_model="writer/model",
-    )
-    session, _provider = chat_session(tmp_path, ["Hi."], config=config)
-    session.story.defaults.world_map = True
-    session.story.defaults.main_model = "TEE/gemma-3-27b"
-    assert "TEE chat" in (session.isometric_offer()[2] or "")
-    assert session.role_model("image_prompt") == "TEE/gemma-3-27b"
-    session.story.defaults.main_model = "z-ai/glm-5.3"
-    assert "TEE chat" not in (session.isometric_offer()[2] or "")
-    assert session.role_model("image_prompt") == "writer/model"
-
-
-def test_a_memory_chats_map_art_goes_into_its_backup_and_comes_back(tmp_path):
-    """From memory the art was lost with the chat's backup (the review, Oct
-    15 2026): it rides in the backup's files, and is taken back out."""
-    from sealedlore.models.world import PlaceLayout
-    from sealedlore.storage.images import WORLD_ART_FILE
-
-    story = Story(title="Incognito", mode="chat", chat_prompt=PROMPT, chat_keep="memory")
-    story.defaults.world_map = True
-    session = StorySession(
-        StoryBundle(story=story),
-        make_config(map_art=False),
-        MockChatProvider(["Hi."]),
-        root=tmp_path,
-        estimator=TokenEstimator(counter=fallback_counter),
-    )
-    assert session.backup_files() == {}
-    art = session.world_art
-    art.layouts["farm"] = {"": PlaceLayout(place_id="farm", rows=["..", ".."], spec={})}
-    files = session.backup_files()
-    assert set(files) == {WORLD_ART_FILE}
-    again = StorySession(
-        StoryBundle(story=story.model_copy(deep=True)),
-        make_config(map_art=False),
-        MockChatProvider(["Hi."]),
-        root=tmp_path,
-        estimator=TokenEstimator(counter=fallback_counter),
-    )
-    again.restore_memory(files, [])
-    assert again.world_art.layout_for("farm") is not None
-    assert WORLD_ART_FILE not in again.pictures.all_files()
-    assert listing(tmp_path) == {}
-
-
-def test_a_memory_only_chat_with_a_map_leaves_no_trace_on_disk(tmp_path):
-    config = make_config(archive_chunk_turns=2, map_art=False)
-    story = Story(title="Incognito", mode="chat", chat_prompt=PROMPT, chat_keep="memory")
-    story.defaults.main_model = "z-ai/glm-5.3"
-    story.defaults.world_map = True
-    before = listing(tmp_path)
-    read = json.dumps(
-        {
-            "places": [{"name": "The well", "kind": "site", "quote": "the old well"}],
-            "where": [{"who": "You", "place": "The well", "quote": "the old well"}],
-        }
-    )
-    provider = MockChatProvider(["You stand by the old well.", read] * 4)
-    session = StorySession(
-        StoryBundle(story=story),
-        config,
-        provider,
-        root=tmp_path,
-        estimator=TokenEstimator(counter=fallback_counter),
-    )
-    for i in range(3):
-        say(session, f"Step {i}: I look around.")
-    assert session.world().where == {"You": next(iter(session.world().places))}
-    assert listing(tmp_path) == before
-    assert {"world_request", "world_response"} <= {e["kind"] for e in session.memory_log}
 
 
 def test_the_first_message_is_kept_in_full_after_its_part_is_summarised(tmp_path):
@@ -358,64 +188,6 @@ def enter(session: StorySession, keep: str = "memory") -> MockChatProvider:
     private = MockChatProvider([f"A quiet answer that holds {MARKER} close."])
     session.enter_private(keep=keep, provider=private, model="local/model")
     return private
-
-
-@pytest.mark.parametrize("keep", ["memory", "disk"])
-def test_nothing_from_a_chats_private_part_reaches_its_own_model(tmp_path, keep):
-    """A beta tester asked to switch to private mid-chat, as a story can. The
-    same rule holds: the part goes to the private model and nowhere else, and
-    what the chat's model reads in its place is the approved summary."""
-    import json
-
-    config = make_config(archive_chunk_turns=2, auto_archive=True)
-    session, main = chat_session(tmp_path, ["Noted."], config=config)
-    session.story.defaults.context_token_budget = 1_000
-    for i in range(3):
-        say(session, f"Question {i}: what is a torus? " + "More on that. " * 20)
-    before = len(main.payloads)
-
-    private = enter(session, keep)
-    say(session, f"Between us: {MARKER}, the first thing.")
-    say(session, f"And {MARKER} again, the second.")
-    list(session.regenerate())
-    assert len(main.payloads) == before  # nothing else is called meanwhile
-    assert len(private.payloads) == 3
-    sent = private.requests[-1]
-    assert sent.model == "local/model"
-    assert sent.messages[0].text.startswith(PROMPT)  # the chat's own system prompt
-    assert not any(marker in sent.messages[0].text for marker in STORY_MARKERS)
-    assert "what is a torus" in json.dumps(private.payloads[-1])  # it reads what came before
-
-    private.responses = ["They settled the matter and agreed to come back to it on Friday."]
-    summary = session.summarise_private()
-    asked = private.requests[-1]
-    assert asked.messages[0].text == DEFAULT_TEXTS["chat.private.summary"].strip()
-    assert MARKER in asked.messages[1].text and "torus" not in asked.messages[1].text
-    assert MARKER not in summary
-    list(session.close_private(summary))
-    assert not session.in_private
-
-    # Everything afterwards: turns, archival (the chunk is two exchanges), a
-    # retake and the picture writer.
-    for i in range(6):
-        say(session, f"Back to maths, step {i}. " + "And so on. " * 20)
-    list(session.regenerate())
-    try:
-        session.write_image_prompt("a torus")
-    except ValueError:
-        pass  # the mock's reply isn't JSON; the request went out, that's what counts
-    after = json.dumps(main.payloads[before:])
-    assert session.summaries, "the chat was archived after the private part"
-    assert MARKER not in after
-    assert "agreed to come back to it on Friday" in after
-    assert DEFAULT_TEXTS["chat.private.lead"] in after  # and says what it is
-
-    on_disk = "".join(
-        path.read_text(errors="ignore")
-        for path in (tmp_path / "stories" / session.story.id).rglob("*")
-        if path.is_file()
-    )
-    assert (MARKER in on_disk) is (keep == "disk")
 
 
 def test_a_chats_private_part_can_end_with_nothing_carried_over(tmp_path):
@@ -603,24 +375,6 @@ def test_a_chat_tail_ends_every_request_and_never_enters_the_history(tmp_path):
     provider.responses = ["Fine."]
     say(session, "Again")
     assert texts(provider.requests[-1])[-1] == ("user", "Again"), "blank sends nothing"
-
-
-def test_a_chat_tail_travels_with_the_chat_but_not_to_the_picture_writer(tmp_path):
-    session, provider = chat_session(tmp_path, ["Hi."])
-    session.story.chat_tail = "Stay terse."
-    session.story.chat_character = "Ada"
-    session.story.defaults.world_map = True
-    back = bundle_from_scenario(scenario_from_bundle(session.bundle, {}))
-    assert back.story.chat_tail == "Stay terse."
-    assert back.story.chat_character == "Ada" and back.story.defaults.world_map
-    again = fresh_playthrough(session.bundle, "Again").story
-    assert again.chat_tail == "Stay terse." and again.chat_character == "Ada"
-
-    say(session, "Hello")
-    provider.responses = ["not json: only the request matters here"]
-    with pytest.raises(ValueError):
-        session.write_image_prompt("the cat", anchor_id=None, max_refs=0, fixed=None, model=None)
-    assert "Stay terse." not in provider.requests[-1].messages[-1].text
 
 
 def test_a_chats_markdown_export_names_the_user_as_the_chat_does(tmp_path):

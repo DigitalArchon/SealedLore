@@ -5,7 +5,7 @@ which the window implements on the GUI thread. The rules that keep a story
 to itself are here, once, for every route:
 
 - every `/api/` route but pairing needs a paired phone's token;
-- only stories the author shared reach a phone, and none that keeps a map
+- only stories the author shared reach a phone, and no visual story
   (version 1 is for text stories and chats). A story that isn't available is
   answered as if it didn't exist, and while one is open on the desktop every
   route about the open story answers 423 with no title;

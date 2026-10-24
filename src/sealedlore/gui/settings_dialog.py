@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from sealedlore.engine.image_variants import family_id, picture_support, takes_pictures
+from sealedlore.engine.image_variants import family_id, picture_support
 from sealedlore.engine.portraits import portrait_size
 from sealedlore.engine.reasoning import (
     LEVEL_LABELS,
@@ -45,7 +45,6 @@ from sealedlore.engine.reasoning import (
 from sealedlore.engine.reasoning import describe as describe_reasoning
 from sealedlore.engine.routing import describe, routable, route_body
 from sealedlore.engine.speed_test import Role, SpeedTarget, plan_targets
-from sealedlore.engine.world_pictures import isometric_size, picture_size
 from sealedlore.gui.attest_check import AttestationButton
 from sealedlore.gui.fields import FormScroll
 from sealedlore.gui.image_jobs import ImageCatalog
@@ -93,7 +92,7 @@ from sealedlore.models.generation import (
     ReasoningLevel,
 )
 from sealedlore.models.route import ModelRoute
-from sealedlore.models.story import Story, maps_offered
+from sealedlore.models.story import Story
 from sealedlore.phone.torrc import find_tor
 from sealedlore.providers import make_chat_provider
 from sealedlore.providers.base import ChatProvider
@@ -160,30 +159,6 @@ RECALL_CHOICES = (
     ("Questions: chapters and passages", "exchanges|questions"),
     ("Questions and turns: chapters and passages", "exchanges|everywhere"),
 )
-
-# Settings → Models → Open country (`Config.open_country`): how much the
-# world designer puts in each region (engine/regions.py OPEN_COUNTRY).
-OPEN_COUNTRY_CHOICES = (
-    ("sparse", "Sparse"),
-    ("normal", "Normal"),
-    ("rich", "Rich"),
-)
-
-# Settings → Images → Draw map pictures (`Config.map_pictures_mode`).
-MAP_PICTURE_MODES = (
-    ("auto", "Automatically"),
-    ("ask", "Ask before drawing"),
-    ("off", "Off"),
-)
-
-
-def _hidden_holder(parent: QWidget) -> QWidget:
-    """A widget never shown, holding the rows a page builds but doesn't offer
-    (the map's, while maps are withdrawn: models/story.py). Saving still
-    reads their controls; the author never sees them."""
-    holder = QWidget(parent)
-    holder.hide()
-    return holder
 
 
 class SettingsDialog(QDialog):
@@ -450,8 +425,6 @@ class SettingsDialog(QDialog):
             "plot": "Plot model",
             "lore": "Lore model",
             "image_prompt": "Image prompt writer",
-            "map": "Map model",
-            "map_art": "Map art model",
             "look": "Look model",
             "npc": "People model",
             "keeper": "Plot keeper model",
@@ -861,62 +834,6 @@ class SettingsDialog(QDialog):
         )
         form.addRow("Lore model", self.lore_model)
 
-        # The map's rows are built whatever happens (saving reads them) and
-        # shown only while maps are offered (models/story.py).
-        map_form = form if maps_offered() else QFormLayout(_hidden_holder(widget))
-        self.map_model = self._routed_field(
-            self.config.map_model or fresh.get("map_model", ""), "map_model"
-        )
-        self.map_model.setPlaceholderText("same as the scene model")
-        self.map_model.setToolTip(
-            "Keeps the map of a story that has it on (Story → Setup): after each passage it "
-            "reads the places the story went to or described, how they connect, who is "
-            "where and the things that matter. A quick model is right here."
-        )
-        map_form.addRow("Map model", self.map_model)
-        self.map_art_model = self._routed_field(
-            self.config.map_art_model or fresh.get("map_art_model", ""), "map_art_model"
-        )
-        self.map_art_model.setPlaceholderText("same as the map model")
-        self.map_art_model.setToolTip(
-            "Draws the map: a small picture of each place and thing, and the layout of each "
-            "place, in the background. Use recommended models fills in the one that drew best "
-            "of the free models."
-        )
-        map_form.addRow("Map art model", self.map_art_model)
-        self.region_model = self._routed_field(self.config.region_model or "")
-        self.region_model.setPlaceholderText("same as the story's model")
-        self.region_model.setToolTip(
-            "Designs the world ahead of the player in stories played on their map: the "
-            "country round them, a region at a time, with its places, things and whoever is "
-            "about, to fit the story. One call a region, about nine when a story begins and "
-            "a few more as the player moves on. Blank uses the story's model."
-        )
-        map_form.addRow("World designer model", self.region_model)
-        self.open_country = QComboBox()
-        for value, label in OPEN_COUNTRY_CHOICES:
-            self.open_country.addItem(label, value)
-        self.open_country.setCurrentIndex(
-            max(self.open_country.findData(self.config.open_country), 0)
-        )
-        self.open_country.setToolTip(
-            "How much the world designer puts in each region of open country it designs. "
-            "Sparse: two places, one thing and one person or creature at most. Normal: "
-            "three places, three things and one person. Rich: five places, eight things and "
-            "three people. A region designed already keeps what it has."
-        )
-        map_form.addRow("Open country", self.open_country)
-        self.map_art = QCheckBox("Draw the map")
-        self.map_art.setChecked(self.config.map_art)
-        self.map_art.setToolTip(
-            "In stories with the map on, draw it in the background after each passage: a "
-            "small picture of each place and thing, the layout of each place the story "
-            "reaches, and the land around it. Drawn once each, then kept. Off, the map is "
-            "kept and shown plainly, nothing is sent to the map art model, and map pictures "
-            "from an image model (Images) are off too."
-        )
-        map_form.addRow(self.map_art)
-
         self.image_prompt_model = self._routed_field(self.config.image_prompt_model or "")
         self.image_prompt_model.setPlaceholderText("same as the story's model")
         self.image_prompt_model.setToolTip(
@@ -986,8 +903,6 @@ class SettingsDialog(QDialog):
             "plot": self.plot_model,
             "lore": self.lore_model,
             "image_prompt": self.image_prompt_model,
-            "map": self.map_model,
-            "map_art": self.map_art_model,
             "look": self.look_model,
             "npc": self.npc_model,
             "keeper": self.keeper_model,
@@ -1058,11 +973,6 @@ class SettingsDialog(QDialog):
             role("Lore", self.lore_model, "Scene"),
             role("Image prompt writer", self.image_prompt_model, "Story"),
         ]
-        if maps_offered():
-            roles += [
-                role("Map", self.map_model, "Scene"),
-                role("Map art", self.map_art_model, "Map"),
-            ]
         private = self._private_test_settings()
         if private is not None and private.model.strip():
             roles.append(Role("Private", private.model, private, kind="story"))
@@ -1599,7 +1509,6 @@ class SettingsDialog(QDialog):
         form.addRow(hint)
         self._portrait_rows(form)
         self._place_rows(form)
-        self._map_pictures_rows(form if maps_offered() else QFormLayout(_hidden_holder(widget)))
         # Where pictures are drawn: the chat endpoint unless set. Most never
         # set it, so it is put away, open when it has been.
         where = Fold(form, "Picture endpoint (if not the chat endpoint's)")
@@ -1653,116 +1562,6 @@ class SettingsDialog(QDialog):
             "A portrait of each character from their card, offered when a story starts and "
             "on the Cast page; every prompt is shown to you first. "
             f"{model or 'No model'}: {price}." + (f" {known.note}" if known is not None else "")
-        )
-
-    def _sync_map_pictures_over(self) -> None:
-        """The limit on drawing unasked means something only when drawing
-        automatically."""
-        self.map_pictures_over.setEnabled(self.map_pictures.currentData() == "auto")
-
-    def _map_pictures_rows(self, form: QFormLayout) -> None:
-        """Map pictures: drawn on their own under a standing approval (the
-        default), or each run's approved first on the Map page (the author,
-        Oct 17 2026), or none. Story pictures ask each time."""
-        form.addRow(QLabel("<b>Map pictures</b>"))
-        self.map_pictures = QComboBox()
-        for value, label in MAP_PICTURE_MODES:
-            self.map_pictures.addItem(label, value)
-        self.map_pictures.setCurrentIndex(
-            max(self.map_pictures.findData(self.config.map_pictures_mode), 0)
-        )
-        self.map_pictures.setToolTip(
-            "For a story that keeps a map: everyone's avatar, roofs, the buildings and things "
-            "on it, drawn by an image model as the story reaches them. Drawn automatically: "
-            "in the background, without asking. Ask before drawing: what the map wants waits "
-            "on the Map page with its price until you approve it. Needs Draw the map (Models) "
-            "on."
-        )
-        form.addRow("Draw map pictures", self.map_pictures)
-        # Automatically, up to so many at once; more wait on the Map page (the
-        # author, Oct 19 2026: an old story opened drew 33 in two minutes).
-        self.map_pictures_over = QSpinBox()
-        self.map_pictures_over.setRange(0, 500)
-        self.map_pictures_over.setSpecialValueText("any number")
-        self.map_pictures_over.setSuffix(" at once")
-        self.map_pictures_over.setValue(self.config.map_pictures_ask_over)
-        self.map_pictures_over.setToolTip(
-            "Drawing automatically: when the map wants more pictures than this at once (an "
-            "older story opened again, say, or a new place full of things), they wait on the "
-            "Map page with their price until you approve them. Any number: never ask."
-        )
-        form.addRow("Without asking, at most", self.map_pictures_over)
-        self.map_pictures.currentIndexChanged.connect(self._sync_map_pictures_over)
-        self._sync_map_pictures_over()
-        self.map_picture_model = ModelField(
-            family_id(self.config.map_picture_model, self._image_models),
-            self._browse_image_models if self.image_catalog is not None else None,
-            pictures=self._picture_support,
-        )
-        form.addRow("Map picture model", self.map_picture_model)
-        self.map_picture_limit = QSpinBox()
-        self.map_picture_limit.setRange(1, 500)
-        self.map_picture_limit.setValue(self.config.map_picture_daily_limit)
-        self.map_picture_limit.setSuffix(" a day, per story")
-        form.addRow("At most", self.map_picture_limit)
-        self.map_picture_note = QLabel()
-        self.map_picture_note.setObjectName("hintLabel")
-        self.map_picture_note.setWordWrap(True)
-        form.addRow(self.map_picture_note)
-        self.map_picture_model.textChanged.connect(self._sync_map_picture_note)
-        self.map_picture_limit.valueChanged.connect(self._sync_map_picture_note)
-        self._sync_map_picture_note()
-        # Paintings of a place (Paintings on the map, Paint this place… on
-        # the play view): painted only when asked.
-        self.map_isometric_model = ModelField(
-            family_id(self.config.map_isometric_model, self._image_models),
-            self._browse_image_models if self.image_catalog is not None else None,
-            pictures=self._picture_support,
-            recommended=RECOMMENDED_IMAGE_MODELS["map_isometric_model"],
-        )
-        form.addRow("Painting model", self.map_isometric_model)
-        self.map_isometric_note = QLabel()
-        self.map_isometric_note.setObjectName("hintLabel")
-        self.map_isometric_note.setWordWrap(True)
-        form.addRow(self.map_isometric_note)
-        self.map_isometric_model.textChanged.connect(self._sync_map_isometric_note)
-        self._sync_map_isometric_note()
-
-    def _sync_map_isometric_note(self, *_args) -> None:
-        model = self.map_isometric_model.text().strip()
-        info = next((m for m in self._image_models if m.id == model), None)
-        each = info.price(isometric_size(info)) if info else None
-        price = f"${each:.2f} a painting listed" if each is not None else "price not listed"
-        takes = (
-            " It can't be given the map to paint from: choose one that takes pictures."
-            if info is not None and not takes_pictures(model, self._image_models)
-            else ""
-        )
-        known = recommended_model("map_isometric_model", model)
-        self.map_isometric_note.setText(
-            "Paint this place… on the play view (and Paintings on the map) paints a place as "
-            "it stands, from the map and everyone on it, only when you ask, counted with the "
-            f"map pictures above (needs no tick). {model or 'No model'}: {price}.{takes}"
-            + (f" {known.note}" if known is not None else "")
-        )
-
-    def _sync_map_picture_note(self, *_args) -> None:
-        model = self.map_picture_model.text().strip()
-        info = next((m for m in self._image_models if m.id == model), None)
-        # The sizes the map asks for (a square for a sprite, landscape for a
-        # postcard), so the ceiling is of what is sent, not the cheapest listed.
-        sizes = (picture_size(info), picture_size(info, landscape=True)) if info else ()
-        prices = [p for p in (info.price(size) for size in sizes) if p is not None] if info else []
-        each = max(prices) if prices else None
-        price = f"up to ${each:.3f} a picture listed" if each is not None else "price not listed"
-        limit = self.map_picture_limit.value()
-        self.map_picture_note.setText(
-            "The map picture model draws every picture the map wants: the avatars (from "
-            "the portraits), the things, roofs and ground of the play view, and the "
-            "Region map's pictures. Drawn without asking each time: each prompt is kept in "
-            f"the story's log with what it cost. {model or 'No model'}: {price}, so at most "
-            + (f"${each * limit:.2f}" if each else f"{limit} pictures")
-            + " a day for a story (less on a subscription that includes the model)."
         )
 
     def _media_fields(self, endpoint: MediaEndpoint) -> tuple[QLineEdit, QLineEdit, QComboBox]:
@@ -1846,8 +1645,6 @@ class SettingsDialog(QDialog):
         for field in (
             self.image_model,
             self.portrait_model,
-            self.map_picture_model,
-            self.map_isometric_model,
         ):
             field.show_pictures()
         return chosen
@@ -2038,18 +1835,9 @@ class SettingsDialog(QDialog):
         self.config.image_size = self.image_size.currentText().strip() or self.config.image_size
         self.config.image_count = self.image_count.value()
         self.config.image_prompt_model = self.image_prompt_model.text().strip() or None
-        self.config.map_pictures_mode = self.map_pictures.currentData()
-        self.config.map_pictures_ask_over = self.map_pictures_over.value()
         self.config.location_backgrounds = self.location_backgrounds.isChecked()
         self.config.portrait_model = (
             self.portrait_model.text().strip() or self.config.portrait_model
-        )
-        self.config.map_picture_model = (
-            self.map_picture_model.text().strip() or self.config.map_picture_model
-        )
-        self.config.map_picture_daily_limit = self.map_picture_limit.value()
-        self.config.map_isometric_model = (
-            self.map_isometric_model.text().strip() or self.config.map_isometric_model
         )
         images = MediaEndpoint(
             base_url=self.image_url.text().strip(),
@@ -2104,14 +1892,9 @@ class SettingsDialog(QDialog):
         self.config.scene_model = self._role_model(self.scene_model) or None
         self.config.plot_reads = self.plot_reads.isChecked()
         self.config.plot_model = self._role_model(self.plot_model) or None
-        self.config.map_model = self._role_model(self.map_model) or None
-        self.config.map_art_model = self._role_model(self.map_art_model) or None
-        self.config.region_model = self._role_model(self.region_model) or None
         self.config.look_model = self._role_model(self.look_model) or None
         self.config.npc_model = self._role_model(self.npc_model) or None
         self.config.keeper_model = self._role_model(self.keeper_model) or None
-        self.config.open_country = self.open_country.currentData()
-        self.config.map_art = self.map_art.isChecked()
         self.config.cache_control_mode = self.cache_mode.currentText()  # type: ignore[assignment]
         self.config.cache_ttl = self.cache_ttl.currentData()
 

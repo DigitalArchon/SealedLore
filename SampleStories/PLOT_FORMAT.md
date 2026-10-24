@@ -182,15 +182,15 @@ A small walled town...
   is told the part of it around the player's character each turn: the
   places, how far and which way, the ways and the things, as written here.
   So what a place is like belongs in its text: the storyteller keeps to it.
-- A plot file can ship with its map already drawn: `<name>.world_art.json`
-  beside `<name>.md` (the samples do). Play the map once, then copy the
-  story's `world_art.json` from its folder next to the file under that name.
-  Every import of the file finds the same places (their ids come from their
-  names), so the art fits; without it the map is drawn as the story goes.
-  Its map pictures (an isometric view, say) come too when their files are
-  beside the plot file: in that copy, write each picture's `file` from the
-  plot file's folder, as a picture line is written
-  (`pictures/map/farm-isometric.jpg`). One whose file isn't there is left out.
+- A plot file played as a Visual Story ships with its map designed:
+  `<name>.world_art.json` beside `<name>.md` (Doomsville with a map does),
+  holding the plan of every area, and `<name>.visual.json`, the game's design
+  sheet. Every import of the file finds the same places (their ids come from
+  their names), so the art fits. Its pictures (an area's painted backdrop, a
+  character's walking figure) come too when their files are beside the plot
+  file: each picture's `file` is written from the plot file's folder, as a
+  picture line is written (`pictures/map/farm-backdrop.jpg`). One whose file
+  isn't there is left out. An ordinary story ignores the `# Map` section.
 
 ## Pictures
 

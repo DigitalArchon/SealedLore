@@ -125,10 +125,9 @@ def test_every_page_is_one_click_away_and_plot_shows_only_with_a_plot(app, windo
     tabs = window.right_tabs
     plot = tabs.indexOf(window.plot_panel)
     assert not tabs.isTabVisible(plot), "the story has no plot"
-    assert not tabs.isTabVisible(tabs.indexOf(window.world_view)), "nor a map"
     assert not tabs.isTabVisible(tabs.indexOf(window.inspector)), "Prompt is under View"
     shown = [i for i in range(tabs.count()) if tabs.isTabVisible(i)]
-    assert len(shown) == tabs.count() - 3
+    assert len(shown) == tabs.count() - 2  # Plot and Prompt hidden
     # No scrolling strip: every visible page has its own button on screen.
     settle(app)
     for index in shown:
@@ -349,8 +348,6 @@ def test_recommended_models_are_offered_never_imposed(app, window: MainWindow, m
         "scene_model": "small/scene",
         "plot_model": "small/plot",
         "lore_model": "small/lore",
-        "map_model": "small/map",
-        "map_art_model": "small/map-art",
     }
     for field, model in table.items():
         monkeypatch.setitem(config_module.RECOMMENDED_MODELS, field, model)
@@ -370,8 +367,6 @@ def test_recommended_models_are_offered_never_imposed(app, window: MainWindow, m
     assert dialog.scene_model.text() == "small/scene"
     assert dialog.plot_model.text() == "small/plot"
     assert dialog.lore_model.text() == "small/lore"
-    assert dialog.map_model.text() == "small/map"
-    assert dialog.map_art_model.text() == "small/map-art"
     assert window.config.scene_model is None  # not until Save
     dialog._save()
     assert window.config.scene_model == "small/scene"
@@ -903,7 +898,6 @@ def _top_row(window: MainWindow) -> list[bool]:
             window.stories_button,
             window.view_toggle,
             window.find_button,
-            window.world_button,
             window.branch_bar,
         )
     ]

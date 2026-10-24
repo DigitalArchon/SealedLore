@@ -6,36 +6,23 @@ old art files with no levels, and the level job's reply filed on its plan."""
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 
 import pytest
 
-from sealedlore.engine.area import build_area, build_level, render_positions
+from sealedlore.engine.area import build_area, build_level
 from sealedlore.engine.levels import (
     level_area_id,
-    levels_called_for,
     linked_levels,
     listed_levels,
     parse_level,
     place_of_area,
-    stairs_spot,
 )
 from sealedlore.engine.prompt import TurnRequest
-from sealedlore.engine.prompt_texts import DEFAULT_TEXTS
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
-from sealedlore.engine.world_art import (
-    ArtJob,
-    adopt,
-    finish,
-    has_levels,
-    layout_messages,
-    plan_art,
-    rasterise,
-)
-from sealedlore.models.area import Spot
+from sealedlore.engine.world_art import rasterise
 from sealedlore.models.config import Config, ProviderConfig
 from sealedlore.models.world import (
     LevelLayout,
@@ -138,25 +125,6 @@ def test_a_level_s_area_id_is_the_place_s_with_its_index_and_the_plan_s_own_is_t
     assert place_of_area("house#3") == "house" and place_of_area("farm") == "farm"
 
 
-def test_levels_are_asked_for_only_when_the_place_s_words_call_for_them():
-    plain = WorldPlace(id="b", name="The barn", kind="building", what="a red barn")
-    storeys = house_place()
-    station = WorldPlace(id="s", name="Deep Station", kind="site", what="a station of three decks")
-    yard = WorldPlace(id="y", name="The yard", kind="site", what="a yard with a cellar door")
-    assert not levels_called_for(plain)
-    assert levels_called_for(storeys)
-    assert levels_called_for(station)  # enclosed by its words, whatever its kind
-    assert not levels_called_for(yard)  # a site's grounds have no upper floor
-    world, _art = world_and_art()
-    asked = layout_messages(world, storeys, "a farm", DEFAULT_TEXTS)
-    assert '"levels"' in asked[-1].text
-    quiet = layout_messages(world, plain, "a farm", DEFAULT_TEXTS)
-    assert '"levels"' not in quiet[-1].text
-    # The listing is held to the rules: no 0, whole indexes in range, one each.
-    spec = {"levels": [{"index": 1, "name": "Upper"}, {"index": 0}, {"index": 1}, 2, {"index": 9}]}
-    assert listed_levels(spec) == [(1, "Upper"), (2, "Level 2")]
-
-
 def test_levels_listed_on_a_stairs_feature_are_read_as_the_plan_s():
     # GLM 5.3 Flash's live reply for a watchtower (Oct 17 2026).
     spec = {
@@ -181,99 +149,6 @@ def test_levels_listed_on_a_stairs_feature_are_read_as_the_plan_s():
     assert listed_levels(spec) == [(-1, "Cellar"), (1, "Upper floor"), (2, "Top of the tower")]
     # The object's own list wins when there is one.
     assert listed_levels({**spec, "levels": [{"index": 1, "name": "Loft"}]}) == [(1, "Loft")]
-
-
-def test_a_station_whose_reply_calls_the_void_dark_is_a_deck_with_its_decks():
-    # GLM 5.3 Flash's live reply for a ring station (Oct 17 2026): "ground":
-    # "dark", as the enclosed prompt's own words suggest, and seven decks.
-    # The void was drawn as plating and no deck was ever drawn.
-    station = WorldPlace(
-        id="st", name="Halcyon Reach", kind="site", what="a ring station of six decks"
-    )
-    spec = {
-        "ground": "Dark",
-        "features": [
-            {"kind": "area", "fill": "floor", "shape": "ellipse", "x": 2, "y": 1, "w": 36, "h": 22}
-        ],
-        "levels": [{"index": 1, "name": "Promenade"}, {"index": -1, "name": "Habitat"}],
-    }
-    rows, _objects, _labels = rasterise(spec, 40, 24)
-    assert rows[0][0] == " " and rows[12][20] == "_"
-    layout = PlaceLayout(place_id="st", spec=spec, rows=rows)
-    assert has_levels(station, layout)
-    world = WorldMap(places={"st": station.model_copy(update={"x": 0.0, "y": 0.0, "size": 300.0})})
-    art = WorldArt(layouts={"st": {"": layout}})
-    area = build_area(world, art, "st")
-    assert area is not None and area.look == "space" and area.indoor
-    assert area.rows[0][0] == " "
-
-
-def test_plan_art_plans_a_job_per_level_only_when_the_plan_lists_them():
-    world, art = world_and_art(upper=False)
-    world.visited = {"Serrik Vaun": ["house"]}
-    jobs = plan_art(world, art, here="house", setting="a farm")
-    level_jobs = [j for j in jobs if ":level:" in j.key]
-    assert [j.key for j in level_jobs] == ["layout:house:level:1"]
-    job = level_jobs[0]
-    assert job.extra["level"] == 1 and job.extra["level_name"] == "Upper floor"
-    # The plan's own request and shapes stand before the level's ask, which
-    # names the stairs tiles to keep.
-    assert job.messages[-2].role == "assistant" and '"levels"' in job.messages[-2].text
-    assert "x 10, y 12" in job.messages[-1].text and "Upper floor" in job.messages[-1].text
-    # Drawn: not asked again; failed twice: let be.
-    world2, art2 = world_and_art(upper=True)
-    world2.visited = {"Serrik Vaun": ["house"]}
-    assert not [j for j in plan_art(world2, art2, here="house", setting="s") if ":level:" in j.key]
-    art.failures["layout:house:level:1"] = 2
-    assert not [j for j in plan_art(world, art, here="house", setting="s") if ":level:" in j.key]
-    # A plan that lists none, or a place whose words don't call for levels, plans none.
-    art.failures.clear()
-    art.layouts["house"][""].spec = {**GROUND_SPEC, "levels": []}
-    assert not [j for j in plan_art(world, art, here="house", setting="s") if ":level:" in j.key]
-    assert not has_levels(
-        WorldPlace(id="house", name="The house", kind="building"), art.layouts["house"][""]
-    )
-
-
-def test_a_level_job_s_reply_is_finished_into_the_plan_s_levels():
-    world, art = world_and_art(upper=False)
-    job = ArtJob(
-        "layout:house:level:1",
-        "layout",
-        [],
-        "house",
-        name="The house, Upper floor",
-        extra={"grid": (40, 24), "level": 1, "level_name": "Upper floor"},
-    )
-    drawn = finish(
-        job, json.dumps({**UPPER_SPEC, "levels": [{"index": 2}]}), model="m", made_at="t"
-    )
-    assert isinstance(drawn, LevelLayout)
-    assert drawn.index == 1 and drawn.name == "Upper floor" and drawn.place_id == "house"
-    assert "levels" not in drawn.spec  # a level lists none
-    assert drawn.rows[12][10] == "&" and len(drawn.rows) == 24
-    adopt(art, drawn)
-    plan = art.layouts["house"][""]
-    assert plan.level(1) is drawn and plan.level(2) is None
-    # Drawn again, it replaces the one it had; for a plan that went, it is dropped.
-    adopt(art, drawn.model_copy(update={"made_at": "later"}))
-    assert len(plan.levels) == 1 and plan.level(1).made_at == "later"
-    adopt(art, drawn.model_copy(update={"place_id": "gone"}))
-    assert "gone" not in art.layouts
-    # A main plan that lists levels but drew no stairs gets one tile of them.
-    bare = {**GROUND_SPEC, "features": GROUND_SPEC["features"][:2]}
-    main = finish(
-        ArtJob(
-            "layout:house", "layout", [], "house", extra={"grid": (40, 24), "levels_asked": True}
-        ),
-        json.dumps(bare),
-        model="m",
-        made_at="t",
-    )
-    assert isinstance(main, PlaceLayout)
-    assert any("&" in row for row in main.rows)
-    assert any(f.get("added_by") == "program" for f in main.spec["features"])
-    assert stairs_spot(["#####", "#___#", "#___#", "#####"]) == (2, 1)
 
 
 def test_a_plan_with_a_level_is_two_areas_joined_by_their_stairs():
@@ -389,89 +264,6 @@ def climb(session: StorySession) -> None:
     assert session.go_through() is not None
 
 
-def test_walking_up_the_stairs_lands_a_step_off_them_on_the_floor_above(tmp_path, story, cast):
-    session = make_session(tmp_path, story, cast)
-    climb(session)
-    state = session.area_state()
-    me = state.spots["Serrik Vaun"]
-    assert me.area == "house#1"
-    upper = session.area("house#1")
-    assert upper is not None and upper.level == 1
-    assert (me.x, me.y) not in {(e.x, e.y) for e in upper.stairs_entrances()}
-    assert abs(me.x - 10) + abs(me.y - 12) <= 3
-    assert "from The house to The house, upper floor" in state.walked_words
-    assert session.here_place() == "house"
-    # And down again: the title says the ground floor.
-    steps = session.walk_route(10, 12)
-    session.walked(steps)
-    assert session.door_here() == ("house", "The house")
-    session.go_through()
-    assert session.area_state().spots["Serrik Vaun"].area == "house"
-    # Travel never offers the building one is upstairs in.
-    climb(session)
-    assert "house" not in {pid for pid, _n, _s in session.travel_choices()}
-
-
-def test_the_storyteller_is_told_the_level_the_stairs_and_who_is_on_another_level(
-    tmp_path, story, cast
-):
-    session = make_session(tmp_path, story, cast, ["She came up the stairs."])
-    climb(session)
-    session.story.scene.present_others = [
-        "Jane"
-    ]  # here, by the scene; the map has her in the house
-    state = session.area_state()
-    state.spots["Jane"] = Spot(area="house", x=25, y=5)
-    session.story.area_live.state = state
-    list(session.send(turn("I look out of the window.")))
-    sent = session.provider.requests[0].messages[-1].text
-    assert "- Serrik Vaun: in The house, upper floor" in sent
-    assert "Stairs from here: down to the ground floor" in sent
-    also = next(line for line in sent.splitlines() if line.startswith("Also in The house"))
-    assert (
-        also.startswith("Also in The house, on another level: ") and "Jane (ground floor)" in also
-    )
-    # The pure rendering, for a level with nothing but its own people.
-    world, art = world_and_art()
-    upper = build_level(world, art, "house", 1)
-    text = render_positions(upper, world, {"Me": Spot(area="house#1", x=12, y=12)}, "Me")
-    assert "in The house, upper floor" in text and "down to the level below" in text
-    # Someone the map keeps in the house stays on the level they stood on.
-    user = session.path()[-2]
-    assert user.meta.area.spots["Jane"].area == "house"
-    assert user.meta.area.spots["Serrik Vaun"].area == "house#1"
-
-
-def test_each_level_is_furnished_on_its_own_under_its_area_id(tmp_path, story, cast):
-    furnishing = json.dumps(
-        {
-            "rooms": [
-                {
-                    "room": 0,
-                    "purpose": "bedroom",
-                    "items": [{"name": "a wooden bed", "w": 2, "h": 1, "where": "wall"}],
-                }
-            ]
-        }
-    )
-    session = make_session(tmp_path, story, cast, [furnishing, furnishing])
-    session.config.map_art = True
-    furnish, _pictures = session.tile_art_jobs()
-    assert {a.id for a in furnish} >= {"house", "house#1"}
-    upper = next(a for a in furnish if a.id == "house#1")
-    session._furnish_one(upper, session.provider)
-    art = session.map_art_copy()
-    assert "house#1" in art.furnishings and art.furnishings["house#1"][""].place_id == "house#1"
-    assert art.furnishing_for("house", "") is None  # the ground floor's own, still to come
-    sent = session.provider.requests[-1].messages[-1].text
-    assert "The building: The house, upper floor" in sent
-    # Once furnished, the level isn't asked again, and its area has the furniture.
-    furnish, _pictures = session.tile_art_jobs()
-    assert "house#1" not in {a.id for a in furnish}
-    placed = session.area("house#1").placements
-    assert any(p.name == "a wooden bed" and p.id.startswith("house#1:") for p in placed)
-
-
 @pytest.mark.skipif(os.environ.get("CI_NO_QT") == "1", reason="needs Qt")
 def test_the_stairs_tile_is_drawn_unlike_the_floor():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -498,3 +290,5 @@ def test_the_stairs_tile_is_drawn_unlike_the_floor():
     stairs, floor = tile(10, 12), tile(14, 12)
     assert stairs != floor
     assert len(set(stairs)) > 2  # treads: not one flat colour
+
+

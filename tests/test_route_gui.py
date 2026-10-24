@@ -149,8 +149,6 @@ def test_settings_keeps_each_roles_route(app, tmp_path, story, cast):
     assert targets[f"{GLM} · Fastest first word · FP8+ · paid"] == (
         "Scene",
         "Plot",
-        "Map",
-        "Map art",
     )
     dialog._save()
     assert window.config.model_routes == {"scene": ModelRoute(priority="latency")}

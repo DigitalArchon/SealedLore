@@ -18,7 +18,6 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -34,7 +33,6 @@ from sealedlore.gui.attest_check import AttestationButton
 from sealedlore.gui.model_picker import Browse, BrowseRoute, ModelField
 from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.models.config import Config, ProviderConfig, split_model
-from sealedlore.models.story import maps_offered
 from sealedlore.providers.tee import is_private_mode, is_tee
 
 # Any other model: memory only is about this computer, not about the model.
@@ -58,15 +56,6 @@ ENCRYPTED_HINTS = {
     "memory": "Nothing is written to disk, not even the log: when the chat is closed, it is "
     "gone. End-to-end encrypted as on disk. Pictures are kept in memory too.",
 }
-
-
-def _hidden_holder(parent: QWidget) -> QWidget:
-    """A widget never shown, holding the rows a dialog builds but doesn't
-    offer (the map's, while maps are withdrawn: models/story.py). Saving
-    still reads their controls; the author never sees them."""
-    holder = QWidget(parent)
-    holder.hide()
-    return holder
 
 
 class NewChatDialog(QDialog):
@@ -126,20 +115,6 @@ class NewChatDialog(QDialog):
         )
         tail_hint.setObjectName("hintLabel")
         tail_hint.setWordWrap(True)
-        self.world_map = QCheckBox("Keep a map of the conversation")
-        self.chat_character = QLineEdit()
-        self.chat_character.setPlaceholderText("You")
-        self.chat_character.setMaxLength(60)
-        self.chat_character.setEnabled(False)
-        map_hint = QLabel(
-            "After each reply a small model (Settings → Models → Map model) notes the places "
-            "the conversation goes to, how they connect, who is where and the things that "
-            "matter, and the map grows with it (Map, above the chat); its art is drawn in the "
-            "background. One more small call after every reply. The map tracks you by the "
-            'name beside it: your character\'s name, or "You".'
-        )
-        map_hint.setObjectName("hintLabel")
-        map_hint.setWordWrap(True)
         self.keep = QComboBox()
         self.keep.addItem("On disk", "disk")
         self.keep.addItem("In memory only", "memory")
@@ -158,12 +133,6 @@ class NewChatDialog(QDialog):
         form.addRow("", prompt_hint)
         form.addRow("Tail", self.tail)
         form.addRow("", tail_hint)
-        # Shown only while maps are offered (models/story.py): the rows are
-        # built whatever happens, since starting the chat reads them.
-        map_form = form if maps_offered() else QFormLayout(_hidden_holder(self))
-        map_form.addRow("Map", self.world_map)
-        map_form.addRow("Your name on it", self.chat_character)
-        map_form.addRow("", map_hint)
         form.addRow(self.keep_label, self.keep)
         form.addRow("", self.keep_hint)
 
@@ -183,7 +152,6 @@ class NewChatDialog(QDialog):
         self.attest.model_changed(self.model.text())
         self.keep.currentIndexChanged.connect(lambda _index: self._sync())
         self.title.textChanged.connect(lambda _text: self._sync())
-        self.world_map.toggled.connect(self.chat_character.setEnabled)
         self._sync()
 
     def _endpoint_of(self, model: str) -> ProviderConfig | None:

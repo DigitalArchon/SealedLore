@@ -193,7 +193,7 @@ def test_stories_are_shared_from_the_dialog_and_one_with_a_map_never(app, place,
         update={
             "id": "mapped",
             "title": "With a map",
-            "defaults": story.defaults.model_copy(update={"world_map": True}),
+            "mode": "visual",
         }
     )
     window = window_with(place, story, cast, stories=[mapped])
@@ -204,7 +204,7 @@ def test_stories_are_shared_from_the_dialog_and_one_with_a_map_never(app, place,
         for i in range(dialog.stories.count())
     }
     plain, with_map = items[story.id], items["mapped"]
-    assert not (with_map.flags() & Qt.ItemIsEnabled) and "keeps a map" in with_map.text()
+    assert not (with_map.flags() & Qt.ItemIsEnabled) and "visual story" in with_map.text()
     plain.setCheckState(Qt.Checked)
     assert window.config.phone.shared_stories == [story.id]
     plain.setCheckState(Qt.Unchecked)
@@ -244,7 +244,7 @@ def test_share_with_phone_in_the_stories_list(app, place, story, cast):
     mapped = story.model_copy(
         update={
             "id": "mapped",
-            "defaults": story.defaults.model_copy(update={"world_map": True}),
+            "mode": "visual",
         }
     )
     window = window_with(place, story, cast, stories=[mapped])

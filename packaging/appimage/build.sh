@@ -304,7 +304,7 @@ install -m 644 "$SRC"/packaging/appimage/licenses/*.txt "$LICENCES/texts/"
 log "Sample stories and the plot format guide"
 mkdir -p "$APPDIR/usr/share/sealedlore/samples"
 cp "$SRC"/SampleStories/*.md "$APPDIR/usr/share/sealedlore/samples/"
-# A sample's map art, drawn once and shipped beside it (storage/world_art.py).
+# A visual story's predesigned map: its plans, paintings and sprites beside its plot file (storage/world_art.py).
 find "$SRC/SampleStories" -maxdepth 1 -name '*.world_art.json' -exec cp {} "$APPDIR/usr/share/sealedlore/samples/" \;
 # A visual story's design sheet beside its plot file (storage/visual_design.py).
 find "$SRC/SampleStories" -maxdepth 1 -name '*.visual.json' -exec cp {} "$APPDIR/usr/share/sealedlore/samples/" \;
@@ -312,7 +312,7 @@ find "$SRC/SampleStories" -maxdepth 1 -name '*.visual.json' -exec cp {} "$APPDIR
 if [ -d "$SRC/SampleStories/pictures" ]; then
     cp -r "$SRC/SampleStories/pictures" "$APPDIR/usr/share/sealedlore/samples/"
 fi
-# The tile sets map-first play draws its maps in (storage/tile_sets.py).
+# The tile sets the visual stories' play view draws things and ground in (storage/tile_sets.py).
 if [ -d "$SRC/SampleStories/tilesets" ]; then
     cp -r "$SRC/SampleStories/tilesets" "$APPDIR/usr/share/sealedlore/samples/"
 fi

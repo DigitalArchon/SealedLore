@@ -1448,24 +1448,6 @@ def test_someone_arriving_ends_a_rest(tmp_path):
     assert _consulted(session, "I wave.")
 
 
-def test_a_rest_on_a_map_story_follows_the_map_where_the_plot_has_no_place(tmp_path, monkeypatch):
-    from types import SimpleNamespace
-
-    session = make_session(tmp_path, [], text=ANY_TIME)
-    chronicle = initial_chronicle(session.story.plot)
-    session.story.defaults.world_map = True
-    where = {"Ann": "farm"}
-    monkeypatch.setattr(session, "_world_read", lambda path=None: SimpleNamespace(where=where))
-    at_farm = session._rest_moment(chronicle, [])
-    where["Ann"] = "town"
-    assert session._rest_moment(chronicle, []) != at_farm
-    # The plot's own place wins wherever it has one.
-    chronicle.place = "The Mill"
-    in_mill = session._rest_moment(chronicle, [])
-    where["Ann"] = "farm"
-    assert session._rest_moment(chronicle, []) == in_mill
-
-
 def test_the_scene_card_vetoes_a_move_to_elsewhere_while_it_names_the_place():
     p = plot()
     before = initial_chronicle(p)

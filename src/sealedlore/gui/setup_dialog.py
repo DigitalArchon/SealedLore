@@ -20,7 +20,6 @@ from collections.abc import Sequence
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QButtonGroup,
-    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -38,8 +37,6 @@ from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.gui.composer import (
     AGENCY_LABELS,
     AGENCY_TIPS,
-    SCARCE_LABEL,
-    SCARCE_TIP,
     WORLD_ACTIVITY_LABELS,
     WORLD_ACTIVITY_TIPS,
 )
@@ -50,7 +47,7 @@ from sealedlore.gui.style_panel import StylePanel
 from sealedlore.models.character import Character
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID, Node
 from sealedlore.models.scene import SceneState
-from sealedlore.models.story import Story, maps_offered
+from sealedlore.models.story import Story
 
 # How full the map's rooms are (models/area.py `Density`).
 DENSITY_LABELS = {
@@ -62,15 +59,6 @@ DENSITY_LABELS = {
 
 GENERATE_LABEL = "The model writes the opening from these notes"
 AS_WRITTEN_LABEL = "Use exactly as written — this is the opening passage"
-
-
-def _hidden_holder(parent: QWidget) -> QWidget:
-    """A widget never shown, holding the rows a dialog builds but doesn't
-    offer (the map's, while maps are withdrawn: models/story.py). Saving
-    still reads their controls; the author never sees them."""
-    holder = QWidget(parent)
-    holder.hide()
-    return holder
 
 
 def _hint(text: str) -> QLabel:
@@ -249,42 +237,7 @@ class SetupDialog(QDialog):
         self.description.setPlaceholderText("What this chat is for. Not sent to the model.")
         form.addRow("Title", self.title)
         form.addRow("Description", self.description)
-        # A chat may keep a map as a story does (the author, Oct 2026); it
-        # tracks the user by one name, since a chat has no cast.
-        self.world_map = QCheckBox("Keep a map of the conversation")
-        self.world_map.setChecked(self.story.defaults.world_map)
-        self.chat_character = line_edit(self.story.chat_character)
-        self.chat_character.setPlaceholderText("You")
-        self.chat_character.setMaxLength(60)
-        self.chat_character.setEnabled(self.story.defaults.world_map)
-        self.world_map.toggled.connect(self.chat_character.setEnabled)
-        # The map's rows are built whatever happens (saving reads them) and
-        # shown only while maps are offered (models/story.py).
-        map_form = form if maps_offered() else QFormLayout(_hidden_holder(widget))
-        map_form.addRow("Map", self.world_map)
-        map_form.addRow("Your name on it", self.chat_character)
-        map_form.addRow(
-            _hint(
-                "After each reply a small model notes the places the conversation goes to, "
-                "how they connect, who is where and the things that matter, and the map grows "
-                "with it (Map, above the chat). One more small call after every reply; the "
-                "map's pictures are drawn in the background. The map tracks you by the name "
-                'beside it: your character\'s name, or "You".'
-            )
-        )
-        self._scarce_row(map_form)
         return widget
-
-    def _scarce_row(self, form: QFormLayout) -> None:
-        """Things are scarce in this world (`StoryDefaults.scarce`): told to
-        the world designer, so only for a story or chat that keeps a map."""
-        self.scarce = QCheckBox(SCARCE_LABEL)
-        self.scarce.setChecked(self.story.defaults.scarce)
-        self.scarce.setToolTip(SCARCE_TIP)
-        self.scarce.setEnabled(self.world_map.isChecked())
-        self.world_map.toggled.connect(self.scarce.setEnabled)
-        form.addRow("Scarcity", self.scarce)
-        form.addRow(_hint(SCARCE_TIP))
 
     def _chat_prompt_tab(self) -> QWidget:
         widget = QWidget()
@@ -350,40 +303,6 @@ class SetupDialog(QDialog):
             _hint(
                 "How much happens that you didn't start: people acting on their own aims, "
                 "someone arriving, an earlier choice catching up."
-            )
-        )
-        self.world_map = QCheckBox("Keep a map of the story")
-        self.world_map.setChecked(self.story.defaults.world_map)
-        # Built whatever happens (saving reads them), shown only while maps
-        # are offered (models/story.py: withdrawn while they are redesigned).
-        map_form = form if maps_offered() else QFormLayout(_hidden_holder(widget))
-        map_form.addRow("Map", self.world_map)
-        map_form.addRow(
-            _hint(
-                "The story is played on its map: you walk where you like in each place, "
-                "click people and things for what you can do, and travel between places. "
-                "After each passage a small model notes the places the story goes to and "
-                "who is where, and the map grows with the story. One more small call after "
-                "every passage; the map's pictures are drawn in the background. To go on "
-                "without it from where the story is, keeping this one as it is: Story → "
-                "Continue without the map…"
-            )
-        )
-        self._scarce_row(map_form)
-        self.map_density = QComboBox()
-        for value, label in DENSITY_LABELS.items():
-            self.map_density.addItem(label, value)
-        self.map_density.setCurrentIndex(
-            max(0, self.map_density.findData(self.story.defaults.map_density))
-        )
-        self.map_density.setEnabled(self.story.defaults.world_map)
-        self.world_map.toggled.connect(self.map_density.setEnabled)
-        map_form.addRow("Rooms", self.map_density)
-        map_form.addRow(
-            _hint(
-                "How full the map's rooms are: the furniture each building is planned with, "
-                "halved, as planned, or two thirds more. Decorations are left out of sparse "
-                "rooms. Furniture stands in the way, as it would."
             )
         )
         self.image_style = line_edit(self.story.image_style)
@@ -623,9 +542,6 @@ class SetupDialog(QDialog):
             story.setup.description = self.description.toPlainText().strip() or None
             story.chat_prompt = self.chat_prompt.toPlainText().strip()
             story.chat_tail = self.chat_tail.toPlainText().strip()
-            story.defaults.world_map = self.world_map.isChecked()
-            story.defaults.scarce = self.scarce.isChecked()
-            story.chat_character = self.chat_character.text().strip()
             self.accept()
             return
         story.world_bible = self.world.toPlainText().strip() or None
@@ -633,9 +549,6 @@ class SetupDialog(QDialog):
         setup.description = self.description.toPlainText().strip() or None
         story.defaults.agency_mode = self.agency.currentData()
         story.defaults.world_activity = self.world_activity.currentData()
-        story.defaults.world_map = self.world_map.isChecked()
-        story.defaults.map_density = self.map_density.currentData()
-        story.defaults.scarce = self.scarce.isChecked()
         story.style = self.style
         story.image_style = self.image_style.text().strip()
         story.private_prompt.mode = self.private_mode.currentData()

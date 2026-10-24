@@ -10,12 +10,7 @@ import os
 import pytest
 
 from sealedlore.engine.backdrops import (
-    backdrop_job,
-    backdrop_request,
     current_backdrop,
-    door_words,
-    expanded_prompt,
-    expander_messages,
     loose_things,
     painted_things,
 )
@@ -62,36 +57,6 @@ def test_a_backdrop_is_current_only_for_the_map_as_it_is_now(tmp_path, story, ca
     assert current_backdrop(world, art, house) is None
 
 
-def test_the_request_names_the_look_the_place_and_every_door(tmp_path, story, cast):
-    session = make_session(tmp_path, story, cast)
-    house = session.area("house")
-    farm = session.area("farm")
-    assert "door out in the" in door_words(house)
-    assert "the door of The house in its" in door_words(farm)
-    text = backdrop_request(house, words="the inside of The house", style="a storybook look")
-    assert text.startswith(
-        "Repaint this picture as a storybook look: a lavishly detailed illustrated game map of "
-        "the inside of The house, seen from directly above."
-    )
-    assert "top-down view of the inside of one building" in text
-    assert (
-        "Keep the layout: every building, wall, fence, road, path, doorway, water and rock" in text
-    )
-    assert "Everything else is yours to make beautiful" in text
-    assert "No people, no writing" in text
-    job = backdrop_job(session.world(), session.map_art_copy(), house, words="x", style="y")
-    assert job.subject == "backdrop" and job.subject_id == "house" and job.key == "backdrop:house"
-    # The expander sees the request with the render first; its reply is one block.
-    system, user = expander_messages(text, "data:image/png;base64,AAAA")
-    assert system.role == "system" and "prompt upsampler" in system.parts[0].text
-    assert user.parts[0].image.startswith("data:image/png") and user.parts[0].text == text
-    assert expander_messages(text, None)[1].parts[0].image == ""
-    assert expanded_prompt(
-        "<think>hm</think>\n```\nConvert the entire image into a painting.\n```"
-    ) == ("Convert the entire image into a painting.")
-    assert expanded_prompt("ok") == ""
-
-
 def test_fixed_things_are_painted_and_loose_ones_stay_sprites(tmp_path, story, cast):
     session = make_session(
         tmp_path,
@@ -110,30 +75,6 @@ def test_fixed_things_are_painted_and_loose_ones_stay_sprites(tmp_path, story, c
     stove = next(f for f in house.placements if "stove" in f.name)
     records = {stove.id: ThingRecord(state="dropped", name=stove.name, by="")}
     assert stove in loose_things(house, records)
-
-
-def test_a_backdrop_is_wanted_only_with_map_pictures_on_and_none_current(tmp_path, story, cast):
-    session = make_session(tmp_path, story, cast)
-    house = session.area("house")
-    assert not session.backdrop_wanted(house)  # no image endpoint, pictures off
-    session.config.map_art = True
-    session.config.map_pictures_mode = "auto"
-    session.config.providers[0].api_key = "k"
-    assert session.map_pictures_on
-    assert session.backdrop_wanted(house)
-    plan = area_plan(session.world(), session.map_art_copy(), "house")
-    art = session.world_art
-    art.pictures.append(
-        MapPicture(
-            subject="backdrop",
-            subject_id="house",
-            name="The house",
-            file="images/map/b.jpg",
-            plan=plan.made_at if plan is not None else "",
-        )
-    )
-    session._save_art(art)
-    assert not session.backdrop_wanted(house)
 
 
 @pytest.mark.skipif(

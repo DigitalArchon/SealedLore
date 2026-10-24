@@ -38,7 +38,6 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.dice import TIER_ORDER
 from sealedlore.gui import theme
-from sealedlore.gui.avatar_view import AvatarView
 from sealedlore.gui.fields import FormScroll, set_field_text
 from sealedlore.gui.lore_cast_dialog import FILL_LABEL
 from sealedlore.gui.portrait_view import PortraitView
@@ -77,10 +76,6 @@ class CastPanel(QWidget):
     # (character id, picture id or "", what): a picture drawn for the card:
     # "new" (a portrait), "again" or "edit" (of that picture), "scene".
     picture_requested = Signal(str, str, str)
-    # (character id, what): their avatar on the map: "draw" (from the
-    # portrait, else the card), "file" (one of the author's own), "reset"
-    # (the tile set's own figure).
-    avatar_requested = Signal(str, str)
     # (character id): a portrait chosen from a file went first on the card.
     portrait_added = Signal(str)
     # Cards for a published world's people, written by a model.
@@ -232,32 +227,6 @@ class CastPanel(QWidget):
         self.portrait.scene_requested.connect(lambda: self._ask("scene"))
         self.portrait.add_requested.connect(self._add_portrait)
         self.portrait.remove_requested.connect(self._remove_portrait)
-        # Their avatar on the map (gui/avatar_view.py), while the story is
-        # played on one: what walks for them, drawn again, chosen or put back.
-        self.avatar = AvatarView()
-        self.avatar.draw_requested.connect(lambda: self._avatar("draw"))
-        self.avatar.draw_with_words_requested.connect(lambda: self._avatar("words"))
-        self.avatar.choose_requested.connect(lambda pid: self._avatar(f"use:{pid}"))
-        self.avatar.add_requested.connect(lambda: self._avatar("file"))
-        self.avatar.reset_requested.connect(lambda: self._avatar("reset"))
-        self.avatar.setVisible(False)
-        # What the map records them as carrying (things taken on it), under
-        # the avatar; read-only, the window's to answer.
-        self.carrying = QLabel()
-        self.carrying.setObjectName("hintLabel")
-        self.carrying.setWordWrap(True)
-        self.carrying.setToolTip(
-            "What they carry, as the map records it: things taken, given or dropped on the "
-            "map when the turn was sent"
-        )
-        self.carrying.hide()
-        self.carrying_of = None
-        self._map_first = False
-        # (name) -> (the figure the map walks for them, where it came from,
-        # whether it is being drawn now); the window's, when there is a map.
-        self.avatar_of = None
-        # name -> [(picture id, image, how, in use)]: every avatar kept for them.
-        self.avatar_choices_of = None
         self.pictures.again_requested.connect(lambda ref: self._ask("again", ref))
         self.pictures.edit_requested.connect(lambda ref: self._ask("edit", ref))
         self.pictures.changed.connect(self._on_pictures_changed)
@@ -291,8 +260,6 @@ class CastPanel(QWidget):
         column.setContentsMargins(0, 0, 0, 0)
         column.setSpacing(6)
         column.addWidget(self.portrait)
-        column.addWidget(self.avatar)
-        column.addWidget(self.carrying)
         column.addWidget(QLabel("Other pictures"))
         column.addWidget(self.pictures)
         column.addStretch(1)
@@ -505,11 +472,6 @@ class CastPanel(QWidget):
             ref_id = character.reference_images[0].id
         self.picture_requested.emit(character.id, ref_id, what)
 
-    def _avatar(self, what: str) -> None:
-        character = self._current
-        if character is not None:
-            self.avatar_requested.emit(character.id, what)
-
     def add_portrait_to(self, character_id: str) -> bool:
         """Choose a file to be this character's portrait (the People page's
         Choose a picture…): their card selected, then as Choose a file…."""
@@ -524,39 +486,6 @@ class CastPanel(QWidget):
         character = self._current
         if self.pictures.add_portrait() and character is not None:
             self.portrait_added.emit(character.id)
-
-    def set_map_first(self, on: bool) -> None:
-        """Whether the story is played on a map: then each card shows their
-        avatar on it."""
-        self._map_first = on
-        self.refresh_avatar()
-
-    def refresh_avatar(self) -> None:
-        """The current card's avatar as the map has it now (one just landed,
-        or was chosen)."""
-        character = self._current
-        shown = self._map_first and character is not None and self.avatar_of is not None
-        self.avatar.setVisible(shown)
-        self.refresh_carrying()
-        if not shown:
-            return
-        image, source, drawing = self.avatar_of(character.name)
-        self.avatar.show_avatar(image, source, character.name)
-        self.avatar.set_drawing(drawing)
-        choices = self.avatar_choices_of(character.name) if self.avatar_choices_of else []
-        self.avatar.set_choices(choices)
-
-    def refresh_carrying(self) -> None:
-        """The current card's "Carrying: …" line, as the map records it
-        (shown only when they carry something)."""
-        character = self._current
-        things = (
-            self.carrying_of(character.name)
-            if self._map_first and character is not None and self.carrying_of is not None
-            else []
-        )
-        self.carrying.setText("Carrying: " + ", ".join(things) if things else "")
-        self.carrying.setVisible(bool(things))
 
     def _remove_portrait(self) -> None:
         character = self._current
@@ -584,7 +513,6 @@ class CastPanel(QWidget):
         caption = first.caption if first is not None and first.caption != "portrait" else ""
         self.portrait.show_portrait(data, caption, name)
         self.portrait.set_offered(character is not None, character is not None)
-        self.refresh_avatar()
         item = self.list.currentItem()
         if item is not None and character is not None:
             item.setIcon(self._icon(character))

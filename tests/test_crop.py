@@ -66,7 +66,6 @@ def test_each_shape_is_the_size_its_model_draws():
     isometric view is the shape of the plan it is laid over on the map."""
     config = Config(
         portrait_model="flux",
-        map_isometric_model="qwen",
         image_models=[
             _listed("flux", "1024*1024", "1280*720", "1024*1536", "1536*1024"),
             _listed("qwen", "1024x1024", "1024x768", "576x1024"),
@@ -342,19 +341,6 @@ def test_every_way_a_picture_comes_in_keeps_nothing_hidden_and_offers_its_shape(
     assert picture.width() / picture.height() == pytest.approx(
         area.width() / area.height(), abs=0.05
     )
-
-    # The isometric view, a picture of one's own at the view's shape.
-    from sealedlore.engine.world_art import local_area
-
-    world = session.world()
-    area_id = local_area(world, world.start).id
-    seen = _answer(monkeypatch, whole=True)
-    _pick(monkeypatch, png)
-    window._own_isometric(area_id)
-    assert seen["initial"] == ISOMETRIC
-    view = session.map_art_copy().picture_for("isometric", area_id)
-    assert view is not None and view.model == "" and view.file.startswith("images/map/")
-    clean(view.file)
 
 
 @pytest.mark.real_crop

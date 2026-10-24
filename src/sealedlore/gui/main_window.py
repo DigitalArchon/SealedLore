@@ -84,7 +84,7 @@ from sealedlore.gui.model_trouble import (
     TroubleRole,
 )
 from sealedlore.gui.new_story_guide import NewStoryGuide
-from sealedlore.gui.people_page import NOT_NAMED_SUFFIX, PeoplePage, people_view
+from sealedlore.gui.people_page import PeoplePage, people_view
 from sealedlore.gui.phone_status import PhoneStatusButton
 from sealedlore.gui.plot_editor import PlotEditorWindow
 from sealedlore.gui.plot_panel import ClockDialog, PlotPanel
@@ -97,7 +97,7 @@ from sealedlore.gui.session_line import SessionLine
 from sealedlore.gui.settings_dialog import SettingsDialog
 from sealedlore.gui.setup_dialog import SetupDialog
 from sealedlore.gui.speed_test import speed_tests
-from sealedlore.gui.start_dialog import DESIGN, StartDialog
+from sealedlore.gui.start_dialog import StartDialog
 from sealedlore.gui.start_page import NewDialog, StartChooser
 from sealedlore.gui.status import NoticeStatusBar, StatusStrip, WaitCounter
 from sealedlore.gui.stories import StoryListPanel
@@ -115,20 +115,15 @@ from sealedlore.gui.transcript import (
 from sealedlore.gui.usage_dialog import UsageDialog
 from sealedlore.gui.visual_window import VisualWindow, player_choices
 from sealedlore.gui.welcome import setup_missing, welcome_html
-from sealedlore.gui.window_area import AreaWindow
 from sealedlore.gui.window_cast import CastWindow
 from sealedlore.gui.window_chat import ChatWindow
-from sealedlore.gui.window_corrections import CorrectionWindow
-from sealedlore.gui.window_edit import MapEditWindow
 from sealedlore.gui.window_find import FindWindow
 from sealedlore.gui.window_images import ImagesWindow
 from sealedlore.gui.window_layout import LayoutWindow, StoriesDock
-from sealedlore.gui.window_objects import ObjectsWindow
 from sealedlore.gui.window_phone import PhoneWindow
 from sealedlore.gui.window_private import PrivateWindow
 from sealedlore.gui.window_text import TextSizeWindow
 from sealedlore.gui.window_videos import VideosWindow
-from sealedlore.gui.window_world import WorldWindow
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.ids import utc_now_iso
@@ -140,7 +135,6 @@ from sealedlore.models.route import ROUTE_ROLES, ModelRoute
 from sealedlore.models.scene import SceneState
 from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
-from sealedlore.models.world import WorldArt, WorldMap
 from sealedlore.providers import make_session_provider
 from sealedlore.providers.base import ChatProvider, UnconfiguredProvider
 from sealedlore.providers.embeddings import EmbeddingBackend, OpenAICompatibleEmbeddings
@@ -164,7 +158,6 @@ from sealedlore.storage.paths import VISUAL_SAMPLES, data_home, samples_dir, sto
 from sealedlore.storage.repository import (
     StoryBundle,
     copy_story,
-    copy_without_map,
     load_config_or_recover,
     load_story_bundle,
     read_api_log,
@@ -183,7 +176,7 @@ from sealedlore.storage.scenario import (
     write_scenario,
 )
 from sealedlore.storage.visual_design import cards_for_design, load_design
-from sealedlore.storage.world_art import carried_art, carried_story_art, load_sidecar
+from sealedlore.storage.world_art import carried_story_art, load_sidecar
 from sealedlore.threads import BackgroundThread
 from sealedlore.tree import path_to
 
@@ -250,11 +243,6 @@ class MainWindow(
     CastWindow,
     ChatWindow,
     FindWindow,
-    WorldWindow,
-    AreaWindow,
-    CorrectionWindow,
-    ObjectsWindow,
-    MapEditWindow,
     ImagesWindow,
     VideosWindow,
     PhoneWindow,
@@ -421,12 +409,10 @@ class MainWindow(
         # Wraps under a large text size rather than widening the window.
         self._build_find()
         self._build_place_button()
-        self._build_world()
-        self._build_area()
         self._build_stories_button()
         self.top_row = WrapRow(spacing=6, group_spacing=12)
         self.top_row.add_group([self.stories_button, self.view_toggle])
-        self.top_row.add_group([self.find_button, self.place_button, self.world_button])
+        self.top_row.add_group([self.find_button, self.place_button])
         self.top_row.add_group([self.branch_bar], right=True, whole=True)
         # A layout of the centre's own, not in a widget: wrapped in one, it
         # missed the branch bar's height changing and drew its buttons
@@ -498,8 +484,6 @@ class MainWindow(
         self.cast_panel.scan_requested.connect(self.scan_for_characters)
         self.cast_panel.infer_requested.connect(self.infer_competence)
         self.cast_panel.picture_requested.connect(self._on_card_picture)
-        self._wire_avatars()
-        self._wire_corrections()
         self.scene_panel = ScenePanel()
         self.scene_panel.changed.connect(self._on_scene_changed)
         self.scene_panel.update_requested.connect(self.update_scene_from_story)
@@ -529,8 +513,6 @@ class MainWindow(
         self.people_page = PeoplePage(self._story_pictures)
         self._people_dirty = True
         self._wire_people()
-        self._wire_objects()
-        self._wire_map_edit()
         # The pages a job locks read-only rather than greys out.
         self._busy_locks = [
             BusyLock(page)
@@ -551,11 +533,8 @@ class MainWindow(
 
         # Scene first, and the page a story opens on: playtesting found the
         # scene read wrong too often to go unwatched, and Cast is for changes
-        # made by hand. A story that keeps a map has Map before it, opens on
-        # it, and the Inspector takes half the window (window_world.py).
+        # made by hand.
         self.right_tabs = TabRows()
-        self.right_tabs.addTab(self.world_view, "Map")
-        self.right_tabs.setTabVisible(0, False)
         self.right_tabs.addTab(self.people_page, "People")
         self.right_tabs.addTab(self.scene_panel, "Scene")
         self.right_tabs.addTab(self.cast_page, "Cast")
@@ -580,7 +559,11 @@ class MainWindow(
         self.addDockWidget(Qt.RightDockWidgetArea, right)
         self.resizeDocks([left, right], [240, 420], Qt.Horizontal)
         self._init_layout(left, right)
-        self._init_world_dock()
+        # View takes `stories_list_action`; the pages built on first show.
+        self.right_tabs.currentChanged.connect(self._on_page_changed)
+        self.stories_list_action = self.stories_dock.toggleViewAction()
+        self.stories_list_action.setText("&Stories list")
+        self.stories_list_action.setStatusTip("Show or hide the list of stories")
         self._init_stories_list()
 
         self.status_strip = StatusStrip()
@@ -717,14 +700,6 @@ class MainWindow(
         self.restart_action = QAction("&Restart as new playthrough…", self)
         self.restart_action.triggered.connect(lambda: self.restart_story(review=True))
         story_menu.addAction(self.restart_action)
-        # The author (Oct 19 2026): someone enjoying a story who no longer
-        # wants to pay for the map goes on from where they are without it.
-        self.without_map_action = QAction("Continue &without the map…", self)
-        self.without_map_action.setStatusTip(
-            "A copy of this story, from where it is, played on without the map"
-        )
-        self.without_map_action.triggered.connect(self.continue_without_map)
-        story_menu.addAction(self.without_map_action)
         # Pictures before the rarer things: they are what play reaches for.
         self._image_actions(story_menu)
         self._video_menu_actions(story_menu)
@@ -781,7 +756,7 @@ class MainWindow(
         story_menu.addAction(self.usage_action)
 
         view_menu = self.menuBar().addMenu("&View")
-        # Hidden while a story keeps a map: the map has its room (window_world.py).
+        # The Stories list, put away while a story is open (window_layout.py).
         view_menu.addAction(self.stories_list_action)
         view_menu.addSeparator()
         self.storyteller_view_action = QAction("What the &storyteller sees", self)
@@ -860,15 +835,12 @@ class MainWindow(
         self.addAction(stop_action)
 
     def _show_first_page(self) -> None:
-        """The page a story opens on: its map, if it keeps one; else who is
-        in it, by their faces (People); a chat, which has neither, its
-        chapters."""
+        """The page a story opens on: who is in it, by their faces (People);
+        a chat, which has no cast, its chapters."""
         session = self.session
         if session is None:
             return
-        if session.map_on:
-            self.right_tabs.setCurrentWidget(self.world_view)
-        elif session.story.chat:
+        if session.story.chat:
             self.right_tabs.setCurrentWidget(self.summaries_panel)
         else:
             self.right_tabs.setCurrentWidget(self.people_page)
@@ -912,19 +884,6 @@ class MainWindow(
         hidden = set() if self.config.show_plot_spoilers else session.hidden_ids()
         missing, _lore = session.without_pictures()
         scene, unnamed = session.story.scene, []
-        if session.map_first and session.nodes:
-            # On a map, who is here is the map's, as the storyteller is told:
-            # whoever is in sight or earshot, named or not.
-            mapped = session.map_scene(session.path(), session.story.held_character_id)
-            if mapped is not None:
-                mapped.location = scene.location
-                unknowns = session.world().unknowns
-                unnamed = [
-                    (label, unknowns[label])
-                    for label in sorted(unknowns)
-                    if f"{unknowns[label]}{NOT_NAMED_SUFFIX}" in mapped.present_others
-                ]
-                scene = mapped
         self.people_page.set_view(
             people_view(
                 [c for c in session.cast if c.id not in hidden],
@@ -982,6 +941,14 @@ class MainWindow(
         if self.prompt_page_action.isChecked() != bool(on):
             self.prompt_page_action.setChecked(bool(on))
 
+    def _on_page_changed(self, _index: int) -> None:
+        self._sync_dock_title()
+        if self.right_tabs.currentWidget() is self.people_page and self._people_dirty:
+            self._build_people()
+        if self.right_tabs.currentWidget() is self.images_panel:
+            # The cards' pictures change on their own pages: read afresh.
+            self.refresh_images()
+
     def _sync_dock_title(self) -> None:
         """The panel beside the story is titled with its page and what the
         page shows (Oct 18 2026; it was "Inspector")."""
@@ -1020,16 +987,6 @@ class MainWindow(
             self.stop_generation()
         elif self.map_shown():
             self.show_map(False)
-        elif self.world_shown():
-            # On the play view, what is pending (a Move…, an Objects tool, an
-            # Edit Mode stroke, Edit Mode) goes first; the window's shortcut
-            # took the key before the view saw it.
-            if self.world_view.play_shown() and self.area_view.cancel_pending():
-                return
-            # From the isometric view back to the map; from the local level
-            # (the play view too) out to the region; then off the map.
-            if not self.world_view.escape():
-                self.show_world(False)
         elif self.find_open():
             self.close_find()
 
@@ -1385,21 +1342,10 @@ class MainWindow(
             return
         again = "new chat" if self.session.story.chat else "new playthrough"
         title = f"{self.session.story.title} ({again})"
-        files, art = self._files_and_art()
-        self._open_new_bundle(
-            fresh_playthrough(self.session.bundle, title, files, art), review=review
-        )
-
-    def _files_and_art(self) -> tuple[dict[str, bytes], WorldArt | None]:
-        """The open story's reference pictures, and its map's art with the map
-        pictures' files beside them: a restart or a scenario file of a story
-        with a map keeps what was drawn for it."""
-        assert self.session is not None
         files = reference_files(self.session.bundle, self.root)
-        if not self.session.map_on:
-            return files, None
-        art, map_files = carried_art(self.session.map_art_copy(), self.session.pictures.read)
-        return {**files, **map_files}, art
+        self._open_new_bundle(
+            fresh_playthrough(self.session.bundle, title, files, None), review=review
+        )
 
     # --- the stories list's menu ---------------------------------------------
 
@@ -1452,45 +1398,6 @@ class MainWindow(
         self.stories.refresh(selected_id=copy.story.id)
         self.open_story(copy.story.id)
         self.statusBar().showMessage(f"Created “{copy.story.title}”, a complete copy", 8000)
-
-    def continue_without_map(self) -> None:
-        """A copy of the open story, from where it is, played on without the
-        map (`copy_without_map`): the same characters, plot, world, lore,
-        branches and story so far; the scene card as the map had it. The
-        map story stays as it was; the copy is opened."""
-        session = self.session
-        if session is None or not session.map_on or self._busy or session.in_private:
-            return
-        if self.memory_chat:
-            return  # nothing of a memory-only chat is written to disk
-        title = f"{session.story.title} (without the map)"
-        answer = QMessageBox.question(
-            self,
-            "Continue without the map",
-            f"Make a copy of “{session.story.title}” that goes on from where it is now, "
-            "without the map?\n\n"
-            "The copy keeps every character, the plot, the world and lore, every branch "
-            "and the story so far, and starts with everyone where the map has them. "
-            "Nothing is read, drawn or painted for a map any more, and the storyteller "
-            "is no longer sent it: each turn costs less.\n\n"
-            f"This story stays as it is, map and all. The copy is called “{title}”.",
-            QMessageBox.Ok | QMessageBox.Cancel,
-            QMessageBox.Ok,
-        )
-        if answer != QMessageBox.Ok:
-            return
-        scene = None if session.story.chat else session.scene_without_map()
-        session.save()
-        try:
-            copy = copy_without_map(session.story.id, title=title, scene=scene, root=self.root)
-        except OSError as exc:
-            self._warn_plain("Could not make the copy", str(exc))
-            return
-        self.stories.refresh(selected_id=copy.story.id)
-        self.open_story(copy.story.id)
-        self.statusBar().showMessage(
-            f"Created “{copy.story.title}”: the story so far, going on without the map", 8000
-        )
 
     def delete_story(self, story_id: str) -> None:
         if self._busy:
@@ -1571,19 +1478,12 @@ class MainWindow(
         """Back to the no-story state the window starts in."""
         self.show_map(False)
         self.close_find()
-        if self.map_layout:
-            self._set_map_layout(False)
         if self.session is not None:
             if self.session.memory_only:
                 bad_hosts().forget_session()
             self.session.close(wait_seconds=0)
             self.session.save()
         self.session = None
-        self._leave_story_views()
-        # Nothing of the story's map stays for the next: a memory chat's
-        # card, postcard and decoded views (the review, Oct 15 2026).
-        self.world_view.picture_reader = None
-        self.world_view.set_world(WorldMap(), WorldArt(), None, keep_view=False)
         self._sync_stories_list()
         self.setWindowTitle("SealedLore")
         self.status_strip.reset_session_cost()
@@ -1678,8 +1578,6 @@ class MainWindow(
         self.reload_transcript()
         self._reassemble_inspector()
         self._update_controls()
-        # The map turned on or off: its button, and what it lacks drawn.
-        self._sync_world()
         # The opening, the starting scene and the suggested character are only
         # read when a story begins; changed on one already under way, they
         # used to be saved with nothing to show for it.
@@ -1715,18 +1613,10 @@ class MainWindow(
             self.session.cast,
             parent=self,
             without_pictures=offered,
-            tile_sets=self.session.tile_sets_at_start(),
         )
         if dialog.exec() != StartDialog.Accepted:
             return
         held = dialog.held_character_id()
-        tile_set = dialog.tile_set_choice()
-        if tile_set == DESIGN:
-            # Designed and set drawing before the opening; the map's things
-            # wait for it (`tile_set_waiting`). Cancelled: the AI chooses.
-            self._area_own_look()
-        elif tile_set:
-            self.session.set_tile_set(tile_set)
         # Before holding: pinning resets the roster the held character joins.
         if (pinned := dialog.pinned()) is not None:
             self.session.pin_at_start(*pinned)
@@ -1804,24 +1694,9 @@ class MainWindow(
         self.session = session
         self._after_open()
 
-    def _leave_story_views(self) -> None:
-        """Nothing of a story's map views stays for the next: Edit Mode and
-        the area it looked at, the play view and its painted areas, a
-        painting waiting for its pieces, a menu choice mid-walk, the Objects
-        panel, and what the Region map was last built from. Closing a story
-        did this and opening another over it didn't: the next story came up
-        in the last one's Edit Mode, looking for a building it didn't have,
-        with no area at all until Done (the review, Oct 20 2026)."""
-        self.leave_map_edit(refresh=False)
-        self._close_area()  # the painting waited for, the menu choice, the caches
-        self._close_objects()
-        self._world_drawn = None
-        self._drawn_art = None
-
     def _after_open(self) -> None:
         """Everything that follows a story being opened, from disk or (a
         memory-only chat) from memory."""
-        self._leave_story_views()
         # A route to one host is checked against that host's price.
         self.session.host_price = self._host_price
         self._fetch_host_prices()
@@ -1856,15 +1731,7 @@ class MainWindow(
         self._sync_chat_ui()
         self._attest_chat()
         self._update_controls()
-        self._sync_world()
-        if self.session.map_first and self.session.map_pictures_on:
-            # The map's pictures are priced and named from the image listing,
-            # read otherwise only when a picture dialog opens: on a new setup
-            # the Map page named raw ids and Objects… had no price.
-            self.image_catalog.ensure()
         self._sync_stories_list()
-        # A story opens on its map where the story is now, not where the last left it.
-        self.refresh_world(keep_view=False)
 
     def refresh_panels(self) -> None:
         if self.session is None:
@@ -2034,8 +1901,6 @@ class MainWindow(
         self._show_nodes(self.session.full_path())
         self.refresh_branch_bar()
         self._refresh_find()
-        # The leaf moved (a branch, a take, an edit): the map is the path's.
-        self.refresh_world(keep_view=True)
         # The phones' view is rebuilt from the same state (gui/window_phone.py).
         self._phone_settled()
 
@@ -2045,8 +1910,7 @@ class MainWindow(
         above the transcript are put away: greyed, they only looked usable.
         None: a story is open, and they are back."""
         open_story = start is None
-        # The map's button is the map's to show (`_sync_world`), the branch
-        # bar the branches' (`refresh_branch_bar`).
+        # The branch bar is the branches' to show (`refresh_branch_bar`).
         for widget in (self.stories_button, self.view_toggle, self.find_button):
             widget.setVisible(open_story)
         if not open_story:
@@ -2749,12 +2613,10 @@ class MainWindow(
         self._update_controls()
 
     def _on_passage_done(self) -> None:
-        """The passage is in: the composer opens while the reads run, and
-        the map says it is being read."""
+        """The passage is in: the composer opens while the reads run."""
         self._background = True
         self._update_controls()
         self.composer.focus_input()
-        self._sync_progress()
 
     def _run_queued(self) -> None:
         run, self._queued, self._queued_text = self._queued, None, None
@@ -2892,7 +2754,6 @@ class MainWindow(
         back left of the starting scene (the review, Oct 20 2026).
         """
         assert self.session is not None
-        self.session.restore_area(node)  # its walking and travel, live again
         self.session.delete_from(node.id)
         self.composer.restore_turn(node)
 
@@ -3165,7 +3026,6 @@ class MainWindow(
         and offers Stop. `job` names it in a failure ("Review failed"); `sent`
         is the turn or Question it answers.
         """
-        self._finish_walk_before_job()
         self._job_name = job or ("Question" if question is not None else "Generation")
         self._sent = sent
         self._failed = None
@@ -3383,12 +3243,8 @@ class MainWindow(
             QTimer.singleShot(0, lambda: self.transcript.scroll_to_node(focus))
         self.refresh_summaries()
         self.refresh_retrieval()
-        # Card pictures that came back while the worker owned the story,
-        # before the map's art starts: after it, the avatars were drawn from
-        # the cards' words and again from the portraits (Oct 18 2026: a
-        # drafted story's six avatars, paid twice).
+        # Card pictures that came back while the worker owned the story.
         self._take_card_pictures()
-        self._sync_world()
         if self._streaming_job:
             # The kept prompt is exactly what was sent, so show that.
             self.refresh_inspector()
@@ -3409,11 +3265,6 @@ class MainWindow(
             # speakers the composer offers follow who is present.
             self._refresh_scene_panel()
             self._refresh_composer()
-            # What the map's Undo puts back now: a correction made on an
-            # earlier message no longer, one the reads made on this one
-            # (`leave_with_scene_read`).
-            self.area_view.set_undo(self.session.correction_undo)
-            self.world_view.set_undo(self.session.correction_undo)
         if self._asking:
             if self.session is not None and len(self.session.bundle.asides) > self._asides_before:
                 self.status_strip.add_usage(self.session.bundle.asides[-1].usage)
@@ -3430,8 +3281,11 @@ class MainWindow(
         self._offer_pending_scene()
         self._sync_private_ui()
         self._offer_private_summary()
-        # What the job's starter wanted done once it is in (Make a card).
-        self._run_after_job()
+        # What the job's starter wanted done once it is in (`_after_job`:
+        # Fill with lore characters…, window_cast.py).
+        after, self._after_job = getattr(self, "_after_job", None), None
+        if after is not None:
+            QTimer.singleShot(0, after)
         if self._queued is not None:
             # After the thread has let go of the job, not inside its signal.
             QTimer.singleShot(0, self._run_queued)
@@ -4521,9 +4375,6 @@ class MainWindow(
         moved = self.session.hold(character_id or None)
         self._refresh_scene_panel()
         self._refresh_composer()
-        # The map follows the character taken up: the ring, the sight, the
-        # clock; the other character's unsent walk is theirs, not these.
-        self.refresh_world()
         if character_id:
             self.composer.select_speaker(character_id)
         self._reassemble_inspector()
@@ -4670,7 +4521,6 @@ class MainWindow(
         busy = self._busy
         has_story = self.session is not None
         self._refresh_model_button()
-        self._sync_area_lock()
         self.composer.set_busy(
             busy,
             has_story=has_story,
@@ -4727,11 +4577,6 @@ class MainWindow(
             self.usage_action,
         ):
             action.setEnabled(has_story and not busy)
-        # Only for a story or chat that keeps a map, and never one kept in
-        # memory alone: the copy is written to disk.
-        keeps_map = has_story and self.session.map_on
-        self.without_map_action.setVisible(keeps_map)
-        self.without_map_action.setEnabled(keeps_map and not busy and not self.memory_chat)
         unstarted = has_story and not (self.session and self.session.nodes)
         self.start_action.setEnabled(unstarted and not busy)
         # Once the story has begun it can only restart: greyed for good, it
@@ -4847,7 +4692,6 @@ class MainWindow(
         if self.session is not None:
             self.session.close()
             self.session.save()
-        self._join_paint_threads()
         self._discard_provider()
         self._remember_layout()
         save_config(self.config, root=self.root)

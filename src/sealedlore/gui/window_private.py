@@ -170,7 +170,7 @@ class PrivateWindow:
         private = self.in_private
         # Pictures stay: the private model writes their prompts, and the image
         # dialog warns that the picture itself is neither private nor unsaved.
-        for action in (self.review_action, self.restart_action, self.without_map_action):
+        for action in (self.review_action, self.restart_action):
             action.setEnabled(action.isEnabled() and not private)
         # Settings stays clickable and says why it's paused (_settings_paused).
         # Switching story or branch would leave the scene behind half-open.
@@ -178,10 +178,6 @@ class PrivateWindow:
         self.branch_bar.setEnabled(self.session is not None and not self._busy and not private)
         if private and self.map_shown():
             self.show_map(False)
-        # The story's map stays where it is, paused (the author, Oct 15 2026):
-        # nothing from the scene reaches it, and it catches up from the
-        # approved summary (`_sync_world`).
-        self._sync_world()
         for widget in (self.stories, self.branch_bar):
             widget.setToolTip(
                 self._say(

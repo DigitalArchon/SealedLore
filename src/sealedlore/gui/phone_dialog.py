@@ -37,7 +37,6 @@ from PySide6.QtWidgets import (
 
 from sealedlore.gui.sizing import size_to_screen
 from sealedlore.gui.winprivacy import copy_text
-from sealedlore.models.story import keeps_map
 from sealedlore.phone import qr
 from sealedlore.phone.pairing import CODE_SECONDS
 from sealedlore.storage.library import story_listings
@@ -55,7 +54,7 @@ HOW_TO_PAIR = (
     "phone's usual browser, which can't reach an onion address.) Then compare the four digits "
     "the phone shows with the ones SealedLore asks you to allow."
 )
-NO_MAP_YET = "Keeps a map: phones play text stories and chats only, for now."
+NO_MAP_YET = "A visual story: phones play text stories and chats only, for now."
 
 
 class QrWidget(QWidget):
@@ -279,9 +278,7 @@ class PhoneDevicesDialog(QDialog):
         if session is not None and session.memory_only:
             item = QListWidgetItem(f"{session.story.title} (this memory-only chat, for this run)")
             item.setData(Qt.UserRole, (session.story.id, True))
-            self._tick_item(
-                item, window.phone_shared(session.story.id), keeps_map(session.story.defaults)
-            )
+            self._tick_item(item, window.phone_shared(session.story.id), session.story.visual)
             self.stories.addItem(item)
         for listing in story_listings(window.root):
             if listing.error is not None:
@@ -295,7 +292,7 @@ class PhoneDevicesDialog(QDialog):
     def _tick_item(self, item: QListWidgetItem, shared: bool, keeps_map: bool) -> None:
         if keeps_map:
             item.setFlags(item.flags() & ~Qt.ItemIsEnabled & ~Qt.ItemIsUserCheckable)
-            item.setText(item.text() + " · keeps a map")
+            item.setText(item.text() + " · a visual story")
             item.setToolTip(NO_MAP_YET)
             return
         item.setFlags(item.flags() | Qt.ItemIsUserCheckable)

@@ -174,7 +174,7 @@ def test_stories_are_listed_with_whether_they_are_chats_or_keep_a_map(tmp_path: 
             "id": "mapped",
             "title": "Mapped",
             "updated_at": "2026-10-02",
-            "defaults": story.defaults.model_copy(update={"world_map": True}),
+            "mode": "visual",
         }
     )
     for each in (plain, chat, mapped):
