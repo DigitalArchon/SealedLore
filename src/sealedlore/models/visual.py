@@ -167,10 +167,26 @@ class ItemSpawn(BaseModel):
     inside: str = ""
 
 
+class ThingNote(BaseModel):
+    """What the design says of a thing the plan already draws (by name, in
+    the area of a place): its standing state in words (`tags`: "burning",
+    "fed within the hour") and what is seen of it, so the keeper and the
+    people know what the picture shows. Live (the author, Oct 24 2026), the
+    creek crossing's campfire was painted burning and the model was told
+    nothing of it."""
+
+    name: str
+    place: str
+    tags: list[str] = Field(default_factory=list)
+    seen: str = ""
+
+
 class VisualDesign(BaseModel):
     locked: list[LockedDoor] = Field(default_factory=list)
     creatures: list[CreatureSpawn] = Field(default_factory=list)
     items: list[ItemSpawn] = Field(default_factory=list)
+    # The state of things the plans already draw (a campfire that burns).
+    things: list[ThingNote] = Field(default_factory=list)
     # A line for the log the first time an area is entered, by place name.
     flavour: dict[str, str] = Field(default_factory=dict)
     # Combat ability by character name; the rest take `default_ability`.

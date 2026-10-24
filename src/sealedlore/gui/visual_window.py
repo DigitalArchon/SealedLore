@@ -600,8 +600,9 @@ class VisualWindow(QMainWindow):
         view = self.area_view
         if not view.walking() or view.area is None:
             return
-        remaining = view.remaining_steps()
-        view.finish_walk()
+        # Cut, not finished: a finish tells the presenter, which walks the
+        # figure on to the old destination before the new click is seen.
+        remaining = view.cut_walk()
         held = view.held()
         if held is None:
             return

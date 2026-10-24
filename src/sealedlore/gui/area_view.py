@@ -1457,6 +1457,12 @@ class AreaView(QWidget):
             self._fit(self.area)
 
     def _follow(self, x: float, y: float) -> None:
+        """The view keeps the author's character inside its middle: a figure
+        walking out of the inner part of the viewport pans the view by the
+        overshoot alone, a step at a time, so the camera glides at the
+        figure's pace. It used to recentre the view in one jump each time
+        the figure reached the inner edge (the author, Oct 24 2026: the
+        framing "jumps around a lot rather than being smooth")."""
         if self.area is None:
             return
         px = px_for(self.area)
@@ -1464,8 +1470,12 @@ class AreaView(QWidget):
         margin = port.width() * 0.25
         point = QPointF((x + 0.5) * px, (y + 0.5) * px)
         inner = port.adjusted(margin, margin * 0.6, -margin, -margin * 0.6)
-        if not inner.contains(point):
-            self.view.centerOn(point)
+        if inner.contains(point):
+            return
+        dx = min(0.0, point.x() - inner.left()) + max(0.0, point.x() - inner.right())
+        dy = min(0.0, point.y() - inner.top()) + max(0.0, point.y() - inner.bottom())
+        centre = port.center()
+        self.view.centerOn(centre.x() + dx, centre.y() + dy)
 
     def held(self) -> Walker | None:
         return next((w for w in self.walkers if w.held), None)
@@ -1903,6 +1913,30 @@ class AreaView(QWidget):
         start, and the walk then wrote session state under the worker; the
         review, Oct 16 2026)."""
         self._stop_walking()
+
+    def cut_walk(self) -> list[tuple[int, int]]:
+        """A walk still animating ends now, where the figure is (the tile it
+        is nearest), and nothing is told: the window stands the player there
+        itself. The tiles not walked come back. `finish_walk` tells the
+        walk's end, and the walk's end refreshes the view, which showed the
+        walk on to the old destination; a click elsewhere mid-walk then
+        waited for that (the author, Oct 24 2026: the figure went to the
+        clicked places in order)."""
+        if not self._timer.isActive():
+            return []
+        self._timer.stop()
+        if self._progress >= 0.5 and self._steps:
+            self._arrive()
+        remaining = list(self._steps)
+        self._walked, self._steps, self._progress = [], [], 0.0
+        held = self.held()
+        if held is not None:
+            person = self.people.get(held.name)
+            if person is not None:
+                person.set_bob(0.0)
+                person.set_pose("stand")
+            self._show_at(held, held.x, held.y)
+        return remaining
 
     def drop_walk(self) -> None:
         """A walk still animating is forgotten: nothing is told."""

@@ -750,7 +750,7 @@
       },
       {
        "kind": "object",
-       "name": "cold campfire",
+       "name": "campfire",
        "x": 10,
        "y": 7
       },
@@ -816,7 +816,7 @@
      "1": "wrecked car",
      "2": "road sign, shot through",
      "3": "abandoned sled",
-     "4": "cold campfire",
+     "4": "campfire",
      "5": "fallen pine",
      "6": "snowdrift",
      "7": "culvert pipe",

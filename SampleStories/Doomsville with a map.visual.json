@@ -215,12 +215,25 @@
       "kind": "light"
     }
   ],
+  "things": [
+    {
+      "name": "campfire",
+      "place": "The creek crossing",
+      "tags": ["burning", "fed within the hour"],
+      "seen": "Split pine on a ring of stones, burning low but steady. Boot prints all round it, more than one pair, leading off south."
+    },
+    {
+      "name": "watch fire",
+      "place": "Hellsville",
+      "tags": ["burning", "kept fed by the gate watch"]
+    }
+  ],
   "flavour": {
     "The farm": "Snow to the knee between the house and the barn. Nothing moves but the wind.",
     "The farmhouse": "Cold rooms, a stove gone out, the smell of old smoke. Someone kept this place.",
     "The barn": "Hay dust and rust. A pickup sits on flat tyres, its tank long dry.",
     "The frozen pond": "The ice is grey and thick. Reeds stand dead along the edge.",
-    "The creek crossing": "The road dips to a frozen creek. Something has been through the snow here before you.",
+    "The creek crossing": "The road dips to a frozen creek. Someone's fire still burns beside the road, and the snow round it is trodden.",
     "The gas station": "Four lanes of wrecks under the snow, and the station's canopy sagging. Keep your eyes open.",
     "The hills": "Bare trees on limestone slopes, and a trail that someone keeps walking.",
     "Hellsville": "A town behind a wall of cars and timber. Smoke from a few chimneys. People, alive.",

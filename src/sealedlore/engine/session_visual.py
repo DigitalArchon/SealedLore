@@ -643,6 +643,22 @@ class VisualRuntime:
                 f"{area.id}:{spawn.kind}",
             ):
                 state.creatures[creature.id] = creature
+        for note in design.things:
+            area = self._visual_area_named(note.place)
+            if area is None:
+                continue
+            want = bare(note.name).casefold()
+            for placement in area.placements:
+                if bare(placement.name).casefold() != want:
+                    continue
+                record = state.things.get(placement.id)
+                if record is None:
+                    record = state.things[placement.id] = ThingRecord(
+                        state="seen", name=placement.name
+                    )
+                record.tags = [t for t in note.tags if t and t not in record.tags] + record.tags
+                if note.seen and not record.seen:
+                    record.seen = note.seen
         for item in design.items:
             area = self._visual_area_named(item.place)
             if area is None:

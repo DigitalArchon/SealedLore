@@ -35,6 +35,7 @@ from sealedlore.models.visual import (  # noqa: E402
     ItemSpawn,
     LockedDoor,
     PersonSheet,
+    ThingNote,
     VisualDesign,
 )
 from sealedlore.models.world import WorldDelta  # noqa: E402
@@ -368,6 +369,10 @@ def test_a_click_mid_walk_turns_the_figure_at_once(app, window: MainWindow):
     assert (now.spots["Serrik Vaun"].x, now.spots["Serrik Vaun"].y) == (me.x, me.y)
     assert now.seconds < after_first
     assert view.walking()
+    # Straight there: never on to the first click's place first (the author,
+    # Oct 24 2026: the figure went to the clicked places in order).
+    assert view._steps[-1] == (me.x, me.y) and far not in view._steps
+    assert view._walked[0] == stood
     walk_all(app, view)
     shown = view.held()
     assert (shown.x, shown.y) == (me.x, me.y)
@@ -465,6 +470,14 @@ def _design() -> VisualDesign:
             ItemSpawn(name="a first aid kit", place="The house", count=1, kind="medicine"),
         ],
         flavour={"The house": "Dust, and a cold stove.", "The farm": "Snow to the knee."},
+        things=[
+            ThingNote(
+                name="a cast-iron stove",
+                place="The house",
+                tags=["lit", "fed within the hour"],
+                seen="Someone kept this burning.",
+            )
+        ],
     )
 
 
@@ -517,6 +530,19 @@ def test_the_design_is_laid_out_once_dead_things_and_locks(game: VisualWindow):
     # On the area: the key lies on the farm as a thing of its own.
     assert any(p.name == "a house key" for p in farm.placements)
     assert any(p.name == "a tin of beans" for p in house.placements)
+    # What the design says of a thing the plan draws reaches the keeper (the
+    # creek crossing's campfire was painted burning and the model was told
+    # nothing of it; the author, Oct 24 2026).
+    stove = next(p for p in house.placements if p.name == "a cast-iron stove")
+    noted = state.things[stove.id]
+    assert noted.tags == ["lit", "fed within the hour"]
+    assert noted.seen == "Someone kept this burning."
+    was = state.spots["Serrik Vaun"]
+    state.spots["Serrik Vaun"] = Spot(area="house", x=stove.x, y=stove.y + 1)
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    assert "cast-iron stove; lit; fed within the hour; Someone kept" in session.visual_state_text()
+    state.spots["Serrik Vaun"] = was
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
     assert game.health.text() == "♥♥" and game.carry_button.text() == "Carrying nothing"
     assert "Snow to the knee." in game.log.toPlainText()  # the flavour line, once
     # One of the dead brought into sight is reported, once.

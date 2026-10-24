@@ -442,6 +442,55 @@ def test_me_centres_either_view_on_the_author_s_character(app, window):
     assert abs(middle.x() - me[0]) < 50 and abs(-middle.y() - me[1]) < 50
 
 
+def test_the_view_pans_by_the_overshoot_rather_than_recentring(app, window):
+    """A figure walking out of the viewport's middle pans the view by just
+    what it overshot, so the camera glides with it; it used to jump to
+    centre on the figure each time (the author, Oct 24 2026)."""
+    from sealedlore.gui.area_render import px_for
+
+    view = window.area_view
+    view.view.scale(3, 3)
+    view.centre_on_me()
+    held = view.held()
+    px = px_for(view.area)
+    inner = view.view.viewport()
+    port = view.view.mapToScene(inner.rect()).boundingRect()
+    centre = port.center()
+    # Still inside the middle: nothing moves.
+    view._follow(held.x + 1, held.y)
+    assert view.view.mapToScene(inner.rect()).boundingRect().center() == centre
+    # Just past the inner edge: the view moves by the overshoot, not to the figure.
+    far_x = (port.right() - port.width() * 0.25) / px + 1.0  # a tile past the inner right edge
+    view._follow(far_x, held.y)
+    moved = view.view.mapToScene(inner.rect()).boundingRect().center()
+    assert 0 < moved.x() - centre.x() <= px * 1.5
+    assert abs(moved.x() - (far_x + 0.5) * px) > port.width() * 0.2  # not centred on it
+    assert abs(moved.y() - centre.y()) < 1e-6
+
+
+def test_a_walk_cut_short_stands_the_figure_where_it_is_and_tells_nothing(app, window):
+    from sealedlore.gui.area_view import STEPS_PER_SECOND
+
+    view = window.area_view
+    session = window.session
+    before = session.area_state().spots["Serrik Vaun"]
+    steps = [tuple(s) for s in session.walk_route(before.x + 6, before.y)]
+    finished: list[list] = []
+    view.walk_finished.disconnect(window._area_walked)
+    view.walk_finished.connect(lambda walked: finished.append(list(walked)))
+    view.walk(steps)
+    view._advance(1.7 / STEPS_PER_SECOND)  # one tile on, most of the way to the next
+    remaining = view.cut_walk()
+    assert not view.walking() and finished == []
+    # Nearest tile: the second one, being over half way there.
+    assert (view.held().x, view.held().y) == steps[2]
+    assert remaining == steps[3:]
+    person = view.people["Serrik Vaun"]
+    assert person.pose == "stand" and person.bob == 0.0
+    assert view.cut_walk() == []
+    view.walk_finished.connect(window._area_walked)
+
+
 def test_indoors_what_can_t_be_seen_is_shaded_and_someone_out_of_sight_is_hidden(app, window):
     from PySide6.QtCore import QPointF, Qt
 
