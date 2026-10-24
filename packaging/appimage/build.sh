@@ -306,6 +306,8 @@ mkdir -p "$APPDIR/usr/share/sealedlore/samples"
 cp "$SRC"/SampleStories/*.md "$APPDIR/usr/share/sealedlore/samples/"
 # A sample's map art, drawn once and shipped beside it (storage/world_art.py).
 find "$SRC/SampleStories" -maxdepth 1 -name '*.world_art.json' -exec cp {} "$APPDIR/usr/share/sealedlore/samples/" \;
+# A visual story's design sheet beside its plot file (storage/visual_design.py).
+find "$SRC/SampleStories" -maxdepth 1 -name '*.visual.json' -exec cp {} "$APPDIR/usr/share/sealedlore/samples/" \;
 # The pictures the samples' cards name (`- picture:`), in the folder beside them.
 if [ -d "$SRC/SampleStories/pictures" ]; then
     cp -r "$SRC/SampleStories/pictures" "$APPDIR/usr/share/sealedlore/samples/"
