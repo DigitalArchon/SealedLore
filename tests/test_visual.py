@@ -17,7 +17,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QEvent  # noqa: E402
+from PySide6.QtCore import QEvent, Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from sealedlore.engine.area import path, stand_near  # noqa: E402
@@ -252,17 +252,43 @@ def test_the_line_needs_a_listener_and_a_menu_verb_without_rules_says_so(app, wi
 
 
 def test_closing_the_game_saves_and_brings_the_main_window_back(app, window: MainWindow):
+    """Closing keeps the log and the clock with the story: opened again, the
+    log reads as it was left and the Stories list says where the game's
+    clock stands (the author, Oct 25 2026: the log came back as the opening
+    alone, and the list said "0 messages")."""
     game = window.visual_window
     session = game.session
     story_id = session.story.id
+    opening_lines = game.log.toPlainText().count("\n") + 1
+    game.say("Serrik takes a breath.", kind="report")
+    game.say("Hello?", kind="you")
+    assert [line.text for line in session.story.visual_log][-2:] == [
+        "Serrik takes a breath.",
+        "Hello?",
+    ]
     game.close()
     pump(app)
     assert window.visual_window is None and not window.isHidden()
     assert story_mode(story_id, window.root) == "visual"
-    # Opened again from the Stories list, it is the game's window again.
+    listing = next(row for row in story_listings(window.root) if row.id == story_id)
+    assert listing.visual_when.startswith("Day 1, ")
+    label = next(
+        window.stories.list.item(i).text()
+        for i in range(window.stories.list.count())
+        if window.stories.list.item(i).data(Qt.UserRole) == story_id
+    )
+    assert label.split("\n")[1] == f"Visual story · {listing.visual_when}"
+    # Opened again from the Stories list, it is the game's window again, on
+    # the log as it was left: the opening once, the lines said after it.
     window.open_story(story_id)
     pump(app)
-    assert isinstance(window.visual_window, VisualWindow)
+    game = window.visual_window
+    assert isinstance(game, VisualWindow)
+    text = game.log.toPlainText()
+    assert "Serrik takes a breath." in text and "Hello?" in text
+    assert text.count("\n") + 1 >= opening_lines + 2
+    assert text.index("Hello?") > text.index("Serrik takes a breath.")
+    assert len([line for line in game.session.story.visual_log if line.text == "Hello?"]) == 1
 
 
 def test_who_can_be_played_and_the_opening_s_hour():

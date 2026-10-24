@@ -117,7 +117,12 @@ class StoryListPanel(QWidget):
             error = listing.error
             if error is None:
                 count = listing.messages
-                label = f"{listing.title}\n{count} message{'s' if count != 1 else ''}"
+                if listing.visual:
+                    # A game on its map has no messages: where its clock stands.
+                    when = listing.visual_when or "not begun yet"
+                    label = f"{listing.title}\nVisual story · {when}"
+                else:
+                    label = f"{listing.title}\n{count} message{'s' if count != 1 else ''}"
                 self._played.append((listing.id, label, listing.updated))
             else:
                 # Shown rather than skipped: a story that vanished without a

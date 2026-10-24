@@ -21,7 +21,7 @@ from sealedlore.models.private import Attestation, PrivatePrompt, PrivateSpan
 from sealedlore.models.prompt_edit import PromptEdit
 from sealedlore.models.route import ModelRoute
 from sealedlore.models.scene import SceneLogEntry, SceneState
-from sealedlore.models.visual import VisualDesign
+from sealedlore.models.visual import LogLine, VisualDesign
 from sealedlore.models.world import WorldDelta
 
 NarrativePerson = Literal["first", "second", "third"]
@@ -183,6 +183,11 @@ class Story(BaseModel):
     # A visual story's predesigned sheet (models/visual.py), copied from
     # the plot file's `.visual.json` when the story is made.
     visual_design: VisualDesign | None = None
+    # A visual story's log so far (the newest LOG_KEPT lines) and the day and
+    # hour it stands at, as the Stories list shows it (a visual story has no
+    # messages to count).
+    visual_log: list[LogLine] = Field(default_factory=list)
+    visual_when: str = ""
     # How pictures of this story should look ("painterly sci-fi concept art"),
     # given to whoever writes an image prompt. Never reaches the storyteller.
     image_style: str = ""

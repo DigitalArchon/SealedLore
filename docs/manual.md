@@ -23,7 +23,7 @@ part of the window, and what each feature does. The README's
 - [Perspective and supporting characters](#perspective-and-supporting-characters)
 - [The People page](#the-people-page)
 - [The scene, and who can walk into it](#the-scene-and-who-can-walk-into-it)
-- [The map (withdrawn for now)](#the-map-withdrawn-for-now)
+- [The map of the earlier betas](#the-map-of-the-earlier-betas)
 - [Branches, takes and export](#branches-takes-and-export)
 - [Outcomes and dice](#outcomes-and-dice)
 - [Response length and style](#response-length-and-style)
@@ -33,6 +33,8 @@ part of the window, and what each feature does. The README's
   - [Pictures of your own](#pictures-of-your-own)
   - [Pictures for the cards](#pictures-for-the-cards)
   - [Pictures of places](#pictures-of-places)
+  - [A picture kept as a card's own](#a-picture-kept-as-a-cards-own)
+- [Visual Stories](#visual-stories)
 - [Videos](#videos)
 - [Private scenes](#private-scenes)
 - [Simple chat](#simple-chat)
@@ -1512,13 +1514,14 @@ line you type; your portrait, the place and the clock sit under the view.
 Click where to go and your character walks there; click a building to go
 inside or a door to go through it (the view fades through); **Travel…** sets
 off for another place and **Leave** walks on past an edge, the clock moving
-by the way's length. Everything is saved as you go, so closing the window
-(back to your stories; the story is in the Stories list and opens the game
-again) loses nothing. The people you meet, and the plot, are the model's;
+by the way's length. Everything is saved as you go, the log included, so
+closing the window (back to your stories; the story is in the Stories list,
+which says where the game's clock stands, and opens the game again) loses
+nothing. The people you meet, and the plot, are the model's;
 walking, doors, what you carry, what you can see and hear, and fights are
 the game's own rules. Journeys go only between the places the world was
-designed with, never into the open country between them, and a click while
-you walk turns you at once. Outdoors the weather the world was designed with
+designed with, never into the open country between them; a click while you
+walk turns you at once, and the view glides along with you. Outdoors the weather the world was designed with
 falls over the place, and the light follows the hour; a hit flashes your
 figure red, and whoever goes down lies where they fell. Doomsville's
 characters walk with stride frames of their own, drawn from their sprites.

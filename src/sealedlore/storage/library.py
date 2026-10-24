@@ -24,6 +24,8 @@ class StoryListing:
     chat: bool = False
     # A visual story (played on its map as a game): opened in its own window.
     visual: bool = False
+    # A visual story: the day and hour it stands at (`Story.visual_when`).
+    visual_when: str = ""
     keeps_map: bool = False
     # A story that can't be read: why. It is still listed, so it can be
     # looked into or deleted.
@@ -63,6 +65,7 @@ def story_listings(root: Path | None = None) -> list[StoryListing]:
                     updated=str(story.get("updated_at") or ""),
                     chat=story.get("mode") == "chat",
                     visual=story.get("mode") == "visual",
+                    visual_when=str(story.get("visual_when") or ""),
                     keeps_map=story.get("mode") == "visual",
                 )
             )

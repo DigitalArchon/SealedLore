@@ -54,6 +54,7 @@ from sealedlore.gui.ref_images import pixmap_within
 from sealedlore.gui.visual_presenter import VisualPresenter
 from sealedlore.models.character import Character
 from sealedlore.models.config import Config
+from sealedlore.models.visual import LOG_KEPT, LogLine
 
 # The side column's share of the window, and its narrowest.
 SIDE_SHARE = 0.26
@@ -440,9 +441,14 @@ class VisualWindow(QMainWindow):
         self.statusBar().showMessage(
             "Saved as you go. Close the window to return to your stories.", 8000
         )
-        opening = (session.story.setup.opening_text or "").strip()
-        if opening:
-            self.say(opening.split("\n\n")[0], kind="note")
+        if session.story.visual_log:
+            # Played before: the log as it was left, then on from there.
+            for line in session.story.visual_log:
+                self._show_line(line.kind, line.text)
+        else:
+            opening = (session.story.setup.opening_text or "").strip()
+            if opening:
+                self.say(opening.split("\n\n")[0], kind="note")
         self._after_action([])
 
     # --- the frame -------------------------------------------------------------------
@@ -512,6 +518,7 @@ class VisualWindow(QMainWindow):
         clock = session.map_clock()
         when = f"Day {clock[0]}, {clock[1] // 60:02d}:{clock[1] % 60:02d}" if clock else ""
         self.where.setText(" · ".join(p for p in (area.title if area else "", when) if p))
+        session.story.visual_when = when  # the Stories list's line (saved with the next move)
         hits = session.visual_hits_left()
         self.health.setText("♥" * hits + "♡" * (session.visual_design().player_hits - hits))
         carrying = session.visual_inventory()
@@ -560,7 +567,7 @@ class VisualWindow(QMainWindow):
         if box.clickedButton() is again and self.session is not None:
             self.session.visual_reset()
             self.session.visual_lay_out()
-            self.log.clear()
+            self._clear_log()
             self.area_view.set_locked(False)
             self.presenter.refresh(snap=True)
             self._after_action(["You start again."])
@@ -569,7 +576,21 @@ class VisualWindow(QMainWindow):
 
     def say(self, text: str, *, kind: str = "report") -> None:
         """A line in the log: a report of what happens, a note (the flavour
-        of a place or an event), or the player's own words."""
+        of a place or an event), or the player's own words. Kept with the
+        story (`Story.visual_log`, the newest LOG_KEPT), so the game reopens
+        on what has been."""
+        self._show_line(kind, text)
+        if self.session is not None:
+            log = self.session.story.visual_log
+            log.append(LogLine(kind=kind, text=text))
+            del log[:-LOG_KEPT]
+
+    def _clear_log(self) -> None:
+        self.log.clear()
+        if self.session is not None:
+            self.session.story.visual_log.clear()
+
+    def _show_line(self, kind: str, text: str) -> None:
         colour = {
             "report": "#b8bcc8",
             "note": "#d8c9a0",
@@ -1052,7 +1073,7 @@ class VisualWindow(QMainWindow):
         if box.clickedButton() is again and self.session is not None:
             self.session.visual_reset()
             self.session.visual_lay_out()
-            self.log.clear()
+            self._clear_log()
             self.area_view.set_locked(False)
             self.presenter.refresh(snap=True)
             self._after_action(["You start again."])

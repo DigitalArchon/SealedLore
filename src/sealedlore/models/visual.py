@@ -181,6 +181,20 @@ class ThingNote(BaseModel):
     seen: str = ""
 
 
+class LogLine(BaseModel):
+    """A line of a visual story's log (what happened, what was said), kept
+    with the story so the game reopens on what has been (the author, Oct 25
+    2026: the log came back as the opening alone). `kind` is the window's
+    colour: report, note, you, speech, sound."""
+
+    kind: str = "report"
+    text: str
+
+
+# The log lines a story keeps: the newest, once it runs past this.
+LOG_KEPT = 400
+
+
 class VisualDesign(BaseModel):
     locked: list[LockedDoor] = Field(default_factory=list)
     creatures: list[CreatureSpawn] = Field(default_factory=list)
