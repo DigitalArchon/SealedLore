@@ -102,6 +102,7 @@ TROUBLE_ROLE_NAMES = {
     "map": "Map reads",
     "map_art": "Map art",
     "look": "Look (visual stories)",
+    "npc": "People (visual stories)",
 }
 COLUMNS = ("Host", "First word", "Reasoning", "Tokens/s", "Answered", "Cost", "Notes")
 HOST_COLUMNS = ("Try", "Precision", "Keeps prompts?", "In $/M", "Out $/M")

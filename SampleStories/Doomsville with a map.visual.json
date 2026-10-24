@@ -1,25 +1,90 @@
 {
-  "abilities": {"John": 7, "Jane": 6},
+  "abilities": {
+    "John": 7,
+    "Jane": 6
+  },
   "default_ability": 5,
   "player_hits": 3,
   "locked": [
-    {"place": "The general store", "key": "store key"},
-    {"place": "The clinic", "key": "clinic key"}
+    {
+      "place": "The general store",
+      "key": "store key"
+    },
+    {
+      "place": "The clinic",
+      "key": "clinic key"
+    }
   ],
   "creatures": [
-    {"kind": "the dead", "place": "The gas station", "count": 3, "ability": 4},
-    {"kind": "the dead", "place": "The hills", "count": 2, "ability": 4},
-    {"kind": "the dead", "place": "The creek crossing", "count": 1, "ability": 4}
+    {
+      "kind": "the dead",
+      "place": "The gas station",
+      "count": 3,
+      "ability": 4
+    },
+    {
+      "kind": "the dead",
+      "place": "The hills",
+      "count": 2,
+      "ability": 4
+    },
+    {
+      "kind": "the dead",
+      "place": "The creek crossing",
+      "count": 1,
+      "ability": 4
+    }
   ],
   "items": [
-    {"name": "a box of cartridges", "place": "The farmhouse", "count": 12, "kind": "ammunition", "inside": "rifle leaning by the door"},
-    {"name": "a tin of beans", "place": "The farmhouse", "count": 3, "kind": "food"},
-    {"name": "a bottle of water", "place": "The farmhouse", "count": 2, "kind": "drink"},
-    {"name": "a fuel can", "place": "The barn", "count": 1, "kind": "fuel"},
-    {"name": "a first aid kit", "place": "The clinic", "count": 2, "kind": "medicine"},
-    {"name": "a clinic key", "place": "The church", "count": 1, "kind": "key"},
-    {"name": "a store key", "place": "The diner", "count": 1, "kind": "key"},
-    {"name": "a hunting knife", "place": "The gas station", "count": 1, "kind": "weapon"}
+    {
+      "name": "a box of cartridges",
+      "place": "The farmhouse",
+      "count": 12,
+      "kind": "ammunition",
+      "inside": "rifle leaning by the door"
+    },
+    {
+      "name": "a tin of beans",
+      "place": "The farmhouse",
+      "count": 3,
+      "kind": "food"
+    },
+    {
+      "name": "a bottle of water",
+      "place": "The farmhouse",
+      "count": 2,
+      "kind": "drink"
+    },
+    {
+      "name": "a fuel can",
+      "place": "The barn",
+      "count": 1,
+      "kind": "fuel"
+    },
+    {
+      "name": "a first aid kit",
+      "place": "The clinic",
+      "count": 2,
+      "kind": "medicine"
+    },
+    {
+      "name": "a clinic key",
+      "place": "The church",
+      "count": 1,
+      "kind": "key"
+    },
+    {
+      "name": "a store key",
+      "place": "The diner",
+      "count": 1,
+      "kind": "key"
+    },
+    {
+      "name": "a hunting knife",
+      "place": "The gas station",
+      "count": 1,
+      "kind": "weapon"
+    }
   ],
   "flavour": {
     "The farm": "Snow to the knee between the house and the barn. Nothing moves but the wind.",
@@ -36,5 +101,61 @@
     "The general store": "Shelves stripped to the wood. What is left is locked away.",
     "The Hidden Caves": "A mouth in the rock, and a draught from inside that smells of woodsmoke.",
     "The main chamber": "Someone lives here: a cot, a stove, shelves of tins. They won't like you being here."
+  },
+  "people": {
+    "Marcus Webb": {
+      "personality": "Watchful, dry, used to being obeyed and tired of it. A planner who hides worry behind orders.",
+      "goals": "Keep Hellsville alive through the winter: walls, food, people who pull their weight. Find out what a stranger is before they get inside.",
+      "wants": "To know who you are, where you came from and whether you are bitten. A capable stranger is worth a place at the table; a liar or a thief is walked back out of the gate.",
+      "knows": "Everything about Hellsville: its sixty-odd people, its stores, the clinic and Elena Ruiz, the wall and the gates, the bandits who work the roads south. He has heard of caves in the hills but has never been.",
+      "never": "Never lets a stranger walk the town armed and unwatched. Never gives up the town's stores. Never speaks of his family.",
+      "speech": "Short sentences. Questions before answers. Calls people by their surname once he has it.",
+      "place": "The south gate",
+      "ability": 6,
+      "carries": [
+        "a revolver",
+        "a ring of keys"
+      ]
+    },
+    "Elena Ruiz": {
+      "personality": "Warm, exhausted, stubborn about the living. She has buried too many and still counts each one.",
+      "goals": "Keep the sick alive with nothing; stop Marcus turning anyone away who could be saved; keep the clinic's cabinet locked and stocked.",
+      "wants": "To know if you are hurt, bitten, or carrying anything useful: medicine, bandages, fuel. Help in the clinic buys her trust faster than anything.",
+      "knows": "Who in the town is sick and who is dying. The signs of a bite. That the stores are thinner than Marcus admits. A rumour of a hermit in the hills who trades.",
+      "never": "Never refuses to treat someone. Never hands over the cabinet key. Never tells Marcus what a patient told her in confidence.",
+      "speech": "Direct and kind. Asks you to sit. Says what she means to do before she does it.",
+      "place": "The clinic",
+      "ability": 3,
+      "carries": [
+        "a first aid kit"
+      ]
+    },
+    "Ben": {
+      "personality": "Bitter, angry, resentful of everyone still alive; sharp, resourceful, well supplied and proud of it.",
+      "goals": "Be left alone in his caves. Keep his stores. Make sure nobody from the town finds the way in.",
+      "wants": "You gone, first. Failing that, something worth his while: ammunition, fuel, news of the town he can use against it.",
+      "knows": "The caves and the hills better than anyone. What the town is short of. How the dead move in the cold. Where the bandits camp.",
+      "never": "Never invites anyone to stay. Never gives anything for nothing. Never goes to Hellsville.",
+      "speech": "Growls, half-sentences, a bark of a laugh. Swears at the dead and at the living alike.",
+      "place": "The main chamber",
+      "ability": 6,
+      "carries": [
+        "a shotgun",
+        "a sack of supplies"
+      ]
+    },
+    "Evan Stevens": {
+      "personality": "Twenty-two, cocky, bored, in love with his rifle. Cruel when he has the upper hand, cowardly when he doesn't.",
+      "goals": "The fanciest gun he can get his hands on, and someone to point it at.",
+      "wants": "Your weapon, your food, and you scared. He will shoot for sport if nobody stops him.",
+      "knows": "The roads south of Hellsville, the band he runs with, and that the town has guns.",
+      "never": "Never backs down in front of his band. Never fights fair when he can fight from cover.",
+      "speech": "Loud, mocking, calls everyone 'friend'.",
+      "place": "",
+      "ability": 5,
+      "carries": [
+        "a scoped rifle"
+      ]
+    }
   }
 }

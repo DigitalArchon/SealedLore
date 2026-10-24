@@ -45,6 +45,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.area import Placement
 from sealedlore.engine.look import LookReply, Rect
+from sealedlore.engine.npc import NpcReply
 from sealedlore.gui.area_render import px_for
 from sealedlore.gui.area_view import AreaView, Walker, _bare_name
 from sealedlore.gui.image_codec import encoded
@@ -62,8 +63,9 @@ FADE_MS = 220
 PORTRAIT = QSize(72, 96)
 # Verbs done beside whoever or whatever they are for.
 WALK_UP = ("talk", "attack", "use", "take", "eat", "destroy")
-# What the line does for now (step 1: nothing is asked of a model).
-LINE_HINT = "Say or do something (talking to people and acting come in the next steps)"
+# The line, with nobody to talk to, and with someone.
+LINE_HINT = "Right-click a person and Talk to them, then say what you say here"
+TALK_HINT = "Say something to {name} (Enter)"
 # The picture of a part sent to the Look's model: no wider than this.
 LOOK_PICTURE_SIDE = 768
 # A thing looked at: its footprint and a tile round it.
@@ -153,15 +155,31 @@ class VisualAreaView(AreaView):
         return super().cancel_pending()
 
     def _person_menu(self, person: Walker, at, mark=None) -> None:
-        if person.name not in self.creature_ids:
-            super()._person_menu(person, at, mark)
-            return
         menu = QMenu(self)
-        title = menu.addAction("One of the dead")
+        if person.name in self.creature_ids:
+            title = menu.addAction("One of the dead")
+            title.setEnabled(False)
+            attack = menu.addAction("Attack it")
+            attack.setEnabled(not self.locked)
+            attack.triggered.connect(lambda: self.action_chosen.emit("attack", person.name, ""))
+            self._show_menu(menu, at)
+            return
+        if person.held:
+            return
+        title = menu.addAction(person.name)
         title.setEnabled(False)
-        attack = menu.addAction("Attack it")
+        talk = menu.addAction("Talk to them")
+        talk.setEnabled(not self.locked)
+        talk.triggered.connect(lambda: self.action_chosen.emit("talk", person.name, ""))
+        attack = menu.addAction("Attack them")
         attack.setEnabled(not self.locked)
         attack.triggered.connect(lambda: self.action_chosen.emit("attack", person.name, ""))
+        menu.addSeparator()
+        walk = menu.addAction("Go over to them")
+        walk.setEnabled(not self.locked)
+        walk.triggered.connect(
+            lambda: self.go_requested.emit(person.x, person.y, True, person.name)
+        )
         self._show_menu(menu, at)
 
     def _thing_menu(self, thing: Placement, at, mark=None) -> None:
@@ -222,6 +240,13 @@ class _LookDone(QObject):
     done = Signal(object, str)
 
 
+class _TalkDone(QObject):
+    """A person's reply, emitted on its thread, delivered on the GUI thread:
+    (the person's name, the reply or None, the problem)."""
+
+    done = Signal(str, object, str)
+
+
 class _Fade(QWidget):
     """Black over the view, at an opacity the animation sets."""
 
@@ -275,7 +300,33 @@ class VisualWindow(QMainWindow):
         # The part being looked at, while the model answers.
         self._look_pending: tuple[str, Rect] | None = None
 
-        # The column: who is talking (later), the log, the line.
+        # The column: who is talking, the log, the line.
+        self.talking_portrait = QLabel()
+        self.talking_portrait.setFixedSize(QSize(48, 64))
+        self.talking_portrait.setAlignment(Qt.AlignCenter)
+        self.talking_name = QLabel()
+        self.talking_name.setObjectName("emptyTitle")
+        self.talking_mood = QLabel()
+        self.talking_mood.setObjectName("hintLabel")
+        self.talking_stop = QToolButton()
+        self.talking_stop.setText("Done talking")
+        self.talking_stop.clicked.connect(lambda: self._set_talking(None))
+        talking = QWidget()
+        talking.setObjectName("visualTalking")
+        talking_layout = QHBoxLayout(talking)
+        talking_layout.setContentsMargins(0, 0, 0, 0)
+        talking_words = QVBoxLayout()
+        talking_words.addWidget(self.talking_name)
+        talking_words.addWidget(self.talking_mood)
+        talking_layout.addWidget(self.talking_portrait)
+        talking_layout.addLayout(talking_words, 1)
+        talking_layout.addWidget(self.talking_stop, 0, Qt.AlignTop)
+        self.talking = talking
+        self.talking.hide()
+        self._talking_to: str | None = None
+        self._talk_pending: str | None = None
+        self._talk_signal = _TalkDone()
+        self._talk_signal.done.connect(self._talked)
         self.log = QTextEdit()
         self.log.setObjectName("visualLog")
         self.log.setReadOnly(True)
@@ -287,6 +338,7 @@ class VisualWindow(QMainWindow):
         side_layout = QVBoxLayout(side)
         side_layout.setContentsMargins(8, 8, 8, 8)
         side_layout.setSpacing(6)
+        side_layout.addWidget(self.talking)
         side_layout.addWidget(self.log, 1)
         side_layout.addWidget(self.line)
         side.setMinimumWidth(SIDE_MIN)
@@ -432,6 +484,10 @@ class VisualWindow(QMainWindow):
         self._show_where()
         if session.area_state().dead:
             self._died()
+            return
+        if self._talking_to is not None and not session.talk_target(self._talking_to)[0]:
+            self._set_talking(None)
+        self._greet_newcomers()
 
     def _died(self) -> None:
         self.area_view.set_locked(True)
@@ -454,7 +510,12 @@ class VisualWindow(QMainWindow):
     def say(self, text: str, *, kind: str = "report") -> None:
         """A line in the log: a report of what happens, a note (the flavour
         of a place or an event), or the player's own words."""
-        colour = {"report": "#b8bcc8", "note": "#d8c9a0", "you": "#e6e9f0"}.get(kind, "#b8bcc8")
+        colour = {
+            "report": "#b8bcc8",
+            "note": "#d8c9a0",
+            "you": "#e6e9f0",
+            "speech": "#f4e9c8",
+        }.get(kind, "#b8bcc8")
         self.log.append(f'<p style="color:{colour}">{html.escape(text)}</p>')
 
     # --- moving ----------------------------------------------------------------------
@@ -514,6 +575,24 @@ class VisualWindow(QMainWindow):
         if at is None:
             person = next((w for w in self.area_view.walkers if w.name == name), None)
             at = (person.x, person.y) if person is not None else None
+        if verb == "talk" and session.has_card(name):
+            if at is not None:
+                self._go(at[0], at[1], True, name)
+            can, why = session.talk_target(name)
+            if not can:
+                self.say(why)
+                return
+            self._set_talking(name)
+            return
+        if verb == "attack" and session.has_card(name) and name not in self.area_view.creature_ids:
+            if at is not None:
+                self._go(at[0], at[1], True, name)
+            lines = session.visual_attack_person(name)
+            self.presenter.refresh(snap=True)
+            self._after_action(lines)
+            if self._talking_to == name:
+                self._set_talking(None)
+            return
         if verb == "attack" and name in self.area_view.creature_ids:
             lines: list[str] = []
             for _try in range(3):
@@ -766,9 +845,105 @@ class VisualWindow(QMainWindow):
         text = self.line.text().strip()
         if not text:
             return
+        session = self.session
+        if session is None:
+            return
+        if self._talking_to is None:
+            self.say(text, kind="you")
+            self.say("Nobody is listening: right-click a person and Talk to them first.")
+            self.line.clear()
+            return
+        if self._talk_pending is not None:
+            self.statusBar().showMessage(f"{self._talking_to} is still answering.", 4000)
+            return
+        can, why = session.talk_target(self._talking_to)
+        if not can:
+            self.say(why)
+            self.line.clear()
+            return
         self.line.clear()
-        self.say(text, kind="you")
-        self.say("Nobody answers yet: talking and acting come in the next steps.")
+        self.say(f"{session.held_name()}: {text}", kind="you")
+        self._ask_person(self._talking_to, text)
+
+    # --- the people (engine/npc.py) --------------------------------------------------
+
+    def _set_talking(self, name: str | None) -> None:
+        """Whom the line speaks to: their portrait and mood in the column."""
+        session = self.session
+        self._talking_to = name
+        if name is None or session is None:
+            self.talking.hide()
+            self.line.setPlaceholderText(LINE_HINT)
+            return
+        card = session.visual_card(name)
+        pixmap = QPixmap()
+        if card is not None and card.reference_images:
+            pixmap = pixmap_within(
+                session.pictures.read(card.reference_images[0].file), QSize(96, 128)
+            )
+        self.talking_portrait.setPixmap(
+            pixmap.scaled(QSize(48, 64), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            if not pixmap.isNull()
+            else QPixmap()
+        )
+        self.talking_name.setText(name)
+        mood = session.area_state().moods.get(name, "")
+        self.talking_mood.setText(mood)
+        self.talking.show()
+        self.line.setPlaceholderText(TALK_HINT.format(name=name))
+        self.line.setFocus()
+
+    def _ask_person(self, name: str, line: str) -> None:
+        """What the player says (or "" when they have just appeared) goes to
+        the person's model on a thread."""
+        session = self.session
+        if session is None or self._talk_pending is not None:
+            return
+        started = session.start_talk(
+            name,
+            line,
+            lambda reply, problem, n=name: self._talk_signal.done.emit(n, reply, problem),
+        )
+        if not started:
+            if line:
+                can, why = session.talk_target(name)
+                if why:
+                    self.say(why)
+            return
+        self._talk_pending = name
+        self.statusBar().showMessage(f"{name} is answering, with {session.role_model('npc')}…")
+
+    def _talked(self, name: str, reply: NpcReply | None, problem: str) -> None:
+        session = self.session
+        self._talk_pending = None
+        if session is None:
+            return
+        self.statusBar().clearMessage()
+        if reply is None:
+            self.say(f"{name} doesn't answer ({problem or 'no reply'}).")
+            return
+        if reply.say:
+            self.say(f"{name}: {reply.say}", kind="speech")
+        lines = session.apply_npc_reply(name, reply)
+        self.presenter.refresh(snap=True)
+        self._after_action(lines)
+        if self._talking_to == name:
+            self.talking_mood.setText(session.area_state().moods.get(name, ""))
+        if reply.intent in ("leave", "fetch_help", "attack", "hide") and self._talking_to == name:
+            self._set_talking(None)
+
+    def _greet_newcomers(self) -> None:
+        """Someone newly in sight here speaks first, or not: one encounter
+        call a person an area (the author's point 2: the model decides how
+        the person responds)."""
+        session = self.session
+        if session is None or self._talk_pending is not None:
+            return
+        for name in session.people_in_sight():
+            if session.encounter_due(name):
+                session.mark_encountered(name)
+                self._ask_person(name, "")
+                return
 
     # --- Qt --------------------------------------------------------------------------
 
@@ -780,6 +955,7 @@ class VisualWindow(QMainWindow):
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt's name
         self._settle_figure()
         self._look_pending = None
+        self._talk_pending = None
         self.presenter.close()
         session, self.session = self.session, None
         if session is not None:

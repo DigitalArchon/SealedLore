@@ -28,6 +28,7 @@ ROLE_NAMES = {
     "map": "Map reads",
     "map_art": "Map art",
     "look": "Look",
+    "npc": "People",
 }
 
 

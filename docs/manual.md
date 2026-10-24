@@ -1537,6 +1537,20 @@ the end, with a fresh start offered from the opening. **Wait an hour** and
 world starts with (its locks and keys, its dead, things laid out, a line for
 each place) is its design, shipped beside its plot file.
 
+**The people** are the model's. Each has a sheet in the world's design (who
+they are, what they want, what they know, what they never do, how they
+speak) over their card, and stands where the design puts them. When someone
+comes into your sight the model speaks for them first, or not, as they
+would. Right-click a person and **Talk to them**: the column names them, and
+what you type in the line is said to them; the model answers in their
+voice, remembers the exchange, and chooses what they do, which the game then
+carries out: come with you (they follow you through doors and on journeys),
+lead you somewhere, back away, hide, go for others, walk off, hand you
+something they carry, or go for you, in which case the game's own fight
+decides it. They see what you do in front of them, and are told. **Attack
+them** is the same fight, started by you. One call to the model a line, the
+story model unless **Settings → Models → People model** names another.
+
 The one thing the model does so far is **look**. Press **Look at…** and drag
 a frame round any part of the place (or right-click a thing and choose
 **Look at it closely**): the model is shown that part of the picture and

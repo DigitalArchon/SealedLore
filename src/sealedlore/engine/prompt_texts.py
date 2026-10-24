@@ -3789,6 +3789,90 @@ _text(
 )
 
 
+# The people of a visual story (the author, Oct 24 2026: "all interactions
+# with NPCs… that character has their own defined personality, goals,
+# attitude, and the AI responds for them", and "the AI will decide how the
+# character responds and can then have them join the main character, attack
+# them, retreat, hide, go for help"). One call a line; the reply's intent is
+# carried out by the program on the map (engine/npc.py). Unmeasured.
+
+_text(
+    "npc.system",
+    VISUAL,
+    "A person: the rules",
+    "The system prompt of a visual story's talk call: the model speaks for one person "
+    "from their sheet, and chooses what they do, from a fixed set the program carries out.",
+    "You speak for one person in a top-down game set in the world below, from the sheet "
+    "that follows. You are that person and nobody else: never the player's character, "
+    "never a narrator. Answer what the player says or does with what this person says "
+    "back, a few sentences at most, in their own voice, true to their personality, "
+    "goals, what they want from a stranger, what they know and what they never do. Then "
+    "choose what they do next, from this set only: stay (where they are), follow (go "
+    "with the player from now on), lead_to (take the player somewhere: name the place), "
+    "attack (fight the player), retreat (back away, keep their distance), hide (get out "
+    "of sight), fetch_help (go for others), leave (walk off), give (hand the player "
+    "something they carry: name it). Most people stay; nobody attacks or follows without "
+    "a reason the sheet gives. Reply with one JSON object and nothing else:\n\n"
+    '{"say": "what they say, or "" for silence", "mood": "one word", "intent": '
+    '{"kind": "stay", "place": "", "what": ""}, "remember": "one line this person will '
+    'remember of this exchange, or """}',
+)
+
+_text(
+    "npc.sheet",
+    VISUAL,
+    "A person: the sheet",
+    "The person's sheet as the talk call is given it: the design's words over their card.",
+    "THE WORLD:\n{world}\n\nWHO YOU ARE: {name}\n{card}\nPersonality: {personality}\n"
+    "Goals: {goals}\nWhat you want from a stranger: {wants}\nWhat you know: {knows}\n"
+    "What you never do or say: {never}\nHow you speak: {speech}",
+    (
+        ("world", "The world in brief"),
+        ("name", "The person's name"),
+        ("card", "Their card's words"),
+        ("personality", "The sheet's personality"),
+        ("goals", "The sheet's goals"),
+        ("wants", "What they want from a stranger"),
+        ("knows", "What they know"),
+        ("never", "What they never do or say"),
+        ("speech", "How they speak"),
+    ),
+)
+
+_text(
+    "npc.situation",
+    VISUAL,
+    "A person: the situation",
+    "The user message of a talk call: where they both are, who else is about, what the "
+    "player carries and has done where this person could see, what this person "
+    "remembers, the conversation so far, and the player's words.",
+    "WHERE: {where}. It is {when}.\nWHO IS ABOUT: {about}\nTHE PLAYER'S CHARACTER, "
+    "{player}: {player_words}\nWHAT YOU HAVE SEEN THEM DO: {witnessed}\nWHAT YOU REMEMBER: "
+    "{memories}\n\nTHE CONVERSATION SO FAR:\n{talk}\n\n{player} says to you: {line}",
+    (
+        ("where", "The place, in words"),
+        ("when", "The time of day"),
+        ("about", "Who else is in sight or earshot"),
+        ("player", "The player's character's name"),
+        ("player_words", "What can be seen of the player: weapon in hand, wounds"),
+        ("witnessed", "What this person saw the player do"),
+        ("memories", "This person's own memory lines"),
+        ("talk", "The conversation so far"),
+        ("line", "What the player says"),
+    ),
+)
+
+_text(
+    "npc.encounter",
+    VISUAL,
+    "A person: the player appears",
+    "The player's line in a talk call made when the player first comes into a person's "
+    "sight in a place: the person speaks first, or not, and does what they would.",
+    "(nothing yet: they have just come into your sight. Say what you would say first, "
+    "if anything, and do what you would do.)",
+)
+
+
 # --- Video -----------------------------------------------------------------
 # A video prompt is not a picture prompt: a picture is one frozen moment, a
 # video is a few seconds of one continuous shot, so the writer is told the

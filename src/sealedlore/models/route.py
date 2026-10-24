@@ -33,6 +33,8 @@ ROUTE_ROLES: dict[str, str | None] = {
     "map_art": "map",
     # A visual story's Look (engine/look.py): the story model's unless set.
     "look": "story",
+    # A visual story's people (engine/npc.py): the story model's unless set.
+    "npc": "story",
 }
 
 

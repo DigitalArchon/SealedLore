@@ -19,8 +19,12 @@ from dataclasses import dataclass, field
 from sealedlore.engine.area import (
     WALK_M_PER_S,
     Area,
+    anchor_of,
     area_of,
     bare,
+    in_earshot,
+    path,
+    sees,
     stand_near,
     walk_metres,
     walk_seconds,
@@ -34,6 +38,15 @@ from sealedlore.engine.look import (
     look_messages,
     parse_look,
     things_in,
+)
+from sealedlore.engine.npc import (
+    NPC_MAX_TOKENS,
+    NpcReply,
+    intent_words,
+    npc_messages,
+    parse_npc,
+    player_description,
+    sheet_of,
 )
 from sealedlore.engine.places import place_for
 from sealedlore.engine.session_area import (
@@ -62,7 +75,7 @@ from sealedlore.engine.world_art import is_window
 from sealedlore.engine.world_layout import position
 from sealedlore.ids import new_id
 from sealedlore.models.area import Found, Spot, ThingRecord
-from sealedlore.models.visual import DoorState, VisualDesign
+from sealedlore.models.visual import DoorState, NpcGoal, PersonSheet, VisualDesign
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError
 from sealedlore.threads import BackgroundThread
 
@@ -162,6 +175,7 @@ class VisualRuntime:
                     spot, frm, to = through
                     to_area = spot.area
                     seconds += DOOR_SECONDS
+                    self._companions_to(spot)
                     words = (
                         f"You go into {to}."
                         if there is not None and there.indoor and not area.indoor
@@ -285,6 +299,7 @@ class VisualRuntime:
         state.spots[held] = spot
         self._add_time(state, choices[place_id], frm.name if frm else "", place.name)
         self._set_live(state)
+        self._companions_to(spot)
         return place.name, choices[place_id]
 
     def visual_cross(self, side: str) -> str | None:
@@ -418,23 +433,58 @@ class VisualRuntime:
         return self.area(area_id, world, art) if area_id and not is_window(area_id) else None
 
     def visual_lay_out(self) -> None:
-        """The design's dead, things and locks laid on the world, once."""
+        """The design's dead, things and locks laid on the world, once; its
+        people stood where it puts them, each once their place is on the
+        map (a plot-hidden place has no one in it until it is revealed)."""
         state = self.area_state()
-        if state.laid_out:
-            return
         design = self.visual_design()
+        world, art = self.world(), self._art_read()
         taken_by_area: dict[str, set[tuple[int, int]]] = {}
-        for spawn in design.creatures:
-            area = self._visual_area_named(spawn.place)
-            if area is None:
-                continue
-            taken = taken_by_area.setdefault(
+
+        def taken_in(area: Area) -> set[tuple[int, int]]:
+            return taken_by_area.setdefault(
                 area.id,
                 area.blocked()
                 | {(sp.x, sp.y) for sp in state.spots.values() if sp.area == area.id},
             )
+
+        changed = False
+        for name, sheet in design.people.items():
+            if not sheet.place or name in state.placed or not self.has_card(name):
+                continue
+            area = self._visual_area_named(sheet.place)
+            if area is None:
+                continue
+            changed = True
+            state.placed.append(name)
+            taken = taken_in(area)
+            # At the place itself when it is a part of the area (the south
+            # gate on Hellsville's plan), else near the area's middle.
+            want = sheet.place.strip().casefold()
+            place = next((p for p in world.places.values() if p.name.casefold() == want), None)
+            at = anchor_of(area, world, place.id) if place is not None else None
+            x, y = stand_near(area, at or (area.width // 2, area.height // 2), taken, seed=name)
+            taken.add((x, y))
+            state.spots[name] = Spot(area=area.id, x=x, y=y)
+            for thing in sheet.carries:
+                state.things[ITEM_PREFIX + new_id()] = ThingRecord(
+                    state="taken", name=thing, by=name, kind=kind_of(thing)
+                )
+        if state.laid_out:
+            if changed:
+                self._set_live(state)
+            return
+        for spawn in design.creatures:
+            area = self._visual_area_named(spawn.place)
+            if area is None:
+                continue
             for creature in spawn_creatures(
-                area, spawn.kind, spawn.count, spawn.ability, taken, f"{area.id}:{spawn.kind}"
+                area,
+                spawn.kind,
+                spawn.count,
+                spawn.ability,
+                taken_in(area),
+                f"{area.id}:{spawn.kind}",
             ):
                 state.creatures[creature.id] = creature
         for item in design.items:
@@ -452,11 +502,7 @@ class VisualRuntime:
                     record = state.things[holder.id] = ThingRecord(state="seen", name=holder.name)
                 record.contents.append(Found(name=item.name, count=item.count, kind=kind))
                 continue
-            taken = taken_by_area.setdefault(
-                area.id,
-                area.blocked()
-                | {(sp.x, sp.y) for sp in state.spots.values() if sp.area == area.id},
-            )
+            taken = taken_in(area)
             x, y = stand_near(area, (area.width // 2, area.height // 2), taken, seed=item.name)
             taken.add((x, y))
             state.things[ITEM_PREFIX + new_id()] = ThingRecord(
@@ -466,7 +512,6 @@ class VisualRuntime:
                 count=item.count,
                 kind=kind,
             )
-        world, art = self.world(), self._art_read()
         for lock in design.locked:
             inside = self._visual_area_named(lock.place)
             if inside is None:
@@ -528,6 +573,7 @@ class VisualRuntime:
             record = state.things[placement_id] = ThingRecord(state="taken", name=thing.name)
         record.state, record.by, record.spot = "taken", held, None
         record.kind = record.kind or kind_of(thing.name)
+        self._visual_witness(state, f"took the {bare(thing.name)}")
         self._set_live(state)
         return f"You take the {bare(thing.name)}."
 
@@ -611,6 +657,7 @@ class VisualRuntime:
         if record is None:
             record = state.things[placement_id] = ThingRecord(state="broken", name=thing.name)
         record.state = "broken"
+        self._visual_witness(state, f"broke the {bare(thing.name)}")
         self._set_live(state)
         lines = self.visual_tick(10, noise=(me.x, me.y), reach=FORCE_NOISE_M)
         return "\n".join([f"You break the {bare(thing.name)}. It makes a noise.", *lines])
@@ -680,14 +727,18 @@ class VisualRuntime:
         area, me = self._visual_me(state)
         if area is None or me is None or state.dead:
             return []
+        del reach  # every creature in the area hears a noise in it, for now
+        lines: list[str] = self._step_people(state, area, me, seconds)
         creatures = {c.id: c for c in state.creatures.values() if c.area == area.id}
         if not creatures:
-            return []
-        del reach  # every creature in the area hears a noise in it, for now
+            if state.wounds >= self.visual_design().player_hits:
+                state.dead = True
+                lines.append("That was one wound too many. You are dead.")
+            self._set_live(state)
+            return lines
         beside = step_creatures(
             area, creatures, (me.x, me.y), seconds, noise=noise, rng=random.Random(state.seconds)
         )
-        lines: list[str] = []
         base, weapon = self.visual_ability()
         for cid in beside:
             creature = creatures[cid]
@@ -756,3 +807,407 @@ class VisualRuntime:
         """Start again from the opening: the live state dropped."""
         self.story.area_live = None
         self.save()
+
+    # --- the people (engine/npc.py) --------------------------------------------------
+
+    def visual_people(self) -> list[str]:
+        """The people the design places or sheets, by name: those with a
+        card. They stand where the design put them and where their intents
+        took them (`settle` keeps their spots)."""
+        design = self.visual_design()
+        return [name for name in design.people if self.has_card(name)]
+
+    def visual_sheet(self, name: str) -> PersonSheet:
+        return sheet_of(name, self.visual_design().people)
+
+    def visual_card(self, name: str):
+        want = name.casefold()
+        return next((c for c in (*self.cast, *self.supporting) if c.name.casefold() == want), None)
+
+    def people_in_sight(self) -> list[str]:
+        """The people in the player's area they can see or hear, nearest first."""
+        state = self.area_state()
+        area, me = self._visual_me(state)
+        held = self.held_name()
+        if area is None or me is None:
+            return []
+        found = []
+        for name, spot in state.spots.items():
+            if name == held or spot.area != area.id or name in state.people_down:
+                continue
+            here = (spot.x, spot.y)
+            if sees(area, (me.x, me.y), here) or in_earshot(area, (me.x, me.y), here):
+                found.append((abs(spot.x - me.x) + abs(spot.y - me.y), name))
+        return [name for _d, name in sorted(found)]
+
+    def talk_target(self, name: str) -> tuple[bool, str]:
+        """Whether the player can speak to this person now: in their area,
+        within earshot."""
+        state = self.area_state()
+        area, me = self._visual_me(state)
+        spot = state.spots.get(name)
+        if area is None or me is None or spot is None or spot.area != area.id:
+            return False, f"{name} isn't here."
+        if name in state.people_down:
+            return False, f"{name} is down."
+        if not in_earshot(area, (me.x, me.y), (spot.x, spot.y)):
+            return False, f"{name} is too far to hear you."
+        return True, ""
+
+    def start_talk(
+        self, name: str, line: str, done: Callable[[NpcReply | None, str], None]
+    ) -> bool:
+        """What the player says to a person, answered by the model on a
+        thread: `done` gets the reply (or None and why) on the thread;
+        `apply_npc_reply` makes it real on the GUI thread. `line` "" is the
+        encounter: the person has just seen the player."""
+        if self.in_private:
+            return False
+        if line:
+            can, _why = self.talk_target(name)
+            if not can:
+                return False
+        elif name not in self.people_in_sight():
+            return False  # the encounter: on sight, from any distance
+        state = self.area_state()
+        area, me = self._visual_me(state)
+        card = self.visual_card(name)
+        world = self.world()
+        place = world.places.get(area.place_id)
+        clock = self.map_clock()
+        base, weapon = self.visual_ability()
+        if line:
+            state.talks.setdefault(name, []).append([self.held_name() or "You", line])
+            self._set_live(state)
+        messages = npc_messages(
+            name=name,
+            sheet=self.visual_sheet(name),
+            card=card,
+            world=self.story.world_bible,
+            where=f"{area.title}" + (f": {place.what}" if place is not None and place.what else ""),
+            when=f"day {clock[0]}, {clock[1] // 60:02d}:{clock[1] % 60:02d}"
+            if clock
+            else "daytime",
+            about=[n for n in self.people_in_sight() if n != name]
+            + [
+                "one of the dead"
+                for c in state.creatures.values()
+                if c.area == area.id and c.state != "down"
+            ],
+            player=self.held_name() or "the player",
+            player_words=player_description(
+                bare(weapon[0]) if weapon[0] else "", state.wounds, len(self.visual_inventory())
+            ),
+            witnessed=state.witnessed.get(name, []),
+            memories=state.memories.get(name, []),
+            talk=state.talks.get(name, []),
+            line=line or self.texts["npc.encounter"],
+            texts=self.texts,
+        )
+        model = self.role_model("npc")
+        request = ChatRequest(
+            model=model,
+            extra_body=self.route_for("npc", model),
+            messages=messages,
+            params=self.side_params(model, max_tokens=NPC_MAX_TOKENS),
+        )
+        detached = getattr(self.provider, "detached", None)
+        text = detached() if callable(detached) else self.provider
+        thread = BackgroundThread(
+            target=self._talk_run,
+            args=(text, request, done, text is not self.provider),
+            name="visual-talk",
+            daemon=True,
+        )
+        self._talk_thread = thread
+        thread.start()
+        return True
+
+    def _talk_run(self, text: ChatProvider, request: ChatRequest, done, own: bool) -> None:
+        reply: NpcReply | None = None
+        problem = ""
+        try:
+            log_ref = self._log("npc_request", {"payload": self.provider.build_payload(request)})
+            try:
+                answer, completed = text.complete(request)
+                self._log(
+                    "npc_response",
+                    {"request_log_ref": log_ref, "text": answer, "usage": completed.raw_usage},
+                )
+                self.unreported_usage.append(self.priced(completed.usage, request.model))
+                reply = parse_npc(answer)
+            except (ProviderError, ValueError) as exc:
+                problem = str(exc)[:300]
+                self._log("npc_error", {"request_log_ref": log_ref, "error": problem})
+        except Exception as exc:  # noqa: BLE001 - a thread dies silently otherwise
+            problem = f"{type(exc).__name__}: {exc}"[:300]
+            self._log("npc_error", {"error": problem})
+        finally:
+            if own:
+                _close_quietly(text)
+        done(reply, problem)
+
+    def apply_npc_reply(self, name: str, reply: NpcReply) -> list[str]:
+        """The person's words into the conversation, their memory and mood
+        kept, and their intent carried out on the map (GUI thread). The
+        lines for the log after their speech."""
+        state = self.area_state()
+        area, me = self._visual_me(state)
+        if area is None or me is None:
+            return []
+        if reply.say:
+            state.talks.setdefault(name, []).append([name, reply.say])
+        if reply.remember:
+            state.memories.setdefault(name, []).append(reply.remember)
+            state.memories[name] = state.memories[name][-20:]
+        if reply.mood:
+            state.moods[name] = reply.mood
+        lines: list[str] = []
+        words = intent_words(name, reply, player=self.held_name() or "you")
+        kind = reply.intent
+        spot = state.spots.get(name)
+        if kind == "follow":
+            if name not in state.companions:
+                state.companions.append(name)
+            state.goals[name] = NpcGoal(intent="follow", toward=self.held_name() or "")
+        elif kind in ("retreat", "hide", "leave", "fetch_help", "lead_to"):
+            if name in state.companions:
+                state.companions.remove(name)
+            goal = self._npc_destination(state, area, me, spot, kind, reply.place)
+            state.goals[name] = goal
+        elif kind == "attack":
+            if name in state.companions:
+                state.companions.remove(name)
+            state.goals[name] = NpcGoal(intent="attack", toward=self.held_name() or "")
+        elif kind == "give":
+            lines += self._npc_gives(state, name, reply.what)
+            words = "" if lines else words
+            state.goals[name] = NpcGoal(intent="stay")
+        else:
+            state.goals[name] = NpcGoal(intent="stay")
+        if words:
+            lines.append(words)
+        self._set_live(state)
+        if kind == "attack":
+            lines += self.visual_tick(0)
+        return lines
+
+    def _npc_gives(self, state, name: str, what: str) -> list[str]:
+        """A person hands the player a thing they carry (by its words), or
+        nothing they have."""
+        want = {w for w in re.findall(r"[a-z]+", what.lower()) if len(w) > 2}
+        for record in state.things.values():
+            if record.state != "taken" or record.by != name:
+                continue
+            words = set(re.findall(r"[a-z]+", record.name.lower()))
+            if not want or want & words:
+                record.by = self.held_name() or record.by
+                return [f"{name} hands you the {bare(record.name)}."]
+        return [f"{name} has nothing of the kind to give."] if what else []
+
+    def _npc_destination(self, state, area: Area, me: Spot, spot, kind: str, place: str) -> NpcGoal:
+        """Where an intent takes a person: away from the player (retreat),
+        out of sight (hide), out of the area by the nearest exit (leave,
+        fetch_help), or toward a named place (lead_to: the area's door that
+        leads there, else the far side)."""
+        if spot is None:
+            return NpcGoal(intent=kind)
+        here = (spot.x, spot.y)
+        free = [
+            (x, y)
+            for y in range(area.height)
+            for x in range(area.width)
+            if area.walkable(x, y) and (x, y) not in area.blocked()
+        ]
+        if not free:
+            return NpcGoal(intent=kind, area=area.id, x=spot.x, y=spot.y)
+        if kind == "retreat":
+            far = [t for t in free if 6 <= abs(t[0] - me.x) + abs(t[1] - me.y) <= 14]
+            goal = min(
+                far or free,
+                key=lambda t: (
+                    abs(t[0] - here[0])
+                    + abs(t[1] - here[1])
+                    - (abs(t[0] - me.x) + abs(t[1] - me.y))
+                ),
+            )
+        elif kind == "hide":
+            hidden = [t for t in free if not sees(area, (me.x, me.y), t)]
+            goal = min(hidden or free, key=lambda t: abs(t[0] - here[0]) + abs(t[1] - here[1]))
+        elif kind == "lead_to" and place:
+            world = self.world()
+            want = place.casefold()
+            doors = [
+                (e.x, e.y)
+                for e in area.entrances
+                if (
+                    world.places.get(e.place_id) is not None
+                    and want in world.places[e.place_id].name.casefold()
+                )
+            ]
+            goal = (
+                doors[0]
+                if doors
+                else max(free, key=lambda t: abs(t[0] - here[0]) + abs(t[1] - here[1]))
+            )
+        else:
+            exits = list(area.exits) + [(e.x, e.y) for e in area.entrances]
+            edges = [t for t in free if t[0] in (0, area.width - 1) or t[1] in (0, area.height - 1)]
+            goal = min(
+                exits or edges or free, key=lambda t: abs(t[0] - here[0]) + abs(t[1] - here[1])
+            )
+        return NpcGoal(intent=kind, area=area.id, x=goal[0], y=goal[1])
+
+    def _step_people(self, state, area: Area, me: Spot, seconds: int) -> list[str]:
+        """The people in the player's area carry their intents out as time
+        passes: a follower keeps beside the player, one going somewhere
+        walks there (and is gone once there, for leave and fetch_help), one
+        attacking closes and fights. Lines for the log."""
+        lines: list[str] = []
+        held = self.held_name()
+        tiles = max(0, int(seconds * 1.2 / max(area.tile_m, 0.1)))
+        taken = {(s.x, s.y) for n, s in state.spots.items() if s.area == area.id}
+        for name, goal in list(state.goals.items()):
+            spot = state.spots.get(name)
+            if spot is None or spot.area != area.id or name == held or name in state.people_down:
+                continue
+            here = (spot.x, spot.y)
+            if goal.intent == "follow":
+                target = (me.x, me.y)
+                if max(abs(here[0] - me.x), abs(here[1] - me.y)) <= 1:
+                    continue
+                stand = stand_near(area, target, taken - {here} | {target})
+                route = path(area, here, stand, blocked=taken - {here})
+                step = route[min(len(route) - 1, max(1, tiles * 2))] if len(route) > 1 else here
+            elif goal.intent == "attack":
+                if max(abs(here[0] - me.x), abs(here[1] - me.y)) <= 1:
+                    lines += self._person_attacks(state, name)
+                    continue
+                stand = stand_near(area, (me.x, me.y), taken - {here} | {(me.x, me.y)})
+                route = path(area, here, stand, blocked=taken - {here})
+                step = route[min(len(route) - 1, max(1, tiles))] if len(route) > 1 else here
+            elif goal.area == area.id and goal.x is not None and goal.y is not None:
+                target = (goal.x, goal.y)
+                # A way out is a door tile, which `settle` keeps people off:
+                # beside it is there.
+                arrived = here == target or (
+                    goal.intent in ("leave", "fetch_help")
+                    and max(abs(here[0] - target[0]), abs(here[1] - target[1])) <= 1
+                )
+                if arrived:
+                    if goal.intent in ("leave", "fetch_help"):
+                        state.spots.pop(name, None)
+                        state.goals.pop(name, None)
+                        lines.append(f"{name} is gone.")
+                    continue
+                route = path(area, here, target, blocked=taken - {here} - {target})
+                step = route[min(len(route) - 1, max(1, tiles))] if len(route) > 1 else here
+            else:
+                continue
+            if step != here and step != (me.x, me.y):
+                taken.discard(here)
+                state.spots[name] = Spot(area=area.id, x=step[0], y=step[1])
+                taken.add(step)
+        return lines
+
+    def _person_attacks(self, state, name: str) -> list[str]:
+        """A person beside the player fights them (the simple combat)."""
+        from sealedlore.models.visual import Creature
+
+        sheet = self.visual_sheet(name)
+        base, weapon = self.visual_ability()
+        stand_in = Creature(name=name, area="", x=0, y=0, ability=sheet.ability)
+        result = fight(base, weapon, stand_in, attacking=False)
+        if result.won:
+            state.people_down.append(name)
+            state.goals.pop(name, None)
+            if name in state.companions:
+                state.companions.remove(name)
+            return [
+                f"{name} comes at you; you put them down ({result.mine} against {result.theirs})."
+            ]
+        state.wounds += 1
+        return [
+            f"{name} comes at you and gets the better of you ({result.mine} against "
+            f"{result.theirs}): you are hurt."
+        ]
+
+    def visual_attack_person(self, name: str) -> list[str]:
+        """The player attacks a person: a fight; the person turns on them."""
+        state = self.area_state()
+        area, me = self._visual_me(state)
+        spot = state.spots.get(name)
+        if area is None or me is None or spot is None or spot.area != area.id:
+            return []
+        if max(abs(spot.x - me.x), abs(spot.y - me.y)) > 1:
+            return [f"{name} isn't within reach."]
+        from sealedlore.models.visual import Creature
+
+        sheet = self.visual_sheet(name)
+        base, weapon = self.visual_ability()
+        stand_in = Creature(name=name, area="", x=0, y=0, ability=sheet.ability)
+        result = fight(base, weapon, stand_in, attacking=True)
+        self._visual_witness(state, f"attacked {name}")
+        if result.won:
+            state.people_down.append(name)
+            state.goals.pop(name, None)
+            if name in state.companions:
+                state.companions.remove(name)
+            lines = [f"You put {name} down ({result.mine} against {result.theirs})."]
+        else:
+            state.wounds += 1
+            state.goals[name] = NpcGoal(intent="attack", toward=self.held_name() or "")
+            lines = [
+                f"{name} gets the better of you ({result.mine} against {result.theirs}): "
+                "you are hurt."
+            ]
+        state.seconds += 10
+        self._set_live(state)
+        return lines + self.visual_tick(0)
+
+    def _visual_witness(self, state, words: str) -> None:
+        """What the player did, as everyone who could see them saw it."""
+        area, me = self._visual_me(state)
+        if area is None or me is None:
+            return
+        for name, spot in state.spots.items():
+            if name == self.held_name() or spot.area != area.id:
+                continue
+            if sees(area, (spot.x, spot.y), (me.x, me.y)):
+                state.witnessed.setdefault(name, []).append(words)
+                state.witnessed[name] = state.witnessed[name][-20:]
+
+    def _companions_to(self, spot: Spot) -> None:
+        """Whoever travels with the player stands beside them where they
+        arrive (through a door, after a journey)."""
+        state = self.area_state()
+        if not state.companions:
+            return
+        area = self.area(spot.area, things=state.things)
+        if area is None:
+            return
+        taken = area.blocked() | {(s.x, s.y) for s in state.spots.values() if s.area == spot.area}
+        for name in state.companions:
+            if name in state.people_down:
+                continue
+            x, y = stand_near(area, (spot.x, spot.y), taken | {(spot.x, spot.y)})
+            taken.add((x, y))
+            state.spots[name] = Spot(area=spot.area, x=x, y=y)
+        self._set_live(state)
+
+    def encounter_due(self, name: str) -> bool:
+        """Whether this person has just come into the player's sight here,
+        unmet in this area so far."""
+        state = self.area_state()
+        me = state.spots.get(self.held_name() or "")
+        if me is None:
+            return False
+        return f"{name}@{me.area}" not in state.greeted
+
+    def mark_encountered(self, name: str) -> None:
+        state = self.area_state()
+        me = state.spots.get(self.held_name() or "")
+        if me is None:
+            return
+        state.greeted.append(f"{name}@{me.area}")
+        self._set_live(state)

@@ -939,6 +939,10 @@ class Config(BaseModel):
     # of the area and says what the player sees and finds there. Blank, the
     # story model; one that reads no pictures is sent the words alone.
     look_model: str | None = None
+    # A visual story's people (engine/npc.py): the model that speaks for
+    # each person from their sheet and chooses what they do. Blank, the
+    # story model.
+    npc_model: str | None = None
     # How much it puts in each region (regions.OPEN_COUNTRY: places, things
     # and people at most). "rich" is what every region had before Oct 21 2026
     # (5, 8, 3); live, the Doomsville map sample's ring round the farm held 13

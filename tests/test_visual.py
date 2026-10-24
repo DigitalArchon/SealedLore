@@ -20,7 +20,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QEvent  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
-from sealedlore.engine.area import stand_near  # noqa: E402
+from sealedlore.engine.area import path, stand_near  # noqa: E402
 from sealedlore.engine.session_visual import TIME_WORDS  # noqa: E402
 from sealedlore.engine.world_art import is_window  # noqa: E402
 from sealedlore.gui import start_page  # noqa: E402
@@ -33,6 +33,7 @@ from sealedlore.models.visual import (  # noqa: E402
     CreatureSpawn,
     ItemSpawn,
     LockedDoor,
+    PersonSheet,
     VisualDesign,
 )
 from sealedlore.models.world import WorldDelta  # noqa: E402
@@ -231,14 +232,14 @@ def test_travel_sets_off_and_arrives(app, window: MainWindow):
     assert game.area_view.area is not None and game.area_view.area.id == me.area
 
 
-def test_the_line_and_a_person_s_menu_say_what_is_not_in_the_game_yet(app, window: MainWindow):
+def test_the_line_needs_a_listener_and_a_menu_verb_without_rules_says_so(app, window: MainWindow):
     game = window.visual_window
     game.line.setText("Hello?")
     game.line.returnPressed.emit()
     words = game.log.toPlainText()
-    assert "Hello?" in words and "Nobody answers yet" in words
-    game.area_view.action_chosen.emit("talk", "Maela Orr", "")
-    assert "Talk Maela Orr: not in the game yet" in game.log.toPlainText()
+    assert "Hello?" in words and "Nobody is listening" in words
+    game.area_view.action_chosen.emit("use", "a stove", "nope")
+    assert "Use a stove: not in the game yet" in game.log.toPlainText()
 
 
 def test_closing_the_game_saves_and_brings_the_main_window_back(app, window: MainWindow):
@@ -693,6 +694,256 @@ def test_doomsville_s_sheet_comes_with_the_story(app, tmp_path: Path, monkeypatc
         "The creek crossing",
         "The gas station",
         "The south gate",
+    ]
+    game.close()
+    pump(app)
+    main.close()
+
+
+# --- step 3: the people who talk (engine/npc.py) --------------------------------
+
+
+def _peopled_design() -> VisualDesign:
+    design = _design()
+    design.creatures = []
+    design.people = {
+        "Maela Orr": PersonSheet(
+            personality="Talkative, quick, trusts easily.",
+            goals="Get out of the house and see the town.",
+            wants="Company on the road.",
+            place="The house",
+            ability=4,
+            carries=["a brass key", "a loaf of bread"],
+        ),
+        "Captain Idris": PersonSheet(personality="Grim.", place="", ability=8),
+    }
+    return design
+
+
+GREETING = (
+    '{"say": "Oh! You gave me a fright.", "mood": "startled", '
+    '"intent": {"kind": "stay"}, "remember": "A stranger walked in."}'
+)
+
+
+def _answer(game, reply: str, deadline: float = 10.0) -> None:
+    """Wait for the pending talk call to land (the mock answered it at once
+    with `reply`, set before the call was made)."""
+    game.session.provider.responses = [reply]
+    end = time.monotonic() + deadline
+    while time.monotonic() < end and game._talk_pending is not None:
+        pump(QApplication.instance())
+        time.sleep(0.01)
+
+
+def _ask(game, line: str, reply: str) -> None:
+    """The player says `line` to whom they talk to; the mock answers `reply`."""
+    game.session.provider.responses = [reply]
+    game.line.setText(line)
+    game.line.returnPressed.emit()
+    _answer(game, reply)
+
+
+@pytest.fixture
+def peopled(app, tmp_path: Path, story, cast):
+    bundle, art = _visual_bundle(story, cast)
+    bundle.story.visual_design = _peopled_design()
+    bundle.story.scene.present_character_ids = ["char-serrik"]
+    save_story_bundle(bundle, root=tmp_path)
+    save_world_art(story.id, art, tmp_path)
+    main = MainWindow(root=tmp_path, use_mock=True)
+    main.config.map_art = False
+    # The greeting is scripted before the game opens: she may be in sight
+    # from where the design stands her, and is greeted at once.
+    main._current_provider().responses = [GREETING]
+    main.open_story(story.id)
+    pump(app)
+    game = main.visual_window
+    _answer(game, GREETING)
+    # Maela beside the player (the design stood her across the house, in
+    # another room): in sight, so she is greeted and can be talked to.
+    session = game.session
+    state = session.area_state()
+    me = state.spots["Serrik Vaun"]
+    house = session.area("house")
+    near = stand_near(house, (me.x, me.y), house.blocked() | {(me.x, me.y)})
+    state.spots["Maela Orr"] = Spot(area="house", x=near[0], y=near[1])
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    game.presenter.refresh(snap=True)
+    session.provider.responses = [GREETING]
+    game._after_action([])
+    _answer(game, GREETING)
+    yield game
+    game.close()
+    pump(app)
+    main.close()
+
+
+def test_the_design_s_people_stand_where_it_puts_them_and_greet_the_player(peopled: VisualWindow):
+    """Maela is in the house with the player; the plot would hide her, but
+    the game has her where the design put her. Someone newly in sight gets
+    the encounter call: the model speaks for them first."""
+    session = peopled.session
+    state = session.area_state()
+    assert state.spots["Maela Orr"].area == "house" and "Maela Orr" in state.placed
+    assert "Captain Idris" not in state.spots  # no place: the plot's to bring in
+    assert "Maela Orr" in session.visual_people()
+    carried = [r.name for r in state.things.values() if r.state == "taken" and r.by == "Maela Orr"]
+    assert sorted(carried) == ["a brass key", "a loaf of bread"]
+    # The encounter: a call went out as she came into sight, answered.
+    request = session.provider.requests[-1]
+    system = request.messages[0].text
+    assert system.startswith("You speak for one person")
+    assert "WHO YOU ARE: Maela Orr" in system and "Personality: Talkative, quick" in system
+    user = request.messages[1].text
+    assert "they have just come into your sight" in user and "Serrik Vaun" in user
+    words = peopled.log.toPlainText()
+    assert "Maela Orr: Oh! You gave me a fright." in words
+    assert state.memories["Maela Orr"] == ["A stranger walked in."]
+    assert state.moods["Maela Orr"] == "startled"
+    assert not session.encounter_due("Maela Orr")  # once an area
+
+
+def test_talking_sets_the_line_s_listener_and_a_follow_intent_makes_a_companion(
+    peopled: VisualWindow,
+):
+    session, view = peopled.session, peopled.area_view
+    view.action_chosen.emit("talk", "Maela Orr", "")
+    walk_all(QApplication.instance(), view)
+    assert peopled._talking_to == "Maela Orr" and not peopled.talking.isHidden()
+    assert peopled.talking_name.text() == "Maela Orr"
+    assert "Maela Orr" in peopled.line.placeholderText()
+    _ask(
+        peopled,
+        "Come with me to the town.",
+        '{"say": "Gladly. Lead on.", "mood": "eager", '
+        '"intent": {"kind": "follow", "place": "", "what": ""}, "remember": "I joined them."}',
+    )
+    user = session.provider.requests[-1].messages[1].text
+    assert "Serrik Vaun says to you: Come with me to the town." in user
+    assert "THE CONVERSATION SO FAR:\nMaela Orr: Oh! You gave me a fright." in user
+    words = peopled.log.toPlainText()
+    assert "Maela Orr: Gladly. Lead on." in words and "Maela Orr comes with you." in words
+    state = session.area_state()
+    assert state.companions == ["Maela Orr"]
+    assert state.talks["Maela Orr"][-2:] == [
+        ["Serrik Vaun", "Come with me to the town."],
+        ["Maela Orr", "Gladly. Lead on."],
+    ]
+    # Through the door and on a journey, she comes along.
+    house = session.area("house")
+    door = house.exits[0]
+    view.go_requested.emit(door[0], door[1], False, "")
+    walk_all(QApplication.instance(), view)
+    assert session.area_state().spots["Maela Orr"].area == "farm"
+    peopled._settle_figure()
+    assert session.visual_travel("town") is not None
+    me = session.area_state().spots["Serrik Vaun"]
+    her = session.area_state().spots["Maela Orr"]
+    assert her.area == "town" and max(abs(her.x - me.x), abs(her.y - me.y)) <= 2
+
+
+def test_a_give_hands_over_what_they_carry_and_leave_walks_them_off(peopled: VisualWindow):
+    session, view = peopled.session, peopled.area_view
+    view.action_chosen.emit("talk", "Maela Orr", "")
+    walk_all(QApplication.instance(), view)
+    _ask(
+        peopled,
+        "Have you a key?",
+        '{"say": "Here.", "intent": {"kind": "give", "what": "the brass key"}}',
+    )
+    assert "Maela Orr hands you the brass key." in peopled.log.toPlainText()
+    assert [r.name for _i, r in session.visual_inventory()] == ["a brass key"]
+    _ask(peopled, "Now go.", '{"say": "Fine.", "intent": {"kind": "leave"}}')
+    assert "Maela Orr walks off." in peopled.log.toPlainText()
+    assert peopled._talking_to is None  # the conversation is over
+    goal = session.area_state().goals["Maela Orr"]
+    assert goal.intent == "leave" and goal.area == "house"
+    # Time passes: she walks to the way out and is gone (the player out of
+    # her way first: they stood in the doorway's only approach).
+    house = session.area("house")
+    state = session.area_state()
+    me = state.spots["Serrik Vaun"]
+    away = next(
+        (x, y)
+        for y in range(house.height)
+        for x in range(house.width)
+        if house.walkable(x, y)
+        and (x, y) not in house.blocked()
+        and abs(x - me.x) + abs(y - me.y) >= 4
+        and len(path(house, (me.x, me.y), (x, y))) > 1
+    )
+    state.spots["Serrik Vaun"] = Spot(area="house", x=away[0], y=away[1])
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    for _ in range(12):
+        session.visual_wait(1)
+    assert "Maela Orr" not in session.area_state().spots
+
+
+def test_an_attack_intent_turns_them_on_the_player_and_the_player_may_strike_back(
+    peopled: VisualWindow,
+):
+    session, view = peopled.session, peopled.area_view
+    view.action_chosen.emit("talk", "Maela Orr", "")
+    walk_all(QApplication.instance(), view)
+    _ask(
+        peopled,
+        "Give me everything you have.",
+        '{"say": "Over my dead body.", "intent": {"kind": "attack"}}',
+    )
+    words = peopled.log.toPlainText()
+    assert "Maela Orr goes for you." in words
+    assert "Maela Orr comes at you" in words  # the tick: she is beside, she fights
+    # Serrik at 7 against her 4: she is down.
+    assert "Maela Orr" in session.area_state().people_down
+    assert session.talk_target("Maela Orr") == (False, "Maela Orr is down.")
+    assert peopled._talking_to is None
+
+
+def test_the_reply_is_held_to_its_shape():
+    from sealedlore.engine.npc import intent_words, parse_npc
+
+    reply = parse_npc(
+        'Sure: {"say": " Hello  there ", "mood": "Wary", "intent": {"kind": "DANCE"}, '
+        '"remember": "x"}'
+    )
+    assert reply.say == "Hello there" and reply.mood == "Wary" and reply.intent == "stay"
+    reply = parse_npc('{"say": "", "intent": "follow"}')
+    assert reply.intent == "follow"
+    assert intent_words("Ann", reply, player="you") == "Ann comes with you."
+    reply = parse_npc('{"intent": {"kind": "lead_to", "place": "the church"}}')
+    assert "sets off for the church" in intent_words("Ann", reply, player="you")
+    with pytest.raises(ValueError):
+        parse_npc("no json here")
+
+
+def test_doomsville_s_people_stand_in_their_places(app, tmp_path: Path, monkeypatch):
+    from PySide6.QtWidgets import QInputDialog
+
+    main = MainWindow(root=tmp_path / "data", use_mock=True)
+    main.config.map_art = False
+    monkeypatch.setattr(QInputDialog, "getItem", lambda *a, **k: ("John", True))
+    main.open_visual_sample(SAMPLES / "Doomsville with a map.md")
+    pump(app)
+    game = main.visual_window
+    session = game.session
+    state = session.area_state()
+    world = session.world()
+    where = {
+        name: world.places[session.area(spot.area).place_id].name
+        for name, spot in state.spots.items()
+    }
+    # The south gate is a part of Hellsville's plan: he stands on it, at the gate.
+    assert where["Marcus Webb"] == "Hellsville"
+    gate = next(p for p in world.places.values() if p.name == "The south gate")
+    marcus = state.spots["Marcus Webb"]
+    assert session.place_of_spot(marcus, world) in (gate.id, session.area(marcus.area).place_id)
+    assert where["Elena Ruiz"] == "The clinic"
+    assert "Ben" not in where  # the caves are plot-hidden: stood once they are revealed
+    assert "Evan Stevens" not in where  # the plot's to bring in
+    assert sorted(r.name for r in state.things.values() if r.by == "Marcus Webb") == [
+        "a revolver",
+        "a ring of keys",
     ]
     game.close()
     pump(app)

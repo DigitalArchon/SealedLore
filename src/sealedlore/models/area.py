@@ -17,7 +17,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from sealedlore.models.visual import Creature, DoorState
+from sealedlore.models.visual import Creature, DoorState, NpcGoal
 
 ThingVerb = Literal["use", "take", "destroy", "eat"]
 PersonVerb = Literal["talk", "look", "attack"]
@@ -199,6 +199,24 @@ class AreaState(BaseModel):
     seen_now: list[str] = Field(default_factory=list)
     flavour_said: list[str] = Field(default_factory=list)
     laid_out: bool = False
+    # The people (engine/npc.py): each conversation so far ([who, words]
+    # pairs, the latest last), what each remembers (their own lines), what
+    # each saw the player do, their mood, what they are doing of their own
+    # accord, and who travels with the player.
+    talks: dict[str, list[list[str]]] = Field(default_factory=dict)
+    memories: dict[str, list[str]] = Field(default_factory=dict)
+    witnessed: dict[str, list[str]] = Field(default_factory=dict)
+    moods: dict[str, str] = Field(default_factory=dict)
+    goals: dict[str, NpcGoal] = Field(default_factory=dict)
+    companions: list[str] = Field(default_factory=list)
+    # The people greeted (the encounter call made) in each area, by
+    # "<name>@<area id>", so a greeting is once a visit.
+    greeted: list[str] = Field(default_factory=list)
+    # A person who attacked and lost: down.
+    people_down: list[str] = Field(default_factory=list)
+    # The design's people stood on the map so far (one whose place the plot
+    # still hides is stood once it is on the map).
+    placed: list[str] = Field(default_factory=list)
 
 
 class LiveArea(BaseModel):

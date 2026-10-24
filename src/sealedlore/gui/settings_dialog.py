@@ -453,6 +453,7 @@ class SettingsDialog(QDialog):
             "map": "Map model",
             "map_art": "Map art model",
             "look": "Look model",
+            "npc": "People model",
         }
         return [(labels.get(role, role), field) for role, field in self._route_fields.items()]
 
@@ -932,6 +933,14 @@ class SettingsDialog(QDialog):
             "told what the game knows stands there. Blank uses the story's model."
         )
         form.addRow("Look model", self.look_model)
+        self.npc_model = self._routed_field(self.config.npc_model or "")
+        self.npc_model.setPlaceholderText("same as the story's model")
+        self.npc_model.setToolTip(
+            "In a visual story, speaks for each person you talk to, from their sheet, and "
+            "chooses what they do (come with you, lead you somewhere, back away, attack…). "
+            "One call a line. Blank uses the story's model."
+        )
+        form.addRow("People model", self.npc_model)
 
         self.recommended = QPushButton("Use recommended models")
         self.recommended.setToolTip(
@@ -971,6 +980,7 @@ class SettingsDialog(QDialog):
             "map": self.map_model,
             "map_art": self.map_art_model,
             "look": self.look_model,
+            "npc": self.npc_model,
         }
         for role, field in self._route_fields.items():
             field.set_route(self.config.model_routes.get(role))
@@ -2088,6 +2098,7 @@ class SettingsDialog(QDialog):
         self.config.map_art_model = self._role_model(self.map_art_model) or None
         self.config.region_model = self._role_model(self.region_model) or None
         self.config.look_model = self._role_model(self.look_model) or None
+        self.config.npc_model = self._role_model(self.npc_model) or None
         self.config.open_country = self.open_country.currentData()
         self.config.map_art = self.map_art.isChecked()
         self.config.cache_control_mode = self.cache_mode.currentText()  # type: ignore[assignment]

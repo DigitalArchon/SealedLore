@@ -37,6 +37,22 @@ Kind = Literal[
 ]
 
 CreatureState = Literal["wander", "drawn", "chase", "down"]
+# What a person may do of their own accord (engine/npc.py): the model
+# chooses one from a sheet; the program carries it out on the map.
+Intent = Literal[
+    "stay", "follow", "lead_to", "attack", "retreat", "hide", "fetch_help", "leave", "give"
+]
+INTENTS: tuple[str, ...] = (
+    "stay",
+    "follow",
+    "lead_to",
+    "attack",
+    "retreat",
+    "hide",
+    "fetch_help",
+    "leave",
+    "give",
+)
 
 
 class DoorState(BaseModel):
@@ -69,6 +85,42 @@ class Creature(BaseModel):
     ability: int = 4
     # Hits it takes before it is down.
     hits: int = 1
+
+
+class PersonSheet(BaseModel):
+    """Who a person is, for the model that speaks for them (engine/npc.py):
+    the design's words, over the character's card."""
+
+    personality: str = ""
+    goals: str = ""
+    # How they take to a stranger, and what they want from one.
+    wants: str = ""
+    # What they know (and may tell), and what they never tell or do.
+    knows: str = ""
+    never: str = ""
+    # How they speak.
+    speech: str = ""
+    # Where they are when the story begins (a place by name); "" for
+    # someone the plot brings in later.
+    place: str = ""
+    # Their combat ability.
+    ability: int = 5
+    # What they carry, if anything is said of it.
+    carries: list[str] = Field(default_factory=list)
+
+
+class NpcGoal(BaseModel):
+    """What a person is doing of their own accord: their current intent
+    and, for one that moves them, where to (a tile in an area)."""
+
+    intent: str = "stay"
+    area: str | None = None
+    x: int | None = None
+    y: int | None = None
+    # Who the intent is toward (follow, attack, give): the player, mostly.
+    toward: str = ""
+    # What a give hands over.
+    what: str = ""
 
 
 class LockedDoor(BaseModel):
@@ -109,3 +161,5 @@ class VisualDesign(BaseModel):
     default_ability: int = 5
     # Hits the player takes before they die.
     player_hits: int = 3
+    # The people (by the character's name) and who they are.
+    people: dict[str, PersonSheet] = Field(default_factory=dict)

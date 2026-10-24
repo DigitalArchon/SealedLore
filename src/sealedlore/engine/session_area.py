@@ -1196,6 +1196,14 @@ class AreaRuntime:
                 if outside and new.for_place != waiting:
                     new = new.model_copy(update={"for_place": waiting})
                 spots[name] = new
+        if self.story.visual:
+            # A visual story's people (engine/session_visual.py) stand where
+            # the design put them and where their own intents took them,
+            # whatever the map's `where` says of them (it says nothing).
+            for name in self.visual_people():
+                spot = state.spots.get(name)
+                if spot is not None and name not in spots:
+                    spots[name] = spot
         # Nobody stands in fire or a wall a redrawn plan put under them
         # (kept there, every walk was refused; the second review).
         # Nor in a doorway: a walk into a door ends short of whoever stands
