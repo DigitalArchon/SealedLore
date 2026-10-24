@@ -19,25 +19,18 @@ import math
 import re
 import xml.etree.ElementTree as ElementTree
 from collections.abc import Sequence
-from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any
 
-from sealedlore.engine import deck_plan
 from sealedlore.engine.levels import (
     STAIRS,
 )
-from sealedlore.engine.prompt_texts import PromptTexts
 from sealedlore.engine.world import key
 from sealedlore.engine.world_layout import SMALL_CRAFT, moves, position, size_of
-from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.world import (
-    LevelLayout,
-    PlaceLayout,
     TerrainPatch,
     WorldArt,
     WorldMap,
     WorldPlace,
-    WorldThing,
 )
 
 # The story's palette: the 16 colours every sprite is drawn in (the view
@@ -415,58 +408,6 @@ def decked(rows: tuple[str, ...] | list[str]) -> tuple[str, ...]:
     return tuple("".join(row) for row in filled)
 
 
-def deck_layout(job: ArtJob, text: str, *, model: str, made_at: str) -> PlaceLayout:
-    """A brief's reply laid out as the plan (the main deck) with every other
-    deck as its levels, all drawn at once. ValueError when the brief has no
-    rooms or they won't fit."""
-    named = tuple(tuple(n) for n in job.extra.get("named") or ())
-    brief = deck_plan.parse_brief(text, named=named)  # type: ignore[arg-type]
-    plan = deck_plan.generate(
-        brief,
-        job.subject_id,
-        hull=str(job.extra.get("hull") or ""),
-        ring=bool(job.extra.get("ring", True)),
-    )
-    main = plan.decks[0]
-    others = [d for i, d in sorted(plan.decks.items()) if i != 0]
-    spec = {
-        "ground": "space",
-        "deck": True,
-        "shape": plan.shape,
-        "hull_kind": plan.hull,
-        "hull": main.hull,
-        "tile_m": plan.tile_m,
-        "brief": brief.as_dict(),
-        "rooms": main.room_records(),
-        "main": main.name,
-        "levels": [{"index": d.index, "name": d.name} for d in others],
-        "features": [],
-    }
-    return PlaceLayout(
-        place_id=job.subject_id,
-        state=job.state,
-        spec=spec,
-        rows=main.rows,
-        labels=main.labels,
-        model=model,
-        made_at=made_at,
-        levels=[
-            LevelLayout(
-                index=d.index,
-                name=d.name,
-                place_id=job.subject_id,
-                state=job.state,
-                spec={"rooms": d.room_records(), "hull": d.hull},
-                rows=d.rows,
-                labels=d.labels,
-                model=model,
-                made_at=made_at,
-            )
-            for d in others
-        ],
-    )
-
-
 def rasterise(
     spec: dict[str, Any], width: int, height: int
 ) -> tuple[list[str], dict[str, str], dict[str, list[int]]]:
@@ -546,57 +487,6 @@ def rasterise(
 
 
 # --- What needs drawing ---------------------------------------------------------
-
-
-@dataclass
-class ArtJob:
-    """One drawing to make: its key (also what a failure is counted by), the
-    messages to send, and what it is of."""
-
-    key: str
-    kind: Literal["sprite", "layout", "terrain"]
-    messages: list[PromptMessage]
-    subject_id: str
-    name: str = ""
-    state: str = ""
-    from_sprite: str | None = None
-    subject: Literal["place", "thing"] = "place"
-    # A patch of land: where and how wide.
-    patch: tuple[float, float, float] | None = None
-    order: int = 0
-    extra: dict[str, Any] = field(default_factory=dict)
-
-
-def _message(role: str, text: str) -> PromptMessage:
-    return PromptMessage(role=role, parts=(ContentPart(text=text),))  # type: ignore[arg-type]
-
-
-def _palette_line() -> str:
-    return ", ".join(PALETTE.values())
-
-
-def _grid_fill(texts: PromptTexts, key: str, width: int, height: int, tile: str) -> str:
-    return texts.fill(
-        key,
-        width=str(width),
-        height=str(height),
-        last_x=str(width - 1),
-        last_y=str(height - 1),
-        tile=tile,
-    )
-
-
-def _tile_words(metres: float) -> str:
-    if metres < 1.5:
-        return "one metre"
-    if metres < 950:
-        return f"{metres:.0f} metres"
-    return f"{metres / 1000:.1f} km".replace(".0 km", " km")
-
-
-def _what(place: WorldPlace) -> str:
-    kind = place.kind or "place"
-    return f"{place.name}, a {kind}" + (f": {place.what}" if place.what else "")
 
 
 # --- Plans on the map ---------------------------------------------------------------
@@ -974,15 +864,6 @@ WALKABLE = frozenset("._=+,:s&b")  # "b": the play view's bridge (engine/area.py
 FLOOR = "_"
 
 
-def _fixed_lines(fixed: Sequence[dict[str, Any]]) -> str:
-    lines = []
-    for f in fixed:
-        span = f"x {f['x']}-{f['x'] + f['w'] - 1}, y {f['y']}-{f['y'] + f['h'] - 1}"
-        what = " ".join(str(f.get("what") or "").split())
-        lines.append(f"- {f['name']} ({f['place_kind']}): {span}" + (f": {what}" if what else ""))
-    return "\n".join(lines)
-
-
 def _fixed_match(feature: dict[str, Any], fixed_one: dict[str, Any]) -> bool:
     """Whether a building the model drew is this fixed one: by place id when
     the shape carries one (`with_fixed` drew it), else by its name, under
@@ -1029,35 +910,6 @@ def with_fixed(spec: dict[str, Any], fixed: Sequence[dict[str, Any]]) -> dict[st
             }
         )
     return {**spec, "features": kept}
-
-
-def _thing_words(thing: WorldThing) -> str:
-    return thing.name + (f" ({thing.state})" if thing.state else "")
-
-
-def _ways(world: WorldMap, place: WorldPlace) -> list[str]:
-    ways = []
-    for link in world.links:
-        if place.id not in (link.a, link.b):
-            continue
-        other = world.places.get(link.b if link.a == place.id else link.a)
-        if other is None:
-            continue
-        words = ", ".join(w for w in (link.direction, link.distance) if w)
-        if link.a == place.id:
-            ways.append(f"to {other.name}" + (f" ({words})" if words else ""))
-        else:
-            ways.append(f"from {other.name}" + (f" ({words}, toward here)" if words else ""))
-    return ways
-
-
-def _centred_on(world: WorldMap, patch: TerrainPatch) -> bool:
-    """Whether `patch` is its place's own land (`terrain_patch`), not land
-    along a way kept under the place."""
-    place = world.places.get(patch.place_id)
-    if place is None or place.x is None or place.y is None:
-        return False
-    return abs(patch.x - place.x) < 1.0 and abs(patch.y - place.y) < 1.0
 
 
 def _covers(patch: TerrainPatch, x: float, y: float, side: float | None = None) -> bool:
@@ -1119,10 +971,3 @@ def holding_place(
             if best is None or size_of(place) < best[0]:
                 best = (size_of(place), place)
     return best[1] if best is not None else None
-
-
-def _compass(dx: float, dy: float) -> str:
-    names = ("north", "north-east", "east", "south-east", "south", "south-west", "west")
-    names = (*names, "north-west")
-    angle = (math.degrees(math.atan2(dx, dy)) + 360) % 360
-    return names[round(angle / 45) % 8]

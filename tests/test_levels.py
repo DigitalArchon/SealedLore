@@ -290,5 +290,3 @@ def test_the_stairs_tile_is_drawn_unlike_the_floor():
     stairs, floor = tile(10, 12), tile(14, 12)
     assert stairs != floor
     assert len(set(stairs)) > 2  # treads: not one flat colour
-
-

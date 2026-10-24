@@ -377,6 +377,27 @@ def test_a_chat_tail_ends_every_request_and_never_enters_the_history(tmp_path):
     assert texts(provider.requests[-1])[-1] == ("user", "Again"), "blank sends nothing"
 
 
+def test_a_chat_tail_travels_with_the_chat_but_not_to_the_picture_writer(tmp_path):
+    """A chat's picture prompt is written on the chat as its model reads it,
+    without the tail; the map section it once carried is gone (the map mode
+    archived, Oct 24 2026: the call used a method that no longer existed)."""
+    session, provider = chat_session(tmp_path, ["Hi."])
+    session.story.chat_tail = "Stay terse."
+    session.story.chat_character = "Ada"
+    back = bundle_from_scenario(scenario_from_bundle(session.bundle, {}))
+    assert back.story.chat_tail == "Stay terse."
+    assert back.story.chat_character == "Ada"
+    again = fresh_playthrough(session.bundle, "Again").story
+    assert again.chat_tail == "Stay terse." and again.chat_character == "Ada"
+
+    say(session, "Hello")
+    provider.responses = ["not json: only the request matters here"]
+    with pytest.raises(ValueError):
+        session.write_image_prompt("the cat", anchor_id=None, max_refs=0, fixed=None, model=None)
+    assert "Stay terse." not in provider.requests[-1].messages[-1].text
+    assert "Hello" in "".join(m.text for m in provider.requests[-1].messages)
+
+
 def test_a_chats_markdown_export_names_the_user_as_the_chat_does(tmp_path):
     """The review of Oct 20 2026: every one of the author's messages was
     "**Unknown:**" (the name came from the cast, and a chat has none)."""

@@ -523,7 +523,7 @@ class PeoplePage(QScrollArea):
             button.setText(MAKE_CARD_LABEL)
             button.setToolTip(
                 f"Give {name} a card of their own, written from what the story says of them: "
-                "a profile, a portrait and an avatar on the map"
+                "a profile and a portrait"
             )
             button.setPopupMode(QToolButton.InstantPopup)
             menu = QMenu(button)

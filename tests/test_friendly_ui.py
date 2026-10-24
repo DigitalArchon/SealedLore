@@ -649,3 +649,23 @@ def test_the_panel_beside_the_story_is_titled_with_its_page(app, window):
     window._close_story()
     settle(app)
     assert dock.windowTitle() == NO_STORY_TITLE
+
+
+def test_the_people_page_makes_a_card_for_someone_with_none(app, window, monkeypatch):
+    """Make a card ▾ under "Also here, with no card yet" writes the card and
+    opens it on the Cast page (the map mode archived, Oct 24 2026: the slot
+    had gone with it, and the button did nothing)."""
+    from sealedlore.providers.mock import MockChatProvider
+
+    session = window.session
+    session.story.scene.present_others = ["Suzuka Nakamoto"]
+    monkeypatch.setattr(window, "_current_provider", lambda: MockChatProvider(["not json"]))
+    window.right_tabs.setCurrentWidget(window.people_page)
+    window._refresh_people()
+    assert list(window.people_page.make_card_buttons) == ["Suzuka Nakamoto"]
+    actions = window.people_page.make_card_buttons["Suzuka Nakamoto"].menu().actions()
+    actions[0].trigger()
+    wait_until(app, lambda: any(c.name == "Suzuka Nakamoto" for c in window.session.supporting))
+    # The card opens on the Cast page once the job is in (`_after_job`).
+    wait_until(app, lambda: window.right_tabs.currentWidget() is window.cast_page)
+    assert "Suzuka Nakamoto" in [c.name for c in window.session.supporting]

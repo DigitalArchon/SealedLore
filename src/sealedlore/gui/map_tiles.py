@@ -24,7 +24,7 @@ from dataclasses import dataclass, replace
 from functools import lru_cache
 
 from PySide6.QtCore import QPoint, QRect, Qt
-from PySide6.QtGui import QColor, QImage, QPainter, QPixmap
+from PySide6.QtGui import QColor, QImage, QPainter
 
 from sealedlore.gui.image_codec import image_from_data
 
@@ -1024,72 +1024,6 @@ def _roof(p: QPainter, grid: _Grid, house: set[tuple[int, int]], look: Look) -> 
 # --- For the view ---------------------------------------------------------------
 
 
-@lru_cache(maxsize=48)
-def tiles_pixmap(
-    rows: tuple[str, ...],
-    ground: str = "",
-    roofs: bool = False,
-    cleared: tuple[tuple[int, int, int, int], ...] = (),
-    colours: LookColours | None = None,
-) -> QPixmap:
-    """`render_tiles`, kept: a scene is drawn again on every redraw of the view."""
-    return QPixmap.fromImage(
-        render_tiles(rows, ground, roofs=roofs, cleared=cleared, colours=colours)
-    )
-
-
-def faded_edges(image: QImage, fade: int) -> QImage:
-    """`image` with its alpha ramped to nothing over `fade` pixels at each
-    edge (never more than a quarter of its smaller side, so a small picture
-    keeps a solid middle)."""
-    import numpy as np
-
-    fade = min(fade, min(image.width(), image.height()) // 4)
-    if fade <= 0:
-        return image
-    work = image.convertToFormat(QImage.Format_ARGB32_Premultiplied)
-    h, w = work.height(), work.width()
-    a = np.frombuffer(work.constBits(), np.uint8).reshape(h, work.bytesPerLine())[:, : w * 4]
-    a = a.reshape(h, w, 4).astype(np.float32)
-    ys = np.minimum(np.arange(h) + 0.5, h - np.arange(h) - 0.5)[:, None]
-    xs = np.minimum(np.arange(w) + 0.5, w - np.arange(w) - 0.5)[None, :]
-    ramp = np.clip(np.minimum(ys, xs) / fade, 0, 1)
-    # Premultiplied: every channel takes the ramp, which keeps the colour.
-    out = np.ascontiguousarray((a * ramp[..., None]).astype(np.uint8))
-    return QImage(out.data, w, h, w * 4, QImage.Format_ARGB32_Premultiplied).copy()
-
-
-def render_land(
-    rows: tuple[str, ...], ground: str = "", colours: LookColours | None = None
-) -> QImage:
-    """A patch of land for the region: `render_tiles`, fading out over
-    LAND_FADE_TILES at its edge. A QImage, so it can be rendered off the
-    GUI thread (the Region map's land took 1.2 s of a 4 s open, Oct 19
-    2026; `WorldView` renders it in the background and lays it in as it
-    comes). Kept nowhere here: the view keeps each patch's pixmap for the
-    map it shows (`land_key`). An LRU of 48 kept here thrashed once a map
-    had more patches than that, asked for in one order every build, and
-    every patch was rendered again on the GUI thread on every rebuild: 3.5
-    s a rebuild at 60 patches (the review, Oct 20 2026)."""
-    image = render_tiles(rows, ground, colours=colours)
-    return faded_edges(image, LAND_FADE_TILES * TILE)
-
-
-def land_key(rows: tuple[str, ...], ground: str = "", colours: LookColours | None = None) -> tuple:
-    """What a rendered patch depends on: the rows, the ground and the colours."""
-    return (rows, ground, colours)
-
-
-@lru_cache(maxsize=8)
-def ground_pixmap(width: int, height: int, colour: str, fade: int) -> QPixmap:
-    """A flat ground in `colour`, `width` by `height`, fading out over
-    `fade` pixels at its edge: laid under the region's patches and the
-    ways between them, so they lie on one country and not each on the fog."""
-    image = _image(max(width, 1), max(height, 1))
-    image.fill(_c(colour))
-    return QPixmap.fromImage(faded_edges(image, fade))
-
-
 def building_boxes(
     rows: Sequence[str], most: tuple[int, int] = (MAX_ROOF_TILES, MAX_ROOF_TILES)
 ) -> list[tuple[int, int, int, int]]:
@@ -1129,33 +1063,5 @@ def person_sprite(name: str) -> QImage:
     p.fillRect(9, 2, 1, 4, _c(hair))
     p.fillRect(4, 5, 1, 1, _c("#1b1d2b"))  # eyes
     p.fillRect(7, 5, 1, 1, _c("#1b1d2b"))
-    p.end()
-    return _outlined(image)
-
-
-@lru_cache(maxsize=16)
-def prop_sprite(variant: int) -> QImage:
-    """A small thing on the ground (a marked object, until it has a picture
-    of its own): a crate, a barrel or a sack."""
-    image = _image(12, 12)
-    p = QPainter(image)
-    p.setPen(Qt.NoPen)
-    kind = variant % 3
-    if kind == 0:  # crate
-        p.fillRect(1, 3, 10, 8, _c(WOOD[1]))
-        p.fillRect(1, 3, 10, 2, _c(WOOD[2]))
-        p.fillRect(1, 7, 10, 1, _c(WOOD[0]))
-        p.fillRect(5, 3, 2, 8, _c(WOOD[0]))
-    elif kind == 1:  # barrel
-        p.setBrush(_c(WOOD[1]))
-        p.drawRoundedRect(2, 1, 8, 10, 3, 3)
-        p.fillRect(2, 3, 8, 1, _c(STONE[0]))
-        p.fillRect(2, 8, 8, 1, _c(STONE[0]))
-        p.fillRect(4, 1, 2, 10, _c(WOOD[2]))
-    else:  # sack
-        p.setBrush(_c("#c9a46a"))
-        p.drawEllipse(1, 3, 10, 8)
-        p.fillRect(4, 1, 4, 3, _c("#a8844e"))
-        p.fillRect(3, 6, 2, 3, _c("#e0c48e"))
     p.end()
     return _outlined(image)

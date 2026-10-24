@@ -850,6 +850,7 @@ class MainWindow(
     def _wire_people(self) -> None:
         page = self.people_page
         page.profile_requested.connect(self._open_profile)
+        page.card_requested.connect(self.make_card)
         page.draw_requested.connect(lambda card_id: self._on_card_picture(card_id, "", "new"))
         page.file_requested.connect(self._choose_card_picture)
         page.play_requested.connect(self._play_as)
@@ -1521,8 +1522,8 @@ class MainWindow(
         if not path.endswith(".json"):
             path += SCENARIO_SUFFIX
         try:
-            files, art = self._files_and_art()
-            write_scenario(Path(path), scenario_from_bundle(self.session.bundle, files, art))
+            files = reference_files(self.session.bundle, self.root)
+            write_scenario(Path(path), scenario_from_bundle(self.session.bundle, files, None))
         except OSError as exc:
             self._warn_plain("Could not export scenario", f"{path}: {exc.strerror or exc}")
             return

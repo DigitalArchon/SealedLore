@@ -1389,6 +1389,28 @@ def test_an_import_opens_setup_before_it_begins(app, window: MainWindow, tmp_pat
     assert started == [window.session.story.id]
 
 
+def test_story_export_as_scenario_writes_a_file_the_import_reads_back(
+    app, window: MainWindow, tmp_path, monkeypatch
+):
+    """Story → Export ▸ Scenario, through the window (the map mode archived,
+    Oct 24 2026: it called a helper that had gone with the map, so the menu
+    entry raised instead of writing)."""
+    from PySide6.QtWidgets import QFileDialog
+
+    from sealedlore.storage.scenario import read_scenario
+
+    path = tmp_path / "out.sealedlore-scenario.json"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(path), ""))
+    window.export_scenario()
+    scenario = read_scenario(path)
+    assert scenario.title == window.session.story.title
+    assert [c.name for c in scenario.cast] == [c.name for c in window.session.cast]
+    monkeypatch.setattr(window, "open_setup", lambda: False)
+    before = window.session.story.id
+    window._import_scenario(path)
+    assert window.session.story.id != before
+
+
 def test_person_and_tense_are_fixed_once_the_story_has_begun(app, window: MainWindow):
     """Shown greyed, for reference, with the way to a new telling. One not set
     may be set once; nothing is fixed before the first passage."""

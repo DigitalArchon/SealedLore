@@ -219,7 +219,6 @@ class ImageRuntime:
                 options=self.assembly_options(),
                 # The chat's tail is for its replies, not the picture's prompt.
                 with_chat_tail=False,
-                the_map=self.map_context(path, None),
             )
             if is_tee(self.model):
                 model = self.model

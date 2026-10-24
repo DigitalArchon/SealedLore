@@ -25,7 +25,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from sealedlore.models.world import PlaceLayout, WorldPlace
+from sealedlore.models.world import PlaceLayout
 
 LEVEL_SEP = "#"
 STAIRS = "&"
@@ -77,10 +77,6 @@ def parse_level(area_id: str | None) -> tuple[str, int] | None:
     return (place_id, index) if index else None
 
 
-def is_level(area_id: str | None) -> bool:
-    return parse_level(area_id) is not None
-
-
 def place_of_area(area_id: str | None) -> str | None:
     """The place an area id stands in, for a plan or one of its levels: a
     window's id comes back as it is (engine/area.py resolves those)."""
@@ -89,17 +85,6 @@ def place_of_area(area_id: str | None) -> str | None:
 
 
 # --- Whether a place has levels, and which ---------------------------------------
-
-
-def levels_called_for(place: WorldPlace) -> bool:
-    """Whether the place's words call for more than one level, so the layout
-    model is asked to list them: a building, room or vehicle whose words
-    name floors, a cellar, decks or the like, or any place whose words make
-    it an enclosed one with levels (a station, a dungeon, a keep)."""
-    words = f"{place.name} {place.what} {place.state}"
-    if not _LEVEL_WORDS.search(words):
-        return False
-    return place.kind in _INSIDE_KINDS or _ENCLOSED_WORDS.search(words) is not None
 
 
 def listed_levels(spec: dict[str, Any]) -> list[tuple[int, str]]:
@@ -350,8 +335,3 @@ def _shared_floor(a: Sequence[str], b: Sequence[str]) -> tuple[int, int] | None:
             if best is None or score < best[0]:
                 best = (score, x, y)
     return (best[1], best[2]) if best is not None else None
-
-
-def stairs_words(tiles: Sequence[tuple[int, int]]) -> str:
-    """'x 12, y 7; x 13, y 7', for the level's request."""
-    return "; ".join(f"x {x}, y {y}" for x, y in sorted(tiles, key=lambda t: (t[1], t[0])))

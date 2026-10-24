@@ -24,7 +24,6 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Collection, Mapping, Sequence
-from dataclasses import dataclass
 from typing import Any
 
 from sealedlore.engine.area import (
@@ -50,7 +49,6 @@ from sealedlore.engine.area import (
     metres_per_tile,
     path,
     point_tile,
-    room_words,
     stairs_landing,
     stand_near,
     thing_tile,
@@ -67,7 +65,6 @@ from sealedlore.engine.takeable import same_thing
 from sealedlore.engine.tile_sets import (
     TileSetInfo,
     choose_set,
-    item_slugs,
 )
 from sealedlore.engine.world import (
     key,
@@ -86,7 +83,6 @@ from sealedlore.engine.world_layout import (
     position,
     size_of,
 )
-from sealedlore.ids import utc_now_iso
 from sealedlore.models.area import (
     AreaState,
     LiveArea,
@@ -97,7 +93,6 @@ from sealedlore.models.area import (
 from sealedlore.models.node import Node
 from sealedlore.models.scene import SceneState
 from sealedlore.models.world import (
-    MapPicture,
     OwnTileSet,
     WorldArt,
     WorldMap,
@@ -132,23 +127,6 @@ DEFAULT_START_MINUTE = 9 * 60
 _CLOCK_TIME = re.compile(r"^\s*(\d{1,2})[:.h](\d{2})\s*$")
 
 
-def is_opening(before: Sequence[Node]) -> bool:
-    """Whether the passage after `before` is the story's first."""
-    return not any(n.kind == "assistant" for n in before)
-
-
-def opening_minute(value: Any) -> int:
-    """The minute of the day a read's "starts_at" names ("07:30", "19.00"),
-    else DEFAULT_START_MINUTE."""
-    found = _CLOCK_TIME.match(str(value or ""))
-    if found is None:
-        return DEFAULT_START_MINUTE
-    hour, minute = int(found.group(1)), int(found.group(2))
-    if hour > 23 or minute > 59:
-        return DEFAULT_START_MINUTE
-    return hour * 60 + minute
-
-
 # Past an outdoor area's edge: how far straight on another area may start
 # and still be walked into, the way a place must lie to be offered, and how
 # many are.
@@ -166,35 +144,6 @@ EDGE_TRIES = 12
 # where they end ("from the house to the farm"); a walk up to someone keeps
 # the area's own name.
 MOVING_VERBS = ("travel", "walk", "enter", "leave", "stairs", "onward")
-
-
-@dataclass
-class TileAsset:
-    """One asset of the tile set in use, as the editor lists it."""
-
-    role: str
-    label: str
-    group: str
-    # "the set's", "drawn for this story", "changed for this story".
-    source: str
-    # What it shows, in words: what a redraw is drawn from.
-    words: str
-
-
-@dataclass
-class TileSetCard:
-    """One tile set as the gallery shows it (gui/tile_set_gallery.py)."""
-
-    # What `set_tile_set` takes: a shipped set's name, or "own:<key>".
-    name: str
-    title: str
-    in_use: bool
-    # Drawn for this story (may be removed), or shipped with SealedLore.
-    own: bool
-    style: str
-    keywords: list[str]
-    # Its assets by role, for the thumbnails.
-    read: Any
 
 
 # The roles a gallery card shows thumbnails of: textures, then sprites.
@@ -1800,26 +1749,6 @@ class AreaRuntime:
     # --- one asset at a time (Look ▾ → Edit the tile set…) -------------------------
 
 
-def _went_far(area: Area, p, spot: Spot) -> bool:
-    """Whether a thing at `spot` is `MOVE_MIN_M` or more from where it stood,
-    or in another area."""
-    if spot.area != area.id:
-        return True
-    return math.hypot(spot.x - p.x, spot.y - p.y) * area.tile_m >= MOVE_MIN_M
-
-
-def _names_room_of(area: Area, spot: str, p) -> bool:
-    """Whether the spot named is the room the thing already stands in (the
-    read gave where it is, not where it went)."""
-    if not spot:
-        return False
-    room = area.room_at(int(p.centre[0]), int(p.centre[1]))
-    if room is None:
-        return False
-    wanted = key(bare(spot))
-    return wanted in (key(bare(room_words(area, room))), key(room.name), key(room.purpose))
-
-
 def _twin(area: Area, name: str, world: WorldMap):
     """The area's own drawn thing of this name (a plan's object or a piece
     of furniture, not one of the map's things laid on it), or None: a map's
@@ -1832,41 +1761,6 @@ def _twin(area: Area, name: str, world: WorldMap):
     # The map's "Pickup truck" is the barn plan's "rusted pickup truck on
     # flat tyres" (live, both were drawn).
     return next((p for p in own if same_thing(name, p.name)), None)
-
-
-def _avatar_stands(art: WorldArt, name: str, portrait: str | None) -> bool:
-    """Whether a person's avatar is as it should be, with `portrait` (a
-    file) the one their card leads with: the author's own choice stands (a
-    redraw, their own picture, or the set's figure: ""); else every
-    character has an avatar drawn from the portrait they have now (the
-    author, Oct 17 2026), so one drawn here from their words before a
-    portrait came, or from a portrait they no longer lead with, doesn't. A
-    sample's, or one from before this was kept (`from_picture` None),
-    stands."""
-    if art.tile_overrides.get(f"walker/{name}") is not None:
-        return True
-    drawn = art.picture_for("walker", name)
-    if drawn is None:
-        return False
-    return drawn.from_picture is None or not portrait or drawn.from_picture == portrait
-
-
-def _walker_picture(
-    name: str, file: str, *, prompt: str = "", model: str = "", from_picture: str | None = None
-) -> MapPicture:
-    """The record of an avatar drawn or chosen for a person, kept with the
-    map's pictures (`subject` "walker"); `model` "" for the author's own.
-    `from_picture`: the portrait it was drawn from, "" from words."""
-    return MapPicture(
-        subject="walker",
-        subject_id=name,
-        name=name,
-        file=file,
-        from_picture=from_picture,
-        prompt=prompt,
-        model=model,
-        made_at=utc_now_iso(),
-    )
 
 
 def _own_info(name: str, found: OwnTileSet) -> TileSetInfo:
@@ -1884,16 +1778,6 @@ def _own_info(name: str, found: OwnTileSet) -> TileSetInfo:
         lava=words.get("lava") == "yes",
         **({"light": light} if len(light) == 3 else {}),
     )
-
-
-def _asset_key(role: str) -> str:
-    """The tile run's job key for an editor role ("walker/Jane" is
-    "walker:Jane", "items/a-chest" is "item:a-chest")."""
-    if role.startswith("walker/"):
-        return f"walker:{role[7:]}"
-    if role.startswith("items/"):
-        return f"item:{role[6:]}"
-    return role
 
 
 # An in-character turn that takes the author's character in through the
@@ -1924,8 +1808,3 @@ def _close_quietly(client: ChatProvider | None) -> None:
             close()
         except Exception:  # noqa: BLE001 - closing is best effort
             pass
-
-
-def item_sprite_key(name: str) -> str:
-    """The slug an item's own sprite is kept under (`MapPicture.subject_id`)."""
-    return item_slugs(name)[0] if item_slugs(name) else ""

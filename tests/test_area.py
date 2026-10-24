@@ -16,7 +16,6 @@ from sealedlore.engine.area import (
     furnish,
     item_verbs,
     path,
-    render_positions,
     stand_near,
     walk_metres,
     walk_seconds,
@@ -223,25 +222,6 @@ def test_standing_near_a_spot_never_stands_on_a_wall_a_thing_or_someone_else():
     assert stand_near(house, (0, 0)) != (0, 0)
 
 
-def test_the_storyteller_is_told_where_everyone_stands_and_never_the_day():
-    world, art = world_and_art()
-    house = build_area(world, art, "house")
-    stove = next(p for p in house.placements if "stove" in p.name)
-    spots = {
-        "Jane": Spot(area="house", x=stove.x, y=stove.y + 1),
-        "Marcus": Spot(area="house", x=stove.x + 4, y=stove.y + 1),
-        "Ben": Spot(area="farm", x=3, y=3),
-    }
-    text = render_positions(house, world, spots, "Jane", walked="about 2 minutes on foot")
-    assert "- Jane: in The house, in the smaller central hall, by the cast-iron stove." in text
-    assert "- Marcus: 4 m east of Jane" in text
-    assert "; in sight, within earshot." in text
-    assert "Ben" not in text  # not in this area
-    assert "Within reach: the cast-iron stove" in text
-    assert "Since the last passage: about 2 minutes on foot." in text
-    assert "Day" not in text and "day" not in text
-
-
 def test_what_can_be_done_with_a_thing_comes_from_its_plan_or_its_name():
     assert item_verbs("a loaf of bread") == ("use", "take", "eat", "destroy")
     assert item_verbs("a heavy oak dining table") == ("use", "destroy")
@@ -355,25 +335,6 @@ def test_the_ground_s_cover_never_cuts_any_ground_off():
     }
     assert ground - reached == set()
     assert sum(row.count("T") for row in farm.rows) > 100  # still a wooded farm
-
-
-def test_walls_stop_sight_and_the_storyteller_is_told_who_is_out_of_sight():
-    from sealedlore.engine.area import in_earshot, seen_tiles, sees
-
-    world, art = world_and_art()
-    house = build_area(world, art, "house")
-    jane, marcus, ben = (5, 10), (30, 10), (15, 5)
-    assert not sees(house, jane, marcus) and sees(house, jane, ben)
-    assert sees(house, (5, 12), (30, 12))  # through the doorway in the wall
-    assert in_earshot(house, jane, ben) and not in_earshot(house, jane, marcus)
-    grid = seen_tiles(house, jane)
-    assert grid[10][15] and not grid[10][30]
-    spots = {
-        "Jane": Spot(area="house", x=jane[0], y=jane[1]),
-        "Marcus": Spot(area="house", x=marcus[0], y=marcus[1]),
-    }
-    text = render_positions(house, world, spots, "Jane")
-    assert "(another room); out of sight." in text
 
 
 def _stand(session, area_id: str, x: int, y: int) -> None:
@@ -595,23 +556,6 @@ def test_someone_the_scene_has_here_and_the_map_never_placed_stands_with_the_aut
     assert "Maela Orr" not in session.area_state().spots  # gone from the scene: from the map
 
 
-def test_several_of_one_thing_within_reach_are_named_once():
-    world, art = world_and_art()
-    house = build_area(world, art, "house")
-    from sealedlore.engine.area import Placement
-
-    stools = [
-        Placement(
-            id=f"s{i}", name="a wooden stool", x=5 + i, y=10, w=1, h=1, kind="furniture", verbs=()
-        )
-        for i in range(3)
-    ]
-    house.placements = [*house.placements, *stools]
-    text = render_positions(house, world, {"Jane": Spot(area="house", x=5, y=11)}, "Jane")
-    reach = next(line for line in text.splitlines() if line.startswith("Within reach"))
-    assert reach.count("wooden stool") == 1 and "2 more near" in reach
-
-
 # --- the pixel art's style, and a card's avatar ---------------------------------------
 
 
@@ -722,20 +666,6 @@ def test_the_time_of_day_has_its_bands_and_never_the_day():
     assert now_words(18 * 60) == "It is dusk."
     assert now_words(None, " rain. ") == "The weather: rain."
     assert now_words(None, "") == ""
-
-
-def test_the_positions_carry_the_time_of_day_and_the_weather_under_the_heading():
-    world, art = world_and_art()
-    house = build_area(world, art, "house")
-    stove = next(p for p in house.placements if "stove" in p.name)
-    spots = {"Jane": Spot(area="house", x=stove.x, y=stove.y + 1)}
-    text = render_positions(
-        house, world, spots, "Jane", now="It is dusk. The weather: snowing hard."
-    )
-    lines = text.splitlines()
-    assert lines[0].startswith("Where everyone stands")
-    assert lines[1] == "It is dusk. The weather: snowing hard."
-    assert "Day" not in text and "day" not in text
 
 
 def session_log(session) -> list[dict]:

@@ -270,13 +270,6 @@ def _shape(word: Any) -> str:
     return "block"
 
 
-def ring_said(*words: str) -> bool:
-    """Whether a place's own words make it a ring (a ring-shaped station, a
-    wheel, a torus): only then is the brief's "ring" laid out as one."""
-    text = " ".join(w for w in words if w)
-    return re.search(rf"\b(?:{_SHAPE_WORDS[0][1]})\b", text, re.I) is not None
-
-
 def hull_kind(*words: str) -> str:
     """What a hull is from words (the brief's own "hull", a place's name and
     what is said of it), "" when none says."""

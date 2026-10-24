@@ -12,10 +12,9 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from collections.abc import Callable
-from functools import lru_cache
 
 from PySide6.QtCore import QByteArray, Qt
-from PySide6.QtGui import QColor, QImage, QPainter, QPixmap
+from PySide6.QtGui import QColor, QImage, QPainter
 
 from sealedlore.engine.world_art import PALETTE
 from sealedlore.gui.image_codec import image_from_data
@@ -91,38 +90,6 @@ def pixel_art(svg: str) -> QImage | None:
             ):
                 image.setPixelColor(x, y, OUTLINE)
     return image
-
-
-@lru_cache(maxsize=512)
-def sprite_pixmap(sprite_id: str, svg: str, pixels: int) -> QPixmap | None:
-    """The sprite at `pixels` across, nearest-neighbour: crisp at any size."""
-    image = pixel_art(svg)
-    if image is None:
-        return None
-    return QPixmap.fromImage(
-        image.scaled(pixels, pixels, Qt.KeepAspectRatio, Qt.FastTransformation)
-    )
-
-
-def tile_image(rows: tuple[str, ...], ground: str = "") -> QImage:
-    """Tile rows as an image, one pixel a tile: scaled up by the view."""
-    height = len(rows)
-    width = max((len(r) for r in rows), default=1)
-    image = QImage(width, max(height, 1), QImage.Format_ARGB32)
-    image.fill(QColor(GROUND_COLOURS.get(ground, GROUND_COLOURS[""])))
-    for y, row in enumerate(rows):
-        for x, ch in enumerate(row):
-            if ch == ".":
-                continue
-            colour = OBJECT_COLOUR if ch.isdigit() else TILE_COLOURS.get(ch)
-            if colour is not None:
-                image.setPixelColor(x, y, QColor(colour))
-    return image
-
-
-@lru_cache(maxsize=256)
-def tile_pixmap(rows: tuple[str, ...], ground: str = "") -> QPixmap:
-    return QPixmap.fromImage(tile_image(rows, ground))
 
 
 # --- Pictures from an image model (engine/world_pictures.py) -----------------

@@ -154,6 +154,52 @@ class CastWindow:
             job="Lore characters",
         )
 
+    def make_card(self, name: str, to_cast: bool = False) -> None:
+        """A card for someone the story names with none (the People page's
+        Make a card ▾), written from the story by the scan for new
+        characters (else the name alone), then opened on the Cast page."""
+        session = self.session
+        if session is None or not name.strip():
+            return
+        if self._busy:
+            self.statusBar().showMessage(
+                "A card can be made once the story's current job is done.", 6000
+            )
+            return
+        if session.in_private:
+            self.statusBar().showMessage("Not in a private scene.", 5000)
+            return
+        if self.config.active_provider() is not None or self.use_mock:
+            session.provider = self._current_provider()
+        made: dict[str, object] = {}
+
+        def job():
+            card, filled = session.card_for(name, to_cast=to_cast)
+            made["card"], made["filled"] = card, filled
+            yield SessionNotice(f"A card for {card.name}.")
+
+        def after() -> None:
+            card = made.get("card")
+            if card is None or self.session is not session:
+                return
+            self.refresh_panels()
+            self._refresh_people()
+            self._open_profile(card.id)
+            words = (
+                f"A card for {card.name}, written from the story: check it, and draw a portrait."
+                if made.get("filled")
+                else f"A card for {card.name}: the story says little of them yet, so fill it in."
+            )
+            self.statusBar().showMessage(words, 10000)
+
+        self._after_job = after
+        self._start(
+            job,
+            streaming=False,
+            busy_text=f"Writing a card for {name} from what the story says of them…",
+            job="Card",
+        )
+
     def _dialog_parent(self) -> QWidget:
         """A dialog opened from the guide or Setup (the Cast page lent to
         them) stands over it."""

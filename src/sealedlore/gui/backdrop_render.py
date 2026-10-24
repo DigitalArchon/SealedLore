@@ -18,14 +18,9 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QImage, QPainter
 
 from sealedlore.engine.area import Area
-from sealedlore.engine.backdrops import painted_things
 from sealedlore.gui.area_render import (
     Ground,
-    TileSource,
-    foot_of,
     px_for,
-    render_ground,
-    thing_picture,
 )
 from sealedlore.gui.image_codec import encoded, image_from_data
 
@@ -38,23 +33,6 @@ def area_picture_size(area: Area) -> tuple[int, int]:
     px = px_for(area)
     extra = round(px * 0.7) if area.indoor else 0
     return area.width * px, area.height * px + extra
-
-
-def render_source(area: Area, source: TileSource, *, dress: bool = True) -> QImage:
-    """The area as the painter should see it: the ground and the things
-    that stay put on it, nothing that is carried or driven."""
-    ground = render_ground(area, source, dress=dress)
-    px = px_for(area)
-    image = ground.image.convertToFormat(QImage.Format_RGB32)
-    p = QPainter(image)
-    for f in sorted(painted_things(area), key=lambda f: f.y + f.h):
-        picture = thing_picture(source, f, px, indoor=area.indoor)
-        cx, foot = foot_of(f, px)
-        left, top = int(round(cx + picture.dx)), int(round(foot + picture.dy))
-        lit = ground.light.apply(picture.image, left, top) if ground.light else picture.image
-        p.drawImage(left, top, lit)
-    p.end()
-    return image
 
 
 def padded_square(image: QImage, side: int) -> QImage:
@@ -70,18 +48,6 @@ def padded_square(image: QImage, side: int) -> QImage:
     p.drawImage(0, (side - h) // 2, scaled)
     p.end()
     return out
-
-
-def source_png(area: Area, source: TileSource, side: int, *, dress: bool = True) -> bytes | None:
-    """The render padded to a square `side` wide, for the painter: as JPEG
-    (the name is from when it was PNG: a 2048 square of outdoor tiles as
-    PNG made the request too large for the endpoint, HTTP 413)."""
-    image = padded_square(render_source(area, source, dress=dress), side)
-    return (
-        encoded(image.convertToFormat(QImage.Format_RGB32), "JPEG", 92)
-        if not image.isNull()
-        else None
-    )
 
 
 def trim_painting(data: bytes, area: Area) -> bytes:

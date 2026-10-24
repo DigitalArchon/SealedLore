@@ -38,15 +38,12 @@ from sealedlore.engine.levels import (
     level_area_id,
     level_name,
     linked_levels,
-    parse_level,
 )
 from sealedlore.engine.marks import footprint
-from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
-from sealedlore.engine.takeable import FIXED_MARK, fixed_thing, item_verbs, named_in, the
+from sealedlore.engine.takeable import item_verbs
 from sealedlore.engine.tile_sets import LIGHT_WORDS, roof_material
 from sealedlore.engine.world import key
 from sealedlore.engine.world_art import (
-    FILLS,
     GROUND,
     REGION_GRID_SIDE,
     REGION_GRID_TILES,
@@ -72,7 +69,7 @@ from sealedlore.engine.world_art import (
     with_fixed,
 )
 from sealedlore.engine.world_layout import position, size_of
-from sealedlore.models.area import FurnishPlan, Spot, ThingRecord
+from sealedlore.models.area import FurnishPlan, ThingRecord
 from sealedlore.models.world import WorldArt, WorldMap, WorldPlace
 
 # A tile outdoors, at game scale (design §2: game scale, not true scale).
@@ -1380,11 +1377,6 @@ def stairs_landing(area: Area, tile: tuple[int, int], taken: Collection[tuple[in
     them, never on a stairs tile (they would be in the doorway again)."""
     off = set(taken) | {(e.x, e.y) for e in area.stairs_entrances()} | {tile}
     return stand_near(area, tile, off)
-
-
-def level_of_area(area_id: str | None) -> tuple[str, int] | None:
-    """(place id, level) when an area id names a level of a plan."""
-    return parse_level(area_id)
 
 
 def _fix_buildings(
@@ -2786,65 +2778,6 @@ def bearing(a: tuple[float, float], b: tuple[float, float]) -> str:
     return _COMPASS[round(angle / 45) % 8]
 
 
-def metres_words(metres: float) -> str:
-    if metres < 1.5:
-        return "beside"
-    if metres < 10:
-        return f"{metres:.0f} m"
-    return f"{round(metres / 5) * 5:.0f} m"
-
-
-def room_words(area: Area, room: Room | None) -> str:
-    if room is None:
-        return ""
-    if room.purpose:
-        return f"the {room.purpose.lower().removeprefix('the ')}"
-    return f"the {room.name}"
-
-
-def near_thing(area: Area, x: int, y: int, within: float = 1.6) -> Placement | None:
-    """The placement nearest (x, y) within `within` tiles of its edge."""
-    best, best_d = None, within
-    for p in area.placements:
-        cx = min(max(x, p.x), p.x + p.w - 1)
-        cy = min(max(y, p.y), p.y + p.h - 1)
-        d = math.hypot(cx - x, cy - y)
-        if d <= best_d:
-            best, best_d = p, d
-    return best
-
-
-def where_words(area: Area, x: int, y: int) -> str:
-    """'in the kitchen, by the woodstove'; 'in the farm, by the well'."""
-    parts = []
-    room = area.room_at(x, y)
-    if room is not None:
-        parts.append(f"in {room_words(area, room)}")
-    doorway = next((d for d in area.doorways if (x, y) in d.tiles()), None)
-    if doorway is not None:
-        parts.append("in a doorway")
-    entrance = area.entrance_at(x, y)
-    thing = near_thing(area, x, y)
-    if thing is not None:
-        parts.append(f"by the {_bare(thing.name)}")
-    elif not area.indoor:
-        for place_id, (x0, y0, x1, y1) in area.buildings.items():
-            if x0 - 2 <= x <= x1 + 2 and y0 - 2 <= y <= y1 + 2:
-                parts.append(f"outside {area.names.get(place_id, 'a building')}")
-                break
-        else:
-            spot = min(
-                area.labels.items(),
-                key=lambda item: math.hypot(item[1][0] - x, item[1][1] - y),
-                default=None,
-            )
-            if spot is not None and math.hypot(spot[1][0] - x, spot[1][1] - y) <= 6:
-                parts.append(f"near {spot[0]}")
-    if entrance is not None:
-        parts.append("on the stairs" if entrance.stairs else "at its door")
-    return ", ".join(parts)
-
-
 def bare(name: str) -> str:
     """A thing's name without its article: "a wooden chest" is "wooden chest"."""
     return _bare(name)
@@ -2893,156 +2826,6 @@ def now_words(minute: int | None, weather: str = "") -> str:
     return " ".join(parts)
 
 
-def render_positions(
-    area: Area,
-    world: WorldMap,
-    spots: Mapping[str, Spot],
-    held: str,
-    *,
-    walked: str = "",
-    action_line: str = "",
-    limit: int = 8,
-    things: Mapping[str, ThingRecord] | None = None,
-    texts: PromptTexts = DEFAULT_TEXTS,
-    elsewhere: Sequence[str] = (),
-    level_names: Mapping[str, str] | None = None,
-    now: str = "",
-    mark_fixed: bool = False,
-    at_the_door: Collection[str] = (),
-) -> str:
-    """Where everyone stands, for the storyteller: exact, from the grid
-    (design §5). `now`: the time of day and the weather (`now_words`), right
-    under the heading. The author's character's place in the area (and its
-    level, on a plan with floors or decks), who else is here with distance
-    and bearing, what is within reach (a broken thing said to be broken),
-    what each of them carries (`things`, the turn's records; the author's
-    character first), the doorways out, the stairs to other levels, who is
-    on another level of the place (`elsewhere`, lines the caller found), and
-    how far they walked since the last passage. Never the clock's day (the
-    author's ruling: the day is the plot's). `mark_fixed`: what can't be
-    taken or moved (built in, rooted, bolted down) is marked so in reach, on
-    a turn that may not move it. `at_the_door`: names among `spots` standing
-    at a door of this building from outside (on the tile beyond its wall),
-    said so."""
-    me = spots.get(held)
-    if me is None or me.area != area.id:
-        return ""
-    here = (me.x, me.y)
-    lines = ["Where everyone stands (the map is exact: keep to it):"]
-    if now:
-        lines.append(now)
-    words = where_words(area, *here)
-    # A window of open country: "in open country, in the Great Erg".
-    place = f"in {area.name}" + (f", in {area.within}" if area.within else "")
-    if area.level_name:
-        place += f", {area.level_name.lower()}"
-    lines.append(f"- {held}: {place}" + (f", {words}" if words else "") + ".")
-    my_room = area.room_at(*here)
-    others = []
-    for name, spot in spots.items():
-        if name == held or spot.area != area.id:
-            continue
-        metres = math.hypot(spot.x - me.x, spot.y - me.y) * area.tile_m
-        others.append((metres, name, spot))
-    others.sort()
-    for metres, name, spot in others[:limit]:
-        room = area.room_at(spot.x, spot.y)
-        apart = ""
-        if area.indoor and room is not None and my_room is not None and room.index != my_room.index:
-            apart = f", in {room_words(area, room)} (another room)"
-        where = where_words(area, spot.x, spot.y)
-        if name in at_the_door:
-            where = "at the door, just outside"
-        far = metres_words(metres)
-        way = bearing(here, (spot.x, spot.y))
-        how = f"beside {held}" if far == "beside" else f"{far} {way} of {held}"
-        tail = f", {where}" if where and not apart else apart
-        lines.append(f"- {name}: {how}{tail}; {sight_words(area, here, (spot.x, spot.y))}.")
-    reach = sorted(
-        (
-            (math.hypot(p.centre[0] - me.x - 0.5, p.centre[1] - me.y - 0.5) * area.tile_m, p)
-            for p in area.placements
-        ),
-        key=lambda item: item[0],
-    )
-    nearest: dict[str, tuple[float, int]] = {}
-    fixed: set[str] = set()
-    for m, p in reach:
-        if m <= 4.0:
-            label = _bare(p.name) + (" (broken)" if p.broken else "")
-            first, count = nearest.get(label, (m, 0))
-            nearest[label] = (first, count + 1)
-            if mark_fixed and fixed_thing(p.name):
-                fixed.add(label)
-    close = [
-        f"{the(name)} ({'at hand' if m < 1.5 else metres_words(m)}"
-        + (f"; {n - 1} more near" if n > 1 else "")
-        + (f"; {FIXED_MARK})" if name in fixed else ")")
-        for name, (m, n) in nearest.items()
-    ][:limit]
-    if close:
-        lines.append("Within reach: " + "; ".join(close) + ".")
-    if things:
-        # Who carries what: the author's character always, the others when
-        # they are in this area.
-        present = [held] + [n for _m, n, _s in others]
-        for name in present:
-            carried = carried_by(things, name)
-            if carried:
-                lines.append(texts.fill("map.carries", name=name, things=", ".join(carried)))
-    if area.indoor and my_room is not None:
-        ways = []
-        for d in area.doorways:
-            sides = {r.index for x, y in _beside(d) if (r := area.room_at(x, y)) is not None}
-            if my_room.index in sides:
-                other = [area.rooms[i] for i in sides if i != my_room.index]
-                out = d.middle in area.exits or any(t in area.exits for t in d.tiles())
-                if out:
-                    ways.append(f"{bearing(here, d.middle)}, out of {area.name}")
-                elif other:
-                    ways.append(f"{bearing(here, d.middle)}, to {room_words(area, other[0])}")
-        if ways:
-            lines.append("Doorways from here: " + "; ".join(dict.fromkeys(ways)) + ".")
-    stairs = stairs_lines(area, here, level_names)
-    if stairs:
-        lines.append("Stairs from here: " + "; ".join(stairs) + ".")
-    for line in elsewhere:
-        lines.append(line)
-    if walked:
-        lines.append(f"Since the last passage: {walked}.")
-    if action_line:
-        lines.append(action_line)
-    return "\n".join(lines)
-
-
-def stairs_lines(
-    area: Area, here: tuple[int, int], level_names: Mapping[str, str] | None = None
-) -> list[str]:
-    """'up to the upper floor, 8 m north', for each stairs in the area, the
-    nearest first (`level_names`: each level area's name, by id; a level
-    not named is "the level above/below")."""
-    found = []
-    names = level_names or {}
-    for e in sorted(
-        area.stairs_entrances(), key=lambda e: math.hypot(e.x - here[0], e.y - here[1])
-    ):
-        name = names.get(e.place_id) or ("the level above" if e.side == "up" else "the level below")
-        metres = math.hypot(e.x - here[0], e.y - here[1]) * area.tile_m
-        how = "at hand" if metres < 1.5 else f"{metres_words(metres)} {bearing(here, (e.x, e.y))}"
-        found.append(f"{e.side} to {name}, {how}")
-    return list(dict.fromkeys(found))[:4]
-
-
-def _beside(d: Doorway) -> list[tuple[int, int]]:
-    if d.way == "h":
-        return [(x, d.y0 - 1) for x in range(d.x0, d.x1 + 1)] + [
-            (x, d.y1 + 1) for x in range(d.x0, d.x1 + 1)
-        ]
-    return [(d.x0 - 1, y) for y in range(d.y0, d.y1 + 1)] + [
-        (d.x1 + 1, y) for y in range(d.y0, d.y1 + 1)
-    ]
-
-
 def walked_words(seconds: int, frm: str = "", to: str = "") -> str:
     """'about twenty minutes on foot, from the farm to Hellsville'."""
     minutes = seconds / 60
@@ -3060,78 +2843,10 @@ def walked_words(seconds: int, frm: str = "", to: str = "") -> str:
     return span
 
 
-def anchors_near(area: Area, x: int, y: int, limit: int = 12) -> list[str]:
-    """Named spots near (x, y), nearest first, for the read to choose from
-    (design §5: a closed list, as the plot's places are): the things, the
-    rooms and the doorways of the room (x, y) is in."""
-    found: list[tuple[float, str]] = []
-    for p in area.placements:
-        d = math.hypot(p.centre[0] - x, p.centre[1] - y)
-        found.append((d, the(p.name)))
-    for room in area.rooms:
-        found.append((math.hypot(room.cx - x, room.cy - y) + 0.5, room_words(area, room)))
-    for name, (dx, dy) in doorway_spots(area, x, y):
-        found.append((math.hypot(dx - x, dy - y), name))
-    names = dict.fromkeys(name for _d, name in sorted(found))
-    return list(names)[:limit]
-
-
 # A doorway is where people stand in prose ("Ruth came as far as the
 # doorway"), and the read reached for it with none on its list (live, Oct 17
 # 2026): it was dropped and she stayed 20 m off in the kitchen.
 _DOORWAY = frozenset({"doorway", "door", "doorframe", "threshold", "door frame"})
-
-
-def doorway_spots(area: Area, x: int, y: int) -> list[tuple[str, tuple[int, int]]]:
-    """The doorways of the room (x, y) is in, each named for where it
-    leads ("the doorway to the kitchen", "the doorway out of The barn")."""
-    room = area.room_at(x, y) if area.indoor else None
-    if room is None:
-        return []
-    found = []
-    for d in area.doorways:
-        sides = {r.index for bx, by in _beside(d) if (r := area.room_at(bx, by)) is not None}
-        if room.index not in sides:
-            continue
-        other = [area.rooms[i] for i in sides if i != room.index]
-        if d.middle in area.exits or any(t in area.exits for t in d.tiles()):
-            name = f"the doorway out of {area.name}"
-        elif other:
-            name = f"the doorway to {room_words(area, other[0])}"
-        else:
-            continue
-        found.append((name, d.middle))
-    return found
-
-
-def anchor_tile(
-    area: Area, name: str, near: tuple[int, int] | None = None
-) -> tuple[int, int] | None:
-    """The tile a named spot stands for (`anchors_near`'s names). `near`:
-    where the spots were listed from, so a bare "the doorway" is the
-    nearest doorway of that room."""
-    wanted = key(_bare(name))
-    for p in area.placements:
-        if key(_bare(p.name)) == wanted:
-            return int(p.centre[0]), int(p.centre[1])
-    for room in area.rooms:
-        if key(_bare(room_words(area, room))) == wanted or key(room.name) == wanted:
-            return int(room.cx), int(room.cy)
-    if near is not None:
-        doors = doorway_spots(area, *near)
-        for door, tile in doors:
-            if key(door) == wanted:
-                return tile
-        if wanted in _DOORWAY and doors:
-            return min(doors, key=lambda d: math.hypot(d[1][0] - near[0], d[1][1] - near[1]))[1]
-        if wanted in _DOORWAY:
-            # Standing in no room (in a doorway, outdoors): the nearest door
-            # of the area, a doorway, a way out or a building's door.
-            every = [d.middle for d in area.doorways] + list(area.exits)
-            every += [(e.x, e.y) for e in area.entrances if not e.stairs]
-            if every:
-                return min(every, key=lambda t: math.hypot(t[0] - near[0], t[1] - near[1]))
-    return None
 
 
 # Words that say where something went, and a door named among them.
@@ -3143,34 +2858,6 @@ _A_DOOR = re.compile(
     r"\b(?:doors?|doorways?|doorframe|door frame|doorstep|doorsill|threshold|entrance|way in|"
     r"gates?)\b"
 )
-
-
-def spot_in_words(area: Area, words: str, near: tuple[int, int]) -> str:
-    """The spot a few words of the read's say a thing went to ("dragged to the
-    door", "shoved across the doorway, blocking it", "moved to the stove"):
-    a door or doorway (the nearest, `anchor_tile`), else the spot near `near`
-    the words name best (`anchors_near`); "" when they say no place it went.
-    The read put where a thing ended up in its state as often as in "spot"
-    (the replay, Oct 17 2026)."""
-    said = " ".join(words.lower().split())
-    if not said or _WENT.search(said) is None:
-        return ""
-    if _A_DOOR.search(said) is not None:
-        return "the doorway"
-    best, score = "", 0
-    for name in anchors_near(area, *near, limit=40):
-        found = named_in(name, said)
-        if found > score:
-            best, score = name, found
-    return best
-
-
-def fills_word(ch: str) -> str:
-    """A tile's kind in words, for a hover."""
-    for word, tile in FILLS.items():
-        if tile == ch:
-            return word
-    return ""
 
 
 # --- The map's metres and an area's tiles --------------------------------------
@@ -3333,23 +3020,3 @@ def in_earshot(area: Area, a: tuple[int, int], b: tuple[int, int]) -> bool:
     if room_a is not None and room_b is not None and room_a.index == room_b.index:
         return True
     return sees(area, a, b)
-
-
-def sight_words(area: Area, a: tuple[int, int], b: tuple[int, int]) -> str:
-    """'in sight, within earshot', 'out of sight', for the positions."""
-    seen, heard = sees(area, a, b), in_earshot(area, a, b)
-    if seen:
-        return "in sight, within earshot" if heard else "in sight"
-    return "out of sight, within earshot" if heard else "out of sight"
-
-
-def seen_tiles(area: Area, origin: tuple[int, int]) -> list[list[bool]]:
-    """Which tiles someone at `origin` can see: a ray to each. Indoors only
-    (an area of 40 x 24 tiles is ~20 ms); outdoors the people's lines are
-    enough."""
-    w, h = area.width, area.height
-    out = [[False] * w for _ in range(h)]
-    for y in range(h):
-        for x in range(w):
-            out[y][x] = sees(area, origin, (x, y))
-    return out

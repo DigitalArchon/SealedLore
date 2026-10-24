@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass
 
 from sealedlore.engine.world_art import plan_rect
 from sealedlore.engine.world_layout import position, size_of
@@ -26,36 +25,6 @@ from sealedlore.models.world import WorldArt, WorldMap
 MARK = re.compile(r"[⌖@]\s*\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)")
 # A turn names at most this many marks for the storyteller and the read.
 MAX_MARKS = 6
-
-
-def mark_token(x: float, y: float) -> str:
-    """How a mark is written in a turn."""
-    return f"⌖({round(x)}, {round(y)})"
-
-
-@dataclass(frozen=True)
-class MarkIn:
-    """A mark as it stands in a turn's text: the token as written, and the
-    point it names in metres (east, north)."""
-
-    token: str
-    x: float
-    y: float
-
-
-def marks_in(text: str) -> list[MarkIn]:
-    """The marks a turn's text holds, each once, in order."""
-    out: list[MarkIn] = []
-    seen: set[tuple[float, float]] = set()
-    for match in MARK.finditer(text or ""):
-        x, y = float(match.group(1)), float(match.group(2))
-        if not (math.isfinite(x) and math.isfinite(y)) or (x, y) in seen:
-            continue
-        seen.add((x, y))
-        out.append(MarkIn(token=match.group(0), x=x, y=y))
-        if len(out) >= MAX_MARKS:
-            break
-    return out
 
 
 def footprint(
@@ -128,29 +97,3 @@ def compass(dx: float, dy: float) -> str:
     """The compass way of a step east `dx`, north `dy` (metres)."""
     angle = (math.degrees(math.atan2(dx, dy)) + 360) % 360
     return _COMPASS[round(angle / 45) % 8]
-
-
-def chain_words(world: WorldMap, place_id: str | None, depth: int = 2) -> str:
-    """'in the far bank, in The Silverwood': the place and what it is in."""
-    parts: list[str] = []
-    seen: set[str] = set()
-    current = world.places.get(place_id or "")
-    while current is not None and current.id not in seen and len(parts) < depth:
-        seen.add(current.id)
-        parts.append(f"in {current.name}")
-        current = world.places.get(current.inside or "")
-    return ", ".join(parts)
-
-
-def nearest_place(world: WorldMap, x: float, y: float) -> tuple[str, float] | None:
-    """(id, metres) of the known place whose spot is nearest the point."""
-    best: tuple[float, str] | None = None
-    for place in world.places.values():
-        if place.x is None or place.y is None or place.kind == "region":
-            continue
-        if place.id not in world.seen:
-            continue
-        d = math.hypot(place.x - x, place.y - y)
-        if best is None or d < best[0]:
-            best = (d, place.id)
-    return (best[1], best[0]) if best is not None else None

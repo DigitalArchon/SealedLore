@@ -21,16 +21,11 @@ last picture (when the model takes pictures), so it stays the same barn.
 
 from __future__ import annotations
 
-import math
 import re
-from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
-from sealedlore.engine.world_art import LAYOUT_HEIGHT, LAYOUT_WIDTH, MAX_FAILURES, SPRITE_KINDS
-from sealedlore.engine.world_layout import position
-from sealedlore.models.world import MapPicture, WorldArt, WorldMap, WorldPlace
+from sealedlore.models.world import WorldArt, WorldMap, WorldPlace
 from sealedlore.providers.images import ImageModelInfo
 
 # Where map pictures are kept, inside the story's pictures folder.
@@ -101,178 +96,6 @@ def picture_size(model: ImageModelInfo | None, *, landscape: bool = False) -> st
     return sizes[0] if sizes else "1024x1024"
 
 
-def size_pixels(size: str) -> tuple[int, int]:
-    """A listed size as (width, height) in pixels; a size with no numbers
-    ("1k", "auto", "16:9") as 1024 by 576, the shape most such models paint."""
-    parts = size.replace("*", "x").split("x")
-    if len(parts) == 2 and all(p.isdigit() for p in parts) and all(int(p) > 0 for p in parts):
-        return int(parts[0]), int(parts[1])
-    return 1024, 576
-
-
-def isometric_size(model: ImageModelInfo | None) -> str:
-    """The isometric view's size: the landscape size the model lists nearest
-    the shape of a plan (LAYOUT_WIDTH by LAYOUT_HEIGHT, 5:3), the larger on a
-    tie, up to ISOMETRIC_WIDEST across. The map lays the view over the plan
-    it was painted from, so the nearer its shape, the less is cut off (a 4:3
-    view lost a tenth at the top and the bottom). Else as a postcard."""
-    wanted = LAYOUT_WIDTH / LAYOUT_HEIGHT
-    shapes: list[tuple[float, int, str]] = []
-    for size in model.resolutions if model is not None else ():
-        parts = size.replace("*", "x").split("x")
-        if len(parts) != 2 or not (parts[0].isdigit() and parts[1].isdigit()):
-            continue
-        width, height = int(parts[0]), int(parts[1])
-        if height < width <= ISOMETRIC_WIDEST:
-            shapes.append((abs(width / height - wanted), -width * height, size))
-    if shapes:
-        return min(shapes)[2]
-    return picture_size(model, landscape=True)
-
-
-def plan_pictures(
-    world: WorldMap,
-    art: WorldArt,
-    *,
-    people: Sequence[Person],
-    held: str | None,
-    setting: str,
-    edits: bool,
-    texts: PromptTexts = DEFAULT_TEXTS,
-    limit: int = 6,
-    style: str = "in a style that suits the world's mood",
-    hidden: Collection[str] = (),
-) -> list[PictureJob]:
-    """What the map still needs from the image model, in the order it is
-    wanted. `edits`: the model takes a picture to work from (a change is
-    then drawn from the last picture; otherwise drawn afresh). Nothing drawn,
-    and nothing that failed too often, is asked again. `style`: the pixel
-    art's style in a few words (the tile set's, `tile_draw.style_words`).
-    `hidden`: places and things never drawn yet (the world designer's in a
-    region the author's character hasn't been in, `regions.unexplored_ids`)."""
-    look = style
-    style = texts.fill("map.picture.style", style=look)
-    here = world.where.get(held or "")
-    jobs: list[tuple[tuple, PictureJob]] = []
-
-    def failed(key: str) -> bool:
-        return art.failures.get(key, 0) >= MAX_FAILURES
-
-    def far(place_id: str | None) -> float:
-        a, b = position(world, here), position(world, place_id)
-        if a is None or b is None:
-            return math.inf
-        return math.hypot(a[0] - b[0], a[1] - b[1])
-
-    for person in people:
-        key = f"picture:person:{person.name}"
-        if art.picture_for("person", person.name) is not None or failed(key):
-            continue
-        at = world.where.get(person.name)
-        rank = 0 if person.name == held else 1 if at is not None and at == here else 2
-        if rank == 2 and at is None:
-            continue  # the story hasn't placed them: no avatar yet
-        prompt = texts.fill(
-            "map.picture.person",
-            who=person.name,
-            looks=person.looks,
-            setting=setting,
-            style=style,
-        )
-        jobs.append(
-            (
-                (0, rank, far(at), person.name),
-                PictureJob(key, "person", person.name, person.name, prompt),
-            )
-        )
-
-    shown = set(world.seen) | {pid for places in world.visited.values() for pid in places}
-    if world.start is not None:
-        shown.add(world.start)
-    subjects: list[tuple[Literal["place", "thing"], str, str, str, str | None, int]] = [
-        ("place", p.id, p.name, p.what, p.id, 2)
-        for p in world.places.values()
-        if p.kind in SPRITE_KINDS and p.id in shown and p.id not in hidden
-    ]
-    subjects += [
-        ("thing", t.id, t.name, "", world.where.get(t.carried_by or "") or t.at, 3)
-        for t in world.things.values()
-        if (t.carried_by or t.at in shown) and t.id not in hidden
-    ]
-    for subject, subject_id, name, what, at, order in subjects:
-        state = (
-            world.places[subject_id].state if subject == "place" else world.things[subject_id].state
-        )
-        if art.picture_for(subject, subject_id, state) is not None:
-            continue
-        key = f"picture:{subject}:{subject_id}" + (f":{state}" if state else "")
-        if failed(key):
-            continue
-        last = art.picture_for(subject, subject_id)
-        if last is not None and edits:
-            prompt = texts.fill(
-                "map.picture.change", what=name, change=state or "as it was before", style=style
-            )
-            reference, from_picture = last.file, last.id
-        else:
-            words = name + (f": {what}" if what else "") + (f" ({state})" if state else "")
-            prompt = texts.fill("map.picture.place", what=words, setting=setting, style=style)
-            reference, from_picture = None, None
-        jobs.append(
-            (
-                (order, 0, far(at), name),
-                PictureJob(key, subject, subject_id, name, prompt, state, reference, from_picture),
-            )
-        )
-    # Postcards: each place the author's character has been (not a road or a
-    # vehicle), where they are now first.
-    been = set(world.visited.get(held or "", []))
-    if world.start is not None and not been:
-        been.add(world.start)
-    for place_id in been:
-        place = world.places.get(place_id)
-        if place is None or place.kind in ("route", "vehicle"):
-            continue
-        state = place.state
-        if art.picture_for("postcard", place_id, state) is not None:
-            continue
-        key = f"picture:postcard:{place_id}" + (f":{state}" if state else "")
-        if failed(key):
-            continue
-        last = art.picture_for("postcard", place_id)
-        if last is not None and edits:
-            prompt = texts.fill(
-                "map.picture.postcard.change",
-                place=place.name,
-                change=state or "as it was before",
-            )
-            reference, from_picture = last.file, last.id
-        else:
-            inside = [p.name for p in world.places.values() if p.inside == place_id][:6]
-            what = (place.what or place.kind or "").rstrip(".") + "."
-            prompt = texts.fill(
-                "map.picture.postcard",
-                place=place.name,
-                view="seen inside" if place.kind == "room" else "seen from outside",
-                what=what + (f" ({state})" if state else ""),
-                inside=f"In it: {', '.join(inside)}. " if inside else "",
-                setting=setting,
-                style=look,
-            )
-            reference, from_picture = None, None
-        here_now = place_id == here or place_id == _container(world, here, place_id)
-        jobs.append(
-            (
-                (1 if here_now else 4, 0, far(place_id), place.name),
-                PictureJob(
-                    key, "postcard", place_id, place.name, prompt, state, reference, from_picture
-                ),
-            )
-        )
-    jobs.sort(key=lambda pair: pair[0])
-    return [job for _, job in jobs[:limit]]
-
-
 def _container(world: WorldMap, inner: str | None, outer: str) -> str | None:
     """`outer` when `inner` is somewhere inside it, else None."""
     seen: set[str] = set()
@@ -294,53 +117,6 @@ def area_plan(world: WorldMap, art: WorldArt, area_id: str):
     if area is None:
         return None
     return art.layout_shown(area_id, area.state)
-
-
-def views_of(art: WorldArt, area_id: str) -> list[MapPicture]:
-    """Every isometric view an area has, oldest first: each Paint it (again)
-    and each picture of the author's own adds one, and none is thrown away."""
-    return [p for p in art.pictures if p.subject == "isometric" and p.subject_id == area_id]
-
-
-def chosen_view(world: WorldMap, art: WorldArt, area_id: str) -> MapPicture | None:
-    """The view the author chose for the area, for the map as it is there
-    now (`WorldArt.chosen_views`), or None: none chosen under this state, or
-    the one chosen is gone."""
-    chosen = art.chosen_views.get(area_id, {}).get(isometric_state(world, area_id))
-    return next((p for p in views_of(art, area_id) if p.id == chosen), None) if chosen else None
-
-
-def shown_view(world: WorldMap, art: WorldArt, area_id: str) -> MapPicture | None:
-    """The isometric view to lay over an area: the one the author chose
-    for the map as it is there now (`chosen_view`; painting one chooses
-    it), else the latest that is of the map as it is now (`view_current`),
-    else the latest painted, out of date and said so. The latest alone laid
-    a burning farm over the branch where it stands, and offered to paint it
-    again (the review, Oct 15 2026)."""
-    chosen = chosen_view(world, art, area_id)
-    if chosen is not None:
-        return chosen
-    views = views_of(art, area_id)
-    for picture in reversed(views):
-        if view_current(world, art, area_id, picture):
-            return picture
-    return views[-1] if views else None
-
-
-def view_current(world: WorldMap, art: WorldArt, area_id: str, picture: MapPicture) -> bool:
-    """Whether an isometric view is of the map there as it is now: painted
-    under the area's state (`isometric_state`) and from the plan it has now.
-    A plan drawn again (Redraw plan…) makes it out of date. A view painted
-    before views kept their plan counts as current when it is newer than the
-    plan."""
-    if picture.state != isometric_state(world, area_id):
-        return False
-    plan = area_plan(world, art, area_id)
-    if plan is None:
-        return True
-    if picture.plan:
-        return picture.plan == plan.made_at
-    return not (picture.made_at and plan.made_at) or picture.made_at >= plan.made_at
 
 
 def isometric_state(world: WorldMap, area_id: str) -> str:
@@ -376,34 +152,6 @@ LOOK_WORDS = {
 }
 
 
-def seen_change(art: WorldArt, place: WorldPlace) -> str:
-    """How a changed place looks, from its plan in that state against the
-    one before it: fire, ruins, walls down. Plain words a painter can draw;
-    the story's own ("past saving, a furnace now") never said fire. Empty
-    when there is no plan of the change to read."""
-    after = art.layout_for(place.id, place.state) if place.state else None
-    if after is None or not after.rows:
-        return ""
-    before = art.layout_for(place.id, "")
-    cells = "".join(after.rows)
-    seen = []
-    if "*" in cells:
-        seen.append("on fire")
-    if cells.count(":") > len(cells) // 4:
-        seen.append("in ruins")
-    if before is not None and before.rows:
-        walls_before = "".join(before.rows).count("#")
-        if walls_before and cells.count("#") < walls_before * 0.6:
-            seen.append("most of its walls down")
-    return ", ".join(seen)
-
-
-def _changed(world: WorldMap, area_id: str) -> list[WorldPlace]:
-    area = world.places[area_id]
-    inside = [p for p in world.places.values() if p.inside == area_id and p.state]
-    return inside + ([area] if area.state else [])
-
-
 def one_line(place: WorldPlace) -> str:
     """The area in one sentence: the first of its description, else its
     name. Measured (SealedLoreDocs design/map.md, Oct 15 2026): with the
@@ -419,69 +167,3 @@ def one_line(place: WorldPlace) -> str:
 # How many people's looks and things' names a painting's prompt carries.
 PAINTING_PEOPLE = 6
 PAINTING_THINGS = 8
-
-
-def isometric_job(
-    world: WorldMap,
-    art: WorldArt,
-    area_id: str,
-    *,
-    look: str = "",
-    style: str = "in a style that suits the world's mood",
-    texts: PromptTexts = DEFAULT_TEXTS,
-    when: str = "",
-    people: Sequence[str] = (),
-    things: Sequence[str] = (),
-) -> PictureJob:
-    """A painting of an area as a picture job (the author, Oct 17 2026: keep
-    to the map, and a beautiful rendition of the scene as it is now). The
-    program's own picture of the area goes with the prompt (the play view's
-    tiles with the people and things on it, gui/map_render.py, made on the
-    painting's thread); the prompt asks for it painted keeping the layout,
-    any change first in words a painter can draw, the area in one line
-    (`one_line`), the ground's look (`world_art.plan_ground`), `when` (the
-    time of day and the weather, `area.now_words`), the `people` there by
-    their looks (never a name: no writing) and the `things` at hand by
-    name. No prompt writer: measured, its paragraph cost layout."""
-    area = world.places[area_id]
-    now = ""
-    for place in _changed(world, area_id):
-        seen = seen_change(art, place)
-        change = f"{seen} (the story: {place.state})" if seen else place.state
-        now += texts.fill("map.picture.isometric.now", place=place.name, state=change)
-    looks = [" ".join(p.split()).rstrip(".") for p in people if p and p.strip()]
-    names = list(dict.fromkeys(" ".join(t.split()) for t in things if t and t.strip()))
-    when = " ".join(when.split())
-    prompt = texts.fill(
-        "map.picture.isometric",
-        now=now,
-        places=one_line(area),
-        look=LOOK_WORDS.get(look, "as the map shows it"),
-        style=style,
-        when=f" {when}" if when else "",
-        people=(
-            texts.fill("map.picture.isometric.people", people="; ".join(looks[:PAINTING_PEOPLE]))
-            if looks
-            else ""
-        ),
-        things=(
-            texts.fill("map.picture.isometric.things", things=", ".join(names[:PAINTING_THINGS]))
-            if names
-            else ""
-        ),
-    )
-    state = isometric_state(world, area_id)
-    plan = area_plan(world, art, area_id)
-    scene = " ".join(
-        part for part in (when, f"{len(looks)} there." if looks else "") if part
-    ).strip()
-    return PictureJob(
-        key=f"isometric:{area_id}:{state}" if state else f"isometric:{area_id}",
-        subject="isometric",
-        subject_id=area_id,
-        name=area.name,
-        prompt=prompt,
-        state=state,
-        plan=plan.made_at if plan is not None else "",
-        scene=scene,
-    )

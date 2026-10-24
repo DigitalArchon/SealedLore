@@ -304,11 +304,6 @@ def fixed_thing(name: str) -> bool:
     return thing_class(name) == "fixed"
 
 
-def movable_thing(name: str) -> bool:
-    """Too heavy to carry off but not fixed: shoved, dragged or rolled."""
-    return thing_class(name) == "movable"
-
-
 # How the storyteller is shown a thing that can't be taken (or driven) on a
 # turn that may not move it: beside it in "Within reach" and "Things here",
 # with `map.fixed` once under the positions.

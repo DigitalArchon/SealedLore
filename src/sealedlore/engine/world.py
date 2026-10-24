@@ -19,10 +19,9 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Collection, Iterable, Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import Any
 
-from sealedlore.engine.scene_state import same_person
 from sealedlore.engine.takeable import same_thing
 from sealedlore.engine.tile_sets import head_noun
 from sealedlore.engine.world_layout import (
@@ -36,7 +35,6 @@ from sealedlore.engine.world_layout import (
     position,
     size_of,
 )
-from sealedlore.models.character import Character
 from sealedlore.models.node import Node
 from sealedlore.models.world import (
     PlaceKind,
@@ -102,11 +100,6 @@ _ROAD_NOISE = frozenset(
 )
 
 
-def _road_words(name: str) -> frozenset[str]:
-    words = re.findall(r"[a-z][a-z'-]*", str(name or "").lower())
-    return frozenset(w.removesuffix("'s") for w in words) - _ROAD_NOISE
-
-
 def _find_thing(
     world: WorldMap, name: str, near: Collection[str] | None = None
 ) -> WorldThing | None:
@@ -126,14 +119,6 @@ def _find_thing(
         if same_thing(name, t.name) and (near is None or t.at is None or t.at in near)
     ]
     return like[0] if len(like) == 1 else None
-
-
-def _near_places(world: WorldMap, delta: WorldDelta, people: Sequence[Character]) -> set[str]:
-    """The places this reply's people are in, with everything round them."""
-    ids = set(delta.where.values()) | {
-        pid for name, pid in world.where.items() if any(same_person(name, c) for c in people)
-    }
-    return {p.id for pid in ids for p in _chain(world, pid)}
 
 
 # --- Rendering, for the read -------------------------------------------------
@@ -233,15 +218,6 @@ def _far(distance: float) -> str:
         miles = distance / _METRES_A_MILE
         far += f" / {miles:.0f} miles" if distance >= _WHOLE_MILES_FROM else f" / {miles:.1f} miles"
     return far
-
-
-def _around(world: WorldMap, here: str | None, place: WorldPlace, fixed: Collection[str]) -> str:
-    where = _how_far(world, here, place.id, fixed)
-    head = f"{place.name} ({place.kind or 'place'}" + (f", {where}" if where else "") + ")"
-    what = " ".join(place.what.split())
-    if place.state:  # what the story did to it, else the map says a barn stands burnt
-        what = (what + " " if what else "") + f"Now: {' '.join(place.state.split())}."
-    return f"{head}: {what}" if what else head
 
 
 def _nearest(
@@ -389,40 +365,6 @@ def _names_place(text: str, place: WorldPlace) -> bool:
     return False
 
 
-def _sentences_to(source: str, end: int) -> str:
-    """The sentence the quote ends in, and the one before it."""
-    head = source[:end]
-    stops = [m.end() for m in re.finditer(r"[.!?…]['\"”’]?\s", head)]
-    start = stops[-2] if len(stops) >= 2 else 0
-    rest = source[end:]
-    stop = re.search(r"[.!?…]['\"”’]?(\s|$)", rest)
-    return source[start : end + (stop.end() if stop else len(rest))]
-
-
-def _parents_first(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The reply's places, each after the place it is inside when that is in
-    the same reply. Live (Oct 17 2026), a new world's opening listed the
-    watch room and the lamp room before "The lighthouse" they were inside:
-    a parent not found yet was dropped, and every room stood on its own."""
-    named = {key(_text(e.get("name"))): i for i, e in enumerate(entries)}
-    done: set[int] = set()
-    out: list[dict[str, Any]] = []
-
-    def visit(i: int, seen: set[int]) -> None:
-        if i in done or i in seen:
-            return
-        seen.add(i)
-        parent = named.get(key(_text(entries[i].get("inside"))))
-        if parent is not None:
-            visit(parent, seen)
-        done.add(i)
-        out.append(entries[i])
-
-    for i in range(len(entries)):
-        visit(i, set())
-    return out
-
-
 # What a person stands at, not in: a read that lists one inside a building as
 # a place is folded into the building (`_furniture_folded`).
 FURNITURE = frozenset(
@@ -539,82 +481,6 @@ def _drop_named_only(
     return [f"place {p.name}: only named, nothing says where it is yet" for p in gone]
 
 
-def _weather_entry(reply: dict[str, Any]) -> dict[str, Any] | None:
-    """The reply's weather as {"now", "quote"}: the object asked for, or a
-    string with "weather_quote" beside it (as the minutes are given), or
-    None when there is none. The author's Direction states it ("It begins
-    to snow") and the read's quote is found in the turn as in the passage."""
-    value = reply.get("weather")
-    if isinstance(value, dict):
-        return value
-    if isinstance(value, str) and value.strip():
-        return {"now": value, "quote": reply.get("weather_quote")}
-    return None
-
-
-def _link_mover(
-    world: WorldMap,
-    delta: WorldDelta,
-    a: str,
-    b: str,
-    direction: str | None,
-    distance: str | None,
-) -> WorldPlace | None:
-    """On the author's turn, the place a link moves: the end the read gave
-    again in this reply (the "to" end first) that is on the map with a spot,
-    measured from an end that has its spot, by a compass direction and a
-    distance in metres the layout can read. None when the link moves nothing
-    (a way between two standing places, noted as a conflict if they
-    disagree). The mover leaves the place it was in when the other end lies
-    outside it, or is it: "two miles east of Hellsville" is not inside
-    Hellsville, nor inside the farm it stood in."""
-    stated = metres(distance)
-    if bearing(direction) is None or stated is None:
-        return None
-    copies = {p.id: p for p in delta.places}
-    for mover_id, anchor_id in ((b, a), (a, b)):
-        mover = copies.get(mover_id)
-        before = world.places.get(mover_id)
-        # Moved already in this reply (a mark, which is exact): that stands.
-        if mover is None or before is None or before.x is None or mover_id in delta.moved:
-            continue
-        anchor = copies.get(anchor_id) or world.places.get(anchor_id)
-        if anchor is None or position_any(world, delta, anchor_id) is None:
-            continue
-        known = {**world.places, **copies}
-        if moves(known, mover) or mover_id in _ancestors(known, anchor_id):
-            continue  # a vehicle, or its own container measured from it
-        if anchor_id in _ancestors(known, mover_id):
-            # Measured from what it is in: outside it only when the distance
-            # says so, else it stays where it is (the author said no more).
-            if stated <= size_of(anchor) / 2:
-                continue
-            mover.inside = anchor.inside
-        elif mover.inside is not None and mover.inside not in {
-            anchor_id,
-            *_ancestors(known, anchor_id),
-        }:
-            mover.inside = anchor.inside  # beside the other end, at its level
-        return mover
-    return None
-
-
-def position_any(world: WorldMap, delta: WorldDelta, place_id: str) -> tuple[float, float] | None:
-    """Where a place is, the delta's copy first (`position` for the rest)."""
-    seen: set[str] = set()
-    copies = {p.id: p for p in delta.places}
-    current: str | None = place_id
-    while current is not None and current not in seen:
-        seen.add(current)
-        place = copies.get(current) or world.places.get(current)
-        if place is None:
-            return None
-        if place.x is not None and place.y is not None:
-            return place.x, place.y
-        current = place.inside
-    return None
-
-
 def _ancestors(places: Mapping[str, WorldPlace], place_id: str) -> set[str]:
     out: set[str] = set()
     current = places.get(place_id)
@@ -635,32 +501,6 @@ def within_ids(world: WorldMap, place_id: str) -> set[str]:
         grew = bool(more)
     found.discard(place_id)
     return found
-
-
-def _is_vehicle(world: WorldMap, delta: WorldDelta, place_id: str) -> bool:
-    place = next((p for p in delta.places if p.id == place_id), None) or world.places.get(place_id)
-    return place is not None and place.kind == "vehicle"
-
-
-def _would_loop(world: WorldMap, delta: WorldDelta, place_id: str, inside: str) -> bool:
-    """Whether putting `place_id` inside `inside` would make it inside itself."""
-    parents = {p.id: p.inside for p in world.places.values()}
-    parents.update({p.id: p.inside for p in delta.places})
-    seen: set[str] = set()
-    current: str | None = inside
-    while current is not None and current not in seen:
-        if current == place_id:
-            return True
-        seen.add(current)
-        current = parents.get(current)
-    return False
-
-
-def place_name_any(world: WorldMap, delta: WorldDelta, place_id: str) -> str:
-    for place in delta.places:
-        if place.id == place_id:
-            return place.name
-    return place_name(world, place_id)
 
 
 # Someone placed but not yet named (the author, Oct 17 2026): "Unknown 1".
@@ -697,14 +537,6 @@ _AT_THE_DOOR = re.compile(
 _DOORWAY = re.compile(r"\b(door|doorway|threshold|entrance|gate)\b", re.IGNORECASE)
 
 
-def is_unknown(name: str) -> bool:
-    return _UNKNOWN_LABEL.match(name.strip()) is not None
-
-
-def _describes_one(text: str) -> bool:
-    return _NOT_ONE.match(text.strip()) is None
-
-
 def _plain(text: str) -> str:
     return _ARTICLE.sub("", " ".join(text.lower().split()))
 
@@ -719,35 +551,6 @@ def unknown_for(who: str, world: WorldMap, delta: WorldDelta | None = None) -> s
         return label if label in known else None
     wanted = _plain(who)
     return next((label for label, said in known.items() if _plain(said) == wanted), None)
-
-
-def next_unknown(world: WorldMap, delta: WorldDelta | None = None) -> str:
-    """The next label: one past every label the story has given, named or not."""
-    used = [world.unknowns_made, *(delta.unknowns if delta is not None else {})]
-    numbers = [u if isinstance(u, int) else int(u.split()[-1]) for u in used]
-    numbers += [int(label.split()[-1]) for label in world.unknowns]
-    return f"{UNKNOWN} {max(numbers, default=0) + 1}"
-
-
-def unknown_words(text: str, world: WorldMap) -> str:
-    """`text` with each unknown's label as their description, for the
-    storyteller and the turns a menu writes ("the teenage girl, not named
-    yet" rather than "Unknown 1")."""
-    for label in sorted(world.unknowns, key=len, reverse=True):
-        text = re.sub(rf"\b{re.escape(label)}\b", f"{world.unknowns[label]} (not named yet)", text)
-    return text
-
-
-def person_name(name: str, people: Sequence[Character], placed: Iterable[str]) -> str:
-    """One person, one name: someone in the story it is a form of, else
-    someone already on the map, else as written."""
-    for character in people:
-        if same_person(name, character):
-            return character.name
-    for other in placed:
-        if same_person(name, Character(id="", name=other)):
-            return other
-    return name
 
 
 # --- Folding ------------------------------------------------------------------
