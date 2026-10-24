@@ -74,10 +74,13 @@ def npc_messages(
     memories: Sequence[str],
     talk: Sequence[Sequence[str]],
     line: str,
+    state: Sequence[str] = (),
     texts: PromptTexts = DEFAULT_TEXTS,
 ) -> list[PromptMessage]:
     """The talk call: the rules and the sheet as the system (cached per
-    person), the situation and the player's words as the user message."""
+    person), the situation and the player's words as the user message.
+    `state`: the person's own state in the keeper's words (held, bound,
+    hurt), as the program has it."""
     system = "\n\n".join(
         [
             texts["npc.system"],
@@ -103,6 +106,7 @@ def npc_messages(
         about=", ".join(about) or "nobody else",
         player=player,
         player_words=player_words or "nothing to remark on",
+        state=", ".join(state) or "as usual",
         witnessed="; ".join(list(witnessed)[-WITNESS_LINES:]) or "nothing",
         memories="; ".join(list(memories)[-MEMORY_LINES:]) or "nothing yet",
         talk="\n".join(lines) or "(nothing yet)",

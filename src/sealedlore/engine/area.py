@@ -2144,6 +2144,10 @@ def apply_things(area: Area, records: Mapping[str, ThingRecord]) -> Area:
                     rows[y][x] = ground
         elif record.state == "broken":
             placements.append(_broken(p))
+        elif record.name and record.name != p.name:
+            # A visual story's keeper made it into something else (a repaired
+            # truck): the plan's thing under the record's name and verbs.
+            placements.append(replace(p, name=record.name, verbs=item_verbs(record.name)))
         else:
             placements.append(p)
     for pid, record in mine.items():

@@ -20,7 +20,16 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from PySide6.QtCore import QElapsedTimer, QPoint, QPointF, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import (
+    QElapsedTimer,
+    QPoint,
+    QPointF,
+    QRectF,
+    Qt,
+    QTimer,
+    QVariantAnimation,
+    Signal,
+)
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPixmap, QTransform
 from PySide6.QtWidgets import (
     QGraphicsItem,
@@ -54,6 +63,8 @@ STEPS_PER_SECOND = 9
 # The walk is drawn this often, the figure between one tile and the next
 # (it used to jump a tile at a time, 111 ms apart).
 FRAME_MS = 16
+# A hit's red flash over a figure.
+HIT_FLASH_MS = 420
 # A person's sprite, in tiles tall, indoors and out.
 PERSON_TILES = {True: 2.1, False: 2.6}
 # A place's sprite in the area is about this many tiles tall.
@@ -128,6 +139,9 @@ class Walker:
     # The name shown over them: None for the name itself, "" for none (a
     # visual story's dead have no name to show).
     label: str | None = None
+    # Down: drawn lying where they fell (a visual story's dead put down, a
+    # person beaten).
+    fallen: bool = False
 
 
 @dataclass
@@ -1262,7 +1276,11 @@ class AreaView(QWidget):
                 self.scene.removeItem(self._tags.pop(name))
         for walker in walkers:
             person = self.people.get(walker.name)
-            if person is None or person.walker.image is not walker.image:
+            if (
+                person is None
+                or person.walker.image is not walker.image
+                or person.walker.fallen != walker.fallen
+            ):
                 if person is not None:
                     self.scene.removeItem(person)
                     self.scene.removeItem(self._tags.pop(walker.name))
@@ -1280,6 +1298,19 @@ class AreaView(QWidget):
             self._follow(held.x, held.y)
         self._sync_sight()
         self._lift_tags()
+
+    def flash_person(self, name: str) -> None:
+        """A hit: the figure flashes red and settles (a visual story's fights)."""
+        person = self.people.get(name)
+        if person is None:
+            return
+        animation = QVariantAnimation(self)
+        animation.setDuration(HIT_FLASH_MS)
+        animation.setStartValue(1.0)
+        animation.setEndValue(0.0)
+        animation.valueChanged.connect(lambda v, p=person: p.set_flash(float(v)))
+        animation.finished.connect(animation.deleteLater)
+        animation.start()
 
     def _sync_sight(self) -> None:
         """Line of sight from the author's character: indoors the rooms they

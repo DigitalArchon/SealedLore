@@ -35,6 +35,8 @@ THING_BEHIND = 0.25
 GOLD = QColor(246, 207, 110)
 
 FACINGS = ("south", "east", "north", "west")
+# A walking figure with one picture leans this many degrees each way.
+STRIDE_LEAN = 4.0
 OTHER_SIDE = {"east": "west", "west": "east"}
 # Where a carried thing is held, as shares of the carrier's height up from
 # their foot and of their width out to their front.
@@ -169,6 +171,8 @@ class PersonSprite(Sprite):
         self.pose, self.step = "stand", 0
         # A step's bob while walking, for a figure with no walking pictures.
         self.bob = 0.0
+        # A hit's flash, 1.0 to 0.0 (`AreaView.flash_person`).
+        self.flash = 0.0
         self.carried: list[Sprite] = []
         self.place_at(walker.x, walker.y)
 
@@ -200,6 +204,11 @@ class PersonSprite(Sprite):
             self.bob = bob
             self.update()
 
+    def set_flash(self, flash: float) -> None:
+        if flash != self.flash:
+            self.flash = flash
+            self.update()
+
     def carry(self, sprite: Sprite) -> None:
         """`sprite` held by them: it goes where they go, in front of them."""
         if sprite not in self.carried:
@@ -229,9 +238,12 @@ class PersonSprite(Sprite):
 
     def boundingRect(self) -> QRectF:  # noqa: N802 - Qt's name
         # Wide enough for the ring and its pen (it painted outside and
-        # smeared while walking), and for the bob.
+        # smeared while walking), for the bob, for a stride's lean, and for
+        # a fallen figure lying along the ground.
         centre, rx, ry, pen = self._ring()
-        half = max(self.width / 2 + 2, rx + pen + 1)
+        half = max(self.width / 2 + 2, rx + pen + 1, self.height * 0.3)
+        if getattr(self.walker, "fallen", False):
+            half = max(half, self.height / 2 + 2)
         bottom = max(4.0, centre.y() + ry + pen + 1)
         top = -self.height - 4 - 1
         return QRectF(-half, top, 2 * half, bottom - top)
@@ -247,16 +259,32 @@ class PersonSprite(Sprite):
             painter.drawEllipse(centre, rx, ry)
         picture, mirrored = self.frames.frame(self.facing, self.side, self.pose, self.step)
         target = QRectF(-self.width / 2, -self.height - self.bob, self.width, self.height)
+        painter.save()
+        if getattr(self.walker, "fallen", False):
+            # Down: lying along the ground, faded.
+            painter.translate(0, -self.px * 0.1)
+            painter.rotate(-82 if self.side == "east" else 82)
+            painter.setOpacity(0.75)
+        elif self.pose == "walk" and not self.frames.has("walk"):
+            # A stride from one picture: a lean each way on alternate tiles,
+            # with the bob (step 5 of the visual stories' design: walking
+            # frames drop in through `Frames` when drawn).
+            painter.rotate(STRIDE_LEAN if self.step % 2 else -STRIDE_LEAN)
         if picture is None:
             painter.setPen(QColor(20, 20, 26))
             painter.setBrush(QColor(90, 110, 170))
             painter.drawRoundedRect(target, 6, 6)
-            return
-        source = QRectF(picture.rect())
-        if mirrored:
-            painter.save()
-            painter.scale(-1, 1)
-            painter.drawPixmap(target, picture, source)
-            painter.restore()
         else:
-            painter.drawPixmap(target, picture, source)
+            source = QRectF(picture.rect())
+            if mirrored:
+                painter.save()
+                painter.scale(-1, 1)
+                painter.drawPixmap(target, picture, source)
+                painter.restore()
+            else:
+                painter.drawPixmap(target, picture, source)
+        if self.flash > 0:
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(220, 40, 30, int(170 * self.flash)))
+            painter.drawRoundedRect(target, 6, 6)
+        painter.restore()

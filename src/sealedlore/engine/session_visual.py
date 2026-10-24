@@ -83,14 +83,19 @@ from sealedlore.engine.session_area import (
 )
 from sealedlore.engine.takeable import can_be_taken
 from sealedlore.engine.visual_rules import (
+    DRIVE_M_PER_S,
     FORCE_DIFFICULTY,
     FORCE_NOISE_M,
     GUN_NOISE_M,
+    PERSON_SIGHT_M,
     best_weapon,
     can_open,
     door_id,
+    drivable,
     fight,
+    is_held,
     is_loud,
+    is_out,
     item_actions,
     kind_of,
     sight_report,
@@ -124,11 +129,79 @@ TIME_WORDS = (
 )
 
 
+def _place_named(world, words: str):
+    """The map's place a keeper's words name: by name, else the name that
+    holds the words, else the one sharing most words with them, the last
+    word (the head noun) counting double (live, "The Farm - Barn" for the
+    barn). None for nothing like it."""
+    want = [w for w in re.findall(r"[a-z]+", words.lower()) if w not in STOP_WORDS]
+    if not want:
+        return None
+    places = list(world.places.values())
+    folded = words.strip().casefold()
+    exact = next((p for p in places if p.name.casefold() == folded), None)
+    if exact is not None:
+        return exact
+    holding = next((p for p in places if folded in p.name.casefold()), None)
+    if holding is not None:
+        return holding
+    best, best_score = None, 0
+    for place in places:
+        own = [w for w in re.findall(r"[a-z]+", place.name.lower()) if w not in STOP_WORDS]
+        if not own:
+            continue
+        score = sum(1 for w in own if w in want) + (2 if own[-1] == want[-1] else 0)
+        if score > best_score:
+            best, best_score = place, score
+    return best
+
+
+def _reaches(area: Area, spot: tuple[int, int]) -> bool:
+    """Whether a tile is joined to the area's walkable mass: a walk from it
+    to the walkable tile nearest the middle exists."""
+    if not area.walkable(*spot):
+        return False
+    blocked = area.blocked()
+    middle = stand_near(area, (area.width // 2, area.height // 2), blocked)
+    if middle == spot:
+        return True
+    return len(path(area, spot, middle, blocked=blocked - {spot})) > 1
+
+
+def _minute_of(words: str) -> int | None:
+    found = re.match(r"\s*(\d{1,2})(?::(\d{2}))?\s*$", words or "")
+    if found is None:
+        return None
+    return int(found.group(1)) * 60 + int(found.group(2) or 0)
+
+
+def _in_shift(shift, minute: int) -> bool:
+    """Whether the day's `minute` falls in the shift (which may cross midnight)."""
+    start, end = _minute_of(shift.start), _minute_of(shift.end)
+    if start is None or end is None:
+        return False
+    if start <= end:
+        return start <= minute < end
+    return minute >= start or minute < end
+
+
 # An item taken out of something, or laid by the design: a record of its own.
 ITEM_PREFIX = "item:"
 # Waiting and sleeping, in minutes.
 WAIT_MINUTES = 60
 SLEEP_UNTIL = 7 * 60
+# Words that name no thing (live, take_away "set of spark plugs" took the
+# tin of beans by "of").
+STOP_WORDS = frozenset({"the", "a", "an", "of", "my", "your", "some", "this", "that", "it"})
+# The keeper is told this many of the things in the player's area.
+STATE_THINGS = 30
+# A conversation is a moment of the plot every this many of the player's
+# lines, when an armed event's trigger speaks of talk (`talk_moment`).
+TALK_MOMENT_LINES = 3
+TALK_TRIGGER = re.compile(
+    r"\b(?:talk\w*|ask\w*|question\w*|told|tell\w*|speak\w*|press\w*|convers\w*|learn\w*)\b",
+    re.IGNORECASE,
+)
 # The noise of forcing a door or a gunshot reaches the dead in the area.
 
 
@@ -299,10 +372,36 @@ class VisualRuntime:
             return 0
         return walk_seconds(walk_metres(area, steps))
 
-    def visual_travel(self, place_id: str) -> tuple[str, int] | None:
+    def visual_drive_choices(self) -> list[tuple[str, str, list[tuple[str, str, int]]]]:
+        """The vehicles the player can drive from here (a thing the keeper
+        made to work, `drivable`, within reach in their area): (its record
+        id, its name, the journeys by it with their seconds)."""
+        state = self.area_state()
+        area, me = self._visual_me(state)
+        if area is None or me is None:
+            return []
+        out = []
+        for placement in area.placements:
+            record = state.things.get(placement.id)
+            if record is None or record.state in ("gone", "taken") or not drivable(record):
+                continue
+            # The walk over to it first (the author needn't stand beside it).
+            cx, cy = placement.centre
+            route = self.walk_route(int(cx), int(cy), beside=True)
+            up = walk_seconds(walk_metres(area, [tuple(t) for t in route])) if route else 0
+            journeys = [
+                (pid, name, up + max(60, int(seconds * WALK_M_PER_S / DRIVE_M_PER_S)))
+                for pid, name, seconds in self.visual_travel_choices()
+            ]
+            out.append((placement.id, bare(record.name), journeys))
+        return out
+
+    def visual_travel(self, place_id: str, vehicle: str | None = None) -> tuple[str, int] | None:
         """Set off for a place now: stood at its edge (or its way in), the
-        clock moved by the way's length on foot. (The place's name, the
-        seconds); None when the place can't be reached."""
+        clock moved by the way's length on foot, or by `vehicle` (a drivable
+        thing's record id: it comes too, and stands beside the player where
+        they arrive). (The place's name, the seconds); None when the place
+        can't be reached."""
         world, art = self.world(), self._art_read()
         place = world.places.get(place_id)
         choices = {pid: seconds for pid, _n, seconds in self.visual_travel_choices()}
@@ -314,7 +413,24 @@ class VisualRuntime:
         target = area_of(world, art, place_id)
         if held is None or me is None or target is None:
             return None
+        seconds = choices[place_id]
+        ride = None
+        if vehicle is not None:
+            ride, journeys = None, []
+            for vid, _name, found in self.visual_drive_choices():
+                record = state.things.get(vid)
+                if vid == vehicle and record is not None:
+                    ride, journeys = (vid, record), found
+            if ride is None:
+                return None
+            seconds = next(
+                (s for pid, _n, s in journeys if pid == place_id),
+                max(60, int(seconds * WALK_M_PER_S / DRIVE_M_PER_S)),
+            )
         landing = self._arrival(world, art, target, held)
+        there = self.area(target, world, art, things=state.things)
+        if landing is not None and there is not None and not _reaches(there, landing):
+            landing = None  # a corner cut off by trees or a wall (live, the gas station)
         spot = (
             Spot(area=target, x=landing[0], y=landing[1])
             if landing is not None
@@ -324,10 +440,23 @@ class VisualRuntime:
             return None
         frm = self.area(me.area, world, art)
         state.spots[held] = spot
-        self._add_time(state, choices[place_id], frm.name if frm else "", place.name)
+        self._add_time(state, seconds, frm.name if frm else "", place.name)
+        if ride is not None:
+            vid, record = ride
+            there = self.area(target, world, art, things=state.things)
+            placement = next((p for p in (frm.placements if frm else []) if p.id == vid), None)
+            if there is not None:
+                taken = there.blocked() | {
+                    (s.x, s.y) for s in state.spots.values() if s.area == there.id
+                }
+                x, y = stand_near(there, (spot.x, spot.y), taken | {(spot.x, spot.y)})
+                record.state, record.by = "dropped", ""
+                record.spot = Spot(area=there.id, x=x, y=y)
+                if placement is not None:
+                    record.w, record.h = placement.w, placement.h
         self._set_live(state)
         self._companions_to(spot)
-        return place.name, choices[place_id]
+        return place.name, seconds
 
     def visual_cross(self, side: str) -> str | None:
         """On past this edge into the designed area that adjoins it; the
@@ -571,7 +700,24 @@ class VisualRuntime:
         return max(0, self.visual_design().player_hits - self.area_state().wounds)
 
     def visual_item_actions(self, record: ThingRecord) -> tuple[str, ...]:
-        return item_actions(record.kind or kind_of(record.name))
+        """What a carried thing's menu offers: the rules' verbs for its kind,
+        and the uses the keeper granted it."""
+        verbs = item_actions(record.kind or kind_of(record.name))
+        return tuple(verbs) + tuple(u for u in record.uses if u.lower() not in verbs)
+
+    def visual_uses(self, placement_id: str) -> list[str]:
+        """The uses the keeper granted a thing standing here."""
+        record = self.area_state().things.get(placement_id)
+        return list(record.uses) if record is not None else []
+
+    def visual_attempt_words(self, verb: str, name: str, record_id: str = "") -> str:
+        """A use chosen from a thing's menu, as the attempt the keeper is
+        asked to rule on: the verb, the thing, and its state."""
+        record = self.area_state().things.get(record_id) if record_id else None
+        words = f"I {verb} the {bare(name)}"
+        if record is not None and record.tags:
+            words += f" ({', '.join(record.tags)})"
+        return words + "."
 
     def _visual_me(self, state) -> tuple[Area | None, Spot | None]:
         me = state.spots.get(self.held_name() or "")
@@ -594,7 +740,8 @@ class VisualRuntime:
         if not self._in_reach(area, me, thing):
             return "You aren't close enough."
         record = state.things.get(placement_id)
-        if not can_be_taken(thing.name) and not (record is not None and record.kind):
+        kind = record.kind if record is not None else ""
+        if not can_be_taken(thing.name) and not (kind and kind != "vehicle"):
             return f"The {bare(thing.name)} is too much to carry."
         if record is None:
             record = state.things[placement_id] = ThingRecord(state="taken", name=thing.name)
@@ -670,7 +817,7 @@ class VisualRuntime:
             return f"You see to your wounds with the {name}."
         if verb == "use" and kind == "paper" and record.seen:
             return f"The {name}: {record.seen}"
-        return f"You can't do much with the {name} here yet."
+        return ""  # no rule: the window sends it to the keeper as an attempt
 
     def visual_break(self, placement_id: str) -> str:
         state = self.area_state()
@@ -740,6 +887,9 @@ class VisualRuntime:
         else:
             state.wounds += 1
         state.seconds += 10
+        if is_loud(weapon[0]):
+            lines.append("The shot rolls out over the ground; anything near will have heard it.")
+            self._visual_witness(state, f"fired the {bare(weapon[0])}")
         self._set_live(state)
         noise = (me.x, me.y) if is_loud(weapon[0]) else None
         lines += self.visual_tick(0, noise=noise, reach=GUN_NOISE_M)
@@ -756,6 +906,7 @@ class VisualRuntime:
             return []
         del reach  # every creature in the area hears a noise in it, for now
         lines: list[str] = self._step_people(state, area, me, seconds)
+        self._keep_schedules(state, area)
         creatures = {c.id: c for c in state.creatures.values() if c.area == area.id}
         if not creatures:
             if state.wounds >= self.visual_design().player_hits:
@@ -867,7 +1018,10 @@ class VisualRuntime:
             if name == held or spot.area != area.id or name in state.people_down:
                 continue
             here = (spot.x, spot.y)
-            if sees(area, (me.x, me.y), here) or in_earshot(area, (me.x, me.y), here):
+            metres = math.hypot(spot.x - me.x, spot.y - me.y) * area.tile_m
+            if (metres <= PERSON_SIGHT_M and sees(area, (me.x, me.y), here)) or in_earshot(
+                area, (me.x, me.y), here
+            ):
                 found.append((abs(spot.x - me.x) + abs(spot.y - me.y), name))
         return [name for _d, name in sorted(found)]
 
@@ -881,6 +1035,9 @@ class VisualRuntime:
             return False, f"{name} isn't here."
         if name in state.people_down:
             return False, f"{name} is down."
+        tags = state.person_tags.get(name, [])
+        if is_out(tags):
+            return False, f"{name} is {', '.join(tags)} and can't answer."
         if not in_earshot(area, (me.x, me.y), (spot.x, spot.y)):
             return False, f"{name} is too far to hear you."
         return True, ""
@@ -933,6 +1090,7 @@ class VisualRuntime:
             memories=state.memories.get(name, []),
             talk=state.talks.get(name, []),
             line=line or self.texts["npc.encounter"],
+            state=state.person_tags.get(name, []),
             texts=self.texts,
         )
         model = self.role_model("npc")
@@ -1023,6 +1181,33 @@ class VisualRuntime:
             lines += self.visual_tick(0)
         return lines
 
+    def talk_moment(self, name: str) -> str:
+        """A conversation can move the plot (Doomsville's "The caves": the
+        player "presses someone with pointed questions"): once every
+        TALK_MOMENT_LINES of the player's lines to a person, when an event
+        is armed whose trigger speaks of talking or asking, the keeper is
+        asked about the moment, with the latest lines. "" otherwise."""
+        plot = self.story.plot
+        if plot is None:
+            return ""
+        state = self.area_state()
+        lines = [pair for pair in state.talks.get(name, []) if pair[0] == self.held_name()]
+        if not lines or len(lines) % TALK_MOMENT_LINES:
+            return ""
+        chronicle = self.visual_chronicle()
+        items = [
+            i
+            for i in armed(plot, chronicle, self.plot_days(), mentioned=[chronicle.place or ""])
+            if "begin" in i.kinds
+            and TALK_TRIGGER.search(
+                " ".join([i.event.trigger or "", *(v.trigger or "" for v in i.variants)])
+            )
+        ]
+        if not items:
+            return ""
+        latest = "; ".join(f"{who}: {words}" for who, words in state.talks.get(name, [])[-6:])
+        return f"the player is talking with {name} (the latest lines: {latest})"
+
     def _npc_gives(self, state, name: str, what: str) -> list[str]:
         """A person hands the player a thing they carry (by its words), or
         nothing they have."""
@@ -1102,6 +1287,8 @@ class VisualRuntime:
             spot = state.spots.get(name)
             if spot is None or spot.area != area.id or name == held or name in state.people_down:
                 continue
+            if is_held(state.person_tags.get(name, [])):
+                continue  # held, bound or out cold: they stay where they are
             here = (spot.x, spot.y)
             if goal.intent == "follow":
                 target = (me.x, me.y)
@@ -1140,6 +1327,37 @@ class VisualRuntime:
                 state.spots[name] = Spot(area=area.id, x=step[0], y=step[1])
                 taken.add(step)
         return lines
+
+    def _keep_schedules(self, state, area: Area) -> None:
+        """The design's people keep their hours (`PersonSheet.schedule`):
+        one with nothing else to do, not in the player's area (nobody
+        vanishes in sight), stands at the place their shift names when the
+        clock is in it. Elena at the clinic by day, the church by night."""
+        clock = self.map_clock()
+        if clock is None:
+            return
+        minute = clock[1]
+        for name in self.visual_people():
+            sheet = self.visual_sheet(name)
+            spot = state.spots.get(name)
+            if not sheet.schedule or spot is None or spot.area == area.id:
+                continue
+            if name in state.companions or name in state.people_down:
+                continue
+            goal = state.goals.get(name)
+            if (goal is not None and goal.intent != "stay") or is_held(
+                state.person_tags.get(name, [])
+            ):
+                continue
+            due = next((sh.place for sh in sheet.schedule if _in_shift(sh, minute)), None)
+            if due is None:
+                continue
+            target = self._visual_area_named(due)
+            if target is None or target.id == spot.area:
+                continue
+            new = self._place_spot(state, due)
+            if new is not None:
+                state.spots[name] = new
 
     def _person_attacks(self, state, name: str) -> list[str]:
         """A person beside the player fights them (the simple combat)."""
@@ -1298,12 +1516,13 @@ class VisualRuntime:
         state.chronicle = chronicle
         self._set_live(state)
 
-    def visual_plot_check(self) -> tuple[list[str], str]:
+    def visual_plot_check(self, moment: str = "") -> tuple[list[str], str]:
         """After anything that moved the game: what the plot's code decides
         (offscreen happenings, windows closed), and whether the keeper
         should be asked now: on arriving somewhere the plot knows with an
-        event armed there, on a new day with one due, or when one is
-        overdue. (The lines for the log, why to ask or "")."""
+        event armed there, on a new day with one due, when one is overdue,
+        or at a `moment` of the window's own (the player has slept) with
+        anything armed. (The lines for the log, why to ask or "")."""
         plot = self.story.plot
         if plot is None:
             return [], ""
@@ -1341,6 +1560,8 @@ class VisualRuntime:
                 i.event.kind == "timed" and days.get(i.event.id, day + 1) <= day for i in items
             ):
                 why = f"day {day} has come"
+        if moment and not why and items:
+            why = moment
         self._save_chronicle(state, chronicle)
         return lines, why
 
@@ -1370,12 +1591,57 @@ class VisualRuntime:
         ]
         companions = ", ".join(state.companions) or "nobody"
         visited = ", ".join(chronicle.visited) or "nowhere yet"
+        world = self.world()
+        place_state = ""
+        if area is not None:
+            place = world.places.get(area.place_id)
+            if place is not None and place.state:
+                place_state = f" The place is {place.state}."
         return (
-            f"{held} is at {where} ({plot_place}); it is {when}; wounds {state.wounds}. "
+            f"{held} is at {where} ({plot_place}); it is {when}; wounds {state.wounds}."
+            f"{place_state} "
             f"With them: {companions}. Here too: {', '.join(people) or 'nobody'}; "
             f"the dead here: {dead}. "
-            f"Carrying: {', '.join(carried) or 'nothing'}. Places visited: {visited}."
+            f"Carrying: {', '.join(carried) or 'nothing'}. Places visited: {visited}.\n"
+            f"THINGS HERE (name; state; within reach or not):\n{self._things_text(state, area, me)}"
         )
+
+    def _record_words(self, record: ThingRecord | None) -> str:
+        if record is None:
+            return ""
+        parts = []
+        if record.state == "broken":
+            parts.append("broken")
+        parts += record.tags
+        if record.uses:
+            parts.append("can be: " + ", ".join(record.uses))
+        if record.contents:
+            parts.append("holds " + ", ".join(f.name for f in record.contents[:6]))
+        if record.seen and len(record.seen) < 160:
+            parts.append(record.seen)
+        return "; ".join(parts)
+
+    def _things_text(self, state, area: Area | None, me: Spot | None) -> str:
+        """The things in the player's area for the keeper, nearest first,
+        each with its state in the rules' words."""
+        if area is None or me is None:
+            return "(nothing)"
+        rows = []
+        for placement in sorted(
+            area.placements, key=lambda p: abs(p.centre[0] - me.x) + abs(p.centre[1] - me.y)
+        )[:STATE_THINGS]:
+            record = state.things.get(placement.id)
+            words = self._record_words(record) or ("broken" if placement.broken else "as it stands")
+            reach = "within reach" if self._in_reach(area, me, placement) else "not in reach"
+            rows.append(f"- {bare(placement.name)}; {words}; {reach}")
+        for _rid, record in self.visual_inventory():
+            words = self._record_words(record)
+            rows.append(f"- {bare(record.name)} (carried){'; ' + words if words else ''}")
+        for name, spot in state.spots.items():
+            tags = state.person_tags.get(name)
+            if tags and name != self.held_name() and spot.area == area.id:
+                rows.append(f"- {name} is {', '.join(tags)}")
+        return "\n".join(rows) or "(nothing)"
 
     def _keeper_messages(self, kind: str, line: str):
         plot = self.story.plot
@@ -1544,15 +1810,12 @@ class VisualRuntime:
             x, y = stand_near(area, (me.x, me.y), taken | {(me.x, me.y)})
             return Spot(area=area.id, x=x, y=y)
         target = self._visual_area_named(where)
-        if target is None:
-            # A place named loosely: the one whose name holds the words.
-            world = self.world()
-            place = next((p for p in world.places.values() if words in p.name.casefold()), None)
-            target = self._visual_area_named(place.name) if place is not None else None
+        world = self.world()
+        place = _place_named(world, where)
+        if target is None and place is not None:
+            target = self._visual_area_named(place.name)
         if target is None:
             return None
-        world = self.world()
-        place = next((p for p in world.places.values() if p.name.casefold() == words), None)
         at = anchor_of(target, world, place.id) if place is not None else None
         taken = target.blocked() | {(s.x, s.y) for s in state.spots.values() if s.area == target.id}
         x, y = stand_near(target, at or (target.width // 2, target.height // 2), taken)
@@ -1590,6 +1853,91 @@ class VisualRuntime:
                 found.append(state.doors.setdefault(key, DoorState()))
         return found
 
+    def _find_thing(
+        self, state, area: Area | None, words: str, *, carried: bool | None = None
+    ) -> tuple[str, ThingRecord | None, object | None] | None:
+        """The thing a keeper's words name: among what the player carries
+        (`carried` True), what stands or lies in their area (False), or both
+        (None: carried first). The one sharing most words with the name.
+        (record id or placement id, the record if any, the placement if any)."""
+        want = set(re.findall(r"[a-z]+", words.lower())) - STOP_WORDS
+        if not want:
+            return None
+        best: tuple[int, str, ThingRecord | None, object | None] | None = None
+
+        def consider(key: str, record, placement, name: str) -> None:
+            nonlocal best
+            score = len(want & set(re.findall(r"[a-z]+", name.lower())))
+            if score and (best is None or score > best[0]):
+                best = (score, key, record, placement)
+
+        held = self.held_name()
+        if carried is not False:
+            # From `state` itself, never `visual_inventory()` (a fresh copy:
+            # live, a take_away marked the copy and the player kept the parts).
+            for rid, record in state.things.items():
+                if record.state == "taken" and record.by == held:
+                    consider(rid, record, None, record.name)
+            if best is not None and carried is True:
+                return best[1:]
+        if carried is not True and area is not None:
+            for placement in area.placements:
+                consider(placement.id, state.things.get(placement.id), placement, placement.name)
+        return best[1:] if best is not None else None
+
+    def _transform(self, state, area: Area | None, op: Op) -> list[str]:
+        """A thing here or carried becomes what the keeper says it now is."""
+        found = self._find_thing(state, area, op.get("what"))
+        if found is None:
+            return [f"(The keeper named {op.get('what') or 'a thing'}, which isn't here.)"]
+        key, record, placement = found
+        if record is None:
+            record = state.things[key] = ThingRecord(
+                state="seen", name=placement.name if placement is not None else op.get("what")
+            )
+        old = bare(record.name)
+        if op.get("name"):
+            record.name = op.get("name")
+        if op.get("kind"):
+            record.kind = kind_of(record.name, op.get("kind"))
+        elif op.get("name"):
+            record.kind = kind_of(record.name, record.kind)
+        new_state = op.get("state").strip().lower()
+        if new_state in ("broken",):
+            record.state = "broken"
+        elif new_state in ("gone", "destroyed", "used up"):
+            record.state = "gone"
+        elif new_state in ("whole", "repaired", "working", "fixed", "mended") or (
+            new_state and record.state == "broken"
+        ):
+            record.state = (
+                "dropped" if record.spot is not None else ("taken" if record.by else "seen")
+            )
+        if op.args.get("tags") is not None:
+            record.tags = op.words("tags")
+        if op.args.get("uses") is not None:
+            record.uses = op.words("uses")
+        if op.get("note"):
+            record.seen = op.get("note")
+        new = record.name.strip()
+        words = f"The {old} is now {new}." if bare(new) != old else f"The {old} has changed."
+        if record.state == "gone":
+            words = f"The {old} is gone."
+        elif record.tags or record.uses:
+            words += (
+                " ("
+                + "; ".join(
+                    part
+                    for part in (
+                        ", ".join(record.tags),
+                        ("you can " + ", ".join(record.uses) + " it") if record.uses else "",
+                    )
+                    if part
+                )
+                + ")"
+            )
+        return [words]
+
     def apply_script(self, ops: list[Op]) -> list[str]:
         """The keeper's operations, in order, on the live state; the lines
         the player reads."""
@@ -1606,6 +1954,8 @@ class VisualRuntime:
                 if text:
                     lines.append(f"{who}: {text}")
                     state.talks.setdefault(who, []).append([who, text])
+                    if me is not None and f"{who}@{me.area}" not in state.greeted:
+                        state.greeted.append(f"{who}@{me.area}")  # no second greeting
             elif kind == "spawn":
                 lines += self._stand_person(state, op.get("who"), op.get("where"))
             elif kind == "spawn_dead":
@@ -1653,6 +2003,9 @@ class VisualRuntime:
                         spot=spot,
                         count=op.count(1),
                         kind=kind_of(what, op.get("kind")),
+                        tags=op.words("tags"),
+                        uses=op.words("uses"),
+                        seen=op.get("note"),
                     )
             elif kind == "give":
                 what = op.get("what")
@@ -1663,21 +2016,54 @@ class VisualRuntime:
                         by=held,
                         count=op.count(1),
                         kind=kind_of(what, op.get("kind")),
+                        tags=op.words("tags"),
+                        uses=op.words("uses"),
+                        seen=op.get("note"),
                     )
                     lines.append(f"You now have {what}.")
+            elif kind == "transform":
+                lines += self._transform(state, area, op)
+            elif kind == "go":
+                spot = self._place_spot(state, op.get("where"))
+                if spot is not None and held:
+                    state.spots[held] = spot
+                    there = self.area(spot.area, things=state.things)
+                    if there is not None and spot.area != (me.area if me is not None else ""):
+                        lines.append(f"You are at {there.title}.")
+                    self._set_live(state)
+                    self._companions_to(spot)
+                    state = self.area_state()
+                    area, me = self._visual_me(state)
+            elif kind == "set_state":
+                place = _place_named(self.world(), op.get("where"))
+                if place is not None:
+                    new_state = op.get("state")
+                    if new_state:
+                        state.place_states[place.id] = new_state
+                    else:
+                        state.place_states.pop(place.id, None)
+                    lines.append(f"{place.name}: {new_state or 'as it was'}.")
+            elif kind == "tag_person":
+                card = self.visual_card(op.get("who"))
+                if card is not None:
+                    tags = op.words("tags")
+                    if tags:
+                        state.person_tags[card.name] = tags
+                        lines.append(f"{card.name} is {', '.join(tags)}.")
+                        if is_held(tags):
+                            state.goals[card.name] = NpcGoal(intent="stay")
+                            if card.name in state.companions:
+                                state.companions.remove(card.name)
+                    else:
+                        state.person_tags.pop(card.name, None)
             elif kind == "take_away":
-                want = set(re.findall(r"[a-z]+", op.get("what").lower())) - {"the", "a", "an"}
-                for record in state.things.values():
-                    if (
-                        record.state == "taken"
-                        and record.by == held
-                        and want & set(re.findall(r"[a-z]+", record.name.lower()))
-                    ):
-                        record.state = "gone"
-                        lines.append(f"The {bare(record.name)} is gone from your hands.")
-                        break
+                found = self._find_thing(state, area, op.get("what"), carried=True)
+                if found is not None and found[1] is not None and found[1].state == "taken":
+                    record = found[1]
+                    record.state = "gone"
+                    lines.append(f"The {bare(record.name)} is gone from your hands.")
             elif kind == "break":
-                want = set(re.findall(r"[a-z]+", op.get("what").lower())) - {"the", "a", "an"}
+                want = set(re.findall(r"[a-z]+", op.get("what").lower())) - STOP_WORDS
                 if area is not None:
                     for thing in area.placements:
                         if want & set(re.findall(r"[a-z]+", thing.name.lower())):

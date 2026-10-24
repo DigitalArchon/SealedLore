@@ -264,7 +264,11 @@ class WorldRuntime:
             )
             for n in tail
         )
-        key = (head_key, tail_key, tuple(sorted(hidden)))
+        # A visual story's keeper sets a place's state on the live state (no
+        # passage carries a delta there): read as stored, never settled.
+        live = self.story.area_live if self.story.visual else None
+        states = tuple(sorted(live.state.place_states.items())) if live is not None else ()
+        key = (head_key, tail_key, tuple(sorted(hidden)), states)
         folds = self._folds()
         lock = self._fold_lock()
         with lock:
@@ -292,6 +296,9 @@ class WorldRuntime:
                 while len(folds["head"]) > FOLDS_KEPT:
                     folds["head"].popitem(last=False)
         world = hide(fold_onto(kept[0].model_copy(deep=True), tail), hidden)
+        for place_id, state in states:
+            if place_id in world.places:
+                world.places[place_id].state = state
         with lock:
             folds["all"][key] = (world, kept[1])
             while len(folds["all"]) > FOLDS_KEPT:

@@ -14,6 +14,7 @@ The session applies the scripts (engine/session_visual.py).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
@@ -33,10 +34,20 @@ OPS: dict[str, tuple[str, ...]] = {
     "spawn_dead": ("where", "count"),  # the dead appear at a place
     "move": ("who", "where"),  # a person goes to a place ("beside the player", "away")
     "remove": ("who",),  # a person is gone from the map
-    "place": ("what", "where", "count", "kind"),  # a thing lies at a place
-    "give": ("what", "count", "kind"),  # a thing into the player's hands
+    "tag_person": ("who", "tags"),  # a person's state, in words ("held by John", "bound")
+    "go": ("where",),  # the player is now at a place (over the wall, inside, driven there)
+    "place": ("what", "where", "count", "kind", "tags", "uses", "note"),  # a thing lies at a place
+    "give": ("what", "count", "kind", "tags", "uses", "note"),  # a thing into the player's hands
     "take_away": ("what",),  # a thing the player carries is gone
     "break": ("what",),  # a thing here is broken
+    # A thing here or carried becomes what it now is: a new name, kind and
+    # state ("whole", "broken", "gone"), words for its state (tags) and the
+    # verbs it now offers (uses), which the player picks from its menu and
+    # which come back to the keeper as attempts. The author (Oct 24 2026): a
+    # repaired car is "a new model for the car that isn't broken", with the
+    # ability to use it that it lacked broken.
+    "transform": ("what", "name", "kind", "state", "tags", "uses", "note"),
+    "set_state": ("where", "state"),  # a place's state ("burnt out", "flooded")
     "unlock": ("where",),  # a building's door opens
     "lock": ("where", "key"),  # a building's door is locked
     "seal": ("where",),  # a building's door won't open until unsealed
@@ -68,6 +79,10 @@ class Op:
             return max(0, min(200, int(float(self.args.get("count", default) or default))))
         except (TypeError, ValueError):
             return default
+
+    def words(self, key: str) -> list[str]:
+        """A comma- or semicolon-separated field as a list of words."""
+        return [w.strip() for w in re.split(r"[,;]", self.args.get(key, "")) if w.strip()]
 
 
 @dataclass(frozen=True)
@@ -256,16 +271,49 @@ def _ops(raw: object, dropped: list[str]) -> list[Op]:
         if not isinstance(item, dict):
             dropped.append(str(item)[:60])
             continue
+        item = _keyed(item)
         name = str(item.get("op") or "").strip().lower()
         if name not in OPS:
             dropped.append(name or "(no op)")
             continue
         args = {
-            key: " ".join(str(item.get(key)).split())
+            key: " ".join(
+                (
+                    ", ".join(str(v) for v in item.get(key))
+                    if isinstance(item.get(key), list)
+                    else str(item.get(key))
+                ).split()
+            )
             for key in OPS[name]
             if item.get(key) is not None
         }
         out.append(Op(op=name, args=args))
+    return out
+
+
+def _keyed(item: dict) -> dict:
+    """An operation written with its name as the key, as Sonnet did live
+    (`{"clock": 90}`, `{"go": "water tower"}`, `{"say": "Elena", "text":
+    "…"}`, `{"say": {"who": …, "text": …}}`), as the `op` shape."""
+    if item.get("op") is not None:
+        return item
+    candidates = [name for name in OPS if name in item]
+    if not candidates:
+        return item
+    # `{"give": "a key", "note": "…"}`: "note" is an operation's name and a
+    # field of give; the operation is the key that is no other candidate's
+    # field (live, a transform with a note was read as the note alone).
+    fields_of_others = {
+        field for other in candidates for field in OPS[other] if other != candidates[0]
+    } | {field for other in candidates for field in OPS[other]}
+    chosen = next((c for c in candidates if c not in fields_of_others), candidates[0])
+    value = item[chosen]
+    out = {k: v for k, v in item.items() if k != chosen}
+    if isinstance(value, dict):
+        out.update(value)
+    elif value is not None and not isinstance(value, bool):
+        out.setdefault(OPS[chosen][0], value)
+    out["op"] = chosen
     return out
 
 

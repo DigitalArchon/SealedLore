@@ -33,6 +33,7 @@ Kind = Literal[
     "ammunition",
     "paper",
     "container",
+    "vehicle",
     "thing",
 ]
 
@@ -87,10 +88,24 @@ class Creature(BaseModel):
     hits: int = 1
 
 
+class Shift(BaseModel):
+    """Where a person is at these hours of the day when nothing else moves
+    them (engine/session_visual.py `_keep_schedules`): "20:00" to "06:00"
+    at The church. A shift may cross midnight."""
+
+    start: str = "00:00"
+    end: str = "24:00"
+    place: str
+
+
 class PersonSheet(BaseModel):
     """Who a person is, for the model that speaks for them (engine/npc.py):
     the design's words, over the character's card."""
 
+    # A line for the card of a person the plot file has no card for (a
+    # townsperson): the card is made from it when the story is made
+    # (storage/visual_design.py `cards_for_design`).
+    card: str = ""
     personality: str = ""
     goals: str = ""
     # How they take to a stranger, and what they want from one.
@@ -107,6 +122,8 @@ class PersonSheet(BaseModel):
     ability: int = 5
     # What they carry, if anything is said of it.
     carries: list[str] = Field(default_factory=list)
+    # Where they are through the day, when nothing else moves them.
+    schedule: list[Shift] = Field(default_factory=list)
 
 
 class NpcGoal(BaseModel):
@@ -163,3 +180,6 @@ class VisualDesign(BaseModel):
     player_hits: int = 3
     # The people (by the character's name) and who they are.
     people: dict[str, PersonSheet] = Field(default_factory=dict)
+    # The weather the play view draws outdoors ("snow", "rain", "fog"; ""
+    # for clear), since a visual story has no passages to say it.
+    weather: str = ""

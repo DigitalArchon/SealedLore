@@ -246,8 +246,15 @@ def test_the_line_needs_a_listener_and_a_menu_verb_without_rules_says_so(app, wi
         time.sleep(0.01)
     words = game.log.toPlainText()
     assert "Serrik Vaun attempts: Hello?" in words and "Nothing comes of it" in words
+    # A menu verb the rules lack is an attempt too (the author, Oct 24 2026:
+    # the model handles any mechanic that isn't coded).
     game.area_view.action_chosen.emit("use", "a stove", "nope")
-    assert "Use a stove: not in the game yet" in game.log.toPlainText()
+    assert "Serrik Vaun attempts: I use the stove." in game.log.toPlainText()
+    assert game._keeper_pending == "action"
+    end = time.monotonic() + 10
+    while time.monotonic() < end and game._keeper_pending is not None:
+        pump(app)
+        time.sleep(0.01)
 
 
 def test_closing_the_game_saves_and_brings_the_main_window_back(app, window: MainWindow):
@@ -693,7 +700,7 @@ def test_doomsville_s_sheet_comes_with_the_story(app, tmp_path: Path, monkeypatc
     design = session.story.visual_design
     assert design is not None and design.abilities["John"] == 7
     state = session.area_state()
-    assert state.laid_out and len(state.creatures) == 6
+    assert state.laid_out and len(state.creatures) == 7
     assert any(r.name == "a hunting knife" for r in state.things.values())
     assert any(d.locked and d.key == "clinic key" for d in state.doors.values())
     assert "Snow to the knee" in game.log.toPlainText()
@@ -1193,3 +1200,295 @@ def test_the_keeper_s_reply_is_held_to_the_operations():
     assert set(OPS) >= {"note", "say", "spawn", "give", "reveal", "end"}
     with pytest.raises(ValueError):
         parse_keeper("no", events)
+
+
+# --- steps 5 and 6: anything the player tries, the look, the content ---------------
+
+
+def _goal(intent: str):
+    from sealedlore.models.visual import NpcGoal
+
+    return NpcGoal(intent=intent)
+
+
+def test_the_keeper_can_make_a_thing_into_what_it_has_become_and_a_vehicle_drives(
+    plotted: VisualWindow,
+):
+    """The author (Oct 24 2026): no repair mechanic, but a repaired car is "a
+    new model for the car that isn't broken" with the ability to use it."""
+    session = plotted.session
+    house = session.area("house")
+    stove = next(p for p in house.placements if "stove" in p.name.lower())
+    script = (
+        '{"script": [{"op": "transform", "what": "the stove", "name": "a running snowmobile", '
+        '"kind": "vehicle", "state": "whole", "tags": ["works", "fuelled"], "uses": ["drive"], '
+        '"note": "It coughs, then runs."}, {"op": "tag_person", "who": "Maela Orr", '
+        '"tags": "bound, held by Serrik"}, {"op": "set_state", "where": "The house", '
+        '"state": "smoke-filled"}], "note": ""}'
+    )
+    session.provider.responses = [script]
+    plotted.line.setText("/d I turn the stove into a snowmobile and tie Maela up.")
+    plotted.line.returnPressed.emit()
+    _keeper_answer(plotted, script)
+    words = plotted.log.toPlainText()
+    assert "is now a running snowmobile." in words
+    assert "you can drive it" in words and "Maela Orr is bound, held by Serrik." in words
+    assert "The house: smoke-filled." in words
+    state = session.area_state()
+    record = state.things[stove.id]
+    assert record.name == "a running snowmobile" and record.kind == "vehicle"
+    assert record.tags == ["works", "fuelled"] and record.uses == ["drive"]
+    # The placement takes the record's name; its menu offers the use.
+    house = session.area("house")
+    assert any(p.name == "a running snowmobile" for p in house.placements)
+    assert session.visual_uses(stove.id) == ["drive"]
+    # The place's state is the map's now, read from the live state.
+    assert session.world().places["house"].state == "smoke-filled"
+    assert "The place is smoke-filled." in session.visual_state_text()
+    assert "running snowmobile; works; fuelled; can be: drive" in session.visual_state_text()
+    # A bound person carries out no intent and is told her state.
+    state.goals["Maela Orr"] = state.goals.get("Maela Orr") or _goal("stay")
+    state.goals["Maela Orr"].intent = "leave"
+    before = state.spots["Maela Orr"]
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    session.visual_tick(60)
+    assert session.area_state().spots["Maela Orr"] == before
+    session.provider.responses = [GREETING]
+    plotted.area_view.action_chosen.emit("talk", "Maela Orr", "")
+    plotted.line.setText("Comfortable?")
+    plotted.line.returnPressed.emit()
+    _answer(plotted, GREETING)
+    talk = next(
+        r for r in reversed(session.provider.requests) if "YOUR OWN STATE" in r.messages[1].text
+    )
+    assert "YOUR OWN STATE: bound, held by Serrik" in talk.messages[1].text
+    # Choosing the use from the menu is an attempt the keeper rules on.
+    ruling = (
+        '{"possible": true, "roll": null, "success": [{"op": "note", "text": "It starts."}], '
+        '"failure": [], "note": ""}'
+    )
+    session.provider.responses = [ruling]
+    me = state.spots["Serrik Vaun"]
+    state.spots["Serrik Vaun"] = Spot(area="house", x=stove.x + 1, y=stove.y + 1)
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    plotted.presenter.refresh(snap=True)
+    plotted.area_view.action_chosen.emit("use:drive", "a running snowmobile", stove.id)
+    assert plotted._keeper_pending == "action"
+    _keeper_answer(plotted, ruling)
+    request = session.provider.requests[-1]
+    assert "ATTEMPTS: I drive the running snowmobile (works, fuelled)." in request.messages[1].text
+    assert "It starts." in plotted.log.toPlainText()
+    # Travel… offers the journey by it, and the vehicle comes along.
+    choices = session.visual_drive_choices()
+    assert choices and choices[0][1] == "running snowmobile"
+    by_foot = dict((pid, s) for pid, _n, s in session.visual_travel_choices())
+    by_road = dict((pid, s) for pid, _n, s in choices[0][2])
+    assert by_road["town"] < by_foot["town"] / 4
+    plotted._travel_menu()
+    labels = [a.text() for a in plotted.area_view.travel_menu.actions()]
+    assert any("by running snowmobile" in label and "by road" in label for label in labels)
+    gone = session.visual_travel("town", vehicle=stove.id)
+    assert gone is not None and gone[1] == by_road["town"]
+    state = session.area_state()
+    assert state.spots["Serrik Vaun"].area == "town"
+    record = state.things[stove.id]
+    assert record.state == "dropped" and record.spot is not None and record.spot.area == "town"
+    del me
+
+
+def test_the_keeper_moves_the_player_and_a_use_the_rules_lack_goes_to_it(plotted: VisualWindow):
+    session = plotted.session
+    script = '{"script": [{"op": "go", "where": "The farm"}], "note": "Over the sill and out."}'
+    session.provider.responses = [script]
+    plotted.line.setText("/d I climb out of the window onto the farm.")
+    plotted.line.returnPressed.emit()
+    _keeper_answer(plotted, script)
+    assert session.area_state().spots["Serrik Vaun"].area == "farm"
+    assert "You are at The farm." in plotted.log.toPlainText()
+    # A carried thing with no rule for Use: the attempt, with the thing's state.
+    state = session.area_state()
+    state.things["item:wire"] = ThingRecord(
+        state="taken", name="a coil of wire", by="Serrik Vaun", kind="tool", tags=["rusty"]
+    )
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    assert session.visual_item_actions(state.things["item:wire"]) == ("use", "drop")
+    ruling = '{"possible": false, "roll": null, "success": [], "failure": [], "note": "Not here."}'
+    session.provider.responses = [ruling]
+    plotted._carry_action("item:wire", "use")
+    assert plotted._keeper_pending == "action"
+    _keeper_answer(plotted, ruling)
+    assert (
+        "ATTEMPTS: I use the coil of wire (rusty)."
+        in session.provider.requests[-1].messages[1].text
+    )
+    assert "Not here." in plotted.log.toPlainText()
+
+
+def test_people_keep_their_hours_when_the_player_is_elsewhere(peopled: VisualWindow):
+    session = peopled.session
+    design = session.visual_design()
+    design.people["Maela Orr"].schedule = [
+        __import__("sealedlore.models.visual", fromlist=["Shift"]).Shift(
+            start="00:00", end="24:00", place="The farm"
+        )
+    ]
+    state = session.area_state()
+    # Out of her area: she keeps her hours. In it: she stays in sight.
+    assert state.spots["Maela Orr"].area == "house"
+    session.visual_tick(60)
+    assert session.area_state().spots["Maela Orr"].area == "house"
+    farm = session.area("farm")
+    spot = next(
+        (x, y) for y in range(farm.height) for x in range(farm.width) if farm.walkable(x, y)
+    )
+    state = session.area_state()
+    state.spots["Serrik Vaun"] = Spot(area="farm", x=spot[0], y=spot[1])
+    state.spots["Maela Orr"] = Spot(area="house", x=5, y=5)
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    session.visual_tick(60)
+    assert session.area_state().spots["Maela Orr"].area == "farm"
+
+
+def test_sleeping_is_a_moment_of_the_plot_and_the_dead_down_lie_where_they_fell(
+    game: VisualWindow, monkeypatch
+):
+    session = game.session
+    asked = []
+    monkeypatch.setattr(
+        session, "visual_plot_check", lambda moment="": (asked.append(moment), ([], ""))[1]
+    )
+    game._pass_time(True)
+    assert asked[-1] == "the player has just slept the night through"
+    game._pass_time(False)
+    assert asked[-1] == ""
+    # One of the dead put down lies there, no longer attackable from its menu.
+    state = session.area_state()
+    creature = next(c for c in state.creatures.values())
+    creature.state = "down"
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    game.presenter.refresh(snap=True)
+    walker = next(w for w in game.area_view.walkers if w.name == creature.id)
+    assert walker.fallen and creature.id in game.area_view.fallen
+    shown = []
+    monkeypatch.setattr(game.area_view, "_show_menu", lambda menu, at: shown.append(menu))
+    game.area_view._person_menu(walker, None)
+    assert [a.text() for a in shown[-1].actions()] == ["One of the dead, down"]
+
+
+def test_cards_are_made_for_the_design_s_townspeople():
+    from sealedlore.storage.visual_design import cards_for_design
+
+    design = VisualDesign(
+        people={
+            "Marcus Webb": PersonSheet(personality="x"),  # the plot file's own
+            "Tom Bell": PersonSheet(card="Keeps the south gate.", place="The south gate"),
+            "Nobody": PersonSheet(personality="no card line: none made"),
+        }
+    )
+    cards = cards_for_design(design, ["Marcus Webb"])
+    assert [(c.name, c.summary, c.is_player_available) for c in cards] == [
+        ("Tom Bell", "Keeps the south gate.", False)
+    ]
+
+
+def test_doomsville_s_townspeople_have_cards_and_stand_in_the_town(
+    app, tmp_path: Path, monkeypatch
+):
+    from PySide6.QtWidgets import QInputDialog
+
+    main = MainWindow(root=tmp_path, use_mock=True)
+    main.config.map_art = False
+    monkeypatch.setattr(QInputDialog, "getItem", lambda *a, **k: ("John", True))
+    main._current_provider().responses = [GREETING] * 4
+    main.open_visual_sample(SAMPLES / "Doomsville with a map.md")
+    pump(app)
+    game = main.visual_window
+    session = game.session
+    names = {c.name for c in session.supporting}
+    assert {"Tom Bell", "Ruth Calloway", "Sam", "Cole", "Dutch"} <= names
+    assert session.has_card("Tom Bell")
+    state = session.area_state()
+    town = session.world()
+    town_id = next(p.id for p in town.places.values() if p.name == "Hellsville")
+    assert state.spots["Tom Bell"].area == town_id and state.spots["Ruth Calloway"].area != town_id
+    assert "Cole" not in state.spots  # the band comes with its event
+    assert session.visual_design().weather == "snow"
+    # The dead have a sprite of their own, shipped with the sample.
+    art = session.map_art_copy()
+    assert art.picture_for("walker", "the dead") is not None
+    game.close()
+    pump(app)
+    main.close()
+
+
+def test_the_keeper_s_operations_are_read_with_the_name_as_the_key_too():
+    from sealedlore.engine.keeper import parse_keeper, parse_ruling
+
+    ruling = parse_ruling(
+        '{"possible": true, "roll": null, "success": [{"clock": 90}, {"go": "water tower"}, '
+        '{"transform": "Pickup truck", "name": "a battered pickup", "kind": "vehicle", '
+        '"tags": ["works"], "uses": ["drive"]}, {"say": {"who": "Elena", "text": "Lord."}}, '
+        '{"say": "Tom Bell", "text": "Check its neck."}, {"note": "x"}], "failure": []}',
+        [],
+    )
+    ops = [(o.op, o.args) for o in ruling.success]
+    assert ops[0] == ("clock", {"minutes": "90"}) and ops[1] == ("go", {"where": "water tower"})
+    assert ops[2][0] == "transform" and ops[2][1]["what"] == "Pickup truck"
+    assert ops[2][1]["name"] == "a battered pickup" and ops[2][1]["uses"] == "drive"
+    assert ops[3] == ("say", {"who": "Elena", "text": "Lord."})
+    assert ops[4] == ("say", {"who": "Tom Bell", "text": "Check its neck."})
+    assert ops[5] == ("note", {"text": "x"}) and ruling.dropped == []
+    reply = parse_keeper('{"script": [{"dance": 1}, {"op": "note", "text": "y"}]}', [])
+    assert [o.op for o in reply.script] == ["note"] and reply.dropped == ["(no op)"]
+
+
+def test_an_operation_with_a_note_field_is_not_read_as_a_note():
+    from sealedlore.engine.keeper import parse_keeper
+
+    reply = parse_keeper(
+        '{"script": [{"give": "spare store key", "count": 1, "kind": "key", '
+        '"tags": "unlocks store", "note": "Key to the store"}, '
+        '{"transform": "Pickup truck", "name": "pickup truck", '
+        '"note": "runs"}, {"note": "plain"}]}',
+        [],
+    )
+    assert [o.op for o in reply.script] == ["give", "transform", "note"]
+    assert reply.script[0].args["what"] == "spare store key"
+    assert reply.script[0].args["note"] == "Key to the store"
+    assert reply.script[1].args["what"] == "Pickup truck" and reply.script[1].args["note"] == "runs"
+
+
+def test_a_take_away_reaches_the_player_s_hands(plotted: VisualWindow):
+    session = plotted.session
+    give = (
+        '{"script": [{"give": "a set of spark plugs", "kind": "tool"}, '
+        '{"give": "a tin of beans", "kind": "food"}], "note": ""}'
+    )
+    session.provider.responses = [give]
+    plotted.line.setText("/d I have spark plugs and beans.")
+    plotted.line.returnPressed.emit()
+    _keeper_answer(plotted, give)
+    assert [r.name for _i, r in session.visual_inventory()] == [
+        "a set of spark plugs",
+        "a tin of beans",
+    ]
+    gone = '{"script": [{"take_away": "set of spark plugs"}], "note": ""}'
+    session.provider.responses = [gone]
+    plotted.line.setText("/d The plugs are used up.")
+    plotted.line.returnPressed.emit()
+    _keeper_answer(plotted, gone)
+    # Not the beans by the word "of", and really gone from the player's hands.
+    assert [r.name for _i, r in session.visual_inventory()] == ["a tin of beans"]
+    assert "The set of spark plugs is gone from your hands." in plotted.log.toPlainText()
+
+
+def test_a_place_the_keeper_names_loosely_is_found():
+    from sealedlore.engine.session_visual import _place_named
+    from tests.test_area import world_and_art
+
+    world, _art = world_and_art()
+    assert _place_named(world, "The house").id == "house"
+    assert _place_named(world, "house").id == "house"
+    assert _place_named(world, "The Farm - House").id == "house"
+    assert _place_named(world, "the farm's barn").id == "farm"
+    assert _place_named(world, "the moon") is None

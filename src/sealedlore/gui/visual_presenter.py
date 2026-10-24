@@ -33,6 +33,7 @@ from sealedlore.engine.area import (
 from sealedlore.engine.backdrops import loose_things
 from sealedlore.engine.deck_plan import DRAWN_PIECES
 from sealedlore.engine.tile_sets import head_noun
+from sealedlore.engine.visual_rules import DEAD_SPRITE
 from sealedlore.engine.world import key
 from sealedlore.gui.area_render import (
     Ground,
@@ -168,14 +169,31 @@ class VisualPresenter(QObject):
             )
             for name, bx, by, dx, dy in session.at_the_door()
         ]
-        # The dead in this area (models/visual.py), no name over them.
+        # The dead in this area (models/visual.py), no name over them; one
+        # put down lies where it fell, as does a person beaten.
         walkers += [
-            Walker(creature.id, creature.x, creature.y, self._creature_image(art), label="")
+            Walker(
+                creature.id,
+                creature.x,
+                creature.y,
+                self._creature_image(art),
+                label="",
+                fallen=creature.state == "down",
+            )
             for creature in state.creatures.values()
-            if creature.area == area.id and creature.state != "down"
+            if creature.area == area.id
         ]
-        view.creature_ids = {
-            c.id for c in state.creatures.values() if c.area == area.id and c.state != "down"
+        walkers = [
+            Walker(
+                w.name, w.x, w.y, w.image, held=w.held, door=w.door, carded=w.carded, fallen=True
+            )
+            if w.name in state.people_down
+            else w
+            for w in walkers
+        ]
+        view.creature_ids = {c.id for c in state.creatures.values() if c.area == area.id}
+        view.fallen = set(state.people_down) | {
+            c.id for c in state.creatures.values() if c.state == "down"
         }
         places = self._place_marks(area, session, art)
         built = session.built_area(area.id)
@@ -214,7 +232,7 @@ class VisualPresenter(QObject):
                 minute=clock[1] if clock else None,
                 failed=failed,
                 places=places,
-                weather=session.world().weather,
+                weather=session.world().weather or session.visual_design().weather,
                 things=self._thing_pictures(area, session, art, loose=backdrop is not None),
             )
         if walk is not None:
@@ -457,13 +475,23 @@ class VisualPresenter(QObject):
         return image
 
     def _creature_image(self, art) -> QImage | None:
-        """One of the dead: the tile set's first generic person, greyed and
-        greened (until a sprite is drawn for them)."""
+        """One of the dead: the world's own sprite of them (a walker picture
+        of "the dead", shipped with Doomsville), else the tile set's first
+        generic person, greyed and greened."""
+        session = self.session
+        drawn = art.picture_for("walker", DEAD_SPRITE)
+        if drawn is not None:
+            cache_key = ("", "creature", drawn.file)
+            if cache_key in self._walker_images:
+                return self._walker_images[cache_key]
+            image = sprite_image(session.pictures.read(drawn.file))
+            if image is not None:
+                self._walker_images[cache_key] = image
+                return image
         cache_key = ("", "creature")
         if cache_key in self._walker_images:
             return self._walker_images[cache_key]
-        session = self.session
-        image: QImage | None = None
+        image = None
         people = session.generic_people()
         if people:
             _info, read = session.tile_set(art)

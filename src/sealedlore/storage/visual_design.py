@@ -8,6 +8,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from sealedlore.models.character import Character
 from sealedlore.models.visual import VisualDesign
 from sealedlore.storage.atomic import read_json
 
@@ -31,3 +32,24 @@ def load_design(plot_path: Path) -> VisualDesign | None:
         return VisualDesign.model_validate(data)
     except ValidationError:
         return None
+
+
+def cards_for_design(design: VisualDesign, names: list[str]) -> list[Character]:
+    """Supporting cards for the design's people the story has no card for
+    (its townspeople: the plot file carries only the cast), each from the
+    sheet's `card` line, never playable, so the game can stand and talk to
+    them (`has_card`). `names`: the cards the story has."""
+    have = {n.strip().casefold() for n in names}
+    out = []
+    for name, sheet in design.people.items():
+        if name.strip().casefold() in have or not sheet.card.strip():
+            continue
+        out.append(
+            Character(
+                name=name.strip(),
+                summary=sheet.card.strip(),
+                is_player_available=False,
+                origin="author",
+            )
+        )
+    return out

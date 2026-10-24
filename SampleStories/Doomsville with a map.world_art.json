@@ -5581,6 +5581,19 @@
    "made_at": "2026-10-23T20:37:30.589677+00:00",
    "plan": "2026-10-23T20:11:04.621194+00:00",
    "scene": ""
+  },
+  {
+   "id": "4359c3ee-223b-42b5-8681-df61323ad385",
+   "subject": "walker",
+   "subject_id": "the dead",
+   "name": "the dead",
+   "state": "",
+   "file": "pictures/map/walker-the-dead.webp",
+   "from_picture": "",
+   "prompt": "Create a small full-body game character sprite of one of the walking dead: a gaunt dead man in torn, filthy winter clothes and a rotted parka, grey-green skin, slack jaw, head tilted, one arm hanging, in hand-painted 16-bit pixel art, bleak and quiet, cold muted greys and rust browns against grimy snow, thin winter light: standing, facing the viewer, the whole figure from head to feet with chibi proportions and a large head. Centred alone on a plain pure white background with a wide white margin on every side, crisp dark outline, nothing else in the picture.",
+   "model": "blackforestlabs/flux-3/klein/text-to-image",
+   "made_at": "2026-10-24T16:39:35.373105+00:00",
+   "plan": ""
   }
  ],
  "pictures_by_day": {},

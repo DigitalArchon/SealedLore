@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
-from sealedlore.engine.area import Area, Placement
+from sealedlore.engine.area import Area, Placement, bare
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.ids import new_id
@@ -90,6 +90,12 @@ def _thing_lines(things: Sequence[Placement], records: Mapping[str, ThingRecord]
             contents = " — holds: " + ", ".join(_count(f) for f in record.contents)
         lines.append(f"- {p.id}: {p.name}{state}{contents}")
     return "\n".join(lines) or "- nothing the game knows of; bare ground or floor"
+
+
+def _same_find(a: str, b: str) -> bool:
+    """Two finds of one thing ("a hunting rifle", "hunting rifle"): live, the
+    model listed the design's own contents again as new finds."""
+    return bare(a).casefold() == bare(b).casefold()
 
 
 def _count(f: Found) -> str:
@@ -204,6 +210,8 @@ def apply_look(
             if record is None and holder is not None:
                 record = records[find.inside] = ThingRecord(state="seen", name=holder.name)
             if record is not None:
+                if any(_same_find(f.name, found.name) for f in record.contents):
+                    continue  # known to be in it already (the design's, or found before)
                 record.contents.append(found)
                 lines.append(f"You find {_count(found)} in {holder.name if holder else 'it'}.")
                 continue

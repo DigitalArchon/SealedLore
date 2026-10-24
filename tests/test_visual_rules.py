@@ -146,3 +146,35 @@ def test_what_is_newly_seen_or_heard_is_reported_once():
 @pytest.mark.parametrize("name", ["a riflex", "beansx", "a keyboard"])
 def test_kinds_are_whole_words(name):
     assert kind_of(name) == "thing"
+
+
+def test_vehicles_are_a_kind_held_people_stay_and_a_working_vehicle_drives():
+    from sealedlore.engine.visual_rules import drivable, is_held
+
+    assert kind_of("a pickup truck") == "vehicle" and item_actions("vehicle") == ()
+    truck = ThingRecord(state="seen", name="a pickup truck")
+    assert not drivable(truck)
+    truck.tags = ["works", "fuelled"]
+    assert drivable(truck)
+    sled = ThingRecord(state="seen", name="a thing", uses=["Drive"])
+    assert drivable(sled)
+    assert is_held(["held by John", "angry"]) and is_held(["out cold"])
+    assert not is_held(["angry", "hurt"])
+
+
+def test_the_dead_out_of_sight_but_near_are_heard_once():
+    rows = ["." * 20, "." * 9 + "#" + "." * 10, "." * 9 + "#" + "." * 10, "." * 20]
+    area = _yard(rows, tile_m=2.0)
+    # Behind the wall, 10 tiles east (20 m): heard, not seen.
+    creature = Creature(id="z", area="yard", x=14, y=1, ability=4)
+    lines, now = sight_report(area, (4, 1), {}, [creature], [])
+    assert lines == [
+        "You hear something dragging itself through the snow, about 20 m east, out of sight."
+    ]
+    assert now == ["heard:z"]
+    again, _now = sight_report(area, (4, 1), {}, [creature], now)
+    assert again == []
+    # Into sight: reported as seen, though heard before.
+    creature.x, creature.y = 6, 0
+    seen, now2 = sight_report(area, (4, 1), {}, [creature], now)
+    assert seen and "shambling" in seen[0] and now2 == ["z"]

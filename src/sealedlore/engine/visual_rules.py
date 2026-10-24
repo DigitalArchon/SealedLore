@@ -89,6 +89,11 @@ _KIND_WORDS: tuple[tuple[str, str], ...] = (
         r"cabinets?|cupboards?|drawers?|lockers?|barrels?|bins?|baskets?|cases?|pouches?|"
         r"satchels?|footlockers?|safes?|wardrobes?|dressers?|shelves|shelf",
     ),
+    (
+        "vehicle",
+        r"trucks?|pickups?|cars?|jeeps?|vans?|motorbikes?|motorcycles?|bikes?|bicycles?|"
+        r"snowmobiles?|tractors?|buses|bus|lorr(?:y|ies)|boats?|canoes?|sleds?|sledges?",
+    ),
 )
 _KINDS = [(kind, re.compile(rf"\b(?:{words})\b", re.IGNORECASE)) for kind, words in _KIND_WORDS]
 
@@ -110,9 +115,51 @@ FORCE_NOISE_M = 60.0
 DEAD_M_PER_S = 0.6
 DEAD_SIGHT_M = 40.0
 DEAD_HEARING_M = 25.0
+# How far the player hears one of the dead they can't see.
+HEARD_M = 30.0
+# How far the player sees a person, in the open (live, a watchman greeted
+# them from the far gate, 500 m up the street).
+PERSON_SIGHT_M = 60.0
+# The walker picture a world ships of its dead (`MapPicture.subject_id`).
+DEAD_SPRITE = "the dead"
 CHASE_GIVES_UP = 6
 # A strength check to force a lock: ability against this.
 FORCE_DIFFICULTY = 6
+# A vehicle the keeper has made to work (`ThingRecord.uses` has "drive")
+# travels at this speed, against walking's 1.4 m/s.
+DRIVE_M_PER_S = 12.0
+# A person tagged with any of these by the keeper (`AreaState.person_tags`)
+# stays where they are and carries out no intent.
+OUT_WORDS = (
+    r"unconscious|out cold|knocked out|knocked cold|senseless|passed out|asleep|sleeping|"
+    r"dead|dying|comatose"
+)
+HELD_WORDS = re.compile(
+    r"\b(?:held|bound|tied|captive|prisoner|restrained|subdued|pinned|locked up|chained|"
+    + OUT_WORDS
+    + r")\b",
+    re.IGNORECASE,
+)
+OUT = re.compile(rf"\b(?:{OUT_WORDS})\b", re.IGNORECASE)
+
+
+def is_held(tags: Iterable[str]) -> bool:
+    """Whether a person's state words keep them where they are."""
+    return any(HELD_WORDS.search(tag) for tag in tags)
+
+
+def is_out(tags: Iterable[str]) -> bool:
+    """Whether a person's state words leave them unable to answer."""
+    return any(OUT.search(tag) for tag in tags)
+
+
+def drivable(record: ThingRecord) -> bool:
+    """A thing the keeper has made drivable: a vehicle that works."""
+    kind = record.kind or kind_of(record.name)
+    uses = {u.lower() for u in record.uses}
+    tags = " ".join(record.tags).lower()
+    works = re.search(r"\b(?:works|running|repaired|fuelled|fueled)\b", tags) is not None
+    return "drive" in uses or (kind == "vehicle" and works)
 
 
 def kind_of(name: str, hint: str = "") -> str:
@@ -158,6 +205,8 @@ def item_actions(kind: str) -> tuple[str, ...]:
         return ("drink", "drop")
     if kind in ("medicine", "light", "paper", "tool"):
         return ("use", "drop")
+    if kind == "vehicle":
+        return ()  # driven from its own menu, never carried
     return ("drop",)
 
 
@@ -348,7 +397,7 @@ def sight_report(
     for name, spot in people.items():
         if spot == me:
             continue
-        if sees(area, me, spot):
+        if _metres(area, me, spot) <= PERSON_SIGHT_M and sees(area, me, spot):
             now.append(name)
             if name not in seen_before:
                 lines.append(f"{name} is here, {_whereabouts(area, me, spot)}.")
@@ -369,6 +418,17 @@ def sight_report(
                     if creature.state == "chase"
                     else f"{creature.name[0].upper()}{creature.name[1:]}, "
                     f"{_whereabouts(area, me, spot)}, shambling."
+                )
+        elif _metres(area, me, spot) <= HEARD_M:
+            # Out of sight but near: a sound cue, once (step 5 of the design:
+            # what the player can hear is reported as sound).
+            heard = f"heard:{creature.id}"
+            now.append(heard)
+            if heard not in seen_before and creature.id not in seen_before:
+                over = "over the floor" if area.indoor else "through the snow"
+                lines.append(
+                    f"You hear something dragging itself {over}, "
+                    f"{_whereabouts(area, me, spot)}, out of sight."
                 )
     return lines, now
 

@@ -25,7 +25,7 @@
     {
       "kind": "the dead",
       "place": "The hills",
-      "count": 2,
+      "count": 3,
       "ability": 4
     },
     {
@@ -84,6 +84,135 @@
       "place": "The gas station",
       "count": 1,
       "kind": "weapon"
+    },
+    {
+      "name": "a box of matches",
+      "place": "The farmhouse",
+      "count": 1,
+      "kind": "light"
+    },
+    {
+      "name": "a wool coat",
+      "place": "The farmhouse",
+      "count": 1,
+      "kind": "clothing",
+      "inside": "bedframe under quilt"
+    },
+    {
+      "name": "a hunting rifle",
+      "place": "The farmhouse",
+      "count": 1,
+      "kind": "weapon",
+      "inside": "rifle leaning by the door"
+    },
+    {
+      "name": "a car battery",
+      "place": "The gas station",
+      "count": 1,
+      "kind": "tool",
+      "inside": "wrecked sedan"
+    },
+    {
+      "name": "a set of spark plugs",
+      "place": "The gas station",
+      "count": 1,
+      "kind": "tool",
+      "inside": "jackknifed truck"
+    },
+    {
+      "name": "a toolbox",
+      "place": "The barn",
+      "count": 1,
+      "kind": "tool",
+      "inside": "Workbench with rusted tools"
+    },
+    {
+      "name": "a length of hose",
+      "place": "The gas station",
+      "count": 1,
+      "kind": "tool"
+    },
+    {
+      "name": "a pot of stew",
+      "place": "The diner",
+      "count": 4,
+      "kind": "food",
+      "inside": "kitchen counter"
+    },
+    {
+      "name": "a kitchen knife",
+      "place": "The diner",
+      "count": 1,
+      "kind": "weapon",
+      "inside": "kitchen counter"
+    },
+    {
+      "name": "a bottle of antibiotics",
+      "place": "The clinic",
+      "count": 1,
+      "kind": "medicine",
+      "inside": "medicine cabinet"
+    },
+    {
+      "name": "a sack of rice",
+      "place": "The general store",
+      "count": 1,
+      "kind": "food",
+      "inside": "ration shelf"
+    },
+    {
+      "name": "a box of candles",
+      "place": "The general store",
+      "count": 1,
+      "kind": "light",
+      "inside": "canned goods shelf"
+    },
+    {
+      "name": "a coil of rope",
+      "place": "The general store",
+      "count": 1,
+      "kind": "tool"
+    },
+    {
+      "name": "a wool blanket",
+      "place": "The church",
+      "count": 2,
+      "kind": "clothing",
+      "inside": "cots"
+    },
+    {
+      "name": "a snare wire",
+      "place": "The hills",
+      "count": 1,
+      "kind": "tool",
+      "inside": "hunting stand"
+    },
+    {
+      "name": "a box of shotgun shells",
+      "place": "The Hidden Caves",
+      "count": 8,
+      "kind": "ammunition",
+      "inside": "rifle rack"
+    },
+    {
+      "name": "a tin of beans",
+      "place": "The Hidden Caves",
+      "count": 6,
+      "kind": "food",
+      "inside": "crates of supplies"
+    },
+    {
+      "name": "a jerry can of fuel",
+      "place": "The Hidden Caves",
+      "count": 1,
+      "kind": "fuel",
+      "inside": "crates of supplies"
+    },
+    {
+      "name": "a lantern",
+      "place": "The Hidden Caves",
+      "count": 1,
+      "kind": "light"
     }
   ],
   "flavour": {
@@ -100,7 +229,12 @@
     "The church": "Pews pushed to the walls and bedrolls where they stood. The town sleeps here.",
     "The general store": "Shelves stripped to the wood. What is left is locked away.",
     "The Hidden Caves": "A mouth in the rock, and a draught from inside that smells of woodsmoke.",
-    "The main chamber": "Someone lives here: a cot, a stove, shelves of tins. They won't like you being here."
+    "The main chamber": "Someone lives here: a cot, a stove, shelves of tins. They won't like you being here.",
+    "The south gate": "A wall of cars and timber, a gate of welded bed frames, and a watch fire that somebody keeps fed.",
+    "Main street": "Shopfronts boarded, snow swept into banks, footprints everywhere. Sixty people live behind these walls.",
+    "The north gate": "The north wall is thinner here: a barricade of tyres and a gate that hangs crooked.",
+    "The water tower": "The tower still holds water, iced at the spout. Someone has nailed a ladder to its legs.",
+    "The cave mouth": "A crack in the rock a man can slip through sideways, and a draught of warmer air from inside."
   },
   "people": {
     "Marcus Webb": {
@@ -115,6 +249,23 @@
       "carries": [
         "a revolver",
         "a ring of keys"
+      ],
+      "schedule": [
+        {
+          "start": "07:00",
+          "end": "19:00",
+          "place": "The south gate"
+        },
+        {
+          "start": "19:00",
+          "end": "22:00",
+          "place": "The diner"
+        },
+        {
+          "start": "22:00",
+          "end": "07:00",
+          "place": "The church"
+        }
       ]
     },
     "Elena Ruiz": {
@@ -128,6 +279,18 @@
       "ability": 3,
       "carries": [
         "a first aid kit"
+      ],
+      "schedule": [
+        {
+          "start": "07:00",
+          "end": "21:00",
+          "place": "The clinic"
+        },
+        {
+          "start": "21:00",
+          "end": "07:00",
+          "place": "The church"
+        }
       ]
     },
     "Ben": {
@@ -148,7 +311,7 @@
       "personality": "Twenty-two, cocky, bored, in love with his rifle. Cruel when he has the upper hand, cowardly when he doesn't.",
       "goals": "The fanciest gun he can get his hands on, and someone to point it at.",
       "wants": "Your weapon, your food, and you scared. He will shoot for sport if nobody stops him.",
-      "knows": "The roads south of Hellsville, the band he runs with, and that the town has guns.",
+      "knows": "The roads south of Hellsville, the band he runs with, and that the town has guns. He runs with Cole and Dutch, who do what he says while he has the gun.",
       "never": "Never backs down in front of his band. Never fights fair when he can fight from cover.",
       "speech": "Loud, mocking, calls everyone 'friend'.",
       "place": "",
@@ -156,6 +319,163 @@
       "carries": [
         "a scoped rifle"
       ]
+    },
+    "Tom Bell": {
+      "card": "A heavyset man of forty who keeps Hellsville's south gate: a watchman's patience, a shotgun, and no small talk.",
+      "personality": "Slow to speak, slow to trust, loyal to Marcus. Not unkind.",
+      "goals": "Nobody gets through the south gate armed and unannounced. Keep the watch fire fed.",
+      "wants": "To know your business before you are inside, and to see your hands. He will circle behind a stranger while Marcus talks, as a matter of course.",
+      "knows": "Who comes and goes by the south road. The dead were thick on the old highway last month. The bandits camp south, past the creek.",
+      "never": "Never leaves the gate unwatched by day. Never gives his shotgun up.",
+      "speech": "Few words, flat. Grunts where another man would answer.",
+      "place": "The south gate",
+      "ability": 5,
+      "carries": [
+        "a shotgun"
+      ],
+      "schedule": [
+        {
+          "start": "06:00",
+          "end": "20:00",
+          "place": "The south gate"
+        },
+        {
+          "start": "20:00",
+          "end": "06:00",
+          "place": "The church"
+        }
+      ]
+    },
+    "Ruth Calloway": {
+      "card": "Hellsville's cook, sixty, who runs the diner's one stove and feeds the town from it.",
+      "personality": "Brisk, warm under it, sharp with anyone who wastes food.",
+      "goals": "A hot meal for everyone, every day, out of nothing. Keep the stove in.",
+      "wants": "News from outside, and anything edible you can spare. A hand with the wood buys a bowl.",
+      "knows": "Everybody in town and what they're like hungry. That the stores will run out before spring. That Marcus doesn't sleep.",
+      "never": "Never turns a hungry child away. Never speaks ill of Elena.",
+      "speech": "Talks while she works, calls everyone 'love' or 'you'.",
+      "place": "The diner",
+      "ability": 3,
+      "carries": [
+        "a ladle"
+      ],
+      "schedule": [
+        {
+          "start": "06:00",
+          "end": "21:00",
+          "place": "The diner"
+        },
+        {
+          "start": "21:00",
+          "end": "06:00",
+          "place": "The church"
+        }
+      ]
+    },
+    "Dale Fisk": {
+      "card": "A wiry man of thirty with a hunting rifle who watches Hellsville's north gate and the hills beyond.",
+      "personality": "Jumpy, talkative when nervous, braver than he looks.",
+      "goals": "See the dead coming before they reach the wall. Get off the night watch.",
+      "wants": "Someone to talk to on the wall. He'll tell a stranger more than he should.",
+      "knows": "The hills to the east, where the dead wander. He has seen smoke from the hills some mornings, and thinks someone lives out there.",
+      "never": "Never leaves his post while the gate is open. Never fires at a shape he can't name.",
+      "speech": "Quick, nervous, laughs at his own jokes.",
+      "place": "The north gate",
+      "ability": 5,
+      "carries": [
+        "a hunting rifle"
+      ],
+      "schedule": [
+        {
+          "start": "07:00",
+          "end": "19:00",
+          "place": "The north gate"
+        },
+        {
+          "start": "19:00",
+          "end": "07:00",
+          "place": "The church"
+        }
+      ]
+    },
+    "Lila Chen": {
+      "card": "Elena's helper at the clinic, nineteen, who learned nursing from her in the last four years.",
+      "personality": "Serious, careful, quietly proud of what she knows.",
+      "goals": "Keep the cots clean and the sick fed; learn everything Elena can teach.",
+      "wants": "To know if you are hurt; and whether you have seen other doctors anywhere, alive.",
+      "knows": "How to clean a wound and set a bone. Who in town is sick. That Elena is more tired than she lets on.",
+      "never": "Never opens the medicine cabinet without Elena. Never gossips about patients.",
+      "speech": "Soft, exact, asks permission before she touches anyone.",
+      "place": "The clinic",
+      "ability": 2,
+      "carries": [],
+      "schedule": [
+        {
+          "start": "07:00",
+          "end": "21:00",
+          "place": "The clinic"
+        },
+        {
+          "start": "21:00",
+          "end": "07:00",
+          "place": "The church"
+        }
+      ]
+    },
+    "Pastor Elias Hart": {
+      "card": "A grey man of sixty who keeps the church where Hellsville sleeps, and buries its dead properly.",
+      "personality": "Gentle, tired, unshakeable. Has stopped asking why.",
+      "goals": "Keep the people who sleep in his church warm, fed and unafraid. Bury the dead with their names.",
+      "wants": "To know your name, and whether you have anyone. He offers a cot before anything else.",
+      "knows": "Everyone's losses. Where everyone in town came from. That the caves in the hills were a hiding place for bootleggers once.",
+      "never": "Never refuses shelter. Never carries a weapon.",
+      "speech": "Slow, kindly, scripture now and then.",
+      "place": "The church",
+      "ability": 2,
+      "carries": []
+    },
+    "Sam": {
+      "card": "A boy of nine, Hellsville-born, who knows every gap in the wall and every hiding place in town.",
+      "personality": "Curious, fearless about the wrong things, lonely.",
+      "goals": "See everything. Find out what the stranger has in their bag.",
+      "wants": "Stories from outside. Something shiny. He'll follow a stranger about until someone calls him off.",
+      "knows": "The gap in the wall behind the water tower that nobody has fixed. Where Marcus keeps the spare keys (the diner, in the ledger).",
+      "never": "Never goes outside the wall. Never tells a grown-up about the gap.",
+      "speech": "Fast, full of questions, 'mister' or 'miss'.",
+      "place": "The church",
+      "ability": 1,
+      "carries": [
+        "a slingshot"
+      ]
+    },
+    "Cole": {
+      "card": "A bandit in Evan Stevens's band, thirty and heavy, who does the talking when Evan lets him.",
+      "personality": "Lazy, mean, a coward under a loud voice.",
+      "goals": "Take what the roads give without getting shot.",
+      "wants": "Your pack and your gun, handed over quietly.",
+      "knows": "The roads south, the band's camp, that Evan is not to be crossed when he has the rifle up.",
+      "never": "Never fights someone who looks able to fight back. Never crosses Evan to his face.",
+      "speech": "Loud, mocking, repeats what Evan says.",
+      "place": "",
+      "ability": 5,
+      "carries": [
+        "a pistol"
+      ]
+    },
+    "Dutch": {
+      "card": "A bandit in Evan Stevens's band, older and quieter than the others, with a shotgun and a limp.",
+      "personality": "Watchful, tired of Evan, not tired enough to leave.",
+      "goals": "Eat, and live through the winter.",
+      "wants": "The quickest end to any trouble: a trade, a threat, a shot, whichever is least work.",
+      "knows": "That the band is finished by spring without a town to feed off. That Hellsville has walls and guns.",
+      "never": "Never shoots first. Never says Evan's name without a curse.",
+      "speech": "Low, few words, spits.",
+      "place": "",
+      "ability": 5,
+      "carries": [
+        "a shotgun"
+      ]
     }
-  }
+  },
+  "weather": "snow"
 }

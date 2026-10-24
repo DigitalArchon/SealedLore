@@ -45,8 +45,9 @@ played on one goes on as a story without it.
 - **Visual Stories** (new in 2.0.0b7, early). A separate way to play: a
   world on its map, the visuals centre stage, the model for the people you
   meet and the plot, the game's own rules for everything else. The start
-  page lists them under the samples, Doomsville first. In this version only
-  the walking, the doors, the journeys and the clock are in. See [Visual
+  page lists them under the samples, Doomsville first: walk its map, talk to
+  its people, and try anything the rules don't cover (the keeper rules on it
+  and makes the outcome real on the board). See [Visual
   Stories](docs/manual.md#visual-stories) in the manual.
 - **A picture kept as a card's own** (new in 2.0.0b7). Right-click any
   picture and choose **Use as a character's picture…** or **Use as a place's

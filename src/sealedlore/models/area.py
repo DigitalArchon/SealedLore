@@ -119,6 +119,14 @@ class ThingRecord(BaseModel):
     # its kind as the rules read it ("" until asked).
     count: int = 1
     kind: str = ""
+    # A visual story's keeper may make a thing into what it has become
+    # (engine/keeper.py `transform`: a repaired truck): words for its state
+    # ("works", "fuelled", "lit") and the verbs it now offers in its menu
+    # ("drive", "start"), each of which goes back to the keeper as an
+    # attempt when chosen. The author (Oct 24 2026): not a million small
+    # mechanics, but ways for the model to manage any it is asked for.
+    tags: list[str] = Field(default_factory=list)
+    uses: list[str] = Field(default_factory=list)
 
 
 class MapAction(BaseModel):
@@ -227,6 +235,14 @@ class AreaState(BaseModel):
     plot_days_seen: list[int] = Field(default_factory=list)
     # The story's end, when the keeper ended it: the words.
     ended: str = ""
+    # A person's state in the keeper's words ("held by John", "bound",
+    # "unconscious"): shown to the model that speaks for them, and one held
+    # or out cold stays where they are (engine/session_visual.py).
+    person_tags: dict[str, list[str]] = Field(default_factory=dict)
+    # A place's state the keeper set ("burnt out"), by place id: a visual
+    # story has no passages to carry a map delta, so the fold reads these
+    # (engine/session_world.py `_fold`).
+    place_states: dict[str, str] = Field(default_factory=dict)
 
 
 class LiveArea(BaseModel):

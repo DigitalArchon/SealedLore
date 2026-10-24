@@ -1514,12 +1514,13 @@ inside or a door to go through it (the view fades through); **Travel…** sets
 off for another place and **Leave** walks on past an edge, the clock moving
 by the way's length. Everything is saved as you go, so closing the window
 (back to your stories; the story is in the Stories list and opens the game
-again) loses nothing. The people you meet, and the plot, will be the model's;
-walking, doors, what you carry, what you can see and hear, and fights will be
-the game's own rules. In this version only the walking, the doors, the
-journeys and the clock are in; the line says so. Journeys go only between
-the places the world was designed with, never into the open country between
-them, and a click while you walk turns you at once.
+again) loses nothing. The people you meet, and the plot, are the model's;
+walking, doors, what you carry, what you can see and hear, and fights are
+the game's own rules. Journeys go only between the places the world was
+designed with, never into the open country between them, and a click while
+you walk turns you at once. Outdoors the weather the world was designed with
+falls over the place, and the light follows the hour; a hit flashes your
+figure red, and whoever goes down lies where they fell.
 
 The game keeps its own rules, with no model behind them. Right-click a thing
 to **take it**, to take what a look found in it, or to **break it** (a noise
@@ -1532,10 +1533,12 @@ you enter it. **The dead** are the world's: they wander, come to a noise, and
 chase you on sight; one beside you attacks, and you can attack one from its
 menu. A fight is one number a side, yours with the best weapon you carry
 against theirs, and the higher wins: a loss is a wound, and three wounds are
-the end, with a fresh start offered from the opening. **Wait an hour** and
-**Sleep till morning** on the toolbar pass the time where you stand. What a
-world starts with (its locks and keys, its dead, things laid out, a line for
-each place) is its design, shipped beside its plot file.
+the end, with a fresh start offered from the opening. One of the dead you
+can't see but is near is a sound in the log, in its own colour; a shot rolls
+out, and everyone near knows it. **Wait an hour** and **Sleep till morning**
+on the toolbar pass the time where you stand. What a world starts with (its
+locks and keys, its dead, things laid out, a line for each place, the
+weather) is its design, shipped beside its plot file.
 
 **The people** are the model's. Each has a sheet in the world's design (who
 they are, what they want, what they know, what they never do, how they
@@ -1549,7 +1552,12 @@ lead you somewhere, back away, hide, go for others, walk off, hand you
 something they carry, or go for you, in which case the game's own fight
 decides it. They see what you do in front of them, and are told. **Attack
 them** is the same fight, started by you. One call to the model a line, the
-story model unless **Settings → Models → People model** names another.
+story model unless **Settings → Models → People model** names another. The
+people keep their hours: the design says where each is through the day
+(Elena at the clinic by day, the church by night), and they are there when
+nothing else moves them. A world's townspeople need no card in its plot
+file: a line in the design makes one, so you can talk to the cook or the
+gate guard like anyone else.
 
 **The plot** is kept by the story's keeper (the story model unless **Settings
 → Models → Plot keeper model** names another). The plot file's facts,
@@ -1567,7 +1575,22 @@ dice roll, and the outcome is implemented on the board, so a wall climbed
 puts you over it and something found is in your hands. The keeper can end
 the story; a fresh start is offered.
 
-The one thing the model does so far is **look**. Press **Look at…** and drag
+**Anything you try.** The game has few rules of its own on purpose; the
+keeper is how everything else gets done. Try to repair the truck in the barn
+with the parts you have gathered and the keeper rules on it: what it takes,
+what is still missing, and on success the truck becomes a new thing (a
+running pickup, fuelled) with what you can now do with it in its menu
+(**Drive it**), and **Travel…** offers every journey by it, at a vehicle's
+pace, the truck coming with you. The same way a thing can be lit, loaded,
+built or broken into what it now is, a person can be held, bound or knocked
+out (they stay put and know their state), and a place can be left burnt or
+flooded. A menu choice the rules have no verb for, and **Use** on anything
+the rules can't use, goes to the keeper as an attempt with the thing's state.
+A conversation can move the plot too: when something is waiting on what you
+ask or are told, the keeper is asked as you talk; and sleeping is a moment of
+the plot of its own.
+
+The model also **looks** for you. Press **Look at…** and drag
 a frame round any part of the place (or right-click a thing and choose
 **Look at it closely**): the model is shown that part of the picture and
 told what the game knows stands there, and says what you see and what you

@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from sealedlore.engine.plot_md import parse_plot_markdown
+from sealedlore.engine.visual_rules import DEAD_SPRITE
 from sealedlore.engine.world import applied
 from sealedlore.engine.world_art import local_area
 from sealedlore.models.world import WorldMap
@@ -546,7 +547,7 @@ def test_a_sample_s_shipped_map_art_fits_its_map():
         places = {p.subject_id for p in with_files.pictures if p.subject != "walker"}
         assert places <= ids
         walkers = {p.subject_id for p in with_files.pictures if p.subject == "walker"}
-        assert walkers <= {c.name for c in scenario.cast}
+        assert walkers <= {c.name for c in scenario.cast} | {DEAD_SPRITE}  # a visual story's dead
         assert sorted(files) == sorted(p.file for p in with_files.pictures)
         # A showcase: every area with a plan comes with its painting: its
         # backdrop (the play view's ground and the board's picture of it,
@@ -699,7 +700,7 @@ def test_a_map_sample_is_ready_to_play_on_its_map():
         assert art.tile_set in sets, f"{path.name}: no tile set {art.tile_set!r}"
         _info, folder = sets[art.tile_set]
         world = applied(WorldMap(), scenario.world_base, base=True)
-        walkers = {p.subject_id for p in art.pictures if p.subject == "walker"}
+        walkers = {p.subject_id for p in art.pictures if p.subject == "walker"} - {DEAD_SPRITE}
         assert walkers == {c.name for c in scenario.cast}, f"{path.name}: walkers"
         names = [c.name for c in scenario.cast]
         for pid in art.layouts:

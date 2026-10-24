@@ -182,7 +182,7 @@ from sealedlore.storage.scenario import (
     scenario_from_bundle,
     write_scenario,
 )
-from sealedlore.storage.visual_design import load_design
+from sealedlore.storage.visual_design import cards_for_design, load_design
 from sealedlore.storage.world_art import carried_art, carried_story_art, load_sidecar
 from sealedlore.threads import BackgroundThread
 from sealedlore.tree import path_to
@@ -1158,8 +1158,12 @@ class MainWindow(
         bundle.pending_files.update(files)
         story = bundle.story
         story.mode = "visual"
-        # The predesigned sheet beside the file (storage/visual_design.py).
+        # The predesigned sheet beside the file (storage/visual_design.py),
+        # and a card for each of its people the file has none for.
         story.visual_design = load_design(path)
+        if story.visual_design is not None:
+            names = [c.name for c in (*bundle.cast, *bundle.supporting.characters)]
+            bundle.supporting.characters += cards_for_design(story.visual_design, names)
         choices = player_choices(bundle.cast, story.setup.choose_one_of)
         if not choices:
             self._warn_plain("Nobody to play", f"{path.name} has no character to play as.")

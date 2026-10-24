@@ -75,6 +75,15 @@ LOOK_PICTURE_SIDE = 768
 LOOK_MARGIN = 1
 
 
+# A journey by vehicle in Travel…'s entries: "<DRIVE><record id>|<place id>".
+DRIVE = "drive:"
+
+
+def _driven(seconds: int) -> str:
+    minutes = max(1, round(seconds / 60))
+    return f"{minutes} min by road" if minutes < 90 else f"{minutes / 60:.1f} h by road"
+
+
 def _duration(seconds: int) -> str:
     minutes = seconds / 60
     if minutes < 1:
@@ -105,10 +114,14 @@ class VisualAreaView(AreaView):
         ):
             button.hide()
         self.looking = False
-        # The window supplies what a thing is known to hold (its record's contents).
+        # The window supplies what a thing is known to hold (its record's
+        # contents) and the uses the keeper granted it (its menu's verbs).
         self.contents_of: Callable[[str], list[str]] = lambda _id: []
-        # The dead in the area shown (their walkers' names are their ids).
+        self.uses_of: Callable[[str], list[str]] = lambda _id: []
+        # The dead in the area shown (their walkers' names are their ids),
+        # and whoever lies fallen.
         self.creature_ids: set[str] = set()
+        self.fallen: set[str] = set()
 
     def set_looking(self, on: bool) -> None:
         """Look at…: the next drag over the area frames what to look at."""
@@ -160,14 +173,21 @@ class VisualAreaView(AreaView):
     def _person_menu(self, person: Walker, at, mark=None) -> None:
         menu = QMenu(self)
         if person.name in self.creature_ids:
-            title = menu.addAction("One of the dead")
+            down = person.name in self.fallen
+            title = menu.addAction("One of the dead, down" if down else "One of the dead")
             title.setEnabled(False)
-            attack = menu.addAction("Attack it")
-            attack.setEnabled(not self.locked)
-            attack.triggered.connect(lambda: self.action_chosen.emit("attack", person.name, ""))
+            if not down:
+                attack = menu.addAction("Attack it")
+                attack.setEnabled(not self.locked)
+                attack.triggered.connect(lambda: self.action_chosen.emit("attack", person.name, ""))
             self._show_menu(menu, at)
             return
         if person.held:
+            return
+        if person.name in self.fallen:
+            title = menu.addAction(f"{person.name}, down")
+            title.setEnabled(False)
+            self._show_menu(menu, at)
             return
         title = menu.addAction(person.name)
         title.setEnabled(False)
@@ -205,6 +225,14 @@ class VisualAreaView(AreaView):
             action.setEnabled(not self.locked)
             action.triggered.connect(
                 lambda _c=False, v=verb: self.action_chosen.emit(v, thing.name, thing.id)
+            )
+        for use in self.uses_of(thing.id):
+            # A use the keeper granted (a repaired truck's "drive"): the
+            # attempt goes back to the keeper with the thing's state.
+            action = menu.addAction(f"{use[0].upper()}{use[1:]} it")
+            action.setEnabled(not self.locked)
+            action.triggered.connect(
+                lambda _c=False, v=use: self.action_chosen.emit(f"use:{v}", thing.name, thing.id)
             )
         menu.addSeparator()
         walk = menu.addAction("Go over to it")
@@ -302,6 +330,9 @@ class VisualWindow(QMainWindow):
         self.area_view.look_drawn.connect(self._look_part)
         self.area_view.look_thing.connect(self._look_thing)
         self.area_view.contents_of = self._contents_of
+        self.area_view.uses_of = lambda pid: self.session.visual_uses(pid) if self.session else []
+        # The wounds shown last, so a new one flashes the figure.
+        self._wounds_shown = session.area_state().wounds
         self._fade = _Fade(self.area_view.view.viewport())
         self._fading: QVariantAnimation | None = None
         self._look_signal = _LookDone()
@@ -494,9 +525,11 @@ class VisualWindow(QMainWindow):
         carrying = session.visual_inventory()
         self.carry_button.setText(f"Carrying ({len(carrying)})" if carrying else "Carrying nothing")
 
-    def _after_action(self, lines: list[str]) -> None:
+    def _after_action(self, lines: list[str], *, moment: str = "") -> None:
         """After anything that moved the game: the rules' lines, what is
-        newly seen or heard, the bar, and death when it comes."""
+        newly seen or heard (a sound cue in its own colour), the bar, a hit's
+        flash, and death when it comes. `moment`: a moment of the plot the
+        window knows of (the player has slept), for the keeper."""
         session = self.session
         if session is None:
             return
@@ -504,15 +537,21 @@ class VisualWindow(QMainWindow):
             if line:
                 self.say(line, kind="report")
         for line in session.visual_report():
-            self.say(line, kind="note")
+            self.say(line, kind="sound" if line.startswith("You hear") else "note")
         self._show_where()
+        wounds = session.area_state().wounds
+        if wounds > self._wounds_shown:
+            held = self.area_view.held()
+            if held is not None:
+                self.area_view.flash_person(held.name)
+        self._wounds_shown = wounds
         if session.area_state().dead:
             self._died()
             return
         if self._talking_to is not None and not session.talk_target(self._talking_to)[0]:
             self._set_talking(None)
         self._greet_newcomers()
-        plot_lines, why = session.visual_plot_check()
+        plot_lines, why = session.visual_plot_check(moment)
         for line in plot_lines:
             self.say(line, kind="note")
         if why:
@@ -544,8 +583,12 @@ class VisualWindow(QMainWindow):
             "note": "#d8c9a0",
             "you": "#e6e9f0",
             "speech": "#f4e9c8",
+            "sound": "#9fb8c8",
         }.get(kind, "#b8bcc8")
-        self.log.append(f'<p style="color:{colour}">{html.escape(text)}</p>')
+        words = html.escape(text)
+        if kind == "sound":
+            words = f"<i>{words}</i>"
+        self.log.append(f'<p style="color:{colour}">{words}</p>')
 
     # --- moving ----------------------------------------------------------------------
 
@@ -648,9 +691,21 @@ class VisualWindow(QMainWindow):
             self.presenter.refresh(snap=True)
             self._after_action(line.split("\n"))
             return
+        if verb.startswith("use:"):
+            # A use the keeper granted this thing: walk up, and the attempt
+            # goes to the keeper with the thing's state.
+            if at is not None:
+                self._go(at[0], at[1], True, name)
+            words = session.visual_attempt_words(verb[4:], name, target_id)
+            self.say(f"{session.held_name()} attempts: {words}", kind="you")
+            self._ask_keeper("action", words)
+            return
         if verb in WALK_UP and at is not None:
             self._go(at[0], at[1], True, name)
-        self.say(f"{verb.capitalize()} {name}: not in the game yet.")
+        # No rule of the game's own: the keeper rules on it as an attempt.
+        words = session.visual_attempt_words(verb, name, target_id)
+        self.say(f"{session.held_name()} attempts: {words}", kind="you")
+        self._ask_keeper("action", words)
 
     def _locked_door(self, x: int, y: int) -> None:
         """A locked door stopped the move: force it, or not."""
@@ -677,7 +732,12 @@ class VisualWindow(QMainWindow):
             return
         lines = session.visual_sleep() if sleep else session.visual_wait(60)
         self.presenter.refresh(snap=True)
-        self._after_action(lines or ["Time passes."])
+        # Sleeping is a moment of the plot (Doomsville's "Alone too long"):
+        # the keeper is asked when anything is armed.
+        self._after_action(
+            lines or ["Time passes."],
+            moment="the player has just slept the night through" if sleep else "",
+        )
 
     def _fill_carry_menu(self) -> None:
         session = self.session
@@ -705,28 +765,48 @@ class VisualWindow(QMainWindow):
             session.visual_drop(record_id)
             if verb == "drop"
             else session.visual_use(record_id, verb)
+            if verb in ("eat", "drink", "use")
+            else ""
         )
+        if not line:
+            # No rule for it (a tool used, a use the keeper granted): the
+            # keeper rules on the attempt, with the thing's state.
+            record = session.area_state().things.get(record_id)
+            words = session.visual_attempt_words(verb, record.name if record else "it", record_id)
+            self.say(f"{session.held_name()} attempts: {words}", kind="you")
+            self._ask_keeper("action", words)
+            return
         self.presenter.refresh(snap=True)
         self._after_action([line])
 
     def _travel_menu(self) -> None:
-        self.area_view.set_travel(
-            [
-                (place_id, name, _duration(seconds))
-                for place_id, name, seconds in self.session.visual_travel_choices()[:16]
+        """Travel…: every designed place on foot, and by any vehicle within
+        reach that the keeper has made to work (`visual_drive_choices`)."""
+        choices = [
+            (place_id, name, _duration(seconds))
+            for place_id, name, seconds in self.session.visual_travel_choices()[:16]
+        ]
+        for vehicle_id, vehicle, journeys in self.session.visual_drive_choices():
+            choices += [
+                (f"{DRIVE}{vehicle_id}|{place_id}", f"{name} by {vehicle}", _driven(seconds))
+                for place_id, name, seconds in journeys[:16]
             ]
-        )
+        self.area_view.set_travel(choices)
 
     def _travel(self, place_id: str) -> None:
         if self._fading is not None:
             return
         self._settle_figure()
-        gone = self.session.visual_travel(place_id)
+        vehicle = None
+        if place_id.startswith(DRIVE):
+            vehicle, place_id = place_id[len(DRIVE) :].split("|", 1)
+        gone = self.session.visual_travel(place_id, vehicle=vehicle)
         if gone is None:
             self.statusBar().showMessage("There's no way there from here.", 4000)
             return
         name, seconds = gone
-        self.say(f"You set off for {name}: {_duration(seconds)}.")
+        how = _driven(seconds) if vehicle else _duration(seconds)
+        self.say(f"You {'drive' if vehicle else 'set off'} for {name}: {how}.")
         self._fade_through(lambda: self._arrived(seconds))
 
     def _edge_menu(self, side: str) -> None:
@@ -751,13 +831,19 @@ class VisualWindow(QMainWindow):
         self._fade_through(lambda: self._arrived(0))
 
     def _arrived(self, seconds: int) -> None:
-        """A journey's end: the dead there have had the journey's time."""
+        """A journey's end: the dead there have had the journey's time; and
+        an arrival is a moment of the plot wherever it is (an event with no
+        place of its own, the bandits on the road, has nowhere else to come)."""
         session = self.session
         if session is None:
             return
         lines = session.visual_tick(min(seconds, 120))
         self.presenter.refresh(snap=True)
-        self._after_action(lines)
+        state = session.area_state()
+        me = state.spots.get(session.held_name() or "")
+        area = session.area(me.area) if me is not None else None
+        where = area.title if area is not None else "a new place"
+        self._after_action(lines, moment=f"the player has just arrived at {where} after a journey")
 
     def _through_door(self, _left: str, _arrived: str) -> None:
         """The walk to the door is over: through it with a fade, the walk on
@@ -1041,7 +1127,7 @@ class VisualWindow(QMainWindow):
             self.say(f"{name}: {reply.say}", kind="speech")
         lines = session.apply_npc_reply(name, reply)
         self.presenter.refresh(snap=True)
-        self._after_action(lines)
+        self._after_action(lines, moment=session.talk_moment(name))
         if self._talking_to == name:
             self.talking_mood.setText(session.area_state().moods.get(name, ""))
         if reply.intent in ("leave", "fetch_help", "attack", "hide") and self._talking_to == name:

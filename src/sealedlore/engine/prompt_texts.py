@@ -3761,7 +3761,8 @@ _text(
     "tense, and what they find on looking: inside, under or among what is there, "
     "small things a person could pick up (food, tools, clothing, papers, a weapon, "
     "fuel, a key), or nothing. Be sparing and fitting to the world: most places hold "
-    "little, and a place searched before holds no more than it did. Never invent "
+    "little, and a place searched before holds no more than it did. What the game says a "
+    "thing already holds is known: never list it again as found. Never invent "
     "people, never a way out of the place, never anything the game says is not there. "
     "Reply with one JSON object and nothing else:\n\n"
     '{"see": "what the player sees", "found": [{"in": "the id of the thing it is in or '
@@ -3846,13 +3847,15 @@ _text(
     "The user message of a talk call: where they both are, who else is about, what the "
     "player carries and has done where this person could see, what this person "
     "remembers, the conversation so far, and the player's words.",
-    "WHERE: {where}. It is {when}.\nWHO IS ABOUT: {about}\nTHE PLAYER'S CHARACTER, "
+    "WHERE: {where}. It is {when}.\nWHO IS ABOUT: {about}\nYOUR OWN STATE: {state}\n"
+    "THE PLAYER'S CHARACTER, "
     "{player}: {player_words}\nWHAT YOU HAVE SEEN THEM DO: {witnessed}\nWHAT YOU REMEMBER: "
     "{memories}\n\nTHE CONVERSATION SO FAR:\n{talk}\n\n{player} says to you: {line}",
     (
         ("where", "The place, in words"),
         ("when", "The time of day"),
         ("about", "Who else is in sight or earshot"),
+        ("state", "This person's own state, as the game has it (held, hurt), or as usual"),
         ("player", "The player's character's name"),
         ("player_words", "What can be seen of the player: weapon in hand, wounds"),
         ("witnessed", "What this person saw the player do"),
@@ -3883,18 +3886,32 @@ _text(
     "The keeper: the rules",
     "The system prompt of a visual story's plot keeper: what it is, the operations it may "
     "use, and how to use them.",
-    "You keep the plot of a top-down game set in the world below. The program keeps every "
-    "rule (where everyone stands, what they carry, the dead, fights, doors, the clock); you "
-    "decide what the plot does, and you say it as a script of operations the program "
-    "carries out, in order. You never write prose for the player to read beyond short "
-    'notes; the people speak through "say". Be concrete: a thing has a plain name and a '
-    "kind (food, drink, weapon, tool, light, key, fuel, clothing, medicine, ammunition, "
-    'paper, container); a place is one of the world\'s by name, or "beside the player"; a '
-    "person is one of the story's characters by name. Use only these operations, with the "
-    "fields given:\n{ops}\n\nAn event you fire happens: its facts are set and whoever it "
-    "brings in is on the board, by the program; your script tells it (where people stand, "
-    'what they say, what appears). Fire an event only when its "when" holds now, or it is '
-    "overdue. Keep scripts short: a handful of operations.",
+    "You keep the plot of a top-down game set in the world below, and you are its game "
+    "master for everything the game's own rules don't cover. The program keeps a few "
+    "rules itself (where everyone stands, what they carry, the dead, simple fights, doors "
+    "and keys, the clock); you decide what the plot does and what comes of anything the "
+    "player attempts beyond those rules, and you say it as a script of operations the "
+    "program carries out, in order. You never write prose for the player to read beyond "
+    'short notes; the people speak through "say". Be concrete: a thing has a plain name '
+    "and a kind (food, drink, weapon, tool, light, key, fuel, clothing, medicine, "
+    "ammunition, paper, container, vehicle); a place is one of the world's by name, or "
+    '"beside the player"; a person is one of the story\'s characters by name. Use only '
+    "these operations, with the fields given:\n{ops}\n\nThere is no mechanic for most "
+    "things the player may try: make one up on the spot by changing the board. A thing "
+    'repaired, lit, loaded, filled or built becomes a new version of itself: "transform" '
+    'it, with a plain new name, its kind, "whole" for its state, tags for what is true of '
+    'it now ("works", "fuelled") and uses for what the player can now do with it ("drive", '
+    '"start", "light"); a use you grant appears in the thing\'s menu, and choosing it comes '
+    "back to you as an attempt with the thing's state, so grant only uses you would "
+    'resolve. A vehicle with the use "drive" is driven by the program itself (Travel offers '
+    'it). A person held, bound, knocked out or freed is "tag_person" with the words for '
+    "their state (a held person stays put and knows it); a place burnt, flooded or barred "
+    'is "set_state"; the player over a wall, through a window or driven somewhere is "go". '
+    "What the player carries and what stands here is listed, with each thing's state: "
+    "rule from it, never from things that aren't there.\n\nAn event you fire happens: its "
+    "facts are set and whoever it brings in is on the board, by the program; your script "
+    "tells it (where people stand, what they say, what appears). Fire an event only when its "
+    '"when" holds now, or it is overdue. Keep scripts short: a handful of operations.',
     (("ops", "The operations, one a line"),),
 )
 
@@ -3909,7 +3926,8 @@ _text(
     'Reply with one JSON object and nothing else: {"fire": [{"event": "its title", '
     '"variant": "its variant\'s title or """, "script": [operations]}], "script": '
     '[operations outside any event, usually none], "note": "a line for the player, or '
-    '"""}. Fire nothing when nothing should happen yet.',
+    '"""}. Fire nothing when nothing should happen yet. Whoever has just spoken (the latest '
+    'lines) has said it: no "say" that repeats their words; only what more happens.',
     (
         ("state", "Where things stand"),
         ("armed", "The events that could happen now"),
@@ -3928,7 +3946,10 @@ _text(
     "WHERE THINGS STAND:\n{state}\n\nEVENTS THAT COULD HAPPEN NOW:\n{armed}\n\n"
     "WHAT HAS HAPPENED:\n{happened}\n\nTHE FACTS: {facts}\n\nTHE PLAYER, AS THE AUTHOR OF "
     "THE STORY, DIRECTS: {line}\n\nThe Director has full command: make it so, as nearly "
-    "as the operations allow, however unlikely. Reply with one JSON object and nothing "
+    "as the operations allow, however unlikely, and on the board, not in words alone: a "
+    'place burnt, flooded or barred is "set_state"; a thing that appears is "place" or '
+    '"give"; a thing changed is "transform"; a person\'s state is "tag_person"; a person '
+    'come or gone is "spawn", "move" or "remove". Reply with one JSON object and nothing '
     'else: {"script": [operations], "fire": [events this also brings about, usually '
     'none], "note": "what the player sees happen, one or two lines"}.',
     (
@@ -3950,11 +3971,15 @@ _text(
     "WHERE THINGS STAND:\n{state}\n\nEVENTS THAT COULD HAPPEN NOW:\n{armed}\n\n"
     "WHAT HAS HAPPENED:\n{happened}\n\nTHE FACTS: {facts}\n\nTHE PLAYER'S CHARACTER "
     "ATTEMPTS: {line}\n\nRule on it as a fair game master: is it possible here and now, "
-    "with what they have? If it is, what does it take (a roll of a skill against a "
-    "difficulty: trivial, easy, standard, hard or desperate; or no roll when it can't "
-    "fail), and what happens on success and on failure, as operations? A result that "
-    "puts them somewhere is a move; something found is a give or a place; someone held "
-    "or subdued is a say and a move. Reply with one JSON object and nothing else: "
+    "with what they have and what is here? If it is, what does it take (a roll of a skill "
+    "against a difficulty: trivial, easy, standard, hard or desperate; or no roll when it "
+    "can't fail), and what happens on success and on failure, as operations? Make the "
+    "outcome real on the board, not only in words: a result that puts them somewhere is a "
+    '"go"; something found or made is a "give" or a "place"; something repaired, lit, '
+    'loaded or built is a "transform" of the thing into what it now is, with the uses the '
+    'player gains; someone held or subdued is a "tag_person" and a "say"; time it takes '
+    'is a "clock". Say what is missing when it can\'t be done yet (the parts, the fuel, the '
+    "tool), so the player knows what to find. Reply with one JSON object and nothing else: "
     '{"possible": true, "roll": {"skill": "strength", "difficulty": "standard"} or null, '
     '"success": [operations], "failure": [operations], "note": "what the player sees, '
     'one or two lines, before the outcome", "fire": [events this brings about, usually none]}.',
