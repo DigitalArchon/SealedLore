@@ -30,10 +30,13 @@ most improvements here will be related to better integrating the plots into
 the story. Making it more natural, more consistent, etc. As above, nothing
 is broken, but there are definitely improvements to be made here.
 
-The map of the earlier 2.0 betas is gone from ordinary stories: a story that
-was played on one goes on as a story without it. What the map became is
-Visual Stories (below): a game played on a map designed in advance, with
-rules of its own.
+Visual Stories are new and early: a game played on a map designed in
+advance (Doomsville, to begin with), where the model plays the people you
+meet and keeps the plot, and the game's own rules do the rest. It plays
+through, and anything the rules don't cover goes to the model to resolve;
+expect rough edges, and tell me what you find. The map of the earlier 2.0
+betas is gone from ordinary stories: a story that was played on one goes on
+as a story without it.
 
 ### New in version 2
 
@@ -92,6 +95,10 @@ rules of its own.
   passage length of your own; its other way in is called **Advanced setup…**;
   and a past turn's OOC note is edited with the turn, and goes with a new
   branch from it.
+- **The earlier betas' map retired** (2.0.0b7). Ordinary stories no longer
+  keep a map; a story that was played on one goes on without it, with
+  everything else it has. The map lives on as Visual Stories, and the
+  AppImage is about 20 MB smaller for it.
 
 ### Pictures of places
 
