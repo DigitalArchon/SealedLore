@@ -52,6 +52,10 @@ def pump(app) -> None:
 
 def _visual_bundle(story, cast) -> tuple[StoryBundle, object]:
     world, art = world_and_art()
+    # The town has a plan of its own here (the farm's, for a journey to
+    # arrive in): a visual story never lands on open country.
+    farm = art.layouts["farm"][""]
+    art.layouts["town"] = {"": farm.model_copy(update={"place_id": "town"})}
     story.mode = "visual"
     story.world_base = WorldDelta(places=list(world.places.values()), seen=list(world.seen))
     story.world_start = "house"
@@ -210,8 +214,7 @@ def test_travel_sets_off_and_arrives(app, window: MainWindow):
     before = session.area_state().seconds
     game.area_view.travel_chosen.emit("town")
     me = session.area_state().spots["Serrik Vaun"]
-    # The town has no plan: the open country round it stands in.
-    assert is_window(me.area)
+    assert me.area == "town" and not is_window(me.area)
     assert session.area_state().seconds - before == choices[0][2]
     assert "You set off for Hellsville" in game.log.toPlainText()
     deadline = time.monotonic() + 5
@@ -280,3 +283,145 @@ def test_doomsville_opens_as_a_visual_story(app, tmp_path: Path, monkeypatch):
     game.close()
     pump(app)
     main.close()
+
+
+# --- the author's first play (Oct 24 2026): open country, redirecting, Look ---
+
+
+def test_journeys_and_edges_never_lead_into_open_country(window: MainWindow):
+    """Walking east into open country took the author to "a strange looking
+    space with a single building in the middle", and entering it returned
+    them to the farm: the window of open country round the farm, with the
+    farm stamped on it. A visual story is always somewhere designed."""
+    game = window.visual_window
+    session = game.session
+    state = session.area_state()
+    farm = session.area("farm")
+    spot = next(
+        (x, y) for y in range(farm.height) for x in range(farm.width) if farm.walkable(x, y)
+    )
+    state.spots["Serrik Vaun"] = Spot(area="farm", x=spot[0], y=spot[1])
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    game.presenter.refresh(snap=True)
+    # A place with no plan is not offered (the map story offered the open
+    # country round it); the town, with one, is.
+    del session.world_art.layouts["town"]
+    session._art_version += 1
+    assert [c[0] for c in session.travel_choices()] == ["town"]
+    assert session.visual_travel_choices() == []
+    assert session.visual_travel("town") is None
+    for side in ("north", "east", "south", "west"):
+        assert all(c[0] != "area" for c in session.visual_edge_choices(side))
+        assert session.visual_cross(side) is None
+    before = session.area_state().spots["Serrik Vaun"]
+    game.area_view.edge_chosen.emit("east", "area")
+    assert session.area_state().spots["Serrik Vaun"] == before
+    assert "barred" in window.visual_window.statusBar().currentMessage()
+
+
+def test_a_click_mid_walk_turns_the_figure_at_once(app, window: MainWindow):
+    """The game waited for a walk to end before taking the next click (the
+    author: not responsive, no changing destination part way)."""
+    game = window.visual_window
+    session, view = game.session, game.area_view
+    me = session.area_state().spots["Serrik Vaun"]
+    area = session.area(me.area)
+    far = max(
+        ((x, y) for y in range(area.height) for x in range(area.width) if area.walkable(x, y)),
+        key=lambda t: abs(t[0] - me.x) + abs(t[1] - me.y),
+    )
+    view.go_requested.emit(far[0], far[1], False, "")
+    assert view.walking()
+    after_first = session.area_state().seconds
+    for _ in range(3):
+        view._step()  # three tiles along
+    shown = view.held()
+    stood = (shown.x, shown.y)
+    assert stood != (me.x, me.y) and stood != far
+    # Back the other way: the figure turns where it is, the game has them
+    # there, the unwalked time is given back.
+    view.go_requested.emit(me.x, me.y, False, "")
+    now = session.area_state()
+    assert (now.spots["Serrik Vaun"].x, now.spots["Serrik Vaun"].y) == (me.x, me.y)
+    assert now.seconds < after_first
+    assert view.walking()
+    walk_all(app, view)
+    shown = view.held()
+    assert (shown.x, shown.y) == (me.x, me.y)
+
+
+LOOK_REPLY = """{"see": "A heavy sack, its mouth tied with wire. It is half full.",
+"found": [{"in": "%s", "name": "a tin of beans", "count": 2, "kind": "food"},
+{"in": null, "name": "a rusted knife", "count": 1, "kind": "weapon", "note": "under the sack"}]}"""
+
+
+def test_a_look_shows_the_part_and_makes_what_it_finds_real(app, window: MainWindow):
+    """The author: a black tarp on the floor nobody could ask about. Look at
+    it: the model is shown the part and told what the game knows, and what
+    it finds is in the game from then on."""
+    from sealedlore.engine.look import FOUND_PREFIX
+
+    game = window.visual_window
+    session, view = game.session, game.area_view
+    area = view.area
+    thing = area.placements[0]
+    session.provider.responses = [LOOK_REPLY % thing.id]
+    view.look_thing.emit(thing.id)
+    assert game._look_pending is not None
+    assert "You look closely" in game.log.toPlainText()
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and game._look_pending is not None:
+        pump(app)
+        time.sleep(0.01)
+    assert game._look_pending is None
+    # The request: the rules, the picture of the part, what stands there by id.
+    request = session.provider.requests[-1]
+    assert request.messages[0].text.startswith("You are the eyes of a player")
+    assert request.messages[1].parts[0].image.startswith("data:image/jpeg;base64,")
+    assert f"- {thing.id}: {thing.name}" in request.messages[1].text
+    assert "Serrik Vaun looks closely at it." in request.messages[1].text
+    assert "image_url" in str(session.provider.payloads[-1])
+    words = game.log.toPlainText()
+    assert "A heavy sack, its mouth tied with wire." in words
+    assert "You find a tin of beans ×2 in" in words and "You find a rusted knife here." in words
+    things = session.area_state().things
+    record = things[thing.id]
+    assert record.state == "seen" and record.seen.startswith("A heavy sack")
+    assert [(f.name, f.count, f.kind) for f in record.contents] == [("a tin of beans", 2, "food")]
+    knife = next(r for pid, r in things.items() if pid.startswith(FOUND_PREFIX))
+    assert knife.state == "dropped" and knife.name == "a rusted knife" and knife.spot is not None
+    # The knife lies on the floor now, a thing of its own on the area.
+    shown = session.area(area.id)
+    assert any(p.name == "a rusted knife" for p in shown.placements)
+    assert game._contents_of(thing.id) == ["a tin of beans ×2"]
+    # Saved: the records are the live state's.
+    assert session.story.area_live.state.things[thing.id].contents[0].name == "a tin of beans"
+    # Looked at again, the model is told what was found before.
+    session.provider.responses = ['{"see": "The same sack.", "found": []}']
+    view.look_drawn.emit(thing.x, thing.y, thing.x + 2, thing.y + 2)
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and game._look_pending is not None:
+        pump(app)
+        time.sleep(0.01)
+    text = session.provider.requests[-1].messages[1].text
+    assert "holds: a tin of beans ×2" in text and "lying here: a rusted knife" in text
+    assert "You find nothing you could take." in game.log.toPlainText()
+
+
+def test_the_look_s_reply_is_held_to_its_shape():
+    from sealedlore.engine.area import Placement
+    from sealedlore.engine.look import parse_look
+
+    sack = Placement(id="s1", name="a sack", x=1, y=1, w=1, h=1, verbs=(), kind="object")
+    reply = parse_look(
+        'Sure: {"see": "  Dust.  ", "found": [{"in": "nope", "name": "a coin", "count": "999"},'
+        ' {"name": ""}, {"in": "s1", "name": "rope", "count": -3}, "junk"]}',
+        [sack],
+    )
+    assert reply.see == "Dust."
+    assert [(f.name, f.count, f.inside) for f in reply.found] == [
+        ("a coin", 50, ""),
+        ("rope", 1, "s1"),
+    ]
+    with pytest.raises(ValueError):
+        parse_look("nothing here", [sack])

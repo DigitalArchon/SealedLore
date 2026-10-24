@@ -27,6 +27,7 @@ ROLE_NAMES = {
     "image_prompt": "Picture prompts",
     "map": "Map reads",
     "map_art": "Map art",
+    "look": "Look",
 }
 
 

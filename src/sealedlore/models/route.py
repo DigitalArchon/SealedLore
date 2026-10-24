@@ -31,6 +31,8 @@ ROUTE_ROLES: dict[str, str | None] = {
     "image_prompt": "story",
     "map": "scene",
     "map_art": "map",
+    # A visual story's Look (engine/look.py): the story model's unless set.
+    "look": "story",
 }
 
 

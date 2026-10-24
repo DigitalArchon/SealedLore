@@ -705,6 +705,8 @@ class StorySession(
             found = list(self._route_checks.items())
         roles_by_key: dict[tuple[str, str], list[str]] = {}
         for role in ROUTE_ROLES:
+            if role == "look" and not self.story.visual:
+                continue  # a visual story's alone
             _role, model = self._role_in_use(role)
             body = self.route_for(role)
             if body:
@@ -739,6 +741,7 @@ class StorySession(
             "image_prompt": self.config.image_prompt_model,
             "map": self.config.map_model,
             "map_art": self.config.map_art_model,
+            "look": self.config.look_model,
         }
         role = role_in_use(role, own)
         if self.story.chat and is_tee(self.model):

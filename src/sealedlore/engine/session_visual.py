@@ -11,11 +11,25 @@ about the predesigned world and the clock. No model is called here.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 
-from sealedlore.engine.area import area_of
-from sealedlore.engine.session_area import DEFAULT_START_MINUTE
+from sealedlore.engine.area import Area, area_of, walk_metres, walk_seconds
+from sealedlore.engine.look import (
+    LOOK_MAX_TOKENS,
+    LookReply,
+    Rect,
+    apply_look,
+    look_messages,
+    parse_look,
+    things_in,
+)
+from sealedlore.engine.places import place_for
+from sealedlore.engine.session_area import DEFAULT_START_MINUTE, _close_quietly
+from sealedlore.engine.world_art import is_window
 from sealedlore.models.area import Spot
+from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError
+from sealedlore.threads import BackgroundThread
 
 # The opening's hour by its words, when the plot names no start.
 TIME_WORDS = (
@@ -97,12 +111,50 @@ class VisualRuntime:
         return VisualMove(steps=steps, from_area=from_area, to_area=to_area, words=words)
 
     def visual_travel_choices(self) -> list[tuple[str, str, int]]:
-        """Where a journey can go: the known places with an area to arrive
-        in (a place with nothing drawn has nowhere to stand)."""
+        """Where a journey can go: the known places with a plan to arrive
+        in. Never the open country round a place (the author, Oct 24 2026:
+        a window of it is "a strange looking space", and the ruling of Oct
+        23 stands: players are always somewhere designed)."""
         world, art = self.world(), self._art_read()
-        return [
-            choice for choice in self.travel_choices() if area_of(world, art, choice[0]) is not None
-        ]
+        out = []
+        for choice in self.travel_choices():
+            target = area_of(world, art, choice[0])
+            if target is not None and not is_window(target):
+                out.append(choice)
+        return out
+
+    def visual_edge_choices(self, side: str) -> list[tuple[str, str, int]]:
+        """Past an edge: the designed area straight on, if one adjoins, then
+        the places that lie that way; never open country."""
+        world, art = self.world(), self._art_read()
+        out = []
+        for choice in self.edge_choices(side):
+            if choice[0] == "area":
+                beyond = self._beyond(side)
+                if beyond is None or is_window(beyond[0].area):
+                    continue
+            elif is_window(area_of(world, art, choice[0]) or ""):
+                continue
+            out.append(choice)
+        return out
+
+    def visual_stand(self, area_id: str, x: int, y: int, refund: int = 0) -> None:
+        """The player is here now, the walk they were shown making cut short
+        (a click elsewhere mid-walk): stood where the figure stands, the
+        unwalked part's seconds given back."""
+        state = self.area_state()
+        held = self.held_name()
+        if held is None:
+            return
+        state.spots[held] = Spot(area=area_id, x=x, y=y)
+        state.seconds = max(0, state.seconds - max(0, refund))
+        self._set_live(state)
+
+    def unwalked_seconds(self, area: Area | None, steps: list[tuple[int, int]]) -> int:
+        """How long the tiles not walked would have taken."""
+        if area is None or len(steps) < 2:
+            return 0
+        return walk_seconds(walk_metres(area, steps))
 
     def visual_travel(self, place_id: str) -> tuple[str, int] | None:
         """Set off for a place now: stood at its edge (or its way in), the
@@ -134,11 +186,116 @@ class VisualRuntime:
         return place.name, choices[place_id]
 
     def visual_cross(self, side: str) -> str | None:
-        """On past this edge into the area that adjoins it; the area's
-        name, or None when the way is barred."""
+        """On past this edge into the designed area that adjoins it; the
+        area's name, or None when the way is barred (or only open country
+        lies that way)."""
+        beyond = self._beyond(side)
+        if beyond is None or is_window(beyond[0].area):
+            return None
         state = self.cross_edge(side)
         if state is None:
             return None
         me = state.spots.get(self.held_name() or "")
         area = self.area(me.area) if me is not None else None
         return area.name if area is not None else None
+
+    # --- Look (engine/look.py) ------------------------------------------------------
+
+    def look_rect(self, area_id: str, rect: Rect) -> Rect:
+        """The part held to the area."""
+        area = self.area(area_id)
+        if area is None:
+            return rect
+        x0, y0, x1, y1 = rect
+        x0, x1 = sorted((max(0, min(area.width - 1, x0)), max(0, min(area.width - 1, x1))))
+        y0, y1 = sorted((max(0, min(area.height - 1, y0)), max(0, min(area.height - 1, y1))))
+        return x0, y0, x1, y1
+
+    def look_model_reads_pictures(self) -> bool:
+        """Whether the Look's model is known to read pictures (the listing
+        already fetched; a model it doesn't know is taken to)."""
+        return self.reads_pictures(self.role_model("look")) is not False
+
+    def start_look(
+        self,
+        area_id: str,
+        rect: Rect,
+        picture: str,
+        done: Callable[[LookReply | None, str], None],
+    ) -> bool:
+        """Look closely at a part of the area, on a thread: the model is
+        shown the part (`picture`, a data URL; "" sends the words alone) and
+        what the game knows of it, and `done` gets its reply, or "" and why
+        not, on the thread. The reply is made real by `apply_look_reply` on
+        the GUI thread. False when nothing could be asked."""
+        area = self.area(area_id)
+        held = self.held_name()
+        if area is None or held is None or self.in_private:
+            return False
+        world = self.world()
+        place = world.places.get(area.place_id)
+        entry = place_for(area.name, self.visible_lore())
+        words = [place.what if place is not None else "", entry.content if entry else ""]
+        model = self.role_model("look")
+        request = ChatRequest(
+            model=model,
+            extra_body=self.route_for("look", model),
+            messages=look_messages(
+                world=self.story.world_bible,
+                place=f"{area.title}. " + " ".join(w for w in words if w),
+                area=area,
+                rect=rect,
+                records=self.area_state().things,
+                player=held,
+                picture=picture if self.look_model_reads_pictures() else "",
+                texts=self.texts,
+            ),
+            params=self.side_params(model, max_tokens=LOOK_MAX_TOKENS),
+        )
+        detached = getattr(self.provider, "detached", None)
+        text = detached() if callable(detached) else self.provider
+        things = things_in(area, rect)
+        thread = BackgroundThread(
+            target=self._look_run,
+            args=(text, request, things, done, text is not self.provider),
+            name="visual-look",
+            daemon=True,
+        )
+        self._look_thread = thread
+        thread.start()
+        return True
+
+    def _look_run(self, text: ChatProvider, request: ChatRequest, things, done, own: bool) -> None:
+        reply: LookReply | None = None
+        problem = ""
+        try:
+            log_ref = self._log("look_request", {"payload": self.provider.build_payload(request)})
+            try:
+                answer, completed = text.complete(request)
+                self._log(
+                    "look_response",
+                    {"request_log_ref": log_ref, "text": answer, "usage": completed.raw_usage},
+                )
+                self.unreported_usage.append(self.priced(completed.usage, request.model))
+                reply = parse_look(answer, things)
+            except (ProviderError, ValueError) as exc:
+                problem = str(exc)[:300]
+                self._log("look_error", {"request_log_ref": log_ref, "error": problem})
+        except Exception as exc:  # noqa: BLE001 - a thread dies silently otherwise
+            problem = f"{type(exc).__name__}: {exc}"[:300]
+            self._log("look_error", {"error": problem})
+        finally:
+            if own:
+                _close_quietly(text)
+        done(reply, problem)
+
+    def apply_look_reply(self, area_id: str, rect: Rect, reply: LookReply) -> list[str]:
+        """What the look found, made real on the live state (GUI thread);
+        the lines for the log."""
+        area = self.area(area_id)
+        if area is None:
+            return []
+        state = self.area_state()
+        lines = apply_look(state.things, area, rect, reply)
+        self._set_live(state)
+        return lines

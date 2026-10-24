@@ -49,7 +49,23 @@ Density = Literal["sparse", "normal", "full"]
 # adds show on the play view): taken = carried by `by`; broken = broken,
 # where it stood or at `spot`; gone = eaten, used up or destroyed outright;
 # dropped = lies at `spot` (put down, moved there, or put there by the story).
-ThingState = Literal["taken", "broken", "gone", "dropped"]
+# seen = looked at closely (a visual story's Look): still where it was, with
+# what the look found in or on it (`contents`) and the words it was seen in.
+ThingState = Literal["taken", "broken", "gone", "dropped", "seen"]
+
+
+class Found(BaseModel):
+    """Something a look found (a visual story, engine/look.py): in or on a
+    thing, or lying in the area. Real in the game from then on: the
+    record's contents, or a thing of its own on the floor."""
+
+    name: str
+    count: int = 1
+    # A word for what kind of thing it is (food, weapon, tool, clothing,
+    # key, fuel, paper…), as the look said it.
+    kind: str = ""
+    note: str = ""
+
 
 THING_VERBS: tuple[str, ...] = ("use", "take", "destroy", "eat")
 PERSON_VERBS: tuple[str, ...] = ("talk", "look", "attack")
@@ -92,6 +108,10 @@ class ThingRecord(BaseModel):
     # Its footprint in tiles: a table moved is as big where it stands now.
     w: int = 1
     h: int = 1
+    # What a look found in or on it, and what it was seen to be (a visual
+    # story's Look; engine/look.py). Kept whatever the state.
+    contents: list[Found] = Field(default_factory=list)
+    seen: str = ""
 
 
 class MapAction(BaseModel):

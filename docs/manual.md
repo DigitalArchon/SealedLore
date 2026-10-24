@@ -1517,8 +1517,19 @@ by the way's length. Everything is saved as you go, so closing the window
 again) loses nothing. The people you meet, and the plot, will be the model's;
 walking, doors, what you carry, what you can see and hear, and fights will be
 the game's own rules. In this version only the walking, the doors, the
-journeys and the clock are in: nothing is asked of a model yet, and the line
-says so.
+journeys and the clock are in; the line says so. Journeys go only between
+the places the world was designed with, never into the open country between
+them, and a click while you walk turns you at once.
+
+The one thing the model does so far is **look**. Press **Look at…** and drag
+a frame round any part of the place (or right-click a thing and choose
+**Look at it closely**): the model is shown that part of the picture and
+told what the game knows stands there, and says what you see and what you
+find on looking, inside, under or among what is there. Whatever it finds is
+in the game from then on: a thing's menu lists what it holds, and something
+found lying in the open is on the floor where you looked. The model is the
+story model unless **Settings → Models → Look model** names another; one
+that reads no pictures is told the words alone.
 
 ## Videos
 

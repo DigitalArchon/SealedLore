@@ -37,6 +37,7 @@ CHAT = "Simple chat"
 PICTURES = "Pictures"
 VIDEO = "Video"
 AUTHORING = "Drafting and review"
+VISUAL = "Visual stories"
 
 GROUPS = (
     STORYTELLER,
@@ -53,6 +54,7 @@ GROUPS = (
     PICTURES,
     VIDEO,
     AUTHORING,
+    VISUAL,
 )
 
 _SLOT = re.compile(r"\{([a-z_]+)\}")
@@ -3736,6 +3738,54 @@ _text(
     "in it: leave every person out and show what stands behind them. No signs, names or "
     "writing of any kind.",
     (("place", "The place's name"),),
+)
+
+
+# --- Visual stories ---------------------------------------------------------
+# A visual story's Look (the author, Oct 24 2026: highlight an area or a
+# thing and "I look at this"; a vision model sees the part of the picture,
+# is told what the game knows of it, and says what the player sees or finds;
+# what it finds becomes real in the game: engine/look.py). Unmeasured.
+
+_text(
+    "look.system",
+    VISUAL,
+    "Look: the rules",
+    "The system prompt of a visual story's Look call: what the model is, what it is "
+    "shown, and the JSON it answers with.",
+    "You are the eyes of a player in a top-down game set in the world below. The "
+    "player looks closely at one part of the place they are in: you are shown that "
+    "part of the picture (when the model reads pictures), the place in words, what the "
+    "game knows stands there, and what has been found there before. Say what the "
+    "player sees in two or three plain sentences, in the second person, present "
+    "tense, and what they find on looking: inside, under or among what is there, "
+    "small things a person could pick up (food, tools, clothing, papers, a weapon, "
+    "fuel, a key), or nothing. Be sparing and fitting to the world: most places hold "
+    "little, and a place searched before holds no more than it did. Never invent "
+    "people, never a way out of the place, never anything the game says is not there. "
+    "Reply with one JSON object and nothing else:\n\n"
+    '{"see": "what the player sees", "found": [{"in": "the id of the thing it is in or '
+    'on, or null for lying in the open", "name": "a tin of beans", "count": 2, '
+    '"kind": "food", "note": "a few words, optional"}]}',
+)
+
+_text(
+    "look.request",
+    VISUAL,
+    "Look: the request",
+    "The user message of a Look call: the world, the place, the part looked at, what "
+    "stands there and what was found before.",
+    "THE WORLD:\n{world}\n\nTHE PLACE:\n{place}\n\nTHE PART LOOKED AT: {part}\n\n"
+    "WHAT STANDS THERE (by id):\n{things}\n\nFOUND HERE BEFORE:\n{before}\n\n"
+    "{player} looks closely at it.",
+    (
+        ("world", "The world in brief"),
+        ("place", "The place in words"),
+        ("part", "Where in the place, in words"),
+        ("things", "The things in the part, one a line, with their ids"),
+        ("before", "What earlier looks found there"),
+        ("player", "The player's character's name"),
+    ),
 )
 
 

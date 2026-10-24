@@ -101,6 +101,7 @@ TROUBLE_ROLE_NAMES = {
     "image_prompt": "Image prompt writer",
     "map": "Map reads",
     "map_art": "Map art",
+    "look": "Look (visual stories)",
 }
 COLUMNS = ("Host", "First word", "Reasoning", "Tokens/s", "Answered", "Cost", "Notes")
 HOST_COLUMNS = ("Try", "Precision", "Keeps prompts?", "In $/M", "Out $/M")

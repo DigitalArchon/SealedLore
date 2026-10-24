@@ -12,23 +12,41 @@ main window (hidden meanwhile) comes back when it closes.
 
 from __future__ import annotations
 
+import base64
+import html
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QEasingCurve, QSize, Qt, QVariantAnimation, Signal
-from PySide6.QtGui import QAction, QColor, QKeySequence, QPainter, QPixmap
+from PySide6.QtCore import (
+    QEasingCurve,
+    QObject,
+    QPointF,
+    QRectF,
+    QSize,
+    Qt,
+    QVariantAnimation,
+    Signal,
+)
+from PySide6.QtGui import QAction, QColor, QImage, QKeySequence, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QSplitter,
     QTextEdit,
+    QToolBar,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
-from sealedlore.gui.area_view import AreaView
+from sealedlore.engine.area import Placement
+from sealedlore.engine.look import LookReply, Rect
+from sealedlore.gui.area_render import px_for
+from sealedlore.gui.area_view import VERB_LABELS, AreaView, _bare_name
+from sealedlore.gui.image_codec import encoded
 from sealedlore.gui.ref_images import pixmap_within
 from sealedlore.gui.visual_presenter import VisualPresenter
 from sealedlore.models.character import Character
@@ -45,6 +63,10 @@ PORTRAIT = QSize(72, 96)
 WALK_UP = ("talk", "attack", "use", "take", "eat", "destroy")
 # What the line does for now (step 1: nothing is asked of a model).
 LINE_HINT = "Say or do something (talking to people and acting come in the next steps)"
+# The picture of a part sent to the Look's model: no wider than this.
+LOOK_PICTURE_SIDE = 768
+# A thing looked at: its footprint and a tile round it.
+LOOK_MARGIN = 1
 
 
 def _duration(seconds: int) -> str:
@@ -59,7 +81,12 @@ def _duration(seconds: int) -> str:
 
 class VisualAreaView(AreaView):
     """The play view with the game's own words, and none of the story
-    window's tools (tile sets, paintings, objects, Edit Mode)."""
+    window's tools (tile sets, paintings, objects, Edit Mode); and Look: a
+    frame dragged over a part of the area (`look_drawn`), or a thing's menu
+    (`look_thing`)."""
+
+    look_drawn = Signal(int, int, int, int)
+    look_thing = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -71,15 +98,107 @@ class VisualAreaView(AreaView):
             self.carry_button,
         ):
             button.hide()
+        self.looking = False
+        # The window supplies what a thing is known to hold (its record's contents).
+        self.contents_of: Callable[[str], list[str]] = lambda _id: []
+
+    def set_looking(self, on: bool) -> None:
+        """Look at…: the next drag over the area frames what to look at."""
+        self.looking = on
+        self._clear_stroke()
+        self.hint.setText(self._hint())
+        self.view.viewport().setCursor(Qt.CrossCursor if on else Qt.ArrowCursor)
+
+    def remaining_steps(self) -> list[tuple[int, int]]:
+        """The tiles of the walk being shown still to walk."""
+        return list(self._steps)
 
     def _hint(self) -> str:
         if self.locked:
             return "One moment."
+        if self.looking:
+            return "Drag a frame round what you want to look at closely. Esc to stop."
         return (
             "Click where to go, a building to go inside, or a door to go through it. "
-            "Travel… sets off for another place; Leave walks on past an edge. Drag the "
-            "ground to look around, wheel to zoom, ◎ Me (Home) finds you."
+            "Right-click a thing to look at it closely, or Look at… to frame any part. "
+            "Travel… sets off for another place; Leave walks on past an edge."
         )
+
+    def _stroke(self, phase: str, point: QPointF) -> bool:
+        if not self.looking or self.area is None or self.locked:
+            return super()._stroke(phase, point)
+        tile = self.tile_at(point)
+        if phase == "press":
+            if tile is None:
+                return False
+            self._clear_stroke()
+            self._stroke_from = tile
+        if self._stroke_from is None:
+            return False
+        corner = tile or self._stroke_from
+        self._show_band(self._stroke_from, corner)
+        if phase == "release":
+            (x0, y0), (x1, y1) = self._stroke_from, corner
+            self._clear_stroke()
+            self.look_drawn.emit(min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
+        return True
+
+    def cancel_pending(self) -> bool:
+        if self.looking:
+            self.set_looking(False)
+            return True
+        return super().cancel_pending()
+
+    def _thing_menu(self, thing: Placement, at, mark=None) -> None:
+        menu = QMenu(self)
+        title = menu.addAction(thing.name[0].upper() + thing.name[1:])
+        title.setEnabled(False)
+        for item in self.contents_of(thing.id):
+            held = menu.addAction(f"  holds {item}")
+            held.setEnabled(False)
+        look = menu.addAction("Look at it closely")
+        look.setEnabled(not self.locked)
+        look.triggered.connect(lambda: self.look_thing.emit(thing.id))
+        for verb in thing.verbs:
+            action = menu.addAction(VERB_LABELS.get(verb, verb.capitalize()))
+            action.triggered.connect(
+                lambda _c=False, v=verb: self.action_chosen.emit(v, thing.name, thing.id)
+            )
+        menu.addSeparator()
+        walk = menu.addAction("Go over to it")
+        walk.setEnabled(not self.locked)
+        cx, cy = thing.centre
+        walk.triggered.connect(
+            lambda: self.go_requested.emit(int(cx), int(cy), True, _bare_name(thing.name))
+        )
+        self._show_menu(menu, at)
+
+    def picture_of(self, rect: Rect) -> QImage:
+        """The part as the view shows it (the painting, the things and the
+        people, not the frame), for the Look's model."""
+        if self.area is None:
+            return QImage()
+        px = px_for(self.area)
+        x0, y0, x1, y1 = rect
+        source = QRectF(x0 * px, y0 * px, (x1 - x0 + 1) * px, (y1 - y0 + 1) * px)
+        scale = min(1.0, LOOK_PICTURE_SIDE / max(source.width(), source.height(), 1.0))
+        image = QImage(
+            max(1, int(source.width() * scale)),
+            max(1, int(source.height() * scale)),
+            QImage.Format_RGB32,
+        )
+        image.fill(QColor(0, 0, 0))
+        painter = QPainter(image)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+        self.scene.render(painter, QRectF(0, 0, image.width(), image.height()), source)
+        painter.end()
+        return image
+
+
+class _LookDone(QObject):
+    """The Look's reply, emitted on its thread, delivered on the GUI thread."""
+
+    done = Signal(object, str)
 
 
 class _Fade(QWidget):
@@ -125,8 +244,15 @@ class VisualWindow(QMainWindow):
         self.area_view.travel_chosen.connect(self._travel)
         self.area_view.edge_wanted.connect(self._edge_menu)
         self.area_view.edge_chosen.connect(self._edge_go)
+        self.area_view.look_drawn.connect(self._look_part)
+        self.area_view.look_thing.connect(self._look_thing)
+        self.area_view.contents_of = self._contents_of
         self._fade = _Fade(self.area_view.view.viewport())
         self._fading: QVariantAnimation | None = None
+        self._look_signal = _LookDone()
+        self._look_signal.done.connect(self._looked)
+        # The part being looked at, while the model answers.
+        self._look_pending: tuple[str, Rect] | None = None
 
         # The column: who is talking (later), the log, the line.
         self.log = QTextEdit()
@@ -175,6 +301,7 @@ class VisualWindow(QMainWindow):
         self.split.setStretchFactor(1, 1)
         self.setCentralWidget(self.split)
         self._build_menus()
+        self._build_toolbar()
         self._show_player()
         self.presenter.refresh(snap=True)
         self.area_view.centre_on_me()
@@ -202,6 +329,21 @@ class VisualWindow(QMainWindow):
         me.setShortcut(QKeySequence("Home"))
         me.triggered.connect(self.area_view.centre_on_me)
         view.addAction(me)
+
+    def _build_toolbar(self) -> None:
+        bar = QToolBar("Play")
+        bar.setMovable(False)
+        self.addToolBar(bar)
+        self.look_tool = QToolButton()
+        self.look_tool.setText("Look at…")
+        self.look_tool.setCheckable(True)
+        self.look_tool.setToolTip(
+            "Look closely at a part of the place: drag a frame round it, and the model is "
+            "shown it and says what you see and find there (a right-click on a thing looks "
+            "at that thing)"
+        )
+        self.look_tool.toggled.connect(self.area_view.set_looking)
+        bar.addWidget(self.look_tool)
 
     def _show_player(self) -> None:
         session = self.session
@@ -232,13 +374,31 @@ class VisualWindow(QMainWindow):
         """A line in the log: a report of what happens, a note (the flavour
         of a place or an event), or the player's own words."""
         colour = {"report": "#b8bcc8", "note": "#d8c9a0", "you": "#e6e9f0"}.get(kind, "#b8bcc8")
-        self.log.append(f'<p style="color:{colour}">{text}</p>')
+        self.log.append(f'<p style="color:{colour}">{html.escape(text)}</p>')
 
     # --- moving ----------------------------------------------------------------------
+
+    def _settle_figure(self) -> None:
+        """A walk still being shown ends where the figure is, and the game
+        has the player there (the author, Oct 24 2026: no changing
+        destination part way; the game waited for the walk to end). The
+        unwalked tiles' time is given back."""
+        view = self.area_view
+        if not view.walking() or view.area is None:
+            return
+        remaining = view.remaining_steps()
+        view.finish_walk()
+        held = view.held()
+        if held is None:
+            return
+        refund = self.session.unwalked_seconds(view.area, [(held.x, held.y), *remaining])
+        self.presenter.cancel_walk()
+        self.session.visual_stand(view.area.id, held.x, held.y, refund)
 
     def _go(self, x: int, y: int, beside: bool, _name: str = "") -> None:
         if self._fading is not None:
             return
+        self._settle_figure()
         move = self.session.visual_go(x, y, beside=beside)
         if move is None:
             self.statusBar().showMessage("There's no way there from here.", 4000)
@@ -277,6 +437,7 @@ class VisualWindow(QMainWindow):
     def _travel(self, place_id: str) -> None:
         if self._fading is not None:
             return
+        self._settle_figure()
         gone = self.session.visual_travel(place_id)
         if gone is None:
             self.statusBar().showMessage("There's no way there from here.", 4000)
@@ -287,7 +448,7 @@ class VisualWindow(QMainWindow):
 
     def _edge_menu(self, side: str) -> None:
         choices = []
-        for choice_id, name, seconds in self.session.edge_choices(side):
+        for choice_id, name, seconds in self.session.visual_edge_choices(side):
             if choice_id == "area":
                 choices.append(("area", f"Walk on into {name}"))
             else:
@@ -298,6 +459,7 @@ class VisualWindow(QMainWindow):
         if choice_id != "area":
             self._travel(choice_id)
             return
+        self._settle_figure()
         name = self.session.visual_cross(side)
         if name is None:
             self.statusBar().showMessage(f"The way {side} is barred here.", 4000)
@@ -347,6 +509,72 @@ class VisualWindow(QMainWindow):
         self._fading = animation
         animation.start()
 
+    # --- Look (engine/look.py) -------------------------------------------------------
+
+    def _contents_of(self, placement_id: str) -> list[str]:
+        if self.session is None:
+            return []
+        record = self.session.area_state().things.get(placement_id)
+        if record is None:
+            return []
+        return [f"{f.name} ×{f.count}" if f.count > 1 else f.name for f in record.contents]
+
+    def _look_thing(self, placement_id: str) -> None:
+        area = self.area_view.area
+        thing = next((p for p in area.placements if p.id == placement_id), None) if area else None
+        if thing is None:
+            return
+        self._look_part(
+            thing.x - LOOK_MARGIN,
+            thing.y - LOOK_MARGIN,
+            thing.x + thing.w - 1 + LOOK_MARGIN,
+            thing.y + thing.h - 1 + LOOK_MARGIN,
+        )
+
+    def _look_part(self, x0: int, y0: int, x1: int, y1: int) -> None:
+        """Look closely at this part of the area: its picture and what the
+        game knows of it go to the model; what it finds becomes real."""
+        session = self.session
+        area = self.area_view.area
+        if session is None or area is None:
+            return
+        self.look_tool.setChecked(False)
+        if self._look_pending is not None:
+            self.statusBar().showMessage("Still looking: one look at a time.", 4000)
+            return
+        rect = session.look_rect(area.id, (x0, y0, x1, y1))
+        picture = ""
+        if session.look_model_reads_pictures():
+            image = self.area_view.picture_of(rect)
+            if not image.isNull():
+                data = encoded(image, "JPEG", 85)
+                picture = "data:image/jpeg;base64," + base64.b64encode(data).decode()
+        started = session.start_look(area.id, rect, picture, self._look_signal.done.emit)
+        if not started:
+            self.statusBar().showMessage("Nothing to look at here.", 4000)
+            return
+        self._look_pending = (area.id, rect)
+        self.say("You look closely…")
+        self.statusBar().showMessage(f"Looking, with {session.role_model('look')}…")
+
+    def _looked(self, reply: LookReply | None, problem: str) -> None:
+        pending, self._look_pending = self._look_pending, None
+        session = self.session
+        if session is None or pending is None:
+            return
+        self.statusBar().clearMessage()
+        if reply is None:
+            self.say(f"You can't make it out ({problem or 'no answer'}).")
+            return
+        area_id, rect = pending
+        if reply.see:
+            self.say(reply.see, kind="note")
+        for line in session.apply_look_reply(area_id, rect, reply):
+            self.say(line)
+        if not reply.found:
+            self.say("You find nothing you could take.")
+        self.presenter.refresh(snap=True)
+
     # --- the line --------------------------------------------------------------------
 
     def _line_sent(self) -> None:
@@ -365,7 +593,8 @@ class VisualWindow(QMainWindow):
             self._fade.resize(self.area_view.view.viewport().size())
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt's name
-        self.area_view.finish_walk()
+        self._settle_figure()
+        self._look_pending = None
         self.presenter.close()
         session, self.session = self.session, None
         if session is not None:

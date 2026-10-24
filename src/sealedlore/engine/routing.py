@@ -88,6 +88,7 @@ def config_role_model(config: Config, role: str) -> tuple[str, str]:
         "image_prompt": config.image_prompt_model,
         "map": config.map_model,
         "map_art": config.map_art_model,
+        "look": config.look_model,
     }
     used = role_in_use(role, own)
     return used, (story_model if used == "story" else own[used] or story_model)
@@ -109,6 +110,7 @@ def config_route(config: Config, role: str, model: str) -> dict[str, Any]:
         "image_prompt": config.image_prompt_model,
         "map": config.map_model,
         "map_art": config.map_art_model,
+        "look": config.look_model,
     }
     return route_body(config.model_routes.get(role_in_use(role, own)), model)
 

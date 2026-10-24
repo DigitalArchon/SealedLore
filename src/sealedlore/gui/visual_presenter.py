@@ -278,6 +278,10 @@ class VisualPresenter(QObject):
             return
         self.refresh()
 
+    def cancel_walk(self) -> None:
+        """A walk cut short: no door to go through at its end."""
+        self._area_then = None
+
     def arrive(self) -> None:
         """After the fade: the area arrived in, the walk on from its door."""
         self.refresh()

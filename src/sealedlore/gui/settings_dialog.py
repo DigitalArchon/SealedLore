@@ -452,6 +452,7 @@ class SettingsDialog(QDialog):
             "image_prompt": "Image prompt writer",
             "map": "Map model",
             "map_art": "Map art model",
+            "look": "Look model",
         }
         return [(labels.get(role, role), field) for role, field in self._route_fields.items()]
 
@@ -921,6 +922,16 @@ class SettingsDialog(QDialog):
             "prompt, so it is cheap and has read everything."
         )
         form.addRow("Image prompt writer", self.image_prompt_model)
+        # A visual story's Look (engine/look.py): shown a part of the play
+        # view and told what the game knows of it.
+        self.look_model = self._routed_field(self.config.look_model or "")
+        self.look_model.setPlaceholderText("same as the story's model")
+        self.look_model.setToolTip(
+            "In a visual story, says what you see and find when you look closely at a part "
+            "of the place: it is shown that part of the picture (when it reads pictures) and "
+            "told what the game knows stands there. Blank uses the story's model."
+        )
+        form.addRow("Look model", self.look_model)
 
         self.recommended = QPushButton("Use recommended models")
         self.recommended.setToolTip(
@@ -959,6 +970,7 @@ class SettingsDialog(QDialog):
             "image_prompt": self.image_prompt_model,
             "map": self.map_model,
             "map_art": self.map_art_model,
+            "look": self.look_model,
         }
         for role, field in self._route_fields.items():
             field.set_route(self.config.model_routes.get(role))
@@ -2075,6 +2087,7 @@ class SettingsDialog(QDialog):
         self.config.map_model = self._role_model(self.map_model) or None
         self.config.map_art_model = self._role_model(self.map_art_model) or None
         self.config.region_model = self._role_model(self.region_model) or None
+        self.config.look_model = self._role_model(self.look_model) or None
         self.config.open_country = self.open_country.currentData()
         self.config.map_art = self.map_art.isChecked()
         self.config.cache_control_mode = self.cache_mode.currentText()  # type: ignore[assignment]
