@@ -20,14 +20,21 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QEvent  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
+from sealedlore.engine.area import stand_near  # noqa: E402
 from sealedlore.engine.session_visual import TIME_WORDS  # noqa: E402
 from sealedlore.engine.world_art import is_window  # noqa: E402
 from sealedlore.gui import start_page  # noqa: E402
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
 from sealedlore.gui.visual_window import VisualWindow, player_choices  # noqa: E402
-from sealedlore.models.area import LiveArea, Spot  # noqa: E402
+from sealedlore.models.area import Found, LiveArea, Spot, ThingRecord  # noqa: E402
 from sealedlore.models.character import Character  # noqa: E402
 from sealedlore.models.story import keeps_map  # noqa: E402
+from sealedlore.models.visual import (  # noqa: E402
+    CreatureSpawn,
+    ItemSpawn,
+    LockedDoor,
+    VisualDesign,
+)
 from sealedlore.models.world import WorldDelta  # noqa: E402
 from sealedlore.storage.library import story_listings, story_mode  # noqa: E402
 from sealedlore.storage.paths import PLOT_FORMAT_GUIDE, visual_stories  # noqa: E402
@@ -425,3 +432,268 @@ def test_the_look_s_reply_is_held_to_its_shape():
     ]
     with pytest.raises(ValueError):
         parse_look("nothing here", [sack])
+
+
+# --- step 2: the rules (engine/visual_rules.py, models/visual.py) -------------
+
+
+def _design() -> VisualDesign:
+    return VisualDesign(
+        abilities={"Serrik Vaun": 7},
+        player_hits=2,
+        locked=[LockedDoor(place="The house", key="house key")],
+        creatures=[CreatureSpawn(kind="the dead", place="The farm", count=2, ability=4)],
+        items=[
+            ItemSpawn(name="a tin of beans", place="The house", count=2, kind="food"),
+            ItemSpawn(name="a house key", place="The farm", count=1, kind="key"),
+            ItemSpawn(name="a first aid kit", place="The house", count=1, kind="medicine"),
+        ],
+        flavour={"The house": "Dust, and a cold stove.", "The farm": "Snow to the knee."},
+    )
+
+
+@pytest.fixture
+def game(app, tmp_path: Path, story, cast):
+    """A visual story with a design: dead on the farm, a locked house, things."""
+    bundle, art = _visual_bundle(story, cast)
+    bundle.story.visual_design = _design()
+    # Outside, on the farm, to begin with.
+    farm_rows = art.layouts["farm"][""].rows
+    save_story_bundle(bundle, root=tmp_path)
+    save_world_art(story.id, art, tmp_path)
+    main = MainWindow(root=tmp_path, use_mock=True)
+    main.config.map_art = False
+    main.open_story(story.id)
+    pump(app)
+    game = main.visual_window
+    session = game.session
+    farm = session.area("farm")
+    state = session.area_state()
+    spot = next(
+        (x, y) for y in range(farm.height) for x in range(farm.width) if farm.walkable(x, y)
+    )
+    state.spots["Serrik Vaun"] = Spot(area="farm", x=spot[0], y=spot[1])
+    state.spots.pop("Maela Orr", None)
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    game.presenter.refresh(snap=True)
+    game._after_action([])
+    del farm_rows
+    yield game
+    game.close()
+    pump(app)
+    main.close()
+
+
+def test_the_design_is_laid_out_once_dead_things_and_locks(game: VisualWindow):
+    session = game.session
+    state = session.area_state()
+    assert state.laid_out
+    dead = [c for c in state.creatures.values() if c.kind == "the dead"]
+    assert len(dead) == 2 and all(c.area == "farm" for c in dead)
+    names = sorted(r.name for r in state.things.values() if r.state == "dropped")
+    assert names == ["a first aid kit", "a house key", "a tin of beans"]
+    beans = next(r for r in state.things.values() if r.name == "a tin of beans")
+    assert beans.count == 2 and beans.kind == "food" and beans.spot.area == "house"
+    farm, house = session.area("farm"), session.area("house")
+    door = next(e for e in farm.entrances if e.place_id == "house")
+    locked = state.doors[f"farm:{door.x},{door.y}"]
+    assert locked.locked and locked.key == "house key"
+    # On the area: the key lies on the farm as a thing of its own.
+    assert any(p.name == "a house key" for p in farm.placements)
+    assert any(p.name == "a tin of beans" for p in house.placements)
+    assert game.health.text() == "♥♥" and game.carry_button.text() == "Carrying nothing"
+    assert "Snow to the knee." in game.log.toPlainText()  # the flavour line, once
+    # One of the dead brought into sight is reported, once.
+    me = state.spots["Serrik Vaun"]
+    first = next(iter(state.creatures.values()))
+    first.x, first.y = stand_near(farm, (me.x, me.y), farm.blocked() | {(me.x, me.y)})
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    lines = session.visual_report()
+    assert any("shambling" in line or "has seen you" in line for line in lines)
+    assert session.visual_report() == []
+
+
+def test_a_locked_door_stops_the_player_until_the_key_is_carried_or_it_is_forced(
+    game: VisualWindow, monkeypatch
+):
+    from PySide6.QtWidgets import QMessageBox
+
+    session, view = game.session, game.area_view
+    farm = session.area("farm")
+    door = next(e for e in farm.entrances if e.place_id == "house")
+    state = session.area_state()
+    state.creatures.clear()  # a quiet farm for this
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    answers = []
+    monkeypatch.setattr(
+        QMessageBox, "question", lambda *a, **k: answers.append(a) or QMessageBox.No
+    )
+    view.go_requested.emit(door.x, door.y, False, "")
+    walk_all(QApplication.instance(), view)
+    assert session.area_state().spots["Serrik Vaun"].area == "farm"
+    assert "Locked. It wants a house key." in game.log.toPlainText()
+    assert len(answers) == 1  # offered to force it
+    # With the key: in.
+    key = next(p for p in farm.placements if p.name == "a house key")
+    state = session.area_state()
+    kx, ky = stand_near(farm, (key.x, key.y), farm.blocked())
+    state.spots["Serrik Vaun"] = Spot(area="farm", x=kx, y=ky)
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    game.presenter.refresh(snap=True)
+    assert session.visual_take(key.id) == "You take the house key."
+    assert [r.name for _i, r in session.visual_inventory()] == ["a house key"]
+    view.go_requested.emit(door.x, door.y, False, "")
+    assert session.area_state().spots["Serrik Vaun"].area == "house"
+    assert "You go into" in game.log.toPlainText()
+
+
+def test_taking_eating_dropping_and_mending(game: VisualWindow):
+    session = game.session
+    house = session.area("house")
+    beans = next(p for p in house.placements if p.name == "a tin of beans")
+    kit = next(p for p in house.placements if p.name == "a first aid kit")
+    state = session.area_state()
+    state.creatures.clear()
+    state.spots["Serrik Vaun"] = Spot(area="house", x=beans.x, y=beans.y)
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    assert session.visual_take(beans.id) == "You take the tin of beans."
+    far = next(p for p in house.placements if max(abs(p.x - beans.x), abs(p.y - beans.y)) > 2)
+    assert session.visual_take(far.id) == "You aren't close enough."
+    stove = next((p for p in house.placements if "stove" in p.name.lower()), None)
+    if stove is not None:
+        state = session.area_state()
+        state.spots["Serrik Vaun"] = Spot(area="house", x=stove.x, y=stove.y + stove.h)
+        session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+        assert "too much to carry" in session.visual_take(stove.id)
+    record_id, record = session.visual_inventory()[0]
+    assert record.count == 2 and session.visual_item_actions(record) == ("eat", "drop")
+    assert session.visual_use(record_id, "eat") == "You eat the tin of beans."
+    assert (
+        session.visual_use(record_id, "eat") == "You eat the tin of beans. That was the last of it."
+    )
+    assert session.visual_inventory() == []
+    # Hurt, the kit mends one wound.
+    state = session.area_state()
+    state.wounds = 1
+    state.spots["Serrik Vaun"] = Spot(area="house", x=kit.x, y=kit.y)
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    session.visual_take(kit.id)
+    kit_id = session.visual_inventory()[0][0]
+    assert session.visual_use(kit_id, "use") == "You see to your wounds with the first aid kit."
+    assert session.area_state().wounds == 0 and session.visual_inventory() == []
+    # Something taken out of a look's find, then put down.
+    state = session.area_state()
+    state.things[beans.id] = state.things[beans.id].model_copy(update={"state": "gone"})
+    holder = house.placements[0]
+    state.things[holder.id] = ThingRecord(
+        state="seen", name=holder.name, contents=[Found(name="a candle", kind="light")]
+    )
+    state.spots["Serrik Vaun"] = Spot(area="house", x=holder.x, y=holder.y)
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    assert session.visual_take_content(holder.id, 0).startswith("You take a candle from the")
+    candle_id, candle = session.visual_inventory()[0]
+    assert candle.kind == "light"
+    assert session.visual_drop(candle_id) == "You put down the candle."
+    shown = session.area("house")
+    assert any(p.name == "a candle" for p in shown.placements)
+
+
+def test_the_dead_attack_wounds_count_and_death_offers_a_fresh_start(
+    app, game: VisualWindow, monkeypatch
+):
+    from PySide6.QtWidgets import QMessageBox
+
+    session, view = game.session, game.area_view
+    state = session.area_state()
+    me = state.spots["Serrik Vaun"]
+    farm = session.area("farm")
+    # One of the dead right beside, too strong to beat bare-handed.
+    beside = next(
+        (x, y)
+        for x, y in ((me.x + 1, me.y), (me.x, me.y + 1), (me.x - 1, me.y), (me.x, me.y - 1))
+        if farm.walkable(x, y)
+    )
+    for creature in state.creatures.values():
+        creature.ability = 9
+        creature.x, creature.y = beside
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    game.presenter.refresh(snap=True)
+    assert len(view.creature_ids) == 2 and all(
+        w.label == "" for w in view.walkers if w.name in view.creature_ids
+    )
+    lines = session.visual_wait(1)
+    assert any("comes at you" in line for line in lines) and session.area_state().wounds >= 1
+    # Attack back with a rifle: 7 + 4 beats 9.
+    state = session.area_state()
+    state.things["item:rifle"] = ThingRecord(
+        state="taken", name="a rifle", by="Serrik Vaun", kind="weapon"
+    )
+    state.wounds = 0
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    target = next(iter(state.creatures))
+    lines = session.visual_attack(target)
+    assert (
+        lines[0].startswith("You put one of the dead down with the a rifle")
+        or "put one of the dead down" in lines[0]
+    )
+    assert session.area_state().creatures[target].state == "down"
+    # Bare-handed against the other until dead: the dialog offers Start again.
+    state = session.area_state()
+    state.things.pop("item:rifle")
+    state.wounds = 1  # one hit from death (player_hits 2)
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    chosen = {}
+
+    def exec_(self):
+        chosen["buttons"] = [b.text() for b in self.buttons()]
+        self._clicked = self.buttons()[0]  # Start again
+        return 0
+
+    monkeypatch.setattr(QMessageBox, "exec", exec_)
+    monkeypatch.setattr(QMessageBox, "clickedButton", lambda self: self._clicked)
+    game._pass_time(False)
+    assert chosen["buttons"] == ["Start again", "Close"]
+    assert "You are dead." in game.log.toPlainText() or "You start again." in game.log.toPlainText()
+    fresh = session.area_state()
+    assert not fresh.dead and fresh.wounds == 0 and fresh.laid_out
+
+
+def test_the_clock_passes_with_waiting_and_sleeping(game: VisualWindow):
+    session = game.session
+    state = session.area_state()
+    state.creatures.clear()
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    before = session.map_clock()
+    session.visual_wait(60)
+    after = session.map_clock()
+    assert after[1] - before[1] == 60
+    lines = session.visual_sleep()
+    assert lines[0].startswith("You sleep") and session.map_clock() == (2, 7 * 60)
+
+
+def test_doomsville_s_sheet_comes_with_the_story(app, tmp_path: Path, monkeypatch):
+    from PySide6.QtWidgets import QInputDialog
+
+    main = MainWindow(root=tmp_path / "data", use_mock=True)
+    main.config.map_art = False
+    monkeypatch.setattr(QInputDialog, "getItem", lambda *a, **k: ("John", True))
+    main.open_visual_sample(SAMPLES / "Doomsville with a map.md")
+    pump(app)
+    game = main.visual_window
+    session = game.session
+    design = session.story.visual_design
+    assert design is not None and design.abilities["John"] == 7
+    state = session.area_state()
+    assert state.laid_out and len(state.creatures) == 6
+    assert any(r.name == "a hunting knife" for r in state.things.values())
+    assert any(d.locked and d.key == "clinic key" for d in state.doors.values())
+    assert "Snow to the knee" in game.log.toPlainText()
+    # Nearest first; the barn is inside the farm, entered by its door.
+    assert [c[1] for c in session.visual_travel_choices()][:3] == [
+        "The creek crossing",
+        "The gas station",
+        "The south gate",
+    ]
+    game.close()
+    pump(app)
+    main.close()

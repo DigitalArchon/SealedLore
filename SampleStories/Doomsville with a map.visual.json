@@ -1,0 +1,40 @@
+{
+  "abilities": {"John": 7, "Jane": 6},
+  "default_ability": 5,
+  "player_hits": 3,
+  "locked": [
+    {"place": "The general store", "key": "store key"},
+    {"place": "The clinic", "key": "clinic key"}
+  ],
+  "creatures": [
+    {"kind": "the dead", "place": "The gas station", "count": 3, "ability": 4},
+    {"kind": "the dead", "place": "The hills", "count": 2, "ability": 4},
+    {"kind": "the dead", "place": "The creek crossing", "count": 1, "ability": 4}
+  ],
+  "items": [
+    {"name": "a box of cartridges", "place": "The farmhouse", "count": 12, "kind": "ammunition", "inside": "rifle leaning by the door"},
+    {"name": "a tin of beans", "place": "The farmhouse", "count": 3, "kind": "food"},
+    {"name": "a bottle of water", "place": "The farmhouse", "count": 2, "kind": "drink"},
+    {"name": "a fuel can", "place": "The barn", "count": 1, "kind": "fuel"},
+    {"name": "a first aid kit", "place": "The clinic", "count": 2, "kind": "medicine"},
+    {"name": "a clinic key", "place": "The church", "count": 1, "kind": "key"},
+    {"name": "a store key", "place": "The diner", "count": 1, "kind": "key"},
+    {"name": "a hunting knife", "place": "The gas station", "count": 1, "kind": "weapon"}
+  ],
+  "flavour": {
+    "The farm": "Snow to the knee between the house and the barn. Nothing moves but the wind.",
+    "The farmhouse": "Cold rooms, a stove gone out, the smell of old smoke. Someone kept this place.",
+    "The barn": "Hay dust and rust. A pickup sits on flat tyres, its tank long dry.",
+    "The frozen pond": "The ice is grey and thick. Reeds stand dead along the edge.",
+    "The creek crossing": "The road dips to a frozen creek. Something has been through the snow here before you.",
+    "The gas station": "Four lanes of wrecks under the snow, and the station's canopy sagging. Keep your eyes open.",
+    "The hills": "Bare trees on limestone slopes, and a trail that someone keeps walking.",
+    "Hellsville": "A town behind a wall of cars and timber. Smoke from a few chimneys. People, alive.",
+    "The diner": "Booths and a counter, and the warmth of a stove that somebody feeds.",
+    "The clinic": "Cots in rows, a cabinet with a lock, the smell of boiled cloth.",
+    "The church": "Pews pushed to the walls and bedrolls where they stood. The town sleeps here.",
+    "The general store": "Shelves stripped to the wood. What is left is locked away.",
+    "The Hidden Caves": "A mouth in the rock, and a draught from inside that smells of woodsmoke.",
+    "The main chamber": "Someone lives here: a cot, a stove, shelves of tins. They won't like you being here."
+  }
+}

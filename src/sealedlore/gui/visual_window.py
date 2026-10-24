@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMenu,
+    QMessageBox,
     QSplitter,
     QTextEdit,
     QToolBar,
@@ -45,7 +46,7 @@ from PySide6.QtWidgets import (
 from sealedlore.engine.area import Placement
 from sealedlore.engine.look import LookReply, Rect
 from sealedlore.gui.area_render import px_for
-from sealedlore.gui.area_view import VERB_LABELS, AreaView, _bare_name
+from sealedlore.gui.area_view import AreaView, Walker, _bare_name
 from sealedlore.gui.image_codec import encoded
 from sealedlore.gui.ref_images import pixmap_within
 from sealedlore.gui.visual_presenter import VisualPresenter
@@ -101,6 +102,8 @@ class VisualAreaView(AreaView):
         self.looking = False
         # The window supplies what a thing is known to hold (its record's contents).
         self.contents_of: Callable[[str], list[str]] = lambda _id: []
+        # The dead in the area shown (their walkers' names are their ids).
+        self.creature_ids: set[str] = set()
 
     def set_looking(self, on: bool) -> None:
         """Look at…: the next drag over the area frames what to look at."""
@@ -149,18 +152,36 @@ class VisualAreaView(AreaView):
             return True
         return super().cancel_pending()
 
+    def _person_menu(self, person: Walker, at, mark=None) -> None:
+        if person.name not in self.creature_ids:
+            super()._person_menu(person, at, mark)
+            return
+        menu = QMenu(self)
+        title = menu.addAction("One of the dead")
+        title.setEnabled(False)
+        attack = menu.addAction("Attack it")
+        attack.setEnabled(not self.locked)
+        attack.triggered.connect(lambda: self.action_chosen.emit("attack", person.name, ""))
+        self._show_menu(menu, at)
+
     def _thing_menu(self, thing: Placement, at, mark=None) -> None:
         menu = QMenu(self)
         title = menu.addAction(thing.name[0].upper() + thing.name[1:])
         title.setEnabled(False)
-        for item in self.contents_of(thing.id):
-            held = menu.addAction(f"  holds {item}")
-            held.setEnabled(False)
+        for index, item in enumerate(self.contents_of(thing.id)):
+            take = menu.addAction(f"Take {item}")
+            take.setEnabled(not self.locked)
+            take.triggered.connect(
+                lambda _c=False, i=index: self.action_chosen.emit("take_content", thing.id, str(i))
+            )
         look = menu.addAction("Look at it closely")
         look.setEnabled(not self.locked)
         look.triggered.connect(lambda: self.look_thing.emit(thing.id))
         for verb in thing.verbs:
-            action = menu.addAction(VERB_LABELS.get(verb, verb.capitalize()))
+            if verb not in ("take", "destroy"):
+                continue  # eating and using are the inventory's
+            action = menu.addAction("Take it" if verb == "take" else "Break it")
+            action.setEnabled(not self.locked)
             action.triggered.connect(
                 lambda _c=False, v=verb: self.action_chosen.emit(v, thing.name, thing.id)
             )
@@ -278,6 +299,15 @@ class VisualWindow(QMainWindow):
         self.name.setObjectName("emptyTitle")
         self.where = QLabel()
         self.where.setObjectName("hintLabel")
+        self.health = QLabel()
+        self.health.setToolTip("Hits you can still take")
+        self.carry_button = QToolButton()
+        self.carry_button.setText("Carrying")
+        self.carry_button.setToolTip("What you carry: eat, drink, use or put down any of it")
+        self.carry_button.setPopupMode(QToolButton.InstantPopup)
+        self.carry_menu = QMenu(self)
+        self.carry_menu.aboutToShow.connect(self._fill_carry_menu)
+        self.carry_button.setMenu(self.carry_menu)
         bar = QWidget()
         bar.setObjectName("visualBar")
         bar_layout = QHBoxLayout(bar)
@@ -287,6 +317,8 @@ class VisualWindow(QMainWindow):
         words.addWidget(self.where)
         bar_layout.addWidget(self.portrait)
         bar_layout.addLayout(words, 1)
+        bar_layout.addWidget(self.health)
+        bar_layout.addWidget(self.carry_button)
 
         left = QWidget()
         left_layout = QVBoxLayout(left)
@@ -302,6 +334,7 @@ class VisualWindow(QMainWindow):
         self.setCentralWidget(self.split)
         self._build_menus()
         self._build_toolbar()
+        session.visual_lay_out()
         self._show_player()
         self.presenter.refresh(snap=True)
         self.area_view.centre_on_me()
@@ -311,6 +344,7 @@ class VisualWindow(QMainWindow):
         opening = (session.story.setup.opening_text or "").strip()
         if opening:
             self.say(opening.split("\n\n")[0], kind="note")
+        self._after_action([])
 
     # --- the frame -------------------------------------------------------------------
 
@@ -344,6 +378,14 @@ class VisualWindow(QMainWindow):
         )
         self.look_tool.toggled.connect(self.area_view.set_looking)
         bar.addWidget(self.look_tool)
+        wait = QAction("Wait an hour", self)
+        wait.setToolTip("An hour passes where you stand")
+        wait.triggered.connect(lambda: self._pass_time(False))
+        bar.addAction(wait)
+        sleep = QAction("Sleep till morning", self)
+        sleep.setToolTip("Sleep until seven in the morning, here")
+        sleep.triggered.connect(lambda: self._pass_time(True))
+        bar.addAction(sleep)
 
     def _show_player(self) -> None:
         session = self.session
@@ -363,12 +405,51 @@ class VisualWindow(QMainWindow):
 
     def _show_where(self) -> None:
         session = self.session
+        if session is None:
+            return
         state = session.area_state()
         me = state.spots.get(session.held_name() or "")
         area = session.area(me.area) if me is not None else None
         clock = session.map_clock()
         when = f"Day {clock[0]}, {clock[1] // 60:02d}:{clock[1] % 60:02d}" if clock else ""
         self.where.setText(" · ".join(p for p in (area.title if area else "", when) if p))
+        hits = session.visual_hits_left()
+        self.health.setText("♥" * hits + "♡" * (session.visual_design().player_hits - hits))
+        carrying = session.visual_inventory()
+        self.carry_button.setText(f"Carrying ({len(carrying)})" if carrying else "Carrying nothing")
+
+    def _after_action(self, lines: list[str]) -> None:
+        """After anything that moved the game: the rules' lines, what is
+        newly seen or heard, the bar, and death when it comes."""
+        session = self.session
+        if session is None:
+            return
+        for line in lines:
+            if line:
+                self.say(line, kind="report")
+        for line in session.visual_report():
+            self.say(line, kind="note")
+        self._show_where()
+        if session.area_state().dead:
+            self._died()
+
+    def _died(self) -> None:
+        self.area_view.set_locked(True)
+        box = QMessageBox(self)
+        box.setWindowTitle("You are dead")
+        box.setText("The story ends here. Start again from the opening, or close the game.")
+        again = box.addButton("Start again", QMessageBox.AcceptRole)
+        box.addButton("Close", QMessageBox.RejectRole)
+        box.exec()
+        if box.clickedButton() is again and self.session is not None:
+            self.session.visual_reset()
+            self.session.visual_lay_out()
+            self.log.clear()
+            self.area_view.set_locked(False)
+            self.presenter.refresh(snap=True)
+            self._after_action(["You start again."])
+        else:
+            self.close()
 
     def say(self, text: str, *, kind: str = "report") -> None:
         """A line in the log: a report of what happens, a note (the flavour
@@ -406,13 +487,24 @@ class VisualWindow(QMainWindow):
         if move.words:
             self.say(move.words)
         self.presenter.refresh()
-        self._show_where()
+        self._after_action(move.lines)
+        if move.locked is not None:
+            self._locked_door(*move.locked)
 
     def _action(self, verb: str, name: str, target_id: str) -> None:
-        """A menu choice on a person or a thing: walked up to for now; what
-        it does comes with the rules (step 2) and the people (step 3)."""
+        """A menu choice on a person, one of the dead or a thing: the rules
+        for things and the dead; people wait for step 3."""
+        session = self.session
         area = self.area_view.area
-        if area is None:
+        if session is None or area is None or self._fading is not None:
+            return
+        if verb == "take_content":
+            holder = next((p for p in area.placements if p.id == name), None)
+            if holder is not None:
+                self._go(int(holder.centre[0]), int(holder.centre[1]), True, holder.name)
+            self.say(session.visual_take_content(name, int(target_id)))
+            self.presenter.refresh(snap=True)
+            self._after_action([])
             return
         at = None
         if target_id:
@@ -422,9 +514,92 @@ class VisualWindow(QMainWindow):
         if at is None:
             person = next((w for w in self.area_view.walkers if w.name == name), None)
             at = (person.x, person.y) if person is not None else None
+        if verb == "attack" and name in self.area_view.creature_ids:
+            lines: list[str] = []
+            for _try in range(3):
+                # Walk up and strike; one that shambled off meanwhile is
+                # followed up to twice more.
+                creature = session.area_state().creatures.get(name)
+                if creature is None or creature.state == "down":
+                    break
+                self._go(creature.x, creature.y, True, name)
+                lines = session.visual_attack(name)
+                if lines != ["It isn't within reach."]:
+                    break
+            self.presenter.refresh(snap=True)
+            self._after_action(lines)
+            return
+        if verb in ("take", "destroy") and target_id:
+            if at is not None:
+                self._go(at[0], at[1], True, name)
+            line = (
+                session.visual_take(target_id)
+                if verb == "take"
+                else session.visual_break(target_id)
+            )
+            self.presenter.refresh(snap=True)
+            self._after_action(line.split("\n"))
+            return
         if verb in WALK_UP and at is not None:
             self._go(at[0], at[1], True, name)
         self.say(f"{verb.capitalize()} {name}: not in the game yet.")
+
+    def _locked_door(self, x: int, y: int) -> None:
+        """A locked door stopped the move: force it, or not."""
+        session = self.session
+        if session is None:
+            return
+        door = session.visual_door(x, y)
+        if door is None or door.sealed:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Locked",
+            "The door is locked" + (f"; it wants a {door.key}" if door.key else "") + ". Force it? "
+            "That takes strength, and makes a noise.",
+        )
+        if answer == QMessageBox.Yes:
+            lines = session.visual_force(x, y).split("\n")
+            self.presenter.refresh(snap=True)
+            self._after_action(lines)
+
+    def _pass_time(self, sleep: bool) -> None:
+        session = self.session
+        if session is None or self._fading is not None:
+            return
+        lines = session.visual_sleep() if sleep else session.visual_wait(60)
+        self.presenter.refresh(snap=True)
+        self._after_action(lines or ["Time passes."])
+
+    def _fill_carry_menu(self) -> None:
+        session = self.session
+        self.carry_menu.clear()
+        if session is None:
+            return
+        carrying = session.visual_inventory()
+        if not carrying:
+            self.carry_menu.addAction("Nothing").setEnabled(False)
+            return
+        for record_id, record in carrying:
+            words = f"{_bare_name(record.name)}" + (f" ×{record.count}" if record.count > 1 else "")
+            sub = self.carry_menu.addMenu(words)
+            for verb in session.visual_item_actions(record):
+                action = sub.addAction(verb.capitalize())
+                action.triggered.connect(
+                    lambda _c=False, r=record_id, v=verb: self._carry_action(r, v)
+                )
+
+    def _carry_action(self, record_id: str, verb: str) -> None:
+        session = self.session
+        if session is None:
+            return
+        line = (
+            session.visual_drop(record_id)
+            if verb == "drop"
+            else session.visual_use(record_id, verb)
+        )
+        self.presenter.refresh(snap=True)
+        self._after_action([line])
 
     def _travel_menu(self) -> None:
         self.area_view.set_travel(
@@ -444,7 +619,7 @@ class VisualWindow(QMainWindow):
             return
         name, seconds = gone
         self.say(f"You set off for {name}: {_duration(seconds)}.")
-        self._fade_through(lambda: self.presenter.refresh(snap=True))
+        self._fade_through(lambda: self._arrived(seconds))
 
     def _edge_menu(self, side: str) -> None:
         choices = []
@@ -465,7 +640,16 @@ class VisualWindow(QMainWindow):
             self.statusBar().showMessage(f"The way {side} is barred here.", 4000)
             return
         self.say(f"You walk on {side}, into {name}.")
-        self._fade_through(lambda: self.presenter.refresh(snap=True))
+        self._fade_through(lambda: self._arrived(0))
+
+    def _arrived(self, seconds: int) -> None:
+        """A journey's end: the dead there have had the journey's time."""
+        session = self.session
+        if session is None:
+            return
+        lines = session.visual_tick(min(seconds, 120))
+        self.presenter.refresh(snap=True)
+        self._after_action(lines)
 
     def _through_door(self, _left: str, _arrived: str) -> None:
         """The walk to the door is over: through it with a fade, the walk on
@@ -574,6 +758,7 @@ class VisualWindow(QMainWindow):
         if not reply.found:
             self.say("You find nothing you could take.")
         self.presenter.refresh(snap=True)
+        self._show_where()
 
     # --- the line --------------------------------------------------------------------
 

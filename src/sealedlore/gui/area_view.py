@@ -125,6 +125,9 @@ class Walker:
     door: tuple[int, int] | None = None
     # They have a card (else the menu offers to make one).
     carded: bool = True
+    # The name shown over them: None for the name itself, "" for none (a
+    # visual story's dead have no name to show).
+    label: str | None = None
 
 
 @dataclass
@@ -1266,7 +1269,7 @@ class AreaView(QWidget):
                 person = _person(walker, px, area.indoor)
                 self.scene.addItem(person)
                 self.people[walker.name] = person
-                tag = _Tag(walker.name, walker.held)
+                tag = _Tag(walker.name if walker.label is None else walker.label, walker.held)
                 self.scene.addItem(tag)
                 self._tags[walker.name] = tag
             person.walker = walker

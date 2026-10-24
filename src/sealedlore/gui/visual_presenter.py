@@ -19,7 +19,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QColor, QImage, QPainter
 
 from sealedlore.engine.area import (
     Area,
@@ -168,6 +168,15 @@ class VisualPresenter(QObject):
             )
             for name, bx, by, dx, dy in session.at_the_door()
         ]
+        # The dead in this area (models/visual.py), no name over them.
+        walkers += [
+            Walker(creature.id, creature.x, creature.y, self._creature_image(art), label="")
+            for creature in state.creatures.values()
+            if creature.area == area.id and creature.state != "down"
+        ]
+        view.creature_ids = {
+            c.id for c in state.creatures.values() if c.area == area.id and c.state != "down"
+        }
         places = self._place_marks(area, session, art)
         built = session.built_area(area.id)
         avoid = list(built.placements) if built is not None else list(area.placements)
@@ -446,6 +455,31 @@ class VisualPresenter(QObject):
             image = pixel_art(sprite.svg)
         self._place_images[cache_key] = image
         return image
+
+    def _creature_image(self, art) -> QImage | None:
+        """One of the dead: the tile set's first generic person, greyed and
+        greened (until a sprite is drawn for them)."""
+        cache_key = ("", "creature")
+        if cache_key in self._walker_images:
+            return self._walker_images[cache_key]
+        session = self.session
+        image: QImage | None = None
+        people = session.generic_people()
+        if people:
+            _info, read = session.tile_set(art)
+            image = sprite_image(read(people[0]))
+        if image is None:
+            small = person_sprite("the dead")
+            image = small.scaled(
+                small.width() * 8, small.height() * 8, Qt.KeepAspectRatio, Qt.FastTransformation
+            )
+        tinted = image.convertToFormat(QImage.Format_ARGB32)
+        painter = QPainter(tinted)
+        painter.setCompositionMode(QPainter.CompositionMode_SourceAtop)
+        painter.fillRect(tinted.rect(), QColor(70, 110, 60, 150))
+        painter.end()
+        self._walker_images[cache_key] = tinted
+        return tinted
 
     def _walker_image(self, name: str, art) -> QImage | None:
         session = self.session

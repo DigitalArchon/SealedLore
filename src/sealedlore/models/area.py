@@ -17,6 +17,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from sealedlore.models.visual import Creature, DoorState
+
 ThingVerb = Literal["use", "take", "destroy", "eat"]
 PersonVerb = Literal["talk", "look", "attack"]
 MapVerb = Literal[
@@ -112,6 +114,10 @@ class ThingRecord(BaseModel):
     # story's Look; engine/look.py). Kept whatever the state.
     contents: list[Found] = Field(default_factory=list)
     seen: str = ""
+    # A visual story's items (engine/visual_rules.py): how many of it, and
+    # its kind as the rules read it ("" until asked).
+    count: int = 1
+    kind: str = ""
 
 
 class MapAction(BaseModel):
@@ -182,6 +188,17 @@ class AreaState(BaseModel):
     # What became of the things the menu's choices were done to, by
     # placement id: carried like the spots, settled with them.
     things: dict[str, ThingRecord] = Field(default_factory=dict)
+    # A visual story's own (models/visual.py, engine/visual_rules.py): the
+    # doors as play has them, the dead, the player's wounds (hits taken),
+    # the people and creatures reported seen, the areas whose flavour line
+    # was said, and whether the design's creatures and items were laid.
+    doors: dict[str, DoorState] = Field(default_factory=dict)
+    creatures: dict[str, Creature] = Field(default_factory=dict)
+    wounds: int = 0
+    dead: bool = False
+    seen_now: list[str] = Field(default_factory=list)
+    flavour_said: list[str] = Field(default_factory=list)
+    laid_out: bool = False
 
 
 class LiveArea(BaseModel):

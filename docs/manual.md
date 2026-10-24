@@ -1521,6 +1521,22 @@ journeys and the clock are in; the line says so. Journeys go only between
 the places the world was designed with, never into the open country between
 them, and a click while you walk turns you at once.
 
+The game keeps its own rules, with no model behind them. Right-click a thing
+to **take it**, to take what a look found in it, or to **break it** (a noise
+the dead hear). **Carrying** under the view lists what you carry: food and
+drink are eaten and drunk, a first aid kit mends a wound, and anything can be
+put down where you stand. A locked door stops you until you carry its key, or
+force it (strength, and a noise). What you newly see or hear is written in
+the log as you move, and each place says a line of its own the first time
+you enter it. **The dead** are the world's: they wander, come to a noise, and
+chase you on sight; one beside you attacks, and you can attack one from its
+menu. A fight is one number a side, yours with the best weapon you carry
+against theirs, and the higher wins: a loss is a wound, and three wounds are
+the end, with a fresh start offered from the opening. **Wait an hour** and
+**Sleep till morning** on the toolbar pass the time where you stand. What a
+world starts with (its locks and keys, its dead, things laid out, a line for
+each place) is its design, shipped beside its plot file.
+
 The one thing the model does so far is **look**. Press **Look at…** and drag
 a frame round any part of the place (or right-click a thing and choose
 **Look at it closely**): the model is shown that part of the picture and
