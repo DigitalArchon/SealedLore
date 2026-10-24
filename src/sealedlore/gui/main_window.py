@@ -417,12 +417,13 @@ class MainWindow(
         self.branch_bar.delete_requested.connect(self._delete_branch)
         # Wraps under a large text size rather than widening the window.
         self._build_find()
+        self._build_place_button()
         self._build_world()
         self._build_area()
         self._build_stories_button()
         self.top_row = WrapRow(spacing=6, group_spacing=12)
         self.top_row.add_group([self.stories_button, self.view_toggle])
-        self.top_row.add_group([self.find_button, self.world_button])
+        self.top_row.add_group([self.find_button, self.place_button, self.world_button])
         self.top_row.add_group([self.branch_bar], right=True, whole=True)
         # A layout of the centre's own, not in a widget: wrapped in one, it
         # missed the branch bar's height changing and drew its buttons
@@ -4157,6 +4158,8 @@ class MainWindow(
         self._refresh_plot_panel()
         self._refresh_people()
         self._sync_held_away()
+        # The scene moved: the place's picture behind the story, and the button.
+        self._sync_place_picture()
 
     def _held_away(self) -> Character | None:
         """The character the author plays, when the scene here doesn't have

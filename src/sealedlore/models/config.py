@@ -894,6 +894,18 @@ class Config(BaseModel):
     # old story opened after map pictures went automatic drew 33 at once).
     # 0: never ask.
     map_pictures_ask_over: int = Field(default=10, ge=0)
+    # A text-only record of places, who is where and what was taken or
+    # broken, in the storyteller's tail of a story that keeps no map
+    # (`engine/world.render_place_record`): what the map read found, with
+    # nothing the program worked out. Measured Oct 24 2026 (SealedLoreDocs
+    # design/map.md); not in Settings, and not yet keeping itself (the read
+    # that fills it runs for a map), until the measurement says it pays.
+    place_record: bool = False
+    # A picture of the place the scene is at, kept on its lore entry (the
+    # author, Oct 24 2026), shown behind the story's text while the scene is
+    # there, in place of the story's own background; the story's own comes
+    # back where the place has none. Settings → Images.
+    location_backgrounds: bool = True
     # Every map picture: the play view's things, textures, roofs and the
     # avatars (from the portrait, by the model's editing version: engine/
     # image_variants.py), a story's own tile set, and the Region map's

@@ -39,6 +39,7 @@ from sealedlore.gui.transcript import message_kind, speaker_label
 from sealedlore.ids import utc_now_iso
 from sealedlore.models.config import PhoneDevice
 from sealedlore.models.node import CHAT_USER_ID
+from sealedlore.models.story import keeps_map
 from sealedlore.phone import views
 from sealedlore.phone.api import Api, PhoneTurn, Refused, Retake, StoryRow
 from sealedlore.phone.page import page_files
@@ -639,7 +640,7 @@ class _Backend:
             title=story.title,
             messages=len(self.service.entries),
             chat=story.chat,
-            keeps_map=story.defaults.world_map,
+            keeps_map=keeps_map(story.defaults),
         )
 
     def story_rows(self) -> list[StoryRow]:

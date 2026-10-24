@@ -1,8 +1,7 @@
 # SealedLore
 
 A Linux and Windows application for AI-driven roleplay with many characters
-in an open world, played on a map if you like, with a number of particularly
-useful features.
+in an open world, with a number of particularly useful features.
 
 ![The start page: six sample stories, each with its picture and a line on what it is, and below them the ways to start a story of your own](docs/screenshots/start-page.webp)
 
@@ -31,28 +30,25 @@ most improvements here will be related to better integrating the plots into
 the story. Making it more natural, more consistent, etc. As above, nothing
 is broken, but there are definitely improvements to be made here.
 
-Stories with a map. THIS is very much an early beta level feature. It does 
-basically function, and I expect it to develop quickly. But there is a big gap 
-here between technically functional, and actually fun to play. So please
-do give it a go and provide any feedback about it. But, but aware it is not
-ready for full proper playthroughs yet.
+Stories on a map are withdrawn for now. The map of the earlier 2.0 betas is
+being redesigned as a mode of its own, with rules of its own; a story that was
+played on one goes on as a story without it.
 
 ### New in version 2
 
-- **Play on a map.** A story can be played on a map drawn in pixel art to
-  suit its world: walk where you like, click people and things for what you
-  can do, and the storyteller is told exactly where everyone stands. The
-  country beyond is designed by the AI as you explore it. Edit Mode changes
-  anything on it by hand. See [Play on a map](#play-on-a-map)
-  below.
+- **Pictures of places** (new in 2.0.0b7). A picture of each place the
+  story goes to, with nobody in it, kept on the place's lore entry and shown
+  behind the story's text while the scene is there. A button above the story
+  draws one for the place you are at, or a new one from the last as the place
+  is now (the bar after the brawl). The samples come with a picture of each
+  of their places. See [Pictures of places](#pictures-of-places) below.
 - **Every character with a face.** A portrait for each character, drawn from
-  their card when you start, and on the map a little avatar drawn from it. A
-  story without a map shows who is here by their faces.
+  their card when you start, and the People page beside the story shows who
+  is here by their faces.
 - **New sample stories to start from**, each with a plot, a background and a
-  picture of everyone: The Ashen Reach (grimdark science fiction), The
-  Silverwood (fantasy), Brasshaven (steampunk) and The Ninth Furnace (a
-  hellscape), all with their maps drawn up and furnished, and Doomsville with
-  a map.
+  picture of everyone and of every place: The Ashen Reach (grimdark science
+  fiction), The Silverwood (fantasy), Brasshaven (steampunk) and The Ninth
+  Furnace (a hellscape).
 - **A friendlier window.** A start page that shows every way to begin, the
   pages beside the story titled with what they are for, Settings in groups,
   plain names throughout, and room to read.
@@ -68,9 +64,8 @@ ready for full proper playthroughs yet.
   [Playing from your phone](docs/manual.md#playing-from-your-phone).
 - **Plots that play better** (new in 2.0.0b3). A guide to wording a plot,
   [Writing a plot that plays well](SampleStories/WRITING_PLOTS.md) (also under
-  Help), the sample plots reworded where it mattered, the plot director asked
-  far less often, and the map's open country as sparse or as rich as you
-  like.
+  Help), the sample plots reworded where it mattered, and the plot director
+  asked far less often.
 - **Characters from the start, and a known world's cast** (new in
   2.0.0b4). Write a story from scratch makes your characters on the Cast page
   itself, portraits and all, in as much or as little detail as you like. For
@@ -85,56 +80,19 @@ ready for full proper playthroughs yet.
   and a past turn's OOC note is edited with the turn, and goes with a new
   branch from it.
 
-### Play on a map
+### Pictures of places
 
-![Playing The Silverwood on its map: the story on the left, and on the right the village of Fernhollow in pixel art, with the ranger, the sellsword, the herbwife and the wounded woodcutter standing where the story put them](docs/screenshots/map-play.webp)
-
-A story can keep a map (Story → Setup → About), and then it is played on it.
-You walk where you like in each place, tile by tile, with no model call.
-Click someone to talk to them, watch them unseen or attack; click a thing to
-use, take, eat or destroy it; and travel between places, the way's length
-moving the story's clock. Right-click a spot to put its coordinate in your
-turn and say what happens there: a rift opening, a camp being pitched.
-
-The map is exact, so the storyteller is told exactly where everyone stands,
-who can see whom and what is within reach. It grows as the story goes: a
-place the story names is put where the story says, and stays there. What
-happens shows on it: a barn blown up is drawn burning, something taken goes
-with whoever took it, something smashed lies broken. Buildings can have
-floors and cellars, stations and ships have decks, and the weather and the
-hour show over the ground. Zoom out to the region to decide where to go next,
-with the country you haven't found yet under fog.
-
-Walk out past the places the story has, and the country ahead of you is
-already being designed, a region about the size of a farm at a time: the AI
-lays out its land, places to go into, things to find and people or creatures,
-to fit the world and what has happened so far, with the roads, rivers and
-woods of the regions beside it carried on across the edges. A snowbound farm
-after the end of the world has dead fields, a collapsed barn and a zombie at
-the fence line round it, and further off the town you left. How much each
-region holds is yours to choose, sparse, normal or rich (Settings → Models →
-Open country).
-
-Every building is furnished, as sparsely or as fully as you like, and every
-character gets a pixel-art avatar drawn from their portrait. Everything is
-drawn in a tile set whose style suits the world rather than any one game's
-(a bleak snowbound farm, a whimsical elven forest, a brass-and-soot
-steampunk city…): the AI picks the one closest to a new world, or you pick,
-or a new one is designed for your world from your words and, if you like,
-photos or renders of how it looks.
-
-**Edit Mode** changes the map by hand rather than asking the storyteller and
-hoping: paint walls, doors, windows, floors and ground, draw rooms and
-fences, add a building where you want it (or take one off), go inside one
-to change its rooms, add places on the region, and make and place things.
-A story whose map it grows opens in Edit Mode once its first place is
-drawn, so you can set it up before you play; it is a button away any time
-after. And when you want a picture of the
-moment, **Paint this place…** has an image model paint the place as it
-stands. The samples with a map come ready to play. Whatever new the story
-brings in is drawn as it is needed, at about a cent a picture, up to a daily
-limit you set (Settings → Images, where you can also have each one asked
-first, or none drawn).
+A story can keep a picture of each place it goes to: the place itself, as it
+is now, with nobody in it. **Picture of this place…** above the story (and
+under Story) has the storyteller's prompt writer describe the place the scene
+is at, you check the prompt, and the picture is drawn (FLUX.3 Klein by
+default, about a cent); it goes on the place's lore entry, made for it if
+there is none, and stands behind the story's text while the story is there.
+Come back later and the picture is back. When the place has changed (a bar
+after a fight, a house after the fire), **New picture of this place…** draws
+it again from the last picture, so it is the same place with the change
+shown. Every picture stays on the entry and in Media. Settings → Images →
+Place pictures turns the background off; the pictures stay.
 
 ### Privacy
 
@@ -228,8 +186,7 @@ OpenRouter, WaveSpeed, or anything OpenAI-compatible).
 ### Simple chat
 
 You can also have a basic chat without the storytelling features, but still
-with summarising, end-to-end encrypted models, image generation, a map that
-grows from the conversation, and so on.
+with summarising, end-to-end encrypted models, image generation, and so on.
 
 ### API usage fees
 
@@ -246,7 +203,7 @@ Have fun!
 - **Playing**: you write as a character you can switch at any time, as
   narration, or as direction to the model; you can also ask it questions out
   of character.
-- **People by their faces**: beside a story without a map, who is here now,
+- **People by their faces**: beside the story, who is here now,
   the rest of the cast and the supporting characters, each with their
   portrait; someone the story brings in without a card gets one in a click.
 - **The world and the cast**: a world bible, cast sheets with skills,
@@ -263,7 +220,7 @@ Have fun!
   about something long merged and its chapters come back, for the Question
   and the next few turns.
 - **Takes and branches**: regenerate any passage in place, or rewrite any
-  earlier message as a named branch; a map shows them all.
+  earlier message as a named branch; a diagram shows them all.
 - **Drafting**: a whole story drafted from a premise.
 - **Costs**: per passage, per session and per story.
 - **Routes**: on NanoGPT, choose which host serves each model (the fastest,
@@ -395,11 +352,9 @@ Windows offers weaker privacy on the machine itself (see
 
 3. **Start from a sample.** The start page shows the sample stories, each
    with its picture and a line on what it is (File → New… shows them too):
-   Doomsville (a survivor at a farmhouse, with a plot), or Doomsville with a
-   map (the same story with the map on and the country around Hellsville
-   drawn up), or one of four other worlds, each with a plot, a map drawn up
-   and furnished with a sprite for every thing and character, a background,
-   and a picture of every character and place: The Ashen Reach (grimdark
+   Doomsville (a survivor at a farmhouse, with a plot), or one of four other
+   worlds, each with a plot, a background, and a picture of every character
+   and place: The Ashen Reach (grimdark
    science fiction on a dying mining world), The Silverwood (elves, forests,
    caves and a city on a waterfall), Brasshaven (a steampunk city of
    airships and clockwork) and The Ninth Furnace (a hellscape of cultists
@@ -411,8 +366,8 @@ Windows offers weaker privacy on the machine itself (see
    characters…** writes cards for its people.
 
 4. **Play.** Type what your character does or says and press Enter. The
-   storyteller answers. Beside the story, a story with a map shows the map,
-   and one without shows its **People**: who is here now, by their faces,
+   storyteller answers. Beside the story, **People** shows who is here now,
+   by their faces,
    with a portrait drawn for anyone who has none in a click. *Playing* is
    the character you write, *Speaking as* is who a turn's text lands as
    (your character, Narration, Direction to the storyteller, or a Question

@@ -260,6 +260,10 @@ def build_world_read_messages(
 # --- The map here, for the storyteller -------------------------------------
 
 SECTION_MAP_HEADING = "# THE MAP HERE"
+# A text-only record in the map's place (`render_place_record`).
+SECTION_RECORD_HEADING = "# WHERE THINGS STAND"
+# How many places, ways and things the record lists at most.
+RECORD_LIMIT = 20
 # Enough to stand on without crowding the tail.
 MAP_LIST_LIMIT = 8
 _COMPASS = (
@@ -470,6 +474,96 @@ def render_map_context(
                 + (f", {thing.state}" if thing.state else "")
                 + (f", {FIXED_MARK}" if stays else "")
             )
+    return "\n".join(lines)
+
+
+def render_place_record(
+    world: WorldMap,
+    held: str | None,
+    texts: PromptTexts = DEFAULT_TEXTS,
+    *,
+    exclude: Collection[str] = (),
+) -> str:
+    """A text-only record for the storyteller's tail, in the map's place
+    when the story keeps no map: the places the story has established (what
+    each is, what is inside it, the ways between them in the story's own
+    words), who is where, and what is carried, broken or lying somewhere. No
+    distances in metres, no bearings, no positions: nothing the program
+    worked out, only what the reads took from the prose. `exclude`: places
+    left out (the world designer's). Empty when the record holds nothing.
+    Measured against the plain story (SealedLoreDocs design/map.md, Oct 24
+    2026, "A text-only record")."""
+    places = [p for p in world.places.values() if p.id not in exclude]
+    by_id = {p.id: p for p in places}
+    if not places and not world.where and not world.things:
+        return ""
+    lines = [SECTION_RECORD_HEADING, texts["record.context"], ""]
+    who = held or "The author's character"
+    verb = "are" if who.lower() == "you" else "is"
+
+    def chain_words(place_id: str | None) -> str:
+        chain = [p for p in _chain(world, place_id) if p.id in by_id]
+        return ", in ".join(p.name for p in chain)
+
+    here_id = world.where.get(held or "") or world.start
+    here_words = chain_words(here_id)
+    if here_words:
+        outside = "just outside " if held is not None and held in world.outside else ""
+        lines.append(f"{who} {verb} at: {outside}{here_words}")
+    # The places the character is in first, then the rest as the map has them.
+    chain_ids = [p.id for p in _chain(world, here_id)]
+    ordered = sorted(
+        places, key=lambda p: chain_ids.index(p.id) if p.id in chain_ids else len(chain_ids)
+    )
+    listed = ordered[:RECORD_LIMIT]
+    if listed:
+        lines.append("Places the story has established:")
+    for place in listed:
+        head = f"- {place.name} ({place.kind or 'place'}"
+        parent = by_id.get(place.inside or "")
+        if parent is not None:
+            head += f", in {parent.name}"
+        head += ")"
+        said = [" ".join(place.what.split())] if place.what.strip() else []
+        if place.state:
+            said.append(f"Now: {' '.join(place.state.split())}")
+        inside = [q.name for q in places if q.inside == place.id]
+        if inside:
+            said.append(f"Inside it: {', '.join(inside)}")
+        what = " ".join(s if s.endswith((".", "!", "?")) else s + "." for s in said)
+        lines.append(f"{head}: {what}" if what else head)
+    shown = {p.id for p in listed}
+    ways = [
+        f"- from {place_name(world, k.a)} to {place_name(world, k.b)}: {words}"
+        for k in world.links
+        if (k.a in shown or k.b in shown)
+        and (words := ", ".join(w for w in (k.direction, k.distance) if w))
+    ]
+    if ways:
+        lines.append("Ways between them, as the story told them:")
+        lines += ways[:RECORD_LIMIT]
+    others = [
+        f"- {name}: " + ("just outside " if name in world.outside else "") + chain_words(pid)
+        for name, pid in world.where.items()
+        if name != held and pid in by_id
+    ]
+    if others:
+        lines.append("Who is where:")
+        lines += others[:RECORD_LIMIT]
+    things = [
+        t
+        for t in reversed(list(world.things.values()))  # the newest first
+        if t.carried_by or (t.at is not None and t.at in by_id)
+    ]
+    if things:
+        lines.append("Things, as the story left them:")
+        for thing in things[:RECORD_LIMIT]:
+            at = (
+                f"carried by {thing.carried_by}"
+                if thing.carried_by
+                else f"at {place_name(world, thing.at)}"
+            )
+            lines.append(f"- {thing.name}: {at}" + (f", {thing.state}" if thing.state else ""))
     return "\n".join(lines)
 
 

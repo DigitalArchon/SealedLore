@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from sealedlore.models.story import maps_offered
 from sealedlore.storage.atomic import read_json
 from sealedlore.storage.paths import is_safe_story_id, stories_dir
 
@@ -50,7 +51,9 @@ def story_listings(root: Path | None = None) -> list[StoryListing]:
                     messages=len(nodes) if isinstance(nodes, list) else 0,
                     updated=str(story.get("updated_at") or ""),
                     chat=story.get("mode") == "chat",
-                    keeps_map=isinstance(defaults, dict) and bool(defaults.get("world_map")),
+                    keeps_map=maps_offered()
+                    and isinstance(defaults, dict)
+                    and bool(defaults.get("world_map")),
                 )
             )
         except (OSError, ValueError) as exc:

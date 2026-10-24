@@ -13,6 +13,8 @@ import re
 import sys
 from pathlib import Path
 
+from sealedlore.models.story import maps_offered
+
 APP_DIR_NAME = "sealedlore"
 WINDOWS_APP_DIR_NAME = "SealedLore"
 
@@ -53,6 +55,11 @@ PLOT_WRITING_GUIDE = "WRITING_PLOTS.md"
 GUIDES = (PLOT_FORMAT_GUIDE, PLOT_WRITING_GUIDE)
 
 
+# Samples that exist only for their map (the same story as another sample,
+# with a map drawn up): not offered while maps are withdrawn.
+MAP_ONLY_SAMPLES = ("Doomsville with a map",)
+
+
 def sample_stories(folder: Path | None = None) -> list[tuple[str, Path]]:
     """The sample stories offered by File → New story from a sample, as
     (name, path), sorted by name: every plot file (.md) in the samples folder
@@ -68,6 +75,11 @@ def sample_stories(folder: Path | None = None) -> list[tuple[str, Path]]:
         for path in folder.glob("*.md")
         if path.is_file() and path.name not in GUIDES
     ]
+    if not maps_offered():
+        # The map is withdrawn while it is redesigned (models/story.py): a
+        # sample that is the same story with a map is not offered; the rest
+        # play as stories with a plot, their `# Map` unused.
+        found = [item for item in found if item[0] not in MAP_ONLY_SAMPLES]
     return sorted(found, key=lambda item: item[0].casefold())
 
 

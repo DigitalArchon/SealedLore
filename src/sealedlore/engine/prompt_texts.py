@@ -2695,6 +2695,22 @@ _text(
 # turn, Sonnet 4.6 refused it against "Keep to it" 10 times in 12 ("No castle
 # stands here", or the Iron Citadel 7 km off); with the clause, 0 in 6 (four
 # beside the waystation, two across the river). GLM 5.3 complied either way.
+# A text-only record in the map's place, for a story that keeps no map:
+# the places, who is where and what was taken or broken, with nothing the
+# program worked out (no distances, bearings or positions). Measured against
+# the plain story (SealedLoreDocs design/map.md, Oct 24 2026).
+_text(
+    "record.context",
+    MAP,
+    "Where things stand: heading",
+    "Heads the text-only record of places, who is where and things in the tail of a "
+    "story that keeps no map (`Config.place_record`).",
+    """\
+What the story has established about its places, who is where and what has
+been taken, moved or broken, as the passages told it. Keep to it unless the
+author's turn changes it; anywhere not listed is the story's to decide.""",
+)
+
 _text(
     "map.context",
     MAP,
@@ -3649,6 +3665,43 @@ _text(
     "around them, what they wear and carry, what they are doing, the light and the weather. "
     "Nobody else in the picture.",
     (("name", "The character's name"),),
+)
+
+# A picture of the place the scene is at (the author, Oct 24 2026: not the
+# scene, "a picture of the area, not including the characters in it"), kept
+# on the place's lore entry and shown behind the story while the scene is
+# there. The story's own prompt writer, which has read the story, is given
+# this as the author's direction; the author may change it first.
+_text(
+    "pictures.place",
+    PICTURES,
+    "Card pictures: a place",
+    "The direction given to the picture prompt writer for a picture of the place the "
+    "scene is at, the place itself with nobody in it; the author can change it before it "
+    "is written.",
+    "A picture of {place}, the place itself as it is at this moment of the story: its "
+    "look and layout, its light and weather, what stands or lies in it, seen as someone "
+    "arriving would see it. Nobody in the picture, and no signs, names or writing of any "
+    "kind: describe the place, never name it.",
+    (("place", "The place's name"),),
+)
+
+# The same place again, after the story changed it: the earlier picture
+# goes as a reference, so the model keeps the place and shows the change (the
+# author: a bar first seen quiet, then "after a large, destructive fight").
+_text(
+    "pictures.place.again",
+    PICTURES,
+    "Card pictures: a place, again",
+    "The direction given to the picture prompt writer for a new picture of a place that "
+    "has one, sent with the earlier picture as a reference: the same place as it is now; "
+    "the author can change it before it is written.",
+    "{place} again, as it is now: the same place as in the earlier picture of it (sent as "
+    "a reference), the same layout and viewpoint, with everything the story has done to "
+    "it since shown as it stands now: damage, disorder, what was moved, built, broken or "
+    "burnt, the light and the weather of this moment. Nobody in the picture, and no signs, "
+    "names or writing of any kind.",
+    (("place", "The place's name"),),
 )
 
 

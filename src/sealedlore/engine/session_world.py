@@ -48,6 +48,7 @@ from sealedlore.engine.world import (
     parse_world_reply,
     place_delta,
     render_map_context,
+    render_place_record,
     resolve_reply,
     several,
     unknown_words,
@@ -57,6 +58,7 @@ from sealedlore.engine.world import (
 from sealedlore.engine.world_layout import CHILD_SHARE, size_of
 from sealedlore.models.character import Character
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID, NARRATOR_SPEAKER_ID, Node
+from sealedlore.models.story import keeps_map
 from sealedlore.models.world import WorldDelta, WorldMap
 from sealedlore.providers.base import ChatRequest, ProviderError
 
@@ -128,7 +130,7 @@ class WorldRuntime:
     @property
     def map_on(self) -> bool:
         """The story keeps a map: the author turned it on (a simple chat may too)."""
-        return self.story.defaults.world_map
+        return keeps_map(self.story.defaults)
 
     @property
     def chat_name(self) -> str:
@@ -312,14 +314,33 @@ class WorldRuntime:
     def _fold_lock(self) -> threading.Lock:
         return self.__dict__.setdefault("_world_fold_lock", threading.Lock())
 
+    def record_context(self, path, held_id: str | None, *, turn_node_id: str | None = None) -> str:
+        """The text-only record in the map's place (`render_place_record`),
+        for a story that keeps no map, when `Config.place_record` is on:
+        what the reads established, with nothing the program worked out.
+        The world designer's regions are left out."""
+        if not self.config.place_record:
+            return ""
+        turn = self._turn_node(path, turn_node_id)
+        shown = self._world_on([*path, turn]) if turn is not None else self._world_on(path)
+        regions = self.world_art.regions.values()
+        return render_place_record(
+            established(shown, self.story.world_base),
+            self.map_held_name(held_id),
+            self.texts,
+            exclude=self.designed_place_ids() | {r.place_id for r in regions},
+        )
+
     def map_context(self, path, held_id: str | None, *, turn_node_id: str | None = None) -> str:
         """The local map for the storyteller at the end of `path`, whenever
         the story keeps a map (the author's call: playing without one saves
         the tokens). A plot file's places in its own words, with distances;
         what the story added, as the reads found it. Never in a private
         scene. Measured in SealedLoreDocs design/map.md."""
-        if not self.map_on or self.in_private:
+        if self.in_private:
             return ""
+        if not self.map_on:
+            return self.record_context(path, held_id, turn_node_id=turn_node_id)
         base = self.story.world_base
         # The turn being sent moved the author's character (its walking, its
         # travel): the map it is told is the one with the turn on it, or "X

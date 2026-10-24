@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMenu,
@@ -49,6 +50,7 @@ from sealedlore.engine.image_variants import (
     version_words,
 )
 from sealedlore.engine.images import ImageRequest
+from sealedlore.engine.places import PLACE_CAPTION, PLACE_CAPTION_AGAIN, place_size, place_title
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.session_images import DEFAULT_MAX_REFS
 from sealedlore.engine.world_pictures import picture_size
@@ -68,6 +70,7 @@ from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, RefUse
+from sealedlore.models.lore import LoreEntry
 from sealedlore.providers.images import ImageModelInfo, parse_image_models
 from sealedlore.storage.image_meta import picture_kind
 from sealedlore.storage.picture_store import file_name
@@ -95,18 +98,35 @@ class ImageDialog(QDialog):
         parent: QWidget | None = None,
         card: Character | None = None,
         background: bool = False,
+        place_mode: bool = False,
+        place: LoreEntry | None = None,
+        location: str = "",
     ) -> None:
         """`card`: a picture of this character alone, as they are now in the
         story (In the scene… on their card): the direction says so, their
         pictures go as references, and the picture is added to their card.
         `background`: a picture to stand behind the story's text (Media →
         the background → Draw a new background…): the direction says so, it
-        is wide, and it becomes the background once drawn."""
+        is wide, and it becomes the background once drawn. `place_mode`: a
+        picture of the place the scene is at (`location`), nobody in it,
+        for its lore entry `place` (made on Generate when there is none),
+        shown behind the story while the scene is there; with a picture
+        already, the same place again as it is now, the last picture sent as
+        a reference (engine/places.py)."""
         super().__init__(parent)
         self.card = card
         self.background = background
+        self.place_mode = place_mode
+        self.place = place
+        self.location = location
+        self.again = place is not None and bool(place.reference_images)
+        # A lore entry made for the place on Generate: the window refreshes.
+        self.made_place = False
         if card is not None:
             title = f"{card.name} in the scene"
+        elif place_mode:
+            name = place.title if place is not None else place_title(location) or "this place"
+            title = f"New picture of {name}" if self.again else f"Picture of {name}"
         else:
             title = "Draw the background" if background else "Draw a picture"
         self.setWindowTitle(title)
@@ -140,9 +160,14 @@ class ImageDialog(QDialog):
             self._for_card(card)
         if background and prefill is None:
             self.direction.setPlainText(session.texts["pictures.background"])
+        if place_mode and prefill is None:
+            self._for_place()
         if prefill is not None:
             self._prefill(prefill)
-        self._fill_models(prefill.model if prefill is not None else session.config.image_model)
+        # A place's picture is a card's: the portrait model draws it (FLUX.3
+        # Klein by default; the author, Oct 24 2026: Klein for all of these).
+        first_model = session.config.portrait_model if place_mode else session.config.image_model
+        self._fill_models(prefill.model if prefill is not None else first_model)
         if prefill is not None:
             self._select_size(prefill.size)
         self._sync()
@@ -161,6 +186,18 @@ class ImageDialog(QDialog):
             what = (
                 "A picture to stand behind the story's text: it becomes the background once "
                 "it is drawn, and the old one stays in Media when it was drawn here."
+            )
+        if self.place_mode:
+            what = (
+                "A picture of the place itself, as it is now, with nobody in it: it goes on "
+                "the place's lore entry (made for it if there is none) and stands behind the "
+                "story's text while the story is there."
+                + (
+                    " The place's last picture goes with the prompt, so the model keeps the "
+                    "place and shows what has changed."
+                    if self.again
+                    else ""
+                )
             )
         intro = QLabel(
             f"{what} A model that has read the story writes a prompt; you check and edit "
@@ -311,6 +348,18 @@ class ImageDialog(QDialog):
         direction_row.addWidget(self.write_button, 0, Qt.AlignTop)
 
         form = QFormLayout()
+        if self.place_mode:
+            # The entry the picture goes on: named here for a new one.
+            self.place_name = QLineEdit(
+                self.place.title if self.place is not None else place_title(self.location)
+            )
+            self.place_name.setMaxLength(60)
+            self.place_name.setReadOnly(self.place is not None)
+            self.place_name.setToolTip(
+                "The lore entry the picture is kept on: the one the scene's location names, "
+                "or a new one by this name."
+            )
+            form.addRow("Place", self.place_name)
         form.addRow("Direction", direction_row)
         form.addRow("Prompt written by", self.writer)
         form.addRow("", self.busy)
@@ -343,6 +392,30 @@ class ImageDialog(QDialog):
         self._set_refs(uses[: max(1, self._max_refs())])
         self._refs_edited = True
         self._written_with = [use.ref_id for use in self._refs]
+
+    def _for_place(self) -> None:
+        """A picture of the place: the direction, and for a place with a
+        picture already, that picture as the reference (the same place as
+        it is now)."""
+        name = self.place.title if self.place is not None else place_title(self.location)
+        self.direction.setPlainText(self.session.place_direction(name, again=self.again))
+        if self.again and self.place is not None:
+            last = self.place.reference_images[-1]
+            uses = [c.use for c in self._choices if c.use.ref_id == last.id]
+            if not uses:
+                uses = [
+                    RefUse(
+                        owner_kind="lore",
+                        owner_id=self.place.id,
+                        owner_name=self.place.title,
+                        ref_id=last.id,
+                        file=last.file,
+                        caption=last.caption,
+                    )
+                ]
+            self._set_refs(uses[:1])
+            self._refs_edited = True
+            self._written_with = [use.ref_id for use in self._refs]
 
     def _prefill(self, image: GeneratedImage) -> None:
         open_span = self.session.open_span
@@ -404,6 +477,8 @@ class ImageDialog(QDialog):
         wanted = current or self.session.config.image_size
         if self.background and not current and info is not None:
             wanted = picture_size(info, landscape=True)  # wide, behind the text
+        elif self.place_mode and not current and info is not None:
+            wanted = place_size(info)  # wide, or the largest square (Klein)
         if wanted not in sizes and sizes:
             wanted = (
                 self.session.config.image_size
@@ -705,6 +780,17 @@ class ImageDialog(QDialog):
         if not text.strip() or not size or not model:
             return
         info = self._info()
+        card_id = self.card.id if self.card is not None else None
+        card_first = False
+        card_caption = SCENE_CAPTION if self.card is not None else ""
+        if self.place_mode:
+            # The entry the picture is kept on, made now when there is none.
+            if self.place is None:
+                self.place = self.session.ensure_place_entry(self.place_name.text(), self.location)
+                self.made_place = True
+            card_id = self.place.id
+            card_first = not self.place.reference_images
+            card_caption = PLACE_CAPTION_AGAIN if self.again else PLACE_CAPTION
         self.request = ImageRequest(
             story_id=self.session.story.id,
             # The version the pictures sent call for (what the price line said).
@@ -714,8 +800,9 @@ class ImageDialog(QDialog):
             size=size,
             n=self.count.value(),
             references=tuple(self._sent_refs()),
-            # A background pictures no passage: it stands behind them all.
-            anchor_node_id=None if self.background else self.anchor_id,
+            # A background pictures no passage: it stands behind them all;
+            # nor does a place's picture, kept on its entry.
+            anchor_node_id=None if self.background or self.place_mode else self.anchor_id,
             direction=self.direction.toPlainText().strip(),
             listed_price=info.price(size) if info is not None else None,
             private_span=self.session.open_span.id if self.session.in_private else None,
@@ -723,8 +810,9 @@ class ImageDialog(QDialog):
             direction_kept=not (
                 self.session.in_private and self.session.open_span.keep == "memory"
             ),
-            card_id=self.card.id if self.card is not None else None,
-            card_caption=SCENE_CAPTION if self.card is not None else "",
+            card_id=card_id,
+            card_first=card_first,
+            card_caption=card_caption,
             background=self.background,
         )
         self.accept()

@@ -15,9 +15,17 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
-from PySide6.QtWidgets import QDialog, QFileDialog, QInputDialog, QMessageBox, QVBoxLayout
+from PySide6.QtWidgets import (
+    QDialog,
+    QFileDialog,
+    QInputDialog,
+    QMessageBox,
+    QToolButton,
+    QVBoxLayout,
+)
 
 from sealedlore.engine.picture_shapes import BACKGROUND
+from sealedlore.engine.places import newest_picture
 from sealedlore.engine.world_art import out_of_the_fog
 from sealedlore.engine.world_pictures import shown_view
 from sealedlore.gui.crop_dialog import cropped_picture
@@ -93,6 +101,78 @@ class ImagesWindow:
         )
         self.portraits_action.triggered.connect(lambda: self.draw_card_pictures())
         story_menu.addAction(self.portraits_action)
+        # The place the scene is at, as a picture of the place itself (the
+        # author, Oct 24 2026); also a button above the story.
+        self.place_action = QAction("Picture of this p&lace…", self)
+        self.place_action.setStatusTip(
+            "A picture of the place the story is at, with nobody in it, kept on its lore "
+            "entry and shown behind the story while it is there"
+        )
+        self.place_action.triggered.connect(self.draw_place_picture)
+        story_menu.addAction(self.place_action)
+
+    def _build_place_button(self) -> None:
+        """Called from `__init__` before the centre is laid out: the button
+        above the story for a picture of the place the scene is at (the
+        author: "a simple button … not disruptive, just present for quick
+        use"). Shown while a story has a location; its words say whether
+        the place has a picture already."""
+        self.place_button = QToolButton()
+        self.place_button.setObjectName("viewToggleButton")
+        self.place_button.setText("Picture of this place…")
+        self.place_button.clicked.connect(self.draw_place_picture)
+        self.place_button.hide()
+        # The place picture behind the story now (its ref id, "" for none).
+        self._place_shown: str | None = None
+
+    def _place_wanted(self) -> bool:
+        session = self.session
+        return (
+            session is not None
+            and not session.story.chat
+            and not session.in_private
+            and bool((session.story.scene.location or "").strip())
+        )
+
+    def _sync_place_button(self) -> None:
+        """The button and the Story menu's entry: shown for a story at a
+        place, worded for whether the place has a picture."""
+        wanted = self._place_wanted()
+        self.place_button.setVisible(wanted)
+        self.place_action.setVisible(wanted)
+        if not wanted:
+            return
+        session = self.session
+        entry = session.current_place()
+        has = newest_picture(entry) is not None
+        name = entry.title if entry is not None else (session.story.scene.location or "")
+        self.place_button.setText("New picture of this place…" if has else "Picture of this place…")
+        tip = (
+            f"{name}: a picture of the place itself, with nobody in it, kept on its lore "
+            "entry and shown behind the story while the story is there."
+        )
+        if has:
+            tip += " A new one is drawn from the last, as the place is now."
+        self.place_button.setToolTip(tip)
+        can = not self._busy and session.config.images() is not None
+        self.place_button.setEnabled(can)
+        self.place_action.setEnabled(can)
+
+    def _sync_place_picture(self) -> None:
+        """After the scene or a card changed: the button's words, and the
+        picture behind the story when the place's picture is another."""
+        self._sync_place_button()
+        found = self.session.place_picture() if self._place_wanted() else None
+        shown = found[1].id if found is not None else ""
+        if self.session is not None and shown != self._place_shown:
+            self._apply_background()
+
+    def draw_place_picture(self) -> bool:
+        """A picture of the place the scene is at (the button above the
+        story, Story → Picture of this place…)."""
+        if not self._place_wanted():
+            return False
+        return self.generate_image(place=True)
 
     def _background_actions(self, view_menu) -> None:
         """Called from `_build_actions`: the View menu's background entries (a
@@ -122,6 +202,7 @@ class ImagesWindow:
             has_story and not busy and bool(self.session and self.session.story.background_image)
         )
         self.images_panel.generate_button.setEnabled(has_story and not busy)
+        self._sync_place_button()
 
     # --- the open story's pictures --------------------------------------------
 
@@ -266,11 +347,13 @@ class ImagesWindow:
         prefill: GeneratedImage | None = None,
         card=None,
         background: bool = False,
+        place: bool = False,
     ) -> bool:
         """`card`: a picture of that character alone, in the scene now, added
         to their card (In the scene… on the Cast page). `background`: a
         picture to go behind the story's text (Media → the background).
-        True when a picture is being drawn."""
+        `place`: a picture of the place the scene is at, for its lore entry
+        (engine/places.py). True when a picture is being drawn."""
         if self.session is None:
             return False
         if self._busy:
@@ -292,12 +375,19 @@ class ImagesWindow:
             parent=self._dialog_parent(),
             card=card,
             background=background,
+            place_mode=place,
+            place=self.session.current_place() if place else None,
+            location=(self.session.story.scene.location or "") if place else "",
         )
         if self._shows_private():
             exclude_from_capture(dialog, True)  # the private model's prompt
         accepted = dialog.exec()
         writer = dialog.writer_model()
         request = dialog.request if accepted else None
+        if getattr(dialog, "made_place", False):
+            # A lore entry made for the place: the Lore page lists it.
+            self.refresh_panels()
+            self._sync_place_button()
         # Freed once read: a child of the window, it held the story it was
         # opened in for as long as the window lived.
         dialog.deleteLater()
@@ -495,6 +585,8 @@ class ImagesWindow:
             self.refresh_images()
             self.statusBar().showMessage(f"Picture ready: {', '.join(names)}.", 8000)
             self._offer_avatars(list(self.session.portraits_taken))
+            # A place's picture landed: behind the story, if the story is there.
+            self._sync_place_picture()
         try:
             changed = self.session.take_background_pictures()
         except (OSError, ValueError) as exc:
@@ -784,13 +876,26 @@ class ImagesWindow:
     # --- the background ----------------------------------------------------------
 
     def _apply_background(self) -> None:
+        """Behind the story's text: the current place's picture while the
+        story is there (`Config.location_backgrounds`, engine/places.py),
+        else the story's own background, else nothing."""
         story = self.session.story if self.session is not None else None
         # The People page offers a background until there is one.
         self._refresh_people()
-        if story is None or not story.background_image:
+        self._place_shown = None
+        if story is None:
             self.transcript.set_background(None)
             return
-        data = self.session.pictures.read(story.background_image)
+        data = None
+        if self.config.location_backgrounds and self._place_wanted():
+            found = self.session.place_picture()
+            if found is not None:
+                data = self.session.pictures.read(found[1].file)
+                self._place_shown = found[1].id if data is not None else None
+        if data is None:
+            self._place_shown = ""
+            if story.background_image:
+                data = self.session.pictures.read(story.background_image)
         # A missing file leaves no background, quietly: nothing to warn about.
         if data is None or not self.transcript.set_background(data):
             self.transcript.set_background(None)

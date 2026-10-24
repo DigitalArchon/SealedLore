@@ -43,7 +43,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.response_style import PRESET_ORDER, PRESETS
 from sealedlore.gui.sizing import GrowingText, size_to_screen
-from sealedlore.models.story import DEFAULT_RESPONSE_STYLE, Story
+from sealedlore.models.story import DEFAULT_RESPONSE_STYLE, Story, maps_offered
 from sealedlore.storage.repository import StoryBundle
 
 STEPS = ("The story", "Characters", "How it begins", "How it reads")
@@ -195,7 +195,8 @@ class NewStoryGuide(QDialog):
             "The story is played on a map that grows as it goes, drawn as you play. "
             "It can be turned on or off later in Setup."
         )
-        form.addRow("", self.map_box)
+        if maps_offered():  # the map is withdrawn while it is redesigned
+            form.addRow("", self.map_box)
         return page
 
     def _characters_page(self) -> QWidget:

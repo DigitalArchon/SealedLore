@@ -24,6 +24,7 @@ from sealedlore.engine.image_prompt import (
 )
 from sealedlore.engine.image_variants import ImageFamily, family_of, fitting_model
 from sealedlore.engine.images import ImageRequest
+from sealedlore.engine.places import newest_picture, place_for, place_title
 from sealedlore.engine.portraits import edit_prompt
 from sealedlore.engine.prompt import assemble_chat, assemble_question
 from sealedlore.engine.scene_state import log_on_path, scene_at
@@ -33,6 +34,7 @@ from sealedlore.engine.video_prompt import (
     seconds_words,
 )
 from sealedlore.models.image import GeneratedImage, ImageRef, RefUse
+from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import Node
 from sealedlore.models.video import GeneratedVideo
 from sealedlore.providers.base import ChatRequest
@@ -63,6 +65,44 @@ class ImageRuntime:
         if anchor_id is None or anchor_id == self.story.active_leaf_id:
             return self.path()
         return self._path_to(anchor_id)
+
+    # --- the place the scene is at (engine/places.py) ---------------------------
+
+    def current_place(self) -> LoreEntry | None:
+        """The lore entry the scene's location names, among those the author
+        may see; None in a chat, with no location, or when none matches."""
+        if self.story.chat:
+            return None
+        return place_for(self.story.scene.location, self.visible_lore())
+
+    def place_picture(self) -> tuple[LoreEntry, ImageRef] | None:
+        """The current place and the picture that stands for it now, when it
+        has one: what goes behind the story (`Config.location_backgrounds`)."""
+        entry = self.current_place()
+        picture = newest_picture(entry)
+        return (entry, picture) if entry is not None and picture is not None else None
+
+    def place_direction(self, name: str, *, again: bool) -> str:
+        """The direction for a picture of the place: the place itself with
+        nobody in it; `again`, the same place as it is now, after the
+        earlier picture."""
+        key = "pictures.place.again" if again else "pictures.place"
+        return self.texts.fill(key, place=name)
+
+    def ensure_place_entry(self, title: str, location: str) -> LoreEntry:
+        """The lore entry for the place the scene is at: the one its location
+        names, else a new one by `title` (the location's own words as its
+        text when they say more than the title), saved."""
+        entry = self.current_place()
+        if entry is not None:
+            return entry
+        title = title.strip() or place_title(location)
+        words = " ".join(location.split())
+        content = words if words and words.casefold() != title.casefold() else ""
+        entry = LoreEntry(title=title, content=content)
+        self.bundle.lore.append(entry)
+        self.save()
+        return entry
 
     # --- what can be pictured ------------------------------------------------
 

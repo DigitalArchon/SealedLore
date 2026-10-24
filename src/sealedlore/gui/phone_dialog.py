@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.gui.sizing import size_to_screen
 from sealedlore.gui.winprivacy import copy_text
+from sealedlore.models.story import keeps_map
 from sealedlore.phone import qr
 from sealedlore.phone.pairing import CODE_SECONDS
 from sealedlore.storage.library import story_listings
@@ -279,7 +280,7 @@ class PhoneDevicesDialog(QDialog):
             item = QListWidgetItem(f"{session.story.title} (this memory-only chat, for this run)")
             item.setData(Qt.UserRole, (session.story.id, True))
             self._tick_item(
-                item, window.phone_shared(session.story.id), session.story.defaults.world_map
+                item, window.phone_shared(session.story.id), keeps_map(session.story.defaults)
             )
             self.stories.addItem(item)
         for listing in story_listings(window.root):

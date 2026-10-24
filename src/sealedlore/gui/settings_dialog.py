@@ -93,7 +93,7 @@ from sealedlore.models.generation import (
     ReasoningLevel,
 )
 from sealedlore.models.route import ModelRoute
-from sealedlore.models.story import Story
+from sealedlore.models.story import Story, maps_offered
 from sealedlore.phone.torrc import find_tor
 from sealedlore.providers import make_chat_provider
 from sealedlore.providers.base import ChatProvider
@@ -175,6 +175,15 @@ MAP_PICTURE_MODES = (
     ("ask", "Ask before drawing"),
     ("off", "Off"),
 )
+
+
+def _hidden_holder(parent: QWidget) -> QWidget:
+    """A widget never shown, holding the rows a page builds but doesn't offer
+    (the map's, while maps are withdrawn: models/story.py). Saving still
+    reads their controls; the author never sees them."""
+    holder = QWidget(parent)
+    holder.hide()
+    return holder
 
 
 class SettingsDialog(QDialog):
@@ -849,6 +858,9 @@ class SettingsDialog(QDialog):
         )
         form.addRow("Lore model", self.lore_model)
 
+        # The map's rows are built whatever happens (saving reads them) and
+        # shown only while maps are offered (models/story.py).
+        map_form = form if maps_offered() else QFormLayout(_hidden_holder(widget))
         self.map_model = self._routed_field(
             self.config.map_model or fresh.get("map_model", ""), "map_model"
         )
@@ -858,7 +870,7 @@ class SettingsDialog(QDialog):
             "reads the places the story went to or described, how they connect, who is "
             "where and the things that matter. A quick model is right here."
         )
-        form.addRow("Map model", self.map_model)
+        map_form.addRow("Map model", self.map_model)
         self.map_art_model = self._routed_field(
             self.config.map_art_model or fresh.get("map_art_model", ""), "map_art_model"
         )
@@ -868,7 +880,7 @@ class SettingsDialog(QDialog):
             "place, in the background. Use recommended models fills in the one that drew best "
             "of the free models."
         )
-        form.addRow("Map art model", self.map_art_model)
+        map_form.addRow("Map art model", self.map_art_model)
         self.region_model = self._routed_field(self.config.region_model or "")
         self.region_model.setPlaceholderText("same as the story's model")
         self.region_model.setToolTip(
@@ -877,7 +889,7 @@ class SettingsDialog(QDialog):
             "about, to fit the story. One call a region, about nine when a story begins and "
             "a few more as the player moves on. Blank uses the story's model."
         )
-        form.addRow("World designer model", self.region_model)
+        map_form.addRow("World designer model", self.region_model)
         self.open_country = QComboBox()
         for value, label in OPEN_COUNTRY_CHOICES:
             self.open_country.addItem(label, value)
@@ -890,7 +902,7 @@ class SettingsDialog(QDialog):
             "three places, three things and one person. Rich: five places, eight things and "
             "three people. A region designed already keeps what it has."
         )
-        form.addRow("Open country", self.open_country)
+        map_form.addRow("Open country", self.open_country)
         self.map_art = QCheckBox("Draw the map")
         self.map_art.setChecked(self.config.map_art)
         self.map_art.setToolTip(
@@ -900,7 +912,7 @@ class SettingsDialog(QDialog):
             "kept and shown plainly, nothing is sent to the map art model, and map pictures "
             "from an image model (Images) are off too."
         )
-        form.addRow(self.map_art)
+        map_form.addRow(self.map_art)
 
         self.image_prompt_model = self._routed_field(self.config.image_prompt_model or "")
         self.image_prompt_model.setPlaceholderText("same as the story's model")
@@ -1013,9 +1025,12 @@ class SettingsDialog(QDialog):
             role("Plot", self.plot_model, "Scene"),
             role("Lore", self.lore_model, "Scene"),
             role("Image prompt writer", self.image_prompt_model, "Story"),
-            role("Map", self.map_model, "Scene"),
-            role("Map art", self.map_art_model, "Map"),
         ]
+        if maps_offered():
+            roles += [
+                role("Map", self.map_model, "Scene"),
+                role("Map art", self.map_art_model, "Map"),
+            ]
         private = self._private_test_settings()
         if private is not None and private.model.strip():
             roles.append(Role("Private", private.model, private, kind="story"))
@@ -1551,7 +1566,8 @@ class SettingsDialog(QDialog):
         hint.setWordWrap(True)
         form.addRow(hint)
         self._portrait_rows(form)
-        self._map_pictures_rows(form)
+        self._place_rows(form)
+        self._map_pictures_rows(form if maps_offered() else QFormLayout(_hidden_holder(widget)))
         # Where pictures are drawn: the chat endpoint unless set. Most never
         # set it, so it is put away, open when it has been.
         where = Fold(form, "Picture endpoint (if not the chat endpoint's)")
@@ -1579,6 +1595,21 @@ class SettingsDialog(QDialog):
         form.addRow(self.portrait_note)
         self.portrait_model.textChanged.connect(self._sync_portrait_note)
         self._sync_portrait_note()
+
+    def _place_rows(self, form: QFormLayout) -> None:
+        """Pictures of the places the story goes to (the author, Oct 24
+        2026): kept on the place's lore entry, and behind the story's text
+        while the story is there."""
+        form.addRow(QLabel("<b>Places</b>"))
+        self.location_backgrounds = QCheckBox("Show the current place's picture behind the story")
+        self.location_backgrounds.setChecked(self.config.location_backgrounds)
+        self.location_backgrounds.setToolTip(
+            "A picture of the place the scene is at (Picture of this place…, above the "
+            "story, or a picture on the place's lore entry) stands behind the story's text "
+            "while the story is there, in place of the story's own background. Off, the "
+            "story's own background stays."
+        )
+        form.addRow("Place pictures", self.location_backgrounds)
 
     def _sync_portrait_note(self, *_args) -> None:
         model = self.portrait_model.text().strip()
@@ -1977,6 +2008,7 @@ class SettingsDialog(QDialog):
         self.config.image_prompt_model = self.image_prompt_model.text().strip() or None
         self.config.map_pictures_mode = self.map_pictures.currentData()
         self.config.map_pictures_ask_over = self.map_pictures_over.value()
+        self.config.location_backgrounds = self.location_backgrounds.isChecked()
         self.config.portrait_model = (
             self.portrait_model.text().strip() or self.config.portrait_model
         )

@@ -34,6 +34,7 @@ from sealedlore.gui.attest_check import AttestationButton
 from sealedlore.gui.model_picker import Browse, BrowseRoute, ModelField
 from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.models.config import Config, ProviderConfig, split_model
+from sealedlore.models.story import maps_offered
 from sealedlore.providers.tee import is_private_mode, is_tee
 
 # Any other model: memory only is about this computer, not about the model.
@@ -57,6 +58,15 @@ ENCRYPTED_HINTS = {
     "memory": "Nothing is written to disk, not even the log: when the chat is closed, it is "
     "gone. End-to-end encrypted as on disk. Pictures are kept in memory too.",
 }
+
+
+def _hidden_holder(parent: QWidget) -> QWidget:
+    """A widget never shown, holding the rows a dialog builds but doesn't
+    offer (the map's, while maps are withdrawn: models/story.py). Saving
+    still reads their controls; the author never sees them."""
+    holder = QWidget(parent)
+    holder.hide()
+    return holder
 
 
 class NewChatDialog(QDialog):
@@ -148,9 +158,12 @@ class NewChatDialog(QDialog):
         form.addRow("", prompt_hint)
         form.addRow("Tail", self.tail)
         form.addRow("", tail_hint)
-        form.addRow("Map", self.world_map)
-        form.addRow("Your name on it", self.chat_character)
-        form.addRow("", map_hint)
+        # Shown only while maps are offered (models/story.py): the rows are
+        # built whatever happens, since starting the chat reads them.
+        map_form = form if maps_offered() else QFormLayout(_hidden_holder(self))
+        map_form.addRow("Map", self.world_map)
+        map_form.addRow("Your name on it", self.chat_character)
+        map_form.addRow("", map_hint)
         form.addRow(self.keep_label, self.keep)
         form.addRow("", self.keep_hint)
 

@@ -69,6 +69,25 @@ class StyleDirectives(BaseModel):
     detached: bool = False
 
 
+# The map is withdrawn while it is redesigned (the author, Oct 24 2026: the
+# story and plot modes work well, and a map game is to be a mode of its own,
+# with rules of its own, to come). Nothing offers a map, and a story saved
+# with one plays on as a story without it: `keeps_map` is what every reader
+# asks, so the saved choice stands for the day the flag goes back on. The
+# tests turn it on (conftest) to keep the map code covered meanwhile.
+MAPS_OFFERED = False
+
+
+def maps_offered() -> bool:
+    """Whether a map may be kept at all, read when asked (tests turn it on)."""
+    return MAPS_OFFERED
+
+
+def keeps_map(defaults: StoryDefaults) -> bool:
+    """Whether a story is played with its map: it chose one, and maps are offered."""
+    return MAPS_OFFERED and defaults.world_map
+
+
 class StoryDefaults(BaseModel):
     agency_mode: AgencyMode = "contested"
     npc_scope: NpcScope = "all"

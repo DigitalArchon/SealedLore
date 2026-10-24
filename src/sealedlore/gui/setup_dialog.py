@@ -50,7 +50,7 @@ from sealedlore.gui.style_panel import StylePanel
 from sealedlore.models.character import Character
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID, Node
 from sealedlore.models.scene import SceneState
-from sealedlore.models.story import Story
+from sealedlore.models.story import Story, maps_offered
 
 # How full the map's rooms are (models/area.py `Density`).
 DENSITY_LABELS = {
@@ -62,6 +62,15 @@ DENSITY_LABELS = {
 
 GENERATE_LABEL = "The model writes the opening from these notes"
 AS_WRITTEN_LABEL = "Use exactly as written — this is the opening passage"
+
+
+def _hidden_holder(parent: QWidget) -> QWidget:
+    """A widget never shown, holding the rows a dialog builds but doesn't
+    offer (the map's, while maps are withdrawn: models/story.py). Saving
+    still reads their controls; the author never sees them."""
+    holder = QWidget(parent)
+    holder.hide()
+    return holder
 
 
 def _hint(text: str) -> QLabel:
@@ -249,9 +258,12 @@ class SetupDialog(QDialog):
         self.chat_character.setMaxLength(60)
         self.chat_character.setEnabled(self.story.defaults.world_map)
         self.world_map.toggled.connect(self.chat_character.setEnabled)
-        form.addRow("Map", self.world_map)
-        form.addRow("Your name on it", self.chat_character)
-        form.addRow(
+        # The map's rows are built whatever happens (saving reads them) and
+        # shown only while maps are offered (models/story.py).
+        map_form = form if maps_offered() else QFormLayout(_hidden_holder(widget))
+        map_form.addRow("Map", self.world_map)
+        map_form.addRow("Your name on it", self.chat_character)
+        map_form.addRow(
             _hint(
                 "After each reply a small model notes the places the conversation goes to, "
                 "how they connect, who is where and the things that matter, and the map grows "
@@ -260,7 +272,7 @@ class SetupDialog(QDialog):
                 'beside it: your character\'s name, or "You".'
             )
         )
-        self._scarce_row(form)
+        self._scarce_row(map_form)
         return widget
 
     def _scarce_row(self, form: QFormLayout) -> None:
@@ -342,8 +354,11 @@ class SetupDialog(QDialog):
         )
         self.world_map = QCheckBox("Keep a map of the story")
         self.world_map.setChecked(self.story.defaults.world_map)
-        form.addRow("Map", self.world_map)
-        form.addRow(
+        # Built whatever happens (saving reads them), shown only while maps
+        # are offered (models/story.py: withdrawn while they are redesigned).
+        map_form = form if maps_offered() else QFormLayout(_hidden_holder(widget))
+        map_form.addRow("Map", self.world_map)
+        map_form.addRow(
             _hint(
                 "The story is played on its map: you walk where you like in each place, "
                 "click people and things for what you can do, and travel between places. "
@@ -354,7 +369,7 @@ class SetupDialog(QDialog):
                 "Continue without the map…"
             )
         )
-        self._scarce_row(form)
+        self._scarce_row(map_form)
         self.map_density = QComboBox()
         for value, label in DENSITY_LABELS.items():
             self.map_density.addItem(label, value)
@@ -363,8 +378,8 @@ class SetupDialog(QDialog):
         )
         self.map_density.setEnabled(self.story.defaults.world_map)
         self.world_map.toggled.connect(self.map_density.setEnabled)
-        form.addRow("Rooms", self.map_density)
-        form.addRow(
+        map_form.addRow("Rooms", self.map_density)
+        map_form.addRow(
             _hint(
                 "How full the map's rooms are: the furniture each building is planned with, "
                 "halved, as planned, or two thirds more. Decorations are left out of sparse "

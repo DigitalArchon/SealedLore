@@ -4,7 +4,7 @@ Everything the [README](../README.md) leaves out: installing in detail, every
 part of the window, and what each feature does. The README's
 [First five minutes](../README.md#first-five-minutes) is the quickest way in.
 
-![Playing The Silverwood on its map: the story on the left, the village of Fernhollow on the right with everyone standing where the story put them](screenshots/map-play.webp)
+![Playing The Silverwood: the story on the left, and beside it the People page with who is here now, by their faces](screenshots/people-page.webp)
 
 ## Contents
 
@@ -23,9 +23,7 @@ part of the window, and what each feature does. The README's
 - [Perspective and supporting characters](#perspective-and-supporting-characters)
 - [The People page](#the-people-page)
 - [The scene, and who can walk into it](#the-scene-and-who-can-walk-into-it)
-- [The map](#the-map)
-  - [Playing on the map](#playing-on-the-map)
-  - [Edit Mode](#edit-mode)
+- [The map (withdrawn for now)](#the-map-withdrawn-for-now)
 - [Branches, takes and export](#branches-takes-and-export)
 - [Outcomes and dice](#outcomes-and-dice)
 - [Response length and style](#response-length-and-style)
@@ -34,6 +32,7 @@ part of the window, and what each feature does. The README's
 - [Pictures](#pictures)
   - [Pictures of your own](#pictures-of-your-own)
   - [Pictures for the cards](#pictures-for-the-cards)
+  - [Pictures of places](#pictures-of-places)
 - [Videos](#videos)
 - [Private scenes](#private-scenes)
 - [Simple chat](#simple-chat)
@@ -49,21 +48,13 @@ part of the window, and what each feature does. The README's
   at any time; the model never writes your character, and nobody walks into a
   scene by shortcut. Speaking as a character, as narration or as direction;
   OOC notes; questions to the model out of character.
-- **The map**: a story can be played on a map drawn in pixel art for its
-  world. Walk anywhere, click people and things for what you can do, travel
-  between places; the storyteller is told where everyone stands and who can
-  see whom. The open country is designed by the AI ahead of you, region by
-  region, as you explore. Places stay where the story put them, what happens shows (a barn
-  burning, a thing carried off), floors, decks, weather and the hour show,
-  and Edit Mode changes anything by hand: walls, doors, floors, rooms,
-  buildings, places and things. A place can be painted by an image model. Tile sets come with the samples, and a new one can be designed for
-  your world.
-- **Faces**: a portrait for every character and a picture for every lore
-  entry, drawn from their cards; an avatar on the map from the portrait; the
-  People page shows who is here by their faces.
-- **Sample stories**: Doomsville, with or without a map, and four other
-  worlds, each with a plot, a map drawn up and furnished, a background and a
-  picture of everyone, all on the start page.
+- **Faces and places**: a portrait for every character and a picture for
+  every lore entry, drawn from their cards; the People page shows who is here
+  by their faces; a picture of each place the story goes to stands behind the
+  story while it is there.
+- **Sample stories**: Doomsville and four other worlds, each with a plot, a
+  background and a picture of everyone and of every place, all on the start
+  page.
 - **The world and the cast**: world bible, cast sheets with skills, supporting
   characters the story introduces (suggested, never added by themselves), a
   lorebook sent whole when small and selected per turn when large.
@@ -482,22 +473,21 @@ archiving, rebuilding summaries.
   private scene when one is open. Hover over it for the whole of it,
   including, for a story, every other call's model and route. It can't be
   changed there; it is only for reference.
-- **Above the transcript**: **Find**; **Map**, the map of the story, for a
-  story that keeps one (see "The map"); and on the right, once a story has
+- **Above the transcript**: **Find**; **Picture of this place…**, a picture
+  of the place the story is at (see "Pictures of places"); and on the right,
+  once a story has
   more than one branch, **Branch** names the branch you are reading: its menu
   switches to another, renames or deletes it, and **Branches** shows every
   branch at once.
 - **Right dock**, beside the story (away while no story is open), its pages
-  as two rows of buttons, its title naming the page shown and what it is for: **Map**
-  (for a story that keeps one, and the page it opens on), **People** (who is
-  in the story, by their faces; the page a story without a map opens on: see
+  as two rows of buttons, its title naming the page shown and what it is for: **People** (who is
+  in the story, by their faces; the page a story opens on: see
   "The People page"), **Scene** (who is here and where the story is, to
   correct), **Cast** (sheets, skills, supporting characters), **Plot** (the
   clock, facts and events; shown only for a story with a plot), **Lore**,
   **Style**, **Story so far** (the chapter summaries: edit, rebuild, archive
   now; double-click one to go to it in the story) and **Media** (every
-  picture and video the story has made, its background and the map's
-  paintings and avatars). **View → Prompt page (advanced)** adds **Prompt**: exactly what the
+  picture and video the story has made, and its background). **View → Prompt page (advanced)** adds **Prompt**: exactly what the
   storyteller was sent last turn, for checking the model's work; **Copy
   prompt** copies it as readable text, **Copy request JSON** as the exact
   request body.
@@ -528,8 +518,8 @@ archiving, rebuilding summaries.
   in a message opens or loads anything. Edit shows the text as written, and
   Find searches the text as you see it.
 - **Text size**: View → Text size → Larger (Ctrl++) and Smaller (Ctrl+-)
-  change every piece of text in the window, the story, the panels, the menus
-  and the map, from 90% to 200%; the same menu lists the sizes, and Normal
+  change every piece of text in the window, the story, the panels and the
+  menus, from 90% to 200%; the same menu lists the sizes, and Normal
   size (Ctrl+0) goes back. It is kept for next time.
 - **Theme and fonts**: View → Theme → Dark is the app's own look, and
   View → Theme → High contrast is white on black, every control outlined,
@@ -560,8 +550,8 @@ archiving, rebuilding summaries.
   under the message it is about, marked ⚠, so it is still there once the
   next notice has replaced it. A read after a passage that takes a while
   counts up ("Reading the scene with … 45 s; Stop skips it"): Stop then
-  skips the reads, the passage stays, and the scene, the clock or the map
-  stays as it was.
+  skips the reads, the passage stays, and the scene or the clock stays as
+  it was.
 - **Shortcuts**: Enter sends, Shift+Enter is a new line, Ctrl+Enter sends
   from anywhere, Esc stops, Ctrl+N new, Ctrl+O import, Ctrl+S save,
   Ctrl+, settings, Ctrl+Shift+I picture, Ctrl+Shift+V the transcript view,
@@ -583,17 +573,11 @@ set them to one it lists (Browse…).
 | Plot model | Settings → Models | the plot's director (the clock and facts are read by the scene model) | the scene model |
 | Authoring model | Settings → Models | drafting from a premise, settings reviews | the story model |
 | Lore model ★ | Settings → Models | picking lore for a large lorebook | the scene model |
-| Map model | Settings → Models | reading each passage for the map: places, who is where, things | the scene model |
-| Map art model | Settings → Models | the map's plans and land, and furnishing its buildings | the map model |
-| World designer model | Settings → Models | designing the country ahead of the player, a region at a time | the story model |
 | Image prompt writer | Settings → Models, or the Image dialog | writing the picture's prompt | the story model |
 | Jev model ★ | `config.json` only | "Jev before each turn" | — |
 | Image model ★ | Settings → Images | pictures of the story | starts as Seedream 5.0 Pro |
 | Portrait model ★ | Settings → Images | portraits and the cards' pictures | starts as FLUX.3 Klein |
-| Map picture model ★ | Settings → Images | every picture the map wants: avatars (from the portraits), things, roofs and ground, a tile set of your own, postcards and the Region map's pictures | starts as FLUX.3 Klein |
-| Painting model ★ | Settings → Images | paintings of a place on the map | starts as FLUX.3 Klein |
 | Video model ★ | Settings → Video | videos | starts as Seedance 2.5 |
-| Tile set designer | **Designed by** in the tile set designer (Look → Tile sets… → Design a new set…) | designing a tile set for your world | Claude Opus 5.5 on NanoGPT, else the map art model |
 | Private model | Settings → Private | private scenes | — |
 | Embeddings model | Settings → Lore | lore vectors | `BAAI/bge-m3` |
 
@@ -633,19 +617,16 @@ story model, the most expensive place to run a small call on every turn. On
 NanoGPT a new setup starts with the ones that measured best, and Settings →
 Models has **Use recommended models** to fill them in on a setup you already
 have (nothing changes until you press Save). **Recommended** beside the story,
-scene, plot, lore, map and map art fields lists the models measured for that
-job, the recommended one first, each with a note on roughly what it scored
+scene, plot and lore fields lists the models measured for that job, the recommended one first, each with a note on roughly what it scored
 and what it costs (for the story, Claude Opus 5.5 as the premium choice: the
-better writer on every blind judge, at about 2.4 times Sonnet's price, with
-passages twice as long on the map). Choosing one only fills in the field.
+better writer on every blind judge, at about 2.4 times Sonnet's price, and
+longer passages). Choosing one only fills in the field.
 
 | For | Model | Why |
 |---|---|---|
 | Scene | `z-ai/glm-5.3` | The read needs a model that reasons: about 89 rosters of 94 right on judged reads, where models that don't reason got 72-78. Included in a NanoGPT subscription |
 | Plot | `deepseek/deepseek-v4.1-flash` | As sound a director as any tried (3 wrong answers in 138 to both judges), about 2.5 seconds before a passage, and included in the subscription |
 | Lore | `deepseek/deepseek-v4.1-flash` | Picks the lore a turn needs after each passage; with 100 entries it cut contradictions of the lore from about 10 in 32 passages to a few |
-| Map | `deepseek/deepseek-v4.1-flash` | The quickest map read by three times (under 2 seconds), included in the subscription. GLM 5.3 and Kimi K3 were judged a little more accurate |
-| Map art | `z-ai/glm-5.3-flash` | Its drawn areas were ranked first by both blind judges, and it is included in the subscription |
 
 They are NanoGPT model ids. On another endpoint the fields stay blank: choose
 a model that reasons for the scene and a quick one for the plot (Browse…).
@@ -767,8 +748,8 @@ that trying other hosts would mean playing outside private mode.
 ## Setting up a story
 
 **Write a story from scratch** (on the start page, or File → New…) walks
-through what a story needs to begin, a step at a time: its title and world
-(and whether it keeps a map), its characters, where it begins and what
+through what a story needs to begin, a step at a time: its title and world,
+its characters, where it begins and what
 happens first, and the person, tense and length it is told in.
 
 The story is made, and listed in your Stories, once its first step is done,
@@ -839,13 +820,11 @@ stand, and, with spoilers on, the events still to come.
 SealedLore (every plot file in `SampleStories/` but the two guides) are
 on the start page and in **File → New…**, in the AppImage as well, each with
 its picture and its line: Doomsville there is the same as importing
-`Doomsville.md`, and **Doomsville with a map** is the same story with a map
-drawn up beforehand (a `# Map` section: see "The map"). The Ashen Reach,
-The Silverwood, Brasshaven and The Ninth Furnace show other kinds of world
-(grimdark science fiction, traditional fantasy, steampunk and a hellscape),
-each with a plot, a map drawn up and furnished, every thing and character
-drawn, a
-background picture, and a picture of every card. Rather than
+`Doomsville.md`. The Ashen Reach, The Silverwood, Brasshaven and The Ninth
+Furnace show other kinds of world (grimdark science fiction, traditional
+fantasy, steampunk and a hellscape), each with a plot, a background picture,
+and a picture of every card and every place (a `# Map` section in a plot file
+is read and kept, unused while the map is withdrawn). Rather than
 write the format by hand, **File → Plot file editor…** writes it for you: the
 world, opening, characters, places, lore, facts and events each get a form,
 conditions and what an event brings or sets are picked from what the file
@@ -1016,32 +995,6 @@ picture is shown the same way on the Lore page.
 
 ![The Cast page: the list of characters, each with a small portrait, and below it the selected character's portrait at the left with the buttons that draw or change it, and the fields of their sheet at the right](screenshots/cast-page.webp)
 
-In a story played on its map, **On the map** under the portrait shows the
-character's avatar, the little pixel-art figure that walks for them, and
-says where it came from. Click it to see it whole, pixel for pixel. **Draw
-the avatar…** (**Draw the avatar again…** once there is one) has the map's
-sprite model draw it from the portrait, or from what the card says of them
-when they have none; the model and price are shown first, and it counts
-against the day's map pictures. **Draw with instructions…** asks what the
-avatar should look like, in your own words, and draws it from them instead
-of the portrait. Every avatar drawn or chosen is kept: **Choose a drawn
-avatar ▾** lists them, the one walking for them ticked, and the Media tab
-lists them under Map as "Avatar", the one in use marked, with **Use as the
-avatar** on the others. **Choose a file…** takes a figure of your
-own (on a plain white or transparent ground), and **Back to the set's own**
-puts the tile set's figure back. Every character gets an avatar drawn from
-the portrait they have now: with map pictures on, avatars are drawn once the
-story has begun (Start offers the portraits first), a character whose
-portrait is being drawn waits for it, and one drawn from their card before a
-portrait came, or from an earlier portrait, is drawn again when a new
-portrait lands, as the rest of the map's pictures are (on its own, or among
-those waiting for you). A character the plot keeps hidden gets none drawn
-until the story brings them in. An avatar you chose yourself stays until you
-say otherwise: when new portraits land on such cards (or map pictures are
-off), you are asked once whether to draw their avatars again from them, and
-they are drawn one after another, even if one is already being drawn. The
-same changes can be made under Look → **Edit the tile set…** on the map.
-
 Two checkboxes on a cast sheet decide who writes that character:
 
 - **Available to play** on (the default) — you can play them, and the model
@@ -1055,7 +1008,7 @@ Two checkboxes on a cast sheet decide who writes that character:
 
 ## The People page
 
-A story without a map opens on **People**, beside the story: who is in it,
+A story opens on **People**, beside the story: who is in it,
 by their faces. **Here now** has whoever the story has in the scene, large,
 the character you play first (marked **You**); **Not here** and **Also in the
 story** have the rest of the cast and the supporting characters, smaller,
@@ -1080,21 +1033,13 @@ Who is here is the scene's (below), so the faces show at a glance who the
 storyteller thinks is in the room; **Correct the scene…** goes to the Scene
 page to put it right.
 
-In a story played on its map, who is here is the map's: whoever it has in
-sight or within earshot of you, as the storyteller is told. Someone there the
-story hasn't named yet ("the woman at the rail", Unknown 1 on the map) is
-listed under **Also here, with no card yet** with **Name…**: say who they
-are, one of the cards or a name, as the map's own correction does.
-
 Someone the story has here who has no card (named in the opening or by a
 passage, never given one) is listed under **Also here, with no card yet**,
 with **Make a card**: as a supporting character, or in the cast so you can
 play them. The card is written from what the story says of them (a short
 call to the summarisation model; with nothing to go on it has their name
 alone, for you to fill in) and opens on the Cast page, where you can draw
-their portrait. On a map, they then get an avatar of their own instead of
-one of the tile set's figures. Right-clicking them on the map offers the
-same.
+their portrait.
 
 ![The People page in Doomsville: the player's character under Here now, and March, whom the story brought in, under Also here, with no card yet, with Make a card beside her name](screenshots/people-no-card.png)
 
@@ -1172,539 +1117,15 @@ all the fields for you to approve, for when the card has drifted.
 | Normal (default) | people pursue their own aims, anyone with a stake acts on it, earlier choices catch up |
 | Eventful | most passages bring something: an arrival, news, a complication |
 
-## The map
+## The map (withdrawn for now)
 
-A story can keep a map that grows as it goes: tick **Keep a map of the story**
-on Story → Setup → About (a simple chat can too: **Keep a map of the
-conversation**, see "Simple chat"). After each passage a small model (Settings → Models
-→ **Map model**) notes the places the story went to or described, how they
-connect, who is where and the things that matter, each held to a sentence of
-the story. A place is put on the map once, where the story said it is ("five
-miles north", "around back", inside the town), and stays there: once the
-story has been somewhere, that is where it is. Walk off the edge of the map
-and the storyteller decides what you find there; the map grows to take it in,
-and it is part of the map from then on.
-
-A plot file can bring a map drawn up beforehand (`# Map`, in the format
-guide): its places stand where the file puts them from the first passage, the
-places you haven't found yet are under fog, and a place the plot keeps hidden
-stays off the map until the plot reveals it. **Doomsville with a map**, among
-the samples, starts this way, and comes with its map's art already drawn, so
-it opens complete; a restart keeps it. A story you make draws its own as it
-goes.
-
-The map is drawn in the background (Settings → Models → **Map art model**;
-untick **Draw the map** to keep it plain): the land around each place the
-story reaches, the ground plan of each place you have been, and a small
-picture of each place and thing. Each is drawn once and kept. When the story
-changes something (a barn blown up, a truck burnt out), it is drawn again as
-it now is, as an edit of how it looked, so it is still the same barn, and
-the local map shows it as it is now. A station or ship is drawn as its decks.
-While it draws, the map says how far it has got, what it is drawing and with
-which model ("Drawing the map: 3 of 12 · the gun cabinet, by FLUX.3 Image
-Klein"), and says when it is done. A room's furniture is chosen first and
-its pieces drawn straight after; until a piece has its own picture it shows
-as the tile set's nearest look-alike, so the room looks much the same when
-the pictures land. A piece the model got wrong twice is given up on
-and named there ("The map is drawn, but not The dark rift"), with **Try
-again** beside it. A branch shows the map as it stands on that branch.
-
-A place the story adds inside the area you are in (a rift opened at a
-marked spot, a well, a shrine) is marked on the play view where it stands,
-with its name over it and its small picture once that is drawn; a building
-is drawn into the ground itself, roofed as its description says it is built
-(stone, slate, thatch, metal…). Someone the story brings in without a name
-stands on the map as **Unknown 1** (then 2, 3…) until a passage names them;
-the menus and the storyteller call them as the story described them ("the
-teenage girl"). When a plot event brings a character in and the passage
-introduces one person without a name, that person is the character, as long
-as the description is of one person and not of the other sex ("the
-watchmen" stay unknown). A thing the tile set has no picture of borrows the set's
-nearest one of the same kind until its own is drawn. When the set's own
-suits it as it is (a "workbench" and the set's heavy wooden workbench, a
-"cast iron stove" and its cast-iron wood stove), that one stands for it for
-good and nothing new is drawn; a different kind of the thing (a rifle rack
-is no tool rack), another material, a broken one or one holding something
-else gets its own.
-
-**Draw map pictures** (under Settings → Images) has an image model (the
-**Map picture model** there, FLUX.3 Klein unless you choose another) draw the
-map's people, buildings and things instead (it needs **Draw the map** on). A
-character's avatar is drawn from their portrait by the model's editing
-version; a model that takes no picture draws it from what their card says: everyone's avatar from their portrait
-or what their card says of them (you first, then whoever is with you), roofs
-of what each building is made of, the things in each room, and each building
-standing on the ground where the story put it. **Automatically** (the
-default) draws them in the background as the story reaches them, without
-asking, up to **Without asking, at most** (10 at once unless you change it;
-"any number" never asks). More than that at once, such as a story you
-played before a newer version opening with everything since to catch up
-on, wait as they would under Ask before drawing, and the Map page says why.
-**Ask before drawing** draws nothing until you say: the Map page says
-how many pictures wait and what they cost, with **Review…** (every picture
-with its prompt and price: change any prompt, untick what you don't want, and
-**Draw** sends the ticked ones exactly as they stand), **Draw them** (all, as
-they are) and **Not now** (none; you aren't asked about those again while the
-story is open). **Off** draws none. Either way they stop at the limit set
-there for each story each day, and each one's prompt and cost are kept in
-the story's log. A place
-the story changes is drawn again from its last picture, so it stays the same
-place. Each place you have been gets a postcard too, a picture of the whole
-place, shown on its card under the local map: click it to see it whole.
-Everything drawn for the map stays with the story: a restart, Duplicate
-settings and a scenario file keep the art and the pictures. Story pictures
-(Picture…) still show you every request first.
-
-Each area on the map (a farm, a town, a works) can have **paintings**: the
-place as it stands, painted by an image model (Settings → Images →
-**Painting model**: FLUX.3 Klein unless you choose another, about a cent a
-painting; **Recommended** beside it offers two enhanced choices, Seedream 5.0
-Pro at about $0.09 and Nano Banana Pro at about $0.14). On the play view, **Paintings ▾**
-is for the place you stand in: **Paint this place…** shows the model and its
-price first (it counts with the day's map pictures) and paints the area as
-the play view shows it at that moment, everyone and everything where they
-stand, in the hour's light and the weather (pressed while the map is still
-drawing the place's pieces, it waits for them and starts by itself); under it the menu lists the
-place's paintings, newest first, each opening on its own to zoom into. The
-model is given the program's own picture of the area (the tiles, with the
-people and things on them) and asked to keep every building, wall, road and
-stretch of water where it is while painting a finished, atmospheric scene,
-and is told the time of day, the weather, who is there (by their looks,
-never their names, so nothing is written on it) and the things at hand. On
-the 2D map, an area that has a painting is marked **◆ Painting** wherever
-its painting isn't drawn: at its corner on the local map, and under its name
-on the region, so you can see which areas have one without going into them;
-click the mark to see that area's. **Paintings** lays every area's latest
-painting over the map, exactly where the area is, so you see what it shows
-and where that is among everything around it; **Fade** lets the map show
-through, and **See it whole** (or a double-click on a painting) opens it on
-its own to zoom into. The bar over the map is for the area in the middle of
-the view, wherever you have moved the map: **Paint it** paints that area
-from its map, giving the model and its price first, and **Paint it again**
-paints another take. The samples come with a painting of every area. The 2D
-map is the story's truth: a painting matches it closely, not exactly. Once
-the story changes something there (the barn burns), the painting says it is
-out of date and offers to paint it again. **Use a picture of your own…**
-takes a picture from disk as the area's painting instead, cropped first to
-the area's shape. Every painting made or brought in is kept: the newest lies
-over the map, and once an area has several the bar says so and **Choose a
-painting…** lets you swap between them (the choice is for the map as it is
-there now; a painting made after a change is chosen for that change). The
-paintings and the postcards are in Media too, under **Map**, the one on the
-map marked; right-click another there for **Show this painting on the
-map**. While you play on an area, its own painting isn't shown over it; zoom
-the Region in on another area to see that one's.
-
-![A painting of Fernhollow from The Silverwood sample: the village's thatched cottages, the green with its old oak and well, the mill on the stream and the forest around, painted from the map](../SampleStories/pictures/map/silverwood-fernhollow-isometric.jpg)
-
-A story that keeps a map makes it part of the window: the panel beside the
-story takes half the window with **Map** as its first page. **Map**,
-above the transcript, goes to it.
-
-A station or a ship in space is laid out by SealedLore itself: the map art
-model only says what it holds (its shape, its decks, and each deck's rooms),
-and every deck is laid out round one lift lobby, the lifts in the same place
-on every deck, with corridors, airlocks and viewports. A station is rooms all
-through, any gap between them filled with storerooms and machinery rooms,
-unless it is a ring: then its rooms and corridors stand round one open middle.
-Its hull is drawn round it: a station's rounded body, a ship's hull narrowing
-to its bridge at the bow with its engines at the stern, an outpost dug into an
-asteroid set in rock. Each room is drawn for what it is, and the
-rooms that make a station what it is have their set pieces: a reactor in
-engineering, consoles and a command chair facing a bridge's viewport, a
-shuttle in a hangar, a mine's shaft, a garden's beds.
-
-A plan is drawn once and kept, so one that came out
-wrong stays so; **Redraw plan…** on the local map draws the plan of the area
-in the middle of the view again (you are asked first; the buildings you have
-been inside keep their own plans).
-
-During a private scene the map stays in the window but is paused: it shows
-the story as it was when the scene began, nothing from the scene is read into
-it, and nothing is drawn or painted. Once you approve the scene's summary, the
-summary is read like any passage and the map catches up.
-
-### Playing on the map
-
-A story that keeps a map is played on it. **Local** is the place you are in,
-drawn tile by tile in a tile set: the farm and its buildings, the inside of
-the farmhouse with its rooms and furniture, everyone where the story put
-them, you ringed in gold. The map is exact, and the storyteller is told it
-exactly: where you stand, who is how far from you and which way, what is
-within reach, the doorways out. Someone a passage leaves at a building's
-door, on its porch or in its yard stands outside it, at its door, until the
-story or a walk takes them in.
-
-![Inside the farmhouse in Doomsville with a map: its rooms lit by lamplight and furnished, John in the front room and the two people the story brought in, not named yet, shown as Unknown 1 and Unknown 2](screenshots/map-indoors.webp)
-
-- **Walking.** Click anywhere to walk there (the arrow keys or WASD take a
-  step); the tile under the pointer shows gold where you can stand and red
-  where you can't, and a click while you are still walking goes on from
-  where you are. Walking costs no model call and moves the clock a little;
-  walk into a door to go through it, into a building or back out. A boat or
-  a cart the story docks somewhere lies there at its own size (a boat on
-  the water by the shore), its name on the ground beside it; one with an
-  inside of its own is boarded there, and left there. Drag the
-  ground, or hold the middle mouse button and move, to look around (the
-  middle button pans the Region and World maps too); the wheel zooms; **−** and **+** zoom, up to twice the art's
-  own pixels. The hour tints the area (blue at night, amber at dawn and
-  dusk), and indoors the rooms you can see into are lit and the rest dimmed.
-  The storyteller is told the time of day in words ("It is dusk"), never
-  the day. Weather the story states, or that you state in a Direction ("It
-  begins to snow"), is kept with the map, told to the storyteller beside
-  the time of day, and shown over an outdoor area: snow, rain, fog or mist,
-  sand or dust. Clear weather shows nothing.
-- **People.** Click someone for **Talk** (you walk up to them, and they
-  react as themselves: someone who knows you notices you and says hello,
-  someone hostile may not), **Look** (you stay out of sight and watch what
-  they are doing) or **Attack**.
-
-  ![The menu for Brannoc Hale on the village green: Talk, Look (stay out of sight and watch), Attack, Walk over, and the corrections Move…, Is really… and Not here](screenshots/map-person-menu.webp)
-- **Things.** Click a thing for what can be done with it: **Use**, and
-  **Take**, **Eat** or **Destroy** where they fit. You walk up to it first.
-  What the choice does is recorded by the program when the turn is sent,
-  not left to the storyteller: **Take** puts the thing with your character
-  (off the floor, and the storyteller is told who carries what), **Destroy**
-  leaves it standing visibly broken (darker, cracked, rubble at its foot;
-  it can't be destroyed again), **Eat** consumes it. A thing the map's own
-  list knows follows suit (carried by you, broken, gone). A turn you rewrite
-  so the menu's words are gone changes nothing, and neither does a failed
-  dice roll: the attempt is the storyteller's to tell. **Use** changes
-  nothing either.
-- **Every thing on the play view is a thing**, whoever put it there: the
-  plan's objects, the furniture the map laid in the rooms, and what the
-  story brought in (an anvil a Direction left by the door, a rifle on the
-  table). What the story adds lies at its place on the play view, beside
-  you when it turns up where you are, on the very spot when your turn marks
-  one. What a passage does to any of them follows on the map: shoved across
-  the doorway, it blocks the doorway; carried off, it is with whoever took
-  it; smashed, it is drawn broken; eaten or used up, it is gone.
-- Things come in four kinds, by what they are. Small things can be
-  **taken** and carried. **Heavy** things (a table, a chest, an anvil, a
-  boulder) can't be carried off, but they can be shoved, dragged or rolled
-  by someone strong enough: the storyteller decides whether an attempt
-  succeeds, and the map follows what it writes. Things that are **part of
-  the building or the ground** (a hearth, a stove, a well, a counter, a
-  tree, anything bolted down) stay where they are whatever a passage says,
-  unless your Direction or Narration moves them, or a turn sent under
-  **Fiat**; the map read may still change their state. On every other turn
-  the storyteller is told so: such things near you are marked "fixed in
-  place", and one your turn names is named again at the very end of what it
-  is sent, with word that an attempt to move it fails. To move one, send
-  the turn under **Fiat**. Something driven or ridden (a truck, a cart, a
-  horse) goes with whoever takes it.
-- **Carrying ▾** lists what your character carries, each with **Drop** (it
-  lies at your feet again, to be picked up by anyone) and **Give to** each
-  person within reach (it is theirs then, and their card says so). The
-  Cast page shows "Carrying: …" under a character's avatar.
-- A choice puts its turn in the composer ("I walk over to Jane."), for you
-  to send as it is or add to; the storyteller is told what the choice means
-  as long as the menu's words are still in the turn.
-- **Travel…** sets off for another place on the map, with how long it takes
-  on foot; the turn goes in the composer, and when you send it the clock
-  moves on by that much and you stand there. A turn you rewrite before
-  sending travels nowhere. The next passage begins on arrival. A place
-  whose plan isn't drawn yet lands you on the open country at its door.
-- **Floors and decks.** A place whose words call for more than one level
-  (a two-storey house, a cellar, a station's decks, a dungeon's levels, a
-  keep) is drawn level by level: its plan is the ground floor or main deck,
-  and each other level comes as a plan of its own, after it, with its
-  stairs in the same tiles. Stairs (a ladder or a lift counts) are the doors
-  between levels: walk onto them to go up or down, as you walk into a door,
-  and you land a step off the stairs on the other level. The title above
-  the area says where you are ("The farmhouse · Upper floor"); the
-  storyteller is told the level you stand on, the stairs from there, and
-  who is on another level of the place. Each level is furnished on its own.
-  The Region and World maps show the plan's own level.
-- **Edges.** Walk off the edge of an outdoor area (the arrow keys past the
-  last tile, or **Leave north ▾** when you stand on it) to walk on into the
-  area beyond, where one adjoins and nothing bars the way (water, trees or
-  rock at the far edge do), or to set off for the places that lie that way.
-  Where no place adjoins, **Walk on into open country** does. A farm's, a
-  village's or a site's plan has a way out to each of its edges, and the
-  ground just past it on the land is cleared and joined to the open
-  country, so a village in a forest can be left on every side; water, the
-  dark of a chasm or a wall still bar the way.
-- **Open country.** Between places, in a region, a desert or a forest, or
-  in no place the map names, you stand on the land itself, laid out as a
-  grid of regions about the size of a farm (400 m across, walked at 2.5 m a
-  tile, as the farm is) starting where the story begins. **The world
-  designer** designs them ahead of you, the one you stand in and the eight
-  around it, and the next ring as you walk on: each region's land, a few
-  places (buildings you can enter, landmarks, a settlement), things to find
-  and people or creatures, to fit the world, what has happened in the
-  story, and the regions beside it, whose roads, rivers and woods carry on
-  across the edges. How much a region holds is **Settings → Models → Open
-  country**: Sparse (at most two places, one thing and one person or
-  creature), Normal, the default (three places, three things, one person),
-  or Rich (five places, eight things, three people). A region designed
-  already keeps what it has. In a world of want, tick **Things are scarce
-  in this world** (Story → Setup → About → Scarcity; a plot file's
-  `scarce: yes`): the designer keeps food, fuel, weapons and whatever else
-  the world holds scarce rare, hidden or hard to reach rather than lying
-  about for the taking. Leave it off for a world without scarcity. On a map
-  that came with a plot file (the samples' among them) the file's world is drawn already: the designer
-  waits while you are on one of its places (a farm, a town, a site, a
-  building; a region or a forest too wide for a plan of its own doesn't
-  count), and begins the first time you stand beyond them all. It runs on the story model unless Settings → Models →
-  World designer model names another, a ring of nine taking about half a
-  minute, and only while **Draw the map** is on. A region is kept once
-  designed, on every branch, and stays under fog on the Region and World
-  maps until you have been there; the next one is painted as you near its
-  edge, so it shows the moment you cross. Nothing the designer put in a
-  region has its own picture drawn (under Draw map pictures) until you have
-  been in that region: until then the tile set's nearest thing stands in.
-  Nobody is designed close by you, nothing the story already has is
-  designed again, and nothing is put on a place's own ground (a farm, a
-  town, a site with its plan), where its plan would hide it. The map read is
-  shown only the region you stand in, and never moves anyone into another
-  region unless the passage names the place. Places the story has stand
-  where they are, a settlement or a building entered by its door, and the
-  storyteller is told what is near you with its distance, and every region
-  designed so far. The world has no edge: the map grows as far as you walk,
-  at the cost of the designs and drawings. A city too wide to walk tile by
-  tile (up to 8 km) gets a plan at a coarser grain.
-- **Changing the map by Direction.** A Direction or Narration states what
-  is so, on the map too. Besides adding a place (at a marked spot, or by
-  its distance and bearing from one) and changing what state a place is in
-  ("The barn is a furnace now"), it can take a place off the map ("The barn
-  is gone": whatever was in it stands in the place around it), rename one
-  ("The inn is now called The Drowned Rat"; the old name still finds it),
-  resize one ("The castle is a vast fortress, three hundred metres across";
-  its plan is drawn again at the new size), move one (to a marked spot, or
-  "the mill now stands two kilometres north of the village"; what is inside
-  goes with it) or put one inside another. The map read quotes your words
-  for each change, a passage can't make them, and a place your turn doesn't
-  name stays as it is. The notice under the turn says what the map did.
-- **Marking a spot.** Right-click anywhere, on Local or on the Region and
-  World maps, and choose **Mark this spot in your turn**: its
-  coordinate goes into the composer at the cursor, as `⌖(412, -88)` (metres
-  east and north on the map; the readout beside the buttons shows the
-  coordinate under the pointer). Write what happens there: "A dark rift
-  opens at ⌖(412, -88)", "Elowen goes to ⌖(412, -88)". The storyteller is
-  told what is at each spot and how far it is from you, and whatever the
-  turn puts there, a new place or someone sent there, is put exactly there
-  on the map. A pin shows each spot the turn marks.
-- **Go here.** Right-click a spot on the map for **Go here**: a spot in the
-  area you are in is walked to, one elsewhere is travelled to, as Travel…
-  does (when the turn is sent).
-- **◎ Me** (or Home) centres the view on you, on Local and on the map.
-- **Correcting the map.** When a passage's reading of the map gets
-  something wrong, put it right by hand: no model is asked, and no time
-  passes. On Local, drag a person or a thing to the tile where they really
-  are (or right-click it, **Move…**, then click where; Esc cancels). The
-  right-click menus have a **Correct the map** section: for a person,
-  **Name…** (someone not named yet: one of the cards, or a name) or **Is
-  really…** (named wrongly: another card, a name, or someone not named yet
-  after all), and **Not here** (taken off the map and off the scene card);
-  for a thing, **Rename…**, **Broken** or **Whole again**, and **Remove**;
-  on an empty tile, **Put someone here…** and **Put a thing here…**. On the
-  Region and World maps, a place's right-click menu has **Rename this
-  place…** (its old name stays as another name for it), **Move this
-  place…** (then click where it stands; what is inside it goes too), **Put
-  it inside…**, **Merge into…** (a duplicate: its people, things and places
-  go to the other) and **Remove from the map**; and on any spot, **Add a
-  place here…** (its name, what kind of place, how wide, and what it is like):
-  it is on the map from then on, told to the storyteller, and drawn when the
-  story goes there. Someone moved into or out
-  of your character's company is put on or taken off the scene card's
-  roster too. A correction belongs to the latest message, so each branch
-  keeps its own and the next passage is read from the corrected map; the
-  last one can be undone (**Undo** in the same menus) until the story
-  moves on.
-- **Objects…** (above Local) makes things and puts them where you want
-  them, mainly to set a place up before you play, though it works at any
-  time. Type what you want, separated by commas ("an armchair, a small side
-  table, a worn rug"), and press **Make**: the panel says how many pictures
-  that draws and what each costs, and each is drawn in the tile set's style
-  (one the tile set already has isn't drawn again). Until its picture is in,
-  an object shows as the tile set's nearest thing. Then choose an object,
-  yours or any of the tile set's, and click on Local to put it there; it
-  stays chosen, so you can put down several (Esc stops). **Remove things**
-  takes anything you click off the map, the furniture that came with the
-  place too. Placing and removing are corrections like those above: no time
-  passes, the storyteller is told the room as it now is, and Undo puts the
-  last one back. Objects… is in Edit Mode's bar too (see "Edit Mode" below).
-
-  ![The Objects panel: a herb drying rack, a cauldron and a spinning wheel typed in, the line saying it draws three pictures with FLUX.3 Image Klein at $0.008 each, and the tile set's things to choose from](screenshots/objects-panel.png)
-- **The clock** (Day 1, 08:00, beside the place's name) moves with walking
-  and travel, with the time the passages tell, and with a Direction or
-  Narration that says time goes by ("Three weeks pass"). In a story with a
-  plot it is the plot's clock, so travel passes the plot's days. The
-  storyteller is never told the day; it is told how far you walked since the
-  last passage, and the reads that keep time are told that walk is counted
-  already.
-- **Who can see whom.** Walls and rock stop sight; windows, fences and
-  doorways don't, and a few trees deep do. What you can't see from where you
-  stand is the fog of war: indoors it is shaded, and anyone out of your sight
-  isn't shown at all until you can see them. Someone outside at a door of
-  the building you are in (knocking, say) shows at that door, beyond its
-  wall, whenever you can see the door. The storyteller is told where
-  everyone is, and who is in sight of you and within earshot.
-- Nobody else moves on their own: people stand where the story last put
-  them until a passage moves them.
-- Nothing can be walked while a passage is being written.
-
-The map's rules hold everywhere: every room can be reached (a plan that left
-one sealed gets a door), roads never run through buildings, doorways and
-walkways stay clear of furniture. **Rooms** on Story → Setup → About sets
-how full the rooms are (Sparse, Normal, Full); a building is furnished by the
-map art model the first time the story is in or beside it.
-
-**Look** chooses the tile set the map is drawn in: one of those that come
-with SealedLore (a snowbound farm, an elven forest, a steampunk city, an
-industrial wasteland, Hell, a space station), or one designed for your
-story. A sample comes with its own. For a new world there are three ways,
-offered as **Map tiles** in the Start dialog, before anything is drawn:
-**The AI chooses the closest set** (the map read's model reads your world
-and picks the nearest set, and says why), a set you choose yourself, or
-**Design a new set for this world…**, which opens the designer before the
-opening is written; the map's things then wait for the new set rather than
-being drawn in another's style. The set is chosen once, when the story
-begins, and kept for the whole story: it changes only when you choose
-another. The first time a story's map opens, a line over it says which set
-it is drawn in (and, when the AI chose it, why), with **Choose a set…** and
-**Design a new set…** a button away; the same is under Look, where **The
-AI's choice, closest to this world** asks again. The gallery shows every set
-as a card, with a strip of its textures and sprites, its style in words and
-what it suits, the one in use marked: **Use this set** switches, **Remove…**
-takes a set drawn for this story out again (its pictures deleted; the ones
-that come with SealedLore stay), **Let the AI choose** has the AI choose
-again, and **Design a new set…** opens the designer. There you name the set
-and describe the look you want, in your own words (prefilled with your
-world and the style now in use: "gritty rain-slick cyberpunk alleys, neon
-and wet concrete", "bright and cheerful storybook meadow"). Under
-**Pictures of the world** you may add up to six photos or renders, each
-with what it shows ("a photo of what a typical bar looks like in this
-setting"): the designer looks at them and works the set's materials,
-colours and buildings out from them, while the image model that draws the
-tiles never sees them (it would copy them). **Designed by** is the model
-that designs it, Claude Opus 5.5 unless you choose another (Recommended ▾
-beside the field), and your choice is kept; a model that can't read
-pictures is sent none, and the dialog says so. **Write the design** has it
-write the set's words and a prompt tailored to every picture from your
-description, your pictures and the world; you see and may change each of
-them, with the number of pictures, the image model that draws them and the
-price of the whole set at the model's listed prices, and nothing is drawn
-until you press **Draw the set…** and confirm. Each picture is then sent
-exactly as its prompt stands, in the background, and the map is drawn in the
-new set once all of it is in; the set it had stays until then. A story may
-keep several sets of its own and swap between them under Look, and they
-travel with Restart, Duplicate settings and scenario files.
-
-![The tile set gallery: a card for each set with a strip of its textures and things, its style in words and the settings it suits, and Use this set; Let the AI choose, Design a new set… and Edit the tile set… at the bottom](screenshots/tile-sets.png)
-
-Things and people the set doesn't have are drawn as the story needs them,
-with **Draw map pictures** on (Settings → Images; FLUX.3 Klein, about a
-cent each): each kind of thing once, each character from their portrait,
-and, in the set's own style, any ground it has none of (sand where the set
-is a snowbound farm, a station's metal deck) and any roof material. Until
-then a thing is a plain crate, a character a small figure, and new ground
-the set's own coloured to match. The samples come with all of theirs. **Edit the
-tile set…** (under Look, and in the gallery) lists every picture the map is
-drawn with: the ground, walls and decoration, every thing and every
-character's sprite, with the words each was drawn from. Change the words
-and **Draw it again…** (the model and price are shown first), **Use a
-picture of your own…**, or go **Back to the set's own**; a change is for
-this story only. Everything drawn for a map is pixel art in a style that
-suits the world rather than any one game's look: each shipped set names its
-own (bleak and quiet for the snowbound farm and the abandoned town, whimsical
-storybook for the elven forest, warm and earthy for the market town), and a
-set drawn for your story takes the style from your
-description (gritty and dark, bright and cheerful, whimsical…), which you
-can see and change with the set's other words before it is drawn.
-
-It is one map, read at three levels by zooming; **Local**, **Region** and
-**World** jump to each. **Local** is the area you are in (the farm, not just
-its farmhouse; a town; the caves), played on as above; before its plan is
-drawn it shows the region. A story opens on **Local**. **Region**
-is the country around you that the story has reached: each place with its
-picture, small when far, its name bright where you have been or can see now,
-dim where the story only told of it, ringed where you are now; it is where you
-look to decide where to go next. Where several places lie too close together
-at the zoom to name apart, their names stand in a column under them, in order
-down the map, the place you are at first. The fog has three shades, named under the
-map's buttons: the area you are in now is clear and edged in gold (what Local
-shows), country you know but aren't in lies under a grey haze, and anywhere
-unexplored is dark. **World** is the whole map zoomed out, its settlements and regions
-named large and the small places hidden. Scroll to zoom (places inside others
-appear as you zoom in), drag to move; double-click a place to go to it. Esc
-goes out from Local to the region.
-
-![The Region view of The Silverwood: the forest, the road north from Fernhollow to Sylvaranth and the mountains beyond, under the grey haze of country known but not here, with Fernhollow ringed in gold where the ranger is](screenshots/map-region.png)
-
-The map is the storyteller's too: each turn it is told where you are on it,
-what is around and inside that place, the ways between them and the things
-there, so a place you go back to is as the story left it. A map from a plot
-file is told in the file's own words, with how far and which way each of its
-places lies. That costs some words on every turn; untick **Keep a map of the
-story** to save them.
-
-**Story → Continue without the map…** goes on from where a map story is,
-without the map, as a story of its own: a copy with every character, the
-plot, the world and lore, every branch and the story so far, and, on the
-branch you are on, the scene as the map had it (where you are, who is with
-you, who is elsewhere and where, what each of you carries). Nothing is read, drawn or painted for a map
-in the copy, and the storyteller is no longer sent it, so each turn costs
-less. The map story stays as it was, to go back to. Like **Duplicate entire
-story**, the copy's cost history includes the original's. Not for a chat kept
-in memory only.
-
-### Edit Mode
-
-![Edit Mode inside the inn of a story drafted from an idea: the bar with Move, Paint and the tile it lays, Room, Fence, Building, Remove building, Go inside, Objects…, Undo, Go outside and Done, over the inn's rooms](screenshots/map-edit.webp)
-
-**✎ Edit map**, on Local, changes the map by hand, so you don't have to ask
-for a change in a Direction and hope it is read the way you meant. Nothing is
-asked of a model, and no time passes in the story. While the map is being
-edited nobody walks; **Done** goes back to playing, and so does sending a
-turn.
-
-A story whose map it grows (drafted from an idea, written from scratch, a
-simple chat) **opens in Edit Mode** once its first place is drawn, after the
-opening and before your first turn, so you can make it as you want it before
-you play. The samples and other plot files bring maps made by hand, so they
-don't; a line on Local offers it instead, until your first turn.
-
-The bar says what the tool in hand does:
-
-- **Move**: drag a person or a thing to where they belong; click one for its
-  menu (its corrections: rename, remove, broken…). The ground pans the view.
-- **Paint**: click, or drag across tiles, to lay the tile chosen beside it:
-  floor, wall, door, window, ground, grass, path, bridge, sand, trees, rock,
-  water, fence, rubble, or nothing. A door painted into a building's wall
-  leads in; one painted over doesn't any more. A bridge is walked on over
-  water (a road the map drew across a river is one already). Painting a tile back to what the plan
-  had takes your change off. What stood on a tile you make a wall or water is
-  gone.
-- **Room**: drag from one corner to the other: walls round it with a door
-  onto the open floor beside it. Outdoors it makes a walled yard.
-- **Fence**: the same with a fence, and a gap for a gate.
-- **Building** (outdoors): drag from corner to corner and name it (and, if
-  you like, say what it is like). It goes on the map where you drew it, with
-  walls and a door; the storyteller is told of it from then on, and its
-  inside is drawn as any building's is, by the map art model. Its roof is
-  made of what its words say.
-- **Remove building** (outdoors): click a building to take it off. One the
-  map knows comes off the map, and whoever and whatever was in it go to the
-  place round it; one only the plan drew is painted over. Its ground is open
-  again. You are asked first.
-- **Go inside** (outdoors): click a building to edit its rooms, walls and
-  doors without walking there. **Go outside** edits the ground round the
-  building you are in, and **Back to…** returns to where your character is.
-- **Objects…** makes things and places them (see Objects… above).
-- **Undo** puts back the last change, then the one before, a building added
-  or taken off included.
-
-![Adding a building in Edit Mode: open country by the sea, the inn and, beside it, the net shed just drawn there, roofed in dark timber](screenshots/map-edit-building.webp)
-
-What you paint is kept with the map's art, beside the plan it changes: it is
-the same on every branch, as the plan is. Buildings and places you add or
-take off are corrections, so they belong to the message the story is at, and
-each branch keeps its own. **Redraw plan…** draws a place's plan afresh,
-and your painting on the old plan goes with it. The rules the map holds a
-drawn plan to (every room can be reached, every building has a door) aren't
-held against your own tiles: a room you wall up stays walled up.
+The earlier 2.0 betas could play a story on a pixel-art map. The map is
+withdrawn in this version while it is redesigned as a mode of its own, with
+rules of its own: nothing offers one, and a story that was played on a map
+goes on as a story without it, with everything it has (its characters, plot,
+lore, pictures and branches); the map's record and art stay with it, unused.
+In its place a story keeps a picture of each place it goes to: see "Pictures
+of places".
 
 ## Branches, takes and export
 
@@ -1748,9 +1169,7 @@ timeline. Esc or **Back to the story** returns.
 On your own turns the ⋯ menu also offers **Take back this turn**, which
 returns the text and its settings to the composer and removes the turn and
 everything after it — for when you want to reword what you wrote, or change a
-setting, and send it again. In a story played on its map the walking and
-travel the turn carried come back with it, so the turn sent again stands
-where it stood. Double-clicking a chapter in **Story so far** jumps to it.
+setting, and send it again. Double-clicking a chapter in **Story so far** jumps to it.
 
 **Story → Export → Story backup…** writes everything (every branch, summaries,
 questions, reviews, pictures and the API log) to one file; **File → Import…**
@@ -1918,9 +1337,9 @@ its ⋯ menu, or any picture file with View → Background picture…). Pictures
 are kept even when their passage is deleted; only their own Delete removes
 them, since they cost money. The Media tab shows every picture and video in
 the story in one place: **Cast** (every picture on every character's card),
-**Lore** (the same for lore entries), **Story** (the background first, then
-the story's own pictures and videos, newest first) and **Map** (the map's
-paintings and postcards, and the avatars). A picture drawn for a card shows under its
+**Lore** (the same for lore entries, the pictures of places among them) and
+**Story** (the background first, then the story's own pictures and videos,
+newest first). A picture drawn for a card shows under its
 card; right-click one to see it whole, go to its card, save it, **Same
 prompt again…** or **Change this picture…**, as on its card. Right-click the
 background to see it whole, save it, **Draw a new background…** (the picture
@@ -1933,7 +1352,7 @@ picture…** too: the changed copy goes after the same passage. **Save all…** 
 there into a folder you choose, the cards' pictures named by card; each
 picture's ⋯ menu saves one.
 
-![The Media page of The Silverwood: the cast's portraits, the lore's pictures, the background behind the story, and the map's paintings and avatars](screenshots/media-page.webp)
+![The Media page of The Silverwood: the cast's portraits, the lore's pictures and the background behind the story](screenshots/media-page.webp)
 
 Pictures go to the chat endpoint unless **Settings → Images** names another:
 an address, a key, and the service it is (NanoGPT, OpenRouter, WaveSpeed, or
@@ -1945,14 +1364,12 @@ key is used only when the address is the chat endpoint's own host.
 
 Every picture you bring in from disk opens **Crop the picture** first: a
 card's picture or portrait, **Add a picture from disk…** in the picture and
-video dialogs, the background, a picture in the plot file editor, or a
-painting of your own. Drag the frame to move it, a corner to resize it,
+video dialogs, the background, or a picture in the plot file editor. Drag the frame to move it, a corner to resize it,
 or across the picture to draw a new one. **Shape** leaves it free, to take
 any part you like, or holds it to the exact shape the app uses:
 
 - a portrait, or a place or lore picture, as your portrait model draws them;
 - the background, as the story area is in the window now;
-- a painting, in the shape of a map area (5:3), which it covers;
 - a square, or the picture's own shape.
 
 Each place opens it on the shape it calls for. **Use the whole picture**
@@ -2034,6 +1451,34 @@ beside it lists the models measured for portraits, with what each is good at:
   same from one picture to the next.
 - **Seedream 5.0 Flash** (about $0.027): very finished, with up to ten
   reference pictures, between FLUX.3 Klein and Seedream 5.0 Pro in price.
+
+### Pictures of places
+
+A story can keep a picture of each place it goes to: the place itself, as it
+is at that moment, with nobody in it. **Picture of this place…** above the
+story (and under Story) opens the picture dialog for the place the scene is
+at: the storyteller's prompt writer describes the place from the story so
+far, you check or change the prompt, and the picture is drawn by the portrait
+model (FLUX.3 Klein by default, about a cent). It goes on the place's lore
+entry, named for the place the scene card gives; when no entry names the
+place one is made for it, under the name in the dialog's **Place** field,
+with the scene card's words as its text, for you to fill in. While the story
+is at that place, the picture stands behind the story's text in place of the
+story's own background, and the story's own comes back wherever the place
+has none. The pictures the samples come with on their places work the same
+way, so Hellsville's main street is behind the story once the story reaches
+Hellsville.
+
+Once a place has a picture the button reads **New picture of this place…**:
+the last picture goes with the prompt as a reference, and the direction asks
+for the same place as it is now, so a bar first pictured quiet comes back
+wrecked after the fight, the same bar. Every picture stays on the entry
+(newest last, and the newest is the one shown) and in the Media tab under
+Lore. A place is found by its entry's title or keywords in the scene's
+location, the nearer place first ("the kitchen of the farmhouse" is the
+farmhouse's), so an entry called "The diner" with a keyword "diner" catches
+"the diner's back room". **Settings → Images → Place pictures** turns the
+background off; the pictures stay on their entries.
 
 ## Videos
 
@@ -2229,16 +1674,6 @@ story is (Settings → Context), with a plain summariser.
   private scene's does, unless the model is a `private/` one: then it is
   end-to-end encrypted (see "Private scenes"), and the chat can move only to
   another `private/` model.
-- **A chat can keep a map**, as a story can (see "The map"): tick **Keep a
-  map of the conversation** when you start it, or later under **Story →
-  Setup… → About**. Once the conversation sets a scene, the map model reads
-  each reply for the places, who is where and the things that matter, the
-  local area is drawn, and the map grows as the chat goes; the map is sent
-  with each message, as a story's is. A chat has no cast, so the map tracks
-  you by the name beside the box (your character's name, or "You" when
-  blank). It is one more small call after every reply. In a TEE chat the
-  map is read and drawn by the chat's own model, and map pictures from an
-  image model stay off (the image endpoint is not private).
 - **Where a chat is kept** is asked when it starts, on any model: **On
   disk**, like any story, or **In memory only**. Nothing of an in-memory
   chat is written on this computer, not even its log, and it teaches the
@@ -2261,8 +1696,7 @@ SealedLore runs its own tor and gives your computer an onion address, so
 there is nothing to set up on your router, no port is opened, and there is
 no account or service in between. It is off until you turn it on, and while
 it is off nothing of it runs, listens or can be reached. For now it works on
-Linux, and for stories and chats that don't keep a map (Story → Continue
-without the map… makes a copy that can go on the phone).
+Linux.
 
 The phone needs **Tor Browser** (from the Tor Project, through Google Play,
 F-Droid or torproject.org), at its Standard or Safer security level: the page

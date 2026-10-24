@@ -15,6 +15,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from sealedlore.engine.jsonreply import extract_json
+from sealedlore.engine.places import place_size
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.world_pictures import looks_of, picture_size
 from sealedlore.messages import ContentPart, PromptMessage
@@ -224,7 +225,9 @@ def portrait_size(model: ImageModelInfo | None) -> str:
 
 
 def card_size(card: Card, model: ImageModelInfo | None) -> str:
-    """A portrait's tall size, or a lore picture's landscape."""
+    """A portrait's tall size, or a lore picture's landscape, else the
+    largest square up to PLACE_SIDE (engine/places.py: FLUX.3 Klein lists
+    squares alone, and a lore picture used to take its first, smallest size)."""
     if isinstance(card, LoreEntry):
-        return picture_size(model, landscape=True)
+        return place_size(model)
     return portrait_size(model)
