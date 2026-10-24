@@ -436,7 +436,7 @@ stories, each with its picture. **File → New…** (Ctrl+N), and **New…** und
 the Stories list, show the same choices. A story saves itself as you go
 (Ctrl+S saves at once).
 
-![The start page with no stories yet: the sample stories first, each with its picture and a line on what it is, then the ways to start your own](screenshots/start-page.webp)
+![The start page with no stories yet: the sample stories first, each with its picture and a line on what it is, then the ways to start your own, then the Visual Stories](screenshots/start-page.webp)
 
 **Managing stories.** Right-click a story in the Stories list:
 - **Open folder** shows the story's files in your file manager (also for a

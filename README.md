@@ -3,7 +3,7 @@
 A Linux and Windows application for AI-driven roleplay with many characters
 in an open world, with a number of particularly useful features.
 
-![The start page: six sample stories, each with its picture and a line on what it is, and below them the ways to start a story of your own](docs/screenshots/start-page.webp)
+![The start page: five sample stories, each with its picture and a line on what it is, below them the ways to start a story of your own, and the Visual Stories, Doomsville first](docs/screenshots/start-page.webp)
 
 *Beta.* This application has been tested extensively both through
 automation and manually by the developer. It is however still in early
