@@ -48,6 +48,7 @@ from sealedlore.engine.cells import (
     lay_pieces,
     make_cell,
 )
+from sealedlore.engine.kits import yard_pieces
 from sealedlore.engine.levels import place_of_area
 from sealedlore.engine.overmap import (
     CAMP_SHARE,
@@ -297,12 +298,37 @@ class OvermapRuntime:
         self._save_art(art)
         world = self._world_read()
         area = self._built_area(made.place.id, world, self._art_read())
-        if area is not None and (made.objects or made.loot):
+        if area is not None and (made.objects or made.loot or area.buildings):
             keep = set()
             for entrance in area.entrances:
                 keep |= {
                     (entrance.x + dx, entrance.y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1)
                 }
+            # The kit's yard pieces round the buildings first (a woodpile, a
+            # kennel), as Doomsville's own were stamped; then the template's
+            # things, clear of them.
+            yard = (
+                yard_pieces(
+                    kit,
+                    area.rows,
+                    area.buildings,
+                    area.names,
+                    area.tile_m,
+                    f"{seed}:{made.key}",
+                    keep=keep,
+                    blocked=area.blocked(),
+                    reach_from=[(e.x, e.y + 1) for e in area.entrances]
+                    + [(e.x, e.y - 1) for e in area.entrances],
+                )
+                if kit is not None and area.buildings
+                else []
+            )
+            used = {
+                (p["x"] + dx, p["y"] + dy)
+                for p in yard
+                for dy in range(int(p.get("h", 1)))
+                for dx in range(int(p.get("w", 1)))
+            }
             pieces, loot = lay_pieces(
                 area.rows,
                 made.objects,
@@ -311,14 +337,14 @@ class OvermapRuntime:
                 seed,
                 made.key,
                 buildings=list(area.buildings.values()),
-                keep=keep,
+                keep=keep | used,
             )
             art = self.world_art
             with self._lock():
                 layout = art.layouts[made.place.id][""]
                 layout.spec = {
                     **layout.spec,
-                    "pieces": pieces,
+                    "pieces": yard + pieces,
                     "loot": loot,
                     "pieces_scale": outdoor_scale(made.place, COLUMNS),
                 }

@@ -575,3 +575,35 @@ def test_out_in_a_made_cell_the_plot_has_the_player_elsewhere(doomsville):
     chronicle = doomsville.visual_chronicle()
     assert chronicle.place is None and "Hellsville" in chronicle.visited
     assert "Brannock:" in doomsville.visual_state_text()
+
+
+def test_the_game_window_offers_the_map_and_walks_on_into_cells(doomsville, monkeypatch, tmp_path):
+    from PySide6.QtWidgets import QApplication, QDialog
+
+    import sealedlore.gui.visual_window as vw
+    from sealedlore.gui.overmap_view import OvermapDialog
+    from sealedlore.models.config import Config
+
+    QApplication.instance() or QApplication([])
+    for region in doomsville.overmap().regions:
+        region.chance = 0
+    opened = []
+
+    def shown(self):
+        opened.append(self)
+        self.chosen = None
+        return QDialog.Rejected
+
+    monkeypatch.setattr(OvermapDialog, "exec", shown)
+    window = vw.VisualWindow(doomsville, Config(visual_paint=False), tmp_path)
+    try:
+        assert window.area_view.travel_button.text() == "Map…"
+        window.area_view.travel_button.click()
+        assert len(opened) == 1 and opened[0].places.count() >= 2
+        window._edge_menu("west")
+        window._edge_go("west", "area")
+        window._fading = None
+        state = doomsville.area_state()
+        assert state.spots[doomsville.held_name()].area.startswith("cell:")
+    finally:
+        window.close()

@@ -563,6 +563,9 @@ def lay_pieces(
     h, w = len(rows), len(rows[0]) if rows else 0
     if not w:
         return [], []
+    # What stands (for what can be reached) and what is kept clear besides
+    # (the gap round each thing, in front of doors: for where things go).
+    solid: set[tuple[int, int]] = set()
     blocked: set[tuple[int, int]] = set(keep)
     middle = (w // 2, h // 2)
     start = min(
@@ -572,7 +575,7 @@ def lay_pieces(
     )
     if start is None:
         return [], []
-    reach = _reachable(rows, start, blocked)
+    reach = _reachable(rows, start, solid)
     roads = [(x, y) for y in range(h) for x in range(w) if rows[y][x] == "="]
     water = [(x, y) for y in range(h) for x in range(w) if rows[y][x] == "~"]
     near_buildings = [((x0 + x1) // 2, (y0 + y1) // 2) for x0, y0, x1, y1 in buildings]
@@ -602,11 +605,16 @@ def lay_pieces(
             if spot is None:
                 continue
             fp = {(spot[0] + dx, spot[1] + dy) for dy in range(ph) for dx in range(pw)}
-            trial = blocked | fp
-            now = _reachable(rows, start, trial) if start not in fp else 0
+            # Reached from the middle, or from beside the thing when it
+            # stands on the middle (a crashed helicopter laid "middle" was
+            # always refused: its own tiles were where the reach began).
+            under = solid | fp
+            origin = start if start not in under else _beside(rows, under, under)
+            now = _reachable(rows, origin, under) if origin is not None else 0
             if now < reach - len(fp):
                 continue  # it would cut ground off
             reach = now
+            solid |= fp
             blocked |= fp
             # A step clear round it, so things don't stand shoulder to shoulder.
             blocked |= {
@@ -625,6 +633,24 @@ def lay_pieces(
             if spot is not None:
                 loot_out.append({"x": spot[0], "y": spot[1], "table": table, "chance": chance})
     return pieces, loot_out
+
+
+def _beside(
+    rows: Sequence[str], fp: Collection[tuple[int, int]], solid: Collection[tuple[int, int]]
+) -> tuple[int, int] | None:
+    """A walkable tile beside a footprint, not under anything."""
+    h, w = len(rows), len(rows[0])
+    for x, y in sorted(fp):
+        for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if (
+                0 <= nx < w
+                and 0 <= ny < h
+                and (nx, ny) not in fp
+                and (nx, ny) not in solid
+                and rows[ny][nx] in WALKABLE
+            ):
+                return nx, ny
+    return None
 
 
 def _free_spot(
