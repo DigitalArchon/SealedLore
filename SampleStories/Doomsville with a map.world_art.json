@@ -467,7 +467,65 @@
        "x": 16,
        "y": 7
       }
-     ]
+     ],
+     "pieces": [
+      {
+       "name": "a stack of firewood",
+       "x": 46,
+       "y": 20,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100,
+       "yard": "3d510125-2878-5feb-9b9b-41c25992393b",
+       "n": 0
+      },
+      {
+       "name": "a dog kennel",
+       "x": 68,
+       "y": 18,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100,
+       "yard": "3d510125-2878-5feb-9b9b-41c25992393b",
+       "n": 1
+      },
+      {
+       "name": "a stack of firewood",
+       "x": 62,
+       "y": 17,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100,
+       "yard": "3d510125-2878-5feb-9b9b-41c25992393b",
+       "n": 2
+      },
+      {
+       "name": "a hay bale rotting in the snow",
+       "x": 99,
+       "y": 41,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100,
+       "yard": "4460da54-f44d-59cb-ba89-2b224e6466ef",
+       "n": 0
+      },
+      {
+       "name": "a hay bale rotting in the snow",
+       "x": 74,
+       "y": 50,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100,
+       "yard": "4460da54-f44d-59cb-ba89-2b224e6466ef",
+       "n": 1
+      }
+     ],
+     "pieces_scale": 3
     },
     "rows": [
      "TTTTTTTTTTTTTTTTTTT==TTTTTTTTTTTTTTTTTTT",
@@ -533,7 +591,7 @@
      ]
     },
     "model": "showcase",
-    "made_at": "2026-10-23T20:11:04.621194+00:00",
+    "made_at": "2026-10-23T20:11:04.621194+00:00+yard:doomsville",
     "levels": []
    }
   },
@@ -835,295 +893,328 @@
     "state": "",
     "spec": {
      "ground": "floor",
-     "features": [
+     "kit": "abandoned",
+     "template": "barn_a",
+     "turn": [
+      0,
+      true
+     ],
+     "tile_m": 1.0,
+     "pieces": [
       {
-       "kind": "building",
-       "name": "Barn",
-       "x": 0,
-       "y": 0,
-       "w": 40,
-       "h": 24,
-       "doors": [
-        {
-         "side": "south",
-         "at": 18
-        },
-        {
-         "side": "south",
-         "at": 21
-        }
-       ],
-       "windows": [
-        {
-         "side": "east",
-         "at": 6
-        },
-        {
-         "side": "east",
-         "at": 17
-        },
-        {
-         "side": "west",
-         "at": 12
-        }
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         12,
-         0
-        ],
-        [
-         12,
-         16
-        ]
-       ],
-       "gaps": [
-        [
-         12,
-         8
-        ],
-        [
-         12,
-         9
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         27,
-         0
-        ],
-        [
-         27,
-         16
-        ]
-       ],
-       "gaps": [
-        [
-         27,
-         7
-        ],
-        [
-         27,
-         8
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         12,
-         16
-        ],
-        [
-         27,
-         16
-        ]
-       ],
-       "gaps": [
-        [
-         19,
-         16
-        ],
-        [
-         20,
-         16
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         0,
-         9
-        ],
-        [
-         6,
-         9
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         0,
-         15
-        ],
-        [
-         6,
-         15
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         6,
-         9
-        ],
-        [
-         6,
-         15
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         33,
-         9
-        ],
-        [
-         39,
-         9
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         33,
-         15
-        ],
-        [
-         39,
-         15
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         33,
-         9
-        ],
-        [
-         33,
-         15
-        ]
-       ],
-       "gaps": [
-        [
-         33,
-         12
-        ]
-       ]
-      },
-      {
-       "kind": "area",
-       "fill": "dark",
-       "shape": "rect",
-       "x": 1,
-       "y": 1,
-       "w": 10,
-       "h": 7
-      },
-      {
-       "kind": "object",
-       "name": "Pickup truck (rusted, flat tyres, no fuel)",
-       "x": 15,
-       "y": 5
-      },
-      {
-       "kind": "object",
-       "name": "Hay bales, stacked",
-       "x": 30,
-       "y": 3
-      },
-      {
-       "kind": "object",
-       "name": "Workbench with rusted tools",
-       "x": 10,
-       "y": 12
-      },
-      {
-       "kind": "object",
-       "name": "Feed sacks, torn and spilled",
+       "name": "a wooden tool rack with hand tools",
        "x": 3,
-       "y": 12
+       "y": 1,
+       "w": 2,
+       "h": 1,
+       "stock": "tool_rack",
+       "chance": 70
       },
       {
-       "kind": "object",
-       "name": "Tilted ladder",
-       "x": 22,
-       "y": 1
+       "name": "workbench with rusted tools",
+       "x": 8,
+       "y": 1,
+       "w": 3,
+       "h": 1,
+       "stock": "workbench",
+       "chance": 80
       },
       {
-       "kind": "object",
-       "name": "Oil drum, empty",
+       "name": "hay bales stacked",
        "x": 24,
-       "y": 20
+       "y": 1,
+       "w": 2,
+       "h": 2,
+       "stock": "hay",
+       "chance": 15
       },
       {
-       "kind": "object",
-       "name": "Scattered straw and a pitchfork",
-       "x": 17,
-       "y": 19
+       "name": "hay bales stacked",
+       "x": 27,
+       "y": 1,
+       "w": 2,
+       "h": 2,
+       "stock": "hay",
+       "chance": 15
       },
       {
-       "kind": "object",
-       "name": "Bird droppings on the floor",
-       "x": 35,
-       "y": 12
+       "name": "a metal tool chest on wheels",
+       "x": 5,
+       "y": 3,
+       "w": 1,
+       "h": 1,
+       "stock": "tool_chest",
+       "chance": 80
+      },
+      {
+       "name": "a low wooden animal pen fence",
+       "x": 19,
+       "y": 4,
+       "w": 3,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a low wooden animal pen fence",
+       "x": 23,
+       "y": 4,
+       "w": 6,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "crate of bolts and nails",
+       "x": 2,
+       "y": 5,
+       "w": 1,
+       "h": 1,
+       "stock": "bolts",
+       "chance": 80
+      },
+      {
+       "name": "a wooden sawhorse",
+       "x": 9,
+       "y": 5,
+       "w": 2,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "feed sacks torn and spilled",
+       "x": 23,
+       "y": 5,
+       "w": 1,
+       "h": 1,
+       "stock": "feed",
+       "chance": 30
+      },
+      {
+       "name": "a large metal feed trough",
+       "x": 26,
+       "y": 5,
+       "w": 2,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a wooden crate of scrap metal",
+       "x": 1,
+       "y": 6,
+       "w": 1,
+       "h": 1,
+       "stock": "scrap",
+       "chance": 60
+      },
+      {
+       "name": "a chopping block with an axe",
+       "x": 4,
+       "y": 6,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a low wooden animal pen fence",
+       "x": 19,
+       "y": 7,
+       "w": 3,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a low wooden animal pen fence",
+       "x": 23,
+       "y": 7,
+       "w": 6,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "tilted ladder",
+       "x": 6,
+       "y": 8,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a stack of old tyres",
+       "x": 10,
+       "y": 8,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a large metal feed trough",
+       "x": 22,
+       "y": 8,
+       "w": 2,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a wooden feed bin with lid",
+       "x": 26,
+       "y": 8,
+       "w": 2,
+       "h": 1,
+       "stock": "feed_bin",
+       "chance": 70
+      },
+      {
+       "name": "a rusted tractor",
+       "x": 8,
+       "y": 10,
+       "w": 3,
+       "h": 3,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a low wooden animal pen fence",
+       "x": 19,
+       "y": 10,
+       "w": 3,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a low wooden animal pen fence",
+       "x": 23,
+       "y": 10,
+       "w": 6,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "plough",
+       "x": 3,
+       "y": 11,
+       "w": 2,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "feed sacks torn and spilled",
+       "x": 22,
+       "y": 12,
+       "w": 1,
+       "h": 1,
+       "stock": "feed",
+       "chance": 30
+      },
+      {
+       "name": "haystack",
+       "x": 26,
+       "y": 12,
+       "w": 2,
+       "h": 2,
+       "stock": "hay",
+       "chance": 15
+      },
+      {
+       "name": "oil drum empty",
+       "x": 3,
+       "y": 13,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "propane tank",
+       "x": 4,
+       "y": 13,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a stack of old tyres",
+       "x": 7,
+       "y": 14,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a wheelbarrow with a flat tyre",
+       "x": 8,
+       "y": 14,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      }
+     ],
+     "loot": [
+      {
+       "x": 28,
+       "y": 15,
+       "table": "floor_barn",
+       "chance": 30
+      },
+      {
+       "x": 1,
+       "y": 16,
+       "table": "floor_barn",
+       "chance": 30
       }
      ]
     },
     "rows": [
-     "########################################",
-     "#          _#_________5____#___________#",
-     "#          _#______________#___________#",
-     "#          _#______________#__2________#",
-     "#          _#______________#___________#",
-     "#          _#__1___________#___________#",
-     "#          _#______________#___________W",
-     "#          _#__________________________#",
-     "#______________________________________#",
-     "#######____________________#_____#######",
-     "#_____#_____#______________#_____#_____#",
-     "#_____#_____#______________#_____#_____#",
-     "W__4__#___3_#______________#_______8___#",
-     "#_____#_____#______________#_____#_____#",
-     "#_____#_____#______________#_____#_____#",
-     "#######_____#______________#_____#######",
-     "#___________#######__#######___________#",
-     "#______________________________________W",
-     "#______________________________________#",
-     "#________________7_____________________#",
-     "#_______________________6______________#",
-     "#______________________________________#",
-     "#______________________________________#",
-     "##################+##+##################"
+     "##############++##############",
+     "#__________#_________________#",
+     "#__________#_________________#",
+     "#__________#_________________#",
+     "#__________+_________________#",
+     "#__________#_________________#",
+     "#__________#_________________#",
+     "#__________#_________________#",
+     "#__________#_________________#",
+     "######+#####_________________#",
+     "#____________________________#",
+     "#____________________________#",
+     "#____________________________#",
+     "#____________________________#",
+     "#____________________________#",
+     "#____________________________#",
+     "#____________________________#",
+     "##############++##############"
     ],
-    "objects": {
-     "1": "Pickup truck (rusted, flat tyres, no fuel)",
-     "2": "Hay bales, stacked",
-     "3": "Workbench with rusted tools",
-     "4": "Feed sacks, torn and spilled",
-     "5": "Tilted ladder",
-     "6": "Oil drum, empty",
-     "7": "Scattered straw and a pitchfork",
-     "8": "Bird droppings on the floor"
-    },
+    "objects": {},
     "labels": {
-     "Barn": [
-      20,
-      12
+     "barn floor": [
+      15,
+      8
+     ],
+     "workshop": [
+      6,
+      4
+     ],
+     "bay": [
+      6,
+      13
      ]
     },
-    "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-14T20:47:40.927118+00:00",
+    "model": "kit:abandoned",
+    "made_at": "kit:a16e1559eda3",
     "levels": []
    }
   },
@@ -1133,291 +1224,391 @@
     "state": "",
     "spec": {
      "ground": "floor",
-     "features": [
+     "kit": "abandoned",
+     "template": "diner_b",
+     "turn": [
+      0,
+      true
+     ],
+     "tile_m": 1.0,
+     "pieces": [
       {
-       "kind": "building",
-       "name": "The Old Diner",
-       "x": 0,
-       "y": 0,
-       "w": 40,
-       "h": 24,
-       "doors": [
-        {
-         "side": "south",
-         "at": 20
-        }
-       ],
-       "windows": [
-        {
-         "side": "south",
-         "at": 6
-        },
-        {
-         "side": "south",
-         "at": 12
-        },
-        {
-         "side": "south",
-         "at": 27
-        },
-        {
-         "side": "south",
-         "at": 33
-        },
-        {
-         "side": "west",
-         "at": 10
-        },
-        {
-         "side": "east",
-         "at": 10
-        }
-       ]
+       "name": "kitchen counter",
+       "x": 3,
+       "y": 1,
+       "w": 4,
+       "h": 1,
+       "stock": "diner_kitchen",
+       "chance": 75
       },
       {
-       "kind": "wall",
-       "points": [
-        [
-         0,
-         9
-        ],
-        [
-         27,
-         9
-        ]
-       ],
-       "gaps": [
-        [
-         8,
-         9
-        ]
-       ]
+       "name": "a cast iron wood burning cookstove",
+       "x": 8,
+       "y": 1,
+       "w": 2,
+       "h": 1,
+       "stock": "stove",
+       "chance": 40
       },
       {
-       "kind": "wall",
-       "points": [
-        [
-         35,
-         0
-        ],
-        [
-         35,
-         9
-        ]
-       ],
-       "gaps": [
-        [
-         35,
-         4
-        ]
-       ]
+       "name": "a cracked vinyl diner booth",
+       "x": 11,
+       "y": 1,
+       "w": 2,
+       "h": 1,
+       "stock": "booth",
+       "chance": 30
       },
       {
-       "kind": "wall",
-       "points": [
-        [
-         27,
-         0
-        ],
-        [
-         27,
-         9
-        ]
-       ],
-       "gaps": [
-        [
-         27,
-         4
-        ]
-       ]
+       "name": "a cracked vinyl diner booth",
+       "x": 27,
+       "y": 1,
+       "w": 2,
+       "h": 1,
+       "stock": "booth",
+       "chance": 30
       },
       {
-       "kind": "wall",
-       "points": [
-        [
-         10,
-         9
-        ],
-        [
-         10,
-         16
-        ]
-       ],
-       "gaps": [
-        [
-         10,
-         12
-        ]
-       ]
+       "name": "battered wooden table",
+       "x": 11,
+       "y": 2,
+       "w": 2,
+       "h": 1,
+       "stock": "",
+       "chance": 100
       },
       {
-       "kind": "wall",
-       "points": [
-        [
-         10,
-         16
-        ],
-        [
-         24,
-         16
-        ]
-       ],
-       "gaps": [
-        [
-         17,
-         16
-        ]
-       ]
+       "name": "battered wooden table",
+       "x": 27,
+       "y": 2,
+       "w": 2,
+       "h": 1,
+       "stock": "",
+       "chance": 100
       },
       {
-       "kind": "wall",
-       "points": [
-        [
-         30,
-         16
-        ],
-        [
-         30,
-         23
-        ]
-       ],
-       "gaps": [
-        [
-         30,
-         19
-        ]
-       ]
+       "name": "a tall pine pantry cupboard",
+       "x": 3,
+       "y": 3,
+       "w": 2,
+       "h": 1,
+       "stock": "pantry",
+       "chance": 85
       },
       {
-       "kind": "passage",
-       "points": [
-        [
-         20,
-         23
-        ],
-        [
-         20,
-         17
-        ]
-       ],
-       "width": 2
+       "name": "a cracked vinyl diner booth",
+       "x": 11,
+       "y": 3,
+       "w": 2,
+       "h": 1,
+       "stock": "booth",
+       "chance": 30
       },
       {
-       "kind": "area",
-       "fill": "floor",
-       "shape": "rect",
+       "name": "a cracked vinyl diner booth",
+       "x": 27,
+       "y": 3,
+       "w": 2,
+       "h": 1,
+       "stock": "booth",
+       "chance": 30
+      },
+      {
+       "name": "a wooden chair",
+       "x": 18,
+       "y": 4,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a wooden chair",
+       "x": 20,
+       "y": 4,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a wooden chair",
+       "x": 22,
+       "y": 4,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a rusted metal folding table",
+       "x": 5,
+       "y": 5,
+       "w": 2,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a long wooden meeting table",
+       "x": 17,
+       "y": 5,
+       "w": 6,
+       "h": 2,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a small metal waste bin",
+       "x": 9,
+       "y": 7,
+       "w": 1,
+       "h": 1,
+       "stock": "trash",
+       "chance": 50
+      },
+      {
+       "name": "a wooden chair",
+       "x": 18,
+       "y": 7,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a wooden chair",
+       "x": 20,
+       "y": 7,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a wooden chair",
+       "x": 22,
+       "y": 7,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a cracked vinyl diner booth",
+       "x": 11,
+       "y": 9,
+       "w": 2,
+       "h": 1,
+       "stock": "booth",
+       "chance": 30
+      },
+      {
+       "name": "a cracked vinyl diner booth",
+       "x": 27,
+       "y": 9,
+       "w": 2,
+       "h": 1,
+       "stock": "booth",
+       "chance": 30
+      },
+      {
+       "name": "battered wooden table",
        "x": 11,
        "y": 10,
-       "w": 18,
-       "h": 5
+       "w": 2,
+       "h": 1,
+       "stock": "",
+       "chance": 100
       },
       {
-       "kind": "object",
-       "name": "long meeting table",
-       "x": 18,
-       "y": 12
+       "name": "battered wooden table",
+       "x": 27,
+       "y": 10,
+       "w": 2,
+       "h": 1,
+       "stock": "",
+       "chance": 100
       },
       {
-       "kind": "object",
-       "name": "Marcus Webb",
-       "x": 22,
-       "y": 12
+       "name": "a wooden storage crate",
+       "x": 1,
+       "y": 11,
+       "w": 1,
+       "h": 1,
+       "stock": "crate_store",
+       "chance": 60
       },
       {
-       "kind": "object",
-       "name": "back table",
-       "x": 20,
-       "y": 10
+       "name": "a wooden ration shelf stacked with dry goods",
+       "x": 4,
+       "y": 11,
+       "w": 2,
+       "h": 1,
+       "stock": "pantry",
+       "chance": 85
       },
       {
-       "kind": "object",
-       "name": "lantern",
-       "x": 14,
-       "y": 11
+       "name": "a wooden ration shelf stacked with dry goods",
+       "x": 7,
+       "y": 11,
+       "w": 2,
+       "h": 1,
+       "stock": "pantry",
+       "chance": 85
       },
       {
-       "kind": "object",
-       "name": "lantern",
+       "name": "a cracked vinyl diner booth",
+       "x": 11,
+       "y": 11,
+       "w": 2,
+       "h": 1,
+       "stock": "booth",
+       "chance": 30
+      },
+      {
+       "name": "a cracked vinyl diner booth",
+       "x": 27,
+       "y": 11,
+       "w": 2,
+       "h": 1,
+       "stock": "booth",
+       "chance": 30
+      },
+      {
+       "name": "a radio set with a microphone",
        "x": 26,
-       "y": 13
+       "y": 12,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
       },
       {
-       "kind": "object",
-       "name": "booth",
+       "name": "a wooden ration shelf stacked with dry goods",
+       "x": 4,
+       "y": 13,
+       "w": 2,
+       "h": 1,
+       "stock": "pantry",
+       "chance": 85
+      },
+      {
+       "name": "a wooden ration shelf stacked with dry goods",
+       "x": 8,
+       "y": 13,
+       "w": 2,
+       "h": 1,
+       "stock": "pantry",
+       "chance": 85
+      },
+      {
+       "name": "a shop counter with an old cash register",
+       "x": 25,
+       "y": 13,
+       "w": 2,
+       "h": 1,
+       "stock": "register",
+       "chance": 70
+      },
+      {
+       "name": "a metal stool",
+       "x": 24,
+       "y": 14,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a metal stool",
+       "x": 27,
+       "y": 14,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a wooden storage crate",
+       "x": 8,
+       "y": 15,
+       "w": 2,
+       "h": 1,
+       "stock": "crate_store",
+       "chance": 60
+      },
+      {
+       "name": "a map pinned to a board with markers",
+       "x": 18,
+       "y": 15,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a small metal waste bin",
+       "x": 22,
+       "y": 16,
+       "w": 1,
+       "h": 1,
+       "stock": "trash",
+       "chance": 50
+      }
+     ],
+     "loot": [
+      {
        "x": 5,
-       "y": 14
+       "y": 9,
+       "table": "floor_diner",
+       "chance": 30
       },
       {
-       "kind": "object",
-       "name": "booth",
-       "x": 5,
-       "y": 18
-      },
-      {
-       "kind": "object",
-       "name": "kitchen counter",
-       "x": 31,
-       "y": 3
-      },
-      {
-       "kind": "object",
-       "name": "wood stove",
-       "x": 38,
-       "y": 3
-      },
-      {
-       "kind": "object",
-       "name": "supply crates",
-       "x": 3,
-       "y": 3
+       "x": 2,
+       "y": 15,
+       "table": "floor_diner",
+       "chance": 30
       }
      ]
     },
     "rows": [
-     "########################################",
-     "#__________________________#_______#___#",
-     "#__________________________#_______#___#",
-     "#__________________________#___8___#__9#",
-     "#______________________________________#",
-     "#__________________________#_______#___#",
-     "#__________________________#_______#___#",
-     "#__________________________#_______#___#",
-     "#__________________________#_______#___#",
-     "########_###################_______#___#",
-     "W_________#_________3__________________W",
-     "#_________#___4________________________#",
-     "#_________________1___2________________#",
-     "#_________#_______________5____________#",
-     "#____6____#____________________________#",
-     "#_________#____________________________#",
-     "#_________#######_#######_____#________#",
-     "#_____________________________#________#",
-     "#____7________________________#________#",
-     "#______________________________________#",
-     "#_____________________________#________#",
-     "#_____________________________#________#",
-     "#_____________________________#________#",
-     "######W#####W#######__#####W#####W######"
+     "#####+#####WWW####WWW####WWW##",
+     "#_________#__________________#",
+     "#_________#__________________#",
+     "#_________#__________________#",
+     "#_________#__________________#",
+     "#_________+__________________#",
+     "#_________#__________________#",
+     "#_________#__________________#",
+     "#_________#__________________#",
+     "#_________#__________________#",
+     "#####+#####__________________#",
+     "#_________#__________________#",
+     "#_________+__________________#",
+     "#_________#__________________#",
+     "#_________#__________________#",
+     "#_________#__________________#",
+     "#_________#__________________#",
+     "############WWW#####+#####WWW#"
     ],
-    "objects": {
-     "1": "long meeting table",
-     "2": "Marcus Webb",
-     "3": "back table",
-     "4": "lantern",
-     "5": "lantern",
-     "6": "booth",
-     "7": "booth",
-     "8": "kitchen counter",
-     "9": "wood stove"
-    },
+    "objects": {},
     "labels": {
-     "The Old Diner": [
+     "meeting hall": [
       20,
-      12
+      9
+     ],
+     "kitchen": [
+      5,
+      5
+     ],
+     "storeroom": [
+      5,
+      13
      ]
     },
-    "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-14T20:47:45.765687+00:00",
+    "model": "kit:abandoned",
+    "made_at": "kit:faeab072af6b",
     "levels": []
    }
   },
@@ -1427,325 +1618,483 @@
     "state": "",
     "spec": {
      "ground": "floor",
-     "features": [
+     "kit": "abandoned",
+     "template": "farmhouse_a",
+     "turn": [
+      0,
+      true
+     ],
+     "tile_m": 1.0,
+     "pieces": [
       {
-       "kind": "building",
-       "name": "Old Two-Storey Farmhouse",
-       "x": 0,
-       "y": 0,
-       "w": 40,
-       "h": 24,
-       "doors": [
-        {
-         "side": "north",
-         "at": 19
-        }
-       ],
-       "windows": [
-        {
-         "side": "north",
-         "at": 5
-        },
-        {
-         "side": "north",
-         "at": 33
-        },
-        {
-         "side": "east",
-         "at": 6
-        },
-        {
-         "side": "east",
-         "at": 17
-        },
-        {
-         "side": "south",
-         "at": 10
-        },
-        {
-         "side": "south",
-         "at": 29
-        },
-        {
-         "side": "west",
-         "at": 6
-        },
-        {
-         "side": "west",
-         "at": 17
-        }
-       ]
+       "name": "a battered tin washbasin on a stand",
+       "x": 1,
+       "y": 1,
+       "w": 1,
+       "h": 1,
+       "stock": "bathroom",
+       "chance": 40
       },
       {
-       "kind": "wall",
-       "points": [
-        [
-         0,
-         8
-        ],
-        [
-         39,
-         8
-        ]
-       ]
+       "name": "a washstand with basin",
+       "x": 6,
+       "y": 1,
+       "w": 1,
+       "h": 1,
+       "stock": "bathroom",
+       "chance": 70
       },
       {
-       "kind": "wall",
-       "points": [
-        [
-         0,
-         16
-        ],
-        [
-         39,
-         16
-        ]
-       ]
+       "name": "a tall pine pantry cupboard",
+       "x": 14,
+       "y": 1,
+       "w": 2,
+       "h": 1,
+       "stock": "pantry",
+       "chance": 90
       },
       {
-       "kind": "wall",
-       "points": [
-        [
-         13,
-         0
-        ],
-        [
-         13,
-         8
-        ]
-       ],
-       "gaps": [
-        [
-         13,
-         4
-        ]
-       ]
+       "name": "a salvaged kitchen counter",
+       "x": 16,
+       "y": 1,
+       "w": 4,
+       "h": 1,
+       "stock": "kitchen_cupboard",
+       "chance": 70
       },
       {
-       "kind": "wall",
-       "points": [
-        [
-         26,
-         0
-        ],
-        [
-         26,
-         8
-        ]
-       ],
-       "gaps": [
-        [
-         26,
-         3
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         13,
-         8
-        ],
-        [
-         13,
-         16
-        ]
-       ],
-       "gaps": [
-        [
-         13,
-         12
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         26,
-         8
-        ],
-        [
-         26,
-         16
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         13,
-         16
-        ],
-        [
-         13,
-         24
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         26,
-         16
-        ],
-        [
-         26,
-         24
-        ]
-       ],
-       "gaps": [
-        [
-         26,
-         20
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         8,
-         8
-        ],
-        [
-         8,
-         12
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         8,
-         12
-        ],
-        [
-         13,
-         12
-        ]
-       ]
-      },
-      {
-       "kind": "passage",
-       "points": [
-        [
-         17,
-         0
-        ],
-        [
-         22,
-         0
-        ]
-       ],
-       "width": 2
-      },
-      {
-       "kind": "object",
-       "name": "wooden stairs to upper floor",
-       "x": 36,
-       "y": 12
-      },
-      {
-       "kind": "object",
-       "name": "woodstove with kindling pile",
-       "x": 3,
-       "y": 11
-      },
-      {
-       "kind": "object",
-       "name": "kitchen table with oil lamp",
-       "x": 20,
-       "y": 3
-      },
-      {
-       "kind": "object",
-       "name": "canned goods on shelves",
-       "x": 30,
-       "y": 2
-      },
-      {
-       "kind": "object",
-       "name": "rain barrel by the window",
-       "x": 37,
-       "y": 3
-      },
-      {
-       "kind": "object",
-       "name": "couch with patched cushions",
-       "x": 5,
-       "y": 20
-      },
-      {
-       "kind": "object",
-       "name": "bedframe under quilt",
-       "x": 20,
-       "y": 13
-      },
-      {
-       "kind": "object",
-       "name": "rifle leaning by the door",
+       "name": "a cast iron wood burning cookstove",
        "x": 21,
-       "y": 2
+       "y": 1,
+       "w": 2,
+       "h": 1,
+       "stock": "stove",
+       "chance": 40
       },
       {
-       "kind": "object",
-       "name": "crate of bolts and nails",
-       "x": 33,
-       "y": 21
+       "name": "kitchen table with oil lamp",
+       "x": 19,
+       "y": 3,
+       "w": 2,
+       "h": 2,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a wooden chair",
+       "x": 21,
+       "y": 3,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a small metal waste bin",
+       "x": 1,
+       "y": 4,
+       "w": 1,
+       "h": 1,
+       "stock": "trash",
+       "chance": 50
+      },
+      {
+       "name": "a wooden peg rack with hanging coats",
+       "x": 11,
+       "y": 4,
+       "w": 2,
+       "h": 1,
+       "stock": "coat_rack",
+       "chance": 75
+      },
+      {
+       "name": "a wooden chair",
+       "x": 18,
+       "y": 4,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a wooden storage crate",
+       "x": 14,
+       "y": 5,
+       "w": 1,
+       "h": 1,
+       "stock": "crate_house",
+       "chance": 60
+      },
+      {
+       "name": "a small metal waste bin",
+       "x": 22,
+       "y": 5,
+       "w": 1,
+       "h": 1,
+       "stock": "trash",
+       "chance": 50
+      },
+      {
+       "name": "a gun cabinet with glass doors",
+       "x": 1,
+       "y": 7,
+       "w": 2,
+       "h": 1,
+       "stock": "guns",
+       "chance": 50
+      },
+      {
+       "name": "a wooden bookshelf with paperback novels",
+       "x": 12,
+       "y": 7,
+       "w": 2,
+       "h": 1,
+       "stock": "bookshelf",
+       "chance": 40
+      },
+      {
+       "name": "a cast iron wood stove",
+       "x": 22,
+       "y": 7,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a low pine coffee table",
+       "x": 18,
+       "y": 9,
+       "w": 2,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a wooden rocking chair",
+       "x": 21,
+       "y": 9,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a worn wooden armchair",
+       "x": 12,
+       "y": 11,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "couch with patched cushions",
+       "x": 18,
+       "y": 11,
+       "w": 3,
+       "h": 1,
+       "stock": "bed",
+       "chance": 30
+      },
+      {
+       "name": "a wooden peg rack with hanging coats",
+       "x": 1,
+       "y": 13,
+       "w": 2,
+       "h": 1,
+       "stock": "coat_rack",
+       "chance": 75
+      },
+      {
+       "name": "rifle leaning by the door",
+       "x": 3,
+       "y": 13,
+       "w": 1,
+       "h": 1,
+       "stock": "rifle_rack",
+       "chance": 30
+      },
+      {
+       "name": "a wooden boot bench",
+       "x": 7,
+       "y": 13,
+       "w": 2,
+       "h": 1,
+       "stock": "boots",
+       "chance": 40
+      }
+     ],
+     "loot": [
+      {
+       "x": 22,
+       "y": 13,
+       "table": "floor_house",
+       "chance": 30
       }
      ]
     },
     "rows": [
-     "#####W###########_______#########W######",
-     "#____________#____________#____________#",
-     "#____________#_______8____#___4________#",
-     "#____________#______3________________5_#",
-     "#_________________________#____________#",
-     "#____________#____________#____________#",
-     "W____________#____________#____________W",
-     "#____________#____________#____________#",
-     "########################################",
-     "#_______#____#____________#____________#",
-     "#_______#____#____________#____________#",
-     "#__2____#____#____________#____________#",
-     "#_______######____________#_________1__#",
-     "#____________#______7_____#____________#",
-     "#____________#____________#____________#",
-     "#____________#____________#____________#",
-     "########################################",
-     "W____________#____________#____________W",
-     "#____________#____________#____________#",
-     "#____________#____________#____________#",
-     "#____6_______#_________________________#",
-     "#____________#____________#______9_____#",
-     "#____________#____________#____________#",
-     "##########W##################W##########"
+     "###WW##############WW###",
+     "#______#__&&_#_________#",
+     "W______#_____#_________#",
+     "#______+_____+_________#",
+     "#______#_____#_________#",
+     "#______#_____#_________#",
+     "########+##+######+#####",
+     "#________#_____________#",
+     "#________#_____________W",
+     "W________+_____________W",
+     "#________#_____________#",
+     "#________#_____________#",
+     "#________#_____________#",
+     "#________#_____________#",
+     "#####+###########WW#####"
     ],
-    "objects": {
-     "1": "wooden stairs to upper floor",
-     "2": "woodstove with kindling pile",
-     "3": "kitchen table with oil lamp",
-     "4": "canned goods on shelves",
-     "5": "rain barrel by the window",
-     "6": "couch with patched cushions",
-     "7": "bedframe under quilt",
-     "8": "rifle leaning by the door",
-     "9": "crate of bolts and nails"
-    },
+    "objects": {},
     "labels": {
-     "Old Two-Storey Farmhouse": [
-      20,
-      12
+     "kitchen": [
+      18,
+      2
+     ],
+     "hall": [
+      10,
+      4
+     ],
+     "washroom": [
+      4,
+      3
+     ],
+     "front room": [
+      17,
+      10
+     ],
+     "mudroom": [
+      5,
+      10
      ]
     },
-    "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-14T20:47:47.381926+00:00",
-    "levels": []
+    "model": "kit:abandoned",
+    "made_at": "kit:08f14056eed2",
+    "levels": [
+     {
+      "index": 1,
+      "name": "Upstairs",
+      "place_id": "3d510125-2878-5feb-9b9b-41c25992393b",
+      "state": "",
+      "spec": {
+       "kit": "abandoned",
+       "pieces": [
+        {
+         "name": "a wooden toy chest",
+         "x": 1,
+         "y": 1,
+         "w": 2,
+         "h": 1,
+         "stock": "toy_chest",
+         "chance": 70
+        },
+        {
+         "name": "a metal framed single bed with worn mattress",
+         "x": 5,
+         "y": 1,
+         "w": 2,
+         "h": 2,
+         "stock": "bed",
+         "chance": 10
+        },
+        {
+         "name": "a pine wardrobe",
+         "x": 14,
+         "y": 1,
+         "w": 2,
+         "h": 1,
+         "stock": "wardrobe",
+         "chance": 80
+        },
+        {
+         "name": "bedframe under quilt",
+         "x": 21,
+         "y": 1,
+         "w": 2,
+         "h": 2,
+         "stock": "bed",
+         "chance": 15
+        },
+        {
+         "name": "a wooden nightstand with candle stub",
+         "x": 20,
+         "y": 2,
+         "w": 1,
+         "h": 1,
+         "stock": "nightstand",
+         "chance": 60
+        },
+        {
+         "name": "a wooden nightstand",
+         "x": 6,
+         "y": 4,
+         "w": 1,
+         "h": 1,
+         "stock": "nightstand",
+         "chance": 60
+        },
+        {
+         "name": "a battered wooden dresser",
+         "x": 21,
+         "y": 4,
+         "w": 2,
+         "h": 1,
+         "stock": "dresser",
+         "chance": 85
+        },
+        {
+         "name": "a small wooden trunk",
+         "x": 1,
+         "y": 7,
+         "w": 2,
+         "h": 1,
+         "stock": "trunk",
+         "chance": 70
+        },
+        {
+         "name": "a wooden storage crate",
+         "x": 5,
+         "y": 7,
+         "w": 2,
+         "h": 1,
+         "stock": "crate_house",
+         "chance": 60
+        },
+        {
+         "name": "a tall bookshelf with old books",
+         "x": 12,
+         "y": 7,
+         "w": 2,
+         "h": 1,
+         "stock": "bookshelf",
+         "chance": 40
+        },
+        {
+         "name": "a small wooden trunk",
+         "x": 21,
+         "y": 7,
+         "w": 2,
+         "h": 1,
+         "stock": "trunk",
+         "chance": 70
+        },
+        {
+         "name": "a wooden storage crate",
+         "x": 1,
+         "y": 8,
+         "w": 1,
+         "h": 1,
+         "stock": "crate_house",
+         "chance": 60
+        },
+        {
+         "name": "a heavy pine dining table",
+         "x": 17,
+         "y": 9,
+         "w": 3,
+         "h": 2,
+         "stock": "",
+         "chance": 100
+        },
+        {
+         "name": "a wooden chair",
+         "x": 14,
+         "y": 10,
+         "w": 1,
+         "h": 1,
+         "stock": "",
+         "chance": 100
+        },
+        {
+         "name": "a wooden storage crate",
+         "x": 2,
+         "y": 11,
+         "w": 1,
+         "h": 1,
+         "stock": "crate_house",
+         "chance": 60
+        },
+        {
+         "name": "a metal framed single bed with worn mattress",
+         "x": 21,
+         "y": 12,
+         "w": 2,
+         "h": 2,
+         "stock": "bed",
+         "chance": 10
+        }
+       ],
+       "loot": [
+        {
+         "x": 22,
+         "y": 5,
+         "table": "floor_house",
+         "chance": 30
+        },
+        {
+         "x": 8,
+         "y": 13,
+         "table": "floor_house",
+         "chance": 30
+        },
+        {
+         "x": 16,
+         "y": 13,
+         "table": "floor_house",
+         "chance": 30
+        }
+       ]
+      },
+      "rows": [
+       "###WW##############WW###",
+       "#______#__&&_#_________#",
+       "W______#_____#_________#",
+       "#______+_____+_________#",
+       "#______#_____#_________#",
+       "#______#_____#_________#",
+       "########+##+############",
+       "#________#_____________#",
+       "#________#_____________W",
+       "#________#_____________W",
+       "#________#_____________#",
+       "#________#_____________#",
+       "#________#_____________#",
+       "#________#_____________#",
+       "#######WW########WW#####"
+      ],
+      "objects": {},
+      "labels": {
+       "main bedroom": [
+        18,
+        3
+       ],
+       "landing": [
+        10,
+        4
+       ],
+       "small bedroom": [
+        4,
+        3
+       ],
+       "back bedroom": [
+        17,
+        10
+       ],
+       "attic room": [
+        5,
+        10
+       ]
+      },
+      "model": "kit:abandoned",
+      "made_at": "kit:08f14056eed2"
+     }
+    ]
    }
   },
   "a3f8414e-f7dc-581a-b9f1-fc0f98688d84": {
@@ -3027,7 +3376,76 @@
        "x": 37,
        "y": 25
       }
-     ]
+     ],
+     "pieces": [
+      {
+       "name": "a stack of sandbags",
+       "x": 64,
+       "y": 85,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100,
+       "yard": "052cc80b-504a-5a32-b3ec-d76d2713733d",
+       "n": 0
+      },
+      {
+       "name": "a stack of pallets",
+       "x": 69,
+       "y": 71,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100,
+       "yard": "052cc80b-504a-5a32-b3ec-d76d2713733d",
+       "n": 1
+      },
+      {
+       "name": "a stack of sandbags",
+       "x": 76,
+       "y": 77,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100,
+       "yard": "052cc80b-504a-5a32-b3ec-d76d2713733d",
+       "n": 2
+      },
+      {
+       "name": "a stack of pallets",
+       "x": 36,
+       "y": 14,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100,
+       "yard": "12b94aab-62a5-5f99-9b6d-e4c705b6f829",
+       "n": 0
+      },
+      {
+       "name": "a rusty oil drum",
+       "x": 97,
+       "y": 29,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100,
+       "yard": "340babf7-cb13-50ff-9bc6-7e62562f78e8",
+       "n": 0
+      },
+      {
+       "name": "a stack of sandbags",
+       "x": 92,
+       "y": 63,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100,
+       "yard": "8e038cdb-bddd-51cd-8a87-13b93e946124",
+       "n": 0
+      }
+     ],
+     "pieces_scale": 2
     },
     "rows": [
      "....TTTTTT.............................==.............................TTTTTT....",
@@ -3149,7 +3567,7 @@
      ]
     },
     "model": "showcase",
-    "made_at": "2026-10-23T20:11:04.621194+00:00",
+    "made_at": "2026-10-23T20:11:04.621194+00:00+yard:doomsville",
     "levels": []
    }
   },
@@ -3159,280 +3577,308 @@
     "state": "",
     "spec": {
      "ground": "floor",
-     "features": [
+     "kit": "abandoned",
+     "template": "clinic_b",
+     "turn": [
+      0,
+      true
+     ],
+     "tile_m": 1.0,
+     "pieces": [
       {
-       "kind": "building",
-       "name": "Elena Ruiz's Clinic (former hardware store)",
-       "x": 0,
-       "y": 0,
-       "w": 40,
-       "h": 24,
-       "doors": [
-        {
-         "side": "south",
-         "at": 19
-        }
-       ],
-       "windows": [
-        {
-         "side": "south",
-         "at": 5
-        },
-        {
-         "side": "south",
-         "at": 33
-        },
-        {
-         "side": "west",
-         "at": 10
-        },
-        {
-         "side": "east",
-         "at": 10
-        }
-       ]
+       "name": "a glass fronted medicine cabinet",
+       "x": 3,
+       "y": 1,
+       "w": 2,
+       "h": 1,
+       "stock": "medicine_cabinet",
+       "chance": 90
       },
       {
-       "kind": "wall",
-       "points": [
-        [
-         12,
-         0
-        ],
-        [
-         12,
-         14
-        ]
-       ],
-       "gaps": [
-        [
-         12,
-         13
-        ]
-       ]
+       "name": "a locked medicine cabinet",
+       "x": 7,
+       "y": 1,
+       "w": 2,
+       "h": 1,
+       "stock": "medicine_cabinet",
+       "chance": 90
       },
       {
-       "kind": "wall",
-       "points": [
-        [
-         12,
-         14
-        ],
-        [
-         39,
-         14
-        ]
-       ],
-       "gaps": [
-        [
-         24,
-         14
-        ]
-       ]
+       "name": "a rusted metal shelf unit",
+       "x": 12,
+       "y": 1,
+       "w": 6,
+       "h": 1,
+       "stock": "hardware",
+       "chance": 40
       },
       {
-       "kind": "wall",
-       "points": [
-        [
-         5,
-         14
-        ],
-        [
-         5,
-         23
-        ]
-       ],
-       "gaps": [
-        [
-         5,
-         19
-        ]
-       ]
+       "name": "a rusted metal shelf unit",
+       "x": 21,
+       "y": 1,
+       "w": 6,
+       "h": 1,
+       "stock": "hardware",
+       "chance": 40
       },
       {
-       "kind": "wall",
-       "points": [
-        [
-         20,
-         14
-        ],
-        [
-         20,
-         23
-        ]
-       ],
-       "gaps": [
-        [
-         20,
-         19
-        ]
-       ]
+       "name": "a filing cabinet dented",
+       "x": 3,
+       "y": 3,
+       "w": 1,
+       "h": 1,
+       "stock": "files",
+       "chance": 70
       },
       {
-       "kind": "wall",
-       "points": [
-        [
-         30,
-         14
-        ],
-        [
-         30,
-         23
-        ]
-       ]
+       "name": "a heavy wooden desk",
+       "x": 7,
+       "y": 3,
+       "w": 2,
+       "h": 1,
+       "stock": "desk",
+       "chance": 60
       },
       {
-       "kind": "wall",
-       "points": [
-        [
-         39,
-         3
-        ],
-        [
-         28,
-         3
-        ]
-       ],
-       "gaps": [
-        [
-         33,
-         3
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         28,
-         3
-        ],
-        [
-         28,
-         14
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         0,
-         6
-        ],
-        [
-         8,
-         6
-        ]
-       ],
-       "gaps": [
-        [
-         3,
-         6
-        ]
-       ]
-      },
-      {
-       "kind": "object",
-       "name": "waiting chairs",
-       "x": 4,
-       "y": 20
-      },
-      {
-       "kind": "object",
-       "name": "reception desk",
+       "name": "a row of metal folding cots",
        "x": 15,
-       "y": 12
+       "y": 3,
+       "w": 3,
+       "h": 1,
+       "stock": "cot",
+       "chance": 30
       },
       {
-       "kind": "object",
-       "name": "examination table",
-       "x": 33,
-       "y": 7
+       "name": "a row of metal folding cots",
+       "x": 19,
+       "y": 3,
+       "w": 3,
+       "h": 1,
+       "stock": "cot",
+       "chance": 30
       },
       {
-       "kind": "object",
-       "name": "second examination table",
+       "name": "a row of metal folding cots",
+       "x": 23,
+       "y": 3,
+       "w": 3,
+       "h": 1,
+       "stock": "cot",
+       "chance": 30
+      },
+      {
+       "name": "a plain wooden chair",
+       "x": 7,
+       "y": 4,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a small metal waste bin",
+       "x": 1,
+       "y": 5,
+       "w": 1,
+       "h": 1,
+       "stock": "trash",
+       "chance": 50
+      },
+      {
+       "name": "a small metal safe",
+       "x": 4,
+       "y": 5,
+       "w": 1,
+       "h": 1,
+       "stock": "safe",
+       "chance": 80
+      },
+      {
+       "name": "a row of metal folding cots",
+       "x": 15,
+       "y": 5,
+       "w": 3,
+       "h": 1,
+       "stock": "cot",
+       "chance": 30
+      },
+      {
+       "name": "a row of metal folding cots",
+       "x": 19,
+       "y": 5,
+       "w": 3,
+       "h": 1,
+       "stock": "cot",
+       "chance": 30
+      },
+      {
+       "name": "a row of metal folding cots",
+       "x": 23,
+       "y": 5,
+       "w": 3,
+       "h": 1,
+       "stock": "cot",
+       "chance": 30
+      },
+      {
+       "name": "a metal instrument tray on wheels",
+       "x": 7,
+       "y": 8,
+       "w": 1,
+       "h": 1,
+       "stock": "trolley",
+       "chance": 60
+      },
+      {
+       "name": "a wheeled instrument trolley",
        "x": 8,
-       "y": 10
+       "y": 8,
+       "w": 1,
+       "h": 1,
+       "stock": "trolley",
+       "chance": 60
       },
       {
-       "kind": "object",
-       "name": "medicine cabinet",
-       "x": 32,
-       "y": 16
+       "name": "a metal examination table",
+       "x": 19,
+       "y": 8,
+       "w": 2,
+       "h": 1,
+       "stock": "",
+       "chance": 100
       },
       {
-       "kind": "object",
-       "name": "supply shelves",
-       "x": 2,
-       "y": 3
-      },
-      {
-       "kind": "object",
-       "name": "desk",
-       "x": 36,
-       "y": 19
-      },
-      {
-       "kind": "object",
-       "name": "bookshelf",
+       "name": "a metal examination table",
        "x": 24,
-       "y": 21
+       "y": 8,
+       "w": 2,
+       "h": 1,
+       "stock": "",
+       "chance": 100
       },
       {
-       "kind": "object",
-       "name": "cots",
-       "x": 25,
-       "y": 10
+       "name": "waiting chairs",
+       "x": 1,
+       "y": 10,
+       "w": 2,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a washstand with basin",
+       "x": 8,
+       "y": 10,
+       "w": 1,
+       "h": 1,
+       "stock": "bathroom",
+       "chance": 60
+      },
+      {
+       "name": "a hospital gurney",
+       "x": 24,
+       "y": 10,
+       "w": 2,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "waiting chairs",
+       "x": 2,
+       "y": 12,
+       "w": 2,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a battered reception desk",
+       "x": 20,
+       "y": 12,
+       "w": 3,
+       "h": 1,
+       "stock": "desk",
+       "chance": 40
+      },
+      {
+       "name": "a plain wooden chair",
+       "x": 21,
+       "y": 13,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a small metal waste bin",
+       "x": 1,
+       "y": 14,
+       "w": 1,
+       "h": 1,
+       "stock": "trash",
+       "chance": 50
+      },
+      {
+       "name": "a small metal waste bin",
+       "x": 26,
+       "y": 14,
+       "w": 1,
+       "h": 1,
+       "stock": "trash",
+       "chance": 50
+      }
+     ],
+     "loot": [
+      {
+       "x": 2,
+       "y": 6,
+       "table": "floor_clinic",
+       "chance": 30
+      },
+      {
+       "x": 11,
+       "y": 14,
+       "table": "floor_clinic",
+       "chance": 30
       }
      ]
     },
     "rows": [
-     "########################################",
-     "#___________#__________________________#",
-     "#___________#__________________________#",
-     "#_6_________#_______________#####_######",
-     "#___________#_______________#__________#",
-     "#___________#_______________#__________#",
-     "###_#####___#_______________#__________#",
-     "#___________#_______________#____3_____#",
-     "#___________#_______________#__________#",
-     "#___________#_______________#__________#",
-     "W_______4___#____________9__#__________W",
-     "#___________#_______________#__________#",
-     "#___________#__2____________#__________#",
-     "#___________________________#__________#",
-     "#____#______############_###############",
-     "#____#______________#_________#________#",
-     "#____#______________#_________#_5______#",
-     "#____#______________#_________#________#",
-     "#____#______________#_________#________#",
-     "#_____________________________#_____7__#",
-     "#___1#______________#_________#________#",
-     "#____#______________#___8_____#________#",
-     "#____#______________#_________#________#",
-     "###################+#############W######"
+     "#######WWW#####WWW#####WWW##",
+     "#________#_________________#",
+     "#________#_________________#",
+     "#________#_________________#",
+     "#________+_________________#",
+     "#________#_________________#",
+     "#________#_________________#",
+     "##########_________________#",
+     "#__________________________#",
+     "#__________________________#",
+     "#__________________________#",
+     "#__________________________#",
+     "#__________________________#",
+     "#__________________________#",
+     "#__________________________#",
+     "##########WWW#####+######WW#"
     ],
-    "objects": {
-     "1": "waiting chairs",
-     "2": "reception desk",
-     "3": "examination table",
-     "4": "second examination table",
-     "5": "medicine cabinet",
-     "6": "supply shelves",
-     "7": "desk",
-     "8": "bookshelf",
-     "9": "cots"
-    },
+    "objects": {},
     "labels": {
-     "Elena Ruiz's Clinic (former hardware store)": [
-      20,
-      12
+     "ward": [
+      18,
+      4
+     ],
+     "dispensary": [
+      5,
+      3
+     ],
+     "treatment room": [
+      14,
+      10
      ]
     },
-    "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-14T20:48:01.023660+00:00",
+    "model": "kit:abandoned",
+    "made_at": "kit:779e49170261",
     "levels": []
    }
   },
@@ -3442,252 +3888,241 @@
     "state": "",
     "spec": {
      "ground": "floor",
-     "features": [
+     "kit": "abandoned",
+     "template": "store_a",
+     "turn": [
+      0,
+      false
+     ],
+     "tile_m": 1.0,
+     "pieces": [
       {
-       "kind": "building",
-       "name": "General Store",
-       "x": 0,
-       "y": 0,
-       "w": 40,
-       "h": 24,
-       "doors": [
-        {
-         "side": "south",
-         "at": 19
-        }
-       ],
-       "windows": [
-        {
-         "side": "south",
-         "at": 5
-        },
-        {
-         "side": "south",
-         "at": 33
-        },
-        {
-         "side": "east",
-         "at": 11
-        }
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         14,
-         0
-        ],
-        [
-         14,
-         15
-        ]
-       ],
-       "gaps": [
-        [
-         14,
-         10
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         14,
-         15
-        ],
-        [
-         40,
-         15
-        ]
-       ],
-       "gaps": [
-        [
-         26,
-         15
-        ]
-       ]
-      },
-      {
-       "kind": "object",
-       "name": "counter",
-       "x": 10,
-       "y": 17
-      },
-      {
-       "kind": "object",
-       "name": "counter",
-       "x": 11,
-       "y": 17
-      },
-      {
-       "kind": "object",
-       "name": "counter",
-       "x": 12,
-       "y": 17
-      },
-      {
-       "kind": "object",
-       "name": "counter",
-       "x": 13,
-       "y": 17
-      },
-      {
-       "kind": "object",
-       "name": "counter",
-       "x": 14,
-       "y": 17
-      },
-      {
-       "kind": "object",
-       "name": "counter",
-       "x": 15,
-       "y": 17
-      },
-      {
-       "kind": "object",
-       "name": "ledger",
-       "x": 12,
-       "y": 16
-      },
-      {
-       "kind": "object",
        "name": "ration shelf",
-       "x": 3,
-       "y": 3
+       "x": 1,
+       "y": 1,
+       "w": 5,
+       "h": 1,
+       "stock": "store_dry",
+       "chance": 85
       },
       {
-       "kind": "object",
-       "name": "canned goods shelf",
-       "x": 9,
-       "y": 3
+       "name": "ration shelf",
+       "x": 8,
+       "y": 1,
+       "w": 5,
+       "h": 1,
+       "stock": "store_dry",
+       "chance": 85
       },
       {
-       "kind": "object",
-       "name": "grain sacks",
+       "name": "a stack of salvaged supply crates",
+       "x": 15,
+       "y": 1,
+       "w": 2,
+       "h": 1,
+       "stock": "crate_store",
+       "chance": 70
+      },
+      {
+       "name": "a crate of bottled water",
+       "x": 19,
+       "y": 1,
+       "w": 2,
+       "h": 1,
+       "stock": "water_crate",
+       "chance": 80
+      },
+      {
+       "name": "a wooden barrel for bulk goods",
+       "x": 23,
+       "y": 1,
+       "w": 2,
+       "h": 1,
+       "stock": "bulk",
+       "chance": 70
+      },
+      {
+       "name": "a stack of salvaged supply crates",
+       "x": 1,
+       "y": 3,
+       "w": 2,
+       "h": 1,
+       "stock": "crate_store",
+       "chance": 70
+      },
+      {
+       "name": "a wooden storage crate",
        "x": 5,
-       "y": 7
+       "y": 3,
+       "w": 1,
+       "h": 1,
+       "stock": "crate_store",
+       "chance": 70
       },
       {
-       "kind": "object",
-       "name": "grain sacks",
-       "x": 6,
-       "y": 7
+       "name": "a wooden barrel for bulk goods",
+       "x": 25,
+       "y": 3,
+       "w": 2,
+       "h": 1,
+       "stock": "bulk",
+       "chance": 70
       },
       {
-       "kind": "object",
-       "name": "grain sacks",
-       "x": 7,
-       "y": 7
-      },
-      {
-       "kind": "object",
-       "name": "water barrels",
+       "name": "canned goods shelf",
        "x": 3,
-       "y": 12
+       "y": 7,
+       "w": 6,
+       "h": 1,
+       "stock": "store_canned",
+       "chance": 85
       },
       {
-       "kind": "object",
-       "name": "ammo crate",
-       "x": 10,
-       "y": 11
+       "name": "supply shelves",
+       "x": 11,
+       "y": 7,
+       "w": 6,
+       "h": 1,
+       "stock": "store_goods",
+       "chance": 80
       },
       {
-       "kind": "object",
-       "name": "store clerk",
-       "x": 12,
-       "y": 18
+       "name": "canned goods shelf",
+       "x": 19,
+       "y": 7,
+       "w": 6,
+       "h": 1,
+       "stock": "store_canned",
+       "chance": 85
       },
       {
-       "kind": "object",
-       "name": "guard with rifle",
-       "x": 13,
-       "y": 14
+       "name": "metal storage shelf with canned food",
+       "x": 3,
+       "y": 10,
+       "w": 2,
+       "h": 1,
+       "stock": "store_canned",
+       "chance": 80
       },
       {
-       "kind": "object",
-       "name": "stockroom shelves",
-       "x": 20,
-       "y": 3
+       "name": "metal storage shelf with canned food",
+       "x": 6,
+       "y": 10,
+       "w": 2,
+       "h": 1,
+       "stock": "store_canned",
+       "chance": 80
       },
       {
-       "kind": "object",
-       "name": "stockroom shelves",
-       "x": 26,
-       "y": 3
+       "name": "an empty supermarket shelf",
+       "x": 11,
+       "y": 10,
+       "w": 6,
+       "h": 1,
+       "stock": "",
+       "chance": 100
       },
       {
-       "kind": "object",
-       "name": "crate pile",
-       "x": 33,
-       "y": 4
+       "name": "supply shelves",
+       "x": 19,
+       "y": 10,
+       "w": 6,
+       "h": 1,
+       "stock": "store_goods",
+       "chance": 80
       },
       {
-       "kind": "object",
-       "name": "crate pile",
-       "x": 34,
-       "y": 5
+       "name": "a wooden barrel for bulk goods",
+       "x": 1,
+       "y": 12,
+       "w": 1,
+       "h": 1,
+       "stock": "bulk",
+       "chance": 70
       },
       {
-       "kind": "object",
-       "name": "night watchman",
-       "x": 37,
-       "y": 12
+       "name": "an overturned shopping cart",
+       "x": 5,
+       "y": 12,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
       },
       {
-       "kind": "object",
-       "name": "counting desk",
-       "x": 30,
-       "y": 11
+       "name": "a small metal waste bin",
+       "x": 23,
+       "y": 12,
+       "w": 1,
+       "h": 1,
+       "stock": "trash",
+       "chance": 50
+      },
+      {
+       "name": "a heavy wooden store counter",
+       "x": 15,
+       "y": 13,
+       "w": 4,
+       "h": 1,
+       "stock": "store_counter",
+       "chance": 60
+      },
+      {
+       "name": "a shop counter with an old cash register",
+       "x": 19,
+       "y": 13,
+       "w": 2,
+       "h": 1,
+       "stock": "register",
+       "chance": 70
+      }
+     ],
+     "loot": [
+      {
+       "x": 22,
+       "y": 4,
+       "table": "floor_store",
+       "chance": 35
+      },
+      {
+       "x": 8,
+       "y": 14,
+       "table": "floor_store",
+       "chance": 35
       }
      ]
     },
     "rows": [
-     "########################################",
-     "#_____________#________________________#",
-     "#_____________#________________________#",
-     "#__8_____9____#________________________#",
-     "#_____________#________________________#",
-     "#_____________#________________________#",
-     "#_____________#________________________#",
-     "#_____________#________________________#",
-     "#_____________#________________________#",
-     "#_____________#________________________#",
-     "#______________________________________#",
-     "#_____________#________________________W",
-     "#_____________#________________________#",
-     "#_____________#________________________#",
-     "#_____________#________________________#",
-     "#_____________############_#############",
-     "#___________7__________________________#",
-     "#_________123456_______________________#",
-     "#______________________________________#",
-     "#______________________________________#",
-     "#______________________________________#",
-     "#______________________________________#",
-     "#______________________________________#",
-     "#####W#############+#############W######"
+     "############################",
+     "#__________________________#",
+     "#__________________________#",
+     "#__________________________#",
+     "#__________________________#",
+     "#####+######################",
+     "#__________________________#",
+     "#__________________________#",
+     "#__________________________#",
+     "#__________________________#",
+     "#__________________________#",
+     "#__________________________#",
+     "#__________________________#",
+     "#__________________________#",
+     "#__________________________#",
+     "#WWW#####+#######WWWW#######"
     ],
-    "objects": {
-     "1": "counter",
-     "2": "counter",
-     "3": "counter",
-     "4": "counter",
-     "5": "counter",
-     "6": "counter",
-     "7": "ledger",
-     "8": "ration shelf",
-     "9": "canned goods shelf"
-    },
+    "objects": {},
     "labels": {
-     "General Store": [
-      20,
-      12
+     "stockroom": [
+      13,
+      2
+     ],
+     "shop floor": [
+      13,
+      9
      ]
     },
-    "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-14T20:48:03.842701+00:00",
+    "model": "kit:abandoned",
+    "made_at": "kit:9dad2e457d21",
     "levels": []
    }
   },
@@ -3697,285 +4132,265 @@
     "state": "",
     "spec": {
      "ground": "floor",
-     "features": [
+     "kit": "abandoned",
+     "template": "church_a",
+     "turn": [
+      0,
+      false
+     ],
+     "tile_m": 1.0,
+     "pieces": [
       {
-       "kind": "building",
-       "name": "Church",
-       "x": 0,
-       "y": 0,
-       "w": 40,
-       "h": 24,
-       "doors": [
-        {
-         "side": "south",
-         "at": 19
-        }
-       ],
-       "windows": [
-        {
-         "side": "north",
-         "at": 6
-        },
-        {
-         "side": "north",
-         "at": 20
-        },
-        {
-         "side": "north",
-         "at": 34
-        },
-        {
-         "side": "south",
-         "at": 8
-        },
-        {
-         "side": "south",
-         "at": 31
-        },
-        {
-         "side": "west",
-         "at": 6
-        },
-        {
-         "side": "west",
-         "at": 17
-        },
-        {
-         "side": "east",
-         "at": 6
-        },
-        {
-         "side": "east",
-         "at": 17
-        }
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         13,
-         0
-        ],
-        [
-         13,
-         15
-        ]
-       ],
-       "gaps": [
-        [
-         13,
-         12
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         13,
-         15
-        ],
-        [
-         39,
-         15
-        ]
-       ],
-       "gaps": [
-        [
-         26,
-         15
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         0,
-         17
-        ],
-        [
-         12,
-         17
-        ]
-       ],
-       "gaps": [
-        [
-         6,
-         17
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         13,
-         8
-        ],
-        [
-         26,
-         8
-        ]
-       ],
-       "gaps": [
-        [
-         19,
-         8
-        ]
-       ]
-      },
-      {
-       "kind": "wall",
-       "points": [
-        [
-         26,
-         8
-        ],
-        [
-         26,
-         15
-        ]
-       ],
-       "gaps": [
-        [
-         26,
-         11
-        ]
-       ]
-      },
-      {
-       "kind": "area",
-       "fill": "dark",
-       "shape": "rect",
-       "x": 0,
-       "y": 0,
-       "w": 12,
-       "h": 17
-      },
-      {
-       "kind": "area",
-       "fill": "floor",
-       "shape": "rect",
-       "x": 1,
-       "y": 1,
-       "w": 10,
-       "h": 15
-      },
-      {
-       "kind": "object",
-       "name": "belfry bell",
-       "x": 6,
-       "y": 3
-      },
-      {
-       "kind": "object",
-       "name": "rope",
-       "x": 6,
-       "y": 6
-      },
-      {
-       "kind": "object",
-       "name": "cracked bell",
-       "x": 3,
-       "y": 13
-      },
-      {
-       "kind": "object",
-       "name": "altar",
+       "name": "a pine wardrobe",
        "x": 20,
-       "y": 2
+       "y": 1,
+       "w": 2,
+       "h": 1,
+       "stock": "vestry",
+       "chance": 70
       },
       {
-       "kind": "object",
-       "name": "candles",
-       "x": 18,
-       "y": 3
+       "name": "a wooden storage crate",
+       "x": 23,
+       "y": 1,
+       "w": 2,
+       "h": 1,
+       "stock": "crate_house",
+       "chance": 50
       },
       {
-       "kind": "object",
-       "name": "pews",
-       "x": 19,
-       "y": 11
+       "name": "tall pillar candle on stand",
+       "x": 9,
+       "y": 2,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
       },
       {
-       "kind": "object",
-       "name": "pews",
-       "x": 25,
-       "y": 11
+       "name": "wooden altar with candles",
+       "x": 10,
+       "y": 2,
+       "w": 3,
+       "h": 1,
+       "stock": "altar",
+       "chance": 60
       },
       {
-       "kind": "object",
-       "name": "barricade",
-       "x": 19,
-       "y": 17
+       "name": "tall pillar candle on stand",
+       "x": 13,
+       "y": 2,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
       },
       {
-       "kind": "object",
+       "name": "small wooden lectern",
+       "x": 8,
+       "y": 3,
+       "w": 1,
+       "h": 1,
+       "stock": "lectern",
+       "chance": 70
+      },
+      {
+       "name": "a pulpit",
+       "x": 16,
+       "y": 3,
+       "w": 1,
+       "h": 1,
+       "stock": "",
+       "chance": 100
+      },
+      {
+       "name": "a heavy wooden desk",
+       "x": 20,
+       "y": 4,
+       "w": 2,
+       "h": 1,
+       "stock": "desk",
+       "chance": 50
+      },
+      {
+       "name": "a small metal waste bin",
+       "x": 24,
+       "y": 4,
+       "w": 1,
+       "h": 1,
+       "stock": "trash",
+       "chance": 50
+      },
+      {
+       "name": "long wooden church pew",
+       "x": 3,
+       "y": 7,
+       "w": 5,
+       "h": 1,
+       "stock": "pew",
+       "chance": 20
+      },
+      {
+       "name": "long wooden church pew",
+       "x": 12,
+       "y": 7,
+       "w": 5,
+       "h": 1,
+       "stock": "pew",
+       "chance": 20
+      },
+      {
        "name": "cots",
-       "x": 31,
-       "y": 12
+       "x": 20,
+       "y": 7,
+       "w": 3,
+       "h": 1,
+       "stock": "cot",
+       "chance": 35
       },
       {
-       "kind": "object",
-       "name": "supply crates",
-       "x": 35,
-       "y": 10
+       "name": "long wooden church pew",
+       "x": 3,
+       "y": 9,
+       "w": 5,
+       "h": 1,
+       "stock": "pew",
+       "chance": 20
       },
       {
-       "kind": "object",
-       "name": "wood stove",
-       "x": 34,
-       "y": 18
+       "name": "long wooden church pew",
+       "x": 12,
+       "y": 9,
+       "w": 5,
+       "h": 1,
+       "stock": "pew",
+       "chance": 20
+      },
+      {
+       "name": "cots",
+       "x": 20,
+       "y": 9,
+       "w": 3,
+       "h": 1,
+       "stock": "cot",
+       "chance": 35
+      },
+      {
+       "name": "long wooden church pew",
+       "x": 3,
+       "y": 11,
+       "w": 5,
+       "h": 1,
+       "stock": "pew",
+       "chance": 20
+      },
+      {
+       "name": "long wooden church pew",
+       "x": 12,
+       "y": 11,
+       "w": 5,
+       "h": 1,
+       "stock": "pew",
+       "chance": 20
+      },
+      {
+       "name": "cots",
+       "x": 20,
+       "y": 11,
+       "w": 3,
+       "h": 1,
+       "stock": "cot",
+       "chance": 35
+      },
+      {
+       "name": "long wooden church pew",
+       "x": 3,
+       "y": 13,
+       "w": 5,
+       "h": 1,
+       "stock": "pew",
+       "chance": 20
+      },
+      {
+       "name": "long wooden church pew",
+       "x": 12,
+       "y": 13,
+       "w": 5,
+       "h": 1,
+       "stock": "pew",
+       "chance": 20
+      },
+      {
+       "name": "wooden collection box",
+       "x": 12,
+       "y": 15,
+       "w": 1,
+       "h": 1,
+       "stock": "collection_box",
+       "chance": 60
+      },
+      {
+       "name": "a small metal waste bin",
+       "x": 24,
+       "y": 16,
+       "w": 1,
+       "h": 1,
+       "stock": "trash",
+       "chance": 50
+      }
+     ],
+     "loot": [
+      {
+       "x": 24,
+       "y": 5,
+       "table": "floor_church",
+       "chance": 30
+      },
+      {
+       "x": 18,
+       "y": 14,
+       "table": "floor_church",
+       "chance": 30
       }
      ]
     },
     "rows": [
-     "            ########W#############W#####",
-     " __________ _#_________________________#",
-     " __________ _#______4__________________#",
-     " _____1____ _#____5____________________#",
-     " __________ _#_________________________#",
-     " __________ _#_________________________#",
-     " _____2____ _#_________________________W",
-     " __________ _#_________________________#",
-     " __________ _######_#######____________#",
-     " __________ _#____________#____________#",
-     " __________ _#____________#____________#",
-     " __________ _#_____6_____7_____________#",
-     " __________ ______________#____9_______#",
-     " __3_______ _#____________#____________#",
-     " __________ _#____________#____________#",
-     " __________ _###########################",
-     "            ___________________________#",
-     "######_######______8___________________W",
-     "#______________________________________#",
-     "#______________________________________#",
-     "#______________________________________#",
-     "#______________________________________#",
-     "#______________________________________#",
-     "########W##########+###########W########"
+     "#####WWW#####WWW####WWW###",
+     "#__________________#_____#",
+     "#__________________#_____#",
+     "#__________________+_____#",
+     "#__________________#_____#",
+     "#__________________#_____#",
+     "#__________________#######",
+     "#________________________#",
+     "#________________________#",
+     "#________________________#",
+     "#________________________#",
+     "#________________________#",
+     "#________________________#",
+     "#________________________#",
+     "#________________________#",
+     "#________________________#",
+     "#________________________#",
+     "#WW#######+#######WW######"
     ],
-    "objects": {
-     "1": "belfry bell",
-     "2": "rope",
-     "3": "cracked bell",
-     "4": "altar",
-     "5": "candles",
-     "6": "pews",
-     "7": "pews",
-     "8": "barricade",
-     "9": "cots"
-    },
+    "objects": {},
     "labels": {
-     "Church": [
-      20,
-      12
+     "chancel": [
+      10,
+      4
+     ],
+     "vestry": [
+      22,
+      3
+     ],
+     "nave": [
+      10,
+      11
      ]
     },
-    "model": "z-ai/glm-5.3-flash",
-    "made_at": "2026-10-14T20:48:05.720201+00:00",
+    "model": "kit:abandoned",
+    "made_at": "kit:7a6dbf7b8c84",
     "levels": []
    }
   },
@@ -5415,118 +5830,6 @@
    "plan": ""
   },
   {
-   "id": "bd4441fa-0eda-442b-b37f-04449d44c663",
-   "subject": "backdrop",
-   "subject_id": "3d510125-2878-5feb-9b9b-41c25992393b",
-   "name": "The farmhouse",
-   "state": "",
-   "file": "pictures/map/doomsville-with-a-map-the-farmhouse-backdrop.jpg",
-   "from_picture": null,
-   "prompt": "Convert the entire image into a warm hand-painted storybook illustration rendered in soft gouache brushwork, seen from directly above, preserving every wall, room, doorway gap, and piece of furniture in exactly the same position, shape, and size as in the reference image. The flat-topped walls become aged timber-framed stone and plaster painted in muted warm greys with visible brushed texture, mossy mortar lines suggested by thin strokes of olive and umber rather than sharp pixel grids. The floor areas become worn wide-plank wooden boards in honey-amber and dusty sienna, with gentle grain strokes and the soft shadows of furniture legs pooling beneath each object. Each furniture piece — the iron-framed bed with its rumpled cream quilt top-left, the two wooden chests near it, the small side tables, the candle-lit centre table with its warm amber glow, the armchair and stacked crates in the middle-left room, the fireplace box with log stack, the single bed with straw-coloured mattress in the central room, the bookshelf and metal trunk bottom-left, the upholstered sofa, the crate and bench near the candle bottom-centre, the open shelving units and hanging garments top-right and mid-right, the wooden barrels, the desk with papers and safe box, the open crate of nails, the tin of preserved food with colourful vegetable tops — are repainted with the same gouache warmth: honey-brown wood with visible grain, cream and rust-ochre fabric, dull iron fittings, all softened by gentle ambient lighting as if a single lantern or two candles illuminate each room from within. Lit candles and the fireplace cast small warm cream-yellow glows onto nearby floors. The overall palette is rich but muted: warm greys, dusty taupes, amber, umber, sage, with no saturated primaries.",
-   "model": "blackforestlabs/flux-3/klein/edit-image",
-   "made_at": "2026-10-23T18:57:34.021604+00:00",
-   "plan": "2026-10-14T20:47:47.381926+00:00",
-   "scene": ""
-  },
-  {
-   "id": "f1d2db25-faec-483f-8419-16e42ef6b233",
-   "subject": "backdrop",
-   "subject_id": "340babf7-cb13-50ff-9bc6-7e62562f78e8",
-   "name": "The clinic",
-   "state": "",
-   "file": "pictures/map/doomsville-with-a-map-the-clinic-backdrop.jpg",
-   "from_picture": null,
-   "prompt": "Repaint the entire image as a warm hand-painted storybook illustration in soft gouache, keeping the orthographic top-down view absolutely identical — every wall band, room outline, doorway gap, and piece of furniture remains in exactly the same position, shape and size as in the reference. The mid-grey padding strips above and below the map stay flat, plain mid-grey with no texture or detail added. Render the stone-tile floors in muted dusty sage and warm taupe, with visible gouache brushwork suggesting cracked, worn stone. The thick wall bands become rich dark slate with subtle earthy undertones and soft brushed texture, their mortar lines implied rather than sharp. The lower face of the south wall carries gentle warm shadow. Every doorway gap stays open and unpainted. Paint the wooden furniture — the brown desk, the small tables, the shelving units, the bookshelves with their coloured spines — in warm amber and chestnut gouache with visible grain strokes. The bed with its pale blue mattress gets soft linen texture; the white-sheeted surface on the cabinet reads as folded cloth. Metal objects such as the grey lockers, the small safe and the appliance-shaped cabinet are rendered in cool blue-grey with muted sheen. The small candle near the corridor junction casts a tiny warm amber glow on the floor around it. The trestle table holding papers shows creamy document shapes. Crates and boxes carry rough wood-plank texture. Shelved jars and goods in the upper-left racks read as small rounded forms in muted terracotta and olive. Lighting is gentle and sourceless, slightly warmer in the lower-right room to suggest the clinic's lived-in character. No people, no text, no labels, no borders, no added elements.",
-   "model": "blackforestlabs/flux-3/klein/edit-image",
-   "made_at": "2026-10-23T18:58:41.787410+00:00",
-   "plan": "2026-10-14T20:48:01.023660+00:00",
-   "scene": ""
-  },
-  {
-   "id": "6554e9af-cf00-4f70-b99d-7fd27b1b5eb0",
-   "subject": "backdrop",
-   "subject_id": "8e038cdb-bddd-51cd-8a87-13b93e946124",
-   "name": "The general store",
-   "state": "",
-   "file": "pictures/map/doomsville-with-a-map-the-general-store-backdrop.jpg",
-   "from_picture": null,
-   "prompt": "Convert the entire image into a warm hand-painted storybook illustration using soft gouache brushwork, gentle diffused lighting, and rich but muted colours with visible painted texture throughout, keeping the overhead orthographic view exactly as it appears and every element precisely in its current position and size. The mid-grey bands above and below the picture remain flat, plain mid-grey with no texture or detail added. The stone-tile floor inside the building becomes warm ochre-grey flagstones painted with loose, slightly uneven gouache strokes showing subtle variation in tone — dusty amber, pale slate and warm stone — with faint cracks suggested by thin brushed lines rather than sharp digital edges. The flat wall bands become thick, hand-painted stone or aged timber, rendered with visible bristle texture in muted olive-grey and earthy brown, their top surfaces catching a soft, warm overhead glow. The interior partial wall that forms the L-shaped back room retains its exact footprint but is painted with the same textured stone. The single doorway gap in the south wall near the centre remains open, unpainted.",
-   "model": "blackforestlabs/flux-3/klein/edit-image",
-   "made_at": "2026-10-23T18:59:11.556767+00:00",
-   "plan": "2026-10-14T20:48:03.842701+00:00",
-   "scene": ""
-  },
-  {
-   "id": "d4cc019d-730f-44d7-a0eb-06e72c5ca9cd",
-   "subject": "backdrop",
-   "subject_id": "12b94aab-62a5-5f99-9b6d-e4c705b6f829",
-   "name": "The church",
-   "state": "",
-   "file": "pictures/map/doomsville-with-a-map-the-church-backdrop.jpg",
-   "from_picture": null,
-   "prompt": "Convert the entire image into a warm hand-painted storybook illustration rendered in soft gouache, repainting every element of this top-down roofless floor plan of a post-apocalyptic church interior while keeping every wall, room, doorway, and piece of furniture in exactly the same position, shape, and size as seen directly overhead. The stone-tile floors become muted dusty-slate and warm ochre gouache washes with visible dry-brush texture and hairline grout lines softened to earthy brown. The flat wall bands, rendered in worn aged-limestone tones of pale buff and weathered grey-green, show gentle brushstroke grain suggesting crumbling mortar and old stone. The black rectangular inset room in the upper-left stays as a distinct enclosed space with darker charcoal-toned flooring. The single gap in the south wall at roughly the centre becomes a softly shadowed open doorway, its edges feathered with warm amber light spilling inward from outside. All wooden furniture — the altar table with its carved front, the wooden pews and chairs clustered in the central seating area, the crates large and small, the stool, the low tables, and the scattered chests — is repainted in rich honey-walnut and chestnut gouache with visible woodgrain brushwork and soft cast shadows falling consistently from upper-left. The pale blue bedroll in the right section stays soft powder-blue with a linen texture. The candelabra in the upper-right corner glows with tiny warm amber flame daubs. Wall-mounted lanterns emit soft halo glows of pale gold. Shelved bottles in the lower-left read as small dark-green and amber shapes. The mid-grey horizontal padding bands at the top and bottom of the image remain flat plain mid-grey with no illustration content. No people, no text, no labels, no borders.",
-   "model": "blackforestlabs/flux-3/klein/edit-image",
-   "made_at": "2026-10-23T18:59:41.804867+00:00",
-   "plan": "2026-10-14T20:48:05.720201+00:00",
-   "scene": ""
-  },
-  {
-   "id": "3223616a-7312-4599-ae85-06fc62c92099",
-   "subject": "backdrop",
-   "subject_id": "4460da54-f44d-59cb-ba89-2b224e6466ef",
-   "name": "The barn",
-   "state": "",
-   "file": "pictures/map/doomsville-with-a-map-the-barn-backdrop.jpg",
-   "from_picture": null,
-   "prompt": "Convert the entire image into a warm hand-painted storybook illustration using soft gouache brushwork, gentle warm overhead lighting, and rich but muted colours, while preserving every element exactly as positioned and sized in the original top-down view. The flat band walls become painted in muted ochre-brown and weathered timber tones with visible wood-grain texture worked in short gouache strokes; the stone-flagged floors of the inner rooms shift to warm sandy-buff with soft cracked-stone texture; the darker outer floor areas become aged charcoal-slate with subtle brush hatching. The large black rectangle in the upper-left interior becomes a deep shadow-pit painted in dark indigo-grey with soft edges. Every object stays in its exact position and footprint: the wooden crates read as honey-amber planks with brushed grain; the blue-grey metal crates become slate-blue with soft metallic sheen in gouache; the barrels are rendered in warm burnt-sienna staves with dark hoops; the hay bale is golden-straw yellow with loose bristle strokes; the sawhorse and metal drum pair show rust-kissed iron and raw timber; the small workbench and stools are warm chestnut brown; the open chest shows dark interior shadow; the rusted bucket and animal pen read in terracotta and pale wood respectively. The single doorway gap centred in the south wall stays open with no door painted in. All wall thicknesses, room divisions, doorway widths and gaps remain identical to the source. The mid-grey padding bands above and below the map stay flat plain grey with no texture or content added. No people, no text, no labels, no decorative borders appear anywhere.",
-   "model": "blackforestlabs/flux-3/klein/edit-image",
-   "made_at": "2026-10-23T19:03:12.292062+00:00",
-   "plan": "2026-10-14T20:47:40.927118+00:00",
-   "scene": ""
-  },
-  {
-   "id": "84c0bccc-460b-4186-bff3-1b9fd69114a5",
-   "subject": "backdrop",
-   "subject_id": "052cc80b-504a-5a32-b3ec-d76d2713733d",
-   "name": "The diner",
-   "state": "",
-   "file": "pictures/map/doomsville-with-a-map-the-diner-backdrop.jpg",
-   "from_picture": null,
-   "prompt": "Convert the entire image into a warm hand-painted storybook illustration using soft gouache brushwork, gentle ambient lighting, and rich but muted colours throughout. The mid-grey padding bands above and below the building must remain plain flat mid-grey with no texture or detail added. The top-down orthographic view is preserved exactly: every wall band, room outline, doorway gap, and interior floor area stays in precisely the same position, shape and size as in the reference. The flat wall bands are rendered in aged stone with visible gouache texture — cool grey-brown with subtle warm rust undertones where old mortar cracks through, and a thin dark line tracing the inner and outer edges. The floors inside every room are painted as worn timber planking seen from above, boards running in consistent direction, with soft grain texture and amber-honey tones warmed by lantern glow pooling unevenly across them. The gap in the south wall centre reads clearly as an open doorway with no door visible, the floor tone continuing through it. Every piece of furniture stays exactly where it is: the two amber-cushioned sofas near the north-west, the dining table-and-chairs cluster on the west side, the two small display cases on the west wall, the pair of cushioned seats and small crate mid-south, the stove bottom-left, the central wooden tables and crate cluster, the small campfire with its warm orange glow and the adjacent box near the middle-south, the long wooden bench south-centre, the counter and shelving units in the north-east room, the stacked crates top-right, the small stove top-right, the folding table far right, and the chair near the east wall.",
-   "model": "blackforestlabs/flux-3/klein/edit-image",
-   "made_at": "2026-10-23T19:03:47.763567+00:00",
-   "plan": "2026-10-14T20:47:45.765687+00:00",
-   "scene": ""
-  },
-  {
-   "id": "0a52860d-3721-4053-9d2e-dab5a6244572",
-   "subject": "backdrop",
-   "subject_id": "b637a244-e18f-5caf-b588-6cd5a28043c4",
-   "name": "The farm",
-   "state": "",
-   "file": "pictures/map/doomsville-with-a-map-the-farm-backdrop.jpg",
-   "from_picture": null,
-   "prompt": "Convert the entire image into a warm hand-painted storybook illustration rendered in soft gouache with visible dry-brush texture, gentle diffused winter lighting, and rich but muted colours, keeping the flat top-down map viewpoint and every layout element exactly where it sits in the reference: all buildings, fences, paths, the frozen pond, rocks, and tree clusters remain in the same positions, shapes and proportions. Paint the open ground as deep midwinter snow: uneven drifts of blue-white and warm cream, compressed boot-and-sled tracks cutting through where paths run, wind-scoured patches of iron-grey frozen earth showing beneath thin snow near the fence line, and faint blue cast-shadows from fences and trees stretching across the surface. The sagging wooden fence encircling the yard should read as weathered grey timber, planks bowing and gapped, dusted with snow on their upper edges. The frozen pond to the west sits as a smooth plate of pale steel-blue ice veined with darker cracks, ringed by a thin crust of snow-covered reeds painted in ochre and dry sienna. The farmhouse — the smaller rectangular building in the upper-centre area — gets a steeply pitched roof of mossy dark-slate shingles heaped with snow overhanging the eaves; its south wall, visible as the front face, shows a framed plank door of faded barn-red with a rusted iron latch, set exactly where the pixel door sits, flanked by a single small shuttered window; a thin wisp of grey-blue smoke curls from a stone chimney above the roof ridge, and a faint warm amber lamplight spills from the window onto the snow below.",
-   "model": "blackforestlabs/flux-3/klein/edit-image",
-   "made_at": "2026-10-23T20:18:50.495670+00:00",
-   "plan": "2026-10-23T20:11:04.621194+00:00",
-   "scene": ""
-  },
-  {
-   "id": "19750ca2-e3af-4787-88bd-eda6a4ecc6c1",
-   "subject": "backdrop",
-   "subject_id": "a3f8414e-f7dc-581a-b9f1-fc0f98688d84",
-   "name": "Hellsville",
-   "state": "",
-   "file": "pictures/map/doomsville-with-a-map-hellsville-backdrop.jpg",
-   "from_picture": null,
-   "prompt": "Convert the entire image into a warm hand-painted storybook illustration rendered in soft gouache with visible dry-brush texture throughout, preserving every element of the top-down map layout exactly — every building footprint, wall, fence line, road, path, tree cluster, rock, and water feature stays in precisely the same position, shape, and size as in the reference image, with no labels, no text, no people, and no decorative borders added anywhere in the painted area. The mid-grey horizontal bands above and below the map image are padding and must remain plain flat mid-grey, unpainted and untouched. The overall lighting is deep winter night: a blue-black sky-ambient underlies everything, cut by pools of warm amber lamplight spilling from the two visible lanterns near the central crossroads and the south gate, casting soft elliptical orange-gold halos across snow-dusted cobblestones and casting long cool blue-grey shadows behind every building and wall. Thin wisps of pale smoke curl from one or two chimney stacks on the rooftops nearest the lanterns. Ground treatment: the earth outside the walled town is snow-covered scrubland rendered in muted slate-blue and cream, with shallow drifts mounding against the outer perimeter wall and wind-scoured bare patches of frozen mud showing in ochre-brown between. Inside the town the main north-south and east-west roads are worn cobblestone, painted in dark blue-grey with frost collected in the mortar gaps, tyre-track ruts pressed into the snow at the verges, and small puddles of meltwater iced over and reflecting the lamplight in milky amber. Side paths are compacted dirt, cracked and pale.",
-   "model": "blackforestlabs/flux-3/klein/edit-image",
-   "made_at": "2026-10-23T20:20:29.989099+00:00",
-   "plan": "2026-10-23T20:11:04.621194+00:00",
-   "scene": ""
-  },
-  {
    "id": "34c87b16-30b4-4c46-a78a-ec9f4499fc09",
    "subject": "backdrop",
    "subject_id": "17c4eb3e-b1d7-5157-a9e4-c7bb68f56690",
@@ -5776,1609 +6079,118 @@
    "model": "blackforestlabs/flux-3/klein/edit-image",
    "made_at": "2026-10-24T17:35:11.573064+00:00",
    "plan": ""
+  },
+  {
+   "id": "d784f57a-a7aa-47c0-ba13-ff7b0978fb92",
+   "subject": "backdrop",
+   "subject_id": "b637a244-e18f-5caf-b588-6cd5a28043c4",
+   "name": "The farm",
+   "state": "",
+   "file": "pictures/map/doomsville-with-a-map-the-farm-backdrop.jpg",
+   "prompt": "Convert the entire image into a warm hand-painted storybook illustration rendered in soft gouache with visible brushwork, gentle diffused winter light, and rich but muted colours, keeping the mid-grey padding bands at the top and bottom of the frame perfectly plain and unchanged, and preserving every element of the top-down map layout — every building footprint, wall, fence line, road, path, doorway position, frozen pond, rock cluster and tree — at exactly the same shape, size and position as in the pixel-art source. Paint the open ground as deep compacted snow with subtle variation: windswept drifts banked against the sagging wooden fence that runs horizontally across the map, boot-and-hoof tracks pressed into the snow along the dirt paths, faint blue-grey shadows pooling in hollows, and patches where the frozen earth shows through where snow has been scraped away near doorways. The frozen pond in the lower-left quadrant becomes a sheet of blue-white ice with fine crack-lines radiating from the centre and a dusting of snow across its surface, ringed by frost-rimed reeds. The farmhouse — the smaller roofed building in the upper-centre area — gets a steeply pitched slate-grey roof with snow collecting along its ridge and eaves, warm amber lamplight spilling from two small shuttered windows on its visible south-facing front wall, a framed plank door in the south wall exactly where the source shows it, and a thin wisp of grey-white chimney smoke curling upward from a stone chimney.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-26T17:09:38+00:00",
+   "plan": "2026-10-23T20:11:04.621194+00:00+yard:doomsville"
+  },
+  {
+   "id": "14862886-ccdf-458f-b61e-c59643b7ed5a",
+   "subject": "backdrop",
+   "subject_id": "4460da54-f44d-59cb-ba89-2b224e6466ef",
+   "name": "The barn",
+   "state": "",
+   "file": "pictures/map/doomsville-with-a-map-the-barn-backdrop.jpg",
+   "prompt": "Convert the entire image into a warm hand-painted storybook illustration rendered in soft gouache with visible brushwork, gentle overhead lamplight, and rich but muted earth tones throughout, while preserving every wall, partition, doorway gap, and piece of furniture exactly where it sits in the original top-down plan view. The building is a post-apocalyptic barn, newer than the surrounding farmhouse, its corrugated metal or timber-plank roof still largely intact; since the roof is removed for the plan view, paint the interior floors as worn, gritty concrete slabs with cracked grout lines, oil stains pooled near the rusting tractor, scattered straw wisps blown across the eastern livestock pen area, and faint muddy tyre tracks arcing from the south-central doorway toward the tractor's resting place. The tractor itself sits on a patch of pale leaked coolant and grime, its rust-brown body picked out in warm ochre shadow; paint it with chunky gouache strokes suggesting peeling paint and heavy rubber tyres. The stacked rubber tyres nearby cast soft elliptical shadows on the concrete. Wooden crates read as rough-sawn pine with dark iron corner brackets; the small sawhorse is pale birchwood. The barrel and gas canister sit amid dark oil rings. The wall-mounted torches painted near the north wall glow with a warm amber halo that fades across the floor in a soft cream wash, casting long directional shadows from crates and pen rails toward the south. The livestock pens in the right-hand room are rendered as sturdy weathered-timber rail fences, their planks showing grain and knots in warm sienna; the grey metal troughs inside them hold a thin glint of stale water painted in cool blue-grey against the warm floor.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-26T17:10:10+00:00",
+   "plan": "kit:a16e1559eda3"
+  },
+  {
+   "id": "6b10dfc2-5780-43bc-93c8-4a7a58473183",
+   "subject": "backdrop",
+   "subject_id": "052cc80b-504a-5a32-b3ec-d76d2713733d",
+   "name": "The diner",
+   "state": "",
+   "file": "pictures/map/doomsville-with-a-map-the-diner-backdrop.jpg",
+   "prompt": "Repaint the reference image as a warm hand-painted storybook illustration rendered in soft gouache with visible dry-brush texture throughout, gentle amber-toned lighting, and rich but muted earth colours — ochre, rust, ash-brown, slate and faded sage — while preserving the layout with absolute fidelity: every wall band, interior partition, open doorway gap, and piece of furniture stays in exactly its current position, shape and size. The top-down roof-removed view is kept; this is the interior of a single building seen from directly above. The north-wall doorway near the left end and the south-wall doorway near the centre remain the only openings. The flat wall bands should read as thick plank-and-patched-concrete walls in post-apocalyptic repair — chipped paint, boards nailed over cracks, faded signage ghosts. The floor becomes scuffed linoleum tile in dirty cream and terracotta checks, worn through to bare concrete in the busiest paths, with grease stains near the kitchen side, scattered grit and a few bottle caps pressed into the grime. The left partition divides the old kitchen prep area from the main hall. The wooden counter top-left becomes a scarred diner service counter with a rusted bell. The cast-iron stove beside it glows with an ember-orange crack of heat, and a thin wisp of smoke curls from its vent pipe. The glowing crate-light on the left becomes a salvaged worktable lit by a mason-jar candle. The four crates of produce — filled with painted oranges, yellowed cabbages, pale tubers — sit in warm lamplight pooling from a mismatched lantern hung just above them on a wire; the plain crate beside them casts a small rectangular shadow. The metal bin stays dull galvanised silver.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-26T17:10:42+00:00",
+   "plan": "kit:faeab072af6b"
+  },
+  {
+   "id": "137915fd-2cd8-47ea-b20d-05db7bdf0ca7",
+   "subject": "backdrop",
+   "subject_id": "3d510125-2878-5feb-9b9b-41c25992393b",
+   "name": "The farmhouse",
+   "state": "",
+   "file": "pictures/map/doomsville-with-a-map-the-farmhouse-backdrop.jpg",
+   "prompt": "Repaint this top-down interior map as a warm hand-painted storybook illustration in soft gouache, with visible brushwork, gentle amber lamplight, and rich but muted earth tones throughout. The flat grey padding bands above and below the picture must remain plain mid-grey with no content added. Preserve the layout exactly: every wall band, interior partition, doorway gap, staircase position at columns 10–11 row 1, and the south-wall door near the left end stay precisely where they are in the source image, with identical shapes and proportions. No furniture moves. Transform the floors into worn, scuffed hardwood planks painted in gouache — pale ash-grey with amber undertones, grain lines visible, knots and scratches suggesting years of use, dusty near the walls and faintly footworn along the central corridor. The wall tops become thick plaster-over-timber bands, cream gone to ash, with hairline cracks and peeling grey paint hinting at the farmhouse's weathered exterior character. Interior partition walls show bare lath where plaster has crumbled at corners.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-26T17:11:14+00:00",
+   "plan": "kit:08f14056eed2"
+  },
+  {
+   "id": "b6626ba1-f48e-4faa-b568-7f13ba4dac43",
+   "subject": "backdrop",
+   "subject_id": "3d510125-2878-5feb-9b9b-41c25992393b#1",
+   "name": "The farmhouse · Upstairs",
+   "state": "",
+   "file": "pictures/map/doomsville-with-a-map-the-farmhouse-upstairs-backdrop.jpg",
+   "prompt": "Convert the entire image into a warm hand-painted storybook illustration rendered in soft gouache with visible brushwork, gentle diffused lighting, and rich but muted earth tones throughout, preserving every wall band, interior partition, doorway gap, floor area, and piece of furniture in exactly the same position, shape and size as in the reference image. The top-down roof-removed view of the farmhouse upper storey is repainted as a lavishly detailed illustrated game map. Wall tops become aged timber and plaster rendered with visible gouache texture, the white paint faded to a chalky grey-cream with patches of bare lath and hairline cracks. The south wall's lower face, visible at the bottom of the map area, shows weathered clapboard with peeling grey paint and a hint of moss at the base. Interior floors become wide softwood planks, their grain painted with fine dry-brush strokes in warm amber and honey tones, darkened near the walls with dust and shadow, boards slightly warped and gapped with age. Small details accumulate: a dust drift in a corner, a water stain beneath a window position, a faint bootprint near a doorway. Each piece of furniture keeps its exact footprint and position. The wooden chests in the upper-left and upper-right corners and the matching pair in the mid-left and mid-right sections are rendered with gouache wood grain in warm chestnut, brass-tack trim, and faint rust at the hinges. The crates clustered in the left mid-section show rough-sawn pine slats with painted cross-bracing, casting soft cast shadows south-east. The single loose crate lower-left matches.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-26T17:11:52+00:00",
+   "plan": ""
+  },
+  {
+   "id": "b830d479-b38e-4ac3-b530-779e68cc43b3",
+   "subject": "backdrop",
+   "subject_id": "a3f8414e-f7dc-581a-b9f1-fc0f98688d84",
+   "name": "Hellsville",
+   "state": "",
+   "file": "pictures/map/doomsville-with-a-map-hellsville-backdrop.jpg",
+   "prompt": "Convert the entire image into a warm hand-painted storybook illustration rendered in soft gouache with visible brushwork, gentle night-time lamplight, and rich but muted colours — deep ochres, slate blues, warm greys, ember reds, and mossy greens — while keeping every element of the layout exactly where it appears in the reference: every building footprint, perimeter wall, interior fence line, road, path, rock cluster, tree cluster, and body of water stays at its precise position, shape, and scale. The two mid-grey horizontal bands above and below the map panel remain plain flat grey, unchanged. Repaint the ground inside and outside the walled town as frozen winter earth under a cold night sky: cracked mud hardened by frost, patches of trampled snow in corners and along wall bases, icy puddles catching amber lamplight in the ruts of the main cross-shaped road, scattered gravel and cinders along paths, and long cast shadows from walls and buildings falling northward under the warm glow of oil lanterns fixed to gate posts and building eaves. Outside the walls the open ground is snow-dusted scrubland with frost-stiffened grass tufts, wheel ruts fading into the distance, scattered boulders painted as moss-and-lichen-covered granite humped under snow, and conifer trees redrawn as real snow-laden pines with dark layered boughs, their undersides touched amber by the town's light. Every building becomes a proper top-down roofed structure in a post-apocalyptic small-town vernacular: weathered timber and cinder-block walls, corrugated iron or tarpaper roofs in dark rust and charcoal, with ridge lines visible as a raised painted edge and faint chimney stacks trailing thin wisps of pale smoke.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-26T17:12:39+00:00",
+   "plan": "2026-10-23T20:11:04.621194+00:00+yard:doomsville"
+  },
+  {
+   "id": "f8733a5d-1ad7-4f8c-a649-186dee6e278f",
+   "subject": "backdrop",
+   "subject_id": "340babf7-cb13-50ff-9bc6-7e62562f78e8",
+   "name": "The clinic",
+   "state": "",
+   "file": "pictures/map/doomsville-with-a-map-the-clinic-backdrop.jpg",
+   "prompt": "Convert the entire image into a warm hand-painted storybook illustration rendered in soft gouache with visible dry-brush texture throughout, keeping every wall, doorway, partition, and piece of furniture in exactly the same position and proportion as in the reference image, with the mid-grey padding bands at the very top and bottom left as flat, plain, unpainted grey. The building is viewed from directly overhead with its roof removed. Paint the interior floor as cracked and stained concrete tiles — the old hardware store's slab — showing four years of post-apocalyptic wear: dark rust-water stains bleeding along grout lines, scuff marks, a few loose tiles edged in grime, and faint ghost-lettering where aisle signage was once painted on the floor, now illegible. Cast soft warm shadows from each piece of furniture onto the floor below and to one side, suggesting a low amber light source — a candle lantern sitting on the small crate near the left-centre wall, its warm glow pooling golden across nearby tiles and fading to cool grey-green toward the corners. The thick flat wall-bands become rough plastered concrete rendered in muted sage-green and weathered off-white gouache with visible brushwork; the south wall's lower face, seen in slight perspective at the bottom of the frame, shows peeling paint, a faded bracket hole where a shelf once hung, and a single open doorway gap roughly centred in it, its threshold darkened by foot-traffic. The inner partition dividing the left smaller room from the larger ward is painted the same cracked plaster, with its single doorway gap left open and dark.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-26T17:13:17+00:00",
+   "plan": "kit:779e49170261"
+  },
+  {
+   "id": "1f4a5f3b-3263-40eb-b28e-62d793b10892",
+   "subject": "backdrop",
+   "subject_id": "8e038cdb-bddd-51cd-8a87-13b93e946124",
+   "name": "The general store",
+   "state": "",
+   "file": "pictures/map/doomsville-with-a-map-the-general-store-backdrop.jpg",
+   "prompt": "Convert the entire image into a warm hand-painted storybook illustration rendered in soft gouache with visible brushwork, gentle overhead lamplight, and rich but muted earthy tones, depicting a lavishly detailed top-down game map of the General Store in Doomsville, set four years after a zombie uprising. Preserve the layout exactly: the single roofless rectangular building occupies the same footprint, its flat wall-top bands rendered as cracked, weathered timber-framed stone or clapboard painted in faded olive-grey, showing nail-rust stains and moss creeping into corners. The south wall's lower face, visible at the bottom of the interior zone, is painted as worn painted wood with peeling dark-green paint. The single doorway gap near the left end of the south wall remains open, its threshold showing scuffed, darkened floorboards and a faint muddy bootprint smear leading inward. No door leaf, no windows, no other openings are added anywhere. The interior floor is wide rough-sawn plank boards in warm amber-brown gouache, painted with visible grain, knot-holes, old stains, dust drifts in corners, and faint dried muddy tracks crossing from the south doorway northward. Cast shadows from every shelf and crate fall softly southward under warm lamplight. All furniture stays exactly in place and at the same scale. The north storage zone holds the scattered wooden crates painted as rough-hewn pine with iron corner straps, showing grain texture and age cracks; the dark crate with blue-glass bottles becomes deep charcoal wood cradling cobalt bottles; the two oak barrels on the right are rendered in warm honey-brown stave wood with iron hoops, one slightly tilted. A small oil lamp on the right wall casts a soft amber pool of light across the barrels.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-26T17:13:56+00:00",
+   "plan": "kit:9dad2e457d21"
+  },
+  {
+   "id": "a8b56460-2c81-4a52-8a7a-9d7f8c98f4a2",
+   "subject": "backdrop",
+   "subject_id": "12b94aab-62a5-5f99-9b6d-e4c705b6f829",
+   "name": "The church",
+   "state": "",
+   "file": "pictures/map/doomsville-with-a-map-the-church-backdrop.jpg",
+   "prompt": "Convert the entire image into a warm hand-painted storybook illustration rendered in soft gouache with visible brushwork, gentle candlelit lighting, and rich but muted tones, treating it as a lavishly detailed top-down game map of the interior of Doomsville's church, set four years after a zombie uprising, with the roof removed to reveal the floor plan exactly as it appears in the reference. Preserve every element of the layout without moving, resizing, or reshaping anything: the thick stone outer walls forming the rectangular nave, the partitioned antechamber in the upper-right corner separated from the nave by an inner wall, the single doorway gap centred in the south wall, and the narrow doorway connecting the antechamber to the nave. All furniture stays in its exact position and proportion: the four wooden pews arranged in two columns of four along the left and right sides of the central aisle, the candle-topped altar table near the north wall centre, the small wooden crate and open chest near the altar area, a torch sconce on the upper-left wall casting a warm amber pool, a wooden chair near the north wall right side, a tall wooden cabinet and a banded wooden crate in the upper-right antechamber, a small wooden table and a metal bin in the antechamber, three cot-style beds with pale blue-grey bedding stacked vertically along the right side of the antechamber, and a second metal bin near the south-east corner of the nave. Repaint all surfaces beautifully: the stone tile floor of the nave becomes aged, cracked flagstone in muted slate and ochre with mortar lines darkened by years of grime, dried mud tracked in near the south doorway, a faint bloodstain scrubbed but not fully erased near one pew, and pooled candlelight warming the tiles around the altar.",
+   "model": "blackforestlabs/flux-3/klein/edit-image",
+   "made_at": "2026-10-26T17:14:31+00:00",
+   "plan": "kit:7a6dbf7b8c84"
   }
  ],
  "pictures_by_day": {},
- "furnishings": {
-  "052cc80b-504a-5a32-b3ec-d76d2713733d": {
-   "": {
-    "place_id": "052cc80b-504a-5a32-b3ec-d76d2713733d",
-    "state": "",
-    "rooms": [
-     {
-      "room": 0,
-      "purpose": "Main meeting hall and diner",
-      "items": [
-       {
-        "name": "a long wooden meeting table",
-        "w": 4,
-        "h": 2,
-        "where": "middle",
-        "count": 1,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "a back table with mismatched chairs",
-        "w": 2,
-        "h": 2,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "a cracked vinyl diner booth",
-        "w": 2,
-        "h": 2,
-        "where": "wall",
-        "count": 3,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "a salvaged kitchen counter",
-        "w": 4,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "a cast iron wood stove",
-        "w": 2,
-        "h": 2,
-        "where": "corner",
-        "count": 1,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a battered oil drum lantern stand",
-        "w": 1,
-        "h": 1,
-        "where": "middle",
-        "count": 3,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       },
-       {
-        "name": "a mismatched wooden chair",
-        "w": 1,
-        "h": 1,
-        "where": "middle",
-        "count": 8,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a stack of salvaged supply crates",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 2,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a bulletin board nailed to a post",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "a rusted metal folding table",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 2,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       }
-      ]
-     },
-     {
-      "room": 1,
-      "purpose": "Waiting area and overflow seating",
-      "items": [
-       {
-        "name": "a cracked vinyl diner booth",
-        "w": 2,
-        "h": 2,
-        "where": "wall",
-        "count": 3,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "a mismatched wooden chair",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 4,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a small scavenged side table",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 2,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a battered oil drum lantern stand",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 2,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       }
-      ]
-     }
-    ],
-    "model": "anthropic/claude-sonnet-4.6",
-    "made_at": "2026-10-16T11:51:21.515795+00:00"
-   }
-  },
-  "4460da54-f44d-59cb-ba89-2b224e6466ef": {
-   "": {
-    "place_id": "4460da54-f44d-59cb-ba89-2b224e6466ef",
-    "state": "",
-    "rooms": [
-     {
-      "room": 0,
-      "purpose": "main barn floor and storage",
-      "items": [
-       {
-        "name": "a wooden barrel, rotting",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 3,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a rusted metal shelf unit",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 2,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a broken wooden crate",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 4,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a large metal feed trough",
-        "w": 3,
-        "h": 1,
-        "where": "wall",
-        "count": 2,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a wooden sawhorse",
-        "w": 2,
-        "h": 1,
-        "where": "middle",
-        "count": 2,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       }
-      ]
-     },
-     {
-      "room": 1,
-      "purpose": "vehicle storage and repair bay",
-      "items": [
-       {
-        "name": "a metal tool chest on wheels",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       },
-       {
-        "name": "a stack of old tyres",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 2,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a wooden workbench with a vice",
-        "w": 3,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a rusted metal jack stand",
-        "w": 1,
-        "h": 1,
-        "where": "middle",
-        "count": 2,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       }
-      ]
-     },
-     {
-      "room": 2,
-      "purpose": "animal feed storage",
-      "items": [
-       {
-        "name": "a wooden feed bin with lid",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a small wooden stool",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       }
-      ]
-     },
-     {
-      "room": 3,
-      "purpose": "abandoned animal pen",
-      "items": [
-       {
-        "name": "a low wooden animal pen fence",
-        "w": 3,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a rusted metal water trough",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       }
-      ]
-     }
-    ],
-    "model": "anthropic/claude-sonnet-4.6",
-    "made_at": "2026-10-16T11:51:21.876354+00:00"
-   }
-  },
-  "3d510125-2878-5feb-9b9b-41c25992393b": {
-   "": {
-    "place_id": "3d510125-2878-5feb-9b9b-41c25992393b",
-    "state": "",
-    "rooms": [
-     {
-      "room": 0,
-      "purpose": "sleeping quarters",
-      "items": [
-       {
-        "name": "a metal-framed single bed with worn mattress",
-        "w": 3,
-        "h": 4,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "a battered wooden dresser",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       },
-       {
-        "name": "a wooden nightstand with candle stub",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       },
-       {
-        "name": "a wooden chest with iron latch",
-        "w": 2,
-        "h": 1,
-        "where": "corner",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       }
-      ]
-     },
-     {
-      "room": 1,
-      "purpose": "kitchen and eating area",
-      "items": [
-       {
-        "name": "a cast iron wood-burning stove",
-        "w": 2,
-        "h": 2,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "a wooden kitchen counter with chopping block",
-        "w": 3,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "a wooden chair",
-        "w": 1,
-        "h": 1,
-        "where": "middle",
-        "count": 3,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a metal bucket",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       },
-       {
-        "name": "a shelf of mismatched tin cups and bowls",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       }
-      ]
-     },
-     {
-      "room": 2,
-      "purpose": "food storage and pantry",
-      "items": [
-       {
-        "name": "a heavy wooden shelf unit",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 3,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a sack of dried beans",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 2,
-        "verbs": [
-         "take",
-         "eat"
-        ]
-       },
-       {
-        "name": "a wooden crate of root vegetables",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "take",
-         "eat"
-        ]
-       },
-       {
-        "name": "a small wooden table for sorting supplies",
-        "w": 2,
-        "h": 2,
-        "where": "middle",
-        "count": 1,
-        "verbs": [
-         "use"
-        ]
-       }
-      ]
-     },
-     {
-      "room": 3,
-      "purpose": "main bedroom",
-      "items": [
-       {
-        "name": "a wooden wardrobe with broken hinge",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "a wooden nightstand",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       },
-       {
-        "name": "a wooden chair draped with clothing",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 1,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "a battered tin washbasin on a stand",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use"
-        ]
-       }
-      ]
-     },
-     {
-      "room": 4,
-      "purpose": "stairwell and utility landing",
-      "items": [
-       {
-        "name": "a wooden storage shelf with tools",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       },
-       {
-        "name": "a wooden barrel for water storage",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 1,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "a wooden peg rack with hanging coats",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       }
-      ]
-     },
-     {
-      "room": 5,
-      "purpose": "living room and rest area",
-      "items": [
-       {
-        "name": "a low wooden coffee table scarred by use",
-        "w": 2,
-        "h": 1,
-        "where": "middle",
-        "count": 1,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a wooden rocking chair",
-        "w": 1,
-        "h": 2,
-        "where": "corner",
-        "count": 1,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "a wooden bookshelf with paperback novels",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       },
-       {
-        "name": "a metal footlocker",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       }
-      ]
-     },
-     {
-      "room": 6,
-      "purpose": "mudroom and entry porch interior",
-      "items": [
-       {
-        "name": "a wooden boot bench",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "a wooden peg rack with hanging gear",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       },
-       {
-        "name": "a metal bucket of sand",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       },
-       {
-        "name": "a small wooden table with candles and matches",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       }
-      ]
-     },
-     {
-      "room": 7,
-      "purpose": "workshop and repair area",
-      "items": [
-       {
-        "name": "a heavy wooden workbench",
-        "w": 4,
-        "h": 2,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "a wooden tool rack with hand tools",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       },
-       {
-        "name": "a wooden stool",
-        "w": 1,
-        "h": 1,
-        "where": "middle",
-        "count": 1,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "a wooden crate of scrap metal",
-        "w": 2,
-        "h": 1,
-        "where": "corner",
-        "count": 1,
-        "verbs": [
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a vice mounted on a wooden block",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use"
-        ]
-       }
-      ]
-     },
-     {
-      "room": 8,
-      "purpose": "main living and heating room",
-      "items": [
-       {
-        "name": "a worn wooden armchair",
-        "w": 2,
-        "h": 2,
-        "where": "corner",
-        "count": 1,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "a small wooden side table",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       },
-       {
-        "name": "a wooden log storage rack",
-        "w": 3,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a metal pot on a trivet",
-        "w": 1,
-        "h": 1,
-        "where": "middle",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       }
-      ]
-     },
-     {
-      "room": 9,
-      "purpose": "small closet or outhouse privy",
-      "items": [
-       {
-        "name": "a wooden bucket latrine with lid",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 1,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "a small wooden shelf with hygiene supplies",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       }
-      ]
-     }
-    ],
-    "model": "anthropic/claude-sonnet-4.6",
-    "made_at": "2026-10-16T11:51:29.620028+00:00"
-   }
-  },
-  "340babf7-cb13-50ff-9bc6-7e62562f78e8": {
-   "": {
-    "place_id": "340babf7-cb13-50ff-9bc6-7e62562f78e8",
-    "state": "",
-    "rooms": [
-     {
-      "room": 0,
-      "purpose": "main treatment hall and reception",
-      "items": [
-       {
-        "name": "a row of metal folding cots",
-        "w": 2,
-        "h": 4,
-        "where": "wall",
-        "count": 6,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a battered reception desk",
-        "w": 3,
-        "h": 2,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a metal examination table",
-        "w": 2,
-        "h": 4,
-        "where": "middle",
-        "count": 1,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a tall metal supply shelf",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 4,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a plastic waiting chair",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 8,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a wheeled instrument trolley",
-        "w": 1,
-        "h": 2,
-        "where": "middle",
-        "count": 2,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a wooden storage crate",
-        "w": 2,
-        "h": 2,
-        "where": "corner",
-        "count": 3,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       }
-      ]
-     },
-     {
-      "room": 1,
-      "purpose": "private examination room",
-      "items": [
-       {
-        "name": "a padded examination table",
-        "w": 2,
-        "h": 4,
-        "where": "middle",
-        "count": 1,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a metal instrument tray on wheels",
-        "w": 1,
-        "h": 2,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a glass-fronted medicine cabinet",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a metal stool",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a small metal waste bin",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       }
-      ]
-     },
-     {
-      "room": 2,
-      "purpose": "medical library and records room",
-      "items": [
-       {
-        "name": "a wooden bookshelf full of medical texts",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 3,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a folding table with scattered papers",
-        "w": 3,
-        "h": 2,
-        "where": "middle",
-        "count": 1,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a wooden chair",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 2,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a metal filing cabinet",
-        "w": 1,
-        "h": 2,
-        "where": "corner",
-        "count": 2,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       }
-      ]
-     },
-     {
-      "room": 3,
-      "purpose": "doctor's office and pharmacy storage",
-      "items": [
-       {
-        "name": "a heavy wooden desk",
-        "w": 3,
-        "h": 2,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a locked medicine cabinet",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a wooden chair",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 2,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a metal shelf stacked with supply boxes",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 2,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a small metal safe",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       }
-      ]
-     }
-    ],
-    "model": "anthropic/claude-sonnet-4.6",
-    "made_at": "2026-10-16T11:51:29.885185+00:00"
-   }
-  },
-  "8e038cdb-bddd-51cd-8a87-13b93e946124": {
-   "": {
-    "place_id": "8e038cdb-bddd-51cd-8a87-13b93e946124",
-    "state": "",
-    "rooms": [
-     {
-      "room": 0,
-      "purpose": "main store floor",
-      "items": [
-       {
-        "name": "a long wooden shelving unit with canned goods",
-        "w": 4,
-        "h": 1,
-        "where": "wall",
-        "count": 4,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a wooden ration shelf stacked with dry goods",
-        "w": 3,
-        "h": 1,
-        "where": "wall",
-        "count": 3,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a heavy wooden store counter",
-        "w": 4,
-        "h": 2,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "an open ledger book on a wooden stand",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       },
-       {
-        "name": "a freestanding wooden display shelf",
-        "w": 2,
-        "h": 1,
-        "where": "middle",
-        "count": 4,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a wooden barrel for bulk goods",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 3,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a wooden crate stacked with supplies",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 5,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a worn wooden stool",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 2,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       }
-      ]
-     },
-     {
-      "room": 1,
-      "purpose": "stockroom and survivor shelter",
-      "items": [
-       {
-        "name": "a heavy wooden storage shelf",
-        "w": 3,
-        "h": 1,
-        "where": "wall",
-        "count": 4,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a wooden crate filled with scavenged supplies",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 6,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a makeshift cot with a tattered blanket",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 3,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a wooden barrel of water",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 2,
-        "verbs": [
-         "use",
-         "eat",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a battered wooden table",
-        "w": 2,
-        "h": 2,
-        "where": "middle",
-        "count": 1,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a wooden chair",
-        "w": 1,
-        "h": 1,
-        "where": "middle",
-        "count": 3,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "a locked metal strongbox on a stand",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       }
-      ]
-     }
-    ],
-    "model": "anthropic/claude-sonnet-4.6",
-    "made_at": "2026-10-16T11:51:36.834442+00:00"
-   }
-  },
-  "12b94aab-62a5-5f99-9b6d-e4c705b6f829": {
-   "": {
-    "place_id": "12b94aab-62a5-5f99-9b6d-e4c705b6f829",
-    "state": "",
-    "rooms": [
-     {
-      "room": 0,
-      "purpose": "survivor refuge and entry hall",
-      "items": [
-       {
-        "name": "heavy wooden barricade",
-        "w": 4,
-        "h": 1,
-        "where": "wall",
-        "count": 2,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "overturned pew used as barrier",
-        "w": 3,
-        "h": 1,
-        "where": "wall",
-        "count": 3,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "folding camp cot",
-        "w": 1,
-        "h": 2,
-        "where": "wall",
-        "count": 6,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "wooden crate of supplies",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 4,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "metal storage shelf with canned food",
-        "w": 1,
-        "h": 3,
-        "where": "wall",
-        "count": 2,
-        "verbs": [
-         "use",
-         "take",
-         "eat"
-        ]
-       },
-       {
-        "name": "battered wooden table",
-        "w": 2,
-        "h": 1,
-        "where": "middle",
-        "count": 2,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "plastic water barrel",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 3,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       },
-       {
-        "name": "pile of salvaged backpacks",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       }
-      ]
-     },
-     {
-      "room": 1,
-      "purpose": "sleeping quarters and sanctuary",
-      "items": [
-       {
-        "name": "wooden altar with candles",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "tall pillar candle on stand",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 4,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       },
-       {
-        "name": "canvas camp cot",
-        "w": 1,
-        "h": 2,
-        "where": "wall",
-        "count": 8,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "small wooden nightstand",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 4,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       },
-       {
-        "name": "wooden chest with personal belongings",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 3,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       },
-       {
-        "name": "folding chair",
-        "w": 1,
-        "h": 1,
-        "where": "middle",
-        "count": 4,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       }
-      ]
-     },
-     {
-      "room": 2,
-      "purpose": "bell tower storage and lookout base",
-      "items": [
-       {
-        "name": "large bronze belfry bell on mount",
-        "w": 2,
-        "h": 2,
-        "where": "middle",
-        "count": 1,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "cracked bronze bell on floor",
-        "w": 2,
-        "h": 2,
-        "where": "corner",
-        "count": 1,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "thick bell rope coiled on hook mount",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       },
-       {
-        "name": "wooden storage trunk",
-        "w": 2,
-        "h": 1,
-        "where": "wall",
-        "count": 2,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       },
-       {
-        "name": "rickety wooden ladder",
-        "w": 1,
-        "h": 3,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "metal bucket with tools",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 2,
-        "verbs": [
-         "use",
-         "take"
-        ]
-       }
-      ]
-     },
-     {
-      "room": 3,
-      "purpose": "chapel and gathering space",
-      "items": [
-       {
-        "name": "long wooden church pew",
-        "w": 3,
-        "h": 1,
-        "where": "middle",
-        "count": 4,
-        "verbs": [
-         "use",
-         "destroy"
-        ]
-       },
-       {
-        "name": "small wooden lectern",
-        "w": 1,
-        "h": 1,
-        "where": "wall",
-        "count": 1,
-        "verbs": [
-         "use"
-        ]
-       },
-       {
-        "name": "wooden collection box",
-        "w": 1,
-        "h": 1,
-        "where": "corner",
-        "count": 1,
-        "verbs": [
-         "use",
-         "take",
-         "destroy"
-        ]
-       }
-      ]
-     }
-    ],
-    "model": "anthropic/claude-sonnet-4.6",
-    "made_at": "2026-10-16T11:51:39.335852+00:00"
-   }
-  }
- },
+ "furnishings": {},
  "tile_set": "abandoned",
  "chosen_views": {}
 }

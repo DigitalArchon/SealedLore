@@ -533,7 +533,8 @@ def test_a_sample_s_shipped_map_art_fits_its_map():
         listed = json.loads(sidecar_art_path(path).read_text(encoding="utf-8"))["pictures"]
         with_files, files = load_sidecar(path)
         assert len(with_files.pictures) == len(listed), f"{path.name}: a map picture is missing"
-        places = {p.subject_id for p in with_files.pictures if p.subject != "walker"}
+        # An upper floor's backdrop is its level's ("<place>#1").
+        places = {p.subject_id.split("#")[0] for p in with_files.pictures if p.subject != "walker"}
         assert places <= ids
         walkers = {p.subject_id for p in with_files.pictures if p.subject == "walker"}
         assert walkers <= {c.name for c in scenario.cast} | {DEAD_SPRITE}  # a visual story's dead
@@ -648,7 +649,12 @@ def test_a_map_sample_is_ready_to_play_on_its_map():
             if area is None:
                 continue
             if area.indoor and world.places[pid].kind in ("building", "room") and area.rooms:
-                assert art.furnishing_for(pid, "") is not None, f"{area.name}: not furnished"
+                # By the model's furnishing, or by a world kit's template
+                # (its furniture is the plan's own: engine/kits.py).
+                kit_made = bool((art.layout_shown(pid, "").spec or {}).get("pieces"))
+                assert kit_made or art.furnishing_for(pid, "") is not None, (
+                    f"{area.name}: not furnished"
+                )
             for thing in area.placements:
                 assert any(read_asset(folder, f"items/{s}") for s in item_slugs(thing.name)), (
                     f"{path.name}: {area.name}: no sprite for {thing.name!r}"
