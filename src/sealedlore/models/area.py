@@ -115,6 +115,12 @@ class ThingRecord(BaseModel):
     # story's Look; engine/look.py). Kept whatever the state.
     contents: list[Found] = Field(default_factory=list)
     seen: str = ""
+    # What was taken out of it or off it since (names), and, for a find
+    # lying beside the thing it was found at, that thing's placement id:
+    # a later look is told what is gone, so the words it was seen in before
+    # don't bring it back.
+    taken_out: list[str] = Field(default_factory=list)
+    found_at: str = ""
     # A visual story's items (engine/visual_rules.py): how many of it, and
     # its kind as the rules read it ("" until asked).
     count: int = 1

@@ -208,6 +208,14 @@ class VisualAreaView(AreaView):
             take.triggered.connect(
                 lambda _c=False, i=index: self.action_chosen.emit("take_content", thing.id, str(i))
             )
+        for other in self._lying_on(thing):
+            # A find that lies on this thing's tiles (put there before a look's
+            # finds were laid beside it) would otherwise never be clicked.
+            take = menu.addAction(f"Take {other.name}")
+            take.setEnabled(not self.locked)
+            take.triggered.connect(
+                lambda _c=False, o=other: self.action_chosen.emit("take", o.name, o.id)
+            )
         look = menu.addAction("Look at it closely")
         look.setEnabled(not self.locked)
         look.triggered.connect(lambda: self.look_thing.emit(thing.id))
@@ -235,6 +243,18 @@ class VisualAreaView(AreaView):
             lambda: self.go_requested.emit(int(cx), int(cy), True, _bare_name(thing.name))
         )
         self._show_menu(menu, at)
+
+    def _lying_on(self, thing: Placement) -> list[Placement]:
+        """The things that can be taken lying on this one's tiles: a click
+        finds the thing listed first on a tile (`placement_at`), the plan's."""
+        if self.area is None:
+            return []
+        tiles = set(thing.tiles())
+        return [
+            p
+            for p in self.area.placements
+            if p.id != thing.id and "take" in p.verbs and tiles & set(p.tiles())
+        ]
 
     def picture_of(self, rect: Rect) -> QImage:
         """The part as the view shows it (the painting, the things and the

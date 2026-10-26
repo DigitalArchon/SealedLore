@@ -2104,6 +2104,11 @@ def _object_placements(area: Area) -> list[Placement]:
 BROKEN_KEEPS = ("use", "take")
 
 
+# A visual story's Look: a find lying in the open has a record of its own
+# under an id with this prefix (engine/look.py).
+FOUND_PREFIX = "found:"
+
+
 def apply_things(area: Area, records: Mapping[str, ThingRecord]) -> Area:
     """The area with the records on it (models/area.py `ThingRecord`; the
     author's rulings: a taken thing is with its taker, a broken one is
@@ -2154,12 +2159,34 @@ def apply_things(area: Area, records: Mapping[str, ThingRecord]) -> Area:
             y=spot.y,
             w=max(1, record.w),
             h=max(1, record.h),
-            verbs=item_verbs(record.name),
+            verbs=_record_verbs(pid, record),
             kind="object",
             room=room.index if room else None,
         )
         placements.append(_broken(placed) if record.state == "broken" else placed)
     return replace(area, rows=["".join(r) for r in rows], placements=placements)
+
+
+def can_take_record(record_id: str, record: ThingRecord) -> bool:
+    """Whether a record is of something a person can carry whatever its name:
+    one the rules know as a kind of item (something carried and put down),
+    or a visual story's find (engine/look.py: "small things a person could
+    pick up"; a find from before kinds were kept has none). "A flannel
+    shirt" or "a box of cartridges" isn't among the name lists' small
+    things."""
+    if record.kind:
+        return record.kind != "vehicle"
+    return record_id.startswith(FOUND_PREFIX)
+
+
+def _record_verbs(record_id: str, record: ThingRecord) -> tuple[str, ...]:
+    """A thing lying where it was put: what its name suggests, and Take
+    whenever `can_take_record`, as the rules take it
+    (`session_visual.visual_take`)."""
+    verbs = item_verbs(record.name)
+    if can_take_record(record_id, record) and "take" not in verbs:
+        verbs = tuple(v for v in ("use", "take", "eat", "destroy") if v in {*verbs, "take"})
+    return verbs
 
 
 def _broken(p: Placement) -> Placement:

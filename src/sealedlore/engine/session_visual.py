@@ -22,6 +22,7 @@ from sealedlore.engine.area import (
     anchor_of,
     area_of,
     bare,
+    can_take_record,
     in_earshot,
     path,
     sees,
@@ -569,7 +570,11 @@ class VisualRuntime:
         if area is None:
             return []
         state = self.area_state()
-        lines = apply_look(state.things, area, rect, reply)
+        standing = {(sp.x, sp.y) for sp in state.spots.values() if sp.area == area.id}
+        standing |= {
+            (c.x, c.y) for c in state.creatures.values() if c.area == area.id and c.state != "down"
+        }
+        lines = apply_look(state.things, area, rect, reply, occupied=standing)
         self._set_live(state)
         return lines
 
@@ -756,13 +761,18 @@ class VisualRuntime:
         if not self._in_reach(area, me, thing):
             return "You aren't close enough."
         record = state.things.get(placement_id)
-        kind = record.kind if record is not None else ""
-        if not can_be_taken(thing.name) and not (kind and kind != "vehicle"):
+        carried = record is not None and can_take_record(placement_id, record)
+        if not can_be_taken(thing.name) and not carried:
             return f"The {bare(thing.name)} is too much to carry."
         if record is None:
             record = state.things[placement_id] = ThingRecord(state="taken", name=thing.name)
         record.state, record.by, record.spot = "taken", held, None
         record.kind = record.kind or kind_of(thing.name)
+        source = state.things.get(record.found_at) if record.found_at else None
+        if source is not None:
+            # Found lying beside it: the thing it was found at is told it went.
+            source.taken_out.append(bare(thing.name))
+            record.found_at = ""
         self._visual_witness(state, f"took the {bare(thing.name)}")
         self._set_live(state)
         return f"You take the {bare(thing.name)}."
@@ -781,6 +791,7 @@ class VisualRuntime:
         if not 0 <= index < len(record.contents):
             return ""
         found = record.contents.pop(index)
+        record.taken_out.append(bare(found.name))
         state.things[ITEM_PREFIX + new_id()] = ThingRecord(
             state="taken",
             name=found.name,

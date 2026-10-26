@@ -411,7 +411,7 @@ def test_a_look_shows_the_part_and_makes_what_it_finds_real(app, window: MainWin
     session, view = game.session, game.area_view
     area = view.area
     thing = area.placements[0]
-    session.provider.responses = [LOOK_REPLY % thing.id]
+    session.provider.responses = [LOOK_REPLY % "T1"]
     view.look_thing.emit(thing.id)
     assert game._look_pending is not None
     assert "You look closely" in game.log.toPlainText()
@@ -420,11 +420,12 @@ def test_a_look_shows_the_part_and_makes_what_it_finds_real(app, window: MainWin
         pump(app)
         time.sleep(0.01)
     assert game._look_pending is None
-    # The request: the rules, the picture of the part, what stands there by id.
+    # The request: the rules, the picture of the part, what is there by handle.
     request = session.provider.requests[-1]
     assert request.messages[0].text.startswith("You are the eyes of a player")
     assert request.messages[1].parts[0].image.startswith("data:image/jpeg;base64,")
-    assert f"- {thing.id}: {thing.name}" in request.messages[1].text
+    assert f"- T1: {thing.name}" in request.messages[1].text
+    assert thing.id not in request.messages[1].text
     assert "Serrik Vaun looks closely at it." in request.messages[1].text
     assert "image_url" in str(session.provider.payloads[-1])
     words = game.log.toPlainText()
@@ -436,21 +437,26 @@ def test_a_look_shows_the_part_and_makes_what_it_finds_real(app, window: MainWin
     assert [(f.name, f.count, f.kind) for f in record.contents] == [("a tin of beans", 2, "food")]
     knife = next(r for pid, r in things.items() if pid.startswith(FOUND_PREFIX))
     assert knife.state == "dropped" and knife.name == "a rusted knife" and knife.spot is not None
-    # The knife lies on the floor now, a thing of its own on the area.
+    assert knife.kind == "weapon" and knife.found_at == thing.id
+    # The knife lies on the floor now, a thing of its own on the area, beside
+    # the stove and never under it, and it can be taken.
     shown = session.area(area.id)
-    assert any(p.name == "a rusted knife" for p in shown.placements)
+    lying = next(p for p in shown.placements if p.name == "a rusted knife")
+    assert (knife.spot.x, knife.spot.y) not in thing.tiles() and "take" in lying.verbs
+    assert shown.placement_at(knife.spot.x, knife.spot.y).name == "a rusted knife"
     assert game._contents_of(thing.id) == ["a tin of beans ×2"]
     # Saved: the records are the live state's.
     assert session.story.area_live.state.things[thing.id].contents[0].name == "a tin of beans"
     # Looked at again, the model is told what was found before.
     session.provider.responses = ['{"see": "The same sack.", "found": []}']
-    view.look_drawn.emit(thing.x, thing.y, thing.x + 2, thing.y + 2)
+    view.look_thing.emit(thing.id)
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline and game._look_pending is not None:
         pump(app)
         time.sleep(0.01)
     text = session.provider.requests[-1].messages[1].text
-    assert "holds: a tin of beans ×2" in text and "lying here: a rusted knife" in text
+    assert f"{thing.name} — in or on it: a tin of beans ×2" in text
+    assert "a rusted knife (lying loose)" in text and "A heavy sack" in text
     assert "You find nothing you could take." in game.log.toPlainText()
 
 
@@ -471,6 +477,113 @@ def test_the_look_s_reply_is_held_to_its_shape():
     ]
     with pytest.raises(ValueError):
         parse_look("nothing here", [sack])
+
+
+def test_a_find_s_holder_is_read_by_handle_by_a_unique_name_or_by_id():
+    """Live (Oct 26 2026), Sonnet 4.6 answered the scarecrow's id cut at its
+    first colon; the shirt was taken to lie in the open, under the scarecrow."""
+    from sealedlore.engine.area import Placement
+    from sealedlore.engine.look import holder_of
+
+    farm = "b637a244-e18f-5caf-b588-6cd5a28043c4"
+    crow = Placement(
+        id=f"{farm}:object:4:22:25", name="scarecrow", x=22, y=25, w=1, h=1, verbs=(), kind="object"
+    )
+    oak = Placement(
+        id=f"{farm}:object:5:15:9", name="a bare oak", x=23, y=25, w=1, h=1, verbs=(), kind="object"
+    )
+    sacks = [
+        Placement(id=f"s{i}", name="a sack", x=i, y=0, w=1, h=1, verbs=(), kind="object")
+        for i in range(2)
+    ]
+    things = [crow, oak, *sacks]
+    assert holder_of("T1", things) == crow.id
+    assert holder_of("t2", things) == oak.id
+    assert holder_of("T2 (the oak)", things) == oak.id
+    assert holder_of("T9", things) == ""
+    assert holder_of(crow.id, things) == crow.id
+    assert holder_of("the scarecrow", things) == crow.id
+    assert holder_of("sack", things) == ""  # two of them: lying in the open
+    assert holder_of(farm, things) == ""  # every thing of the plan shares it
+    assert holder_of(None, things) == holder_of("null", things) == ""
+
+
+def test_what_was_found_stays_and_what_was_taken_is_said_to_the_next_look(game: VisualWindow):
+    """The author (Oct 26 2026): the scarecrow was found to wear a flannel
+    shirt; looked at again, the model said it was gone, as if taken. Once
+    named, a thing stays where it is until something in the game moves it,
+    and the next look is told so; what was taken is told as taken."""
+    from sealedlore.engine.look import LookFind, LookReply, look_messages, things_in
+
+    session = game.session
+    house = session.area("house")
+    stove = next(p for p in house.placements if "stove" in p.name.lower())
+    rect = session.look_rect(
+        "house", (stove.x - 1, stove.y - 1, stove.x + stove.w, stove.y + stove.h)
+    )
+    reply = LookReply(
+        see="A stove, a shirt hung over its rail.",
+        found=[
+            LookFind(name="a flannel shirt", kind="clothing", inside=stove.id),
+            LookFind(name="a box of cartridges", count=2, kind="ammunition"),
+        ],
+    )
+    session.apply_look_reply("house", rect, reply)
+    state = session.area_state()
+    assert [f.name for f in state.things[stove.id].contents] == ["a flannel shirt"]
+    shown = session.area("house")
+    box = next(p for p in shown.placements if p.name == "a box of cartridges")
+    assert not set(box.tiles()) & set(stove.tiles()) and "take" in box.verbs
+
+    def request() -> str:
+        area = session.area("house")
+        return look_messages(
+            world="",
+            place="The house",
+            area=area,
+            rect=rect,
+            records=session.area_state().things,
+            player="Serrik Vaun",
+        )[1].text
+
+    text = request()
+    assert "— in or on it: a flannel shirt" in text and "a box of cartridges (lying loose)" in text
+    assert "taken from it" not in text
+    # Taken, both are told to the next look as gone.
+    state = session.area_state()
+    state.spots["Serrik Vaun"] = Spot(area="house", x=box.x, y=box.y)
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    assert session.visual_take_content(stove.id, 0).startswith("You take a flannel shirt")
+    assert session.visual_take(box.id) == "You take the box of cartridges."
+    text = request()
+    assert "taken from it since: flannel shirt, box of cartridges" in text
+    assert "(lying loose)" not in text
+    assert stove.id in [p.id for p in things_in(session.area("house"), rect)]
+
+
+def test_a_thing_lying_on_another_s_tiles_is_offered_in_its_menu(app, game: VisualWindow):
+    """A find laid on the very thing it was found at (before the fix) was
+    under it, and a click finds the plan's thing first: its menu offers it."""
+    session, view = game.session, game.area_view
+    house = session.area("house")
+    stove = next(p for p in house.placements if "stove" in p.name.lower())
+    state = session.area_state()
+    state.things["found:old"] = ThingRecord(
+        state="dropped",
+        name="flannel shirt",
+        spot=Spot(area="house", x=stove.x, y=stove.y),
+    )
+    x, y = stand_near(house, (stove.x, stove.y + stove.h))
+    state.spots["Serrik Vaun"] = Spot(area="house", x=x, y=y)
+    session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
+    game.presenter.refresh(snap=True)
+    pump(app)
+    shown = view.area
+    assert shown.placement_at(stove.x, stove.y).id == stove.id
+    seen: list[list[str]] = []
+    view._show_menu = lambda menu, at: seen.append([a.text() for a in menu.actions()])
+    view._thing_menu(shown.placement_at(stove.x, stove.y), None)
+    assert "Take flannel shirt" in seen[-1]
 
 
 # --- step 2: the rules (engine/visual_rules.py, models/visual.py) -------------
@@ -650,11 +763,14 @@ def test_taking_eating_dropping_and_mending(game: VisualWindow):
     state.spots["Serrik Vaun"] = Spot(area="house", x=holder.x, y=holder.y)
     session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
     assert session.visual_take_content(holder.id, 0).startswith("You take a candle from the")
+    assert session.area_state().things[holder.id].taken_out == ["candle"]
     candle_id, candle = session.visual_inventory()[0]
     assert candle.kind == "light"
     assert session.visual_drop(candle_id) == "You put down the candle."
     shown = session.area("house")
-    assert any(p.name == "a candle" for p in shown.placements)
+    # Put down, it can be taken again, though "candle" is no name the
+    # story's small-things list knows.
+    assert "take" in next(p for p in shown.placements if p.name == "a candle").verbs
 
 
 def test_the_dead_attack_wounds_count_and_death_offers_a_fresh_start(

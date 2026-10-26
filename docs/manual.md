@@ -1628,8 +1628,10 @@ a frame round any part of the place (or right-click a thing and choose
 **Look at it closely**): the model is shown that part of the picture and
 told what the game knows stands there, and says what you see and what you
 find on looking, inside, under or among what is there. Whatever it finds is
-in the game from then on: a thing's menu lists what it holds, and something
-found lying in the open is on the floor where you looked. The model is the
+in the game from then on: a thing's menu lists what it holds (**Take …**),
+and something found lying in the open is on the floor beside what you looked
+at. It stays there until you take it or something in the game moves it, and
+a later look is told so, and what you have taken. The model is the
 story model unless **Settings → Models → Look model** names another; one
 that reads no pictures is told the words alone.
 
