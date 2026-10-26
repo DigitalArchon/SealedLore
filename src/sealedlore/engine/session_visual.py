@@ -30,6 +30,7 @@ from sealedlore.engine.area import (
     walk_metres,
     walk_seconds,
 )
+from sealedlore.engine.cells import is_cell
 from sealedlore.engine.chronicle import (
     armed,
     day_of,
@@ -1716,7 +1717,19 @@ class VisualRuntime:
         place = self._plot_place(state)
         if place is not None and chronicle.place != place:
             set_place(chronicle, place)
+        elif place is None and chronicle.place is not None and self._in_made_cell(state):
+            # Out in the wider world, in no place the plot names: elsewhere
+            # (live, the plot kept them in Hellsville 40 km away, and "away
+            # from Hellsville" could never hold).
+            set_place(chronicle, None)
         return chronicle
+
+    def _in_made_cell(self, state) -> bool:
+        me = state.spots.get(self.held_name() or "")
+        if me is None:
+            return False
+        world = self._world_read()
+        return is_cell(self._root_place(world, me.area))
 
     def _plot_place(self, state) -> str | None:
         """The plot's place the player stands in: the innermost map place
@@ -1825,7 +1838,19 @@ class VisualRuntime:
             if place is not None and place.state:
                 place_state = f" The place is {place.state}."
         region = self.overmap_region(state) if self.overmap() is not None else None
-        wider = f" The country round about: {region.name}." if region is not None else ""
+        wider = (
+            f" The country round about: {region.name} ({region.words})."
+            if region is not None
+            else ""
+        )
+        if area is not None and self.overmap() is not None:
+            # What the place is, so the keeper never puts it somewhere else
+            # (live: Stillwater, 65 km away, "at the edge of Hellsville").
+            here_place = self._world_read().places.get(
+                self._root_place(self._world_read(), area.id) or ""
+            )
+            if here_place is not None and here_place.what:
+                wider += f" {here_place.name}: {' '.join(here_place.what.split())[:300]}"
         short = self.visual_needs(state)
         faring = f" {held} is {', '.join(short)}." if short else ""
         return (
@@ -1967,7 +1992,9 @@ class VisualRuntime:
             lines += self._fire(firing.event, firing.variant)
             lines += self.apply_script(firing.script)
         script = reply.script
-        if kind == "journey" and reply.note:
+        if kind in ("journey", "moment") and reply.note:
+            # The reply's own note says what is seen: a "note" operation
+            # beside it said the same in other words (live, on arrivals).
             script = [op for op in script if op.op != "note"]
         lines += self.apply_script(script)
         if reply.note:
@@ -2047,6 +2074,18 @@ class VisualRuntime:
         the area's middle), or beside the player."""
         area, me = self._visual_me(state)
         words = where.strip().casefold()
+        # "Snowbound fields (Hellsville)": what is in brackets is a gloss.
+        plain = re.sub(r"\(.*?\)", "", words).strip(" ,.")
+        if (
+            area is not None
+            and me is not None
+            and plain
+            and plain in {area.name.casefold(), area.title.casefold()}
+        ):
+            # The player's own area by its name: here, where they can see it
+            # (live, the made cells share names, and the dead went to the
+            # first "Snowbound fields"... then to Hellsville, by the gloss).
+            return self._spot_off(state, area, me)
         if area is not None and me is not None and any(w in words for w in OFF_WORDS):
             # A little way off, in sight: someone coming, the dead shambling up.
             return self._spot_off(state, area, me)

@@ -2993,8 +2993,11 @@ _text(
     'Reply with one JSON object and nothing else: {"fire": [{"event": "its title", '
     '"variant": "its variant\'s title or """, "script": [operations]}], "script": '
     '[operations outside any event, usually none], "note": "a line for the player, or '
-    '"""}. Fire nothing when nothing should happen yet. Whoever has just spoken (the latest '
-    'lines) has said it: no "say" that repeats their words; only what more happens.',
+    '"""}. Fire nothing when nothing should happen yet, and then leave the note empty. '
+    "The note is only what the player sees or hears now: never what they haven't noticed "
+    "or can't know (a watcher out of sight, a plan, the plot), and never a summary of where "
+    "they are or what they carry. Whoever has just spoken (the latest lines) has said it: "
+    'no "say" that repeats their words; only what more happens.',
     (
         ("state", "Where things stand"),
         ("armed", "The events that could happen now"),
@@ -3146,7 +3149,8 @@ _text(
     "is a real threat, not a fright that comes to nothing; a chance is worth stopping for; "
     "something of interest is a sight or a meeting that colours the world, never a fight. "
     'Say what the player sees in the reply\'s "note" (not a "note" operation as well), in '
-    "one or two plain lines. Reply with one JSON "
+    "one or two plain lines: only what they see or hear, never what they haven't noticed "
+    "or can't know. Reply with one JSON "
     'object and nothing else: {"fire": [{"event": "its title", "variant": "its variant\'s '
     'title or """, "script": [operations]}], "script": [operations], "note": "what the '
     'player sees"}.',

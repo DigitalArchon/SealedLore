@@ -560,3 +560,18 @@ def test_a_made_cell_is_painted_in_the_background_and_shown(doomsville, monkeypa
     picture = doomsville.backdrop_of(area)
     assert picture is not None and doomsville.pictures.read(picture.file)
     assert not doomsville.paint_wanted(area)  # painted once, kept
+
+
+def test_out_in_a_made_cell_the_plot_has_the_player_elsewhere(doomsville):
+    for region in doomsville.overmap().regions:
+        region.chance = 0
+    hellsville = next(p for p in doomsville.overmap().places if p.name == "Hellsville")
+    doomsville.overmap_travel(hellsville.x * 1000, hellsville.y * 1000, "Hellsville")
+    doomsville.visual_plot_check()  # as the window does after every move
+    assert doomsville.visual_chronicle().place == "Hellsville"
+    brannock = next(p for p in doomsville.overmap().places if p.name == "Brannock")
+    doomsville.overmap_travel(brannock.x * 1000, brannock.y * 1000, "Brannock")
+    doomsville.visual_plot_check()
+    chronicle = doomsville.visual_chronicle()
+    assert chronicle.place is None and "Hellsville" in chronicle.visited
+    assert "Brannock:" in doomsville.visual_state_text()

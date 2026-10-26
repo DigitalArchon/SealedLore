@@ -54,6 +54,13 @@ from sealedlore.storage.image_meta import MetadataError, picture_kind, strip_met
 from sealedlore.storage.images import MEDIA_TYPES
 from sealedlore.threads import BackgroundThread
 
+# The weather the play view draws, as the painter is told it.
+WEATHER_WORDS = {
+    "snow": "in deep winter, everything under snow",
+    "rain": "in the rain, the ground wet",
+    "fog": "in fog",
+    "dust": "in blowing dust",
+}
 # The expander's reply is one paragraph; room for a model that thinks first.
 EXPANDER_MAX_TOKENS = 2500
 
@@ -131,10 +138,13 @@ class PaintRuntime:
         return True
 
     def _paint_setting(self) -> str:
-        """The world's opening words, for the request."""
+        """The world's opening words, and the weather the play view draws
+        (live, Brannock came back as dry dirt: the painter was never told it
+        was winter), for the request."""
         words = " ".join((self.story.world_bible or "").split())
         first = words.split(". ")[0].strip().rstrip(".")
-        return f"in {first}" if first else ""
+        weather = WEATHER_WORDS.get((self.visual_design().weather or "").strip().lower(), "")
+        return ", ".join(p for p in (f"in {first}" if first else "", weather) if p)
 
     def _paint(
         self,
