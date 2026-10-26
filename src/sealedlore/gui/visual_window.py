@@ -430,6 +430,10 @@ class VisualWindow(QMainWindow):
         self._keeper_signal = _KeeperDone()
         self._keeper_signal.done.connect(self._kept)
         self._keeper_pending: str | None = None
+        # Whom the player was talking with when the keeper was asked (live,
+        # Marcus "went to fetch others" and the keeper then spoke for him,
+        # the conversation already closed by his leaving).
+        self._keeper_talking: str | None = None
         side = QWidget()
         side.setObjectName("visualSide")
         side_layout = QVBoxLayout(side)
@@ -643,14 +647,16 @@ class VisualWindow(QMainWindow):
         if self._talking_to is not None and not session.talk_target(self._talking_to)[0]:
             self._set_talking(None)
         self._paint_here()
+        if plot:
+            plot_lines, why = session.visual_plot_check(moment)
+            for line in plot_lines:
+                self.say(line, kind="note")
+            if why and self._ask_keeper("moment", why):
+                # Whoever the keeper has speak has spoken; the rest greet
+                # once its reply is in (live, John was told to state his
+                # business three times over on arriving at Hellsville).
+                return
         self._greet_newcomers()
-        if not plot:
-            return
-        plot_lines, why = session.visual_plot_check(moment)
-        for line in plot_lines:
-            self.say(line, kind="note")
-        if why:
-            self._ask_keeper("moment", why)
 
     # --- painting the places (engine/session_paint.py) ---------------------------------
 
@@ -915,6 +921,7 @@ class VisualWindow(QMainWindow):
         if not carrying:
             self.carry_menu.addAction("Nothing").setEnabled(False)
             return
+        near = session.people_in_reach()
         for record_id, record in carrying:
             words = f"{_bare_name(record.name)}" + (f" ×{record.count}" if record.count > 1 else "")
             sub = self.carry_menu.addMenu(words)
@@ -923,6 +930,21 @@ class VisualWindow(QMainWindow):
                 action.triggered.connect(
                     lambda _c=False, r=record_id, v=verb: self._carry_action(r, v)
                 )
+            for name in near:
+                # A toll paid, a trade made: the thing is theirs (live, a
+                # roadblock's price could be named but never handed over).
+                give = sub.addAction(f"Give to {name}")
+                give.triggered.connect(lambda _c=False, r=record_id, n=name: self._carry_give(r, n))
+
+    def _carry_give(self, record_id: str, name: str) -> None:
+        session = self.session
+        if session is None:
+            return
+        line = session.visual_give(record_id, name)
+        if line:
+            self.say(line)
+        self.presenter.refresh(snap=True)
+        self._after_action([])
 
     def _carry_action(self, record_id: str, verb: str) -> None:
         session = self.session
@@ -1231,15 +1253,15 @@ class VisualWindow(QMainWindow):
             self.line.setPlaceholderText(LINE_HINT)
         self.line.setFocus()
 
-    def _ask_keeper(self, kind: str, line: str) -> None:
+    def _ask_keeper(self, kind: str, line: str) -> bool:
         """A moment of the plot, a Direction or an unusual action goes to
-        the keeper on a thread; one at a time."""
+        the keeper on a thread; one at a time. Whether it was asked."""
         session = self.session
         if session is None:
-            return
+            return False
         if self._keeper_pending is not None:
             self.statusBar().showMessage("The story's keeper is still at work: one moment.", 4000)
-            return
+            return False
         started = session.start_keeper(
             kind,
             line,
@@ -1250,11 +1272,13 @@ class VisualWindow(QMainWindow):
         if not started:
             if kind != "moment":
                 self.say("The game has no rule for that, and nobody to ask.")
-            return
+            return False
         self._keeper_pending = kind
+        self._keeper_talking = self._talking_to
         self.statusBar().showMessage(
             f"The story's keeper is at work, with {session.role_model('keeper')}…"
         )
+        return True
 
     def _kept(self, kind: str, line: str, reply, problem: str) -> None:
         session = self.session
@@ -1269,9 +1293,14 @@ class VisualWindow(QMainWindow):
         if isinstance(reply, Ruling):
             lines = session.apply_ruling(reply, line)
         else:
-            lines = session.apply_keeper_reply(reply, kind=kind)
+            lines = session.apply_keeper_reply(
+                reply, kind=kind, talking_to=self._keeper_talking or self._talking_to or ""
+            )
         self.presenter.refresh(snap=True)
-        self._after_action(lines)
+        # A moment's reply is that moment handled: the plot isn't asked
+        # again until something else moves (an overdue event the keeper
+        # declined would otherwise be asked for ever).
+        self._after_action(lines, plot=kind in ("action", "direction"))
         ended = session.area_state().ended
         if ended and not session.area_state().dead:
             self._ended(ended)

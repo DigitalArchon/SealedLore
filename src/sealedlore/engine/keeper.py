@@ -56,6 +56,11 @@ OPS: dict[str, tuple[str, ...]] = {
     "set_fact": ("fact", "value"),
     "wound": ("count",),
     "heal": ("count",),
+    # The player has eaten or drunk (from a stream, a meal someone gave
+    # them): their hunger or thirst is met. Live, the keeper had John drink
+    # his fill from the river and the game still had him parched.
+    "eat": (),
+    "drink": (),
     "clock": ("minutes",),  # time passes
     "end": ("text",),  # the story ends
     # Someone new to the story (a traveller met on the road, a bandit at a
@@ -86,6 +91,46 @@ class Op:
             return max(0, min(200, int(float(self.args.get("count", default) or default))))
         except (TypeError, ValueError):
             return default
+
+    def minutes(self, now_minute: int | None = None) -> int:
+        """A clock operation's minutes: a number, or words for a span ("two
+        hours", "until morning", "overnight"); 0 for nothing readable.
+        `now_minute`: the minute of the day, for "until morning". (Live, a
+        Direction's "Night passes. Morning, day 7" moved the clock not at
+        all: the minutes were read from a field the operation doesn't have.)"""
+        raw = str(self.args.get("minutes", self.args.get("count", "")) or "").strip().lower()
+        if not raw:
+            return 0
+        try:
+            return max(0, min(7 * 24 * 60, int(float(raw))))
+        except ValueError:
+            pass
+        if re.search(r"\b(morning|dawn|first light|daybreak|overnight|the night|till day)\b", raw):
+            return ((7 * 60 - (now_minute or 0)) % (24 * 60)) or 24 * 60
+        number = re.search(r"\d+(?:\.\d+)?", raw)
+        amount = float(number.group(0)) if number else 1.0
+        for word, n in (
+            ("an", 1),
+            ("a", 1),
+            ("half", 0.5),
+            ("two", 2),
+            ("three", 3),
+            ("four", 4),
+            ("five", 5),
+            ("six", 6),
+            ("few", 3),
+            ("several", 4),
+        ):
+            if number is None and re.search(rf"\b{word}\b", raw):
+                amount = n
+                break
+        if re.search(r"\bday", raw):
+            return int(amount * 24 * 60)
+        if re.search(r"\bhour", raw):
+            return int(amount * 60)
+        if re.search(r"\bminute", raw):
+            return int(amount)
+        return 0
 
     def words(self, key: str) -> list[str]:
         """A comma- or semicolon-separated field as a list of words."""

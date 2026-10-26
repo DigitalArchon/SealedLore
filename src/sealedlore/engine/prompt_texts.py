@@ -2917,7 +2917,8 @@ _text(
     "WHERE: {where}. It is {when}.\nWHO IS ABOUT: {about}\nYOUR OWN STATE: {state}\n"
     "THE PLAYER'S CHARACTER, "
     "{player}: {player_words}\nWHAT YOU HAVE SEEN THEM DO: {witnessed}\nWHAT YOU REMEMBER: "
-    "{memories}\n\nTHE CONVERSATION SO FAR:\n{talk}\n\n{player} says to you: {line}",
+    "{memories}\nSAID HERE JUST NOW, BY OTHERS (answer to it, don't repeat it): {heard}\n\n"
+    "THE CONVERSATION SO FAR:\n{talk}\n\n{player} says to you: {line}",
     (
         ("where", "The place, in words"),
         ("when", "The time of day"),
@@ -2927,6 +2928,7 @@ _text(
         ("player_words", "What can be seen of the player: weapon in hand, wounds"),
         ("witnessed", "What this person saw the player do"),
         ("memories", "This person's own memory lines"),
+        ("heard", "What others here said just now, in order"),
         ("talk", "The conversation so far"),
         ("line", "What the player says"),
     ),
@@ -2997,7 +2999,10 @@ _text(
     "The note is only what the player sees or hears now: never what they haven't noticed "
     "or can't know (a watcher out of sight, a plan, the plot), and never a summary of where "
     "they are or what they carry. Whoever has just spoken (the latest lines) has said it: "
-    'no "say" that repeats their words; only what more happens.',
+    'no "say" that repeats their words; only what more happens. The person the player is '
+    'talking with speaks for themselves: no "say" for them. Anything the note says is here '
+    'must be on the board ("place" it), or left unsaid. Speech is a "say", never quoted in '
+    "the note.",
     (
         ("state", "Where things stand"),
         ("armed", "The events that could happen now"),
@@ -3150,7 +3155,7 @@ _text(
     "something of interest is a sight or a meeting that colours the world, never a fight. "
     'Say what the player sees in the reply\'s "note" (not a "note" operation as well), in '
     "one or two plain lines: only what they see or hear, never what they haven't noticed "
-    "or can't know. Reply with one JSON "
+    'or can\'t know; what anyone says is a "say", never quoted in the note. Reply with one JSON '
     'object and nothing else: {"fire": [{"event": "its title", "variant": "its variant\'s '
     'title or """, "script": [operations]}], "script": [operations], "note": "what the '
     'player sees"}.',

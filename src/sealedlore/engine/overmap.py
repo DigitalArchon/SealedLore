@@ -49,6 +49,9 @@ DAY_START = 7 * 60 + 30
 DAY_END = 17 * 60 + 30
 # At night they push on rather than camp when this little of the way is left.
 PUSH_ON_SECONDS = 2 * 3600
+# This close to first light they set out (or walk on) rather than wait for
+# it: live, a journey begun at 07:01 "waited for first light".
+NEAR_MORNING = 3600
 # Food and water: eaten on the way once this long since the last.
 EAT_AFTER = 18 * 3600
 DRINK_AFTER = 18 * 3600
@@ -554,14 +557,15 @@ def journey(
     for n, leg in enumerate(legs):
         region = traveller.regions.get(leg.region)
         minute = minute_of(now, traveller.start_minute)
-        if is_night(minute) and left > PUSH_ON_SECONDS and n == 0:
+        near_morning = until_morning(minute) <= NEAR_MORNING
+        if is_night(minute) and left > PUSH_ON_SECONDS and n == 0 and not near_morning:
             # Setting out at night with far to go: they wait for first light
             # where they are (still the place they set out from: no roll).
             now += until_morning(minute)
             j.needs.slept = now
             j.lines.append("You wait for first light before setting out.")
             minute = minute_of(now, traveller.start_minute)
-        if is_night(minute) and left > PUSH_ON_SECONDS and n > 0:
+        if is_night(minute) and left > PUSH_ON_SECONDS and n > 0 and not near_morning:
             # Night: camp here until morning, with its own roll.
             wait = until_morning(minute)
             name = region.name if region is not None else "the open"

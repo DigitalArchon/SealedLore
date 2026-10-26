@@ -192,6 +192,10 @@ class Mark(BaseModel):
     words: str = ""
 
 
+# Lines of speech an area state keeps for the people to hear.
+HEARD_KEPT = 16
+
+
 class AreaState(BaseModel):
     """Where everyone stands, and the map's clock, after a node."""
 
@@ -235,6 +239,12 @@ class AreaState(BaseModel):
     # each saw the player do, their mood, what they are doing of their own
     # accord, and who travels with the player.
     talks: dict[str, list[list[str]]] = Field(default_factory=dict)
+    # What was said out loud lately ([area id, who, words, x, y], the latest
+    # last, the newest HEARD_KEPT; x, y the speaker's tile, -1 unknown), so
+    # a person answering knows what the others beside them just said (live,
+    # three bandits at a roadblock each greeted the player with "that's far
+    # enough").
+    heard: list[list[str]] = Field(default_factory=list)
     memories: dict[str, list[str]] = Field(default_factory=dict)
     witnessed: dict[str, list[str]] = Field(default_factory=dict)
     moods: dict[str, str] = Field(default_factory=dict)

@@ -25,6 +25,7 @@ CARD_CHARS = 900
 TALK_LINES = 24
 MEMORY_LINES = 12
 WITNESS_LINES = 10
+HEARD_LINES = 6
 NPC_MAX_TOKENS = 900
 
 
@@ -75,12 +76,14 @@ def npc_messages(
     talk: Sequence[Sequence[str]],
     line: str,
     state: Sequence[str] = (),
+    heard: Sequence[Sequence[str]] = (),
     texts: PromptTexts = DEFAULT_TEXTS,
 ) -> list[PromptMessage]:
     """The talk call: the rules and the sheet as the system (cached per
     person), the situation and the player's words as the user message.
     `state`: the person's own state in the keeper's words (held, bound,
-    hurt), as the program has it."""
+    hurt), as the program has it; `heard`: what others here said just now
+    ((who, words) pairs, the latest last)."""
     system = "\n\n".join(
         [
             texts["npc.system"],
@@ -109,6 +112,8 @@ def npc_messages(
         state=", ".join(state) or "as usual",
         witnessed="; ".join(list(witnessed)[-WITNESS_LINES:]) or "nothing",
         memories="; ".join(list(memories)[-MEMORY_LINES:]) or "nothing yet",
+        heard="\n".join(f"{who}: {words}" for who, words in list(heard)[-HEARD_LINES:])
+        or "(nothing)",
         talk="\n".join(lines) or "(nothing yet)",
         line=line,
     )

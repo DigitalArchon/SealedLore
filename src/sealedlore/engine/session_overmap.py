@@ -30,6 +30,7 @@ from sealedlore.engine.area import (
     WALK_M_PER_S,
     Area,
     area_of,
+    area_rect,
     bare,
     clamped_tile,
     outdoor_scale,
@@ -142,6 +143,17 @@ class Travelled:
     brief: str = ""
     seconds: int = 0
     to: str = ""
+
+
+def _edge_tiles(area: Area, depth: int = 3) -> list[tuple[int, int]]:
+    """The tiles within `depth` of any edge of the area: where a road comes
+    in, whichever side it crosses."""
+    return [
+        (x, y)
+        for y in range(area.height)
+        for x in range(area.width)
+        if x < depth or y < depth or x >= area.width - depth or y >= area.height - depth
+    ]
 
 
 class OvermapRuntime:
@@ -866,13 +878,14 @@ class OvermapRuntime:
             # being smaller than its cell): in at its edge toward where they
             # came from.
             on_point = False
-            tile = clamped_tile(world, area, *self._in_area(area, came_from))
+            tile = self._edge_toward(world, area, came_from)
         if tile is None:
             tile = (area.width // 2, area.height // 2)
         taken = area.blocked() | {(s.x, s.y) for s in state.spots.values() if s.area == area.id}
         if road or not on_point:
             # On the road they were on: anywhere in the cell, which it crosses
-            # off its middle as often as not.
+            # off its middle as often as not; come in at an edge, the road
+            # where it crosses that edge, nearest the way they came.
             reach = max(area.width, area.height) if road and on_point else ARRIVAL_ROAD_REACH
             roads = [
                 (math.hypot(x - tile[0], y - tile[1]), x, y)
@@ -880,13 +893,62 @@ class OvermapRuntime:
                 for x in range(max(0, tile[0] - reach), min(area.width, tile[0] + reach + 1))
                 if area.rows[y][x] in "=b" and (x, y) not in taken
             ]
+            if not roads and road and not on_point:
+                roads = [
+                    (math.hypot(x - tile[0], y - tile[1]), x, y)
+                    for x, y in _edge_tiles(area)
+                    if area.rows[y][x] in "=b" and (x, y) not in taken
+                ]
             if roads:
                 _d, x, y = min(roads)
                 return Spot(area=area.id, x=x, y=y)
         x, y = stand_near(area, tile, taken, seed="arrive")
         if not self._joined(area, (x, y)):
-            x, y = stand_near(area, (area.width // 2, area.height // 2), taken, seed="arrive")
+            # The edge is rock or wall (a cave): in by the plan's own way in
+            # when it names one, else the middle (live, a journey to the
+            # Hidden Caves came in at the main chamber, beside its keeper).
+            way_in = self._way_in_label(area, tile)
+            x, y = stand_near(
+                area, way_in or (area.width // 2, area.height // 2), taken, seed="arrive"
+            )
         return Spot(area=area.id, x=x, y=y)
+
+    @staticmethod
+    def _way_in_label(area: Area, near: tuple[int, int]) -> tuple[int, int] | None:
+        """The plan's labelled way in (a cave mouth, a gate, an entrance)
+        nearest `near`, or None."""
+        found = [
+            (math.hypot(x - near[0], y - near[1]), x, y)
+            for name, (x, y) in area.labels.items()
+            if re.search(r"\b(mouth|gate|entrance|entry|way in|door|opening)\b", name, re.I)
+        ]
+        if not found:
+            return None
+        _d, x, y = min(found)
+        return x, y
+
+    def _edge_toward(self, world: WorldMap, area: Area, came_from: tuple[float, float]):
+        """The tile on the area's edge in the direction of `came_from` (true
+        metres): where a ray from the area's middle that way leaves it.
+        Clamping the point's coordinates one by one put a traveller in a
+        corner (live, Brannock's far south-west corner, 30 tiles from the
+        road and the street)."""
+        middle = (area.width // 2, area.height // 2)
+        rect = area_rect(world, area)
+        if rect is None:
+            return middle
+        west, north, width, height = rect
+        cx, cy = west + width / 2, north - height / 2
+        fx, fy = self._in_area(area, came_from)
+        dx, dy = fx - cx, fy - cy
+        if abs(dx) < 1e-6 and abs(dy) < 1e-6:
+            return middle
+        t = min(
+            (width / 2) / abs(dx) if dx else math.inf,
+            (height / 2) / abs(dy) if dy else math.inf,
+        )
+        point = (cx + dx * t * 0.98, cy + dy * t * 0.98)
+        return clamped_tile(world, area, *point) or middle
 
     @staticmethod
     def _joined(area: Area, spot: tuple[int, int]) -> bool:

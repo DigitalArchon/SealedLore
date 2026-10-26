@@ -417,6 +417,44 @@ def _turned_labels(
     return {n: list(turned_point(x, y, w, h, rot, mirror)) for n, (x, y) in labels.items()}
 
 
+# A building's state that leaves nothing of its inside.
+_GUTTED = re.compile(
+    r"\b(burn(?:t|ed)(?: out| down)?|gutted|collaps(?:ed|ing)|ruined|razed|fire-damaged)\b",
+    re.IGNORECASE,
+)
+GUTTED_RUBBLE = 0.3
+GUTTED_PILES = 3
+GUTTED_LOOT = 2
+
+
+def _gutted(floor, rng: random.Random):
+    """A floor as a fire left it: walls and doors as they were, the floor
+    rubble in part, no stairs up, the furniture gone but for piles of
+    scrap where some of it stood, and the ruins table rolled at a couple
+    of spots."""
+    index, lname, ex, labels = floor
+    rows = [list(r) for r in ex.rows]
+    for row in rows:
+        for x, tile in enumerate(row):
+            if tile == "_" and rng.random() < GUTTED_RUBBLE:
+                row[x] = ":"
+            elif tile == "&":
+                row[x] = ":"
+    spots = [(p["x"], p["y"]) for p in ex.pieces]
+    rng.shuffle(spots)
+    pieces = [
+        {"name": "scrap-pile", "x": x, "y": y, "w": 1, "h": 1, "stock": "", "chance": 0}
+        for x, y in spots[:GUTTED_PILES]
+    ]
+    loot = [
+        {"x": x, "y": y, "table": "ruins", "chance": 60}
+        for x, y in spots[GUTTED_PILES : GUTTED_PILES + GUTTED_LOOT]
+    ]
+    # No named rooms in a shell: a label with no room to hold it showed as a
+    # place mark on the floor ("shop floor", live).
+    return (index, lname, Extracted(["".join(r) for r in rows], pieces, loot), {})
+
+
 def kit_layout(
     kit: Kit,
     place_id: str,
@@ -473,6 +511,13 @@ def kit_layout(
                 _turned_labels(composed.labels, width, height, rot, mirror),
             )
         )
+    if _GUTTED.search(state or ""):
+        # A building burnt or fallen has nothing of its furniture left: its
+        # ground floor a shell of rubble with a few piles of scrap and what
+        # the ruins table rolls, its upper floors gone (live, Oct 26 2026: a
+        # farmhouse "burnt to its frame" had the kit's whole inside, a rifle
+        # by the door and a stocked pantry).
+        floors = [_gutted(floors[0], rng)]
     ground = floors[0]
     spec = {
         "ground": "floor",

@@ -503,7 +503,8 @@ class OvermapDialog(QDialog):
             label.setFont(place_font)
             label.setBrush(QBrush(INK))
             label.setFlag(QGraphicsItem.ItemIgnoresTransformations)
-            label.setPos(at.x() + 6, at.y() - 8)
+            label.setPos(at.x() + 9, at.y() - 8)
+            label.setZValue(12)  # over the "you are here" ring, which covered its first letter
             scene.addItem(label)
             self.view.items_kept += [dot, label]
         me = self.session.overmap_point(state)

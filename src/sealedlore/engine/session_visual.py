@@ -82,15 +82,18 @@ from sealedlore.engine.places import place_for
 from sealedlore.engine.session_area import (
     DEFAULT_START_MINUTE,
     DOOR_SECONDS,
+    GIVE_REACH_M,
     WINDING,
     _close_quietly,
 )
 from sealedlore.engine.takeable import can_be_taken
+from sealedlore.engine.tile_sets import head_noun
 from sealedlore.engine.visual_rules import (
     DRIVE_M_PER_S,
     FORCE_DIFFICULTY,
     FORCE_NOISE_M,
     GUN_NOISE_M,
+    HEARD_M,
     PERSON_SIGHT_M,
     best_weapon,
     can_open,
@@ -109,7 +112,7 @@ from sealedlore.engine.visual_rules import (
 from sealedlore.engine.world_art import is_window
 from sealedlore.engine.world_layout import position, size_of
 from sealedlore.ids import new_id
-from sealedlore.models.area import Found, Spot, ThingRecord
+from sealedlore.models.area import HEARD_KEPT, Found, Spot, ThingRecord
 from sealedlore.models.character import Character
 from sealedlore.models.kit import Kit
 from sealedlore.models.plot import Chronicle
@@ -161,6 +164,25 @@ def _place_named(world, words: str):
         if score > best_score:
             best, best_score = place, score
     return best
+
+
+def _made_flavour(place) -> str:
+    """A made building's line the first time it is entered: its state and
+    the first sentence of what it is."""
+    if place is None:
+        return ""
+    words = re.split(r"(?<=[.!?])\s", place.what.strip(), maxsplit=1)[0] if place.what else ""
+    if place.state:
+        return f"{place.name} is {place.state}." + (f" {words}" if words else "")
+    return words
+
+
+def _is_the_thing(holder: str, taken: list[str]) -> bool:
+    """Whether a holder's name names a thing taken out of it: "rifle
+    leaning by the door" is the rifle it held, and nothing once that is
+    taken; the cots aren't the blanket."""
+    words = set(re.findall(r"[a-z]+", holder.lower()))
+    return any((head := head_noun(name)) and head in words for name in taken)
 
 
 def _reaches(area: Area, spot: tuple[int, int]) -> bool:
@@ -645,6 +667,7 @@ class VisualRuntime:
                 size_m=size_of(place),
                 door=door,
                 seed=self.visual_seed(),
+                state=place.state,
             )
             if layout is not None:
                 made.append((place.name, layout))
@@ -978,6 +1001,10 @@ class VisualRuntime:
             return ""
         found = record.contents.pop(index)
         record.taken_out.append(bare(found.name))
+        if not record.contents and _is_the_thing(record.name, record.taken_out):
+            # The holder was the thing itself (the farmhouse's "rifle leaning
+            # by the door" held the hunting rifle): nothing stands there now.
+            record.state = "gone"
         state.things[ITEM_PREFIX + new_id()] = ThingRecord(
             state="taken",
             name=found.name,
@@ -1183,11 +1210,15 @@ class VisualRuntime:
             design = self.visual_design()
             world = self.world()
             place = world.places.get(area.place_id)
-            flavour = (
-                design.flavour.get(place.name if place else area.name)
-                or design.flavour.get(area.name)
-                or self._cell_flavour(world, area)
-            )
+            if is_cell(self._root_place(world, area.id)):
+                # A made cell's building never takes the design's line by its
+                # name (live, a burnt-out farmhouse north of the farm said
+                # "Someone kept this place"): its own words, or the cell's.
+                flavour = self._cell_flavour(world, area) or _made_flavour(place)
+            else:
+                flavour = design.flavour.get(place.name if place else area.name) or (
+                    design.flavour.get(area.name)
+                )
             state.flavour_said.append(area.id)
             if flavour:
                 lines.append(flavour)
@@ -1294,9 +1325,17 @@ class VisualRuntime:
         base, weapon = self.visual_ability()
         if line:
             state.talks.setdefault(name, []).append([self.held_name() or "You", line])
+            self._heard(state, area.id, self.held_name() or "You", line)
             self._set_live(state)
         messages = npc_messages(
             name=name,
+            heard=[
+                (ln[1], ln[2])
+                for ln in state.heard
+                if ln[0] == area.id
+                and ln[1] != name
+                and self._within_hearing(area, state.spots.get(name), ln)
+            ],
             sheet=self.visual_sheet(name),
             card=card,
             world=self.story.world_bible,
@@ -1374,6 +1413,7 @@ class VisualRuntime:
             return []
         if reply.say:
             state.talks.setdefault(name, []).append([name, reply.say])
+            self._heard(state, area.id, name, reply.say)
         if reply.remember:
             state.memories.setdefault(name, []).append(reply.remember)
             state.memories[name] = state.memories[name][-20:]
@@ -1408,6 +1448,59 @@ class VisualRuntime:
         if kind == "attack":
             lines += self.visual_tick(0)
         return lines
+
+    @staticmethod
+    def _heard(state, area_id: str, who: str, words: str) -> None:
+        """A line said out loud here, for the others to answer to: where
+        it was said goes with it, so only those within hearing get it
+        (live, the north gate's watchman "heard most of it" from 500 m)."""
+        spot = state.spots.get(who)
+        at = [spot.x, spot.y] if spot is not None and spot.area == area_id else [-1, -1]
+        state.heard.append([area_id, who, words, *at])
+        del state.heard[:-HEARD_KEPT]
+
+    @staticmethod
+    def _within_hearing(area: Area, listener: Spot | None, line: list) -> bool:
+        if listener is None or len(line) < 5 or line[3] < 0:
+            return True
+        return math.hypot(line[3] - listener.x, line[4] - listener.y) * area.tile_m <= HEARD_M
+
+    def visual_give(self, record_id: str, name: str) -> str:
+        """Hand a carried thing to a person within reach: it is theirs, and
+        they remember it (a toll paid, a trade). The line, or why not."""
+        state = self.area_state()
+        area, me = self._visual_me(state)
+        record = state.things.get(record_id)
+        spot = state.spots.get(name)
+        held = self.held_name()
+        if area is None or me is None or record is None or record.state != "taken" or held is None:
+            return ""
+        if spot is None or spot.area != area.id:
+            return f"{name} isn't here."
+        if math.hypot(spot.x - me.x, spot.y - me.y) * area.tile_m > GIVE_REACH_M:
+            return f"{name} isn't within reach."
+        record.by = name
+        what = bare(record.name) + (f" ×{record.count}" if record.count > 1 else "")
+        self._visual_witness(state, f"gave {name} the {what}")
+        state.memories.setdefault(name, []).append(f"{held} gave me the {what}.")
+        state.memories[name] = state.memories[name][-20:]
+        self._set_live(state)
+        return f"You give {name} the {what}."
+
+    def people_in_reach(self) -> list[str]:
+        """The people the player could hand something to: within reach."""
+        state = self.area_state()
+        area, me = self._visual_me(state)
+        if area is None or me is None:
+            return []
+        return [
+            n
+            for n, sp in state.spots.items()
+            if n != self.held_name()
+            and sp.area == area.id
+            and n not in state.people_down
+            and math.hypot(sp.x - me.x, sp.y - me.y) * area.tile_m <= GIVE_REACH_M
+        ]
 
     def talk_moment(self, name: str) -> str:
         """A conversation can move the plot (Doomsville's "The caves": the
@@ -1542,7 +1635,15 @@ class VisualRuntime:
                 )
                 if arrived:
                     if goal.intent in ("leave", "fetch_help"):
-                        state.spots.pop(name, None)
+                        away = self._away_spot(state, name, area)
+                        if away is not None:
+                            # One of the story's own people goes somewhere
+                            # of theirs, not off the map for good (live, the
+                            # town's leader "went to fetch others" and was
+                            # never seen again).
+                            state.spots[name] = away
+                        else:
+                            state.spots.pop(name, None)
                         state.goals.pop(name, None)
                         lines.append(f"{name} is gone.")
                     continue
@@ -1555,6 +1656,33 @@ class VisualRuntime:
                 state.spots[name] = Spot(area=area.id, x=step[0], y=step[1])
                 taken.add(step)
         return lines
+
+    def _away_spot(self, state, name: str, area: Area) -> Spot | None:
+        """Where someone who leaves the player's area goes: a place of
+        theirs (their shift's, their sheet's) that isn't this area, else
+        another building of the place they are in; None for a stranger with
+        nowhere, who is simply gone."""
+        sheet = self.visual_sheet(name)
+        places = [sh.place for sh in sheet.schedule] + ([sheet.place] if sheet.place else [])
+        if not places and name in state.strangers:
+            return None
+        world = self.world()
+        root = self._root_place(world, area.id)
+        for place in places:
+            target = self._visual_area_named(place)
+            if target is not None and target.id != area.id:
+                spot = self._place_spot(state, place)
+                if spot is not None and spot.area != area.id:
+                    return spot
+        for place in world.places.values():
+            if place.inside != root or place.kind != "building":
+                continue
+            target = self._visual_area_named(place.name)
+            if target is not None and target.id != area.id:
+                spot = self._place_spot(state, place.name)
+                if spot is not None and spot.area != area.id:
+                    return spot
+        return None
 
     def _keep_schedules(self, state, area: Area) -> None:
         """The design's people keep their hours (`PersonSheet.schedule`):
@@ -1724,6 +1852,11 @@ class VisualRuntime:
             set_place(chronicle, None)
         return chronicle
 
+    def _same_root(self, area_a: str, area_b: str) -> bool:
+        """Whether two areas lie in one place: a town and its buildings."""
+        world = self._world_read()
+        return self._root_place(world, area_a) == self._root_place(world, area_b)
+
     def _in_made_cell(self, state) -> bool:
         me = state.spots.get(self.held_name() or "")
         if me is None:
@@ -1816,21 +1949,46 @@ class VisualRuntime:
         where = area.title if area is not None else "nowhere"
         plot_place = chronicle.place or "no place the plot names"
         people = [
-            f"{n}" + (f" ({state.moods[n]})" if n in state.moods else "")
+            f"{n}"
+            + (f" ({state.moods[n]})" if n in state.moods else "")
+            + self._how_far(area, me, sp)
             for n, sp in state.spots.items()
             if area is not None and sp.area == area.id and n != held and n not in state.people_down
         ]
-        dead = sum(
+        dead_up = sum(
             1
             for c in state.creatures.values()
             if area is not None and c.area == area.id and c.state != "down"
         )
+        dead_down = sum(
+            1
+            for c in state.creatures.values()
+            if area is not None and c.area == area.id and c.state == "down"
+        )
+        dead = f"{dead_up} up and about" + (f", {dead_down} down" if dead_down else "")
+        elsewhere = []
+        if area is not None:
+            # Who is in the place's other parts (the clinic off the street),
+            # so the keeper never brings someone in who is here already.
+            for n, sp in state.spots.items():
+                if n == held or sp.area == area.id or n in state.people_down:
+                    continue
+                if self._same_root(sp.area, area.id):
+                    there = self.area(sp.area)
+                    elsewhere.append(f"{n} ({there.title})" if there is not None else n)
         carried = [
             bare(r.name) + (f" ×{r.count}" if r.count > 1 else "")
             for _i, r in self.visual_inventory()
         ]
         companions = ", ".join(state.companions) or "nobody"
         visited = ", ".join(chronicle.visited) or "nowhere yet"
+        # Whom they have met (spoken with, or been greeted by), so the keeper
+        # never writes a reunion for a first meeting (live, Stillwater's
+        # leader greeted John with "You made it back" on his first visit).
+        met = sorted(
+            {n for n in state.talks if n != held}
+            | {g.split("@", 1)[0] for g in state.greeted if g.split("@", 1)[0] != held}
+        )
         world = self.world()
         place_state = ""
         if area is not None:
@@ -1853,14 +2011,46 @@ class VisualRuntime:
                 wider += f" {here_place.name}: {' '.join(here_place.what.split())[:300]}"
         short = self.visual_needs(state)
         faring = f" {held} is {', '.join(short)}." if short else ""
+        # The story's own people not on the board yet, so the plot's band
+        # comes as the plot wrote them (live, "First bandit meeting" brought
+        # Evan with two invented names, Cole and Dutch unused).
+        waiting = [
+            f"{c.name} ({' '.join((c.summary or '').split())[:90]})"
+            for c in (*self.cast, *self.supporting)
+            if c.name != held
+            and c.name not in state.spots
+            and c.name not in state.people_down
+            and c.id not in self.hidden_ids()
+        ]
+        unplaced = (
+            " Characters of the story not on the board yet, for the plot to bring in by name: "
+            + "; ".join(waiting)
+            + "."
+            if waiting
+            else ""
+        )
         return (
             f"{held} is at {where} ({plot_place}); it is {when}; wounds {state.wounds}."
             f"{wider}{faring}{place_state} "
-            f"With them: {companions}. Here too: {', '.join(people) or 'nobody'}; "
-            f"the dead here: {dead}. "
-            f"Carrying: {', '.join(carried) or 'nothing'}. Places visited: {visited}.\n"
+            f"With them: {companions}. Here too: {', '.join(people) or 'nobody'}"
+            + (f"; elsewhere in this place: {', '.join(elsewhere)}" if elsewhere else "")
+            + f"; the dead here: {dead}. "
+            f"Carrying: {', '.join(carried) or 'nothing'}. Places visited: {visited}. "
+            f"People {held} has met so far: {', '.join(met) or 'nobody'}; everyone else is a "
+            f"stranger to them.{unplaced}\n"
             f"THINGS HERE (name; state; within reach or not):\n{self._things_text(state, area, me)}"
         )
+
+    @staticmethod
+    def _how_far(area: Area | None, me: Spot | None, spot: Spot) -> str:
+        """How far off someone stands, for the keeper (live, "Kane stands
+        close" with Kane a hundred metres across the Yard)."""
+        if area is None or me is None:
+            return ""
+        metres = math.hypot(spot.x - me.x, spot.y - me.y) * area.tile_m
+        if metres < 3:
+            return ", beside them"
+        return f", about {round(metres / 5) * 5} m off" if metres >= 5 else ", close by"
 
     def _record_words(self, record: ThingRecord | None) -> str:
         if record is None:
@@ -1982,21 +2172,36 @@ class VisualRuntime:
                 _close_quietly(text)
         done(reply, problem)
 
-    def apply_keeper_reply(self, reply: KeeperReply, *, kind: str = "") -> list[str]:
+    def apply_keeper_reply(
+        self, reply: KeeperReply, *, kind: str = "", talking_to: str = ""
+    ) -> list[str]:
         """Events fired (happened in the chronicle, their facts set, whoever
         they bring in on the board) and the scripts applied (GUI thread). On
         a journey (`kind`) the reply's own note says what is seen: a "note"
-        operation beside it said it twice over, in other words (live)."""
+        operation beside it said it twice over, in other words (live). At a
+        moment or on a journey a person's state (`tag_person`) is the
+        keeper's own knowledge, not the player's (live, "Tom Bell is armed,
+        circling behind player, unseen" was printed); and the person the
+        player is talking with (`talking_to`) speaks through their own call
+        (live, the keeper answered Marcus's question for him, in Marcus's
+        voice, and Marcus then caught John out on it)."""
         lines: list[str] = []
+        quiet = kind in ("journey", "moment")
         for firing in reply.fired:
             lines += self._fire(firing.event, firing.variant)
-            lines += self.apply_script(firing.script)
+            lines += self.apply_script(firing.script, tags_said=not quiet)
         script = reply.script
-        if kind in ("journey", "moment") and reply.note:
+        if quiet and reply.note:
             # The reply's own note says what is seen: a "note" operation
             # beside it said the same in other words (live, on arrivals).
             script = [op for op in script if op.op != "note"]
-        lines += self.apply_script(script)
+        if kind == "moment" and talking_to:
+            script = [
+                op
+                for op in script
+                if not (op.op == "say" and op.get("who").casefold() == talking_to.casefold())
+            ]
+        lines += self.apply_script(script, tags_said=not quiet)
         if reply.note:
             lines.append(reply.note)
         # A note said twice (a "note" operation and the reply's own, live on
@@ -2277,9 +2482,10 @@ class VisualRuntime:
             )
         return [words]
 
-    def apply_script(self, ops: list[Op]) -> list[str]:
+    def apply_script(self, ops: list[Op], *, tags_said: bool = True) -> list[str]:
         """The keeper's operations, in order, on the live state; the lines
-        the player reads."""
+        the player reads. `tags_said`: a person's new state is told (an
+        action's or a Direction's outcome); off, it is kept to the board."""
         state = self.area_state()
         lines: list[str] = []
         held = self.held_name() or ""
@@ -2290,12 +2496,41 @@ class VisualRuntime:
                 lines.append(op.get("text"))
             elif kind == "say":
                 who, text = op.get("who"), op.get("text")
+                card = self.visual_card(who)
+                spot = state.spots.get(card.name) if card is not None else None
+                if card is not None and (
+                    spot is None
+                    or me is None
+                    or area is None
+                    or spot.area != me.area
+                    or not (
+                        in_earshot(area, (me.x, me.y), (spot.x, spot.y))
+                        or (
+                            math.hypot(spot.x - me.x, spot.y - me.y) * area.tile_m <= PERSON_SIGHT_M
+                            and sees(area, (me.x, me.y), (spot.x, spot.y))
+                        )
+                    )
+                ):
+                    # Someone of the story who isn't here, or is out of
+                    # earshot and sight, can't be heard: they greet in their
+                    # own words when the player comes up (live, Stillwater's
+                    # people "spoke" from 120 m off across the hamlet).
+                    continue
                 if text:
                     lines.append(f"{who}: {text}")
                     state.talks.setdefault(who, []).append([who, text])
+                    if me is not None:
+                        self._heard(state, me.area, who, text)
                     if me is not None and f"{who}@{me.area}" not in state.greeted:
                         state.greeted.append(f"{who}@{me.area}")  # no second greeting
             elif kind == "spawn":
+                card = self.visual_card(op.get("who"))
+                spot = state.spots.get(card.name) if card is not None else None
+                if spot is not None and me is not None and self._same_root(spot.area, me.area):
+                    # Already about, in this place or one of its buildings:
+                    # left where they are (live, the welcome at Hellsville
+                    # "spawned" Elena out of her clinic into the street).
+                    continue
                 lines += self._stand_person(state, op.get("who"), op.get("where"))
             elif kind == "stranger":
                 lines += self._make_stranger(state, op)
@@ -2323,6 +2558,18 @@ class VisualRuntime:
                 who, where = op.get("who"), op.get("where").casefold()
                 card = self.visual_card(who)
                 if card is None:
+                    continue
+                here = state.spots.get(card.name)
+                plain = re.sub(r"\(.*?\)", "", where).strip(" ,.")
+                if (
+                    here is not None
+                    and area is not None
+                    and here.area == area.id
+                    and plain in {area.name.casefold(), area.title.casefold()}
+                ):
+                    # Moved to the place they are in already: they stay
+                    # where they stand (live, Ben "moved to The Hidden
+                    # Caves" from his chamber in them to the player's side).
                     continue
                 if any(w in where for w in ("away", "out", "gone", "leaves")):
                     state.spots.pop(card.name, None)
@@ -2394,11 +2641,14 @@ class VisualRuntime:
                     lines.append(f"{place.name}: {new_state or 'as it was'}.")
             elif kind == "tag_person":
                 card = self.visual_card(op.get("who"))
+                if card is not None and card.name == held:
+                    continue  # the player's state is the rules' ("John is hydrated", live)
                 if card is not None:
                     tags = op.words("tags")
                     if tags:
                         state.person_tags[card.name] = tags
-                        lines.append(f"{card.name} is {', '.join(tags)}.")
+                        if tags_said:
+                            lines.append(f"{card.name} is {', '.join(tags)}.")
                         if is_held(tags):
                             state.goals[card.name] = NpcGoal(intent="stay")
                             if card.name in state.companions:
@@ -2452,12 +2702,17 @@ class VisualRuntime:
                 chronicle = self.visual_chronicle()
                 set_fact(chronicle, op.get("fact"), op.get("value"))
                 state.chronicle = chronicle
+            elif kind == "eat":
+                self.note_ate(state, "food")
+            elif kind == "drink":
+                self.note_ate(state, "drink")
             elif kind == "wound":
                 state.wounds += op.count(1)
             elif kind == "heal":
                 state.wounds = max(0, state.wounds - op.count(1))
             elif kind == "clock":
-                state.seconds += op.count(0) * 60
+                clock = self.map_clock()
+                state.seconds += op.minutes(clock[1] if clock else None) * 60
             elif kind == "end":
                 state.ended = op.get("text") or "The story ends here."
                 lines.append(state.ended)

@@ -607,3 +607,48 @@ def test_the_game_window_offers_the_map_and_walks_on_into_cells(doomsville, monk
         assert state.spots[doomsville.held_name()].area.startswith("cell:")
     finally:
         window.close()
+
+
+# --- the playtest's fixes (Oct 27 2026) ---------------------------------------------------
+
+
+def test_setting_out_an_hour_before_first_light_does_not_wait():
+    """Live, a journey begun at 07:01 "waited for first light" (the walking
+    day starts at 07:30)."""
+    om = small_world()
+    om.regions[0].chance = om.regions[1].chance = 0
+    legs = om_rules.route(om, (1000, 6000), (10_000, 6000))
+    traveller = _traveller(om, start_minute=7 * 60 + 1)
+    done = om_rules.journey(legs, traveller, random.Random(1), place_name="Eastgate")
+    assert done.arrived and not any("first light" in line for line in done.lines)
+    assert done.seconds <= sum(leg.seconds for leg in legs) + 60
+
+
+def test_a_journey_comes_in_on_the_road_where_it_crosses_the_edge(doomsville):
+    """Live, a walk to Brannock landed in the cell's far corner, 30 tiles
+    from the road and the street: the arrival point's coordinates were
+    clamped one by one."""
+    for region in doomsville.overmap().regions:
+        region.chance = 0
+    brannock = next(p for p in doomsville.overmap().places if p.name == "Brannock")
+    gone = doomsville.overmap_travel(brannock.x * 1000, brannock.y * 1000, "Brannock")
+    assert gone is not None and gone.arrived
+    state = doomsville.area_state()
+    me = state.spots[doomsville.held_name()]
+    area = doomsville.area(me.area)
+    assert area.name == "Brannock"
+    assert area.rows[me.y][me.x] in "=b", (me.x, me.y)
+    assert not (me.x < 3 and me.y > area.height - 4)
+
+
+def test_a_clock_operation_reads_its_minutes_as_a_number_or_in_words():
+    """Live, "Night passes. Morning, day 7" moved the clock not at all."""
+    from sealedlore.engine.keeper import Op
+
+    assert Op(op="clock", args={"minutes": "90"}).minutes() == 90
+    assert Op(op="clock", args={"minutes": "two hours"}).minutes() == 120
+    assert Op(op="clock", args={"minutes": "until morning"}).minutes(22 * 60) == 9 * 60
+    assert Op(op="clock", args={"minutes": "overnight"}).minutes(7 * 60) == 24 * 60
+    assert Op(op="clock", args={"minutes": "a day"}).minutes() == 24 * 60
+    assert Op(op="clock", args={"minutes": "soon"}).minutes() == 0
+    assert Op(op="clock", args={}).minutes() == 0

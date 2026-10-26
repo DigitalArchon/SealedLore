@@ -1752,3 +1752,223 @@ def test_indoors_someone_out_of_sight_is_hidden_and_the_rooms_are_shaded(app, wi
     game.presenter.refresh(snap=True)
     assert view.people["Maela Orr"].isVisible()
     assert view.person_at(QPointF(7.5 * px, 10.5 * px)).name == "Maela Orr"
+
+
+# --- the playtest's fixes (Oct 27 2026) ---------------------------------------------------
+
+
+def test_at_a_moment_the_keeper_speaks_for_nobody_the_player_talks_with(plotted: VisualWindow):
+    """Live, asked at a conversation moment, the keeper answered Marcus's
+    own question for him in Marcus's voice; and "Tom Bell is armed, circling
+    behind player, unseen" was printed for the player to read."""
+    from sealedlore.engine.keeper import parse_keeper
+
+    session = plotted.session
+    state = session.area_state()
+    session._stand_person(state, "Captain Idris", "beside the player")
+    session._set_live(state)
+    reply = parse_keeper(
+        '{"fire": [], "script": [{"op": "say", "who": "Captain Idris", "text": "Three sets."}, '
+        '{"op": "tag_person", "who": "Captain Idris", "tags": "armed, unseen"}, '
+        '{"op": "note", "text": "The wind picks up."}], "note": ""}',
+        session.story.plot.events,
+    )
+    lines = session.apply_keeper_reply(reply, kind="moment", talking_to="Captain Idris")
+    assert lines == ["The wind picks up."]
+    assert session.area_state().person_tags["Captain Idris"] == ["armed", "unseen"]
+    # Not talking with him: he may speak; an action's outcome tells his state.
+    lines = session.apply_keeper_reply(reply, kind="action")
+    assert "Captain Idris: Three sets." in lines and "Captain Idris is armed, unseen." in lines
+
+
+def test_a_say_from_out_of_earshot_is_dropped_and_leaves_no_greeting_made(
+    plotted: VisualWindow,
+):
+    """Live, Stillwater's people "spoke" from 120 m off across the hamlet
+    as John came in, and then never greeted him when he walked up."""
+    from sealedlore.engine.keeper import Op
+
+    session = plotted.session
+    state = session.area_state()
+    me = state.spots[session.held_name()]
+    far = session.area(me.area)
+    x, y = stand_near(far, (far.width - 2, far.height - 2), far.blocked())
+    state.spots["Captain Idris"] = Spot(area=me.area, x=x, y=y)
+    state.placed.append("Captain Idris")
+    session._set_live(state)
+    if session.people_in_sight() and "Captain Idris" in session.people_in_sight():
+        pytest.skip("the test area is too small to be out of earshot in")
+    lines = session.apply_script([Op(op="say", args={"who": "Captain Idris", "text": "Hey."})])
+    assert lines == []
+    assert not any(g.startswith("Captain Idris@") for g in session.area_state().greeted)
+
+
+def test_a_spawn_of_someone_already_in_the_place_leaves_them_where_they_are(
+    plotted: VisualWindow,
+):
+    """Live, the welcome at Hellsville "spawned" Elena out of her clinic
+    into the street beside the player."""
+    from sealedlore.engine.keeper import Op
+
+    session = plotted.session
+    state = session.area_state()
+    me = state.spots[session.held_name()]
+    farm = session.area("farm")
+    x, y = stand_near(farm, (3, 3), farm.blocked())
+    state.spots["Maela Orr"] = Spot(area="farm", x=x, y=y)
+    session._set_live(state)
+    assert me.area == "house"  # the player indoors, Maela in the yard: one place
+    session.apply_script([Op(op="spawn", args={"who": "Maela Orr", "where": "beside the player"})])
+    after = session.area_state().spots["Maela Orr"]
+    assert (after.area, after.x, after.y) == ("farm", x, y)
+    # The keeper is told she is about, elsewhere in the place.
+    assert "elsewhere in this place: Maela Orr" in session.visual_state_text()
+    assert "People Serrik Vaun has met so far" in session.visual_state_text()
+
+
+def test_a_holder_that_was_the_thing_itself_goes_once_it_is_taken_out(plotted: VisualWindow):
+    """The farmhouse's "rifle leaning by the door" held the hunting rifle,
+    and stood there to be taken as a rifle of its own once the rifle was."""
+    session = plotted.session
+    state = session.area_state()
+    me = state.spots[session.held_name()]
+    house = session.area(me.area)
+    thing = min(house.placements, key=lambda p: abs(p.centre[0] - me.x) + abs(p.centre[1] - me.y))
+    state.things[thing.id] = ThingRecord(
+        state="seen",
+        name="rifle leaning by the door",
+        contents=[
+            Found(name="a box of cartridges", count=12, kind="ammunition"),
+            Found(name="a hunting rifle", kind="weapon"),
+        ],
+    )
+    x, y = stand_near(house, (int(thing.centre[0]), int(thing.centre[1])), house.blocked())
+    state.spots[session.held_name()] = Spot(area=me.area, x=x, y=y)
+    session._set_live(state)
+    assert "cartridges" in session.visual_take_content(thing.id, 0)
+    assert session.area_state().things[thing.id].state == "seen"
+    assert "rifle" in session.visual_take_content(thing.id, 0)
+    assert session.area_state().things[thing.id].state == "gone"
+
+
+def test_a_carried_thing_can_be_given_to_someone_within_reach_and_they_remember(
+    plotted: VisualWindow,
+):
+    """Live, a roadblock's bandit named his toll and nothing could be handed
+    over: the Carrying menu had eat, drink, use and drop."""
+    from sealedlore.engine.session_visual import ITEM_PREFIX
+
+    session = plotted.session
+    state = session.area_state()
+    me = state.spots[session.held_name()]
+    house = session.area(me.area)
+    state.things[ITEM_PREFIX + "box"] = ThingRecord(
+        state="taken", name="a toolbox", by=session.held_name(), kind="tool"
+    )
+    far = stand_near(house, (house.width - 2, house.height - 2), house.blocked())
+    state.spots["Maela Orr"] = Spot(area=me.area, x=far[0], y=far[1])
+    session._set_live(state)
+    assert "isn't within reach" in session.visual_give(ITEM_PREFIX + "box", "Maela Orr")
+    state = session.area_state()
+    near = stand_near(house, (me.x, me.y), house.blocked() | {(me.x, me.y)})
+    state.spots["Maela Orr"] = Spot(area=me.area, x=near[0], y=near[1])
+    session._set_live(state)
+    assert session.people_in_reach() == ["Maela Orr"]
+    assert (
+        session.visual_give(ITEM_PREFIX + "box", "Maela Orr") == "You give Maela Orr the toolbox."
+    )
+    state = session.area_state()
+    assert state.things[ITEM_PREFIX + "box"].by == "Maela Orr"
+    assert [r.name for _i, r in session.visual_inventory()] == []
+    assert state.memories["Maela Orr"][-1] == "Serrik Vaun gave me the toolbox."
+    plotted._fill_carry_menu()  # nothing carried: the menu says so, and doesn't fail
+    assert plotted.carry_menu.actions()[0].text() == "Nothing"
+
+
+def test_a_person_answering_hears_what_others_here_said_just_now(plotted: VisualWindow):
+    """Live, three bandits at a roadblock each greeted the player with
+    "that's far enough", each unaware of the others' words."""
+    session = plotted.session
+    state = session.area_state()
+    me = state.spots[session.held_name()]
+    house = session.area(me.area)
+    near = stand_near(house, (me.x, me.y), house.blocked() | {(me.x, me.y)})
+    state.spots["Captain Idris"] = Spot(area=me.area, x=near[0], y=near[1])
+    state.placed.append("Captain Idris")
+    session._set_live(state)
+    plotted._set_talking("Maela Orr")
+    _ask(plotted, "Who goes there?", GREETING)
+    heard = [h[1:3] for h in session.area_state().heard]
+    assert ["Serrik Vaun", "Who goes there?"] in heard
+    assert ["Maela Orr", "Oh! You gave me a fright."] in heard
+    plotted._set_talking("Captain Idris")
+    _ask(plotted, "And you?", GREETING)
+    request = next(
+        r
+        for r in reversed(session.provider.requests)
+        if "says to you: And you?" in r.messages[1].text
+    )
+    asked = request.messages[1].text
+    assert "SAID HERE JUST NOW" in asked
+    assert "Maela Orr: Oh! You gave me a fright." in asked
+    assert "Serrik Vaun: Who goes there?" in asked
+    # Their own words are not among what they heard others say.
+    before = asked.index("THE CONVERSATION SO FAR")
+    assert "Captain Idris:" not in asked[:before]
+
+
+def test_one_of_the_story_s_people_who_leaves_goes_to_a_place_of_theirs_not_off_the_map(
+    plotted: VisualWindow,
+):
+    """Live, the town's leader "went to fetch others" and was never seen
+    again: whoever left the player's area was dropped from the map."""
+    from sealedlore.models.visual import NpcGoal
+
+    session = plotted.session
+    state = session.area_state()
+    me = state.spots[session.held_name()]
+    house = session.area(me.area)
+    # Maela's sheet puts her in the house; the farm's yard is the place
+    # round it, where "away" has nowhere of hers to go but another building:
+    # none here, so she goes to the house's own place list first.
+    session.visual_design().people["Maela Orr"].schedule = []
+    session.visual_design().people["Maela Orr"].place = "The farm"
+    exit_tile = house.exits[0]
+    state.spots["Maela Orr"] = Spot(area=me.area, x=exit_tile[0], y=exit_tile[1] - 1)
+    state.goals["Maela Orr"] = NpcGoal(intent="leave", area=me.area, x=exit_tile[0], y=exit_tile[1])
+    session._set_live(state)
+    state = session.area_state()
+    lines = session._step_people(state, house, me, 60)
+    session._set_live(state)
+    assert "Maela Orr is gone." in lines
+    state = session.area_state()
+    assert "Maela Orr" in state.spots and state.spots["Maela Orr"].area == "farm"
+    # A stranger with nowhere of their own is simply gone.
+    state.strangers["Nobody Much"] = PersonSheet(card="A drifter.")
+    session.supporting.append(Character(name="Nobody Much", summary="A drifter."))
+    state.spots["Nobody Much"] = Spot(area=me.area, x=exit_tile[0], y=exit_tile[1] - 1)
+    state.goals["Nobody Much"] = NpcGoal(
+        intent="leave", area=me.area, x=exit_tile[0], y=exit_tile[1]
+    )
+    session._set_live(state)
+    state = session.area_state()
+    session._step_people(state, house, me, 60)
+    session._set_live(state)
+    assert "Nobody Much" not in session.area_state().spots
+
+
+def test_what_was_said_is_heard_only_within_hearing(plotted: VisualWindow):
+    """Live, the north gate's watchman "heard most of it" of a conversation
+    at the south gate, 500 m down the street."""
+    session = plotted.session
+    state = session.area_state()
+    me = state.spots[session.held_name()]
+    farm = session.area("farm")
+    session._heard(state, "farm", "Maela Orr", "A whisper.")
+    state.heard[-1][3:] = [1, 1]
+    far = stand_near(farm, (farm.width - 2, farm.height - 2), farm.blocked())
+    near = Spot(area="farm", x=3, y=3)
+    assert session._within_hearing(farm, near, state.heard[-1])
+    assert not session._within_hearing(farm, Spot(area="farm", x=far[0], y=far[1]), state.heard[-1])
+    assert session._within_hearing(farm, Spot(area="farm", x=far[0], y=far[1]), ["farm", "x", "y"])
+    del me

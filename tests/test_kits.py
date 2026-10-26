@@ -453,3 +453,20 @@ def test_a_kit_room_s_name_is_no_place_mark_on_the_play_view(session):
     presenter = VisualPresenter(AreaView(), lambda: session, None)
     marks = presenter._place_marks(house, session, session._art_read())
     assert not {m.name for m in marks} & {r.name for r in house.rooms if r.name}
+
+
+def test_a_burnt_out_building_gets_a_gutted_inside():
+    """Live (Oct 26 2026), a farmhouse "burnt to its frame" had the kit's
+    whole inside, a rifle by the door and a stocked pantry."""
+    kit = load_kit("abandoned")
+    whole = kit_layout(kit, "b1", "farmhouse", size_m=24, door="south", seed="s", state="")
+    burnt = kit_layout(kit, "b1", "farmhouse", size_m=24, door="south", seed="s", state="burnt out")
+    assert whole is not None and burnt is not None
+    assert burnt.levels == [] and whole.levels  # the upper floor went with the fire
+    assert whole.spec["pieces"] and burnt.spec["pieces"]
+    assert {p["name"] for p in burnt.spec["pieces"]} == {"scrap-pile"}
+    assert all(lt["table"] == "ruins" for lt in burnt.spec["loot"]) and burnt.spec["loot"]
+    rows = burnt.rows
+    assert any(":" in row for row in rows) and not any("&" in row for row in rows)
+    # The walls and the door as they were.
+    assert "+" in "".join(rows) and "#" in "".join(rows)
