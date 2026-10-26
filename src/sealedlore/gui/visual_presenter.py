@@ -453,10 +453,15 @@ class VisualPresenter(QObject):
         roofs = _building_boxes(area) if not area.indoor else []
         marks: list[PlaceMark] = []
         own = key(area.name)
+        # A room's name (a world kit's template names its rooms) is no place
+        # to mark: the farmhouse showed a gold diamond in every room.
+        rooms = {key(r.name) for r in area.rooms if r.name}
         for name, (x, y) in area.labels.items():
             if key(name) in boxed:
                 continue
             place = by_name.get(key(name))
+            if place is None and key(name) in rooms:
+                continue
             if place is None and any(x0 <= x <= x1 and y0 <= y <= y1 for x0, y0, x1, y1 in roofs):
                 continue
             if place is None and (

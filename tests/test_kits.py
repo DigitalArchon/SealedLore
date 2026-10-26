@@ -434,3 +434,22 @@ def test_a_long_run_of_furniture_repeats_its_picture_along_it():
     assert _run_middles(one, 40, 80.0) == [120.0]
     thing = Placement(id="u", name="a crate", x=2, y=0, w=6, h=1, verbs=(), kind="object")
     assert len(_run_middles(thing, 40, 80.0)) == 1
+
+
+def test_a_kit_room_s_name_is_no_place_mark_on_the_play_view(session):
+    """Every room of the kit's farmhouse showed its name as a gold diamond,
+    the play view's mark for a place in the area with nothing drawn."""
+    pytest.importorskip("PySide6")
+    from PySide6.QtWidgets import QApplication
+
+    from sealedlore.gui.area_view import AreaView
+    from sealedlore.gui.visual_presenter import VisualPresenter
+
+    app = QApplication.instance() or QApplication([])
+    del app
+    session.visual_kit_plans()
+    house = session.area("house")
+    assert any(r.name == "kitchen" for r in house.rooms) or "kitchen" in house.labels
+    presenter = VisualPresenter(AreaView(), lambda: session, None)
+    marks = presenter._place_marks(house, session, session._art_read())
+    assert not {m.name for m in marks} & {r.name for r in house.rooms if r.name}
