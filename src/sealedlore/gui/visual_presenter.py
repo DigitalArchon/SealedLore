@@ -436,7 +436,7 @@ class VisualPresenter(QObject):
         for f in shown:
             if f.piece in DRAWN_PIECES:
                 continue
-            look = (f.name, f.w, f.h, f.kind, f.broken, px, area.indoor)
+            look = (f.name, f.w, f.h, f.kind, f.broken, "take" in f.verbs, px, area.indoor)
             picture = self._thing_images.get(look)
             if picture is None:
                 picture = thing_picture(self._thing_source, f, px, indoor=area.indoor)

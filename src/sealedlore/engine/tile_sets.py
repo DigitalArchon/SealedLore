@@ -178,17 +178,41 @@ def head_noun(name: str) -> str:
     return content[-1] if content else ""
 
 
-def closest_item(name: str, slugs: Iterable[str]) -> str | None:
+# Words that measure out a thing rather than say what it is: "a coil of
+# rope" is rope, "a length of hose" hose.
+_MEASURES = frozenset(
+    "coil length piece roll bundle scrap strip set pair handful ball spool skein hank".split()
+)
+
+
+def carried_head(name: str) -> str:
+    """What a thing a person carries is: its head noun, or, after a word
+    that only measures it out, what it is a measure of."""
+    head = head_noun(name)
+    if head in _MEASURES:
+        _core, tail = _parts(name)
+        if tail[:1] == ["of"]:
+            rest = [w for w in tail[1:] if w not in _FILLER]
+            return rest[-1] if rest else head
+    return head
+
+
+def closest_item(name: str, slugs: Iterable[str], *, same_kind: bool = False) -> str | None:
     """The set's thing that best stands in for one it has no picture of: the
     same kind of thing (its words hold the name's head noun) first, then the
     most words shared ("a control console bank" is the station's
     "a-bank-of-control-consoles"). None when it shares no word with any.
     A new world's furnisher names things freely, and nearly every one was a
-    plain box on the play view (Oct 17 2026)."""
-    head = head_noun(name)
+    plain box on the play view (Oct 17 2026).
+
+    `same_kind`: only a thing of the very kind (`carried_head`), for what a
+    person carries. A shared word alone made a tin of beans a tin washbasin
+    and a bottle of water the water barrels, each as big as a person (the
+    author, Oct 26 2026)."""
+    head = carried_head(name) if same_kind else head_noun(name)
     if not head:
         return None
-    mine = set(_words(_thing(name))) - _FILLER
+    mine = (set(_words(_thing(name))) - _FILLER) | {head}
     best: tuple[int, int, int, str] | None = None
     for found in slugs:
         theirs = set(_words(found.replace("-", " "))) - _FILLER
@@ -200,6 +224,8 @@ def closest_item(name: str, slugs: Iterable[str]) -> str | None:
         # stood in as a hearth); then one that has the word; else the most
         # words in common ("a wall bunk bed" sleeps in the set's bunks).
         same = head_noun(found.replace("-", " ")) == head
+        if same_kind and not same:
+            continue
         score = (same, head in theirs, shared, -len(theirs), found)
         if best is None or score[:4] > best[:4]:
             best = score

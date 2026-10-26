@@ -218,7 +218,7 @@ class TileSource:
     # ground cost 15-25 ms, eighty things an open (Oct 19 2026).
     cut_dir: Path | None = None
     _images: dict[str, QImage | None] = field(default_factory=dict)
-    _stand_ins: dict[str, str | None] = field(default_factory=dict)
+    _stand_ins: dict[tuple[str, bool], str | None] = field(default_factory=dict)
 
     def image(self, role: str) -> QImage | None:
         """An asset ready to draw: a texture made to wrap if it wasn't (a
@@ -265,22 +265,26 @@ class TileSource:
         asks = getattr(self.read, "from_story", None)
         return bool(asks(role)) if callable(asks) else False
 
-    def item(self, name: str) -> QImage | None:
+    def item(self, name: str, *, carried: bool = False) -> QImage | None:
         """The thing's own picture, else the set's thing that suits it as it
         is (`suitable_item`: no picture of its own is drawn for it), else the
         set's nearest thing of the same kind (`closest_item`) until its own
         picture comes in (the reader lists what the set has), else None:
-        drawn as a plain box."""
+        drawn as a plain box. Something a person carries (`carried`) borrows
+        only a picture of its very kind, never one that merely shares a
+        word with it."""
         for found in item_slugs(name):
             image = self.image(f"items/{found}")
             if image is not None:
                 return image
         listing = getattr(self.read, "items", None)
         if callable(listing):
-            if name not in self._stand_ins:
+            if (name, carried) not in self._stand_ins:
                 names = listing()
-                self._stand_ins[name] = suitable_item(name, names) or closest_item(name, names)
-            found = self._stand_ins[name]
+                self._stand_ins[(name, carried)] = suitable_item(name, names) or closest_item(
+                    name, names, same_kind=carried
+                )
+            found = self._stand_ins[(name, carried)]
             nature = NATURE_STAND_INS.get(head_noun(name))
             # A stone is the set's rock unless the set has a stone of its own.
             if found is not None and not (
@@ -1159,8 +1163,27 @@ def _burning(
         )
 
 
+# Something a person carries, by its height in tiles (a person is drawn
+# 2.1 tiles tall indoors, 2.6 out: gui/area_view.PERSON_TILES), and its
+# width at most. Drawn as tall as anything else on the floor (2.2 tiles), a
+# tin of beans stood as high as the player (the author, Oct 26 2026).
+CARRIED_TILES = {True: 0.85, False: 1.1}
+CARRIED_WIDEST = 1.6
+
+
+def carried(f: Placement) -> bool:
+    """Whether a thing is something a person carries: a thing (not a piece
+    of furniture or a vehicle) that can be taken."""
+    return f.kind == "object" and "take" in f.verbs
+
+
 def _placement_sprite(source: TileSource, f: Placement, px: int, *, indoor: bool) -> QImage | None:
     """A thing's sprite at the size it stands at, None until it is drawn."""
+    if carried(f):
+        sprite = _scaled(source.item(f.name, carried=True), int(px * CARRIED_TILES[indoor]))
+        if sprite is not None and sprite.width() > px * CARRIED_WIDEST:
+            sprite = sprite.scaledToWidth(int(px * CARRIED_WIDEST), Qt.SmoothTransformation)
+        return sprite
     sprite = source.item(f.name)
     if sprite is None:
         return None
@@ -1187,6 +1210,9 @@ def _draw_placement(
     (`_placement_sprite`) with its shadow, broken when it is; a plain crate
     while it has none."""
     cx, foot = foot_of(f, px)
+    if sprite is None and carried(f):
+        _bundle(p, cx, foot, px, broken=f.broken)
+        return
     if sprite is None:
         # Not drawn yet: a plain crate of the thing's footprint, so it is
         # seen to be there (its sprite comes in the background).
@@ -1208,6 +1234,39 @@ def _draw_placement(
     if f.broken:
         _cracks(p, QRectF(left, top, sprite.width(), sprite.height()), px)
         _rubble_at(p, source, cx, foot, px)
+
+
+def _bundle(p: QPainter, cx: float, foot: float, px: int, *, broken: bool = False) -> None:
+    """Something a person carries that has no picture of its kind: a small
+    cloth bundle tied at the neck, so it reads as a thing lying there to be
+    picked up, at its size (its name is in its menu), not as a crate."""
+    w, h = px * 0.62, px * 0.5
+    cloth = QColor(118, 98, 74) if not broken else QColor(84, 72, 60)
+    p.save()
+    p.setPen(Qt.NoPen)
+    p.setBrush(QColor(0, 0, 0, 60))
+    p.drawEllipse(QPointF(cx, foot - px * 0.06), w * 0.55, px * 0.14)
+    body = QRectF(cx - w / 2, foot - h, w, h * 0.92)
+    p.setPen(QPen(QColor(40, 30, 22), max(1.0, px / 24)))
+    p.setBrush(cloth)
+    p.drawRoundedRect(body, w * 0.32, h * 0.38)
+    neck = QPolygonF(
+        [
+            QPointF(cx - w * 0.16, body.top() + h * 0.08),
+            QPointF(cx - w * 0.24, body.top() - h * 0.26),
+            QPointF(cx + w * 0.24, body.top() - h * 0.26),
+            QPointF(cx + w * 0.16, body.top() + h * 0.08),
+        ]
+    )
+    p.drawPolygon(neck)
+    p.setPen(QPen(QColor(64, 46, 30), max(1.0, px / 18)))
+    p.drawLine(
+        QPointF(cx - w * 0.2, body.top() + h * 0.02), QPointF(cx + w * 0.2, body.top() + h * 0.02)
+    )
+    p.setPen(Qt.NoPen)
+    p.setBrush(QColor(255, 240, 210, 70))
+    p.drawEllipse(QPointF(cx - w * 0.16, body.top() + h * 0.34), w * 0.14, h * 0.18)
+    p.restore()
 
 
 def broken_sprite(sprite: QImage) -> QImage:

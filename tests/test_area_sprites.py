@@ -164,3 +164,62 @@ def test_a_thing_carried_goes_with_its_carrier_and_is_left_where_they_put_it_dow
     person.put_down(thing)
     assert thing.parentItem() is None and person.carried == []
     assert thing.scene() is scene
+
+
+class _Set:
+    """A tile set's reader with three item pictures, each a tall block."""
+
+    names = ("a-battered-tin-washbasin-on-a-stand", "water-barrels", "rope")
+
+    def __call__(self, role: str) -> bytes | None:
+        if role.removeprefix("items/") not in self.names:
+            return None
+        from sealedlore.gui.image_codec import encoded
+
+        image = QImage(40, 80, QImage.Format_ARGB32)
+        image.fill(QColor(0, 0, 0, 0))
+        for y in range(4, 76):
+            for x in range(4, 36):
+                image.setPixelColor(x, y, QColor("#806040"))
+        return encoded(image, "PNG")
+
+    def items(self) -> list[str]:
+        return list(self.names)
+
+
+def test_what_a_person_carries_is_drawn_small_and_borrows_only_its_own_kind(app):
+    """The author (Oct 26 2026): indoors a tin of beans looked like a bath, a
+    bottle of water like a barrel. A shared word ("tin", "water") chose the
+    picture, and anything on the floor was drawn as tall as the player."""
+    from sealedlore.engine.tile_sets import carried_head, closest_item
+    from sealedlore.gui.area_render import CARRIED_TILES, _placement_sprite, carried
+
+    source = TileSource(TileSetInfo(name="set"), _Set())
+    px = 40
+
+    def thing(name: str, verbs=("use", "take", "destroy")) -> Placement:
+        return Placement(id=name, name=name, x=4, y=4, w=1, h=1, verbs=verbs, kind="object")
+
+    tin, water, rope = thing("a tin of beans"), thing("a bottle of water"), thing("a coil of rope")
+    assert carried(tin) and not carried(thing("a tin tub", ("use", "destroy")))
+    assert carried_head("a coil of rope") == "rope" and carried_head("a tin of beans") == "tin"
+    names = _Set.names
+    assert closest_item("a tin of beans", names) == "a-battered-tin-washbasin-on-a-stand"
+    assert closest_item("a tin of beans", names, same_kind=True) is None
+    assert closest_item("a bottle of water", names, same_kind=True) is None
+    # No picture of its kind: a small bundle, never the washbasin or the barrels.
+    for small in (tin, water):
+        assert _placement_sprite(source, small, px, indoor=True) is None
+        drawn = thing_picture(source, small, px, indoor=True).image
+        assert drawn.height() <= 2 * px
+        assert any(
+            drawn.pixelColor(x, y).alpha()
+            for x in range(drawn.width())
+            for y in range(drawn.height())
+        )
+    # Its own kind's picture, at a carried thing's size.
+    sprite = _placement_sprite(source, rope, px, indoor=True)
+    assert sprite is not None and sprite.height() == int(px * CARRIED_TILES[True])
+    # What can't be carried still borrows by a shared word, at its old size.
+    tub = _placement_sprite(source, thing("a tin tub", ("use", "destroy")), px, indoor=True)
+    assert tub is not None and tub.height() == int(px * 2.2)
