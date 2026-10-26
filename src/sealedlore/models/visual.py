@@ -18,6 +18,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from sealedlore.ids import new_id
+from sealedlore.models.overmap import Overmap
 
 # The kinds of thing the rules know (engine/visual_rules.py `kind_of`).
 Kind = Literal[
@@ -208,8 +209,14 @@ class VisualDesign(BaseModel):
     default_ability: int = 5
     # Hits the player takes before they die.
     player_hits: int = 3
+    # How warm the player is dressed to begin with (a coat on): a journey's
+    # warmth is this and each kind of warm thing carried (engine/overmap.py).
+    dressed: int = 1
     # The people (by the character's name) and who they are.
     people: dict[str, PersonSheet] = Field(default_factory=dict)
     # The weather the play view draws outdoors ("snow", "rain", "fog"; ""
     # for clear), since a visual story has no passages to say it.
     weather: str = ""
+    # The wider world the story's map stands in (models/overmap.py): its
+    # regions, roads and places, for journeys and exploring.
+    overmap: Overmap | None = None

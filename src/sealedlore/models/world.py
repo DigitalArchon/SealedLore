@@ -405,6 +405,18 @@ class TileEdits(BaseModel):
     tiles: dict[str, str] = Field(default_factory=dict)
 
 
+class OverCell(BaseModel):
+    """A cell of a visual story's overmap, made the first time it was
+    entered (engine/cells.py): its place first, then what stands on it.
+    World, not story: kept with the map's art, folded under the map
+    (engine/session_world.py `_fold`)."""
+
+    key: str
+    template: str = ""
+    places: list[WorldPlace] = Field(default_factory=list)
+    made_at: str = ""
+
+
 class WorldArt(BaseModel):
     sprites: list[WorldSprite] = Field(default_factory=list)
     # By place id, then by state ("" before any change). Art is not branch
@@ -415,6 +427,8 @@ class WorldArt(BaseModel):
     # north-west corner in metres (set from where the story starts), and the
     # cells the author's character has been in (the rest stay under fog).
     regions: dict[str, DesignedRegion] = Field(default_factory=dict)
+    # A visual story's overmap cells made so far, by key ("87,145").
+    cells: dict[str, OverCell] = Field(default_factory=dict)
     region_origin: list[float] | None = None
     explored: list[str] = Field(default_factory=list)
     # Jobs that failed, by key, and how often: one that keeps failing is let be.

@@ -153,6 +153,58 @@ class YardPiece(BaseModel):
     chance: int = 100
 
 
+class OutBuilding(BaseModel):
+    """A building an outdoor template stands on the ground: a place of the
+    map, its inside made from the kit's building kinds by its name."""
+
+    name: str
+    # Metres across.
+    size: float = 20.0
+    chance: int = 100
+    # What became of it ("burnt out"): its state on the map.
+    state: str = ""
+    what: str = ""
+
+
+class OutObject(BaseModel):
+    """A thing an outdoor template lays: where it goes (`near`), how many,
+    and the table it holds things from, when it is a container."""
+
+    name: str
+    # Metres across and down.
+    w: float = 1.5
+    h: float = 1.5
+    chance: int = 100
+    count: int | tuple[int, int] = 1
+    near: Literal["road", "buildings", "water", "middle", "anywhere"] = "anywhere"
+    stock: str = ""
+    stock_chance: int = 100
+
+
+class OutdoorTemplate(BaseModel):
+    """What a cell of open country holds, or a place the overmap makes
+    (models/overmap.py, engine/cells.py): its name, its cover, its water,
+    the buildings and things on it, a ring round it, and the loot lying
+    about. The program lays it out on the cell's ground, roads and rivers."""
+
+    name: str
+    what: str = ""
+    # The ground's cover ("" for the region's): open, sparse, woods,
+    # forest, marsh, rocky, rubble, scrub.
+    cover: str = ""
+    water: Literal["", "pond", "lake", "pools"] = ""
+    buildings: list[OutBuilding] = Field(default_factory=list)
+    # A fence round the buildings, with a gate.
+    fence: bool = False
+    # Fenced fields beside them.
+    fields: int = 0
+    # A ring round the whole: shipping containers, a barricade, a log stockade.
+    wall: Literal["", "containers", "barricade", "logs"] = ""
+    objects: list[OutObject] = Field(default_factory=list)
+    # Tables rolled for what lies about on open ground (table, chance).
+    loot: list[tuple[str, int]] = Field(default_factory=list)
+
+
 class Kit(BaseModel):
     name: str = ""
     tables: dict[str, ItemTable] = Field(default_factory=dict)
@@ -163,3 +215,6 @@ class Kit(BaseModel):
     yard: list[YardPiece] = Field(default_factory=list)
     # How many yard pieces round each building out of doors, at most.
     yard_per_building: int = 3
+    # What a cell of open country, or a place the overmap makes, holds, by
+    # template key (models/overmap.py `OverRegion.finds`).
+    outdoor: dict[str, OutdoorTemplate] = Field(default_factory=dict)

@@ -1409,6 +1409,262 @@
      "kind": "thing"
     }
    ]
+  },
+  "camp": {
+   "entries": [
+    {
+     "table": "food_can",
+     "chance": 45
+    },
+    {
+     "table": "drink",
+     "chance": 40
+    },
+    {
+     "table": "light",
+     "chance": 25
+    },
+    {
+     "table": "clothing_warm",
+     "chance": 20
+    },
+    {
+     "table": "junk",
+     "chance": 40
+    }
+   ]
+  },
+  "roadside": {
+   "entries": [
+    {
+     "table": "junk",
+     "chance": 60
+    },
+    {
+     "table": "food_can",
+     "chance": 12
+    },
+    {
+     "table": "drink",
+     "chance": 10
+    },
+    {
+     "table": "personal",
+     "chance": 10
+    }
+   ]
+  },
+  "wreck": {
+   "entries": [
+    {
+     "table": "car"
+    }
+   ]
+  },
+  "train_cargo": {
+   "type": "distribution",
+   "entries": [
+    {
+     "item": "a crate of tinned peaches",
+     "chance": 20,
+     "count": [
+      2,
+      6
+     ],
+     "kind": "food"
+    },
+    {
+     "item": "a pallet of bottled water",
+     "chance": 15,
+     "count": [
+      3,
+      8
+     ],
+     "kind": "drink"
+    },
+    {
+     "item": "a roll of copper wire",
+     "chance": 15,
+     "kind": "tool"
+    },
+    {
+     "item": "a crate of work boots",
+     "chance": 15,
+     "kind": "clothing"
+    },
+    {
+     "item": "a sack of grain",
+     "chance": 15,
+     "count": [
+      1,
+      3
+     ],
+     "kind": "food"
+    },
+    {
+     "chance": 30
+    }
+   ]
+  },
+  "heli_kit": {
+   "entries": [
+    {
+     "item": "a first aid kit",
+     "chance": 70,
+     "kind": "medicine"
+    },
+    {
+     "item": "a flare gun",
+     "chance": 40,
+     "kind": "light"
+    },
+    {
+     "item": "a survival blanket",
+     "chance": 60,
+     "kind": "clothing"
+    },
+    {
+     "item": "a ration pack",
+     "chance": 70,
+     "count": [
+      1,
+      3
+     ],
+     "kind": "food"
+    },
+    {
+     "item": "a pistol",
+     "chance": 25,
+     "kind": "weapon"
+    }
+   ]
+  },
+  "bandit_stash": {
+   "entries": [
+    {
+     "table": "guns",
+     "chance": 30
+    },
+    {
+     "item": "a box of cartridges",
+     "chance": 50,
+     "count": [
+      4,
+      12
+     ],
+     "kind": "ammunition"
+    },
+    {
+     "table": "food_can",
+     "chance": 60,
+     "count": [
+      1,
+      3
+     ]
+    },
+    {
+     "table": "drink",
+     "chance": 50
+    },
+    {
+     "item": "a bottle of whiskey",
+     "chance": 30,
+     "kind": "drink"
+    }
+   ]
+  },
+  "armoury": {
+   "entries": [
+    {
+     "table": "guns",
+     "chance": 80
+    },
+    {
+     "item": "a box of cartridges",
+     "chance": 80,
+     "count": [
+      8,
+      20
+     ],
+     "kind": "ammunition"
+    },
+    {
+     "item": "a box of shotgun shells",
+     "chance": 60,
+     "count": [
+      6,
+      12
+     ],
+     "kind": "ammunition"
+    }
+   ]
+  },
+  "ice_hut": {
+   "entries": [
+    {
+     "item": "a fishing line",
+     "chance": 70,
+     "kind": "tool"
+    },
+    {
+     "item": "a frozen fish",
+     "chance": 40,
+     "count": [
+      1,
+      3
+     ],
+     "kind": "food"
+    },
+    {
+     "item": "a camping stove",
+     "chance": 30,
+     "kind": "tool"
+    }
+   ]
+  },
+  "farm_yard": {
+   "entries": [
+    {
+     "table": "tools_farm",
+     "chance": 25
+    },
+    {
+     "table": "junk",
+     "chance": 50
+    }
+   ]
+  },
+  "ruins": {
+   "entries": [
+    {
+     "table": "junk",
+     "chance": 70
+    },
+    {
+     "table": "personal",
+     "chance": 15
+    },
+    {
+     "table": "food_can",
+     "chance": 8
+    }
+   ]
+  },
+  "town_street": {
+   "entries": [
+    {
+     "table": "junk",
+     "chance": 60
+    },
+    {
+     "table": "food_can",
+     "chance": 10
+    },
+    {
+     "table": "personal",
+     "chance": 10
+    }
+   ]
   }
  },
  "containers": [
@@ -2325,7 +2581,10 @@
     "house",
     "cottage",
     "cabin",
-    "home"
+    "home",
+    "bunkhouse",
+    "lookout cabin",
+    "guardhouse"
    ],
    "variants": [
     {
@@ -2551,7 +2810,13 @@
    "match": [
     "barn",
     "stable",
-    "shed"
+    "shed",
+    "mill",
+    "sawmill",
+    "depot",
+    "truck depot",
+    "garage",
+    "warehouse"
    ],
    "variants": [
     {
@@ -2664,7 +2929,10 @@
     "diner",
     "cafe",
     "restaurant",
-    "meeting hall"
+    "meeting hall",
+    "rest stop diner",
+    "longhouse",
+    "hall"
    ],
    "variants": [
     {
@@ -2955,7 +3223,9 @@
     "general store",
     "store",
     "shop",
-    "grocery"
+    "grocery",
+    "elevator office",
+    "office"
    ],
    "variants": [
     {
@@ -3284,5 +3554,1126 @@
    "stock": "car",
    "chance": 40
   }
- ]
+ ],
+ "outdoor": {
+  "fields": {
+   "name": "Snowbound fields",
+   "what": "Open fields under snow, the fences down in places.",
+   "cover": "open",
+   "objects": [
+    {
+     "name": "a broken wooden fence section",
+     "w": 2.0,
+     "h": 1.0,
+     "chance": 60,
+     "count": [
+      1,
+      3
+     ]
+    },
+    {
+     "name": "haystack",
+     "w": 3.0,
+     "h": 3.0,
+     "chance": 30
+    },
+    {
+     "name": "scarecrow",
+     "w": 1.0,
+     "h": 1.0,
+     "chance": 20
+    }
+   ],
+   "loot": [
+    [
+     "junk",
+     30
+    ]
+   ]
+  },
+  "farmstead": {
+   "name": "A farmstead",
+   "what": "A farmhouse and its outbuildings, shut up and silent.",
+   "cover": "open",
+   "buildings": [
+    {
+     "name": "farmhouse",
+     "size": 24.0
+    },
+    {
+     "name": "barn",
+     "size": 30.0,
+     "chance": 70
+    },
+    {
+     "name": "shed",
+     "size": 14.0,
+     "chance": 40
+    }
+   ],
+   "fence": true,
+   "fields": 1,
+   "objects": [
+    {
+     "name": "a rusted tractor",
+     "w": 4.0,
+     "h": 2.5,
+     "chance": 40,
+     "near": "buildings"
+    },
+    {
+     "name": "a stack of firewood",
+     "w": 2.0,
+     "h": 1.0,
+     "chance": 70,
+     "near": "buildings"
+    },
+    {
+     "name": "well",
+     "chance": 40,
+     "near": "buildings"
+    }
+   ],
+   "loot": [
+    [
+     "farm_yard",
+     50
+    ]
+   ]
+  },
+  "burned farm": {
+   "name": "A burned farm",
+   "what": "A farmhouse burned to its frame; the barn still stands.",
+   "cover": "open",
+   "buildings": [
+    {
+     "name": "farmhouse",
+     "size": 24.0,
+     "state": "burnt out"
+    },
+    {
+     "name": "barn",
+     "size": 30.0,
+     "chance": 60
+    }
+   ],
+   "fence": true,
+   "objects": [
+    {
+     "name": "a burnt out car",
+     "w": 4.5,
+     "h": 2.0,
+     "chance": 40,
+     "near": "buildings",
+     "stock": "car",
+     "stock_chance": 30
+    },
+    {
+     "name": "a grave with a wooden cross",
+     "w": 1.0,
+     "h": 2.0,
+     "chance": 50,
+     "near": "buildings"
+    }
+   ],
+   "loot": [
+    [
+     "ruins",
+     50
+    ]
+   ]
+  },
+  "abandoned farm": {
+   "name": "An abandoned farm",
+   "what": "A farm left in a hurry: GONE EAST is painted across the farmhouse wall.",
+   "cover": "open",
+   "buildings": [
+    {
+     "name": "farmhouse",
+     "size": 24.0,
+     "what": "GONE EAST is painted across its front wall."
+    },
+    {
+     "name": "barn",
+     "size": 30.0,
+     "chance": 70
+    }
+   ],
+   "fence": true,
+   "fields": 2,
+   "objects": [
+    {
+     "name": "a grain silo, rusted",
+     "w": 3.0,
+     "h": 3.0,
+     "chance": 50,
+     "near": "buildings"
+    },
+    {
+     "name": "a rusted pickup truck with flat tyres",
+     "w": 5.0,
+     "h": 2.0,
+     "chance": 40,
+     "near": "buildings",
+     "stock": "car",
+     "stock_chance": 50
+    }
+   ],
+   "loot": [
+    [
+     "farm_yard",
+     50
+    ]
+   ]
+  },
+  "woods": {
+   "name": "Pine woods",
+   "what": "Dark pines, deep snow between them, and quiet.",
+   "cover": "forest",
+   "objects": [
+    {
+     "name": "fallen-pine",
+     "w": 4.0,
+     "h": 1.0,
+     "chance": 50,
+     "count": [
+      1,
+      2
+     ]
+    },
+    {
+     "name": "hunting-stand",
+     "w": 2.0,
+     "h": 2.0,
+     "chance": 25,
+     "stock": "hunting_stand",
+     "stock_chance": 60
+    },
+    {
+     "name": "frozen-deer-carcass",
+     "w": 2.0,
+     "h": 1.0,
+     "chance": 15
+    }
+   ]
+  },
+  "campsite": {
+   "name": "An abandoned campsite",
+   "what": "Somebody camped here, not long ago, and left in a hurry.",
+   "cover": "woods",
+   "objects": [
+    {
+     "name": "dead-campfire",
+     "near": "middle"
+    },
+    {
+     "name": "a torn tent",
+     "w": 3.0,
+     "h": 3.0,
+     "count": [
+      1,
+      2
+     ],
+     "near": "middle",
+     "stock": "camp",
+     "stock_chance": 70
+    },
+    {
+     "name": "bedroll",
+     "w": 2.0,
+     "h": 1.0,
+     "chance": 60,
+     "near": "middle"
+    },
+    {
+     "name": "a camp stove on a crate",
+     "w": 1.0,
+     "h": 1.0,
+     "chance": 40,
+     "near": "middle"
+    }
+   ],
+   "loot": [
+    [
+     "camp",
+     60
+    ]
+   ]
+  },
+  "cabin": {
+   "name": "A hunting cabin",
+   "what": "A log cabin in the trees, its chimney cold.",
+   "cover": "woods",
+   "buildings": [
+    {
+     "name": "cabin",
+     "size": 18.0
+    }
+   ],
+   "objects": [
+    {
+     "name": "stacked-firewood",
+     "w": 2.0,
+     "h": 1.0,
+     "chance": 80,
+     "near": "buildings"
+    },
+    {
+     "name": "a hanging game rack",
+     "w": 2.0,
+     "h": 1.0,
+     "chance": 40,
+     "near": "buildings"
+    },
+    {
+     "name": "abandoned-sled",
+     "w": 2.0,
+     "h": 1.0,
+     "chance": 30,
+     "near": "buildings"
+    }
+   ],
+   "loot": [
+    [
+     "camp",
+     40
+    ]
+   ]
+  },
+  "logging camp": {
+   "name": "A logging camp",
+   "what": "A bunkhouse and a shed among stacked logs, the saws long silent.",
+   "cover": "woods",
+   "buildings": [
+    {
+     "name": "bunkhouse",
+     "size": 24.0
+    },
+    {
+     "name": "shed",
+     "size": 14.0,
+     "chance": 70
+    }
+   ],
+   "objects": [
+    {
+     "name": "a wooden log storage rack",
+     "w": 4.0,
+     "count": [
+      2,
+      3
+     ],
+     "near": "buildings"
+    },
+    {
+     "name": "a generator with a fuel can",
+     "h": 1.0,
+     "chance": 40,
+     "near": "buildings"
+    },
+    {
+     "name": "a snowmobile",
+     "w": 2.5,
+     "h": 1.0,
+     "chance": 25,
+     "near": "buildings"
+    }
+   ],
+   "loot": [
+    [
+     "camp",
+     50
+    ]
+   ]
+  },
+  "road wreck": {
+   "name": "A wreck on the road",
+   "what": "Cars piled up where something went wrong, long ago.",
+   "cover": "open",
+   "objects": [
+    {
+     "name": "wrecked-sedan",
+     "w": 4.5,
+     "h": 2.0,
+     "near": "road",
+     "stock": "car",
+     "stock_chance": 50
+    },
+    {
+     "name": "jackknifed-truck",
+     "w": 8.0,
+     "h": 2.5,
+     "chance": 60,
+     "near": "road",
+     "stock": "car",
+     "stock_chance": 50
+    },
+    {
+     "name": "snowed-under-car",
+     "w": 4.5,
+     "h": 2.0,
+     "chance": 60,
+     "count": [
+      1,
+      2
+     ],
+     "near": "road",
+     "stock": "car",
+     "stock_chance": 40
+    },
+    {
+     "name": "road-sign-shot-through",
+     "w": 1.0,
+     "h": 1.0,
+     "chance": 40,
+     "near": "road"
+    }
+   ],
+   "loot": [
+    [
+     "roadside",
+     60
+    ]
+   ]
+  },
+  "roadblock": {
+   "name": "A roadblock",
+   "what": "Cars dragged across the road and a fire in a drum: someone holds this stretch.",
+   "cover": "open",
+   "objects": [
+    {
+     "name": "car-barricade",
+     "w": 6.0,
+     "h": 2.0,
+     "near": "road"
+    },
+    {
+     "name": "a burning oil drum fire",
+     "w": 1.0,
+     "h": 1.0,
+     "near": "road"
+    },
+    {
+     "name": "a stack of sandbags",
+     "w": 2.0,
+     "h": 1.0,
+     "count": [
+      1,
+      2
+     ],
+     "near": "road"
+    },
+    {
+     "name": "corpse",
+     "w": 2.0,
+     "h": 1.0,
+     "chance": 50,
+     "near": "road"
+    }
+   ],
+   "loot": [
+    [
+     "bandit_stash",
+     40
+    ]
+   ]
+  },
+  "ruins": {
+   "name": "Burned-out houses",
+   "what": "A street of houses burned to their frames.",
+   "cover": "rubble",
+   "buildings": [
+    {
+     "name": "house",
+     "state": "burnt out"
+    },
+    {
+     "name": "house",
+     "chance": 70,
+     "state": "burnt out"
+    },
+    {
+     "name": "house",
+     "chance": 50
+    }
+   ],
+   "objects": [
+    {
+     "name": "a burnt out car",
+     "w": 4.5,
+     "h": 2.0,
+     "chance": 60,
+     "near": "buildings",
+     "stock": "car",
+     "stock_chance": 20
+    },
+    {
+     "name": "scrap-pile",
+     "w": 2.0,
+     "h": 2.0,
+     "chance": 50
+    },
+    {
+     "name": "a street lamp, dark",
+     "w": 1.0,
+     "h": 1.0,
+     "chance": 40,
+     "near": "buildings"
+    }
+   ],
+   "loot": [
+    [
+     "ruins",
+     60
+    ]
+   ]
+  },
+  "marsh": {
+   "name": "Frozen marsh",
+   "what": "Reeds and black ice; the ground gives underfoot.",
+   "cover": "marsh",
+   "water": "pools",
+   "objects": [
+    {
+     "name": "a rotting rowboat",
+     "w": 3.0,
+     "chance": 40,
+     "near": "water"
+    },
+    {
+     "name": "hunting-stand",
+     "w": 2.0,
+     "h": 2.0,
+     "chance": 25,
+     "stock": "hunting_stand",
+     "stock_chance": 50
+    }
+   ]
+  },
+  "ice hut": {
+   "name": "An ice-fishing hut",
+   "what": "A frozen pond with a fishing hut out on the ice.",
+   "cover": "marsh",
+   "water": "lake",
+   "objects": [
+    {
+     "name": "an ice-fishing hut",
+     "w": 2.5,
+     "h": 2.5,
+     "near": "water",
+     "stock": "ice_hut",
+     "stock_chance": 70
+    },
+    {
+     "name": "a wooden drying rack",
+     "w": 2.0,
+     "h": 1.0,
+     "chance": 50,
+     "near": "water"
+    }
+   ]
+  },
+  "hills": {
+   "name": "Rocky hillside",
+   "what": "Limestone ridges, scree and stunted pines.",
+   "cover": "rocky",
+   "objects": [
+    {
+     "name": "cairn",
+     "w": 1.0,
+     "h": 1.0,
+     "chance": 30
+    },
+    {
+     "name": "split-boulder",
+     "w": 2.0,
+     "h": 2.0,
+     "chance": 50
+    },
+    {
+     "name": "rockfall",
+     "w": 3.0,
+     "h": 2.0,
+     "chance": 30
+    }
+   ]
+  },
+  "sinkhole": {
+   "name": "A sinkhole",
+   "what": "The ground has fallen in here; something moves at the bottom.",
+   "cover": "rocky",
+   "objects": [
+    {
+     "name": "a sinkhole",
+     "w": 6.0,
+     "h": 6.0,
+     "near": "middle"
+    },
+    {
+     "name": "tilted-ladder",
+     "w": 1.0,
+     "h": 2.0,
+     "chance": 40,
+     "near": "middle"
+    }
+   ]
+  },
+  "quarry": {
+   "name": "An old quarry",
+   "what": "A cut in the limestone, a rusted digger left in it.",
+   "cover": "rocky",
+   "objects": [
+    {
+     "name": "a rusted excavator",
+     "w": 6.0,
+     "h": 3.0,
+     "near": "middle",
+     "stock": "car",
+     "stock_chance": 30
+    },
+    {
+     "name": "rockfall",
+     "w": 3.0,
+     "h": 2.0,
+     "count": [
+      1,
+      2
+     ]
+    },
+    {
+     "name": "a rusty oil drum",
+     "w": 1.0,
+     "h": 1.0,
+     "chance": 50
+    }
+   ]
+  },
+  "elevator": {
+   "name": "A grain elevator",
+   "what": "A grain elevator and its office beside the road, the silos rusting.",
+   "cover": "open",
+   "buildings": [
+    {
+     "name": "elevator office",
+     "size": 16.0
+    }
+   ],
+   "objects": [
+    {
+     "name": "a grain silo, rusted",
+     "w": 3.0,
+     "h": 3.0,
+     "count": [
+      2,
+      3
+     ],
+     "near": "buildings"
+    },
+    {
+     "name": "a rusted pickup truck with flat tyres",
+     "w": 5.0,
+     "h": 2.0,
+     "chance": 50,
+     "near": "road",
+     "stock": "car",
+     "stock_chance": 50
+    }
+   ],
+   "loot": [
+    [
+     "farm_yard",
+     40
+    ]
+   ]
+  },
+  "bridge": {
+   "name": "A bridge",
+   "what": "The highway crosses the river here on a long concrete bridge.",
+   "cover": "sparse",
+   "objects": [
+    {
+     "name": "wrecked-car",
+     "w": 4.5,
+     "h": 2.0,
+     "count": [
+      1,
+      2
+     ],
+     "near": "road",
+     "stock": "car",
+     "stock_chance": 40
+    },
+    {
+     "name": "a stack of sandbags",
+     "w": 2.0,
+     "h": 1.0,
+     "chance": 60,
+     "near": "road"
+    },
+    {
+     "name": "road-sign-shot-through",
+     "w": 1.0,
+     "h": 1.0,
+     "chance": 40,
+     "near": "road"
+    }
+   ],
+   "loot": [
+    [
+     "roadside",
+     50
+    ]
+   ]
+  },
+  "mill": {
+   "name": "A mill",
+   "what": "An old timber mill on the river, its wheel frozen.",
+   "cover": "woods",
+   "buildings": [
+    {
+     "name": "mill",
+     "size": 26.0
+    },
+    {
+     "name": "cottage",
+     "size": 18.0,
+     "chance": 70
+    }
+   ],
+   "fence": true,
+   "objects": [
+    {
+     "name": "a wooden log storage rack",
+     "w": 4.0,
+     "count": [
+      1,
+      2
+     ],
+     "near": "buildings"
+    },
+    {
+     "name": "a stack of firewood",
+     "w": 2.0,
+     "h": 1.0,
+     "near": "buildings"
+    }
+   ],
+   "loot": [
+    [
+     "farm_yard",
+     40
+    ]
+   ]
+  },
+  "ghost town": {
+   "name": "A ghost town",
+   "what": "A small town emptied out: a diner, a store, a church, a few houses.",
+   "cover": "sparse",
+   "buildings": [
+    {
+     "name": "diner",
+     "size": 26.0
+    },
+    {
+     "name": "general store",
+     "size": 26.0
+    },
+    {
+     "name": "church",
+     "size": 24.0
+    },
+    {
+     "name": "house"
+    },
+    {
+     "name": "house",
+     "chance": 70
+    },
+    {
+     "name": "house",
+     "chance": 50
+    }
+   ],
+   "objects": [
+    {
+     "name": "a burnt out car",
+     "w": 4.5,
+     "h": 2.0,
+     "chance": 70,
+     "count": [
+      1,
+      2
+     ],
+     "near": "road",
+     "stock": "car",
+     "stock_chance": 30
+    },
+    {
+     "name": "toppled-sign",
+     "w": 1.0,
+     "h": 1.0,
+     "chance": 50,
+     "near": "road"
+    },
+    {
+     "name": "a bus stop shelter with broken glass",
+     "w": 2.0,
+     "h": 1.0,
+     "chance": 40,
+     "near": "road"
+    }
+   ],
+   "loot": [
+    [
+     "town_street",
+     60
+    ]
+   ]
+  },
+  "hamlet": {
+   "name": "A hamlet",
+   "what": "Log cabins behind a stockade on a frozen lake, wood smoke rising.",
+   "cover": "woods",
+   "water": "lake",
+   "buildings": [
+    {
+     "name": "meeting hall",
+     "size": 26.0
+    },
+    {
+     "name": "cabin",
+     "size": 18.0
+    },
+    {
+     "name": "cabin",
+     "size": 18.0
+    },
+    {
+     "name": "cabin",
+     "size": 18.0,
+     "chance": 80
+    },
+    {
+     "name": "shed",
+     "size": 14.0
+    }
+   ],
+   "wall": "logs",
+   "objects": [
+    {
+     "name": "a wooden drying rack",
+     "w": 2.0,
+     "h": 1.0,
+     "count": [
+      1,
+      2
+     ],
+     "near": "buildings"
+    },
+    {
+     "name": "stacked-firewood",
+     "w": 2.0,
+     "h": 1.0,
+     "count": [
+      2,
+      3
+     ],
+     "near": "buildings"
+    },
+    {
+     "name": "an ice-fishing hut",
+     "w": 2.5,
+     "h": 2.5,
+     "near": "water",
+     "stock": "ice_hut",
+     "stock_chance": 50
+    }
+   ]
+  },
+  "lookout": {
+   "name": "A fire lookout",
+   "what": "A steel lookout tower on a rise, a cabin at its foot.",
+   "cover": "woods",
+   "buildings": [
+    {
+     "name": "lookout cabin",
+     "size": 16.0
+    }
+   ],
+   "objects": [
+    {
+     "name": "a steel lookout tower",
+     "w": 4.0,
+     "h": 4.0,
+     "near": "buildings"
+    },
+    {
+     "name": "a radio set with a microphone",
+     "w": 1.0,
+     "h": 1.0,
+     "chance": 60,
+     "near": "buildings"
+    }
+   ],
+   "loot": [
+    [
+     "camp",
+     40
+    ]
+   ]
+  },
+  "train wreck": {
+   "name": "A derailed train",
+   "what": "A freight train off its rails, boxcars on their sides in the snow.",
+   "cover": "marsh",
+   "objects": [
+    {
+     "name": "a derailed boxcar",
+     "w": 14.0,
+     "h": 3.0,
+     "count": [
+      3,
+      4
+     ],
+     "near": "road",
+     "stock": "train_cargo",
+     "stock_chance": 60
+    },
+    {
+     "name": "a derailed locomotive",
+     "w": 16.0,
+     "h": 3.5,
+     "near": "road"
+    },
+    {
+     "name": "scrap-pile",
+     "w": 2.0,
+     "h": 2.0,
+     "chance": 50
+    }
+   ],
+   "loot": [
+    [
+     "junk",
+     50
+    ]
+   ]
+  },
+  "crash site": {
+   "name": "A crashed helicopter",
+   "what": "A helicopter came down here, its rotor snapped, the snow scorched round it.",
+   "cover": "open",
+   "objects": [
+    {
+     "name": "a crashed helicopter",
+     "w": 12.0,
+     "h": 4.0,
+     "near": "middle",
+     "stock": "heli_kit",
+     "stock_chance": 90
+    },
+    {
+     "name": "scrap-pile",
+     "w": 2.0,
+     "h": 2.0,
+     "count": [
+      2,
+      3
+     ],
+     "near": "middle"
+    },
+    {
+     "name": "corpse",
+     "w": 2.0,
+     "h": 1.0,
+     "chance": 50,
+     "near": "middle"
+    }
+   ]
+  },
+  "rest stop": {
+   "name": "A rest stop",
+   "what": "A highway rest stop: a diner, the pumps, the cars still parked.",
+   "cover": "sparse",
+   "buildings": [
+    {
+     "name": "rest stop diner",
+     "size": 24.0
+    }
+   ],
+   "objects": [
+    {
+     "name": "a gas pump, rusted",
+     "w": 1.0,
+     "count": [
+      2,
+      3
+     ],
+     "near": "road"
+    },
+    {
+     "name": "a burnt out car",
+     "w": 4.5,
+     "h": 2.0,
+     "count": [
+      1,
+      2
+     ],
+     "near": "road",
+     "stock": "car",
+     "stock_chance": 30
+    },
+    {
+     "name": "a toppled vending machine",
+     "w": 1.0,
+     "h": 1.0,
+     "chance": 50,
+     "near": "buildings",
+     "stock": "vending",
+     "stock_chance": 40
+    },
+    {
+     "name": "a picnic table",
+     "w": 2.0,
+     "chance": 50,
+     "near": "buildings"
+    }
+   ],
+   "loot": [
+    [
+     "roadside",
+     60
+    ]
+   ]
+  },
+  "ruined town": {
+   "name": "A ruined town",
+   "what": "Burned streets, barricades and the dead: the city the bandits hold.",
+   "cover": "rubble",
+   "buildings": [
+    {
+     "name": "house",
+     "state": "burnt out"
+    },
+    {
+     "name": "store",
+     "size": 26.0,
+     "state": "burnt out"
+    },
+    {
+     "name": "house",
+     "chance": 70,
+     "state": "burnt out"
+    },
+    {
+     "name": "house",
+     "chance": 50
+    }
+   ],
+   "objects": [
+    {
+     "name": "burnt-out-bus",
+     "w": 10.0,
+     "h": 3.0,
+     "chance": 60,
+     "near": "road"
+    },
+    {
+     "name": "a burnt out car",
+     "w": 4.5,
+     "h": 2.0,
+     "count": [
+      2,
+      3
+     ],
+     "near": "road",
+     "stock": "car",
+     "stock_chance": 20
+    },
+    {
+     "name": "car-barricade",
+     "w": 6.0,
+     "h": 2.0,
+     "chance": 60,
+     "near": "road"
+    },
+    {
+     "name": "a burning oil drum fire",
+     "w": 1.0,
+     "h": 1.0,
+     "chance": 50,
+     "near": "road"
+    }
+   ],
+   "loot": [
+    [
+     "ruins",
+     70
+    ]
+   ]
+  },
+  "stronghold": {
+   "name": "A stronghold",
+   "what": "A truck depot walled in with shipping containers, armed men on top.",
+   "cover": "rubble",
+   "buildings": [
+    {
+     "name": "truck depot",
+     "size": 36.0
+    },
+    {
+     "name": "guardhouse",
+     "size": 14.0
+    }
+   ],
+   "wall": "containers",
+   "objects": [
+    {
+     "name": "a shipping container",
+     "w": 6.0,
+     "h": 2.5,
+     "count": [
+      2,
+      3
+     ],
+     "near": "buildings",
+     "stock": "bandit_stash",
+     "stock_chance": 60
+    },
+    {
+     "name": "a burning oil drum fire",
+     "w": 1.0,
+     "h": 1.0,
+     "count": [
+      2,
+      3
+     ],
+     "near": "buildings"
+    },
+    {
+     "name": "a cage",
+     "w": 3.0,
+     "h": 3.0,
+     "chance": 70,
+     "near": "buildings"
+    },
+    {
+     "name": "a stack of sandbags",
+     "w": 2.0,
+     "h": 1.0,
+     "count": [
+      1,
+      2
+     ],
+     "near": "buildings"
+    }
+   ],
+   "loot": [
+    [
+     "bandit_stash",
+     50
+    ]
+   ]
+  }
+ }
 }

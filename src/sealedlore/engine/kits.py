@@ -635,6 +635,18 @@ def kit_problems(kit: Kit, has_picture: Callable[[str], bool] | None = None) -> 
     for piece in kit.yard:
         if piece.stock and piece.stock not in kit.tables:
             out.append(f"yard piece {piece.thing!r}: no table {piece.stock!r}")
+    for key, outdoor in kit.outdoor.items():
+        for obj in outdoor.objects:
+            if obj.stock and obj.stock not in kit.tables:
+                out.append(f"outdoor {key}: {obj.name!r} has no table {obj.stock!r}")
+            if has_picture and not has_picture(obj.name):
+                out.append(f"outdoor {key}: no picture of {obj.name!r}")
+        for table, _chance in outdoor.loot:
+            if table not in kit.tables:
+                out.append(f"outdoor {key}: no loot table {table!r}")
+        for building in outdoor.buildings:
+            if kind_for(kit, building.name) is None:
+                out.append(f"outdoor {key}: no kind of building for {building.name!r}")
 
     def legend_ok(where: str, legend: Mapping[str, LegendEntry]) -> None:
         for ch, entry in legend.items():

@@ -29,6 +29,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QAction, QColor, QImage, QKeySequence, QPainter, QPixmap
 from PySide6.QtWidgets import (
+    QDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -50,6 +51,7 @@ from sealedlore.engine.npc import NpcReply
 from sealedlore.gui.area_render import px_for
 from sealedlore.gui.area_view import AreaView, Walker, _bare_name
 from sealedlore.gui.image_codec import encoded
+from sealedlore.gui.overmap_view import OvermapDialog
 from sealedlore.gui.ref_images import pixmap_within
 from sealedlore.gui.visual_presenter import VisualPresenter
 from sealedlore.models.character import Character
@@ -102,6 +104,8 @@ class VisualAreaView(AreaView):
 
     look_drawn = Signal(int, int, int, int)
     look_thing = Signal(str)
+    # The story has a wider world (an overmap): the hint says Map….
+    wide_world = False
 
     def __init__(self) -> None:
         super().__init__()
@@ -134,10 +138,14 @@ class VisualAreaView(AreaView):
             return "One moment."
         if self.looking:
             return "Drag a frame round what you want to look at closely. Esc to stop."
+        travel = (
+            "Map… to set out across the wider world; Leave walks on into the next stretch of it."
+            if self.wide_world
+            else "Travel… sets off for another place; Leave walks on past an edge."
+        )
         return (
             "Click where to go, a building to go inside, or a door to go through it. "
-            "Right-click a thing to look at it closely, or Look at… to frame any part. "
-            "Travel… sets off for another place; Leave walks on past an edge."
+            "Right-click a thing to look at it closely, or Look at… to frame any part. " + travel
         )
 
     def _stroke(self, phase: str, point: QPointF) -> bool:
@@ -433,6 +441,12 @@ class VisualWindow(QMainWindow):
         self.carry_button = QToolButton()
         self.carry_button.setText("Carrying")
         self.carry_button.setToolTip("What you carry: eat, drink, use or put down any of it")
+        self.needs = QLabel()
+        self.needs.setObjectName("hintLabel")
+        self.needs.setToolTip(
+            "What you are short of: eat and drink from what you carry, and sleep, or go "
+            "without and grow weaker; dress warm for the colder country"
+        )
         self.carry_button.setPopupMode(QToolButton.InstantPopup)
         self.carry_menu = QMenu(self)
         self.carry_menu.aboutToShow.connect(self._fill_carry_menu)
@@ -446,6 +460,7 @@ class VisualWindow(QMainWindow):
         words.addWidget(self.where)
         bar_layout.addWidget(self.portrait)
         bar_layout.addLayout(words, 1)
+        bar_layout.addWidget(self.needs)
         bar_layout.addWidget(self.health)
         bar_layout.addWidget(self.carry_button)
 
@@ -463,6 +478,18 @@ class VisualWindow(QMainWindow):
         self.setCentralWidget(self.split)
         self._build_menus()
         self._build_toolbar()
+        if session.overmap() is not None:
+            # The wider world: Travel… opens the map (gui/overmap_view.py).
+            travel = self.area_view.travel_button
+            travel.setMenu(None)
+            travel.setPopupMode(QToolButton.DelayedPopup)
+            travel.setText("Map…")
+            travel.setToolTip(
+                "The map of the wider world: set out for a place, or go exploring (M)"
+            )
+            travel.clicked.connect(self._open_overmap)
+            self.area_view.wide_world = True
+            self.area_view.hint.setText(self.area_view._hint())
         session.visual_lay_out()
         self._show_player()
         self.presenter.refresh(snap=True)
@@ -520,6 +547,12 @@ class VisualWindow(QMainWindow):
         sleep.setToolTip("Sleep until seven in the morning, here")
         sleep.triggered.connect(lambda: self._pass_time(True))
         bar.addAction(sleep)
+        if self.session.overmap() is not None:
+            world_map = QAction("Map", self)
+            world_map.setShortcut(QKeySequence("M"))
+            world_map.setToolTip("The map of the wider world (M)")
+            world_map.triggered.connect(self._open_overmap)
+            bar.addAction(world_map)
 
     def _show_player(self) -> None:
         session = self.session
@@ -546,14 +579,21 @@ class VisualWindow(QMainWindow):
         area = session.area(me.area) if me is not None else None
         clock = session.map_clock()
         when = f"Day {clock[0]}, {clock[1] // 60:02d}:{clock[1] % 60:02d}" if clock else ""
-        self.where.setText(" · ".join(p for p in (area.title if area else "", when) if p))
+        region = session.overmap_region(state) if session.overmap() is not None else None
+        title = area.title if area else ""
+        if region is not None and title and region.name.casefold() not in title.casefold():
+            title = f"{title}, {region.name}"
+        self.where.setText(" · ".join(p for p in (title, when) if p))
+        short = session.visual_needs(state)
+        self.needs.setText(", ".join(w.capitalize() for w in short))
+        self.needs.setVisible(bool(short))
         session.story.visual_when = when  # the Stories list's line (saved with the next move)
         hits = session.visual_hits_left()
         self.health.setText("♥" * hits + "♡" * (session.visual_design().player_hits - hits))
         carrying = session.visual_inventory()
         self.carry_button.setText(f"Carrying ({len(carrying)})" if carrying else "Carrying nothing")
 
-    def _after_action(self, lines: list[str], *, moment: str = "") -> None:
+    def _after_action(self, lines: list[str], *, moment: str = "", plot: bool = True) -> None:
         """After anything that moved the game: the rules' lines, what is
         newly seen or heard (a sound cue in its own colour), the bar, a hit's
         flash, and death when it comes. `moment`: a moment of the plot the
@@ -579,6 +619,8 @@ class VisualWindow(QMainWindow):
         if self._talking_to is not None and not session.talk_target(self._talking_to)[0]:
             self._set_talking(None)
         self._greet_newcomers()
+        if not plot:
+            return
         plot_lines, why = session.visual_plot_check(moment)
         for line in plot_lines:
             self.say(line, kind="note")
@@ -780,8 +822,17 @@ class VisualWindow(QMainWindow):
         session = self.session
         if session is None or self._fading is not None:
             return
-        lines = session.visual_sleep() if sleep else session.visual_wait(60)
+        woken = None
+        if sleep and session.overmap() is not None:
+            lines, woken = session.visual_sleep_out()
+        else:
+            lines = session.visual_sleep() if sleep else session.visual_wait(60)
         self.presenter.refresh(snap=True)
+        if woken is not None:
+            # Something in the night (engine/session_overmap.py): the keeper says what.
+            self._after_action(lines, plot=False)
+            self._ask_keeper("journey", woken.brief)
+            return
         # Sleeping is a moment of the plot (Doomsville's "Alone too long"):
         # the keeper is asked when anything is armed.
         self._after_action(
@@ -873,12 +924,62 @@ class VisualWindow(QMainWindow):
             self._travel(choice_id)
             return
         self._settle_figure()
+        if self.session.overmap() is not None:
+            gone = self.session.overmap_cross(side)
+            if gone is None:
+                self.statusBar().showMessage(f"The way {side} is barred here.", 4000)
+                return
+            self.say(f"You walk on {side}, into {gone.to}.")
+            self._fade_through(lambda: self._journey_end(gone))
+            return
         name = self.session.visual_cross(side)
         if name is None:
             self.statusBar().showMessage(f"The way {side} is barred here.", 4000)
             return
         self.say(f"You walk on {side}, into {name}.")
         self._fade_through(lambda: self._arrived(0))
+
+    def _open_overmap(self) -> None:
+        """The map of the wider world: choose where to go, and set out."""
+        session = self.session
+        if session is None or session.overmap() is None or self._fading is not None:
+            return
+        if self._keeper_pending is not None:
+            self.statusBar().showMessage("Wait for what is happening here first.", 4000)
+            return
+        dialog = OvermapDialog(session, self)
+        if dialog.exec() != QDialog.Accepted or dialog.chosen is None:
+            return
+        x, y, name, vehicle = dialog.chosen
+        self._settle_figure()
+        gone = session.overmap_travel(x, y, name, vehicle=vehicle)
+        if gone is None:
+            self.statusBar().showMessage("There's no way there from here.", 4000)
+            return
+        self._fade_through(lambda: self._journey_end(gone))
+
+    def _journey_end(self, gone) -> None:
+        """A journey (or a walk on into the next cell) is over: what came of
+        it said, the view on where the player is now, and, when something
+        happened on the way, the keeper asked what."""
+        session = self.session
+        if session is None:
+            return
+        for line in gone.lines:
+            self.say(line, kind="note" if line.startswith("Now on your map") else "report")
+        self.presenter.refresh(snap=True)
+        self.area_view.centre_on_me()
+        if gone.dead:
+            self._show_where()
+            self._died()
+            return
+        lines = session.visual_tick(min(gone.seconds, 120))
+        if gone.stop is not None:
+            self._after_action(lines, plot=False)
+            self._ask_keeper("journey", gone.brief)
+            return
+        moment = f"the player has just arrived at {gone.to} after a journey" if gone.arrived else ""
+        self._after_action(lines, moment=moment)
 
     def _arrived(self, seconds: int) -> None:
         """A journey's end: the dead there have had the journey's time; and

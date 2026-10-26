@@ -51,6 +51,7 @@ from sealedlore.engine.keeper import (
     armed_text,
     direction_messages,
     facts_text,
+    journey_messages,
     moment_messages,
     parse_keeper,
     parse_ruling,
@@ -108,6 +109,7 @@ from sealedlore.engine.world_art import is_window
 from sealedlore.engine.world_layout import position, size_of
 from sealedlore.ids import new_id
 from sealedlore.models.area import Found, Spot, ThingRecord
+from sealedlore.models.character import Character
 from sealedlore.models.kit import Kit
 from sealedlore.models.plot import Chronicle
 from sealedlore.models.visual import DoorState, NpcGoal, PersonSheet, VisualDesign
@@ -209,6 +211,8 @@ TALK_TRIGGER = re.compile(
     re.IGNORECASE,
 )
 # The noise of forcing a door or a gunshot reaches the dead in the area.
+# Where the keeper stands someone a little way off from the player.
+OFF_WORDS = ("nearby", "approaching", "in the distance", "a way off", "close by")
 
 
 @dataclass(frozen=True)
@@ -347,7 +351,11 @@ class VisualRuntime:
 
     def visual_edge_choices(self, side: str) -> list[tuple[str, str, int]]:
         """Past an edge: the designed area straight on, if one adjoins, then
-        the places that lie that way; never open country."""
+        the places that lie that way; never open country. With an overmap,
+        the next cell that way (engine/session_overmap.py), whatever it is."""
+        if self.overmap() is not None:
+            beyond = self.overmap_edge(side)
+            return [("area", beyond[0], beyond[1])] if beyond is not None else []
         world, art = self.world(), self._art_read()
         out = []
         for choice in self.edge_choices(side):
@@ -732,11 +740,15 @@ class VisualRuntime:
         return f"You search the {name} and find {what}."
 
     def visual_lay_out(self) -> None:
-        """The design's dead, things and locks laid on the world, once; its
-        people stood where it puts them, each once their place is on the
-        map (a plot-hidden place has no one in it until it is revealed)."""
+        """The design's dead, things and locks laid on the world, each
+        place's once it is on the map (a place the overmap makes is laid
+        when it is first made); its people stood where it puts them, each
+        once their place is on the map (a plot-hidden place has no one in it
+        until it is revealed)."""
         self.visual_kit_plans()
         state = self.area_state()
+        began = state.overmap.begun
+        self.overmap_begin(state)
         design = self.visual_design()
         world, art = self.world(), self._art_read()
         taken_by_area: dict[str, set[tuple[int, int]]] = {}
@@ -748,7 +760,7 @@ class VisualRuntime:
                 | {(sp.x, sp.y) for sp in state.spots.values() if sp.area == area.id},
             )
 
-        changed = False
+        changed = began != state.overmap.begun
         for name, sheet in design.people.items():
             if not sheet.place or name in state.placed or not self.has_card(name):
                 continue
@@ -770,14 +782,30 @@ class VisualRuntime:
                 state.things[ITEM_PREFIX + new_id()] = ThingRecord(
                     state="taken", name=thing, by=name, kind=kind_of(thing)
                 )
-        if state.laid_out:
-            if changed:
+        places = {
+            p
+            for p in (
+                *(c.place for c in design.creatures),
+                *(n.place for n in design.things),
+                *(i.place for i in design.items),
+                *(lock.place for lock in design.locked),
+            )
+        }
+        laid = set(state.laid_places)
+        if state.laid_out and not state.laid_places:
+            # A story from before places were laid one at a time: whatever
+            # was on its map then was laid.
+            laid = {p for p in places if self._visual_area_named(p) is not None}
+        due = {p for p in places - laid if self._visual_area_named(p) is not None}
+        if not due:
+            if changed or laid != set(state.laid_places) or not state.laid_out:
+                state.laid_places, state.laid_out = sorted(laid), True
                 self._set_live(state)
             return
         for spawn in design.creatures:
-            area = self._visual_area_named(spawn.place)
-            if area is None:
+            if spawn.place not in due:
                 continue
+            area = self._visual_area_named(spawn.place)
             for creature in spawn_creatures(
                 area,
                 spawn.kind,
@@ -788,9 +816,9 @@ class VisualRuntime:
             ):
                 state.creatures[creature.id] = creature
         for note in design.things:
-            area = self._visual_area_named(note.place)
-            if area is None:
+            if note.place not in due:
                 continue
+            area = self._visual_area_named(note.place)
             want = bare(note.name).casefold()
             for placement in area.placements:
                 if bare(placement.name).casefold() != want:
@@ -804,9 +832,9 @@ class VisualRuntime:
                 if note.seen and not record.seen:
                     record.seen = note.seen
         for item in design.items:
-            area = self._visual_area_named(item.place)
-            if area is None:
+            if item.place not in due:
                 continue
+            area = self._visual_area_named(item.place)
             kind = kind_of(item.name, item.kind)
             holder = None
             if item.inside:
@@ -842,9 +870,9 @@ class VisualRuntime:
                 kind=kind,
             )
         for lock in design.locked:
-            inside = self._visual_area_named(lock.place)
-            if inside is None:
+            if lock.place not in due:
                 continue
+            inside = self._visual_area_named(lock.place)
             outside = self.area(inside.parent, world, art) if inside.parent else None
             if outside is None:
                 continue
@@ -853,6 +881,7 @@ class VisualRuntime:
                     state.doors[door_id(outside.id, entrance.x, entrance.y)] = DoorState(
                         locked=True, key=lock.key, sealed=lock.sealed
                     )
+        state.laid_places = sorted(laid | due)
         state.laid_out = True
         self._set_live(state)
 
@@ -866,8 +895,8 @@ class VisualRuntime:
         """The player's combat ability and the weapon that adds to it."""
         design = self.visual_design()
         held = self.held_name() or ""
-        base = design.abilities.get(held, design.default_ability)
-        return base, best_weapon(r for _id, r in self.visual_inventory())
+        base = design.abilities.get(held, design.default_ability) - self.needs_penalty()
+        return max(1, base), best_weapon(r for _id, r in self.visual_inventory())
 
     def visual_hits_left(self) -> int:
         return max(0, self.visual_design().player_hits - self.area_state().wounds)
@@ -981,6 +1010,7 @@ class VisualRuntime:
             record.count -= 1
             if record.count <= 0:
                 record.state = "gone"
+            self.note_ate(state, kind)
             self._set_live(state)
             return f"You {verb} the {name}." + (
                 " That was the last of it." if record.state == "gone" else ""
@@ -1084,7 +1114,8 @@ class VisualRuntime:
         if area is None or me is None or state.dead:
             return []
         del reach  # every creature in the area hears a noise in it, for now
-        lines: list[str] = self._step_people(state, area, me, seconds)
+        lines: list[str] = self.needs_tick(state)
+        lines += self._step_people(state, area, me, seconds)
         self._keep_schedules(state, area)
         creatures = {c.id: c for c in state.creatures.values() if c.area == area.id}
         if not creatures:
@@ -1128,7 +1159,11 @@ class VisualRuntime:
         clock = self.map_clock()
         now = clock[1] if clock else 0
         minutes = (SLEEP_UNTIL - now) % (24 * 60) or 24 * 60
-        return [f"You sleep {minutes // 60} hours.", *self.visual_wait(minutes)]
+        lines = [f"You sleep {minutes // 60} hours.", *self.visual_wait(minutes)]
+        state = self.area_state()
+        self.note_slept(state)
+        self._set_live(state)
+        return lines
 
     def visual_report(self) -> list[str]:
         """What the player newly sees or hears where they stand, and the
@@ -1143,8 +1178,10 @@ class VisualRuntime:
             design = self.visual_design()
             world = self.world()
             place = world.places.get(area.place_id)
-            flavour = design.flavour.get(place.name if place else area.name) or design.flavour.get(
-                area.name
+            flavour = (
+                design.flavour.get(place.name if place else area.name)
+                or design.flavour.get(area.name)
+                or self._cell_flavour(world, area)
             )
             state.flavour_said.append(area.id)
             if flavour:
@@ -1180,6 +1217,12 @@ class VisualRuntime:
         return names + [n for n in placed if n not in names and self.has_card(n)]
 
     def visual_sheet(self, name: str) -> PersonSheet:
+        """Who a person is: the design's sheet, or the one the keeper wrote
+        for a stranger it brought in."""
+        live = self.story.area_live
+        strangers = live.state.strangers if live is not None else {}
+        if name in strangers:
+            return strangers[name]
         return sheet_of(name, self.visual_design().people)
 
     def visual_card(self, name: str):
@@ -1777,9 +1820,13 @@ class VisualRuntime:
             place = world.places.get(area.place_id)
             if place is not None and place.state:
                 place_state = f" The place is {place.state}."
+        region = self.overmap_region(state) if self.overmap() is not None else None
+        wider = f" The country round about: {region.name}." if region is not None else ""
+        short = self.visual_needs(state)
+        faring = f" {held} is {', '.join(short)}." if short else ""
         return (
             f"{held} is at {where} ({plot_place}); it is {when}; wounds {state.wounds}."
-            f"{place_state} "
+            f"{wider}{faring}{place_state} "
             f"With them: {companions}. Here too: {', '.join(people) or 'nobody'}; "
             f"the dead here: {dead}. "
             f"Carrying: {', '.join(carried) or 'nothing'}. Places visited: {visited}.\n"
@@ -1842,6 +1889,8 @@ class VisualRuntime:
             return direction_messages(line=line, **common)
         if kind == "action":
             return action_messages(line=line, **common)
+        if kind == "journey":
+            return journey_messages(reason=line, **common)
         return moment_messages(reason=line, **common)
 
     def start_keeper(self, kind: str, line: str, done: Callable[[object, str], None]) -> bool:
@@ -1981,6 +2030,9 @@ class VisualRuntime:
         the area's middle), or beside the player."""
         area, me = self._visual_me(state)
         words = where.strip().casefold()
+        if area is not None and me is not None and any(w in words for w in OFF_WORDS):
+            # A little way off, in sight: someone coming, the dead shambling up.
+            return self._spot_off(state, area, me)
         if not words or any(
             w in words for w in ("beside", "here", "player", "with them", "next to")
         ):
@@ -2000,6 +2052,55 @@ class VisualRuntime:
         taken = target.blocked() | {(s.x, s.y) for s in state.spots.values() if s.area == target.id}
         x, y = stand_near(target, at or (target.width // 2, target.height // 2), taken)
         return Spot(area=target.id, x=x, y=y)
+
+    def _spot_off(self, state, area: Area, me: Spot) -> Spot:
+        """A tile 10 to 20 tiles from the player that they can see, else the
+        nearest free one."""
+        taken = area.blocked() | {(s.x, s.y) for s in state.spots.values() if s.area == area.id}
+        rng = random.Random(f"{area.id}:{state.seconds}:{len(state.spots)}")
+        for _ in range(60):
+            angle = rng.random() * math.tau
+            reach = rng.randint(10, 20)
+            x = int(me.x + math.cos(angle) * reach)
+            y = int(me.y + math.sin(angle) * reach)
+            if (
+                0 <= x < area.width
+                and 0 <= y < area.height
+                and area.walkable(x, y, taken)
+                and sees(area, (me.x, me.y), (x, y))
+                and _reaches(area, (x, y))
+            ):
+                return Spot(area=area.id, x=x, y=y)
+        x, y = stand_near(area, (me.x, me.y), taken | {(me.x, me.y)})
+        return Spot(area=area.id, x=x, y=y)
+
+    def _make_stranger(self, state, op: Op) -> list[str]:
+        """Someone new to the story, as the keeper wrote them: a supporting
+        card and a sheet, stood where it says."""
+        name = " ".join(op.get("who").split())[:60]
+        held = (self.held_name() or "").casefold()
+        if not name or name.casefold() in {"the player", "player", held}:
+            return []
+        if self.visual_card(name) is None:
+            self.supporting.append(
+                Character(
+                    name=name,
+                    summary=op.get("card") or op.get("attitude") or "Someone met on the road.",
+                    is_player_available=False,
+                    origin="model",
+                )
+            )
+        state.strangers[name] = PersonSheet(
+            card=op.get("card"),
+            personality=op.get("attitude"),
+            wants=op.get("wants"),
+            knows=op.get("knows"),
+            speech=op.get("speech"),
+            carries=op.words("carries"),
+            ability=5,
+        )
+        lines = self._stand_person(state, name, op.get("where") or "nearby")
+        return lines
 
     def _stand_person(self, state, who: str, where: str) -> list[str]:
         card = self.visual_card(who)
@@ -2138,6 +2239,15 @@ class VisualRuntime:
                         state.greeted.append(f"{who}@{me.area}")  # no second greeting
             elif kind == "spawn":
                 lines += self._stand_person(state, op.get("who"), op.get("where"))
+            elif kind == "stranger":
+                lines += self._make_stranger(state, op)
+            elif kind == "tell_of":
+                self._set_live(state)
+                told = self.overmap_tell_of(op.get("where"))
+                state = self.area_state()
+                area, me = self._visual_me(state)
+                if told:
+                    lines.append(told)
             elif kind == "spawn_dead":
                 spot = self._place_spot(state, op.get("where"))
                 target = self.area(spot.area, things=state.things) if spot is not None else None
@@ -2271,6 +2381,14 @@ class VisualRuntime:
                     if name.casefold() == want and item.id not in chronicle.brought_in:
                         chronicle.brought_in.append(item.id)
                 state.chronicle = chronicle
+                if self.overmap() is not None:
+                    # A place the plot reveals is on the player's map too.
+                    want_place = op.get("what")
+                    if want_place and want_place not in state.overmap.known:
+                        known = {p.name.casefold(): p.name for p in self.overmap().places}
+                        if want_place.casefold() in known:
+                            state.overmap.known.append(known[want_place.casefold()])
+                            lines.append(f"Now on your map: {known[want_place.casefold()]}.")
             elif kind == "set_fact":
                 chronicle = self.visual_chronicle()
                 set_fact(chronicle, op.get("fact"), op.get("value"))

@@ -17,8 +17,9 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from sealedlore.models.overmap import OvermapState
 from sealedlore.models.plot import Chronicle
-from sealedlore.models.visual import Creature, DoorState, NpcGoal
+from sealedlore.models.visual import Creature, DoorState, NpcGoal, PersonSheet
 
 ThingVerb = Literal["use", "take", "destroy", "eat"]
 PersonVerb = Literal["talk", "look", "attack"]
@@ -139,6 +140,9 @@ class ThingRecord(BaseModel):
     # mechanics, but ways for the model to manage any it is asked for.
     tags: list[str] = Field(default_factory=list)
     uses: list[str] = Field(default_factory=list)
+    # A vehicle driven across a visual story's overmap: the km of fuel left
+    # in its tank (None until first driven: a full tank).
+    fuel_km: float | None = None
 
 
 class MapAction(BaseModel):
@@ -220,6 +224,9 @@ class AreaState(BaseModel):
     seen_now: list[str] = Field(default_factory=list)
     flavour_said: list[str] = Field(default_factory=list)
     laid_out: bool = False
+    # The design's places whose dead, things and locks have been laid, by
+    # name: a place the overmap makes later is laid once it is on the map.
+    laid_places: list[str] = Field(default_factory=list)
     # The areas whose containers and floor a world kit's item tables have
     # stocked (engine/kits.py), the first time the player entered each.
     stocked: list[str] = Field(default_factory=list)
@@ -258,6 +265,13 @@ class AreaState(BaseModel):
     # story has no passages to carry a map delta, so the fold reads these
     # (engine/session_world.py `_fold`).
     place_states: dict[str, str] = Field(default_factory=dict)
+    # People the keeper brought into the story (a traveller met on the road,
+    # a bandit at a roadblock: engine/keeper.py "stranger"), with their sheet:
+    # each has a supporting card too, so the game can stand and talk to them.
+    strangers: dict[str, PersonSheet] = Field(default_factory=dict)
+    # The wider world (models/overmap.py): places found, cells explored, and
+    # what the traveller last ate, drank and slept.
+    overmap: OvermapState = Field(default_factory=OvermapState)
 
 
 class LiveArea(BaseModel):

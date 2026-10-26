@@ -128,6 +128,10 @@ FORCE_DIFFICULTY = 6
 # A vehicle the keeper has made to work (`ThingRecord.uses` has "drive")
 # travels at this speed, against walking's 1.4 m/s.
 DRIVE_M_PER_S = 12.0
+# Across a visual story's overmap: a working vehicle's full tank, and what a
+# can of fuel carried puts back in it, in km.
+FULL_TANK_KM = 150.0
+FUEL_CAN_KM = 50.0
 # A person tagged with any of these by the keeper (`AreaState.person_tags`)
 # stays where they are and carries out no intent.
 OUT_WORDS = (
@@ -184,6 +188,56 @@ def weapon_bonus(name: str) -> int:
 
 def is_loud(name: str) -> bool:
     return bool(_LOUD.search(name))
+
+
+# Clothing that keeps out the cold (the overmap's warmth, engine/overmap.py):
+# a coat, boots, gloves, a blanket… each counts once, by kind of garment.
+_WARM = re.compile(
+    r"\b(?:(?:winter |wool |down |fur |sheepskin |thermal )?(?:coats?|jackets?|parkas?|"
+    r"anoraks?|greatcoats?)|(?:winter |snow |work )?boots|(?:work |wool |leather )?gloves|"
+    r"mittens|(?:wool |knit |fur )?(?:hats?|caps?)|scarf|scarves|(?:wool )?sweaters?|"
+    r"jumpers?|blankets?|(?:survival )?blankets?|sleeping bags?|bedrolls?|"
+    r"thermal underwear|long johns)\b",
+    re.IGNORECASE,
+)
+
+
+def warm_garment(name: str) -> str:
+    """Which warm garment a thing is ("coat", "boots"…), or "" for none:
+    two coats keep out no more cold than one."""
+    found = _WARM.search(name)
+    if found is None:
+        return ""
+    word = found.group(0).lower().split()[-1]
+    return {
+        "jackets": "coat",
+        "jacket": "coat",
+        "parka": "coat",
+        "parkas": "coat",
+        "anorak": "coat",
+        "greatcoat": "coat",
+        "coats": "coat",
+        "mittens": "gloves",
+        "cap": "hat",
+        "caps": "hat",
+        "hats": "hat",
+        "scarves": "scarf",
+        "jumper": "sweater",
+        "jumpers": "sweater",
+        "sweaters": "sweater",
+        "blankets": "blanket",
+        "bag": "blanket",
+        "bags": "blanket",
+        "bedroll": "blanket",
+        "bedrolls": "blanket",
+        "underwear": "underwear",
+        "johns": "underwear",
+    }.get(word, word)
+
+
+def warmth(carried: Iterable[ThingRecord]) -> int:
+    """How many kinds of warm garment are carried."""
+    return len({g for r in carried if (g := warm_garment(r.name))})
 
 
 def best_weapon(carried: Iterable[ThingRecord]) -> tuple[str, int]:

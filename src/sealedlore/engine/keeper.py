@@ -58,6 +58,13 @@ OPS: dict[str, tuple[str, ...]] = {
     "heal": ("count",),
     "clock": ("minutes",),  # time passes
     "end": ("text",),  # the story ends
+    # Someone new to the story (a traveller met on the road, a bandit at a
+    # roadblock): their name, a line of who they are, and how they take to
+    # the player; the program makes them a card and stands them on the map,
+    # and they talk and act like anyone else (engine/npc.py).
+    "stranger": ("who", "card", "attitude", "wants", "knows", "speech", "carries", "where"),
+    # A place of the wider world the player learns of: it appears on their map.
+    "tell_of": ("where",),
 }
 MAX_OPS = 24
 KEEPER_MAX_TOKENS = 1800
@@ -251,6 +258,29 @@ def action_messages(
     """An action the rules have no verb for: a ruling, with a roll."""
     user = texts.fill(
         "keeper.action", state=state, armed=armed, happened=happened, facts=facts, line=line
+    )
+    return [
+        PromptMessage(
+            role="system", parts=(ContentPart(text=_system(texts, world), cache_breakpoint=True),)
+        ),
+        PromptMessage(role="user", parts=(ContentPart(text=user),)),
+    ]
+
+
+def journey_messages(
+    *,
+    world: str,
+    state: str,
+    armed: str,
+    happened: str,
+    facts: str,
+    reason: str,
+    texts: PromptTexts = DEFAULT_TEXTS,
+) -> list[PromptMessage]:
+    """Something happens on a journey or in a place first explored: the
+    program rolled that it does, and of what kind; the keeper says what."""
+    user = texts.fill(
+        "keeper.journey", state=state, armed=armed, happened=happened, facts=facts, reason=reason
     )
     return [
         PromptMessage(

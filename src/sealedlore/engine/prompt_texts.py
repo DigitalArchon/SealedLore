@@ -3005,6 +3005,39 @@ _text(
 )
 
 _text(
+    "keeper.journey",
+    VISUAL,
+    "The keeper: on the way",
+    "The user message when something happens on a journey across the wider world, or in a "
+    "place first explored: the program rolled that it does and of what kind (danger, a "
+    "chance, something of interest); the keeper says what, on the board. Unmeasured.",
+    "WHERE THINGS STAND:\n{state}\n\nEVENTS THAT COULD HAPPEN NOW:\n{armed}\n\n"
+    "WHAT HAS HAPPENED:\n{happened}\n\nTHE FACTS: {facts}\n\nWHAT HAPPENS NOW: {reason}"
+    "\n\nThe program has decided that something happens here, now, and of what kind; you "
+    "decide what it is, fitting the place, the hour and the kind, and make it real on the "
+    "board where the player stands. If one of the events that could happen now fits this "
+    'moment (its "when" holds here), fire it instead of making something up. Otherwise '
+    "make one thing happen, in a few operations: people who are new to the story come with "
+    '"stranger" (a plain name, a line of who they are, and how they take to the player: '
+    'hostile, wary, friendly, desperate), stood "nearby" or "beside the player"; the '
+    'dead come with "spawn_dead" ("nearby" keeps them a little way off); something worth '
+    'having lies about with "place"; a place the player learns of is "tell_of". A danger '
+    "is a real threat, not a fright that comes to nothing; a chance is worth stopping for; "
+    "something of interest is a sight or a meeting that colours the world, never a fight. "
+    'Say what the player sees in the "note", in one or two plain lines. Reply with one JSON '
+    'object and nothing else: {"fire": [{"event": "its title", "variant": "its variant\'s '
+    'title or """, "script": [operations]}], "script": [operations], "note": "what the '
+    'player sees"}.',
+    (
+        ("state", "Where things stand"),
+        ("armed", "The events that could happen now"),
+        ("happened", "What has happened"),
+        ("facts", "The plot's facts"),
+        ("reason", "What happens now: where, when, the kind of thing, the region's examples"),
+    ),
+)
+
+_text(
     "keeper.direction",
     VISUAL,
     "The keeper: a Direction",

@@ -339,6 +339,11 @@ def ground_round(world: WorldMap, art: WorldArt, place: WorldPlace, look: str = 
 # --- Building an area ---------------------------------------------------------
 
 
+def outdoor_scale(place: WorldPlace, columns: int) -> int:
+    """How many play tiles across one of an outdoor plan's tiles is."""
+    return _scale_for(place, columns)
+
+
 def _scale_for(place: WorldPlace, columns: int) -> int:
     k = round(plan_tile(place) / OUTDOOR_TILE_M)
     return max(1, min(MAX_SCALE, k, MAX_COLUMNS // max(columns, 1)))
@@ -578,12 +583,14 @@ def _noise(w: int, h: int, scale: float, seed: int):
     return out
 
 
-def dress(rows: list[str], look: str, seed_key: str) -> list[str]:
+def dress(rows: list[str], look: str, seed_key: str, cover: Any = None) -> list[str]:
     """The ground's own cover at walking scale (woods, brush, rock, rubble),
     by seeded noise, never within two tiles of anything the plan drew, so
     it never blocks a door or a road. At walking scale a plan's open ground
-    is an empty field without it (the bake-off)."""
-    cover = COVER.get(look, [])
+    is an empty field without it (the bake-off). `cover`: the plan's own
+    (an overmap cell's, engine/cells.py: woods denser than fields), as
+    (tile, noise scale, threshold, density) rows; else the look's."""
+    cover = _cover_of(cover) or COVER.get(look, [])
     if not cover or not rows:
         return rows
     import numpy as np
@@ -608,6 +615,19 @@ def dress(rows: list[str], look: str, seed_key: str) -> list[str]:
         free &= ~put
     rows = ["".join(r) for r in grid]
     return _keep_connected(rows, placed.tolist())
+
+
+def _cover_of(raw: Any) -> list[tuple[str, float, float, float]]:
+    """A plan's own cover rows, held to their shape; [] for none."""
+    out = []
+    for item in raw if isinstance(raw, list) else []:
+        try:
+            ch, scale, threshold, density = item
+            if isinstance(ch, str) and len(ch) == 1 and ch in ",T^~:":
+                out.append((ch, float(scale), float(threshold), float(density)))
+        except (TypeError, ValueError):
+            continue
+    return out
 
 
 def _keep_connected(rows: list[str], placed: list[list[bool]]) -> list[str]:
@@ -1207,7 +1227,7 @@ def build_area(
         for f in fixed:  # what the map has here that isn't a building: labelled where it is
             if f["kind"] != "building":
                 labels[f["name"][:60]] = ((f["x"] + f["w"] // 2) * k, (f["y"] + f["h"] // 2) * k)
-        rows = dress(rows, look, f"{place.id}:{place.state}")
+        rows = dress(rows, look, f"{place.id}:{place.state}", spec.get("cover"))
         # True to the map: the plan's tile over the scale (~1.5 m, up to
         # 3 m where the scale is capped), so walking takes as long as the
         # map is wide.

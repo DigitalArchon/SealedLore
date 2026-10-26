@@ -153,7 +153,9 @@ class WorldRuntime:
         delta replaced is a new one), and goes on from there; the last are
         compared by what they hold, since they are written in place."""
         hidden = self.hidden_ids(path) if self.story.plot is not None and not whole else ()
-        designed = None
+        # A visual story's overmap cells, made as they are entered
+        # (engine/session_overmap.py): world, not story, under the map.
+        designed = self._overmap_delta() if self.story.visual else None
         base = self.story.world_base
         head = list(path[:-FOLD_TAIL]) if len(path) > FOLD_TAIL else []
         tail = list(path[len(head) :])

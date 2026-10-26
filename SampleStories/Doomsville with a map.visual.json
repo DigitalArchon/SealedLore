@@ -33,6 +33,30 @@
       "place": "The creek crossing",
       "count": 1,
       "ability": 4
+    },
+    {
+      "kind": "the dead",
+      "place": "Carrick",
+      "count": 5,
+      "ability": 4
+    },
+    {
+      "kind": "the dead",
+      "place": "Brannock",
+      "count": 3,
+      "ability": 4
+    },
+    {
+      "kind": "the dead",
+      "place": "The derailed train",
+      "count": 2,
+      "ability": 4
+    },
+    {
+      "kind": "the dead",
+      "place": "The rest stop",
+      "count": 2,
+      "ability": 4
     }
   ],
   "items": [
@@ -219,13 +243,19 @@
     {
       "name": "campfire",
       "place": "The creek crossing",
-      "tags": ["burning", "fed within the hour"],
+      "tags": [
+        "burning",
+        "fed within the hour"
+      ],
       "seen": "Split pine on a ring of stones, burning low but steady. Boot prints all round it, more than one pair, leading off south."
     },
     {
       "name": "watch fire",
       "place": "Hellsville",
-      "tags": ["burning", "kept fed by the gate watch"]
+      "tags": [
+        "burning",
+        "kept fed by the gate watch"
+      ]
     }
   ],
   "flavour": {
@@ -247,7 +277,17 @@
     "Main street": "Shopfronts boarded, snow swept into banks, footprints everywhere. Sixty people live behind these walls.",
     "The north gate": "The north wall is thinner here: a barricade of tyres and a gate that hangs crooked.",
     "The water tower": "The tower still holds water, iced at the spout. Someone has nailed a ladder to its legs.",
-    "The cave mouth": "A crack in the rock a man can slip through sideways, and a draught of warmer air from inside."
+    "The cave mouth": "A crack in the rock a man can slip through sideways, and a draught of warmer air from inside.",
+    "The Grey River bridge": "The bridge runs out over the frozen river, cars abandoned along it. Sandbags at the far end. Somebody has used this as a checkpoint.",
+    "Pellier's Mill": "The mill stands over the frozen race, its wheel locked in ice. There's a thread of smoke from the cottage, and it stops as you watch.",
+    "Brannock": "Brannock's one street runs straight across the plain. Every door is open, every window dark. Snow has drifted into the diner.",
+    "Stillwater": "Wood smoke over a stockade of logs, and beyond it the lake, white and flat, with dark shapes out on the ice. Someone on the wall has seen you.",
+    "The fire lookout": "The tower stands above the trees, its cab windows blind with frost. The cabin at its foot has a padlock on the door, broken.",
+    "The derailed train": "Boxcars lie on their sides in the reeds like dead cattle, the locomotive nose-down in the ice. The doors of two are open.",
+    "The crashed helicopter": "The helicopter lies on its side in a field, rotor snapped, the snow round it scorched black. Nobody has been here: the snow is clean.",
+    "The rest stop": "A rest stop off the highway: cars still parked, the diner's windows smashed, a smell of old smoke.",
+    "Carrick": "Carrick: blocks of burned-out houses, cars dragged across the streets, and somewhere close a dog barking. This is their city.",
+    "The Yard": "A wall of shipping containers round a truck depot, oil-drum fires burning on top of it. Men with rifles walk the wall."
   },
   "people": {
     "Marcus Webb": {
@@ -488,7 +528,1012 @@
       "carries": [
         "a shotgun"
       ]
+    },
+    "Agnes Moore": {
+      "card": "Stillwater's leader, a retired schoolteacher in her sixties, small and unbending.",
+      "personality": "Fair, careful, kind once she trusts you, iron when she doesn't.",
+      "goals": "Keep Stillwater fed and safe through the winter, and keep its secret from the bandits.",
+      "wants": "To know who you are, who sent you and who followed you before she opens the gate.",
+      "knows": "Every one of Stillwater's twenty-three people. The lake, the woods round it, the traders who come up the east road. That the bandits in Carrick would take Stillwater apart if they knew where it was.",
+      "never": "Never lets an armed stranger in the first day. Never tells where Stillwater gets its fuel.",
+      "speech": "Clear, measured, a teacher's voice; asks questions and waits for the answers.",
+      "place": "Stillwater",
+      "ability": 3,
+      "carries": [
+        "a ring of keys"
+      ]
+    },
+    "Tobias Grey": {
+      "card": "A Stillwater fisherman and its best shot, forty, bearded, slow to speak.",
+      "personality": "Wary, patient, dryly funny once he warms up.",
+      "goals": "Feed his two girls; keep the wall.",
+      "wants": "You to keep your hands where he can see them.",
+      "knows": "The ice, where the fish are, how the dead come out of the woods in thaw. The east road as far as Brannock.",
+      "never": "Never leaves the wall while a stranger is near. Never lies to Agnes.",
+      "speech": "Short, plain, the odd joke with no smile.",
+      "place": "Stillwater",
+      "ability": 6,
+      "carries": [
+        "a hunting rifle"
+      ]
+    },
+    "Marie Pellier": {
+      "card": "A miller's widow hiding in Pellier's Mill with her two sons, thirty-five, thin and fierce.",
+      "personality": "Frightened and hiding it, proud, quick to anger when her boys are threatened.",
+      "goals": "Keep her sons alive and hidden until spring, then find somewhere safe.",
+      "wants": "You gone before you see the boys, unless you have food or know a safe place.",
+      "knows": "The river, the bridge to the south and who crosses it. That bandit outriders come up the West Bank. Rumours of a place in the north-east where people live in peace.",
+      "never": "Never lets anyone near her sons. Never goes back to the bridge.",
+      "speech": "Quick, guarded, a French-Canadian lilt; switches to French when upset.",
+      "place": "Pellier's Mill",
+      "ability": 4,
+      "carries": [
+        "a hatchet"
+      ]
+    },
+    "Kane": {
+      "card": "The man who runs the Yard, Carrick's bandit stronghold: fifties, scarred, soft-voiced.",
+      "personality": "Cold, clever, patient; cruelty as a tool, not a pleasure.",
+      "goals": "Hold Carrick, feed his crews, find the next town to bleed.",
+      "wants": "Anything you have that he can use, including you: a new crew member, a guide, or a lesson for the others.",
+      "knows": "Every crew on the Long Road, Evan Stevens's band among them. That Hellsville has walls and guns. That there are people somewhere in the north-east.",
+      "never": "Never raises his voice. Never lets a stranger leave the Yard without paying.",
+      "speech": "Quiet, polite, unhurried; every word a threat.",
+      "place": "The Yard",
+      "ability": 7,
+      "carries": [
+        "a revolver",
+        "a box of cartridges"
+      ]
     }
   },
-  "weather": "snow"
+  "weather": "snow",
+  "overmap": {
+    "regions": [
+      {
+        "key": "s",
+        "name": "Stillwater",
+        "words": "The far north-east: a lakeside hamlet where a couple of dozen survivors get by in moderate peace, fishing through the ice behind a fence of logs.",
+        "boxes": [
+          [
+            50,
+            65,
+            22,
+            35
+          ]
+        ],
+        "terrain": "woods",
+        "chance": 2,
+        "split": [
+          10,
+          30,
+          60
+        ],
+        "danger": [
+          "one of the dead, wandered out of the woods"
+        ],
+        "opportunity": [
+          "a Stillwater trapper willing to trade",
+          "a bed for the night by someone's stove"
+        ],
+        "interest": [
+          "Stillwater's people out on the ice",
+          "a child who asks about the south"
+        ],
+        "finds": [
+          [
+            "woods",
+            45
+          ],
+          [
+            "cabin",
+            20
+          ],
+          [
+            "ice hut",
+            20
+          ],
+          [
+            "campsite",
+            15
+          ]
+        ],
+        "warm": 1,
+        "pace": 0.5,
+        "dead": 0.1
+      },
+      {
+        "key": "k",
+        "name": "The Kettle Hills",
+        "words": "Limestone ridges east of Hellsville, full of sinkholes, hollows and caves.",
+        "boxes": [
+          [
+            3,
+            16,
+            4,
+            16
+          ]
+        ],
+        "terrain": "hills",
+        "chance": 6,
+        "split": [
+          40,
+          35,
+          25
+        ],
+        "danger": [
+          "the dead fallen into a sinkhole and climbing out",
+          "a slide of scree",
+          "one of Ben's traps"
+        ],
+        "opportunity": [
+          "a cave with a cache from before",
+          "a hunter's blind with a rifle left in it"
+        ],
+        "interest": [
+          "cairns marking a path",
+          "a rope down a shaft, recently used"
+        ],
+        "finds": [
+          [
+            "hills",
+            45
+          ],
+          [
+            "sinkhole",
+            15
+          ],
+          [
+            "quarry",
+            10
+          ],
+          [
+            "woods",
+            15
+          ],
+          [
+            "campsite",
+            10
+          ],
+          [
+            "cabin",
+            5
+          ]
+        ],
+        "warm": 2,
+        "pace": 0.45,
+        "dead": 0.6
+      },
+      {
+        "key": "h",
+        "name": "Hellsville country",
+        "words": "The farm country round Hellsville: the town's patrols keep the worst away.",
+        "boxes": [
+          [
+            -6,
+            8,
+            -5,
+            14
+          ]
+        ],
+        "terrain": "fields",
+        "chance": 4,
+        "split": [
+          30,
+          30,
+          40
+        ],
+        "danger": [
+          "a straggler of the dead in a ditch",
+          "a bandit scout watching the road"
+        ],
+        "opportunity": [
+          "a farmhouse not yet stripped",
+          "a snare with a rabbit in it"
+        ],
+        "interest": [
+          "a Hellsville patrol",
+          "a family walking to the town to ask for shelter",
+          "smoke from a chimney that should be cold"
+        ],
+        "finds": [
+          [
+            "fields",
+            45
+          ],
+          [
+            "farmstead",
+            25
+          ],
+          [
+            "woods",
+            10
+          ],
+          [
+            "burned farm",
+            10
+          ],
+          [
+            "road wreck",
+            10
+          ]
+        ],
+        "warm": 1,
+        "pace": 0.6,
+        "dead": 0.4
+      },
+      {
+        "key": "b",
+        "name": "The Burn",
+        "words": "Carrick's burned outskirts and the city itself: the bandits' own country, patrols and checkpoints, the dead let loose on purpose. Extremely dangerous.",
+        "boxes": [
+          [
+            -35,
+            -15,
+            -25,
+            -8
+          ]
+        ],
+        "terrain": "ruins",
+        "chance": 45,
+        "split": [
+          90,
+          7,
+          3
+        ],
+        "danger": [
+          "a bandit patrol",
+          "a checkpoint",
+          "a pit of the dead",
+          "a sniper on a roof"
+        ],
+        "opportunity": [
+          "a stash the bandits forgot",
+          "an armoury left unguarded"
+        ],
+        "interest": [
+          "a bandit who wants out",
+          "prisoners being moved"
+        ],
+        "finds": [
+          [
+            "ruins",
+            60
+          ],
+          [
+            "roadblock",
+            20
+          ],
+          [
+            "burned farm",
+            10
+          ],
+          [
+            "road wreck",
+            10
+          ]
+        ],
+        "warm": 1,
+        "pace": 0.5,
+        "dead": 2.0
+      },
+      {
+        "key": "r",
+        "name": "The Long Road",
+        "words": "The old highway's run south-west to Carrick, the bandits' raiding ground: cars stripped and burned, bodies left as warnings.",
+        "boxes": [
+          [
+            -24,
+            -4,
+            -16,
+            0
+          ]
+        ],
+        "terrain": "scrub",
+        "chance": 20,
+        "split": [
+          75,
+          15,
+          10
+        ],
+        "danger": [
+          "a band of three or four at a roadblock",
+          "an ambush from a wreck",
+          "the dead in the cars"
+        ],
+        "opportunity": [
+          "fuel in a tank the bandits missed",
+          "a body with a pack"
+        ],
+        "interest": [
+          "a captive who got away, hiding in a culvert"
+        ],
+        "finds": [
+          [
+            "road wreck",
+            30
+          ],
+          [
+            "roadblock",
+            25
+          ],
+          [
+            "ruins",
+            15
+          ],
+          [
+            "burned farm",
+            15
+          ],
+          [
+            "fields",
+            15
+          ]
+        ],
+        "warm": 1,
+        "pace": 0.55,
+        "dead": 1.0
+      },
+      {
+        "key": "w",
+        "name": "The West Bank",
+        "words": "Scrubland and dead suburbs beyond the river: bandit outriders cross here to reach the highway.",
+        "boxes": [
+          [
+            -35,
+            -12,
+            -8,
+            20
+          ]
+        ],
+        "terrain": "scrub",
+        "chance": 10,
+        "split": [
+          60,
+          20,
+          20
+        ],
+        "danger": [
+          "bandit outriders on snowmobiles",
+          "a burned house with the dead inside"
+        ],
+        "opportunity": [
+          "an abandoned truck stop",
+          "a hunting cabin"
+        ],
+        "interest": [
+          "a lost survivor, half frozen, who saw where the bandits camp"
+        ],
+        "finds": [
+          [
+            "fields",
+            30
+          ],
+          [
+            "ruins",
+            25
+          ],
+          [
+            "burned farm",
+            15
+          ],
+          [
+            "cabin",
+            10
+          ],
+          [
+            "woods",
+            10
+          ],
+          [
+            "campsite",
+            10
+          ]
+        ],
+        "warm": 1,
+        "pace": 0.55,
+        "dead": 0.8
+      },
+      {
+        "key": "n",
+        "name": "The North Woods",
+        "words": "Pine and spruce, logging roads and trappers' cabins: the coldest of the country.",
+        "boxes": [
+          [
+            -35,
+            65,
+            20,
+            35
+          ]
+        ],
+        "terrain": "woods",
+        "chance": 5,
+        "split": [
+          35,
+          35,
+          30
+        ],
+        "danger": [
+          "wolves",
+          "a whiteout",
+          "the dead frozen in place, waking"
+        ],
+        "opportunity": [
+          "a trapper's cabin stocked for winter",
+          "a radio at the fire lookout"
+        ],
+        "interest": [
+          "a nomad family on the move",
+          "tracks of someone dragging a sled"
+        ],
+        "finds": [
+          [
+            "woods",
+            50
+          ],
+          [
+            "cabin",
+            15
+          ],
+          [
+            "campsite",
+            15
+          ],
+          [
+            "logging camp",
+            10
+          ],
+          [
+            "ice hut",
+            10
+          ]
+        ],
+        "warm": 2,
+        "pace": 0.45,
+        "dead": 0.3
+      },
+      {
+        "key": "m",
+        "name": "The Marsh",
+        "words": "Frozen wetland along the river's lower course and the rail line: reeds, ice, few roads.",
+        "boxes": [
+          [
+            -15,
+            50,
+            -25,
+            -9
+          ]
+        ],
+        "terrain": "marsh",
+        "chance": 6,
+        "split": [
+          40,
+          30,
+          30
+        ],
+        "danger": [
+          "thin ice",
+          "the dead under the ice",
+          "a bandit crew hunting runaways"
+        ],
+        "opportunity": [
+          "cargo from the derailed train",
+          "an ice-fishing hut"
+        ],
+        "interest": [
+          "a hermit who traps muskrat and trades"
+        ],
+        "finds": [
+          [
+            "marsh",
+            60
+          ],
+          [
+            "ice hut",
+            20
+          ],
+          [
+            "woods",
+            10
+          ],
+          [
+            "burned farm",
+            10
+          ]
+        ],
+        "warm": 1,
+        "pace": 0.4,
+        "dead": 0.5
+      },
+      {
+        "key": "p",
+        "name": "The Empty Plains",
+        "words": "Dead farmland to the horizon, grain elevators, power lines down: where the hordes cross.",
+        "boxes": [
+          [
+            8,
+            50,
+            -9,
+            20
+          ]
+        ],
+        "terrain": "plains",
+        "chance": 7,
+        "split": [
+          50,
+          25,
+          25
+        ],
+        "danger": [
+          "a pack of the dead on the move",
+          "a horde passing"
+        ],
+        "opportunity": [
+          "a grain elevator's office",
+          "kit from a crashed helicopter"
+        ],
+        "interest": [
+          "a lone traveller, harmless, heading nowhere",
+          "a farmhouse with GONE EAST painted on it"
+        ],
+        "finds": [
+          [
+            "fields",
+            40
+          ],
+          [
+            "abandoned farm",
+            25
+          ],
+          [
+            "farmstead",
+            10
+          ],
+          [
+            "elevator",
+            10
+          ],
+          [
+            "burned farm",
+            10
+          ],
+          [
+            "road wreck",
+            5
+          ]
+        ],
+        "warm": 1,
+        "pace": 0.65,
+        "dead": 0.9
+      },
+      {
+        "key": "e",
+        "name": "The Eastern Ridges",
+        "words": "Rolling woodland, empty and cold.",
+        "boxes": [
+          [
+            50,
+            65,
+            -25,
+            22
+          ]
+        ],
+        "terrain": "woods",
+        "chance": 4,
+        "split": [
+          30,
+          30,
+          40
+        ],
+        "danger": [
+          "exposure",
+          "the odd one of the dead"
+        ],
+        "opportunity": [
+          "a hunting camp",
+          "a cache someone left for Stillwater"
+        ],
+        "interest": [
+          "a Stillwater forager",
+          "a cross on a hill with names carved in it"
+        ],
+        "finds": [
+          [
+            "woods",
+            45
+          ],
+          [
+            "hills",
+            20
+          ],
+          [
+            "cabin",
+            15
+          ],
+          [
+            "campsite",
+            20
+          ]
+        ],
+        "warm": 1,
+        "pace": 0.5,
+        "dead": 0.2
+      },
+      {
+        "key": "f",
+        "name": "The near farms",
+        "words": "The farm country round Hellsville's own, emptier the further out.",
+        "boxes": [
+          [
+            -12,
+            8,
+            -9,
+            20
+          ]
+        ],
+        "terrain": "fields",
+        "chance": 6,
+        "split": [
+          40,
+          30,
+          30
+        ],
+        "danger": [
+          "the dead in a barn",
+          "a dog gone wild"
+        ],
+        "opportunity": [
+          "a root cellar",
+          "a tractor with fuel still in it"
+        ],
+        "interest": [
+          "a survivor who won't come out of a farmhouse but will talk through the door"
+        ],
+        "finds": [
+          [
+            "farmstead",
+            30
+          ],
+          [
+            "fields",
+            35
+          ],
+          [
+            "abandoned farm",
+            15
+          ],
+          [
+            "burned farm",
+            10
+          ],
+          [
+            "woods",
+            10
+          ]
+        ],
+        "warm": 1,
+        "pace": 0.6,
+        "dead": 0.5
+      }
+    ],
+    "lines": [
+      {
+        "kind": "river",
+        "name": "the Grey River",
+        "points": [
+          [
+            -14,
+            35
+          ],
+          [
+            -12,
+            20
+          ],
+          [
+            -9,
+            5
+          ],
+          [
+            -9,
+            -6
+          ],
+          [
+            2,
+            -14
+          ],
+          [
+            18,
+            -20
+          ],
+          [
+            30,
+            -25
+          ]
+        ]
+      },
+      {
+        "kind": "creek",
+        "name": "Miller's Creek",
+        "points": [
+          [
+            9,
+            6
+          ],
+          [
+            4,
+            4
+          ],
+          [
+            0.15,
+            2.6
+          ],
+          [
+            -4,
+            3
+          ],
+          [
+            -9,
+            3
+          ]
+        ]
+      },
+      {
+        "kind": "road",
+        "name": "the old highway",
+        "points": [
+          [
+            -2,
+            35
+          ],
+          [
+            -2,
+            5
+          ],
+          [
+            -2,
+            0
+          ],
+          [
+            -9,
+            -6
+          ],
+          [
+            -20,
+            -13
+          ],
+          [
+            -27,
+            -17
+          ],
+          [
+            -35,
+            -22
+          ]
+        ]
+      },
+      {
+        "kind": "road",
+        "name": "the north road",
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            8
+          ]
+        ]
+      },
+      {
+        "kind": "road",
+        "name": "the east road",
+        "points": [
+          [
+            0,
+            8
+          ],
+          [
+            4.8,
+            8.6
+          ],
+          [
+            16,
+            10
+          ],
+          [
+            30,
+            12
+          ],
+          [
+            45,
+            20
+          ],
+          [
+            58,
+            28
+          ]
+        ]
+      },
+      {
+        "kind": "rail",
+        "name": "the old rail line",
+        "points": [
+          [
+            -35,
+            -12
+          ],
+          [
+            -10,
+            -11
+          ],
+          [
+            12,
+            -11
+          ],
+          [
+            40,
+            -12
+          ],
+          [
+            65,
+            -13
+          ]
+        ]
+      },
+      {
+        "kind": "track",
+        "name": "the logging road",
+        "points": [
+          [
+            -2,
+            22
+          ],
+          [
+            10,
+            26
+          ],
+          [
+            20,
+            28
+          ],
+          [
+            34,
+            30
+          ]
+        ]
+      }
+    ],
+    "places": [
+      {
+        "name": "The farm",
+        "x": 0,
+        "y": 0,
+        "known": true,
+        "template": "",
+        "what": ""
+      },
+      {
+        "name": "Hellsville",
+        "x": 0,
+        "y": 8,
+        "known": true,
+        "template": "",
+        "what": ""
+      },
+      {
+        "name": "The creek crossing",
+        "x": 0.15,
+        "y": 2.6,
+        "known": false,
+        "template": "",
+        "what": ""
+      },
+      {
+        "name": "The gas station",
+        "x": -1.9,
+        "y": 4.5,
+        "known": false,
+        "template": "",
+        "what": ""
+      },
+      {
+        "name": "The hills",
+        "x": 4.8,
+        "y": 8.6,
+        "known": false,
+        "template": "",
+        "what": ""
+      },
+      {
+        "name": "The Hidden Caves",
+        "x": 5.2,
+        "y": 9.1,
+        "known": false,
+        "template": "",
+        "what": ""
+      },
+      {
+        "name": "The Grey River bridge",
+        "x": -9,
+        "y": -6,
+        "known": false,
+        "template": "bridge",
+        "what": "The old highway crosses the Grey River here on a long concrete bridge: a choke point on the way south, and the bandits know it."
+      },
+      {
+        "name": "Pellier's Mill",
+        "x": -10.5,
+        "y": 12,
+        "known": false,
+        "template": "mill",
+        "what": "An old timber mill on the Grey River, its wheel frozen; a family is hiding there."
+      },
+      {
+        "name": "Brannock",
+        "x": 30,
+        "y": 12,
+        "known": false,
+        "template": "ghost town",
+        "what": "A ghost town on the east road across the plains: everyone gone east or dead."
+      },
+      {
+        "name": "Stillwater",
+        "x": 58,
+        "y": 28,
+        "known": false,
+        "template": "hamlet",
+        "what": "A lakeside hamlet behind a stockade of logs, where a couple of dozen survivors get by in moderate peace."
+      },
+      {
+        "name": "The fire lookout",
+        "x": 20,
+        "y": 28,
+        "known": false,
+        "template": "lookout",
+        "what": "A fire lookout tower on a rise in the North Woods, its radio maybe still working."
+      },
+      {
+        "name": "The derailed train",
+        "x": 12,
+        "y": -11,
+        "known": false,
+        "template": "train wreck",
+        "what": "A freight train off its rails in the marsh, boxcars on their sides."
+      },
+      {
+        "name": "The crashed helicopter",
+        "x": 40,
+        "y": -4,
+        "known": false,
+        "template": "crash site",
+        "what": "A military helicopter down on the plains, its kit maybe still aboard."
+      },
+      {
+        "name": "The rest stop",
+        "x": -15,
+        "y": -10,
+        "known": false,
+        "template": "rest stop",
+        "what": "A highway rest stop on the Long Road, picked over and dangerous."
+      },
+      {
+        "name": "Carrick",
+        "x": -27,
+        "y": -17,
+        "known": false,
+        "template": "ruined town",
+        "what": "The ruined city: burned streets, barricades, the dead, and the bandits who hold it."
+      },
+      {
+        "name": "The Yard",
+        "x": -30,
+        "y": -19,
+        "known": false,
+        "template": "stronghold",
+        "what": "The bandits' stronghold: a truck depot walled in with shipping containers."
+      }
+    ],
+    "road_kmh": 3.5
+  }
 }
