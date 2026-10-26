@@ -48,8 +48,9 @@ from sealedlore.engine.area import Placement
 from sealedlore.engine.keeper import Ruling
 from sealedlore.engine.look import LookReply, Rect
 from sealedlore.engine.npc import NpcReply
-from sealedlore.gui.area_render import px_for
+from sealedlore.gui.area_render import TileSource, px_for
 from sealedlore.gui.area_view import AreaView, Walker, _bare_name
+from sealedlore.gui.backdrop_render import source_jpeg, trim_painting
 from sealedlore.gui.image_codec import encoded
 from sealedlore.gui.overmap_view import OvermapDialog
 from sealedlore.gui.ref_images import pixmap_within
@@ -57,6 +58,7 @@ from sealedlore.gui.visual_presenter import VisualPresenter
 from sealedlore.models.character import Character
 from sealedlore.models.config import Config
 from sealedlore.models.visual import LOG_KEPT, LogLine
+from sealedlore.storage.repository import save_config
 
 # The side column's share of the window, and its narrowest.
 SIDE_SHARE = 0.26
@@ -300,6 +302,13 @@ class _LookDone(QObject):
     done = Signal(object, str)
 
 
+class _Painted(QObject):
+    """A place painted (or given up on), on the painting's thread; delivered
+    on the GUI thread."""
+
+    done = Signal(str)
+
+
 class _TalkDone(QObject):
     """A person's reply, emitted on its thread, delivered on the GUI thread:
     (the person's name, the reply or None, the problem)."""
@@ -367,6 +376,9 @@ class VisualWindow(QMainWindow):
         self._fading: QVariantAnimation | None = None
         self._look_signal = _LookDone()
         self._look_signal.done.connect(self._looked)
+        self._paint_signal = _Painted()
+        self._paint_signal.done.connect(self._painted)
+        session.on_painted = self._paint_signal.done.emit
         # The part being looked at, while the model answers.
         self._look_pending: tuple[str, Rect] | None = None
 
@@ -519,6 +531,18 @@ class VisualWindow(QMainWindow):
         quit_action.setShortcut(QKeySequence("Ctrl+Q"))
         quit_action.triggered.connect(self.close)
         game.addAction(quit_action)
+        if self.session.story.visual:
+            game.addSeparator()
+            paint = QAction("&Paint new places", self)
+            paint.setCheckable(True)
+            paint.setChecked(self.config.visual_paint)
+            paint.setToolTip(
+                "Each place with no painting of its own is painted in the background the first "
+                "time you are there (about 3¢ a place, with the image endpoint in Settings); "
+                "the tiles stand in until it comes"
+            )
+            paint.toggled.connect(self._paint_toggled)
+            game.addAction(paint)
         view = self.menuBar().addMenu("&View")
         me = QAction("Centre on &me", self)
         me.setShortcut(QKeySequence("Home"))
@@ -618,6 +642,7 @@ class VisualWindow(QMainWindow):
             return
         if self._talking_to is not None and not session.talk_target(self._talking_to)[0]:
             self._set_talking(None)
+        self._paint_here()
         self._greet_newcomers()
         if not plot:
             return
@@ -626,6 +651,47 @@ class VisualWindow(QMainWindow):
             self.say(line, kind="note")
         if why:
             self._ask_keeper("moment", why)
+
+    # --- painting the places (engine/session_paint.py) ---------------------------------
+
+    def _paint_here(self) -> None:
+        """Paint the area the player is in, when it has no painting yet."""
+        session = self.session
+        if session is None:
+            return
+        state = session.area_state()
+        me = state.spots.get(session.held_name() or "")
+        area = session.area(me.area) if me is not None else None
+        if area is None or not session.paint_wanted(area):
+            return
+        info, read = session.tile_set()
+        source = TileSource(info, read, cut_dir=None)
+        started = session.start_paint(
+            area,
+            lambda side, a=area: source_jpeg(a, source, side),
+            lambda data, a=area: trim_painting(data, a),
+        )
+        if started:
+            self.statusBar().showMessage(f"Painting {area.title} in the background…", 6000)
+
+    def _painted(self, area_id: str) -> None:
+        session = self.session
+        if session is None:
+            return
+        self.presenter.refresh(snap=True)
+        area = session.area(area_id)
+        if area is not None and session.backdrop_of(area) is not None:
+            self.statusBar().showMessage(f"{area.title} is painted.", 4000)
+        self._paint_here()  # where the player is now, if they moved on meanwhile
+
+    def _paint_toggled(self, on: bool) -> None:
+        self.config.visual_paint = on
+        try:
+            save_config(self.config, root=self.root)
+        except OSError:
+            pass
+        if on:
+            self._paint_here()
 
     def _died(self) -> None:
         self.area_view.set_locked(True)
@@ -1203,7 +1269,7 @@ class VisualWindow(QMainWindow):
         if isinstance(reply, Ruling):
             lines = session.apply_ruling(reply, line)
         else:
-            lines = session.apply_keeper_reply(reply)
+            lines = session.apply_keeper_reply(reply, kind=kind)
         self.presenter.refresh(snap=True)
         self._after_action(lines)
         ended = session.area_state().ended
@@ -1323,6 +1389,8 @@ class VisualWindow(QMainWindow):
         self.presenter.close()
         session, self.session = self.session, None
         if session is not None:
+            session.on_painted = None
+            session.stop_paint()
             session.close()
             session.save()
         super().closeEvent(event)

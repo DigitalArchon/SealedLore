@@ -211,6 +211,10 @@ TALK_TRIGGER = re.compile(
     re.IGNORECASE,
 )
 # The noise of forcing a door or a gunshot reaches the dead in the area.
+# What is no person's name (a field's name written for one).
+NOT_NAMES = frozenset(
+    {"who", "name", "stranger", "someone", "somebody", "person", "unknown", "a stranger"}
+)
 # Where the keeper stands someone a little way off from the player.
 OFF_WORDS = ("nearby", "approaching", "in the distance", "a way off", "close by")
 
@@ -1953,16 +1957,29 @@ class VisualRuntime:
                 _close_quietly(text)
         done(reply, problem)
 
-    def apply_keeper_reply(self, reply: KeeperReply) -> list[str]:
+    def apply_keeper_reply(self, reply: KeeperReply, *, kind: str = "") -> list[str]:
         """Events fired (happened in the chronicle, their facts set, whoever
-        they bring in on the board) and the scripts applied (GUI thread)."""
+        they bring in on the board) and the scripts applied (GUI thread). On
+        a journey (`kind`) the reply's own note says what is seen: a "note"
+        operation beside it said it twice over, in other words (live)."""
         lines: list[str] = []
         for firing in reply.fired:
             lines += self._fire(firing.event, firing.variant)
             lines += self.apply_script(firing.script)
-        lines += self.apply_script(reply.script)
+        script = reply.script
+        if kind == "journey" and reply.note:
+            script = [op for op in script if op.op != "note"]
+        lines += self.apply_script(script)
         if reply.note:
             lines.append(reply.note)
+        # A note said twice (a "note" operation and the reply's own, live on
+        # Sonnet 4.6): the fuller one, once.
+        lines = [
+            line
+            for n, line in enumerate(lines)
+            if line not in lines[:n]
+            and not any(other != line and other.startswith(line.rstrip(".")) for other in lines)
+        ]
         if reply.dropped:
             lines.append(
                 "(The keeper asked for things the game can't do: "
@@ -2079,8 +2096,10 @@ class VisualRuntime:
         card and a sheet, stood where it says."""
         name = " ".join(op.get("who").split())[:60]
         held = (self.held_name() or "").casefold()
-        if not name or name.casefold() in {"the player", "player", held}:
-            return []
+        if not name or name.casefold() in {"the player", "player", held} | NOT_NAMES:
+            # Live (Oct 26 2026) Sonnet wrote {"stranger": "who", …}: the
+            # field's name for the person's.
+            return [f"(The keeper brought someone in with no name: {op.get('card')[:80]})"]
         if self.visual_card(name) is None:
             self.supporting.append(
                 Character(
@@ -2259,7 +2278,8 @@ class VisualRuntime:
                         target, "the dead", op.count(1), 4, taken, f"{target.id}:{state.seconds}"
                     ):
                         state.creatures[creature.id] = creature
-                    lines.append(f"The dead: {op.count(1)} more at {target.name}.")
+                    if me is None or target.id != me.area:  # here, they are seen
+                        lines.append(f"The dead: {op.count(1)} more at {target.name}.")
             elif kind == "move":
                 who, where = op.get("who"), op.get("where").casefold()
                 card = self.visual_card(who)

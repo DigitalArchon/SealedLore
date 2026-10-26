@@ -156,6 +156,7 @@ from sealedlore.engine.session_art import ArtRuntime
 from sealedlore.engine.session_images import ImageRuntime
 from sealedlore.engine.session_merge import MergeRuntime, _close
 from sealedlore.engine.session_overmap import OvermapRuntime
+from sealedlore.engine.session_paint import PaintRuntime
 from sealedlore.engine.session_plot import NoticeSeverity, PlotRuntime, SessionNotice
 from sealedlore.engine.session_portraits import PortraitRuntime
 from sealedlore.engine.session_private import PrivateRuntime
@@ -446,6 +447,7 @@ class StorySession(
     AreaRuntime,
     VisualRuntime,
     OvermapRuntime,
+    PaintRuntime,
     MergeRuntime,
     ArchivalRuntime,
     RebuildRuntime,

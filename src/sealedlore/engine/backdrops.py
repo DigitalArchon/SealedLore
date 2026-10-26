@@ -21,8 +21,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from sealedlore.engine.area import Area
+from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.engine.takeable import thing_class
 from sealedlore.engine.world_pictures import area_plan, isometric_state
+from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.area import ThingRecord
 from sealedlore.models.world import MapPicture, WorldArt, WorldMap
 
@@ -100,3 +102,124 @@ def _side(area: Area, x: int, y: int) -> str:
     w, h = area.width, area.height
     distances = {"north": y, "south": h - 1 - y, "west": x, "east": w - 1 - x}
     return min(distances, key=distances.get)
+
+
+# --- painting an area (engine/session_paint.py; the archived helpers, git
+# f5126b6~1, under the visual mode's texts) ---------------------------------------
+
+
+def backdrop_side(area: Area) -> int:
+    return INDOOR_SIDE if area.indoor else OUTDOOR_SIDE
+
+
+def backdrop_size(area: Area) -> str:
+    side = backdrop_side(area)
+    return f"{side}x{side}"
+
+
+def job_key(area: Area, state: str) -> str:
+    return f"{BACKDROP}:{area.id}:{state}" if state else f"{BACKDROP}:{area.id}"
+
+
+def failed_enough(art: WorldArt, area: Area, world: WorldMap) -> bool:
+    return art.failures.get(job_key(area, backdrop_state(world, area)), 0) >= GIVE_UP_AFTER
+
+
+def door_words(area: Area) -> str:
+    """Where the area's doors are, in words the painter can hold to: a
+    door is the one place the play view puts a figure on purpose, and the
+    paintings measured turned a house to face the other way."""
+    parts: list[str] = []
+    w, h = max(area.width, 1), max(area.height, 1)
+
+    def along(x: int, y: int, side: str) -> str:
+        share = x / w if side in ("north", "south") else y / h
+        where = (
+            "near the left end"
+            if share < 0.34
+            else "about the middle"
+            if share < 0.67
+            else "near the right end"
+        )
+        if side in ("west", "east"):
+            where = where.replace("left end", "top").replace("right end", "bottom")
+        return where
+
+    if area.indoor:
+        for x, y in area.exits:
+            side = _side(area, x, y)
+            parts.append(f"a door out in the {side} wall, {along(x, y, side)}")
+        for e in area.entrances:
+            if e.stairs:
+                parts.append(f"stairs {e.side} at column {e.x}, row {e.y}")
+    else:
+        for name, (x0, y0, x1, y1) in area.buildings.items():
+            doors = [e for e in area.entrances if e.place_id == name]
+            title = area.names.get(name, "a building")
+            for e in doors:
+                side = e.side or _side_of_box(e.x, e.y, (x0, y0, x1, y1))
+                parts.append(f"the door of {title} in its {side} wall")
+    return "; ".join(parts)
+
+
+def _side_of_box(x: int, y: int, box: tuple[int, int, int, int]) -> str:
+    x0, y0, x1, y1 = box
+    if y == y0:
+        return "north"
+    if y == y1:
+        return "south"
+    return "west" if x == x0 else "east"
+
+
+def paint_request(
+    area: Area,
+    *,
+    words: str,
+    texts: PromptTexts = DEFAULT_TEXTS,
+) -> str:
+    """The short request the expander turns into the painter's instruction
+    (and the prompt itself when no expander can run): the look, the place
+    in words, what the picture shows and the one rule, every wall, doorway,
+    building and path exactly where it is, seen straight down."""
+    doors = door_words(area)
+    facts = texts.fill(
+        "visual.paint.facts.indoor" if area.indoor else "visual.paint.facts.outdoor",
+        doors=f" Doors: {doors}." if doors else "",
+    )
+    return texts.fill(
+        "visual.paint.request",
+        style=texts["visual.paint.style"],
+        words=" ".join(words.split()),
+        facts=facts,
+    )
+
+
+def expander_messages(
+    request: str, picture: str | None, texts: PromptTexts = DEFAULT_TEXTS
+) -> list[PromptMessage]:
+    """The expander's call: BFL's own upsampler instruction as the system
+    message (`visual.paint.expander`), the request with the render as the
+    first image (none for a model that reads no pictures)."""
+    part = ContentPart(text=request, image=picture or "")
+    return [
+        PromptMessage(role="system", parts=(ContentPart(text=texts["visual.paint.expander"]),)),
+        PromptMessage(role="user", parts=(part,)),
+    ]
+
+
+def expanded_prompt(reply: str) -> str:
+    """The expander's reply as the painter's prompt: one prose block, its
+    thinking and any fence stripped, cut at a sentence past `PROMPT_MOST`;
+    "" when it gave nothing usable."""
+    text = reply
+    if "</think>" in text:
+        text = text.split("</think>", 1)[1]
+    text = text.replace("```", " ")
+    text = " ".join(text.split())
+    if len(text) < 40:
+        return ""
+    if len(text) > PROMPT_MOST:
+        cut = text[:PROMPT_MOST]
+        end = cut.rfind(". ")
+        text = cut[: end + 1] if end > PROMPT_MOST // 2 else cut
+    return text

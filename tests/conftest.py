@@ -142,6 +142,18 @@ class RefusingImages:
 
 
 @pytest.fixture(autouse=True)
+def _paintings_never_reach_the_network(monkeypatch):
+    """A visual story paints places in the background (on by default,
+    engine/session_paint.py): any test whose config has an image endpoint
+    would send the painting. The painter's client refuses here."""
+    try:
+        import sealedlore.engine.session_paint as paint
+    except ImportError:
+        return
+    monkeypatch.setattr(paint, "ImageClient", RefusingImages)
+
+
+@pytest.fixture(autouse=True)
 def memory_keychain():
     from sealedlore.storage import keychain
 

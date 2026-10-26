@@ -18,9 +18,14 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QImage, QPainter
 
 from sealedlore.engine.area import Area
+from sealedlore.engine.backdrops import painted_things
 from sealedlore.gui.area_render import (
     Ground,
+    TileSource,
+    foot_of,
     px_for,
+    render_ground,
+    thing_picture,
 )
 from sealedlore.gui.image_codec import encoded, image_from_data
 
@@ -75,3 +80,30 @@ def backdrop_ground(data: bytes | None, area: Area) -> Ground | None:
     w, h = area_picture_size(area)
     scaled = painting.scaled(w, h, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
     return Ground(scaled.convertToFormat(QImage.Format_RGB32), None)
+
+
+def render_source(area: Area, source: TileSource) -> QImage:
+    """What the painter is sent of an area: its ground, and on it the
+    things that stay put (`painted_things`), lit where they stand. What can
+    be carried or driven stays off: a sprite over the painting."""
+    ground = render_ground(area, source)
+    px = px_for(area)
+    image = ground.image.convertToFormat(QImage.Format_RGB32)
+    painter = QPainter(image)
+    for f in sorted(painted_things(area), key=lambda f: f.y + f.h):
+        picture = thing_picture(source, f, px, indoor=area.indoor)
+        cx, foot = foot_of(f, px)
+        left, top = int(round(cx + picture.dx)), int(round(foot + picture.dy))
+        lit = ground.light.apply(picture.image, left, top) if ground.light else picture.image
+        painter.drawImage(left, top, lit)
+    painter.end()
+    return image
+
+
+def source_jpeg(area: Area, source: TileSource, side: int) -> bytes | None:
+    """The render padded onto a grey square `side` wide, as JPEG (a 2048
+    PNG was refused as too large: HTTP 413)."""
+    square = padded_square(render_source(area, source), side)
+    if square.isNull():
+        return None
+    return encoded(square, "JPEG", 92)

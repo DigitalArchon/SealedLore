@@ -479,9 +479,7 @@ def test_a_working_vehicle_drives_the_road_faster_and_comes_along(doomsville):
     assert [v[0] for v in doomsville.overmap_vehicles()] == [truck]
     hellsville = next(p for p in doomsville.overmap().places if p.name == "Hellsville")
     walking = doomsville.overmap_estimate(hellsville.x * 1000, hellsville.y * 1000)
-    driving = doomsville.overmap_estimate(
-        hellsville.x * 1000, hellsville.y * 1000, vehicle=truck
-    )
+    driving = doomsville.overmap_estimate(hellsville.x * 1000, hellsville.y * 1000, vehicle=truck)
     assert driving.walking * 4 < walking.walking
     gone = doomsville.overmap_travel(
         hellsville.x * 1000, hellsville.y * 1000, "Hellsville", vehicle=truck
@@ -508,3 +506,57 @@ def test_a_dry_tank_ends_the_drive_where_it_runs_out(doomsville):
     assert gone is not None and not gone.arrived
     assert "out of fuel" in gone.lines[-1] or any("out of fuel" in ln for ln in gone.lines)
     assert doomsville.area_state().things[truck].fuel_km == 0
+
+
+def test_a_made_cell_is_painted_in_the_background_and_shown(doomsville, monkeypatch):
+    from types import SimpleNamespace
+
+    from PySide6.QtGui import QColor, QImage
+    from PySide6.QtWidgets import QApplication
+
+    import sealedlore.engine.session_paint as paint
+    from sealedlore.gui.area_render import TileSource
+    from sealedlore.gui.backdrop_render import source_jpeg, trim_painting
+    from sealedlore.gui.image_codec import encoded
+
+    QApplication.instance() or QApplication([])
+    sent = []
+
+    class Painter:
+        def __init__(self, base_url="", api_key="", **kw):
+            self.api = kw.get("api", "nanogpt")
+
+        def generate(self, payload):
+            sent.append(payload)
+            image = QImage(2048, 2048, QImage.Format_RGB32)
+            image.fill(QColor("#ddeeff"))
+            return SimpleNamespace(images=[encoded(image, "JPEG", 80)], cost=0.014)
+
+        def cancel(self):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(paint, "ImageClient", Painter)
+    monkeypatch.setattr(
+        type(doomsville.config),
+        "images",
+        lambda self: SimpleNamespace(base_url="https://img.example", api_key="k", api="nanogpt"),
+    )
+    gone = doomsville.overmap_cross("west")
+    state = doomsville.area_state()
+    area = doomsville.area(state.spots[doomsville.held_name()].area)
+    assert gone is not None and doomsville.paint_wanted(area)
+    source = TileSource(*doomsville.tile_set(), cut_dir=None)
+    done = []
+    doomsville.on_painted = done.append
+    assert doomsville.start_paint(
+        area, lambda side: source_jpeg(area, source, side), lambda d: trim_painting(d, area)
+    )
+    doomsville._paint_thread.join(30)
+    assert done == [area.id] and sent
+    assert sent[0]["model"].endswith("edit-image") and sent[0]["imageDataUrls"]
+    picture = doomsville.backdrop_of(area)
+    assert picture is not None and doomsville.pictures.read(picture.file)
+    assert not doomsville.paint_wanted(area)  # painted once, kept

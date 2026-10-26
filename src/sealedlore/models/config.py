@@ -816,6 +816,11 @@ class Config(BaseModel):
     # the others, with what each is good at.
     portrait_model: str = "blackforestlabs/flux-3/klein/text-to-image"
     image_prompt_model: str | None = None
+    # A visual story paints each place it has no painting of in the
+    # background (engine/session_paint.py): on by default, and by this model
+    # (its edit version, given the render).
+    visual_paint: bool = True
+    visual_paint_model: str = "blackforestlabs/flux-3/klein/edit-image"
     # NanoGPT's host for each role's model (models/route.py), keyed by
     # `ROUTE_ROLES`; missing means the subscription's routing.
     model_routes: dict[str, ModelRoute] = Field(default_factory=dict)

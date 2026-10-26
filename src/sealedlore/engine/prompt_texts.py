@@ -3004,6 +3004,124 @@ _text(
     ),
 )
 
+# A visual story's places painted (engine/session_paint.py): a cell of the
+# overmap made as it is entered, or any area with no painting, repainted
+# from its render by FLUX.3 Klein's edit model, as the archived map mode
+# painted its backdrops (git f5126b6~1), its texts word for word.
+# 1.1¢ a picture; the request's "keep every wall… exactly where it is, seen
+# from directly above" clause is the one the measurement used. The expander
+# is BFL's own upsampler instruction for its editing model (public, on
+# huggingface: flux-3-image-klein-pup), which the bakeoff found raised the
+# keep rate over NanoGPT's expansion; the facts lines are the bakeoff's
+# "facts" request, told for this app's renders.
+_text(
+    "visual.paint.style",
+    VISUAL,
+    "Painting: the look",
+    "The look every backdrop is painted in (the author's choice, Oct 23 2026: the storybook "
+    "look won by eye in both areas measured).",
+    "a warm hand-painted storybook illustration: soft gouache brushwork, gentle lighting, "
+    "rich but muted colours, visible texture in wood, stone, earth and cloth",
+)
+# The showcase wording (Oct 23 2026, the author: each area "beautiful and
+# creatively detailed"): the first wording ("keep every wall ... exactly
+# where it is", nothing more) had Klein repaint the tiles as a flat
+# watercolour of a tile map. Told what it may invent (the ground as it truly
+# looks, shadows, smoke, lamplight, real roofs) and what it must keep (the
+# layout), it painted Tinker's Row and the hills richer with the layout held
+# (by eye, two areas; not blind-judged). A richer style line changed nothing:
+# the edit model stays close to its picture, and the words that move it are
+# what it may add.
+_text(
+    "visual.paint.request",
+    VISUAL,
+    "Painting: the request",
+    "The short request the expander turns into the painter's instruction, and the prompt "
+    "itself when no model that reads pictures is set: the look, the place in words, what the "
+    "render shows, and the rule that the layout stays.",
+    "Repaint this picture as {style}: a lavishly detailed illustrated game map of {words}, "
+    "seen from directly above. {facts} The mid-grey bands above and below the picture are "
+    "padding and stay plain grey. Keep the layout: every building, wall, fence, road, path, "
+    "doorway, water and rock exactly where it is in the picture, with the same shapes and "
+    "sizes. Everything else is yours to make beautiful: paint the ground as it would truly "
+    "look in this place and season, with texture, tracks, drifts, puddles, cracks or cobbles, "
+    "cast shadows, weathering, lamplight and chimney smoke where there are lamps and chimneys, "
+    "and small telling details that fit the place. Buildings get real roofs, doors and windows "
+    "in the style of the setting; trees and rocks become real trees and rocks. No people, no "
+    "writing, no labels, no borders.",
+    (
+        ("style", "the look (visual.paint.style)"),
+        ("words", "the place in words: the area's name and what the map knows of it"),
+        ("facts", "what the render shows (visual.paint.facts.indoor or .outdoor)"),
+    ),
+)
+_text(
+    "visual.paint.facts.indoor",
+    VISUAL,
+    "Painting: what an indoor render shows",
+    "The facts line for an indoor area's render, in the request.",
+    "What the picture shows: a top-down view of the inside of one building with the roof "
+    "removed; the flat bands are the tops of walls, the lower face of the south wall is seen "
+    "at the bottom; the open areas are floors, never ground; each gap in a wall is an open "
+    "doorway, and there are no other openings; the furniture stands where it is.{doors}",
+    (("doors", "where its doors are (door_words), or nothing"),),
+)
+_text(
+    "visual.paint.facts.outdoor",
+    VISUAL,
+    "Painting: what an outdoor render shows",
+    "The facts line for an outdoor area's render, in the request.",
+    "What the picture shows: a top-down map of open ground; buildings are roofed boxes with "
+    "their front wall showing at the bottom and their doors drawn as framed panels, kept "
+    "exactly there; paths and roads, trees, rocks, fences and water stay where they "
+    "are.{doors}",
+    (("doors", "where the buildings' doors are (door_words), or nothing"),),
+)
+_text(
+    "visual.paint.expander",
+    VISUAL,
+    "Painting: the expander",
+    "The system message of the call that turns the request into the painter's instruction: "
+    "BFL's published upsampler instruction for its image-editing model, verbatim. Sent to the "
+    "prompt writer (Settings → Models) with the render as the first image.",
+    (
+        "You are the prompt upsampler of an image-editing model. You see the reference "
+        "image(s), attached in order (the first image, the second image, ...), and the user's "
+        "short request. Expand it into ONE detailed, self-contained instruction: the caption "
+        "the editing model receives together with the same images. Output only the instruction "
+        "as one continuous English prose block, with no greetings, explanations, Markdown, "
+        "JSON, coordinates, ids or angle-bracket tokens. Read a vague or conversational request "
+        "as the most plausible edit of the supplied images.\n\n"
+        "Pick the voice by task shape. When one reference stays and gets bounded changes, write "
+        'an imperative editing instruction on it ("Remove the ...", "Change the ... to ...", '
+        '"Zoom in on ..."); a whole-image transformation opens with its scope ("Convert the '
+        'entire image into ...", "Apply a ... filter over the entire scene", "Horizontally flip '
+        'the entire image so that ...", "Shift the camera viewpoint to ...", then where the '
+        "major elements should now be). When the references are drawn into a newly composed "
+        "frame (combining subjects, a new scene, a garment, object or style donor), write a "
+        'generation request ("Create a photograph of ...", "Create an anime-style illustration '
+        'of ...", "Generate a new image featuring ...") that says what to take from each image, '
+        "by ordinal, and what is newly generated.\n\n"
+        "Keep every explicit edit, constraint, count, position, style cue and piece of wording, "
+        "and decide what is left open as one concrete plan. Ground everything in what is "
+        "actually visible: identify each referent unambiguously by its real appearance, never "
+        "mention content that is not there, and use every image the user attached. State every "
+        "end state concretely (which color, how large, which pose, which material) and give new "
+        "content enough appearance to be generated. Cover the knock-on effects of the change "
+        "(shadows, reflections, occlusion, perspective, scale, lighting) and say what fills a "
+        "removed region. A zoom-in names what stays in frame and which neighbors are cropped "
+        "out; an outpainting continues the scene in the same medium. Describe the change, not "
+        "the whole scene, and close an editing instruction with one compact clause naming what "
+        "stays unchanged; transferred people keep their identity, face and accessories unless "
+        "asked otherwise. Transcribe on-image text verbatim in its original language inside "
+        "double quotes, with line breaks as \\n, and match the original font, size and color "
+        "when replacing it. Name recognizable public figures, brands and landmarks you can see. "
+        "Directions are frame-relative; use no evaluative or quality words. Typical length is "
+        "50 to 150 words.\n\n"
+        "Output only the instruction."
+    ),
+)
+
 _text(
     "keeper.journey",
     VISUAL,
@@ -3018,13 +3136,17 @@ _text(
     "board where the player stands. If one of the events that could happen now fits this "
     'moment (its "when" holds here), fire it instead of making something up. Otherwise '
     "make one thing happen, in a few operations: people who are new to the story come with "
-    '"stranger" (a plain name, a line of who they are, and how they take to the player: '
-    'hostile, wary, friendly, desperate), stood "nearby" or "beside the player"; the '
+    '"stranger", one operation for each person (a group is two or three of them, each with '
+    "a plain name of their own), with a line of who they are and how they take to the "
+    'player (hostile, wary, friendly, desperate), stood "nearby" or "beside the player": '
+    '{"op": "stranger", "who": "Mara Quist", "card": "A woman walking east alone, thin and '
+    'tired", "attitude": "wary", "wants": "food", "where": "nearby"}; the '
     'dead come with "spawn_dead" ("nearby" keeps them a little way off); something worth '
     'having lies about with "place"; a place the player learns of is "tell_of". A danger '
     "is a real threat, not a fright that comes to nothing; a chance is worth stopping for; "
     "something of interest is a sight or a meeting that colours the world, never a fight. "
-    'Say what the player sees in the "note", in one or two plain lines. Reply with one JSON '
+    'Say what the player sees in the reply\'s "note" (not a "note" operation as well), in '
+    "one or two plain lines. Reply with one JSON "
     'object and nothing else: {"fire": [{"event": "its title", "variant": "its variant\'s '
     'title or """, "script": [operations]}], "script": [operations], "note": "what the '
     'player sees"}.',
