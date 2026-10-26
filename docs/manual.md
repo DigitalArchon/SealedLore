@@ -1541,16 +1541,16 @@ opens in a window of its own: the place you are in fills it, painted; the
 column at the right holds the log (what happens, what people say) and the
 line you type; your portrait, the place and the clock sit under the view.
 Click where to go and your character walks there; click a building to go
-inside or a door to go through it (the view fades through); **Travel…** sets
-off for another place and **Leave** walks on past an edge, the clock moving
-by the way's length. Everything is saved as you go, the log included, so
+inside or a door to go through it (the view fades through); **Map…** (or
+**M**) opens the map of the wider world to set out across it, and **Leave**
+walks on past an edge into the next stretch of country, the clock moving by
+the way's length. Everything is saved as you go, the log included, so
 closing the window (back to your stories; the story is in the Stories list,
 which says where the game's clock stands, and opens the game again) loses
 nothing. The people you meet, and the plot, are the model's;
 walking, doors, what you carry, what you can see and hear, and fights are
-the game's own rules. Journeys go only between the places the world was
-designed with, never into the open country between them; a click while you
-walk turns you at once, and the view glides along with you. Outdoors the weather the world was designed with
+the game's own rules. A click while you walk turns you at once, and the view
+glides along with you. Outdoors the weather the world was designed with
 falls over the place, and the light follows the hour; a hit flashes your
 figure red, and whoever goes down lies where they fell. Doomsville's
 characters walk with stride frames of their own, drawn from their sprites.
@@ -1587,6 +1587,44 @@ pieces (a bedroom, a corner of the front room) chosen to go in them, and
 things in the yard round them out of doors. A building that has no inside yet
 gets one this way when the story opens, and keeps it. Doomsville's buildings
 were made from its kit and painted.
+
+**The wider world.** A visual story's places stand in a world of their own:
+Doomsville's is a hundred kilometres across, its regions each with their own
+country and dangers (the farm country round Hellsville, the Kettle Hills,
+the Empty Plains where the hordes cross, the North Woods, the frozen Marsh,
+and far to the south-west the Burn, where the bandits hold a ruined city),
+with roads, a river, a rail line, and places to find. **Map…** shows it:
+the regions, the roads and the river, the places you know, the country you
+have walked, and you. Click a place you know, or anywhere at all to go and
+explore it, and the map says what the journey will take before you set out:
+how long on foot, the nights out, the regions on the way and how dangerous
+each is, and the food and water it needs. **Set out**, and the journey is
+walked a stretch at a time: you walk by day and make camp at night, eat and
+drink from what you carry when it is time, and in each stretch something may
+happen, by the region (a danger, a chance worth stopping for, or simply
+something of interest: a traveller, a sight). When it does, the journey stops
+there, in that stretch of country, and the story's keeper says what it is: the
+dead, a stranger with a name and a mind of their own (talk to them like
+anyone else), something lying in the snow. A place you pass near, or are told
+of, goes on your map, and can be travelled to directly from then on. Every
+stretch of country is made the first time you are in it, from what its region
+holds (open fields, pine woods, a farmstead, a campsite, a wreck on the road),
+with buildings you can go into, and kept: come back and it is the same.
+**Leave** from any edge walks on into the next stretch. Going without food,
+water or sleep shows under the view (**Hungry**, **Thirsty**, **Weary**) and
+makes you weaker in a fight, and in the end wounds you; the colder country
+asks to be dressed warmer (a coat, gloves, a blanket carried count), and
+**Cold** shows when you are not. Sleeping out of doors has its own chance of
+something in the night. A vehicle you have got working is on the map as a
+way to go: fast on the roads, slower across country, never over a river but
+by a bridge, burning fuel as it goes (a full tank, and each can of fuel you
+carry, goes so far; run dry and the drive ends where it stops).
+
+**Places are painted** the first time you are in them, when they have no
+painting of their own yet (a new stretch of country, a building's inside): in
+the background, while you play on the tiles, in the same storybook look as the
+rest, about 3¢ a place through the picture endpoint in Settings. **Game →
+Paint new places** turns it off.
 
 **The people** are the model's. Each has a sheet in the world's design (who
 they are, what they want, what they know, what they never do, how they
@@ -1628,7 +1666,7 @@ keeper is how everything else gets done. Try to repair the truck in the barn
 with the parts you have gathered and the keeper rules on it: what it takes,
 what is still missing, and on success the truck becomes a new thing (a
 running pickup, fuelled) with what you can now do with it in its menu
-(**Drive it**), and **Travel…** offers every journey by it, at a vehicle's
+(**Drive it**), and the map offers every journey by it, at a vehicle's
 pace, the truck coming with you. The same way a thing can be lit, loaded,
 built or broken into what it now is, a person can be held, bound or knocked
 out (they stay put and know their state), and a place can be left burnt or

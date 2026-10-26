@@ -51,7 +51,10 @@ as a story without it.
   meet and the plot, the game's own rules for everything else. The start
   page lists them under the samples, Doomsville first: walk its map, talk to
   its people, and try anything the rules don't cover (the keeper rules on it
-  and makes the outcome real on the board). See [Visual
+  and makes the outcome real on the board). Doomsville stands in a wider
+  world a hundred kilometres across to travel and explore: journeys take
+  days and food and water, something may happen on the way, and new places
+  are painted as you reach them. See [Visual
   Stories](docs/manual.md#visual-stories) in the manual.
 - **A picture kept as a card's own** (new in 2.0.0b7). Right-click any
   picture and choose **Use as a character's picture…** or **Use as a place's
