@@ -1573,6 +1573,21 @@ on the toolbar pass the time where you stand. What a world starts with (its
 locks and keys, its dead, things laid out, a line for each place, the
 weather) is its design, shipped beside its plot file.
 
+**What is in a cupboard** is decided by the game, once, the first time you
+enter a place: each dresser, pantry, medicine cabinet or toolbox is stocked
+from its world's tables of what such a thing holds, by chance, and keeps what
+it was given. Right-click it and **Search it** (half a minute) to see what is
+inside; from then on its menu lists what it holds, to **Take**. A new game
+rolls everything afresh.
+
+**The insides of buildings** come from their world's kit: for each kind of
+building (a farmhouse, a barn, a diner, a church…) a few hand-made layouts,
+picked by chance, turned so the door is where the map has it, with smaller
+pieces (a bedroom, a corner of the front room) chosen to go in them, and
+things in the yard round them out of doors. A building that has no inside yet
+gets one this way when the story opens, and keeps it. Doomsville's buildings
+were made from its kit and painted.
+
 **The people** are the model's. Each has a sheet in the world's design (who
 they are, what they want, what they know, what they never do, how they
 speak) over their card, and stands where the design puts them. When someone
@@ -1627,8 +1642,10 @@ The model also **looks** for you. Press **Look at…** and drag
 a frame round any part of the place (or right-click a thing and choose
 **Look at it closely**): the model is shown that part of the picture and
 told what the game knows stands there, and says what you see and what you
-find on looking, inside, under or among what is there. Whatever it finds is
-in the game from then on: a thing's menu lists what it holds (**Take …**),
+find on looking, inside, under or among what is there. A container the game
+has stocked holds what it holds: the look tells you of it and adds nothing.
+Whatever else it finds is in the game from then on: a thing's menu lists what
+it holds (**Take …**),
 and something found lying in the open is on the floor beside what you looked
 at. It stays there until you take it or something in the game moves it, and
 a later look is told so, and what you have taken. The model is the

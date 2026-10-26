@@ -110,6 +110,8 @@ class VisualAreaView(AreaView):
         # The window supplies what a thing is known to hold (its record's
         # contents) and the uses the keeper granted it (its menu's verbs).
         self.contents_of: Callable[[str], list[str]] = lambda _id: []
+        # Whether a thing holds something not yet seen (Search it).
+        self.searchable: Callable[[str], bool] = lambda _id: False
         self.uses_of: Callable[[str], list[str]] = lambda _id: []
         # The dead in the area shown (their walkers' names are their ids),
         # and whoever lies fallen.
@@ -207,6 +209,12 @@ class VisualAreaView(AreaView):
             take.setEnabled(not self.locked)
             take.triggered.connect(
                 lambda _c=False, i=index: self.action_chosen.emit("take_content", thing.id, str(i))
+            )
+        if self.searchable(thing.id):
+            search = menu.addAction("Search it")
+            search.setEnabled(not self.locked)
+            search.triggered.connect(
+                lambda: self.action_chosen.emit("search", thing.name, thing.id)
             )
         for other in self._lying_on(thing):
             # A find that lies on this thing's tiles (put there before a look's
@@ -343,6 +351,7 @@ class VisualWindow(QMainWindow):
         self.area_view.look_drawn.connect(self._look_part)
         self.area_view.look_thing.connect(self._look_thing)
         self.area_view.contents_of = self._contents_of
+        self.area_view.searchable = self._searchable
         self.area_view.uses_of = lambda pid: self.session.visual_uses(pid) if self.session else []
         # The wounds shown last, so a new one flashes the figure.
         self._wounds_shown = session.area_state().wounds
@@ -714,6 +723,13 @@ class VisualWindow(QMainWindow):
             self.presenter.refresh(snap=True)
             self._after_action(lines)
             return
+        if verb == "search" and target_id:
+            if at is not None:
+                self._go(at[0], at[1], True, name)
+            line = session.visual_search(target_id)
+            self.presenter.refresh(snap=True)
+            self._after_action([line] if line else [])
+            return
         if verb in ("take", "destroy") and target_id:
             if at is not None:
                 self._go(at[0], at[1], True, name)
@@ -924,12 +940,23 @@ class VisualWindow(QMainWindow):
     # --- Look (engine/look.py) -------------------------------------------------------
 
     def _contents_of(self, placement_id: str) -> list[str]:
+        """What a thing holds, once the player has searched it or looked at it."""
         if self.session is None:
             return []
         record = self.session.area_state().things.get(placement_id)
-        if record is None:
+        if record is None or not record.searched:
             return []
         return [f"{f.name} ×{f.count}" if f.count > 1 else f.name for f in record.contents]
+
+    def _searchable(self, placement_id: str) -> bool:
+        """A container not searched yet: one the kit's tables stocked, or one
+        the design put something in."""
+        if self.session is None:
+            return False
+        record = self.session.area_state().things.get(placement_id)
+        return (
+            record is not None and not record.searched and (record.stocked or bool(record.contents))
+        )
 
     def _look_thing(self, placement_id: str) -> None:
         area = self.area_view.area

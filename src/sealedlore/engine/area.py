@@ -117,6 +117,11 @@ class Placement:
     # (engine/deck_plan.py): one it draws itself (DRAWN_PIECES: "reactor",
     # "shaft", "beds"), "set" for one drawn from its sprite; "" for anything else.
     piece: str = ""
+    # A visual story's world kit (engine/kits.py): the item table that stocks
+    # it, and the chance in a hundred that it holds anything ("" for a thing
+    # the kit's container rules may still match by name).
+    stock: str = ""
+    stock_chance: int = 100
 
     def tiles(self) -> list[tuple[int, int]]:
         return [(self.x + dx, self.y + dy) for dy in range(self.h) for dx in range(self.w)]
@@ -231,6 +236,9 @@ class Area:
     # A place under the ground (a cave, a mine: `_UNDERGROUND`), whose rock
     # is solid: drawn as rock faces, not boulders on open ground.
     underground: bool = False
+    # The floor's loot a world kit's template put down (engine/kits.py):
+    # (x, y, table, chance), rolled when the area is first entered.
+    loot: list[tuple[int, int, str, int]] = field(default_factory=list)
 
     @property
     def id(self) -> str:
@@ -800,12 +808,17 @@ def find_rooms(
 
 
 def name_rooms(
-    rooms: Sequence[Room], labels: Mapping[str, tuple[int, int]], records: Any = None
+    rooms: Sequence[Room],
+    labels: Mapping[str, tuple[int, int]],
+    records: Any = None,
+    *,
+    named: bool = False,
 ) -> None:
     """Each room's name and use: from the plan's own room records (a deck the
     program laid out: name, use and box), else from a label standing in it
-    (a drawn plan's named building or room) read for its use. The space the
-    rooms open off is the corridor."""
+    (a drawn plan's named building or room) read for its use, and with
+    `named` (a world kit's template, whose labels are its rooms' names) its
+    name too. The space the rooms open off is the corridor."""
     by_box = [r for r in records if isinstance(r, dict)] if isinstance(records, list) else []
     for room in rooms:
         cx, cy = int(round(room.cx)), int(round(room.cy))
@@ -834,6 +847,8 @@ def name_rooms(
         inside = [n for n, (lx, ly) in labels.items() if x0 <= lx <= x1 and y0 <= ly <= y1]
         if len(inside) == 1:
             room.use = use_of(inside[0])
+            if named:
+                room.name = inside[0][:60]
         if room.name in ("central hall", "hall"):
             room.use = room.use or "corridor"
 
@@ -1113,6 +1128,7 @@ def build_area(
     people_keys = {key(n) for n in people}
     links: LevelLinks | None = None
     generated = False
+    k = 1
     if indoor:
         # The plan's own level, with the stairs the rules put in between it
         # and its other levels (engine/levels.py); a plan with none is as drawn.
@@ -1212,7 +1228,7 @@ def build_area(
     doorways = openings(rows)
     rooms, room_of = find_rooms(rows, objects, doorways) if indoor else ([], [])
     if indoor:
-        name_rooms(rooms, labels, spec.get("rooms"))
+        name_rooms(rooms, labels, spec.get("rooms"), named=bool(spec.get("kit")))
     if links is not None:
         entrances += _stairs_entrances(links, 0, place.id)
     area = Area(
@@ -1239,6 +1255,12 @@ def build_area(
         and _UNDERGROUND.search(f"{place.name} {place.what}") is not None,
     )
     area.placements = _object_placements(area)
+    # A world kit's furniture and loot (engine/kits.py): an inside it made, or
+    # the yard pieces it stamped round an outdoor area's buildings, at the
+    # scale they were stamped at.
+    if indoor or spec.get("pieces_scale") == k:
+        area.placements += _kit_pieces(area, spec.get("pieces"))
+        area.loot = _kit_loot(spec.get("loot"))
     if indoor and generated:
         area.hull = _hull_rows(spec.get("hull"), rows)
         area.placements += deck_pieces(area, spec.get("rooms"))
@@ -1333,7 +1355,12 @@ def build_level(
             rows = [r.replace(digit, "_") for r in rows]
     doorways = openings(rows)
     rooms, room_of = find_rooms(rows, objects, doorways)
-    name_rooms(rooms, labels, (drawn.spec or {}).get("rooms"))  # type: ignore[union-attr]
+    name_rooms(
+        rooms,
+        labels,
+        (drawn.spec or {}).get("rooms"),  # type: ignore[union-attr]
+        named=bool((drawn.spec or {}).get("kit")),  # type: ignore[union-attr]
+    )
     deck = look == "space"
     area = Area(
         place_id=place.id,
@@ -1356,6 +1383,9 @@ def build_level(
         level_name=level_name(layout, index, deck=deck),
     )
     area.placements = _object_placements(area)
+    level_spec = drawn.spec or {}  # type: ignore[union-attr]
+    area.placements += _kit_pieces(area, level_spec.get("pieces"))
+    area.loot = _kit_loot(level_spec.get("loot"))
     if generated:
         drawn_spec = drawn.spec or {}  # type: ignore[union-attr]
         area.hull = _hull_rows(drawn_spec.get("hull"), rows)
@@ -2093,6 +2123,58 @@ def _object_placements(area: Area) -> list[Placement]:
                         room=room.index if room else None,
                     )
                 )
+    return out
+
+
+def _kit_pieces(area: Area, raw: Any) -> list[Placement]:
+    """A world kit's furniture as placements (engine/kits.py `kit_layout`,
+    `yard_pieces`): each on the tiles it was put on, in its room, knowing
+    the table that stocks it. A piece off the grid or on a wall is left out."""
+    out: list[Placement] = []
+    if not isinstance(raw, list):
+        return out
+    for item in raw:
+        if not isinstance(item, dict) or not item.get("name"):
+            continue
+        try:
+            x, y = int(item["x"]), int(item["y"])
+            w, h = max(1, int(item.get("w", 1))), max(1, int(item.get("h", 1)))
+        except (KeyError, TypeError, ValueError):
+            continue
+        tiles = [(x + dx, y + dy) for dy in range(h) for dx in range(w)]
+        if not all(0 <= ty < area.height and 0 <= tx < area.width for tx, ty in tiles):
+            continue
+        if any(area.rows[ty][tx] in WALLS or area.rows[ty][tx] == "+" for tx, ty in tiles):
+            continue
+        name = str(item["name"])[:80]
+        room = area.room_at(x, y)
+        out.append(
+            Placement(
+                id=f"{area.id}:piece:{x}:{y}",
+                name=name,
+                x=x,
+                y=y,
+                w=w,
+                h=h,
+                verbs=item_verbs(name),
+                kind="furniture",
+                room=room.index if room else None,
+                stock=str(item.get("stock") or ""),
+                stock_chance=int(item.get("chance", 100) or 0),
+            )
+        )
+    return out
+
+
+def _kit_loot(raw: Any) -> list[tuple[int, int, str, int]]:
+    out: list[tuple[int, int, str, int]] = []
+    for item in raw if isinstance(raw, list) else []:
+        try:
+            out.append(
+                (int(item["x"]), int(item["y"]), str(item["table"]), int(item.get("chance", 100)))
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
     return out
 
 

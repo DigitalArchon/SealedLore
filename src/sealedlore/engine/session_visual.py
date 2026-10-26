@@ -56,7 +56,8 @@ from sealedlore.engine.keeper import (
     parse_ruling,
     variant_for,
 )
-from sealedlore.engine.levels import place_of_area
+from sealedlore.engine.kits import container_rule, has_words, kit_layout, rng_for, stock
+from sealedlore.engine.levels import level_area_id, place_of_area
 from sealedlore.engine.look import (
     LOOK_MAX_TOKENS,
     LookReply,
@@ -104,12 +105,14 @@ from sealedlore.engine.visual_rules import (
     step_creatures,
 )
 from sealedlore.engine.world_art import is_window
-from sealedlore.engine.world_layout import position
+from sealedlore.engine.world_layout import position, size_of
 from sealedlore.ids import new_id
 from sealedlore.models.area import Found, Spot, ThingRecord
+from sealedlore.models.kit import Kit
 from sealedlore.models.plot import Chronicle
 from sealedlore.models.visual import DoorState, NpcGoal, PersonSheet, VisualDesign
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError
+from sealedlore.storage.kits import load_kit
 from sealedlore.threads import BackgroundThread
 
 # The opening's hour by its words, when the plot names no start.
@@ -188,6 +191,8 @@ def _in_shift(shift, minute: int) -> bool:
 
 # An item taken out of something, or laid by the design: a record of its own.
 ITEM_PREFIX = "item:"
+# A search of a container takes this long.
+SEARCH_SECONDS = 30
 # Waiting and sleeping, in minutes.
 WAIT_MINUTES = 60
 SLEEP_UNTIL = 7 * 60
@@ -593,10 +598,144 @@ class VisualRuntime:
         area_id = area_of(world, art, place.id)
         return self.area(area_id, world, art) if area_id and not is_window(area_id) else None
 
+    # --- The world kit (engine/kits.py, models/kit.py) ---------------------------
+
+    def visual_kit(self) -> Kit | None:
+        """The world kit beside the story's tile set: its item tables,
+        building templates and yard pieces; None when the set has none."""
+        return load_kit(self.tile_set_name(self._art_read()))
+
+    def visual_seed(self) -> str:
+        """What every roll of the story is fixed by: a new playthrough rolls
+        afresh, the same one never does."""
+        return self.story.id
+
+    def visual_kit_plans(self) -> list[str]:
+        """An inside made from the kit for each building or room that has no
+        plan (a place the kit has a kind of building for), its main door on
+        the side its door is in the ground round it; kept with the story's
+        map art, so it is made once. The names of the places given one."""
+        kit = self.visual_kit()
+        if kit is None or not kit.buildings:
+            return []
+        world, art = self.world(), self._art_read()
+        made: list[tuple[str, object]] = []
+        for place in world.places.values():
+            if place.kind not in ("building", "room") or art.layout_shown(place.id, place.state):
+                continue
+            door = self._door_side(place.id)
+            layout = kit_layout(
+                kit,
+                place.id,
+                place.name,
+                place.what,
+                size_m=size_of(place),
+                door=door,
+                seed=self.visual_seed(),
+            )
+            if layout is not None:
+                made.append((place.name, layout))
+        if not made:
+            return []
+        art = self.world_art  # takes the lock itself: read before it is held
+        with self._lock():
+            for _name, layout in made:
+                art.layouts.setdefault(layout.place_id, {})[""] = layout
+        self._save_art(art)
+        return [name for name, _layout in made]
+
+    def _door_side(self, place_id: str) -> str | None:
+        """The side of a building its door out is on, from the ground round
+        it (the parent's plan); None when nothing outside says."""
+        world, art = self.world(), self._art_read()
+        place = world.places.get(place_id)
+        if place is None or place.inside not in world.places:
+            return None
+        outside = self.area(area_of(world, art, place.inside), world, art)
+        if outside is None:
+            return None
+        return next((e.side for e in outside.entrances if e.place_id == place_id), None)
+
+    def _stock(self, state, area: Area) -> None:
+        """The kit's item tables rolled for an area the first time it is
+        entered (CDDA's item groups): each container its template or the
+        kit's container rules give a table holds what the roll says, and the
+        floor's loot lies where the template put it. Rolled by the story's
+        seed, so the same playthrough holds the same things."""
+        if area.id in state.stocked:
+            return
+        state.stocked.append(area.id)
+        kit = self.visual_kit()
+        if kit is None:
+            return
+        seed = self.visual_seed()
+        for p in area.placements:
+            table, chance = p.stock, p.stock_chance
+            if not table:
+                rule = container_rule(kit, p.name)
+                if rule is None:
+                    continue
+                table, chance = rule.table, rule.chance
+            found = stock(kit, table, chance, rng_for(seed, area.id, p.id))
+            record = state.things.get(p.id)
+            if record is None:
+                record = state.things[p.id] = ThingRecord(state="seen", name=p.name)
+            if record.stocked:
+                continue
+            record.stocked = True
+            for f in found:
+                if not any(
+                    bare(c.name).casefold() == bare(f.name).casefold() for c in record.contents
+                ):
+                    record.contents.append(f.model_copy(update={"kind": kind_of(f.name, f.kind)}))
+        taken = area.blocked() | {(sp.x, sp.y) for sp in state.spots.values() if sp.area == area.id}
+        taken |= {
+            (r.spot.x, r.spot.y)
+            for r in state.things.values()
+            if r.spot is not None and r.spot.area == area.id
+        }
+        for x, y, table, chance in area.loot:
+            for f in stock(kit, table, chance, rng_for(seed, area.id, "loot", x, y)):
+                fx, fy = stand_near(area, (x, y), taken)
+                taken.add((fx, fy))
+                state.things[ITEM_PREFIX + new_id()] = ThingRecord(
+                    state="dropped",
+                    name=f.name,
+                    spot=Spot(area=area.id, x=fx, y=fy),
+                    count=f.count,
+                    kind=kind_of(f.name, f.kind),
+                    seen=f.note,
+                )
+
+    def visual_search(self, placement_id: str) -> str:
+        """Search a thing: what it holds is seen, and listed in its menu, from
+        now on (no model is asked; a look tells more). Half a minute passes."""
+        state = self.area_state()
+        area, me = self._visual_me(state)
+        if area is None or me is None:
+            return ""
+        thing = next((p for p in area.placements if p.id == placement_id), None)
+        if thing is None:
+            return "It isn't here."
+        if not self._in_reach(area, me, thing):
+            return "You aren't close enough."
+        record = state.things.get(placement_id)
+        if record is None:
+            record = state.things[placement_id] = ThingRecord(state="seen", name=thing.name)
+        record.searched = True
+        state.seconds += SEARCH_SECONDS
+        self._set_live(state)
+        name = bare(thing.name)
+        if not record.contents:
+            return f"You search the {name}: nothing of use."
+        what = ", ".join(f"{f.name} ×{f.count}" if f.count > 1 else f.name for f in record.contents)
+        return f"You search the {name} and find {what}."
+
     def visual_lay_out(self) -> None:
         """The design's dead, things and locks laid on the world, once; its
         people stood where it puts them, each once their place is on the
         map (a plot-hidden place has no one in it until it is revealed)."""
+        self.visual_kit_plans()
         state = self.area_state()
         design = self.visual_design()
         world, art = self.world(), self._art_read()
@@ -672,7 +811,20 @@ class VisualRuntime:
             holder = None
             if item.inside:
                 want = bare(item.inside).casefold()
-                holder = next((p for p in area.placements if bare(p.name).casefold() == want), None)
+                # On any floor of the place: a kit's farmhouse has its beds
+                # upstairs.
+                plan = art.layout_shown(area.place_id, "")
+                floors = [area]
+                for lv in plan.levels if plan is not None else []:
+                    level = self.area(level_area_id(area.place_id, lv.index), world, art)
+                    if level is not None:
+                        floors.append(level)
+                placements = [p for a in floors for p in a.placements]
+                holder = next((p for p in placements if bare(p.name).casefold() == want), None)
+                if holder is None:
+                    # A kit's inside names it its own way: "a locked medicine
+                    # cabinet" is the medicine cabinet the design means.
+                    holder = next((p for p in placements if has_words(p.name, want)), None)
             if holder is not None:
                 record = state.things.get(holder.id)
                 if record is None:
@@ -986,6 +1138,7 @@ class VisualRuntime:
         if area is None or me is None:
             return []
         lines: list[str] = []
+        self._stock(state, area)
         if area.id not in state.flavour_said:
             design = self.visual_design()
             world = self.world()

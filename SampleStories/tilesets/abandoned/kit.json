@@ -1,0 +1,3288 @@
+{
+ "name": "abandoned",
+ "tables": {
+  "food_can": {
+   "type": "distribution",
+   "entries": [
+    {
+     "item": "a tin of beans",
+     "chance": 30,
+     "kind": "food"
+    },
+    {
+     "item": "a tin of soup",
+     "chance": 22,
+     "kind": "food"
+    },
+    {
+     "item": "a tin of peaches",
+     "chance": 12,
+     "kind": "food"
+    },
+    {
+     "item": "a tin of corned beef",
+     "chance": 12,
+     "kind": "food"
+    },
+    {
+     "item": "a tin of sardines",
+     "chance": 10,
+     "kind": "food"
+    },
+    {
+     "item": "a jar of peanut butter",
+     "chance": 8,
+     "kind": "food"
+    },
+    {
+     "item": "a tin of condensed milk",
+     "chance": 8,
+     "kind": "food"
+    }
+   ]
+  },
+  "food_dry": {
+   "type": "distribution",
+   "entries": [
+    {
+     "item": "a sack of rice",
+     "chance": 10,
+     "kind": "food"
+    },
+    {
+     "item": "a bag of flour",
+     "chance": 14,
+     "kind": "food"
+    },
+    {
+     "item": "a box of oats",
+     "chance": 15,
+     "kind": "food"
+    },
+    {
+     "item": "a packet of pasta",
+     "chance": 15,
+     "kind": "food"
+    },
+    {
+     "item": "a bag of dried beans",
+     "chance": 12,
+     "kind": "food"
+    },
+    {
+     "item": "a box of crackers",
+     "chance": 15,
+     "kind": "food"
+    },
+    {
+     "item": "a jar of honey",
+     "chance": 8,
+     "kind": "food"
+    },
+    {
+     "item": "a bag of sugar",
+     "chance": 10,
+     "kind": "food"
+    }
+   ]
+  },
+  "drink": {
+   "type": "distribution",
+   "entries": [
+    {
+     "item": "a bottle of water",
+     "chance": 50,
+     "kind": "drink"
+    },
+    {
+     "item": "a jug of water",
+     "chance": 12,
+     "kind": "drink"
+    },
+    {
+     "item": "a bottle of whiskey",
+     "chance": 10,
+     "kind": "drink"
+    },
+    {
+     "item": "a can of soda",
+     "chance": 15,
+     "kind": "drink"
+    },
+    {
+     "item": "a jar of instant coffee",
+     "chance": 10,
+     "kind": "drink"
+    }
+   ]
+  },
+  "clothing_warm": {
+   "type": "distribution",
+   "entries": [
+    {
+     "item": "a wool sweater",
+     "chance": 20,
+     "kind": "clothing"
+    },
+    {
+     "item": "a flannel shirt",
+     "chance": 20,
+     "kind": "clothing"
+    },
+    {
+     "item": "a pair of jeans",
+     "chance": 15,
+     "kind": "clothing"
+    },
+    {
+     "item": "a pair of wool socks",
+     "chance": 20,
+     "kind": "clothing"
+    },
+    {
+     "item": "a knit hat",
+     "chance": 15,
+     "kind": "clothing"
+    },
+    {
+     "item": "a pair of work gloves",
+     "chance": 15,
+     "kind": "clothing"
+    },
+    {
+     "item": "a set of thermal underwear",
+     "chance": 10,
+     "kind": "clothing"
+    },
+    {
+     "item": "a wool scarf",
+     "chance": 10,
+     "kind": "clothing"
+    }
+   ]
+  },
+  "clothing_outer": {
+   "type": "distribution",
+   "entries": [
+    {
+     "item": "a wool coat",
+     "chance": 20,
+     "kind": "clothing"
+    },
+    {
+     "item": "a down parka",
+     "chance": 15,
+     "kind": "clothing"
+    },
+    {
+     "item": "a pair of winter boots",
+     "chance": 25,
+     "kind": "clothing"
+    },
+    {
+     "item": "a canvas work jacket",
+     "chance": 20,
+     "kind": "clothing"
+    },
+    {
+     "item": "a rain poncho",
+     "chance": 10,
+     "kind": "clothing"
+    }
+   ]
+  },
+  "personal": {
+   "type": "distribution",
+   "entries": [
+    {
+     "item": "a family photograph",
+     "chance": 25,
+     "kind": "thing"
+    },
+    {
+     "item": "a bundle of letters",
+     "chance": 20,
+     "kind": "paper"
+    },
+    {
+     "item": "a pocket watch",
+     "chance": 8,
+     "kind": "thing"
+    },
+    {
+     "item": "a paperback novel",
+     "chance": 25,
+     "kind": "paper"
+    },
+    {
+     "item": "a deck of cards",
+     "chance": 15,
+     "kind": "thing"
+    },
+    {
+     "item": "a harmonica",
+     "chance": 5,
+     "kind": "thing"
+    }
+   ]
+  },
+  "light": {
+   "type": "distribution",
+   "entries": [
+    {
+     "item": "a box of matches",
+     "chance": 35,
+     "kind": "light"
+    },
+    {
+     "item": "a candle",
+     "chance": 30,
+     "kind": "light"
+    },
+    {
+     "item": "a flashlight",
+     "chance": 15,
+     "kind": "light"
+    },
+    {
+     "item": "a pack of batteries",
+     "chance": 15,
+     "kind": "tool"
+    },
+    {
+     "item": "a lighter",
+     "chance": 10,
+     "kind": "light"
+    }
+   ]
+  },
+  "medicine_home": {
+   "type": "distribution",
+   "entries": [
+    {
+     "item": "a bottle of painkillers",
+     "chance": 30,
+     "kind": "medicine"
+    },
+    {
+     "item": "a roll of bandages",
+     "chance": 30,
+     "kind": "medicine"
+    },
+    {
+     "item": "a bottle of antiseptic",
+     "chance": 15,
+     "kind": "medicine"
+    },
+    {
+     "item": "a box of plasters",
+     "chance": 15,
+     "kind": "medicine"
+    },
+    {
+     "item": "a bottle of cough syrup",
+     "chance": 10,
+     "kind": "medicine"
+    }
+   ]
+  },
+  "tools_hand": {
+   "type": "distribution",
+   "entries": [
+    {
+     "item": "a hammer",
+     "chance": 20,
+     "kind": "tool"
+    },
+    {
+     "item": "a screwdriver",
+     "chance": 20,
+     "kind": "tool"
+    },
+    {
+     "item": "an adjustable wrench",
+     "chance": 15,
+     "kind": "tool"
+    },
+    {
+     "item": "a pair of pliers",
+     "chance": 15,
+     "kind": "tool"
+    },
+    {
+     "item": "a hacksaw",
+     "chance": 10,
+     "kind": "tool"
+    },
+    {
+     "item": "a roll of duct tape",
+     "chance": 20,
+     "kind": "tool"
+    },
+    {
+     "item": "a box of nails",
+     "chance": 15,
+     "kind": "tool"
+    },
+    {
+     "item": "a crowbar",
+     "chance": 5,
+     "kind": "weapon"
+    },
+    {
+     "item": "a hatchet",
+     "chance": 5,
+     "kind": "weapon"
+    }
+   ]
+  },
+  "tools_farm": {
+   "type": "distribution",
+   "entries": [
+    {
+     "item": "a coil of rope",
+     "chance": 20,
+     "kind": "tool"
+    },
+    {
+     "item": "a pitchfork",
+     "chance": 10,
+     "kind": "weapon"
+    },
+    {
+     "item": "a metal bucket",
+     "chance": 15,
+     "kind": "tool"
+    },
+    {
+     "item": "a roll of fence wire",
+     "chance": 15,
+     "kind": "tool"
+    },
+    {
+     "item": "a canvas tarp",
+     "chance": 15,
+     "kind": "tool"
+    },
+    {
+     "item": "an axe",
+     "chance": 8,
+     "kind": "weapon"
+    },
+    {
+     "item": "a bag of animal feed",
+     "chance": 15,
+     "kind": "thing"
+    },
+    {
+     "item": "a sharpening stone",
+     "chance": 10,
+     "kind": "tool"
+    }
+   ]
+  },
+  "garage": {
+   "type": "distribution",
+   "entries": [
+    {
+     "item": "a can of motor oil",
+     "chance": 25,
+     "kind": "fuel"
+    },
+    {
+     "item": "a set of jumper cables",
+     "chance": 15,
+     "kind": "tool"
+    },
+    {
+     "item": "a tyre iron",
+     "chance": 15,
+     "kind": "weapon"
+    },
+    {
+     "item": "a set of spark plugs",
+     "chance": 10,
+     "kind": "tool"
+    },
+    {
+     "item": "a length of hose",
+     "chance": 15,
+     "kind": "tool"
+    },
+    {
+     "item": "a fuel can",
+     "chance": 8,
+     "kind": "fuel"
+    },
+    {
+     "item": "a car battery",
+     "chance": 5,
+     "kind": "tool"
+    },
+    {
+     "item": "a funnel",
+     "chance": 10,
+     "kind": "tool"
+    }
+   ]
+  },
+  "kitchen_utensils": {
+   "type": "distribution",
+   "entries": [
+    {
+     "item": "a kitchen knife",
+     "chance": 25,
+     "kind": "weapon"
+    },
+    {
+     "item": "a can opener",
+     "chance": 25,
+     "kind": "tool"
+    },
+    {
+     "item": "a cast iron skillet",
+     "chance": 15,
+     "kind": "tool"
+    },
+    {
+     "item": "a steel cooking pot",
+     "chance": 15,
+     "kind": "tool"
+    },
+    {
+     "item": "a ladle",
+     "chance": 10,
+     "kind": "tool"
+    },
+    {
+     "item": "a pair of scissors",
+     "chance": 10,
+     "kind": "tool"
+    }
+   ]
+  },
+  "junk": {
+   "type": "distribution",
+   "entries": [
+    {
+     "item": "a crumpled newspaper",
+     "chance": 30,
+     "kind": "paper"
+    },
+    {
+     "item": "an empty tin can",
+     "chance": 30,
+     "kind": "thing"
+    },
+    {
+     "item": "a dead battery",
+     "chance": 15,
+     "kind": "thing"
+    },
+    {
+     "item": "a torn paperback",
+     "chance": 15,
+     "kind": "paper"
+    },
+    {
+     "chance": 50
+    }
+   ]
+  },
+  "kitchen_cupboard": {
+   "entries": [
+    {
+     "table": "food_can",
+     "chance": 45,
+     "count": [
+      1,
+      2
+     ]
+    },
+    {
+     "table": "food_dry",
+     "chance": 25
+    },
+    {
+     "table": "kitchen_utensils",
+     "chance": 25
+    },
+    {
+     "item": "a box of matches",
+     "chance": 15,
+     "kind": "light"
+    },
+    {
+     "table": "drink",
+     "chance": 15
+    }
+   ]
+  },
+  "pantry": {
+   "entries": [
+    {
+     "table": "food_can",
+     "chance": 75,
+     "count": [
+      1,
+      3
+     ]
+    },
+    {
+     "table": "food_dry",
+     "chance": 60,
+     "count": [
+      1,
+      2
+     ]
+    },
+    {
+     "table": "drink",
+     "chance": 30
+    }
+   ]
+  },
+  "stove": {
+   "entries": [
+    {
+     "item": "a steel cooking pot",
+     "chance": 25,
+     "kind": "tool"
+    },
+    {
+     "item": "a cast iron skillet",
+     "chance": 15,
+     "kind": "tool"
+    }
+   ]
+  },
+  "dresser": {
+   "entries": [
+    {
+     "table": "clothing_warm",
+     "chance": 75,
+     "count": [
+      1,
+      2
+     ]
+    },
+    {
+     "table": "personal",
+     "chance": 25
+    },
+    {
+     "table": "light",
+     "chance": 10
+    }
+   ]
+  },
+  "wardrobe": {
+   "entries": [
+    {
+     "table": "clothing_outer",
+     "chance": 60
+    },
+    {
+     "table": "clothing_warm",
+     "chance": 40
+    }
+   ]
+  },
+  "nightstand": {
+   "entries": [
+    {
+     "table": "light",
+     "chance": 40
+    },
+    {
+     "table": "personal",
+     "chance": 30
+    },
+    {
+     "table": "medicine_home",
+     "chance": 15
+    },
+    {
+     "item": "a revolver",
+     "chance": 2,
+     "kind": "weapon"
+    }
+   ]
+  },
+  "bed": {
+   "entries": [
+    {
+     "table": "personal",
+     "chance": 30
+    },
+    {
+     "item": "a shotgun",
+     "chance": 2,
+     "kind": "weapon"
+    },
+    {
+     "table": "junk",
+     "chance": 30
+    }
+   ]
+  },
+  "coat_rack": {
+   "entries": [
+    {
+     "table": "clothing_outer",
+     "chance": 60
+    },
+    {
+     "item": "a wool scarf",
+     "chance": 20,
+     "kind": "clothing"
+    }
+   ]
+  },
+  "boots": {
+   "entries": [
+    {
+     "item": "a pair of winter boots",
+     "chance": 40,
+     "kind": "clothing"
+    },
+    {
+     "item": "a pair of wool socks",
+     "chance": 20,
+     "kind": "clothing"
+    }
+   ]
+  },
+  "bookshelf": {
+   "entries": [
+    {
+     "item": "a paperback novel",
+     "chance": 50,
+     "kind": "paper"
+    },
+    {
+     "item": "a road map of the county",
+     "chance": 15,
+     "kind": "paper"
+    },
+    {
+     "item": "a field guide to edible plants",
+     "chance": 10,
+     "kind": "paper"
+    },
+    {
+     "item": "a first aid manual",
+     "chance": 8,
+     "kind": "paper"
+    }
+   ]
+  },
+  "bathroom": {
+   "entries": [
+    {
+     "table": "medicine_home",
+     "chance": 50
+    },
+    {
+     "item": "a bar of soap",
+     "chance": 30,
+     "kind": "thing"
+    },
+    {
+     "item": "a razor",
+     "chance": 15,
+     "kind": "tool"
+    },
+    {
+     "item": "a toothbrush",
+     "chance": 15,
+     "kind": "thing"
+    }
+   ]
+  },
+  "crate_house": {
+   "entries": [
+    {
+     "table": "food_can",
+     "chance": 25
+    },
+    {
+     "table": "tools_hand",
+     "chance": 25
+    },
+    {
+     "table": "light",
+     "chance": 20
+    },
+    {
+     "table": "clothing_warm",
+     "chance": 15
+    }
+   ]
+  },
+  "toy_chest": {
+   "entries": [
+    {
+     "item": "a stuffed bear",
+     "chance": 30,
+     "kind": "thing"
+    },
+    {
+     "item": "a wooden toy truck",
+     "chance": 20,
+     "kind": "thing"
+    },
+    {
+     "item": "a box of crayons",
+     "chance": 20,
+     "kind": "thing"
+    }
+   ]
+  },
+  "trash": {
+   "entries": [
+    {
+     "table": "junk",
+     "chance": 70
+    }
+   ]
+  },
+  "guns": {
+   "entries": [
+    {
+     "item": "a hunting rifle",
+     "chance": 15,
+     "kind": "weapon"
+    },
+    {
+     "item": "a shotgun",
+     "chance": 10,
+     "kind": "weapon"
+    },
+    {
+     "item": "a box of cartridges",
+     "chance": 35,
+     "count": [
+      1,
+      2
+     ],
+     "kind": "ammunition"
+    },
+    {
+     "item": "a box of shotgun shells",
+     "chance": 30,
+     "kind": "ammunition"
+    },
+    {
+     "item": "a gun cleaning kit",
+     "chance": 20,
+     "kind": "tool"
+    }
+   ]
+  },
+  "rifle_rack": {
+   "entries": [
+    {
+     "item": "a box of cartridges",
+     "chance": 30,
+     "kind": "ammunition"
+    }
+   ]
+  },
+  "trunk": {
+   "entries": [
+    {
+     "table": "clothing_warm",
+     "chance": 40
+    },
+    {
+     "table": "personal",
+     "chance": 40
+    },
+    {
+     "item": "a wool blanket",
+     "chance": 25,
+     "kind": "clothing"
+    }
+   ]
+  },
+  "hay": {
+   "entries": [
+    {
+     "item": "a pitchfork",
+     "chance": 10,
+     "kind": "weapon"
+    }
+   ]
+  },
+  "feed_bin": {
+   "entries": [
+    {
+     "item": "a bag of animal feed",
+     "chance": 70,
+     "kind": "thing"
+    },
+    {
+     "item": "a metal bucket",
+     "chance": 15,
+     "kind": "tool"
+    }
+   ]
+  },
+  "feed": {
+   "entries": [
+    {
+     "item": "a bag of animal feed",
+     "chance": 40,
+     "kind": "thing"
+    }
+   ]
+  },
+  "workbench": {
+   "entries": [
+    {
+     "table": "tools_hand",
+     "chance": 70,
+     "count": [
+      1,
+      2
+     ]
+    },
+    {
+     "table": "garage",
+     "chance": 25
+    }
+   ]
+  },
+  "tool_rack": {
+   "entries": [
+    {
+     "table": "tools_hand",
+     "chance": 60
+    },
+    {
+     "table": "tools_farm",
+     "chance": 30
+    }
+   ]
+  },
+  "tool_chest": {
+   "entries": [
+    {
+     "table": "tools_hand",
+     "chance": 80,
+     "count": [
+      1,
+      2
+     ]
+    },
+    {
+     "table": "garage",
+     "chance": 40
+    }
+   ]
+  },
+  "bolts": {
+   "entries": [
+    {
+     "item": "a box of nails",
+     "chance": 60,
+     "kind": "tool"
+    },
+    {
+     "item": "a box of screws",
+     "chance": 40,
+     "kind": "tool"
+    }
+   ]
+  },
+  "scrap": {
+   "entries": [
+    {
+     "item": "a sheet of scrap metal",
+     "chance": 50,
+     "kind": "thing"
+    },
+    {
+     "item": "a length of pipe",
+     "chance": 30,
+     "kind": "weapon"
+    }
+   ]
+  },
+  "diner_kitchen": {
+   "entries": [
+    {
+     "table": "food_can",
+     "chance": 40
+    },
+    {
+     "table": "food_dry",
+     "chance": 30
+    },
+    {
+     "table": "kitchen_utensils",
+     "chance": 30
+    },
+    {
+     "item": "a jar of instant coffee",
+     "chance": 20,
+     "kind": "drink"
+    }
+   ]
+  },
+  "diner_counter": {
+   "entries": [
+    {
+     "item": "a notepad",
+     "chance": 30,
+     "kind": "paper"
+    },
+    {
+     "table": "drink",
+     "chance": 20
+    },
+    {
+     "item": "a cracked coffee mug",
+     "chance": 25,
+     "kind": "thing"
+    }
+   ]
+  },
+  "register": {
+   "entries": [
+    {
+     "item": "a roll of banknotes",
+     "chance": 30,
+     "kind": "thing"
+    }
+   ]
+  },
+  "booth": {
+   "entries": [
+    {
+     "table": "junk",
+     "chance": 30
+    }
+   ]
+  },
+  "medicine_cabinet": {
+   "entries": [
+    {
+     "item": "a roll of bandages",
+     "chance": 60,
+     "count": [
+      1,
+      3
+     ],
+     "kind": "medicine"
+    },
+    {
+     "item": "a bottle of painkillers",
+     "chance": 40,
+     "kind": "medicine"
+    },
+    {
+     "item": "a bottle of antiseptic",
+     "chance": 40,
+     "kind": "medicine"
+    },
+    {
+     "item": "a bottle of antibiotics",
+     "chance": 8,
+     "kind": "medicine"
+    },
+    {
+     "item": "a suture kit",
+     "chance": 20,
+     "kind": "medicine"
+    },
+    {
+     "item": "a box of syringes",
+     "chance": 15,
+     "kind": "medicine"
+    },
+    {
+     "item": "a splint",
+     "chance": 20,
+     "kind": "medicine"
+    },
+    {
+     "item": "a bottle of iodine tablets",
+     "chance": 15,
+     "kind": "medicine"
+    }
+   ]
+  },
+  "trolley": {
+   "entries": [
+    {
+     "item": "a box of syringes",
+     "chance": 30,
+     "kind": "medicine"
+    },
+    {
+     "item": "a roll of bandages",
+     "chance": 40,
+     "kind": "medicine"
+    }
+   ]
+  },
+  "desk": {
+   "entries": [
+    {
+     "item": "a ledger",
+     "chance": 30,
+     "kind": "paper"
+    },
+    {
+     "item": "a pair of scissors",
+     "chance": 20,
+     "kind": "tool"
+    },
+    {
+     "table": "light",
+     "chance": 15
+    }
+   ]
+  },
+  "files": {
+   "entries": [
+    {
+     "item": "a folder of records",
+     "chance": 60,
+     "kind": "paper"
+    }
+   ]
+  },
+  "safe": {
+   "entries": [
+    {
+     "item": "a bottle of morphine",
+     "chance": 30,
+     "kind": "medicine"
+    },
+    {
+     "item": "a bottle of antibiotics",
+     "chance": 15,
+     "kind": "medicine"
+    }
+   ]
+  },
+  "cot": {
+   "entries": [
+    {
+     "item": "a wool blanket",
+     "chance": 30,
+     "kind": "clothing"
+    }
+   ]
+  },
+  "hardware": {
+   "entries": [
+    {
+     "table": "tools_hand",
+     "chance": 40
+    },
+    {
+     "item": "a box of screws",
+     "chance": 20,
+     "kind": "tool"
+    },
+    {
+     "item": "a roll of duct tape",
+     "chance": 20,
+     "kind": "tool"
+    }
+   ]
+  },
+  "bookshelf_medical": {
+   "entries": [
+    {
+     "item": "a first aid manual",
+     "chance": 40,
+     "kind": "paper"
+    }
+   ]
+  },
+  "collection_box": {
+   "entries": [
+    {
+     "item": "a handful of coins",
+     "chance": 40,
+     "kind": "thing"
+    }
+   ]
+  },
+  "pew": {
+   "entries": [
+    {
+     "item": "a hymn book",
+     "chance": 40,
+     "kind": "paper"
+    }
+   ]
+  },
+  "altar": {
+   "entries": [
+    {
+     "item": "a candle",
+     "chance": 50,
+     "count": [
+      1,
+      3
+     ],
+     "kind": "light"
+    },
+    {
+     "item": "a pair of brass candlesticks",
+     "chance": 25,
+     "kind": "thing"
+    }
+   ]
+  },
+  "lectern": {
+   "entries": [
+    {
+     "item": "a bible",
+     "chance": 70,
+     "kind": "paper"
+    }
+   ]
+  },
+  "vestry": {
+   "entries": [
+    {
+     "item": "a candle",
+     "chance": 40,
+     "count": [
+      1,
+      2
+     ],
+     "kind": "light"
+    },
+    {
+     "item": "a bottle of communion wine",
+     "chance": 25,
+     "kind": "drink"
+    },
+    {
+     "table": "clothing_warm",
+     "chance": 25
+    }
+   ]
+  },
+  "store_canned": {
+   "entries": [
+    {
+     "table": "food_can",
+     "chance": 85,
+     "count": [
+      2,
+      4
+     ]
+    },
+    {
+     "table": "food_dry",
+     "chance": 30
+    }
+   ]
+  },
+  "store_dry": {
+   "entries": [
+    {
+     "table": "food_dry",
+     "chance": 85,
+     "count": [
+      1,
+      3
+     ]
+    },
+    {
+     "table": "food_can",
+     "chance": 30
+    }
+   ]
+  },
+  "store_goods": {
+   "entries": [
+    {
+     "table": "light",
+     "chance": 50
+    },
+    {
+     "table": "tools_hand",
+     "chance": 40
+    },
+    {
+     "item": "a coil of rope",
+     "chance": 20,
+     "kind": "tool"
+    },
+    {
+     "item": "a canvas tarp",
+     "chance": 15,
+     "kind": "tool"
+    },
+    {
+     "item": "a roll of duct tape",
+     "chance": 30,
+     "kind": "tool"
+    }
+   ]
+  },
+  "store_counter": {
+   "entries": [
+    {
+     "item": "a store ledger",
+     "chance": 40,
+     "kind": "paper"
+    },
+    {
+     "table": "light",
+     "chance": 20
+    }
+   ]
+  },
+  "crate_store": {
+   "entries": [
+    {
+     "table": "food_can",
+     "chance": 40
+    },
+    {
+     "table": "drink",
+     "chance": 40
+    },
+    {
+     "table": "tools_hand",
+     "chance": 20
+    }
+   ]
+  },
+  "water_crate": {
+   "entries": [
+    {
+     "item": "a bottle of water",
+     "chance": 85,
+     "count": [
+      2,
+      4
+     ],
+     "kind": "drink"
+    }
+   ]
+  },
+  "bulk": {
+   "entries": [
+    {
+     "table": "food_dry",
+     "chance": 70
+    }
+   ]
+  },
+  "car": {
+   "entries": [
+    {
+     "item": "a road map of the county",
+     "chance": 30,
+     "kind": "paper"
+    },
+    {
+     "table": "light",
+     "chance": 20
+    },
+    {
+     "item": "a first aid kit",
+     "chance": 8,
+     "kind": "medicine"
+    },
+    {
+     "table": "junk",
+     "chance": 40
+    }
+   ]
+  },
+  "hunting_stand": {
+   "entries": [
+    {
+     "item": "a box of cartridges",
+     "chance": 15,
+     "kind": "ammunition"
+    },
+    {
+     "item": "a snare wire",
+     "chance": 20,
+     "kind": "tool"
+    }
+   ]
+  },
+  "vending": {
+   "entries": [
+    {
+     "item": "a can of soda",
+     "chance": 40,
+     "kind": "drink"
+    },
+    {
+     "item": "a chocolate bar",
+     "chance": 30,
+     "kind": "food"
+    }
+   ]
+  },
+  "floor_house": {
+   "entries": [
+    {
+     "table": "junk",
+     "chance": 70
+    },
+    {
+     "table": "personal",
+     "chance": 12
+    },
+    {
+     "table": "light",
+     "chance": 8
+    }
+   ]
+  },
+  "floor_barn": {
+   "entries": [
+    {
+     "table": "tools_farm",
+     "chance": 20
+    },
+    {
+     "table": "junk",
+     "chance": 50
+    }
+   ]
+  },
+  "floor_store": {
+   "entries": [
+    {
+     "table": "food_can",
+     "chance": 15
+    },
+    {
+     "table": "junk",
+     "chance": 50
+    }
+   ]
+  },
+  "floor_clinic": {
+   "entries": [
+    {
+     "item": "a roll of bandages",
+     "chance": 20,
+     "kind": "medicine"
+    },
+    {
+     "table": "junk",
+     "chance": 50
+    }
+   ]
+  },
+  "floor_church": {
+   "entries": [
+    {
+     "item": "a hymn book",
+     "chance": 20,
+     "kind": "paper"
+    },
+    {
+     "table": "junk",
+     "chance": 40
+    }
+   ]
+  },
+  "floor_diner": {
+   "entries": [
+    {
+     "table": "junk",
+     "chance": 60
+    },
+    {
+     "item": "a cracked coffee mug",
+     "chance": 20,
+     "kind": "thing"
+    }
+   ]
+  }
+ },
+ "containers": [
+  {
+   "match": [
+    "medicine cabinet"
+   ],
+   "table": "medicine_cabinet",
+   "chance": 90
+  },
+  {
+   "match": [
+    "gun cabinet",
+    "rifle rack"
+   ],
+   "table": "guns",
+   "chance": 60
+  },
+  {
+   "match": [
+    "rifle leaning"
+   ],
+   "table": "rifle_rack",
+   "chance": 30
+  },
+  {
+   "match": [
+    "dresser"
+   ],
+   "table": "dresser",
+   "chance": 85
+  },
+  {
+   "match": [
+    "wardrobe"
+   ],
+   "table": "wardrobe",
+   "chance": 80
+  },
+  {
+   "match": [
+    "bedside table",
+    "nightstand"
+   ],
+   "table": "nightstand",
+   "chance": 60
+  },
+  {
+   "match": [
+    "pantry",
+    "ration shelf"
+   ],
+   "table": "pantry",
+   "chance": 85
+  },
+  {
+   "match": [
+    "canned food",
+    "canned goods"
+   ],
+   "table": "store_canned",
+   "chance": 80
+  },
+  {
+   "match": [
+    "supply boxes",
+    "supply shelf",
+    "supply shelves"
+   ],
+   "table": "store_goods",
+   "chance": 70
+  },
+  {
+   "match": [
+    "kitchen counter"
+   ],
+   "table": "kitchen_cupboard",
+   "chance": 70
+  },
+  {
+   "match": [
+    "workbench"
+   ],
+   "table": "workbench",
+   "chance": 75
+  },
+  {
+   "match": [
+    "storage shelf with tools",
+    "tool chest",
+    "tool rack"
+   ],
+   "table": "tool_chest",
+   "chance": 70
+  },
+  {
+   "match": [
+    "chest",
+    "footlocker",
+    "trunk"
+   ],
+   "table": "trunk",
+   "chance": 70
+  },
+  {
+   "match": [
+    "crate of supplies",
+    "crates of supplies",
+    "supplies",
+    "supply crates"
+   ],
+   "table": "crate_store",
+   "chance": 70
+  },
+  {
+   "match": [
+    "crate"
+   ],
+   "table": "crate_house",
+   "chance": 50
+  },
+  {
+   "match": [
+    "feed bin"
+   ],
+   "table": "feed_bin",
+   "chance": 70
+  },
+  {
+   "match": [
+    "filing cabinet"
+   ],
+   "table": "files",
+   "chance": 70
+  },
+  {
+   "match": [
+    "safe"
+   ],
+   "table": "safe",
+   "chance": 80
+  },
+  {
+   "match": [
+    "desk"
+   ],
+   "table": "desk",
+   "chance": 60
+  },
+  {
+   "match": [
+    "bookshelf"
+   ],
+   "table": "bookshelf",
+   "chance": 50
+  },
+  {
+   "match": [
+    "car",
+    "pickup",
+    "sedan",
+    "truck"
+   ],
+   "table": "car",
+   "chance": 50
+  },
+  {
+   "match": [
+    "hunting stand"
+   ],
+   "table": "hunting_stand",
+   "chance": 60
+  },
+  {
+   "match": [
+    "dumpster",
+    "waste bin"
+   ],
+   "table": "trash",
+   "chance": 60
+  },
+  {
+   "match": [
+    "vending machine"
+   ],
+   "table": "vending",
+   "chance": 50
+  },
+  {
+   "match": [
+    "cash register"
+   ],
+   "table": "register",
+   "chance": 70
+  },
+  {
+   "match": [
+    "cot",
+    "cots"
+   ],
+   "table": "cot",
+   "chance": 30
+  },
+  {
+   "match": [
+    "collection box"
+   ],
+   "table": "collection_box",
+   "chance": 60
+  }
+ ],
+ "palettes": {
+  "house": {
+   "b": {
+    "thing": "bedframe under quilt",
+    "stock": "bed",
+    "chance": 15
+   },
+   "B": {
+    "thing": "a heavy wooden double bed frame with quilt",
+    "stock": "bed",
+    "chance": 15
+   },
+   "i": {
+    "thing": "a metal framed single bed with worn mattress",
+    "stock": "bed",
+    "chance": 10
+   },
+   "n": {
+    "thing": "a wooden nightstand with candle stub",
+    "stock": "nightstand",
+    "chance": 60
+   },
+   "m": {
+    "thing": "a wooden nightstand",
+    "stock": "nightstand",
+    "chance": 60
+   },
+   "d": {
+    "thing": "a battered wooden dresser",
+    "stock": "dresser",
+    "chance": 85
+   },
+   "D": {
+    "thing": "a small pine dresser",
+    "stock": "dresser",
+    "chance": 85
+   },
+   "a": {
+    "thing": "a pine wardrobe",
+    "stock": "wardrobe",
+    "chance": 80
+   },
+   "A": {
+    "thing": "a wooden wardrobe with broken hinge",
+    "stock": "wardrobe",
+    "chance": 70
+   },
+   "C": {
+    "thing": "a cast iron wood burning cookstove",
+    "stock": "stove",
+    "chance": 40
+   },
+   "k": {
+    "thing": "a salvaged kitchen counter",
+    "stock": "kitchen_cupboard",
+    "chance": 70
+   },
+   "K": {
+    "thing": "kitchen counter",
+    "stock": "kitchen_cupboard",
+    "chance": 70
+   },
+   "P": {
+    "thing": "a tall pine pantry cupboard",
+    "stock": "pantry",
+    "chance": 90
+   },
+   "j": {
+    "thing": "kitchen table with oil lamp"
+   },
+   "J": {
+    "thing": "a heavy pine dining table"
+   },
+   "h": {
+    "thing": "a wooden chair"
+   },
+   "H": {
+    "thing": "a mismatched wooden chair"
+   },
+   "o": {
+    "thing": "couch with patched cushions",
+    "stock": "bed",
+    "chance": 30
+   },
+   "r": {
+    "thing": "a wooden rocking chair"
+   },
+   "R": {
+    "thing": "rifle leaning by the door",
+    "stock": "rifle_rack",
+    "chance": 30
+   },
+   "f": {
+    "thing": "a low pine coffee table"
+   },
+   "F": {
+    "thing": "a worn wooden armchair"
+   },
+   "w": {
+    "thing": "a cast iron wood stove"
+   },
+   "e": {
+    "thing": "a wooden bookshelf with paperback novels",
+    "stock": "bookshelf",
+    "chance": 40
+   },
+   "E": {
+    "thing": "a tall bookshelf with old books",
+    "stock": "bookshelf",
+    "chance": 40
+   },
+   "u": {
+    "thing": "a washstand with basin",
+    "stock": "bathroom",
+    "chance": 70
+   },
+   "v": {
+    "thing": "a battered tin washbasin on a stand",
+    "stock": "bathroom",
+    "chance": 40
+   },
+   "g": {
+    "thing": "a wooden peg rack with hanging coats",
+    "stock": "coat_rack",
+    "chance": 75
+   },
+   "x": {
+    "thing": "a wooden boot bench",
+    "stock": "boots",
+    "chance": 40
+   },
+   "q": {
+    "thing": "a wooden storage crate",
+    "stock": "crate_house",
+    "chance": 60
+   },
+   "Q": {
+    "thing": "a small wooden trunk",
+    "stock": "trunk",
+    "chance": 70
+   },
+   "G": {
+    "thing": "a gun cabinet with glass doors",
+    "stock": "guns",
+    "chance": 50
+   },
+   "y": {
+    "thing": "a wooden toy chest",
+    "stock": "toy_chest",
+    "chance": 70
+   },
+   "z": {
+    "thing": "a small metal waste bin",
+    "stock": "trash",
+    "chance": 50
+   },
+   "l": {
+    "thing": "a wooden log storage rack"
+   },
+   "c": {
+    "thing": "a coat and hat rack",
+    "stock": "coat_rack",
+    "chance": 60
+   },
+   "t": {
+    "thing": "a small wooden side table",
+    "stock": "nightstand",
+    "chance": 30
+   },
+   "U": {
+    "thing": "a large wooden washtub on legs"
+   },
+   "V": {
+    "thing": "a wooden barrel for water storage"
+   },
+   "!": {
+    "chance": 30,
+    "loot": "floor_house"
+   }
+  },
+  "barn": {
+   "H": {
+    "thing": "hay bales stacked",
+    "stock": "hay",
+    "chance": 15
+   },
+   "Y": {
+    "thing": "haystack",
+    "stock": "hay",
+    "chance": 15
+   },
+   "F": {
+    "thing": "a wooden feed bin with lid",
+    "stock": "feed_bin",
+    "chance": 70
+   },
+   "M": {
+    "thing": "a large metal feed trough"
+   },
+   "L": {
+    "thing": "a low wooden animal pen fence"
+   },
+   "V": {
+    "thing": "workbench with rusted tools",
+    "stock": "workbench",
+    "chance": 80
+   },
+   "N": {
+    "thing": "a wooden tool rack with hand tools",
+    "stock": "tool_rack",
+    "chance": 70
+   },
+   "O": {
+    "thing": "a rusted tractor"
+   },
+   "U": {
+    "thing": "plough"
+   },
+   "E": {
+    "thing": "a stack of old tyres"
+   },
+   "X": {
+    "thing": "crate of bolts and nails",
+    "stock": "bolts",
+    "chance": 80
+   },
+   "Z": {
+    "thing": "a wooden crate of scrap metal",
+    "stock": "scrap",
+    "chance": 60
+   },
+   "J": {
+    "thing": "a chopping block with an axe"
+   },
+   "I": {
+    "thing": "tilted ladder"
+   },
+   "S": {
+    "thing": "a wooden sawhorse"
+   },
+   "K": {
+    "thing": "a metal tool chest on wheels",
+    "stock": "tool_chest",
+    "chance": 80
+   },
+   "Q": {
+    "thing": "propane tank"
+   },
+   "G": {
+    "thing": "a wheelbarrow with a flat tyre"
+   },
+   "R": {
+    "thing": "feed sacks torn and spilled",
+    "stock": "feed",
+    "chance": 30
+   },
+   "B": {
+    "thing": "oil drum empty"
+   },
+   "!": {
+    "chance": 30,
+    "loot": "floor_barn"
+   }
+  },
+  "diner": {
+   "C": {
+    "thing": "a cast iron wood burning cookstove",
+    "stock": "stove",
+    "chance": 40
+   },
+   "K": {
+    "thing": "kitchen counter",
+    "stock": "diner_kitchen",
+    "chance": 75
+   },
+   "P": {
+    "thing": "a tall pine pantry cupboard",
+    "stock": "pantry",
+    "chance": 85
+   },
+   "D": {
+    "thing": "a wooden ration shelf stacked with dry goods",
+    "stock": "pantry",
+    "chance": 85
+   },
+   "q": {
+    "thing": "a wooden storage crate",
+    "stock": "crate_store",
+    "chance": 60
+   },
+   "J": {
+    "thing": "a rusted metal folding table"
+   },
+   "B": {
+    "thing": "a cracked vinyl diner booth",
+    "stock": "booth",
+    "chance": 30
+   },
+   "t": {
+    "thing": "battered wooden table"
+   },
+   "L": {
+    "thing": "a shop counter with an old cash register",
+    "stock": "register",
+    "chance": 70
+   },
+   "u": {
+    "thing": "a metal stool"
+   },
+   "Y": {
+    "thing": "a back table with mismatched chairs"
+   },
+   "M": {
+    "thing": "a long wooden meeting table"
+   },
+   "h": {
+    "thing": "a wooden chair"
+   },
+   "Z": {
+    "thing": "a heavy wooden desk",
+    "stock": "desk",
+    "chance": 60
+   },
+   "F": {
+    "thing": "a filing cabinet dented",
+    "stock": "files",
+    "chance": 70
+   },
+   "X": {
+    "thing": "a small metal safe",
+    "stock": "safe",
+    "chance": 80
+   },
+   "R": {
+    "thing": "a radio set with a microphone"
+   },
+   "N": {
+    "thing": "a map pinned to a board with markers"
+   },
+   "z": {
+    "thing": "a small metal waste bin",
+    "stock": "trash",
+    "chance": 50
+   },
+   "!": {
+    "chance": 30,
+    "loot": "floor_diner"
+   }
+  },
+  "clinic": {
+   "E": {
+    "thing": "a metal examination table"
+   },
+   "e": {
+    "thing": "a padded examination table"
+   },
+   "y": {
+    "thing": "a wheeled instrument trolley",
+    "stock": "trolley",
+    "chance": 60
+   },
+   "Y": {
+    "thing": "a metal instrument tray on wheels",
+    "stock": "trolley",
+    "chance": 60
+   },
+   "M": {
+    "thing": "a glass fronted medicine cabinet",
+    "stock": "medicine_cabinet",
+    "chance": 90
+   },
+   "N": {
+    "thing": "a locked medicine cabinet",
+    "stock": "medicine_cabinet",
+    "chance": 90
+   },
+   "u": {
+    "thing": "a washstand with basin",
+    "stock": "bathroom",
+    "chance": 60
+   },
+   "C": {
+    "thing": "a row of metal folding cots",
+    "stock": "cot",
+    "chance": 30
+   },
+   "c": {
+    "thing": "folding camp cot",
+    "stock": "cot",
+    "chance": 30
+   },
+   "v": {
+    "thing": "waiting chairs"
+   },
+   "Z": {
+    "thing": "a heavy wooden desk",
+    "stock": "desk",
+    "chance": 60
+   },
+   "F": {
+    "thing": "a filing cabinet dented",
+    "stock": "files",
+    "chance": 70
+   },
+   "X": {
+    "thing": "a small metal safe",
+    "stock": "safe",
+    "chance": 80
+   },
+   "B": {
+    "thing": "a wooden bookshelf full of medical texts",
+    "stock": "bookshelf_medical",
+    "chance": 40
+   },
+   "H": {
+    "thing": "a rusted metal shelf unit",
+    "stock": "hardware",
+    "chance": 40
+   },
+   "R": {
+    "thing": "a battered reception desk",
+    "stock": "desk",
+    "chance": 40
+   },
+   "G": {
+    "thing": "a hospital gurney"
+   },
+   "h": {
+    "thing": "a plain wooden chair"
+   },
+   "q": {
+    "thing": "a wooden storage crate",
+    "stock": "crate_house",
+    "chance": 50
+   },
+   "z": {
+    "thing": "a small metal waste bin",
+    "stock": "trash",
+    "chance": 50
+   },
+   "!": {
+    "chance": 30,
+    "loot": "floor_clinic"
+   }
+  },
+  "church": {
+   "c": {
+    "thing": "tall pillar candle on stand"
+   },
+   "A": {
+    "thing": "wooden altar with candles",
+    "stock": "altar",
+    "chance": 60
+   },
+   "l": {
+    "thing": "small wooden lectern",
+    "stock": "lectern",
+    "chance": 70
+   },
+   "p": {
+    "thing": "a pulpit"
+   },
+   "P": {
+    "thing": "long wooden church pew",
+    "stock": "pew",
+    "chance": 20
+   },
+   "O": {
+    "thing": "overturned pew used as barrier"
+   },
+   "K": {
+    "thing": "cots",
+    "stock": "cot",
+    "chance": 35
+   },
+   "b": {
+    "thing": "wooden collection box",
+    "stock": "collection_box",
+    "chance": 60
+   },
+   "a": {
+    "thing": "a pine wardrobe",
+    "stock": "vestry",
+    "chance": 70
+   },
+   "q": {
+    "thing": "a wooden storage crate",
+    "stock": "crate_house",
+    "chance": 50
+   },
+   "Z": {
+    "thing": "a heavy wooden desk",
+    "stock": "desk",
+    "chance": 50
+   },
+   "C": {
+    "thing": "a wood stove with a pipe"
+   },
+   "z": {
+    "thing": "a small metal waste bin",
+    "stock": "trash",
+    "chance": 50
+   },
+   "!": {
+    "chance": 30,
+    "loot": "floor_church"
+   }
+  },
+  "store": {
+   "G": {
+    "thing": "canned goods shelf",
+    "stock": "store_canned",
+    "chance": 85
+   },
+   "D": {
+    "thing": "ration shelf",
+    "stock": "store_dry",
+    "chance": 85
+   },
+   "H": {
+    "thing": "supply shelves",
+    "stock": "store_goods",
+    "chance": 80
+   },
+   "M": {
+    "thing": "metal storage shelf with canned food",
+    "stock": "store_canned",
+    "chance": 80
+   },
+   "L": {
+    "thing": "a heavy wooden store counter",
+    "stock": "store_counter",
+    "chance": 60
+   },
+   "R": {
+    "thing": "a shop counter with an old cash register",
+    "stock": "register",
+    "chance": 70
+   },
+   "q": {
+    "thing": "a wooden storage crate",
+    "stock": "crate_store",
+    "chance": 70
+   },
+   "Q": {
+    "thing": "a stack of salvaged supply crates",
+    "stock": "crate_store",
+    "chance": 70
+   },
+   "V": {
+    "thing": "a crate of bottled water",
+    "stock": "water_crate",
+    "chance": 80
+   },
+   "B": {
+    "thing": "a wooden barrel for bulk goods",
+    "stock": "bulk",
+    "chance": 70
+   },
+   "E": {
+    "thing": "an empty supermarket shelf"
+   },
+   "X": {
+    "thing": "an overturned shopping cart"
+   },
+   "Z": {
+    "thing": "a heavy wooden desk",
+    "stock": "desk",
+    "chance": 60
+   },
+   "F": {
+    "thing": "a filing cabinet dented",
+    "stock": "files",
+    "chance": 70
+   },
+   "Y": {
+    "thing": "a small metal safe",
+    "stock": "safe",
+    "chance": 80
+   },
+   "h": {
+    "thing": "a plain wooden chair"
+   },
+   "z": {
+    "thing": "a small metal waste bin",
+    "stock": "trash",
+    "chance": 50
+   },
+   "!": {
+    "chance": 35,
+    "loot": "floor_store"
+   }
+  }
+ },
+ "chunks": {
+  "living_couch": {
+   "rows": [
+    "             ",
+    " r_ff        ",
+    "             ",
+    "  ooo     F  ",
+    "             ",
+    "!            "
+   ]
+  },
+  "living_hearth": {
+   "rows": [
+    "             ",
+    "   F   F     ",
+    "    ff       ",
+    "             ",
+    "   ooo    l  ",
+    "           ! "
+   ]
+  },
+  "living_workroom": {
+   "rows": [
+    "             ",
+    "  JJJ   q    ",
+    "  JJJ        ",
+    "  h H        ",
+    "        UU   ",
+    "!            "
+   ]
+  },
+  "back_bedroom_double": {
+   "rows": [
+    "BBn______DD  ",
+    "BB           ",
+    "             ",
+    "      AA     ",
+    "             ",
+    "    !        ",
+    "             "
+   ]
+  },
+  "back_bedroom_kids": {
+   "rows": [
+    "ii_ii____yy  ",
+    "ii_ii        ",
+    "             ",
+    "m       DD   ",
+    "             ",
+    "             ",
+    "  !          "
+   ]
+  },
+  "back_bedroom_sewing": {
+   "rows": [
+    "QQ_______EE  ",
+    "             ",
+    "   JJJ       ",
+    "   JJJ  h    ",
+    "             ",
+    "ii           ",
+    "ii    !      "
+   ]
+  },
+  "aisle_full": {
+   "rows": [
+    "  MM_MM   EEEEEE  HHHHHH  "
+   ]
+  },
+  "aisle_bare": {
+   "rows": [
+    "  EEEEEE  EEEEEE  X    E  "
+   ]
+  },
+  "aisle_crates": {
+   "rows": [
+    "  QQ_QQ   VV_VV   HHHHHH  "
+   ]
+  },
+  "bay_tractor": {
+   "rows": [
+    "OOO       ",
+    "OOO   UU  ",
+    "OOO       ",
+    "      QB  "
+   ]
+  },
+  "bay_junk": {
+   "rows": [
+    "EE   ZZ   ",
+    "     X    ",
+    "G         ",
+    "  BB   I  "
+   ]
+  },
+  "bay_empty": {
+   "rows": [
+    "          ",
+    "  UU      ",
+    "          ",
+    "      Q   "
+   ]
+  }
+ },
+ "buildings": {
+  "farmhouse": {
+   "match": [
+    "farmhouse",
+    "house",
+    "cottage",
+    "cabin",
+    "home"
+   ],
+   "variants": [
+    {
+     "id": "farmhouse_a",
+     "rows": [
+      "###WW##############WW###",
+      "#CC_kkkkPP#_&&__#u____v#",
+      "#_________#_____#______W",
+      "#_hjj_____+_____+______#",
+      "#__jjh____#gg___#_____z#",
+      "#z_______q#_____#______#",
+      "#####+######+##+########",
+      "#w________ee__#______GG#",
+      "W_____________#________#",
+      "W_____________+________W",
+      "#_____________#________#",
+      "#_____________#________#",
+      "#_____________#________#",
+      "#_____________#xx___Rgg#",
+      "#####WW###########+#####"
+     ],
+     "palettes": [
+      "house"
+     ],
+     "labels": {
+      "kitchen": [
+       5,
+       2
+      ],
+      "hall": [
+       13,
+       4
+      ],
+      "washroom": [
+       19,
+       3
+      ],
+      "front room": [
+       6,
+       10
+      ],
+      "mudroom": [
+       18,
+       10
+      ]
+     },
+     "nested": [
+      {
+       "x": 1,
+       "y": 8,
+       "chunks": [
+        [
+         "living_couch",
+         50
+        ],
+        [
+         "living_hearth",
+         35
+        ],
+        [
+         "living_workroom",
+         15
+        ]
+       ]
+      }
+     ],
+     "levels": [
+      {
+       "index": 1,
+       "name": "Upstairs",
+       "rows": [
+        "###WW##############WW###",
+        "#bb_____aa#_&&__#ii__yy#",
+        "#bbn______#_____#ii____W",
+        "#_________+_____+______#",
+        "#dd_______#_____#m_____#",
+        "#!________#_____#______#",
+        "############+##+########",
+        "#_____________#__qq__QQ#",
+        "W_____________#_______q#",
+        "W_____________#________#",
+        "#_____________#________#",
+        "#_____________#______q_#",
+        "#_____________#________#",
+        "#_____________#!_______#",
+        "#####WW########WW#######"
+       ],
+       "labels": {
+        "main bedroom": [
+         5,
+         3
+        ],
+        "landing": [
+         13,
+         4
+        ],
+        "small bedroom": [
+         19,
+         3
+        ],
+        "back bedroom": [
+         6,
+         10
+        ],
+        "attic room": [
+         18,
+         10
+        ]
+       },
+       "nested": [
+        {
+         "x": 1,
+         "y": 7,
+         "chunks": [
+          [
+           "back_bedroom_double",
+           45
+          ],
+          [
+           "back_bedroom_kids",
+           35
+          ],
+          [
+           "back_bedroom_sewing",
+           20
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "farmhouse_b",
+     "weight": 80,
+     "rows": [
+      "#WW#######WWW#####WWW###",
+      "#uv__z#ee_____________w#",
+      "#_____#________________#",
+      "#_____#___ooo___r______W",
+      "#_____#___ff___________#",
+      "#_____#________________#",
+      "###+###_____________!__#",
+      "#gg___+________________#",
+      "#_&&__##########+#######",
+      "#_____#CC_kkkkkk___PP__#",
+      "#_____#________________#",
+      "#_____+__hjj_h_________W",
+      "#xx___#___jj___________#",
+      "#R____#z______________q#",
+      "###+######WWW#####WW####"
+     ],
+     "palettes": [
+      "house"
+     ],
+     "labels": {
+      "washroom": [
+       3,
+       3
+      ],
+      "parlour": [
+       14,
+       4
+      ],
+      "hall": [
+       3,
+       10
+      ],
+      "kitchen": [
+       14,
+       11
+      ]
+     },
+     "levels": [
+      {
+       "index": 1,
+       "name": "Upstairs",
+       "rows": [
+        "#WW#######WWW#####WWW###",
+        "#ii_yy#bb___aa_#BB__DD_#",
+        "#ii___#bbn_____#BBm____#",
+        "#_____#________#_______#",
+        "#m____#dd______#_______W",
+        "#_____#_______!#!______#",
+        "###+######+#########+###",
+        "#______________________#",
+        "#_&&__##########+#######",
+        "#_____#ee_____________q#",
+        "#qq___#________________#",
+        "#_____#___jj___________#",
+        "#QQ___#___jj_______!___#",
+        "#_____#q______________q#",
+        "###########WW######WW###"
+       ],
+       "labels": {
+        "small bedroom": [
+         3,
+         3
+        ],
+        "main bedroom": [
+         10,
+         3
+        ],
+        "spare bedroom": [
+         19,
+         3
+        ],
+        "landing": [
+         10,
+         7
+        ],
+        "box room": [
+         14,
+         11
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "barn": {
+   "match": [
+    "barn",
+    "stable",
+    "shed"
+   ],
+   "variants": [
+    {
+     "id": "barn_a",
+     "doors": [
+      "north",
+      "south"
+     ],
+     "rows": [
+      "##############++##############",
+      "#HH_HH____________#VVV___NN__#",
+      "#HH_HH____________#__________#",
+      "#_________________#_____K____#",
+      "#LLLLLL_LLL_______+__________#",
+      "#_MM__R___________#SS______X_#",
+      "#_________________#______J__Z#",
+      "#LLLLLL_LLL_______#__________#",
+      "#_FF__MM__________#E___I_____#",
+      "#_________________#####+######",
+      "#LLLLLL_LLL__________________#",
+      "#____________________________#",
+      "#_YY___R_____________________#",
+      "#_YY_________________________#",
+      "#____________________GE______#",
+      "#!___________________________#",
+      "#___________________________!#",
+      "##############++##############"
+     ],
+     "palettes": [
+      "barn"
+     ],
+     "labels": {
+      "barn floor": [
+       14,
+       8
+      ],
+      "workshop": [
+       23,
+       4
+      ],
+      "bay": [
+       23,
+       13
+      ]
+     },
+     "nested": [
+      {
+       "x": 19,
+       "y": 10,
+       "chunks": [
+        [
+         "bay_tractor",
+         40
+        ],
+        [
+         "bay_junk",
+         40
+        ],
+        [
+         "bay_empty",
+         20
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "id": "barn_b",
+     "weight": 80,
+     "doors": [
+      "north",
+      "south"
+     ],
+     "rows": [
+      "#############++#############",
+      "#HH_HH__FF_______MM_MM_____#",
+      "#HH_HH_____________________#",
+      "#___LLLLL____________LLLLL_#",
+      "#___R___________________Y__#",
+      "#_______________________Y__#",
+      "#LLLLLL______________LLLLL_#",
+      "#_MM___E___________________#",
+      "#_______________####+#######",
+      "#LLLLLL_________#VVV____NN_#",
+      "#_______________#________K_#",
+      "#_FF____J_______#__SS______#",
+      "#LLLLLL_________#________XZ#",
+      "#_______________#____!____B#",
+      "#_GG_____!______#__________#",
+      "#############++#############"
+     ],
+     "palettes": [
+      "barn"
+     ],
+     "labels": {
+      "barn floor": [
+       13,
+       7
+      ],
+      "tack room": [
+       21,
+       11
+      ]
+     }
+    }
+   ]
+  },
+  "diner": {
+   "match": [
+    "diner",
+    "cafe",
+    "restaurant",
+    "meeting hall"
+   ],
+   "variants": [
+    {
+     "id": "diner_a",
+     "doors": [
+      "south",
+      "north"
+     ],
+     "rows": [
+      "#####+####WWW#####WWW####W####",
+      "#CC_KKKKK__PP#DD__q_#ZZ____F_#",
+      "#____________#______#h_______#",
+      "#____JJ______+______#________#",
+      "#____________#DD____#_____X__#",
+      "#z___________#______#________#",
+      "#____________#qq____#!_______#",
+      "########+###############+#####",
+      "#____________________________#",
+      "#BB__________LL____________BB#",
+      "#tt_________u__u___________tt#",
+      "#BB________________________BB#",
+      "#_______YY__________YY_______#",
+      "#BB_____YY__________YY_____BB#",
+      "#tt________________________tt#",
+      "#BB___________!____________BB#",
+      "#______z_____________________#",
+      "#WWW####WWW###+####WWW###WWW##"
+     ],
+     "palettes": [
+      "diner"
+     ],
+     "labels": {
+      "kitchen": [
+       6,
+       4
+      ],
+      "storeroom": [
+       16,
+       4
+      ],
+      "office": [
+       24,
+       4
+      ],
+      "dining room": [
+       14,
+       12
+      ]
+     }
+    },
+    {
+     "id": "diner_b",
+     "weight": 80,
+     "doors": [
+      "south",
+      "north"
+     ],
+     "rows": [
+      "##WWW####WWW####WWW#####+#####",
+      "#BB______________BB#CC_KKKK__#",
+      "#tt______________tt#_________#",
+      "#BB______________BB#_____PP__#",
+      "#______h_h_h_______#_________#",
+      "#______MMMMMM______+___JJ____#",
+      "#______MMMMMM______#_________#",
+      "#______h_h_h_______#z________#",
+      "#__________________#_________#",
+      "#BB______________BB#____!____#",
+      "#tt______________tt#####+#####",
+      "#BB______________BB#_DD_DD__q#",
+      "#__R_______________+_________#",
+      "#__LL______________#DD__DD___#",
+      "#_u__u_____________#_________#",
+      "#__________N_______#qq_____!_#",
+      "#______z___________#_________#",
+      "#WWW#####+#####WWW############"
+     ],
+     "palettes": [
+      "diner"
+     ],
+     "labels": {
+      "meeting hall": [
+       9,
+       9
+      ],
+      "kitchen": [
+       24,
+       5
+      ],
+      "storeroom": [
+       24,
+       13
+      ]
+     }
+    }
+   ]
+  },
+  "clinic": {
+   "match": [
+    "clinic",
+    "surgery",
+    "infirmary",
+    "hospital"
+   ],
+   "variants": [
+    {
+     "id": "clinic_a",
+     "rows": [
+      "#WW#####WW####WW#####WW#####",
+      "#EE__u__y#ee____uY#NN__MM_X#",
+      "#________#________#________#",
+      "#h_______#h_______#________#",
+      "#________#________#MM______#",
+      "#z_______#z_______#________#",
+      "#________#________#qq_____!#",
+      "####+########+########+#####",
+      "#__________________________#",
+      "#####+######____######+#####",
+      "#_CCC__CCC_#vv__#ZZ_F____BB#",
+      "#__________#____#h_________#",
+      "#_CCC__CCC_#vv__#_______X__#",
+      "#__________#____#________z_#",
+      "#GG___z___!#____#!_________#",
+      "#WW##########+#####WW#######"
+     ],
+     "palettes": [
+      "clinic"
+     ],
+     "labels": {
+      "first exam room": [
+       5,
+       3
+      ],
+      "second exam room": [
+       14,
+       3
+      ],
+      "dispensary": [
+       23,
+       3
+      ],
+      "hall": [
+       13,
+       8
+      ],
+      "ward": [
+       5,
+       12
+      ],
+      "waiting room": [
+       13,
+       12
+      ],
+      "office": [
+       21,
+       12
+      ]
+     }
+    },
+    {
+     "id": "clinic_b",
+     "weight": 80,
+     "rows": [
+      "##WWW#####WWW#####WWW#######",
+      "#HHHHHH___HHHHHH__#NN__MM__#",
+      "#_________________#________#",
+      "#_CCC_CCC_CCC_____#ZZ___F__#",
+      "#_________________+_h______#",
+      "#_CCC_CCC_CCC_____#____X__z#",
+      "#_________________#______!_#",
+      "#_________________##########",
+      "#_EE___EE__________yY______#",
+      "#__________________________#",
+      "#_GG_______________u_____vv#",
+      "#__________________________#",
+      "#____RRR________________vv_#",
+      "#_____h____________________#",
+      "#z______________!_________z#",
+      "#WW######+#####WWW##########"
+     ],
+     "palettes": [
+      "clinic"
+     ],
+     "labels": {
+      "ward": [
+       9,
+       4
+      ],
+      "dispensary": [
+       22,
+       3
+      ],
+      "treatment room": [
+       13,
+       10
+      ]
+     }
+    }
+   ]
+  },
+  "church": {
+   "match": [
+    "church",
+    "chapel"
+   ],
+   "variants": [
+    {
+     "id": "church_a",
+     "rows": [
+      "#####WWW#####WWW####WWW###",
+      "#__________________#aa_qq#",
+      "#________cAAAc_____#_____#",
+      "#_______l_______p__+_____#",
+      "#__________________#ZZ__z#",
+      "#__________________#____!#",
+      "#__________________#######",
+      "#__PPPPP____PPPPP___KKK__#",
+      "#________________________#",
+      "#__PPPPP____PPPPP___KKK__#",
+      "#________________________#",
+      "#__PPPPP____PPPPP___KKK__#",
+      "#________________________#",
+      "#__PPPPP____PPPPP________#",
+      "#_________________!______#",
+      "#___________b____________#",
+      "#_______________________z#",
+      "#WW#######+#######WW######"
+     ],
+     "palettes": [
+      "church"
+     ],
+     "labels": {
+      "chancel": [
+       10,
+       4
+      ],
+      "vestry": [
+       22,
+       3
+      ],
+      "nave": [
+       10,
+       11
+      ]
+     }
+    },
+    {
+     "id": "church_b",
+     "weight": 80,
+     "rows": [
+      "#####WWW#####WWW####WWW###",
+      "#________________________#",
+      "#________cAAAc___________#",
+      "#_______l_______p________#",
+      "#________________________#",
+      "#OOOOO___________OOOOO___#",
+      "#________________________#",
+      "#_KKK_KKK____KKK_KKK_____#",
+      "#________________________#",
+      "#_KKK_KKK____KKK_KKK_____#",
+      "#________________________#",
+      "#_PPPPP______PPPPP_______#",
+      "#________________________#",
+      "#_PPPPP______PPPPP___CC__#",
+      "#____________________qq__#",
+      "#___________b_______!____#",
+      "#_______________________z#",
+      "#WW#######+#######WW######"
+     ],
+     "palettes": [
+      "church"
+     ],
+     "labels": {
+      "chancel": [
+       12,
+       3
+      ],
+      "nave": [
+       12,
+       10
+      ]
+     }
+    }
+   ]
+  },
+  "store": {
+   "match": [
+    "general store",
+    "store",
+    "shop",
+    "grocery"
+   ],
+   "variants": [
+    {
+     "id": "store_a",
+     "rows": [
+      "############################",
+      "#DDDDD__DDDDD__QQ__VV__BB__#",
+      "#__________________________#",
+      "#QQ__q___________________BB#",
+      "#_____________________!____#",
+      "#####+######################",
+      "#__________________________#",
+      "#__GGGGGG__HHHHHH__GGGGGG__#",
+      "#__________________________#",
+      "#__________________________#",
+      "#__________________________#",
+      "#__________________________#",
+      "#B___X_________________z___#",
+      "#______________LLLLRR______#",
+      "#_______!__________________#",
+      "#WWW#####+#######WWWW#######"
+     ],
+     "palettes": [
+      "store"
+     ],
+     "labels": {
+      "stockroom": [
+       13,
+       2
+      ],
+      "shop floor": [
+       13,
+       9
+      ]
+     },
+     "nested": [
+      {
+       "x": 1,
+       "y": 10,
+       "chunks": [
+        [
+         "aisle_full",
+         50
+        ],
+        [
+         "aisle_bare",
+         25
+        ],
+        [
+         "aisle_crates",
+         25
+        ]
+       ]
+      }
+     ]
+    },
+    {
+     "id": "store_b",
+     "weight": 80,
+     "rows": [
+      "############################",
+      "#GGGGGG_DDDDD_HHHHHH_MM_MM_#",
+      "#__________________________#",
+      "#_________QQ_VV_BB_________#",
+      "#__________________________#",
+      "#__HHHHHH____GGGGGG________#",
+      "#__DDDDD_____EEEEEE________#",
+      "#__________________________#",
+      "#X_________________#########",
+      "#__________________#ZZ__F__#",
+      "#__HHHHHH___GGGGGG_+_h_____#",
+      "#__________________#_____Y_#",
+      "#__________________#______z#",
+      "#__________LLLRR___#!______#",
+      "#_____!____________#_______#",
+      "#WWW####+#####WWW###########"
+     ],
+     "palettes": [
+      "store"
+     ],
+     "labels": {
+      "shop floor": [
+       9,
+       7
+      ],
+      "office": [
+       23,
+       11
+      ]
+     }
+    }
+   ]
+  }
+ },
+ "yard": [
+  {
+   "thing": "a stack of firewood",
+   "w": 2.0,
+   "weight": 30,
+   "near": [
+    "farmhouse",
+    "house",
+    "cottage",
+    "cabin",
+    "home"
+   ]
+  },
+  {
+   "thing": "a chopping block with an axe",
+   "weight": 20,
+   "near": [
+    "farmhouse",
+    "house",
+    "cottage",
+    "cabin",
+    "home"
+   ]
+  },
+  {
+   "thing": "a dog kennel",
+   "w": 1.5,
+   "h": 1.5,
+   "weight": 15,
+   "near": [
+    "farmhouse",
+    "house",
+    "cottage",
+    "cabin",
+    "home"
+   ]
+  },
+  {
+   "thing": "a mailbox on a post leaning",
+   "weight": 10,
+   "near": [
+    "farmhouse",
+    "house",
+    "cottage",
+    "cabin",
+    "home"
+   ]
+  },
+  {
+   "thing": "a wheelbarrow with a flat tyre",
+   "w": 1.5,
+   "weight": 15,
+   "near": [
+    "farmhouse",
+    "house",
+    "cottage",
+    "cabin",
+    "home",
+    "barn",
+    "stable",
+    "shed"
+   ]
+  },
+  {
+   "thing": "a bicycle with a bent wheel",
+   "w": 1.5,
+   "weight": 10,
+   "near": [
+    "farmhouse",
+    "house",
+    "cottage",
+    "cabin",
+    "home"
+   ]
+  },
+  {
+   "thing": "a broken wooden fence section",
+   "w": 2.0,
+   "weight": 10,
+   "near": [
+    "farmhouse",
+    "house",
+    "cottage",
+    "cabin",
+    "home",
+    "barn",
+    "stable",
+    "shed"
+   ]
+  },
+  {
+   "thing": "a rusted pickup truck with flat tyres",
+   "w": 5.0,
+   "h": 2.0,
+   "weight": 8,
+   "near": [
+    "farmhouse",
+    "house",
+    "cottage",
+    "cabin",
+    "home",
+    "barn",
+    "stable",
+    "shed"
+   ],
+   "stock": "car",
+   "chance": 50
+  },
+  {
+   "thing": "a hay bale rotting in the snow",
+   "w": 1.5,
+   "weight": 30,
+   "near": [
+    "barn",
+    "stable",
+    "shed"
+   ]
+  },
+  {
+   "thing": "a stack of pallets",
+   "w": 1.5,
+   "h": 1.5,
+   "weight": 20,
+   "near": [
+    "barn",
+    "stable",
+    "shed",
+    "diner",
+    "clinic",
+    "church",
+    "store",
+    "shop"
+   ]
+  },
+  {
+   "thing": "a pile of tyres",
+   "w": 1.5,
+   "h": 1.5,
+   "weight": 15,
+   "near": [
+    "barn",
+    "stable",
+    "shed"
+   ]
+  },
+  {
+   "thing": "a chicken coop with the wire torn",
+   "w": 2.0,
+   "h": 1.5,
+   "weight": 15,
+   "near": [
+    "barn",
+    "stable",
+    "shed"
+   ]
+  },
+  {
+   "thing": "a rusty oil drum",
+   "weight": 15,
+   "near": [
+    "barn",
+    "stable",
+    "shed",
+    "diner",
+    "clinic",
+    "church",
+    "store",
+    "shop"
+   ]
+  },
+  {
+   "thing": "a water trough with ice in it",
+   "w": 2.0,
+   "weight": 10,
+   "near": [
+    "barn",
+    "stable",
+    "shed"
+   ]
+  },
+  {
+   "thing": "a dumpster with the lid open",
+   "w": 2.0,
+   "h": 1.5,
+   "weight": 20,
+   "near": [
+    "diner",
+    "clinic",
+    "church",
+    "store",
+    "shop"
+   ],
+   "stock": "trash",
+   "chance": 60
+  },
+  {
+   "thing": "a stack of sandbags",
+   "w": 2.0,
+   "weight": 15,
+   "near": [
+    "diner",
+    "clinic",
+    "church",
+    "store",
+    "shop"
+   ]
+  },
+  {
+   "thing": "a park bench under snow",
+   "w": 2.0,
+   "weight": 10,
+   "near": [
+    "diner",
+    "clinic",
+    "church",
+    "store",
+    "shop"
+   ]
+  },
+  {
+   "thing": "a burnt out car",
+   "w": 4.5,
+   "h": 2.0,
+   "weight": 8,
+   "near": [
+    "diner",
+    "clinic",
+    "church",
+    "store",
+    "shop"
+   ],
+   "stock": "car",
+   "chance": 40
+  }
+ ]
+}

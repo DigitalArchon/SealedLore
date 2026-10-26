@@ -1226,14 +1226,31 @@ def _draw_placement(
         return
     if f.broken:
         sprite = broken_sprite(sprite)
-    p.setPen(Qt.NoPen)
-    p.setBrush(QColor(0, 0, 0, 60))
-    p.drawEllipse(QPointF(cx, foot - px * 0.1), sprite.width() * 0.42, px * 0.25)
-    left, top = int(cx - sprite.width() / 2), int(foot - sprite.height())
-    p.drawImage(left, top, sprite)
+    for x in _run_middles(f, px, sprite.width()):
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(0, 0, 0, 60))
+        p.drawEllipse(QPointF(x, foot - px * 0.1), sprite.width() * 0.42, px * 0.25)
+        left, top = int(x - sprite.width() / 2), int(foot - sprite.height())
+        p.drawImage(left, top, sprite)
+        if f.broken:
+            _cracks(p, QRectF(left, top, sprite.width(), sprite.height()), px)
     if f.broken:
-        _cracks(p, QRectF(left, top, sprite.width(), sprite.height()), px)
         _rubble_at(p, source, cx, foot, px)
+
+
+def _run_middles(f: Placement, px: int, width: float) -> list[float]:
+    """Where a thing's picture stands along its footprint: once in its middle,
+    or, for a long run of furniture its picture is much narrower than (a row
+    of shelves, a pew, a fence a world kit laid six tiles long), as many
+    times as fit, side by side. Drawn once, a run showed one shelf in the
+    middle of six tiles of floor."""
+    cx = (f.x + f.w / 2) * px
+    span = f.w * px
+    if f.kind != "furniture" or width <= 0 or width * 1.6 > span:
+        return [cx]
+    n = max(1, round(span / width))
+    step = span / n
+    return [f.x * px + step * (i + 0.5) for i in range(n)]
 
 
 def _bundle(p: QPainter, cx: float, foot: float, px: int, *, broken: bool = False) -> None:

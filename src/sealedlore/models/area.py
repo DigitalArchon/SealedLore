@@ -121,6 +121,12 @@ class ThingRecord(BaseModel):
     # don't bring it back.
     taken_out: list[str] = Field(default_factory=list)
     found_at: str = ""
+    # A visual story's world kit decided what it holds (its item table was
+    # rolled): a look may tell of it, never add to it. And whether the
+    # player has looked inside (searched it, or looked at it closely): its
+    # menu lists what it holds only then.
+    stocked: bool = False
+    searched: bool = False
     # A visual story's items (engine/visual_rules.py): how many of it, and
     # its kind as the rules read it ("" until asked).
     count: int = 1
@@ -214,6 +220,9 @@ class AreaState(BaseModel):
     seen_now: list[str] = Field(default_factory=list)
     flavour_said: list[str] = Field(default_factory=list)
     laid_out: bool = False
+    # The areas whose containers and floor a world kit's item tables have
+    # stocked (engine/kits.py), the first time the player entered each.
+    stocked: list[str] = Field(default_factory=list)
     # The people (engine/npc.py): each conversation so far ([who, words]
     # pairs, the latest last), what each remembers (their own lines), what
     # each saw the player do, their mood, what they are doing of their own

@@ -107,6 +107,10 @@ def _thing_lines(things: Sequence[Placement], records: Mapping[str, ThingRecord]
         contents = ""
         if record is not None and record.contents:
             contents = " — in or on it: " + ", ".join(_count(f) for f in record.contents)
+            if record.stocked:
+                contents += ", and nothing else"
+        elif record is not None and record.stocked:
+            contents = " — holds nothing"
         if record is not None and record.taken_out:
             contents += " — taken from it since: " + ", ".join(record.taken_out)
         lines.append(f"- {handle(index)}: {p.name}{state}{contents}")
@@ -235,6 +239,7 @@ def apply_look(
         if record is None:
             record = records[p.id] = ThingRecord(state="seen", name=p.name)
         record.seen = reply.see
+        record.searched = True
     for find in reply.found:
         found = Found(name=find.name, count=find.count, kind=find.kind, note=find.note)
         if any(_same_find(p.name, found.name) for p in things):
@@ -249,6 +254,9 @@ def apply_look(
             if record is not None:
                 if any(_same_find(f.name, found.name) for f in record.contents):
                     continue  # known to be in it already (the design's, or found before)
+                if record.stocked:
+                    continue  # the kit's tables decided what it holds
+                record.searched = True
                 record.contents.append(found)
                 lines.append(f"You find {_count(found)} in {holder.name if holder else 'it'}.")
                 continue
