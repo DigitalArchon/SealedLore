@@ -2505,3 +2505,46 @@ def test_coming_nearer_to_a_challenger_is_answering_and_walking_off_is_not(
     state.seconds += 10
     session._set_live(state)
     assert session.demands_due() == [("Captain Idris", "warn")]
+
+
+def test_a_leader_s_word_on_the_player_is_their_group_s(peopled: VisualWindow):
+    """Guest standing comes from what a person says and does (the author,
+    Oct 27 2026); a leader's word binds their group, another's only
+    themselves."""
+    session = peopled.session
+    design = session.visual_design()
+    design.groups["The house"] = ["Maela Orr", "Captain Idris"]
+    design.people["Captain Idris"].group = "The house"
+    design.people["Captain Idris"].leads = True
+    design.people["Maela Orr"].group = "The house"
+    peopled._set_talking("Maela Orr")
+    taken_in = (
+        '{"say": "Stay the night, then.", "mood": "warm", "intent": {"kind": "stay"}, '
+        '"standing": "guest"}'
+    )
+    _ask(peopled, "I need a roof.", taken_in)
+    state = session.area_state()
+    assert state.standing["Maela Orr"] == "guest"
+    assert "The house" not in state.group_standing  # her word binds only herself
+    assert session.standing_of("Captain Idris", state) == ""
+    # The system block says whose word binds whom.
+    system = session.provider.requests[-1].messages[0].text
+    assert "You belong to The house; its leader's word on the player binds you" in system
+    assert "it comes from what is said and done" in system
+    # The leader's word is the house's.
+    from sealedlore.engine.npc import NpcReply
+
+    state.spots["Captain Idris"] = Spot(
+        area="house", x=state.spots["Maela Orr"].x, y=state.spots["Maela Orr"].y
+    )
+    state.placed.append("Captain Idris")
+    session._set_live(state)
+    lines = session.apply_npc_reply(
+        "Captain Idris",
+        NpcReply("Go, and don't come back.", "cold", "stay", "", "", "", standing="hostile"),
+    )
+    assert "(Captain Idris: hostile with you now.)" in lines
+    assert "(The house: hostile with you now.)" in lines
+    state = session.area_state()
+    assert state.group_standing["The house"] == "hostile"
+    assert session.standing_of("Maela Orr", state) == "guest"  # her own stands over the group's

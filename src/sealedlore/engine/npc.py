@@ -116,6 +116,17 @@ def npc_messages(
                     if sheet.challenges.strip()
                     else "You demand nothing of passers-by."
                 ),
+                group=(
+                    f"You speak for {sheet.group}: how you come to stand with the player, "
+                    f"{sheet.group} stands too."
+                    if sheet.group and sheet.leads
+                    else (
+                        f"You belong to {sheet.group}; its leader's word on the player binds "
+                        "you, yours binds only yourself."
+                        if sheet.group
+                        else "You belong to no group."
+                    )
+                ),
             ),
         ]
     )

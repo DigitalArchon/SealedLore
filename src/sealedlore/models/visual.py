@@ -162,6 +162,11 @@ class PersonSheet(BaseModel):
     # How well they see someone coming (engine/health.py and the scouting
     # roll in engine/session_visual.py): the default is their ability.
     alertness: int | None = None
+    # They speak for their group (the town's leader, the band's chief): how
+    # they come to stand with the player, their group stands too
+    # (engine/session_visual.py `apply_npc_reply`); the author, Oct 27 2026:
+    # guest standing comes from what a person says and does.
+    leads: bool = False
     # What they demand of anyone who comes near ("a toll for the road",
     # "that strangers stop and show their hands"), making them a challenger
     # (engine/challenges.py): hailed at CHALLENGE_M, and pressed when the

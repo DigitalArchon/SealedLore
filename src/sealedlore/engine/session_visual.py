@@ -1477,6 +1477,13 @@ class VisualRuntime:
             said = self.set_standing(state, name, reply.standing)
             if said:
                 lines.append(f"({said[:-1]} with you now.)")
+            group = self.group_of(name)
+            if group and self.visual_sheet(name).leads:
+                # Their word is their group's (the town's leader taking the
+                # player in, or turning them away).
+                said = self.set_standing(state, group, reply.standing)
+                if said:
+                    lines.append(f"({said[:-1]} with you now.)")
         lines += self.note_demand(state, name, reply)
         if words:
             lines.append(words)

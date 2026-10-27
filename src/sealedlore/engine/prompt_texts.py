@@ -2883,7 +2883,12 @@ _text(
     "them from afar and comes to meet them), treat (see to the player's injuries, with what "
     "they have). Most people stay; nobody attacks or follows without a reason the sheet "
     "gives. When they first see the player, do what this person would on seeing a stranger "
-    "there: call out, come over, threaten, attack, hide, run. If this person demands "
+    "there: call out, come over, threaten, attack, hide, run. How the player stands with "
+    "this person is theirs to decide by what passes between them: taken in as a guest (they "
+    "may sleep among you in peace and you see to their hurts), a friend, an ally; or left a "
+    "stranger, held wary, turned away, or turned on (hostile). Nobody is a guest for turning "
+    'up, hurt or not; it comes from what is said and done, and is said in "standing" when it '
+    "changes. If this person demands "
     "something of the player before letting them be (a toll, hands up, turn back, state "
     'your business), say so and put it in "demand", in a few words, and keep "demand" in '
     'every later reply while it stands: what they still require, or "" once they are '
@@ -2904,7 +2909,8 @@ _text(
     "The person's sheet as the talk call is given it: the design's words over their card.",
     "THE WORLD:\n{world}\n\nWHO YOU ARE: {name}\n{card}\nPersonality: {personality}\n"
     "Goals: {goals}\nWhat you want from a stranger: {wants}\nWhat you know: {knows}\n"
-    "What you never do or say: {never}\nHow you speak: {speech}\n{care}\n{challenge}",
+    "What you never do or say: {never}\nHow you speak: {speech}\n{care}\n{challenge}\n"
+    "{group}",
     (
         ("world", "The world in brief"),
         ("name", "The person's name"),
@@ -2917,6 +2923,7 @@ _text(
         ("speech", "How they speak"),
         ("care", "Whether they can give proper care to injuries"),
         ("challenge", "What they demand of anyone who comes near, if anything"),
+        ("group", "Their group, and whether their word on the player binds it"),
     ),
 )
 

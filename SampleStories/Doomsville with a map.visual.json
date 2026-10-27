@@ -321,7 +321,8 @@
         }
       ],
       "alertness": 6,
-      "group": "Hellsville"
+      "group": "Hellsville",
+      "leads": true
     },
     "Elena Ruiz": {
       "personality": "Warm, exhausted, stubborn about the living. She has buried too many and still counts each one.",
@@ -381,7 +382,8 @@
       ],
       "alertness": 5,
       "group": "Evan's band",
-      "challenges": "your weapon and your food, handed over, and your hands where he can see them"
+      "challenges": "your weapon and your food, handed over, and your hands where he can see them",
+      "leads": true
     },
     "Tom Bell": {
       "card": "A heavyset man of forty who keeps Hellsville's south gate: a watchman's patience, a shotgun, and no small talk.",
@@ -573,7 +575,8 @@
         "a ring of keys"
       ],
       "alertness": 5,
-      "group": "Stillwater"
+      "group": "Stillwater",
+      "leads": true
     },
     "Tobias Grey": {
       "card": "A Stillwater fisherman and its best shot, forty, bearded, slow to speak.",
@@ -624,7 +627,8 @@
       ],
       "alertness": 6,
       "group": "Kane's crew",
-      "challenges": "everything you carry that he can use, and you with it, walked into the Yard ahead of him"
+      "challenges": "everything you carry that he can use, and you with it, walked into the Yard ahead of him",
+      "leads": true
     }
   },
   "weather": "snow",
