@@ -364,7 +364,8 @@
         "a shotgun",
         "a sack of supplies"
       ],
-      "alertness": 7
+      "alertness": 7,
+      "challenges": "that you turn around and go back the way you came; he has nothing for you and his shotgun says so"
     },
     "Evan Stevens": {
       "personality": "Twenty-two, cocky, bored, in love with his rifle. Cruel when he has the upper hand, cowardly when he doesn't.",
@@ -379,7 +380,8 @@
         "a scoped rifle"
       ],
       "alertness": 5,
-      "group": "Evan's band"
+      "group": "Evan's band",
+      "challenges": "your weapon and your food, handed over, and your hands where he can see them"
     },
     "Tom Bell": {
       "card": "A heavyset man of forty who keeps Hellsville's south gate: a watchman's patience, a shotgun, and no small talk.",
@@ -407,7 +409,8 @@
         }
       ],
       "alertness": 5,
-      "group": "Hellsville"
+      "group": "Hellsville",
+      "challenges": "that strangers stop short of the gate, keep their hands in sight and state their business before they come a step closer"
     },
     "Ruth Calloway": {
       "card": "Hellsville's cook, sixty, who runs the diner's one stove and feeds the town from it.",
@@ -536,7 +539,8 @@
         "a pistol"
       ],
       "alertness": 4,
-      "group": "Evan's band"
+      "group": "Evan's band",
+      "challenges": "your pack and your gun, set down on the ground, quietly"
     },
     "Dutch": {
       "card": "A bandit in Evan Stevens's band, older and quieter than the others, with a shotgun and a limp.",
@@ -552,7 +556,8 @@
         "a shotgun"
       ],
       "alertness": 6,
-      "group": "Evan's band"
+      "group": "Evan's band",
+      "challenges": "that you stop where you are and say what you have worth trading, or drop it"
     },
     "Agnes Moore": {
       "card": "Stillwater's leader, a retired schoolteacher in her sixties, small and unbending.",
@@ -584,7 +589,8 @@
         "a hunting rifle"
       ],
       "alertness": 7,
-      "group": "Stillwater"
+      "group": "Stillwater",
+      "challenges": "that you keep your hands where he can see them and stay outside the wall until Agnes says otherwise"
     },
     "Marie Pellier": {
       "card": "A miller's widow hiding in Pellier's Mill with her two sons, thirty-five, thin and fierce.",
@@ -599,7 +605,8 @@
       "carries": [
         "a hatchet"
       ],
-      "alertness": 6
+      "alertness": 6,
+      "challenges": "that you go, now, before you come any closer to the house"
     },
     "Kane": {
       "card": "The man who runs the Yard, Carrick's bandit stronghold: fifties, scarred, soft-voiced.",
@@ -616,7 +623,8 @@
         "a box of cartridges"
       ],
       "alertness": 6,
-      "group": "Kane's crew"
+      "group": "Kane's crew",
+      "challenges": "everything you carry that he can use, and you with it, walked into the Yard ahead of him"
     }
   },
   "weather": "snow",

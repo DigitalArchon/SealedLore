@@ -44,7 +44,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from sealedlore.engine.area import Placement
+from sealedlore.engine.area import Placement, bare
 from sealedlore.engine.keeper import Ruling
 from sealedlore.engine.look import LookReply, Rect
 from sealedlore.engine.npc import NpcReply
@@ -685,7 +685,30 @@ class VisualWindow(QMainWindow):
                 # once its reply is in (live, John was told to state his
                 # business three times over on arriving at Hellsville).
                 return
+        if self._press_demands():
+            return
         self._greet_newcomers()
+
+    def _press_demands(self) -> bool:
+        """A challenger whose demand the player's action ignored presses it
+        (engine/session_challenge.py): the step the program decided, voiced
+        through their model. True when a call went out."""
+        session = self.session
+        if session is None or self._talk_pending is not None:
+            return False
+        due = session.demands_due()
+        state = session.area_state()
+        pending = [n for n, d in state.demands.items() if d.pending]
+        for name in pending or [n for n, _s in due]:
+            cue = session.demand_cue(name, state)
+            if cue and self._ask_person(name, "", cue=cue):
+                return True
+            lines = session.demand_without_reply(name)
+            if lines:
+                for line in lines:
+                    self.say(line, kind="report")
+                self.presenter.refresh(snap=True)
+        return False
 
     # --- painting the places (engine/session_paint.py) ---------------------------------
 
@@ -861,6 +884,7 @@ class VisualWindow(QMainWindow):
             person = next((w for w in self.area_view.walkers if w.name == name), None)
             at = (person.x, person.y) if person is not None else None
         if verb == "talk" and session.has_card(name):
+            session.visual_answering(name)  # the walk up is to speak, not to ignore them
             if at is not None:
                 self._go(at[0], at[1], True, name)
             can, why = session.talk_target(name)
@@ -1005,10 +1029,17 @@ class VisualWindow(QMainWindow):
         session = self.session
         if session is None:
             return
+        record = session.area_state().things.get(record_id)
+        what = bare(record.name) if record is not None else "something"
         line = session.visual_give(record_id, name)
         if line:
             self.say(line)
         self.presenter.refresh(snap=True)
+        if line and name in session.area_state().demands:
+            # A toll paid, or not enough: the person answers to it.
+            cue = session.texts.fill("npc.given", what=f"the {what}")
+            if self._ask_person(name, "", cue=cue):
+                return
         self._after_action([])
 
     def _carry_action(self, record_id: str, verb: str) -> None:
@@ -1417,25 +1448,28 @@ class VisualWindow(QMainWindow):
         self.line.setPlaceholderText(TALK_HINT.format(name=name))
         self.line.setFocus()
 
-    def _ask_person(self, name: str, line: str) -> None:
-        """What the player says (or "" when they have just appeared) goes to
-        the person's model on a thread."""
+    def _ask_person(self, name: str, line: str, *, cue: str = "") -> bool:
+        """What the player says (or "" when they have just appeared, or the
+        situation `cue` describes) goes to the person's model on a thread.
+        Whether a call went out."""
         session = self.session
         if session is None or self._talk_pending is not None:
-            return
+            return False
         started = session.start_talk(
             name,
             line,
             lambda reply, problem, n=name: self._talk_signal.done.emit(n, reply, problem),
+            cue=cue,
         )
         if not started:
             if line:
                 can, why = session.talk_target(name)
                 if why:
                     self.say(why)
-            return
+            return False
         self._talk_pending = name
         self.statusBar().showMessage(f"{name} is answering, with {session.role_model('npc')}…")
+        return True
 
     def _talked(self, name: str, reply: NpcReply | None, problem: str) -> None:
         session = self.session
@@ -1445,6 +1479,11 @@ class VisualWindow(QMainWindow):
         self.statusBar().clearMessage()
         if reply is None:
             self.say(f"{name} doesn't answer ({problem or 'no reply'}).")
+            # A step pending on their demand is carried out in plain words.
+            lines = session.demand_without_reply(name)
+            if lines:
+                self.presenter.refresh(snap=True)
+                self._after_action(lines)
             return
         if reply.say:
             self.say(f"{name}: {reply.say}", kind="speech")

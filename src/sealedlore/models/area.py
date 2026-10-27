@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from sealedlore.models.overmap import OvermapState
 from sealedlore.models.plot import Chronicle
-from sealedlore.models.visual import Creature, DoorState, Injury, NpcGoal, PersonSheet
+from sealedlore.models.visual import Creature, Demand, DoorState, Injury, NpcGoal, PersonSheet
 
 ThingVerb = Literal["use", "take", "destroy", "eat"]
 PersonVerb = Literal["talk", "look", "attack"]
@@ -290,6 +290,9 @@ class AreaState(BaseModel):
     # STANDINGS): "guest", "friend", "hostile"...
     standing: dict[str, str] = Field(default_factory=dict)
     group_standing: dict[str, str] = Field(default_factory=dict)
+    # What each challenger requires of the player before they let them be
+    # (engine/challenges.py), while it stands.
+    demands: dict[str, Demand] = Field(default_factory=dict)
     # People and the dead the player spotted before they were seen (by
     # "<name>@<area id>"): they haven't noticed the player yet.
     spotted: list[str] = Field(default_factory=list)

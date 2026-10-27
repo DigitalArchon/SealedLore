@@ -162,6 +162,11 @@ class PersonSheet(BaseModel):
     # How well they see someone coming (engine/health.py and the scouting
     # roll in engine/session_visual.py): the default is their ability.
     alertness: int | None = None
+    # What they demand of anyone who comes near ("a toll for the road",
+    # "that strangers stop and show their hands"), making them a challenger
+    # (engine/challenges.py): hailed at CHALLENGE_M, and pressed when the
+    # player ignores them. "" for someone who challenges nobody.
+    challenges: str = ""
 
 
 class Injury(BaseModel):
@@ -186,6 +191,31 @@ class Injury(BaseModel):
     healed: bool = False
     # As it was told ("a bite on the forearm").
     words: str = ""
+
+
+class Demand(BaseModel):
+    """What a person requires of the player before they let them be (a
+    toll, hands up, turn back; engine/challenges.py): when it was made,
+    how often the player has ignored it and been warned, and the step the
+    program has decided on and the person has yet to voice."""
+
+    what: str
+    at: int
+    warnings: int = 1
+    ignored: int = 0
+    # How often the player has answered them (a word, a thing handed over),
+    # and how many of those the enforcement has seen.
+    addressed: int = 0
+    seen: int = 0
+    # The player's action the demand or warning was made on (the clock,
+    # where they stood, answers given): that action never counts as
+    # ignoring it.
+    last_key: list[int] = Field(default_factory=list)
+    # How far off the player stood at the last check: coming nearer (to
+    # talk, to pay) is answering, never ignoring.
+    last_metres: float = -1.0
+    # "warn", "attack" or "stand_down", decided and not yet carried out.
+    pending: str = ""
 
 
 class NpcGoal(BaseModel):

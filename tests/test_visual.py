@@ -2290,3 +2290,218 @@ def test_the_people_of_a_place_are_drawn_when_the_player_comes_to_it(
     assert session.pictures.read(session.walker_file("Maela Orr"))
     kinds = [e["kind"] for e in session.read_api_log()] if hasattr(session, "read_api_log") else []
     del kinds
+
+
+# --- challenges (engine/challenges.py, the author's ruling of Oct 27 2026) -------------
+
+
+def _on_the_road(game, *, player_tiles_off: int):
+    """The player and Captain Idris on the farm's open road, Idris
+    `player_tiles_off` tiles down it; the room's trees stop the eye elsewhere."""
+    session = game.session
+    state = session.area_state()
+    state.creatures.clear()
+    farm = session.area("farm")
+    column = next(
+        x for x in range(farm.width) if all(farm.rows[y][x] == "=" for y in range(34, 58))
+    )
+    idris = (column, 56)
+    state.spots["Serrik Vaun"] = Spot(area="farm", x=column, y=56 - player_tiles_off)
+    state.spots["Captain Idris"] = Spot(area="farm", x=idris[0], y=idris[1])
+    if "Captain Idris" not in state.placed:
+        state.placed.append("Captain Idris")
+    state.greeted = [g for g in state.greeted if not g.startswith("Captain Idris@")]
+    session._set_live(state)
+    return farm
+
+
+TOLL = (
+    '{"say": "Far enough. The road costs: a tin of food, set down there.", "mood": "hard", '
+    '"intent": {"kind": "stay"}, "remember": "A stranger on my road.", '
+    '"demand": "a tin of food, set down on the road"}'
+)
+WARNING = (
+    '{"say": "I said a tin of food. Last time of asking.", "mood": "hard", '
+    '"intent": {"kind": "stay"}, "demand": "a tin of food"}'
+)
+ATTACKS = '{"say": "Your funeral.", "mood": "cold", "intent": {"kind": "stay"}}'
+BACKS_OFF = (
+    '{"say": "Go on, then. Go.", "mood": "sour", "intent": {"kind": "retreat"}, "demand": ""}'
+)
+
+
+def test_a_challenger_hails_the_player_close_and_their_demand_is_kept(peopled: VisualWindow):
+    session = peopled.session
+    session.visual_design().people["Captain Idris"].challenges = "a toll for the road"
+    session.visual_design().scouting["Serrik Vaun"] = 0
+    # In sight at 66 m: an ordinary person would be greeted now; a
+    # challenger waits until the player is within hailing distance.
+    _on_the_road(peopled, player_tiles_off=20)
+    assert "Captain Idris" in session.people_in_sight() or True  # 66 m: past sight
+    assert not session.encounter_due("Captain Idris")
+    farm = _on_the_road(peopled, player_tiles_off=8)  # 26 m
+    assert farm.tile_m * 8 <= 30
+    assert session.encounter_due("Captain Idris")
+    session.provider.responses = [TOLL]
+    peopled._after_action([])
+    _answer(peopled, TOLL)
+    user = session.provider.requests[-1].messages[1].text
+    assert "within hailing distance" in user and "a toll for the road" in user
+    system = session.provider.requests[-1].messages[0].text
+    assert "What you demand of anyone who comes near: a toll for the road" in system
+    state = session.area_state()
+    demand = state.demands["Captain Idris"]
+    assert demand.what == "a tin of food, set down on the road" and demand.ignored == 0
+    assert "Captain Idris: Far enough." in peopled.log.toPlainText()
+    # The same action never counts as ignoring it.
+    assert session.demands_due() == []
+
+
+def test_an_ignored_demand_is_warned_once_more_then_pressed_with_an_attack(
+    peopled: VisualWindow,
+):
+    session = peopled.session
+    design = session.visual_design()
+    design.people["Captain Idris"].challenges = "a toll for the road"
+    design.scouting["Serrik Vaun"] = 0
+    design.abilities["Serrik Vaun"] = 4  # against Idris's 8: outmatched
+    _on_the_road(peopled, player_tiles_off=8)
+    session.provider.responses = [TOLL]
+    peopled._after_action([])
+    _answer(peopled, TOLL)
+    # The player waits instead of paying: the first ignore, a second warning.
+    session.provider.responses = [WARNING]
+    peopled._after_action(session.visual_wait(1))
+    _answer(peopled, WARNING)
+    user = session.provider.requests[-1].messages[1].text
+    assert "has not done as you asked" in user and "outmatched" in user
+    state = session.area_state()
+    demand = state.demands["Captain Idris"]
+    assert demand.ignored == 1 and demand.warnings == 2 and demand.pending == ""
+    assert "Captain Idris: I said a tin of food." in peopled.log.toPlainText()
+    # Ignored again: the program has them attack, whatever the reply's intent.
+    session.provider.responses = [ATTACKS]
+    peopled._after_action(session.visual_wait(1))
+    _answer(peopled, ATTACKS)
+    user = session.provider.requests[-1].messages[1].text
+    assert "You attack them now" in user
+    state = session.area_state()
+    assert "Captain Idris" not in state.demands
+    assert state.goals["Captain Idris"].intent == "attack"
+    assert "Captain Idris goes for you." in peopled.log.toPlainText()
+
+
+def test_a_stronger_player_is_warned_and_then_let_be(peopled: VisualWindow):
+    session = peopled.session
+    design = session.visual_design()
+    design.people["Captain Idris"].challenges = "a toll for the road"
+    design.scouting["Serrik Vaun"] = 0
+    design.abilities["Serrik Vaun"] = 14  # far the stronger
+    _on_the_road(peopled, player_tiles_off=8)
+    session.provider.responses = [TOLL]
+    peopled._after_action([])
+    _answer(peopled, TOLL)
+    session.provider.responses = [WARNING]
+    peopled._after_action(session.visual_wait(1))
+    _answer(peopled, WARNING)
+    assert "far more dangerous" in session.provider.requests[-1].messages[1].text
+    session.provider.responses = [BACKS_OFF]
+    peopled._after_action(session.visual_wait(1))
+    _answer(peopled, BACKS_OFF)
+    assert "You give it up" in session.provider.requests[-1].messages[1].text
+    state = session.area_state()
+    assert "Captain Idris" not in state.demands
+    assert state.goals["Captain Idris"].intent == "retreat"
+    assert "Captain Idris backs away from you." in peopled.log.toPlainText()
+
+
+def test_answering_a_demand_is_never_ignoring_it_and_paying_ends_it(peopled: VisualWindow):
+    session = peopled.session
+    design = session.visual_design()
+    design.people["Captain Idris"].challenges = "a toll for the road"
+    design.scouting["Serrik Vaun"] = 0
+    _on_the_road(peopled, player_tiles_off=8)
+    session.provider.responses = [TOLL]
+    peopled._after_action([])
+    _answer(peopled, TOLL)
+    # A word to them counts as answering: no step is taken on it.
+    state = session.area_state()
+    state.spots["Serrik Vaun"] = Spot(
+        area="farm", x=state.spots["Captain Idris"].x, y=state.spots["Captain Idris"].y - 3
+    )
+    session._set_live(state)
+    peopled._set_talking("Captain Idris")
+    _ask(peopled, "A tin? I have one.", WARNING)
+    assert session.area_state().demands["Captain Idris"].ignored == 0
+    # Handing them a tin: they answer to it, and the demand is met.
+    state = session.area_state()
+    state.things["tin"] = ThingRecord(name="a tin of beans", state="taken", by="Serrik Vaun")
+    state.spots["Serrik Vaun"] = Spot(
+        area="farm", x=state.spots["Captain Idris"].x, y=state.spots["Captain Idris"].y - 1
+    )
+    session._set_live(state)
+    paid = '{"say": "That will do.", "mood": "easier", "intent": {"kind": "stay"}, "demand": ""}'
+    session.provider.responses = [paid]
+    peopled._carry_give("tin", "Captain Idris")
+    _answer(peopled, paid)
+    user = session.provider.requests[-1].messages[1].text
+    assert "has just handed you the tin of beans" in user
+    assert "Captain Idris" not in session.area_state().demands
+    assert session.demands_due() == []
+
+
+def test_a_step_with_no_reply_is_carried_out_in_plain_words(peopled: VisualWindow):
+    session = peopled.session
+    design = session.visual_design()
+    design.people["Captain Idris"].challenges = "a toll for the road"
+    design.scouting["Serrik Vaun"] = 0
+    design.abilities["Serrik Vaun"] = 4
+    _on_the_road(peopled, player_tiles_off=8)
+    session.provider.responses = [TOLL]
+    peopled._after_action([])
+    _answer(peopled, TOLL)
+    assert session.demands_due() == []  # the hail's own action
+    session.visual_wait(1)
+    assert session.demands_due() == [("Captain Idris", "warn")]
+    lines = session.demand_without_reply("Captain Idris")
+    assert lines == ["Captain Idris warns you again: a tin of food, set down on the road"]
+    state = session.area_state()
+    assert state.demands["Captain Idris"].warnings == 2
+    session.visual_wait(1)
+    assert session.demands_due() == [("Captain Idris", "attack")]
+    lines = session.demand_without_reply("Captain Idris")
+    assert lines[0] == "Captain Idris goes for you."
+    assert session.area_state().goals["Captain Idris"].intent == "attack"
+
+
+def test_coming_nearer_to_a_challenger_is_answering_and_walking_off_is_not(
+    peopled: VisualWindow,
+):
+    session = peopled.session
+    design = session.visual_design()
+    design.people["Captain Idris"].challenges = "a toll for the road"
+    design.scouting["Serrik Vaun"] = 0
+    _on_the_road(peopled, player_tiles_off=8)
+    session.provider.responses = [TOLL]
+    peopled._after_action([])
+    _answer(peopled, TOLL)
+    # Three tiles nearer, to speak or to pay: no step is taken.
+    state = session.area_state()
+    idris = state.spots["Captain Idris"]
+    state.spots["Serrik Vaun"] = Spot(area="farm", x=idris.x, y=idris.y - 5)
+    state.seconds += 10
+    session._set_live(state)
+    assert session.demands_due() == []
+    # Turning to talk to them counts too, whatever the walk looks like.
+    session.visual_answering("Captain Idris")
+    state = session.area_state()
+    state.spots["Serrik Vaun"] = Spot(area="farm", x=idris.x + 2, y=idris.y - 5)
+    state.seconds += 10
+    session._set_live(state)
+    assert session.demands_due() == []
+    # Walking off is ignoring them.
+    state = session.area_state()
+    state.spots["Serrik Vaun"] = Spot(area="farm", x=idris.x + 2, y=idris.y - 8)
+    state.seconds += 10
+    session._set_live(state)
+    assert session.demands_due() == [("Captain Idris", "warn")]

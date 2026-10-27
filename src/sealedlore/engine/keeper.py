@@ -86,6 +86,9 @@ OPS: dict[str, tuple[str, ...]] = {
         "carries",
         "where",
         "group",
+        # What they demand of anyone who comes near (a toll for the road):
+        # a challenger (engine/challenges.py), or "".
+        "challenges",
     ),
     # A place of the wider world the player learns of: it appears on their map.
     "tell_of": ("where",),

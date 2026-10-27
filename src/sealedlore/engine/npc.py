@@ -40,6 +40,10 @@ class NpcReply:
     # How they now stand with the player, when the reply says ("guest",
     # "friend"...; models/visual.py STANDINGS), else "".
     standing: str = ""
+    # What they require of the player before they let them be (a toll,
+    # hands up; engine/challenges.py): None when the reply says nothing of
+    # it, "" once satisfied or given up.
+    demand: str | None = None
 
 
 def sheet_of(name: str, design_people: Mapping[str, PersonSheet]) -> PersonSheet:
@@ -107,6 +111,11 @@ def npc_messages(
                     if sheet.medic
                     else "You are no medic, but can give first aid with a kit if you carry one."
                 ),
+                challenge=(
+                    f"What you demand of anyone who comes near: {sheet.challenges.strip()}"
+                    if sheet.challenges.strip()
+                    else "You demand nothing of passers-by."
+                ),
             ),
         ]
     )
@@ -151,6 +160,8 @@ def parse_npc(text: str) -> NpcReply:
         kind = intent.strip().lower()
     if kind not in INTENTS:
         kind = "stay"
+    demand = reply.get("demand")
+    demand = " ".join(str(demand).split())[:160] if demand is not None else None
     return NpcReply(
         say=" ".join(str(reply.get("say") or "").split()),
         mood=" ".join(str(reply.get("mood") or "").split())[:24],
@@ -159,6 +170,7 @@ def parse_npc(text: str) -> NpcReply:
         what=what[:80],
         remember=" ".join(str(reply.get("remember") or "").split())[:200],
         standing=standing,
+        demand=demand,
     )
 
 

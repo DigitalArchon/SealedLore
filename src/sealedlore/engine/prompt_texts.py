@@ -2883,13 +2883,18 @@ _text(
     "them from afar and comes to meet them), treat (see to the player's injuries, with what "
     "they have). Most people stay; nobody attacks or follows without a reason the sheet "
     "gives. When they first see the player, do what this person would on seeing a stranger "
-    "there: call out, come over, threaten, attack, hide, run. Reply with one JSON object and "
-    "nothing else:\n\n"
+    "there: call out, come over, threaten, attack, hide, run. If this person demands "
+    "something of the player before letting them be (a toll, hands up, turn back, state "
+    'your business), say so and put it in "demand", in a few words, and keep "demand" in '
+    'every later reply while it stands: what they still require, or "" once they are '
+    'satisfied or have given it up. Leave "demand" out when they demand nothing. Reply '
+    "with one JSON object and nothing else:\n\n"
     '{"say": "what they say, or "" for silence", "mood": "one word", "intent": '
     '{"kind": "stay", "place": "", "what": ""}, "remember": "one line this person will '
     'remember of this exchange, or """, "standing": "how they now stand with the player, '
     "only when it has changed: stranger, wary, hostile, guest, friend, ally or partner; "
-    'else ""}',
+    'else "", "demand": "what they require of the player, or "" once met; left out when '
+    'nothing is demanded"}',
 )
 
 _text(
@@ -2899,7 +2904,7 @@ _text(
     "The person's sheet as the talk call is given it: the design's words over their card.",
     "THE WORLD:\n{world}\n\nWHO YOU ARE: {name}\n{card}\nPersonality: {personality}\n"
     "Goals: {goals}\nWhat you want from a stranger: {wants}\nWhat you know: {knows}\n"
-    "What you never do or say: {never}\nHow you speak: {speech}\n{care}",
+    "What you never do or say: {never}\nHow you speak: {speech}\n{care}\n{challenge}",
     (
         ("world", "The world in brief"),
         ("name", "The person's name"),
@@ -2911,6 +2916,7 @@ _text(
         ("never", "What they never do or say"),
         ("speech", "How they speak"),
         ("care", "Whether they can give proper care to injuries"),
+        ("challenge", "What they demand of anyone who comes near, if anything"),
     ),
 )
 
@@ -2951,6 +2957,92 @@ _text(
     "sight in a place: the person speaks first, or not, and does what they would.",
     "(nothing yet: they have just come into your sight. Say what you would say first, "
     "if anything, and do what you would do.)",
+)
+
+# Challenges (engine/challenges.py; the author, Oct 27 2026): a person who
+# demands something of anyone who comes near hails the player once they
+# are close, and presses the demand when it is ignored; the program
+# decides the step by standing and the odds, the person voices it.
+_text(
+    "npc.challenge",
+    VISUAL,
+    "A person: the player comes near",
+    "The player's line in a talk call made when the player comes within hailing distance of "
+    "a person who demands something of anyone who comes near: the challenge.",
+    "(nothing yet: they have come within hailing distance of you. You demand of anyone who "
+    "comes near: {challenges}. Make your demand or your warning now, in your own words, "
+    'put what you require in "demand", and do what you would do.)',
+    (("challenges", "What this person demands of anyone who comes near"),),
+)
+
+_text(
+    "npc.hostile",
+    VISUAL,
+    "A person: a hostile sees the player near",
+    "The player's line in a talk call made when the player comes within hailing distance of "
+    "a person who is hostile to them and demands nothing in particular.",
+    "(nothing yet: they have come within hailing distance of you, and you are hostile to "
+    "them. Say what you would say, if anything, and do what you would do: a warning, a "
+    'demand (put it in "demand"), an attack.)',
+)
+
+_text(
+    "npc.ignored",
+    VISUAL,
+    "A person: the player ignored the demand",
+    "The player's line in a talk call made when the player has done something other than "
+    "answer this person's demand, and the program has them warn once more.",
+    "(nothing: the player has not done as you asked ({demand}); they went on as if you had "
+    "not spoken. As the odds look to you, {odds}. Warn them once more, in your own words, "
+    'and say what happens if they don\'t; keep "demand" as what you require.)',
+    (
+        ("demand", "What this person demanded"),
+        ("odds", "How the two sides look to this person"),
+        ("player", "The player's character's name"),
+    ),
+)
+
+_text(
+    "npc.attacks",
+    VISUAL,
+    "A person: the player ignored the warning, and they attack",
+    "The player's line in a talk call made when the player has ignored this person's "
+    "demand and warning, and the program has them attack: they say what they say as they do.",
+    "(nothing: the player has ignored your demand ({demand}) and your warning. As the odds "
+    "look to you, {odds}. You attack them now: say what you say as you do, if anything. "
+    'Your intent is "attack".)',
+    (
+        ("demand", "What this person demanded"),
+        ("odds", "How the two sides look to this person"),
+        ("player", "The player's character's name"),
+    ),
+)
+
+_text(
+    "npc.stands_down",
+    VISUAL,
+    "A person: the player ignored the warning, and they let it go",
+    "The player's line in a talk call made when the player has ignored this person's "
+    "demand and warning, and, outmatched, they give it up.",
+    "(nothing: the player has ignored your demand ({demand}) and your warning, and, as the "
+    "odds look to you, {odds}. You give it up and let them be, with whatever grace or "
+    'threat you can muster: say what you say, if anything. "demand" is "" now.)',
+    (
+        ("demand", "What this person demanded"),
+        ("odds", "How the two sides look to this person"),
+        ("player", "The player's character's name"),
+    ),
+)
+
+_text(
+    "npc.given",
+    VISUAL,
+    "A person: the player hands them something",
+    "The player's line in a talk call made when the player hands something to a person "
+    "who has demanded something of them: the person answers to it.",
+    "(nothing said: the player has just handed you {what}. Say what you would, and do what "
+    'you would; "demand" is what you still require, or "" if this meets it.)',
+    (("what", "What the player handed over"),),
 )
 
 
@@ -3201,7 +3293,11 @@ _text(
     "a plain name of their own), with a line of who they are and how they take to the "
     'player (hostile, wary, friendly, desperate), stood "nearby" or "beside the player": '
     '{"op": "stranger", "who": "Mara Quist", "card": "A woman walking east alone, thin and '
-    'tired", "attitude": "wary", "wants": "food", "where": "nearby"}; the '
+    'tired", "attitude": "wary", "wants": "food", "where": "nearby"}; one who stops '
+    "anyone who comes near with a demand (a toll keeper, a sentry, a robber) has "
+    '"challenges": the demand itself, to the player ("a tin of food for the road", "your '
+    'gun, set down"); leave it out for anyone who demands nothing. Never a "stranger" for '
+    'someone the story already has: name them in "say" or "move". The '
     'dead come with "spawn_dead" ("nearby" keeps them a little way off); something worth '
     'having lies about with "place"; a place the player learns of is "tell_of". A danger '
     "is a real threat, not a fright that comes to nothing; a chance is worth stopping for; "

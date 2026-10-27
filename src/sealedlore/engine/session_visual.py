@@ -14,7 +14,7 @@ import math
 import random
 import re
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from sealedlore.engine.area import (
     WALK_M_PER_S,
@@ -1301,12 +1301,19 @@ class VisualRuntime:
         return True, ""
 
     def start_talk(
-        self, name: str, line: str, done: Callable[[NpcReply | None, str], None]
+        self,
+        name: str,
+        line: str,
+        done: Callable[[NpcReply | None, str], None],
+        *,
+        cue: str = "",
     ) -> bool:
         """What the player says to a person, answered by the model on a
         thread: `done` gets the reply (or None and why) on the thread;
         `apply_npc_reply` makes it real on the GUI thread. `line` "" is the
-        encounter: the person has just seen the player."""
+        encounter: the person has just seen the player (a challenger's is
+        the challenge), or, with `cue`, the situation the cue describes (a
+        demand pressed, a thing handed over; engine/session_challenge.py)."""
         if self.in_private:
             return False
         if line:
@@ -1326,7 +1333,10 @@ class VisualRuntime:
             state.talks.setdefault(name, []).append([self.held_name() or "You", line])
             self._heard(state, area.id, self.held_name() or "You", line)
             self.player_noticed_by(state, name)
+            self.address_demand(state, name)
             self._set_live(state)
+        elif not cue and self.is_challenger(name, state):
+            cue = self.challenge_cue(name, state)
         messages = npc_messages(
             name=name,
             heard=[
@@ -1360,7 +1370,7 @@ class VisualRuntime:
             witnessed=state.witnessed.get(name, []),
             memories=state.memories.get(name, []),
             talk=state.talks.get(name, []),
-            line=line or self.texts["npc.encounter"],
+            line=line or cue or self.texts["npc.encounter"],
             state=state.person_tags.get(name, []),
             texts=self.texts,
         )
@@ -1424,6 +1434,11 @@ class VisualRuntime:
         if reply.mood:
             state.moods[name] = reply.mood
         lines: list[str] = []
+        # A step pending on their demand (engine/session_challenge.py) holds
+        # them to it, whatever the reply's own intent.
+        forced = self.apply_demand_step(state, name, reply)
+        if forced is not None and forced != reply.intent:
+            reply = replace(reply, intent=forced)
         words = intent_words(name, reply, player=self.held_name() or "you")
         kind = reply.intent
         spot = state.spots.get(name)
@@ -1462,6 +1477,7 @@ class VisualRuntime:
             said = self.set_standing(state, name, reply.standing)
             if said:
                 lines.append(f"({said[:-1]} with you now.)")
+        lines += self.note_demand(state, name, reply)
         if words:
             lines.append(words)
         self._set_live(state)
@@ -1504,6 +1520,7 @@ class VisualRuntime:
         self._visual_witness(state, f"gave {name} the {what}")
         state.memories.setdefault(name, []).append(f"{held} gave me the {what}.")
         state.memories[name] = state.memories[name][-20:]
+        self.address_demand(state, name)
         self._set_live(state)
         return f"You give {name} the {what}."
 
@@ -1761,6 +1778,7 @@ class VisualRuntime:
             return [f"{name} isn't within reach."]
         self._visual_witness(state, f"attacked {name}")
         self.player_noticed_by(state, name)
+        state.demands.pop(name, None)  # the fight answers any demand of theirs
         rng = random.Random(f"{state.seconds}:{name}:attack")
         outcome, lines = self._person_round(state, area, me, name, rng)
         if outcome.result not in ("down",) and name not in state.people_down:
@@ -1813,7 +1831,14 @@ class VisualRuntime:
             return False
         if self.unaware_of_player(name, state):
             return False  # spotted first: they haven't seen the player yet
-        return f"{name}@{me.area}" not in state.greeted
+        if f"{name}@{me.area}" in state.greeted:
+            return False
+        if self.is_challenger(name, state):
+            # A challenger hails the player once they are close, not on
+            # first sight (engine/challenges.py).
+            area = self.area(me.area)
+            return area is not None and self.challenge_due(name, state, area, me)
+        return True
 
     def mark_encountered(self, name: str) -> None:
         state = self.area_state()
@@ -2367,6 +2392,11 @@ class VisualRuntime:
             # Live (Oct 26 2026) Sonnet wrote {"stranger": "who", …}: the
             # field's name for the person's.
             return [f"(The keeper brought someone in with no name: {op.get('card')[:80]})"]
+        if sheet_of(name, self.visual_design().people) != PersonSheet():
+            # One of the design's own people written as a stranger (live,
+            # the town's leader with "challenges": "earning trust"): their
+            # sheet stands, the keeper's thin one never replaces it.
+            return self._stand_person(state, name, op.get("where") or "nearby")
         if self.visual_card(name) is None:
             self.supporting.append(
                 Character(
@@ -2385,6 +2415,7 @@ class VisualRuntime:
             carries=op.words("carries"),
             ability=5,
             group=op.get("group"),
+            challenges=op.get("challenges"),
         )
         lines = self._stand_person(state, name, op.get("where") or "nearby")
         return lines

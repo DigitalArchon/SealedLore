@@ -1667,6 +1667,21 @@ partner. The person's own words can change it, and so can the story's keeper;
 sleeping among friends keeps the night quiet, and a friend or companion sees
 to your injuries while you rest.
 
+**Challenges.** Some people demand something of anyone who comes near: a
+watchman wants you to stop and state your business, a toll keeper wants
+food for the road, a bandit wants your pack and your gun. Such a person
+does not greet you on sight: they hail you once you are within thirty
+metres, and what they demand stands until you answer it. Answer by
+speaking to them (**Talk to them**) or by handing over what they asked for
+(under **Carrying**, give it to them); they say whether that meets it. Do anything
+else, walk on, wait, look about, and you have ignored them, and the game
+decides what they do from how you stand with them and how the odds look
+(your fighting score and your companions against theirs and their group
+beside them): a neutral warns you once more, then attacks, or lets you be
+if you plainly outmatch them; someone already hostile attacks the first
+time, unless you look the stronger. Walk out of their reach and the demand
+lapses. The person speaks every step in their own words.
+
 **The people's pictures.** Whoever stands in a place you come to and has no
 portrait or sprite of their own gets both drawn in the background (a portrait
 from their card, kept on it, then their walking sprite from the portrait, by
