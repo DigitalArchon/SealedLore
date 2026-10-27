@@ -652,3 +652,23 @@ def test_a_clock_operation_reads_its_minutes_as_a_number_or_in_words():
     assert Op(op="clock", args={"minutes": "a day"}).minutes() == 24 * 60
     assert Op(op="clock", args={"minutes": "soon"}).minutes() == 0
     assert Op(op="clock", args={}).minutes() == 0
+
+
+def test_a_broken_leg_slows_a_journey_and_the_road_mends_nothing(doomsville):
+    from sealedlore.models.visual import Injury
+
+    for region in doomsville.overmap().regions:
+        region.chance = 0
+    hellsville = next(p for p in doomsville.overmap().places if p.name == "Hellsville")
+    whole = doomsville.overmap_estimate(hellsville.x * 1000, hellsville.y * 1000)
+    state = doomsville.area_state()
+    state.injuries.append(
+        Injury(kind="broken leg", serious=True, at=0, treated=0, words="a broken leg")
+    )
+    doomsville._set_live(state)
+    slow = doomsville.overmap_estimate(hellsville.x * 1000, hellsville.y * 1000)
+    assert slow.walking > whole.walking * 1.8
+    gone = doomsville.overmap_travel(hellsville.x * 1000, hellsville.y * 1000, "Hellsville")
+    assert gone is not None and gone.arrived
+    leg = doomsville.area_state().injuries[0]
+    assert 0 < leg.rested < gone.seconds  # up and about: rest counts half

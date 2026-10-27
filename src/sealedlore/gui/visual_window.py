@@ -309,6 +309,13 @@ class _Painted(QObject):
     done = Signal(str)
 
 
+class _PeopleDrawn(QObject):
+    """People's pictures drawn (their names), on the drawing's thread;
+    delivered on the GUI thread."""
+
+    done = Signal(object)
+
+
 class _TalkDone(QObject):
     """A person's reply, emitted on its thread, delivered on the GUI thread:
     (the person's name, the reply or None, the problem)."""
@@ -379,6 +386,9 @@ class VisualWindow(QMainWindow):
         self._paint_signal = _Painted()
         self._paint_signal.done.connect(self._painted)
         session.on_painted = self._paint_signal.done.emit
+        self._people_signal = _PeopleDrawn()
+        self._people_signal.done.connect(self._people_drawn)
+        session.on_people_drawn = self._people_signal.done.emit
         # The part being looked at, while the model answers.
         self._look_pending: tuple[str, Rect] | None = None
 
@@ -575,6 +585,14 @@ class VisualWindow(QMainWindow):
         sleep.setToolTip("Sleep until seven in the morning, here")
         sleep.triggered.connect(lambda: self._pass_time(True))
         bar.addAction(sleep)
+        retreat = QAction("Retreat", self)
+        retreat.setShortcut(QKeySequence("R"))
+        retreat.setToolTip(
+            "Break away from whoever is on you (R): freely unless clearly overwhelmed, "
+            "when they get a blow in first"
+        )
+        retreat.triggered.connect(self._retreat)
+        bar.addAction(retreat)
         if self.session.overmap() is not None:
             world_map = QAction("Map", self)
             world_map.setShortcut(QKeySequence("M"))
@@ -617,7 +635,17 @@ class VisualWindow(QMainWindow):
         self.needs.setVisible(bool(short))
         session.story.visual_when = when  # the Stories list's line (saved with the next move)
         hits = session.visual_hits_left()
-        self.health.setText("♥" * hits + "♡" * (session.visual_design().player_hits - hits))
+        word, hurts = session.visual_condition(state)
+        self.health.setText(
+            "♥" * hits
+            + "♡" * (session.visual_design().player_hits - hits)
+            + f" · {word.capitalize()}"
+        )
+        self.health.setToolTip(
+            "Your injuries:\n" + "\n".join(hurts)
+            if hurts
+            else "Fit. Hearts are your strength: hunger, thirst and infection wear it down."
+        )
         carrying = session.visual_inventory()
         self.carry_button.setText(f"Carrying ({len(carrying)})" if carrying else "Carrying nothing")
 
@@ -647,6 +675,7 @@ class VisualWindow(QMainWindow):
         if self._talking_to is not None and not session.talk_target(self._talking_to)[0]:
             self._set_talking(None)
         self._paint_here()
+        self._draw_people_here()
         if plot:
             plot_lines, why = session.visual_plot_check(moment)
             for line in plot_lines:
@@ -679,6 +708,33 @@ class VisualWindow(QMainWindow):
         )
         if started:
             self.statusBar().showMessage(f"Painting {area.title} in the background…", 6000)
+
+    def _draw_people_here(self) -> None:
+        """Draw the pictures of the people standing where the player is,
+        when they have none (engine/session_people_art.py)."""
+        session = self.session
+        if session is None:
+            return
+        state = session.area_state()
+        me = state.spots.get(session.held_name() or "")
+        area = session.area(me.area) if me is not None else None
+        if area is None:
+            return
+        cards = session.people_art_wanted(area)
+        if cards and session.start_people_art(cards, _cut_sprite):
+            names = ", ".join(c.name for c in cards[:3]) + ("…" if len(cards) > 3 else "")
+            self.statusBar().showMessage(f"Drawing {names} in the background…", 6000)
+
+    def _people_drawn(self, names: list[str]) -> None:
+        session = self.session
+        if session is None:
+            return
+        if names:
+            self.statusBar().showMessage("Drawn: " + ", ".join(names), 5000)
+        self.presenter.refresh(snap=True)
+        if self._talking_to is not None:
+            self._set_talking(self._talking_to)
+        self._draw_people_here()  # anyone still without, where the player is now
 
     def _painted(self, area_id: str) -> None:
         session = self.session
@@ -889,6 +945,15 @@ class VisualWindow(QMainWindow):
             lines = session.visual_force(x, y).split("\n")
             self.presenter.refresh(snap=True)
             self._after_action(lines)
+
+    def _retreat(self) -> None:
+        session = self.session
+        if session is None or self._fading is not None:
+            return
+        self._settle_figure()
+        lines = session.visual_retreat()
+        self.presenter.refresh()
+        self._after_action(lines)
 
     def _pass_time(self, sleep: bool) -> None:
         session = self.session
@@ -1346,7 +1411,8 @@ class VisualWindow(QMainWindow):
         )
         self.talking_name.setText(name)
         mood = session.area_state().moods.get(name, "")
-        self.talking_mood.setText(mood)
+        standing = session.standing_of(name)
+        self.talking_mood.setText(" · ".join(p for p in (mood, standing) if p))
         self.talking.show()
         self.line.setPlaceholderText(TALK_HINT.format(name=name))
         self.line.setFocus()
@@ -1386,7 +1452,9 @@ class VisualWindow(QMainWindow):
         self.presenter.refresh(snap=True)
         self._after_action(lines, moment=session.talk_moment(name))
         if self._talking_to == name:
-            self.talking_mood.setText(session.area_state().moods.get(name, ""))
+            mood = session.area_state().moods.get(name, "")
+            standing = session.standing_of(name)
+            self.talking_mood.setText(" · ".join(p for p in (mood, standing) if p))
         if reply.intent in ("leave", "fetch_help", "attack", "hide") and self._talking_to == name:
             self._set_talking(None)
 
@@ -1419,13 +1487,28 @@ class VisualWindow(QMainWindow):
         session, self.session = self.session, None
         if session is not None:
             session.on_painted = None
+            session.on_people_drawn = None
             session.stop_paint()
+            session.stop_people_art()
             session.close()
             session.save()
         super().closeEvent(event)
         if self._on_close is not None:
             self._on_close()
         self.closed.emit()
+
+
+def _cut_sprite(data: bytes) -> bytes | None:
+    """A drawn sprite cut out of its white ground, as PNG (Qt's, on the
+    drawing's thread; decodes under the codec's lock)."""
+    from sealedlore.gui.area_render import cut_out
+    from sealedlore.gui.image_codec import image_from_data
+
+    image = image_from_data(data)
+    if image.isNull():
+        return None
+    cut = cut_out(image)
+    return encoded(cut, "PNG") if cut is not None else None
 
 
 def player_choices(cast: list[Character], choose: list[str]) -> list[Character]:

@@ -629,12 +629,11 @@
   "coat_rack": {
    "entries": [
     {
-     "table": "clothing_outer",
-     "chance": 60
+     "table": "clothing_outer"
     },
     {
      "item": "a wool scarf",
-     "chance": 20,
+     "chance": 25,
      "kind": "clothing"
     }
    ]
@@ -2000,7 +1999,7 @@
    "g": {
     "thing": "a wooden peg rack with hanging coats",
     "stock": "coat_rack",
-    "chance": 75
+    "chance": 95
    },
    "x": {
     "thing": "a wooden boot bench",
@@ -2942,7 +2941,7 @@
       "north"
      ],
      "rows": [
-      "#####+####WWW#####WWW####W####",
+      "#########+WWW#####WWW####W####",
       "#CC_KKKKK__PP#DD__q_#ZZ____F_#",
       "#____________#______#h_______#",
       "#____JJ______+______#________#",
@@ -2991,7 +2990,7 @@
       "north"
      ],
      "rows": [
-      "##WWW####WWW####WWW#####+#####",
+      "##WWW####WWW####WWW########+##",
       "#BB______________BB#CC_KKKK__#",
       "#tt______________tt#_________#",
       "#BB______________BB#_____PP__#",

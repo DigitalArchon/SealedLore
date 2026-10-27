@@ -54,8 +54,17 @@ OPS: dict[str, tuple[str, ...]] = {
     "unseal": ("where",),
     "reveal": ("what",),  # a hidden place or person of the plot comes into the story
     "set_fact": ("fact", "value"),
+    # The player hurt or seen to (engine/health.py): "injure" a kind
+    # (bruises, cut, broken arm, broken leg, deep wound, bite) with words;
+    # "treat" first aid, care (a break set, a wound cleaned) or
+    # antibiotics; "wound" a serious wound, "heal" care for everything.
+    "injure": ("kind", "words"),
+    "treat": ("how",),
     "wound": ("count",),
     "heal": ("count",),
+    # How someone, or a whole group by name, now stands with the player:
+    # stranger, wary, hostile, guest, friend, ally, partner.
+    "status": ("who", "status"),
     # The player has eaten or drunk (from a stream, a meal someone gave
     # them): their hunger or thirst is met. Live, the keeper had John drink
     # his fill from the river and the game still had him parched.
@@ -67,7 +76,17 @@ OPS: dict[str, tuple[str, ...]] = {
     # roadblock): their name, a line of who they are, and how they take to
     # the player; the program makes them a card and stands them on the map,
     # and they talk and act like anyone else (engine/npc.py).
-    "stranger": ("who", "card", "attitude", "wants", "knows", "speech", "carries", "where"),
+    "stranger": (
+        "who",
+        "card",
+        "attitude",
+        "wants",
+        "knows",
+        "speech",
+        "carries",
+        "where",
+        "group",
+    ),
     # A place of the wider world the player learns of: it appears on their map.
     "tell_of": ("where",),
 }

@@ -673,7 +673,7 @@ def test_the_design_is_laid_out_once_dead_things_and_locks(game: VisualWindow):
     assert "cast-iron stove; lit; fed within the hour; Someone kept" in session.visual_state_text()
     state.spots["Serrik Vaun"] = was
     session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
-    assert game.health.text() == "♥♥" and game.carry_button.text() == "Carrying nothing"
+    assert game.health.text() == "♥♥ · Fit" and game.carry_button.text() == "Carrying nothing"
     assert "Snow to the knee." in game.log.toPlainText()  # the flavour line, once
     # One of the dead brought into sight is reported, once.
     me = state.spots["Serrik Vaun"]
@@ -744,15 +744,24 @@ def test_taking_eating_dropping_and_mending(game: VisualWindow):
         session.visual_use(record_id, "eat") == "You eat the tin of beans. That was the last of it."
     )
     assert session.visual_inventory() == []
-    # Hurt, the kit mends one wound.
+    # Hurt, the kit is first aid on the worst untreated injury (engine/health.py).
+    from sealedlore.models.visual import Injury
+
     state = session.area_state()
-    state.wounds = 1
+    state.injuries.append(
+        Injury(kind="broken arm", serious=True, at=state.seconds, words="a broken arm")
+    )
     state.spots["Serrik Vaun"] = Spot(area="house", x=kit.x, y=kit.y)
     session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
     session.visual_take(kit.id)
     kit_id = session.visual_inventory()[0][0]
-    assert session.visual_use(kit_id, "use") == "You see to your wounds with the first aid kit."
-    assert session.area_state().wounds == 0 and session.visual_inventory() == []
+    assert (
+        session.visual_use(kit_id, "use")
+        == "You splint a broken arm. (the first aid kit is used up)"
+    )
+    assert session.area_state().injuries[0].treated is not None
+    assert session.visual_inventory() == []
+    assert session.visual_use(kit_id, "use") == ""  # gone
     # Something taken out of a look's find, then put down.
     state = session.area_state()
     state.things[beans.id] = state.things[beans.id].model_copy(update={"state": "gone"})
@@ -797,25 +806,45 @@ def test_the_dead_attack_wounds_count_and_death_offers_a_fresh_start(
         w.label == "" for w in view.walkers if w.name in view.creature_ids
     )
     lines = session.visual_wait(1)
-    assert any("comes at you" in line for line in lines) and session.area_state().wounds >= 1
-    # Attack back with a rifle: 7 + 4 beats 9.
+    assert any("comes at you" in line for line in lines)
+    assert session.area_state().injuries, lines  # bare-handed against two: hurt
+    game._show_where()
+    assert game.health.text().split(" · ")[1] in ("Bruised", "Hurt", "Disabled")
+    # Attack back with a rifle, the dead now weak: a hit or a telling blow puts it down.
     state = session.area_state()
     state.things["item:rifle"] = ThingRecord(
         state="taken", name="a rifle", by="Serrik Vaun", kind="weapon"
     )
-    state.wounds = 0
+    state.injuries.clear()
+    for creature in state.creatures.values():
+        creature.ability = 2
     session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
     target = next(iter(state.creatures))
     lines = session.visual_attack(target)
-    assert (
-        lines[0].startswith("You put one of the dead down with the a rifle")
-        or "put one of the dead down" in lines[0]
-    )
+    assert "put one of the dead down" in lines[0] or "You hit one of the dead" in lines[0]
     assert session.area_state().creatures[target].state == "down"
-    # Bare-handed against the other until dead: the dialog offers Start again.
+    # Already carrying a broken leg, bare-handed against something far too
+    # strong: a finishing blow kills, and the dialog offers Start again.
+    from sealedlore.models.visual import Injury
+
     state = session.area_state()
     state.things.pop("item:rifle")
-    state.wounds = 1  # one hit from death (player_hits 2)
+    state.injuries.append(
+        Injury(kind="broken leg", serious=True, at=state.seconds, words="a broken leg")
+    )
+    from sealedlore.models.visual import Creature
+
+    me = state.spots["Serrik Vaun"]
+    state.creatures["brute"] = Creature(
+        id="brute",
+        area="farm",
+        x=beside[0],
+        y=beside[1],
+        ability=30,
+        state="chase",
+        goal_x=me.x,
+        goal_y=me.y,
+    )
     session.story.area_live = LiveArea(leaf_id=None, held="Serrik Vaun", state=state)
     chosen = {}
 
@@ -830,7 +859,7 @@ def test_the_dead_attack_wounds_count_and_death_offers_a_fresh_start(
     assert chosen["buttons"] == ["Start again", "Close"]
     assert "You are dead." in game.log.toPlainText() or "You start again." in game.log.toPlainText()
     fresh = session.area_state()
-    assert not fresh.dead and fresh.wounds == 0 and fresh.laid_out
+    assert not fresh.dead and fresh.wounds == 0 and fresh.laid_out and not fresh.injuries
 
 
 def test_the_clock_passes_with_waiting_and_sleeping(game: VisualWindow):
@@ -1972,3 +2001,292 @@ def test_what_was_said_is_heard_only_within_hearing(plotted: VisualWindow):
     assert not session._within_hearing(farm, Spot(area="farm", x=far[0], y=far[1]), state.heard[-1])
     assert session._within_hearing(farm, Spot(area="farm", x=far[0], y=far[1]), ["farm", "x", "y"])
     del me
+
+
+# --- health, standing, scouting and the people's pictures (Oct 27 2026) ----------------
+
+
+def _beside_tile(area, me):
+    return next(
+        (x, y)
+        for x, y in ((me.x + 1, me.y), (me.x, me.y + 1), (me.x - 1, me.y), (me.x, me.y - 1))
+        if area.walkable(x, y)
+    )
+
+
+def test_retreat_breaks_away_freely_unless_overwhelmed(plotted: VisualWindow):
+    from sealedlore.models.visual import Creature
+
+    session = plotted.session
+    state = session.area_state()
+    state.creatures.clear()
+    me = state.spots["Serrik Vaun"]
+    house = session.area(me.area)
+    beside = _beside_tile(house, me)
+    state.creatures["one"] = Creature(
+        id="one",
+        area=me.area,
+        x=beside[0],
+        y=beside[1],
+        ability=4,
+        state="chase",
+        goal_x=me.x,
+        goal_y=me.y,
+    )
+    session._set_live(state)
+    assert session._beside(state, house, me) == [("one", True)]
+    lines = session.visual_retreat()
+    assert "You break away." in lines and not any("hard pressed" in ln for ln in lines)
+    after = session.area_state()
+    moved = after.spots["Serrik Vaun"]
+    assert (moved.x, moved.y) != (me.x, me.y)
+    assert max(abs(after.creatures["one"].x - moved.x), abs(after.creatures["one"].y - moved.y)) > 1
+    # Disabled by a broken leg, a retreat costs a round at the player's back first.
+    from sealedlore.models.visual import Injury
+
+    state = session.area_state()
+    me = state.spots["Serrik Vaun"]
+    beside = _beside_tile(house, me)
+    state.creatures["one"].x, state.creatures["one"].y = beside
+    state.creatures["one"].ability = 1
+    state.injuries.append(Injury(kind="broken leg", serious=True, at=0, words="a broken leg"))
+    session._set_live(state)
+    lines = session.visual_retreat()
+    assert lines[0] == "You are hard pressed: they get at you as you break away."
+    assert "Nothing is on you." == session.visual_retreat()[0]
+
+
+def test_a_medic_s_treat_intent_sets_a_break_and_a_kit_bearer_gives_first_aid(
+    plotted: VisualWindow,
+):
+    from sealedlore.engine.npc import NpcReply
+    from sealedlore.engine.session_visual import ITEM_PREFIX
+    from sealedlore.models.visual import Injury
+
+    session = plotted.session
+    state = session.area_state()
+    state.injuries.append(Injury(kind="broken arm", serious=True, at=0, words="a broken arm"))
+    me = state.spots["Serrik Vaun"]
+    near = _beside_tile(session.area(me.area), me)
+    state.spots["Maela Orr"] = Spot(area=me.area, x=near[0], y=near[1])
+    session._set_live(state)
+    treat = NpcReply(
+        say="Hold still.", mood="brisk", intent="treat", place="", what="", remember=""
+    )
+    lines = session.apply_npc_reply("Maela Orr", treat)
+    assert lines == ["Maela Orr has nothing to treat you with."]
+    state = session.area_state()
+    state.things[ITEM_PREFIX + "kit"] = ThingRecord(
+        state="taken", name="a first aid kit", by="Maela Orr", kind="medicine"
+    )
+    session._set_live(state)
+    lines = session.apply_npc_reply("Maela Orr", treat)
+    assert lines == ["Maela Orr: Maela Orr splint a broken arm."] or lines[0].startswith(
+        "Maela Orr"
+    )
+    assert session.area_state().injuries[0].treated is not None
+    # A medic gives proper care, and her standing with the player can change.
+    session.visual_design().people["Maela Orr"].medic = True
+    cared = NpcReply(
+        say="Let me set that properly.",
+        mood="kind",
+        intent="treat",
+        place="",
+        what="",
+        remember="",
+        standing="friend",
+    )
+    lines = session.apply_npc_reply("Maela Orr", cared)
+    assert "Maela Orr sets a broken arm." in lines
+    assert "(Maela Orr: friend with you now.)" in lines
+    assert session.standing_of("Maela Orr") == "friend"
+    assert session.area_state().injuries[0].cared is not None
+    # Told to her: the talk call carries the standing and the player's hurts.
+    session.provider.responses = [GREETING]
+    plotted._set_talking("Maela Orr")
+    _ask(plotted, "Thank you.", GREETING)
+    asked = session.provider.requests[-1].messages[1].text
+    assert "HOW THE PLAYER STANDS WITH YOU: friend" in asked
+    assert "hurt: a broken arm, under care" in asked
+    assert "You can give proper care" in session.provider.requests[-1].messages[0].text
+
+
+def test_a_friend_present_tends_the_sleeping_player_and_keeps_the_night(plotted: VisualWindow):
+    from sealedlore.engine.session_visual import ITEM_PREFIX
+    from sealedlore.models.visual import Injury
+
+    session = plotted.session
+    state = session.area_state()
+    state.creatures.clear()
+    state.injuries.append(
+        Injury(kind="deep wound", serious=True, at=state.seconds, words="a deep gash in the side")
+    )
+    me = state.spots["Serrik Vaun"]
+    near = _beside_tile(session.area(me.area), me)
+    state.spots["Maela Orr"] = Spot(area=me.area, x=near[0], y=near[1])
+    state.things[ITEM_PREFIX + "kit"] = ThingRecord(
+        state="taken", name="a first aid kit", by="Maela Orr", kind="medicine"
+    )
+    state.standing["Maela Orr"] = "friend"
+    session._set_live(state)
+    lines = session.visual_sleep()
+    assert any("dress a deep gash" in ln for ln in lines), lines
+    assert session.area_state().injuries[0].treated is not None
+    assert session.safe_here(session.area_state(), session.area(me.area))
+
+
+def test_the_keeper_injures_treats_and_sets_standings(plotted: VisualWindow):
+    from sealedlore.engine.keeper import parse_keeper
+
+    session = plotted.session
+    events = session.story.plot.events
+    reply = parse_keeper(
+        '{"fire": [], "script": ['
+        '{"op": "injure", "kind": "broken leg", "words": "a leg broken in the fall"}, '
+        '{"op": "status", "who": "Maela Orr", "status": "ally"}, '
+        '{"op": "status", "who": "nobody", "status": "friend"}], "note": ""}',
+        events,
+    )
+    lines = session.apply_keeper_reply(reply, kind="direction")
+    assert "You are hurt: a leg broken in the fall." in lines and "Maela Orr: ally." in lines
+    state = session.area_state()
+    assert state.injuries[0].kind == "broken leg" and state.standing["Maela Orr"] == "ally"
+    assert session.visual_walk_factor() == 0.4
+    assert "injuries: a leg broken in the fall, untreated" in session.visual_state_text()
+    assert "Maela Orr: ally" in session.visual_state_text()
+    treated = parse_keeper(
+        '{"fire": [], "script": [{"op": "treat", "how": "first aid"}], "note": ""}', events
+    )
+    lines = session.apply_keeper_reply(treated, kind="direction")
+    assert "You splint a leg broken in the fall." in lines
+    assert session.visual_walk_factor() == 0.5
+    cared = parse_keeper('{"fire": [], "script": [{"op": "heal"}], "note": ""}', events)
+    session.apply_keeper_reply(cared, kind="direction")
+    assert session.area_state().injuries[0].cared is not None
+    # A group's standing holds for each of its people.
+    session.visual_design().groups["The farm"] = ["Maela Orr", "Captain Idris"]
+    state = session.area_state()
+    state.standing.clear()
+    session._set_live(state)
+    grouped = parse_keeper(
+        '{"fire": [], "script": [{"op": "status", "who": "The farm", "status": "guest"}], '
+        '"note": ""}',
+        events,
+    )
+    assert "The farm: guest." in session.apply_keeper_reply(grouped, kind="direction")
+    assert session.standing_of("Captain Idris") == "guest"
+
+
+def test_a_scout_spots_people_first_and_they_greet_only_when_close(plotted: VisualWindow):
+    session = plotted.session
+    state = session.area_state()
+    state.creatures.clear()
+    farm = session.area("farm")
+    # Out on the farm's road, Idris 28 tiles down it (93 m at 3.3 m a tile)
+    # in open sight (the fields are full of trees, which stop the eye).
+    column = next(
+        x for x in range(farm.width) if all(farm.rows[y][x] == "=" for y in range(34, 58))
+    )
+    spot = (column, 36)
+    state.spots["Serrik Vaun"] = Spot(area="farm", x=spot[0], y=spot[1])
+    far = (column, 56)  # 20 tiles: 66 m, past the ordinary 60 m
+    state.spots["Captain Idris"] = Spot(area="farm", x=far[0], y=far[1])
+    state.placed.append("Captain Idris")
+    session.visual_design().scouting["Serrik Vaun"] = 20
+    session._set_live(state)
+    lines = session.visual_report()
+    assert any(ln.startswith("You spot Captain Idris first") for ln in lines), lines
+    assert session.unaware_of_player("Captain Idris")
+    assert not session.encounter_due("Captain Idris")
+    # Walked up close, he notices; and spoken to, at once.
+    state = session.area_state()
+    near = (far[0], far[1] - 3)
+    state.spots["Serrik Vaun"] = Spot(area="farm", x=near[0], y=near[1])
+    session._set_live(state)
+    assert not session.unaware_of_player("Captain Idris")
+    assert session.encounter_due("Captain Idris")
+    # A poor scout is seen first from afar instead: the person reacts now.
+    state = session.area_state()
+    state.scout_rolled.clear()
+    state.spotted.clear()
+    state.spots["Serrik Vaun"] = Spot(area="farm", x=spot[0], y=spot[1])
+    session.visual_design().scouting["Serrik Vaun"] = 0
+    session.visual_design().people["Captain Idris"].alertness = 20
+    session._set_live(state)
+    lines = session.visual_report()
+    assert any(ln.startswith("Captain Idris has seen you") for ln in lines), lines
+    assert "Captain Idris" in session.people_in_sight()
+
+
+class _DrawingImages:
+    """An image client that draws: a flat picture on white with a dark
+    figure in it, so the cut-out keeps something."""
+
+    def __init__(self, base_url: str = "", api_key: str = "", **kwargs) -> None:
+        self.api = kwargs.get("api", "nanogpt")
+        self.payloads: list[dict] = []
+
+    def generate(self, payload):
+        from PySide6.QtGui import QColor, QImage, QPainter
+
+        from sealedlore.gui.image_codec import encoded
+        from sealedlore.providers.images import ImageReply
+
+        self.payloads.append(payload)
+        image = QImage(96, 96, QImage.Format_RGB32)
+        image.fill(QColor(255, 255, 255))
+        painter = QPainter(image)
+        painter.fillRect(30, 20, 36, 60, QColor(40, 30, 20))
+        painter.end()
+        return ImageReply(images=[encoded(image, "PNG")], raw={}, cost=0.01)
+
+    def cancel(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+def test_the_people_of_a_place_are_drawn_when_the_player_comes_to_it(
+    app, plotted: VisualWindow, monkeypatch
+):
+    """The author (Oct 27 2026): portraits draw when the player goes into
+    the relevant region; a man's card drew as the set's woman figure."""
+    from sealedlore.engine import session_people_art
+    from sealedlore.gui import visual_window as vw_module
+
+    session = plotted.session
+    client = _DrawingImages()
+    monkeypatch.setattr(session_people_art, "ImageClient", lambda *a, **k: client)
+    session.config.visual_paint = True
+    session.config.image_endpoint.base_url = "https://nano-gpt.com/api/v1"
+    session.config.image_endpoint.api_key = "k"
+    state = session.area_state()
+    me = state.spots["Serrik Vaun"]
+    near = _beside_tile(session.area(me.area), me)
+    state.spots["Maela Orr"] = Spot(area=me.area, x=near[0], y=near[1])
+    session._set_live(state)
+    maela = session.visual_card("Maela Orr")
+    assert not maela.reference_images and session.walker_file("Maela Orr") is None
+    wanted = session.people_art_wanted(session.area(me.area))
+    assert [c.name for c in wanted] == ["Maela Orr"]
+    drawn: list[list[str]] = []
+    session.on_people_drawn = drawn.append
+    assert session.start_people_art(wanted, vw_module._cut_sprite)
+    session._people_thread.join(20)
+    assert drawn == [["Maela Orr"]]
+    # A portrait from her card, first on it; the sprite from the portrait.
+    assert maela.reference_images and maela.reference_images[0].caption == "portrait"
+    assert maela.reference_images[0].prompt and maela.reference_images[0].model
+    assert session.walker_file("Maela Orr") is not None
+    assert len(client.payloads) == 2
+    assert "imageDataUrls" in client.payloads[1] and client.payloads[1]["prompt"].startswith(
+        "Create a small full-body game character sprite"
+    )
+    assert client.payloads[1]["enable_prompt_expansion"] is False
+    # Drawn: not wanted again; the portrait file and the sprite file are kept.
+    assert session.people_art_wanted(session.area(me.area)) == []
+    assert session.pictures.read(maela.reference_images[0].file)
+    assert session.pictures.read(session.walker_file("Maela Orr"))
+    kinds = [e["kind"] for e in session.read_api_log()] if hasattr(session, "read_api_log") else []
+    del kinds

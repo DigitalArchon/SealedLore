@@ -17,7 +17,7 @@ from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.character import Character
-from sealedlore.models.visual import INTENTS, PersonSheet
+from sealedlore.models.visual import INTENTS, STANDINGS, PersonSheet
 
 WORLD_CHARS = 1500
 CARD_CHARS = 900
@@ -37,6 +37,9 @@ class NpcReply:
     place: str
     what: str
     remember: str
+    # How they now stand with the player, when the reply says ("guest",
+    # "friend"...; models/visual.py STANDINGS), else "".
+    standing: str = ""
 
 
 def sheet_of(name: str, design_people: Mapping[str, PersonSheet]) -> PersonSheet:
@@ -77,6 +80,7 @@ def npc_messages(
     line: str,
     state: Sequence[str] = (),
     heard: Sequence[Sequence[str]] = (),
+    standing: str = "",
     texts: PromptTexts = DEFAULT_TEXTS,
 ) -> list[PromptMessage]:
     """The talk call: the rules and the sheet as the system (cached per
@@ -98,6 +102,11 @@ def npc_messages(
                 knows=_or(sheet.knows, "what anyone here would know"),
                 never=_or(sheet.never, "nothing in particular"),
                 speech=_or(sheet.speech, "plainly"),
+                care=(
+                    "You can give proper care: set a break, clean and stitch a wound."
+                    if sheet.medic
+                    else "You are no medic, but can give first aid with a kit if you carry one."
+                ),
             ),
         ]
     )
@@ -110,6 +119,7 @@ def npc_messages(
         player=player,
         player_words=player_words or "nothing to remark on",
         state=", ".join(state) or "as usual",
+        standing=standing or "a stranger",
         witnessed="; ".join(list(witnessed)[-WITNESS_LINES:]) or "nothing",
         memories="; ".join(list(memories)[-MEMORY_LINES:]) or "nothing yet",
         heard="\n".join(f"{who}: {words}" for who, words in list(heard)[-HEARD_LINES:])
@@ -128,6 +138,9 @@ def parse_npc(text: str) -> NpcReply:
     (else "stay"), the place or thing it names, a memory line. Raises
     ValueError on a reply with no JSON object."""
     reply = extract_json(text, dict, "what the person says")
+    standing = str(reply.get("standing") or "").strip().lower()
+    if standing not in STANDINGS:
+        standing = ""
     intent = reply.get("intent")
     kind, place, what = "stay", "", ""
     if isinstance(intent, dict):
@@ -145,6 +158,7 @@ def parse_npc(text: str) -> NpcReply:
         place=place[:80],
         what=what[:80],
         remember=" ".join(str(reply.get("remember") or "").split())[:200],
+        standing=standing,
     )
 
 
@@ -167,6 +181,8 @@ def intent_words(name: str, reply: NpcReply, *, player: str) -> str:
         return f"{name} walks off."
     if kind == "give":
         return f"{name} hands you {reply.what or 'something'}."
+    if kind == "approach":
+        return f"{name} comes over to you."
     return ""
 
 
@@ -174,13 +190,18 @@ def mood_words(mood: str) -> str:
     return mood.strip().lower()
 
 
-def player_description(weapon: str, wounds: int, carrying: int) -> str:
-    """What a person can see of the player."""
+def player_description(
+    weapon: str, wounds: int, carrying: int, injuries: Sequence[str] = ()
+) -> str:
+    """What a person can see of the player: the weapon in hand, how hurt
+    they look (their injuries in words), what they carry."""
     parts = []
     if weapon:
         parts.append(f"carrying a {weapon} in plain sight")
-    if wounds:
-        parts.append("hurt" if wounds == 1 else "badly hurt")
+    if injuries:
+        parts.append("hurt: " + "; ".join(injuries))
+    elif wounds:
+        parts.append("worn down" if wounds == 1 else "badly worn down")
     if carrying:
         parts.append(f"carrying {carrying} thing{'s' if carrying != 1 else ''}")
     return ", ".join(parts)

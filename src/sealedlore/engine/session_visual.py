@@ -42,6 +42,7 @@ from sealedlore.engine.chronicle import (
     set_place,
 )
 from sealedlore.engine.dice import explain, roll_for
+from sealedlore.engine.health import is_first_aid
 from sealedlore.engine.keeper import (
     KEEPER_MAX_TOKENS,
     KeeperReply,
@@ -99,7 +100,6 @@ from sealedlore.engine.visual_rules import (
     can_open,
     door_id,
     drivable,
-    fight,
     is_held,
     is_loud,
     is_out,
@@ -286,6 +286,7 @@ class VisualRuntime:
         from_area = me.area
         area = self.area(from_area)
         seconds = walk_seconds(walk_metres(area, steps)) if area is not None else 0
+        seconds = int(seconds / max(0.2, self.visual_walk_factor(state)))
         if len(steps) > 1:
             state = self.walked(steps)
         words = ""
@@ -1047,15 +1048,10 @@ class VisualRuntime:
             return f"You {verb} the {name}." + (
                 " That was the last of it." if record.state == "gone" else ""
             )
-        if verb == "use" and kind == "medicine":
-            if state.wounds <= 0:
-                return "You aren't hurt."
-            state.wounds -= 1
-            record.count -= 1
-            if record.count <= 0:
-                record.state = "gone"
+        if verb == "use" and (kind == "medicine" or is_first_aid(record.name)):
+            words = self.visual_use_medicine(state, record)
             self._set_live(state)
-            return f"You see to your wounds with the {name}."
+            return words
         if verb == "use" and kind == "paper" and record.seen:
             return f"The {name}: {record.seen}"
         return ""  # no rule: the window sends it to the keeper as an attempt
@@ -1116,37 +1112,39 @@ class VisualRuntime:
             return []
         if creature.area != area.id or max(abs(creature.x - me.x), abs(creature.y - me.y)) > 1:
             return ["It isn't within reach."]
-        base, weapon = self.visual_ability()
-        result = fight(base, weapon, creature, attacking=True)
-        lines = [result.words]
-        if result.won:
-            creature.hits -= 1
-            if creature.hits <= 0:
-                creature.state = "down"
-            else:
-                lines[-1] = f"You hit {creature.name}; it keeps coming."
-        else:
-            state.wounds += 1
+        _base, weapon = self.visual_ability()
+        rng = random.Random(f"{state.seconds}:{creature_id}")
+        _outcome, lines = self._creature_round(state, area, me, creature, rng)
         state.seconds += 10
         if is_loud(weapon[0]):
             lines.append("The shot rolls out over the ground; anything near will have heard it.")
             self._visual_witness(state, f"fired the {bare(weapon[0])}")
         self._set_live(state)
+        if state.dead:
+            return lines
         noise = (me.x, me.y) if is_loud(weapon[0]) else None
         lines += self.visual_tick(0, noise=noise, reach=GUN_NOISE_M)
         return lines
 
     def visual_tick(
-        self, seconds: int, *, noise: tuple[int, int] | None = None, reach: float = 0.0
+        self,
+        seconds: int,
+        *,
+        noise: tuple[int, int] | None = None,
+        reach: float = 0.0,
+        resting: bool = False,
     ) -> list[str]:
-        """Time passes: the dead in the player's area move, and any beside
-        the player attack. The lines for the log; the state saved."""
+        """Time passes: the injuries mend (or fester), the dead in the
+        player's area move, and any beside the player attack (a round each,
+        engine/health.py). `resting`: the time was spent resting (sleep, a
+        wait), which heals faster. The lines for the log; the state saved."""
         state = self.area_state()
         area, me = self._visual_me(state)
         if area is None or me is None or state.dead:
             return []
         del reach  # every creature in the area hears a noise in it, for now
         lines: list[str] = self.needs_tick(state)
+        lines += self.advance_healing(state, seconds, resting=resting)
         lines += self._step_people(state, area, me, seconds)
         self._keep_schedules(state, area)
         creatures = {c.id: c for c in state.creatures.values() if c.area == area.id}
@@ -1159,41 +1157,38 @@ class VisualRuntime:
         beside = step_creatures(
             area, creatures, (me.x, me.y), seconds, noise=noise, rng=random.Random(state.seconds)
         )
-        base, weapon = self.visual_ability()
+        rng = random.Random(f"{state.seconds}:tick")
         for cid in beside:
+            if state.dead:
+                break
             creature = creatures[cid]
-            result = fight(base, weapon, creature, attacking=False)
             who = creature.name[0].upper() + creature.name[1:]
-            if result.won:
-                creature.hits -= 1
-                if creature.hits <= 0:
-                    creature.state = "down"
-                    lines.append(f"{who} comes at you; {result.words[0].lower()}{result.words[1:]}")
-                else:
-                    lines.append(f"{who} comes at you; you beat it back.")
-            else:
-                state.wounds += 1
-                lines.append(f"{who} comes at you: {result.words}")
+            _outcome, more = self._creature_round(state, area, me, creature, rng)
+            lines += [f"{who} comes at you; {ln[0].lower()}{ln[1:]}" for ln in more[:1]] + more[1:]
         if state.wounds >= self.visual_design().player_hits:
             state.dead = True
             lines.append("That was one wound too many. You are dead.")
         self._set_live(state)
         return lines
 
-    def visual_wait(self, minutes: int) -> list[str]:
+    def visual_wait(self, minutes: int, *, resting: bool = True) -> list[str]:
         state = self.area_state()
         state.seconds += minutes * 60
         self._set_live(state)
-        return self.visual_tick(minutes * 60)
+        return self.visual_tick(minutes * 60, resting=resting)
 
     def visual_sleep(self) -> list[str]:
-        """Sleep until seven in the morning."""
+        """Sleep until seven in the morning; whoever is with the player
+        (a companion, a friend here) sees to their injuries meanwhile."""
         clock = self.map_clock()
         now = clock[1] if clock else 0
         minutes = (SLEEP_UNTIL - now) % (24 * 60) or 24 * 60
         lines = [f"You sleep {minutes // 60} hours.", *self.visual_wait(minutes)]
         state = self.area_state()
         self.note_slept(state)
+        area, _me = self._visual_me(state)
+        if area is not None:
+            lines += self.companions_tend(state, area)
         self._set_live(state)
         return lines
 
@@ -1222,6 +1217,7 @@ class VisualRuntime:
             state.flavour_said.append(area.id)
             if flavour:
                 lines.append(flavour)
+        lines += self.scout_report(state, area, me)
         people = {
             name: (sp.x, sp.y)
             for name, sp in state.spots.items()
@@ -1278,8 +1274,11 @@ class VisualRuntime:
                 continue
             here = (spot.x, spot.y)
             metres = math.hypot(spot.x - me.x, spot.y - me.y) * area.tile_m
-            if (metres <= PERSON_SIGHT_M and sees(area, (me.x, me.y), here)) or in_earshot(
-                area, (me.x, me.y), here
+            noticed = f"{name}@{area.id}" in state.noticed and sees(area, (me.x, me.y), here)
+            if (
+                (metres <= PERSON_SIGHT_M and sees(area, (me.x, me.y), here))
+                or in_earshot(area, (me.x, me.y), here)
+                or noticed
             ):
                 found.append((abs(spot.x - me.x) + abs(spot.y - me.y), name))
         return [name for _d, name in sorted(found)]
@@ -1326,6 +1325,7 @@ class VisualRuntime:
         if line:
             state.talks.setdefault(name, []).append([self.held_name() or "You", line])
             self._heard(state, area.id, self.held_name() or "You", line)
+            self.player_noticed_by(state, name)
             self._set_live(state)
         messages = npc_messages(
             name=name,
@@ -1351,8 +1351,12 @@ class VisualRuntime:
             ],
             player=self.held_name() or "the player",
             player_words=player_description(
-                bare(weapon[0]) if weapon[0] else "", state.wounds, len(self.visual_inventory())
+                bare(weapon[0]) if weapon[0] else "",
+                state.wounds,
+                len(self.visual_inventory()),
+                self.visual_condition(state)[1],
             ),
+            standing=self.standing_of(name, state),
             witnessed=state.witnessed.get(name, []),
             memories=state.memories.get(name, []),
             talk=state.talks.get(name, []),
@@ -1440,8 +1444,24 @@ class VisualRuntime:
             lines += self._npc_gives(state, name, reply.what)
             words = "" if lines else words
             state.goals[name] = NpcGoal(intent="stay")
+        elif kind == "approach":
+            state.goals[name] = NpcGoal(intent="approach", toward=self.held_name() or "")
+        elif kind == "treat":
+            tended = self.visual_treat_by(state, name)
+            if tended:
+                lines += tended
+            elif self.nothing_more_to_do(state, name):
+                lines.append(f"{name} looks you over: nothing more to be done for now.")
+            else:
+                lines.append(f"{name} has nothing to treat you with.")
+            words = ""
+            state.goals[name] = NpcGoal(intent="stay")
         else:
             state.goals[name] = NpcGoal(intent="stay")
+        if reply.standing:
+            said = self.set_standing(state, name, reply.standing)
+            if said:
+                lines.append(f"({said[:-1]} with you now.)")
         if words:
             lines.append(words)
         self._set_live(state)
@@ -1618,9 +1638,15 @@ class VisualRuntime:
                 stand = stand_near(area, target, taken - {here} | {target})
                 route = path(area, here, stand, blocked=taken - {here})
                 step = route[min(len(route) - 1, max(1, tiles * 2))] if len(route) > 1 else here
+            elif goal.intent == "approach":
+                self._approach_step(state, area, me, name, max(1, tiles))
+                taken = {(s.x, s.y) for n, s in state.spots.items() if s.area == area.id}
+                continue
             elif goal.intent == "attack":
                 if max(abs(here[0] - me.x), abs(here[1] - me.y)) <= 1:
                     lines += self._person_attacks(state, name)
+                    if state.dead:
+                        break
                     continue
                 stand = stand_near(area, (me.x, me.y), taken - {here} | {(me.x, me.y)})
                 route = path(area, here, stand, blocked=taken - {here})
@@ -1716,26 +1742,13 @@ class VisualRuntime:
                 state.spots[name] = new
 
     def _person_attacks(self, state, name: str) -> list[str]:
-        """A person beside the player fights them (the simple combat)."""
-        from sealedlore.models.visual import Creature
-
-        sheet = self.visual_sheet(name)
-        base, weapon = self.visual_ability()
-        stand_in = Creature(name=name, area="", x=0, y=0, ability=sheet.ability)
-        result = fight(base, weapon, stand_in, attacking=False)
-        if result.won:
-            state.people_down.append(name)
-            state.goals.pop(name, None)
-            if name in state.companions:
-                state.companions.remove(name)
-            return [
-                f"{name} comes at you; you put them down ({result.mine} against {result.theirs})."
-            ]
-        state.wounds += 1
-        return [
-            f"{name} comes at you and gets the better of you ({result.mine} against "
-            f"{result.theirs}): you are hurt."
-        ]
+        """A person beside the player fights them: a round (engine/health.py)."""
+        area, me = self._visual_me(state)
+        if area is None or me is None:
+            return []
+        rng = random.Random(f"{state.seconds}:{name}")
+        _outcome, lines = self._person_round(state, area, me, name, rng)
+        return [f"{name} comes at you; {ln[0].lower()}{ln[1:]}" for ln in lines[:1]] + lines[1:]
 
     def visual_attack_person(self, name: str) -> list[str]:
         """The player attacks a person: a fight; the person turns on them."""
@@ -1746,28 +1759,19 @@ class VisualRuntime:
             return []
         if max(abs(spot.x - me.x), abs(spot.y - me.y)) > 1:
             return [f"{name} isn't within reach."]
-        from sealedlore.models.visual import Creature
-
-        sheet = self.visual_sheet(name)
-        base, weapon = self.visual_ability()
-        stand_in = Creature(name=name, area="", x=0, y=0, ability=sheet.ability)
-        result = fight(base, weapon, stand_in, attacking=True)
         self._visual_witness(state, f"attacked {name}")
-        if result.won:
-            state.people_down.append(name)
-            state.goals.pop(name, None)
+        self.player_noticed_by(state, name)
+        rng = random.Random(f"{state.seconds}:{name}:attack")
+        outcome, lines = self._person_round(state, area, me, name, rng)
+        if outcome.result not in ("down",) and name not in state.people_down:
+            # Attacked, they fight back from now on.
+            state.goals[name] = NpcGoal(intent="attack", toward=self.held_name() or "")
             if name in state.companions:
                 state.companions.remove(name)
-            lines = [f"You put {name} down ({result.mine} against {result.theirs})."]
-        else:
-            state.wounds += 1
-            state.goals[name] = NpcGoal(intent="attack", toward=self.held_name() or "")
-            lines = [
-                f"{name} gets the better of you ({result.mine} against {result.theirs}): "
-                "you are hurt."
-            ]
         state.seconds += 10
         self._set_live(state)
+        if state.dead:
+            return lines
         return lines + self.visual_tick(0)
 
     def _visual_witness(self, state, words: str) -> None:
@@ -1807,6 +1811,8 @@ class VisualRuntime:
         me = state.spots.get(self.held_name() or "")
         if me is None:
             return False
+        if self.unaware_of_player(name, state):
+            return False  # spotted first: they haven't seen the player yet
         return f"{name}@{me.area}" not in state.greeted
 
     def mark_encountered(self, name: str) -> None:
@@ -2011,6 +2017,16 @@ class VisualRuntime:
                 wider += f" {here_place.name}: {' '.join(here_place.what.split())[:300]}"
         short = self.visual_needs(state)
         faring = f" {held} is {', '.join(short)}." if short else ""
+        _word, hurts = self.visual_condition(state)
+        if hurts:
+            faring += f" {held}'s injuries: " + "; ".join(hurts) + "."
+        standings = [
+            f"{n}: {self.standing_of(n, state)}"
+            for n, sp in state.spots.items()
+            if n != held and self.standing_of(n, state)
+        ] + [f"{g} (all of them): {s}" for g, s in state.group_standing.items()]
+        if standings:
+            faring += " How people stand with them: " + "; ".join(standings) + "."
         # The story's own people not on the board yet, so the plot's band
         # comes as the plot wrote them (live, "First bandit meeting" brought
         # Evan with two invented names, Cole and Dutch unused).
@@ -2146,8 +2162,10 @@ class VisualRuntime:
         problem = ""
         events = self.story.plot.events if self.story.plot is not None else []
         try:
+            # "ask", not "kind": a "kind" field took the entry's own kind,
+            # and every keeper request was logged as "moment" or "journey".
             log_ref = self._log(
-                "keeper_request", {"kind": kind, "payload": self.provider.build_payload(request)}
+                "keeper_request", {"ask": kind, "payload": self.provider.build_payload(request)}
             )
             try:
                 answer, completed = text.complete(request)
@@ -2195,6 +2213,11 @@ class VisualRuntime:
             # The reply's own note says what is seen: a "note" operation
             # beside it said the same in other words (live, on arrivals).
             script = [op for op in script if op.op != "note"]
+        if quiet:
+            # The program has already moved the clock for what the moment
+            # is about (the night slept, the journey made): live, the
+            # keeper's "clock": 480 after a sleep woke John at 15:00.
+            script = [op for op in script if op.op != "clock"]
         if kind == "moment" and talking_to:
             script = [
                 op
@@ -2361,6 +2384,7 @@ class VisualRuntime:
             speech=op.get("speech"),
             carries=op.words("carries"),
             ability=5,
+            group=op.get("group"),
         )
         lines = self._stand_person(state, name, op.get("where") or "nearby")
         return lines
@@ -2381,6 +2405,56 @@ class VisualRuntime:
                     state="taken", name=thing, by=card.name, kind=kind_of(thing)
                 )
         return []
+
+    def _keeper_injures(self, state, op: Op) -> list[str]:
+        """The keeper hurts the player: a kind of injury, or a serious wound."""
+        from sealedlore.engine.health import MINOR_KINDS, SERIOUS_KINDS
+        from sealedlore.models.visual import Injury
+
+        kind = op.get("kind").strip().lower() if op.op == "injure" else "deep wound"
+        if kind not in MINOR_KINDS + SERIOUS_KINDS:
+            kind = "deep wound" if op.op == "wound" else "cut"
+        words = " ".join(op.get("words").split()).rstrip(".")
+        if not words or len(words) > 40 or words.count(" ") > 6:
+            # A name for it, not the story of it (live, the whole fall).
+            words = "bruises" if kind == "bruises" else f"a {kind}"
+        words = words[0].lower() + words[1:]
+        count = op.count(1) if op.op == "wound" else 1
+        if any(i.kind == kind and i.serious and not i.healed for i in state.injuries):
+            # The keeper spoke of an injury the player has (live, asked about
+            # the broken leg, it "injured" a second one): nothing new.
+            return []
+        for _ in range(max(1, count)):
+            state.injuries.append(
+                Injury(kind=kind, serious=kind in SERIOUS_KINDS, at=state.seconds, words=words)
+            )
+        return [f"You are hurt: {words}."]
+
+    def _keeper_treats(self, state, op: Op) -> list[str]:
+        """The keeper sees to the player's injuries: first aid, proper care
+        (a break set, a wound cleaned), or antibiotics."""
+        from sealedlore.engine.health import care, first_aid, worst_untreated
+
+        how = op.get("how").strip().lower()
+        lines: list[str] = []
+        if "antibiotic" in how:
+            for injury in state.injuries:
+                if injury.infected and not injury.healed:
+                    lines.append(care(injury, state.seconds, antibiotics=True))
+        elif "first" in how or "bandage" in how or "splint" in how or "dress" in how:
+            injury = worst_untreated(state.injuries)
+            if injury is not None:
+                lines.append(first_aid(injury, state.seconds))
+        else:
+            for injury in state.injuries:
+                if injury.serious and not injury.healed:
+                    for words in (
+                        care(injury, state.seconds, antibiotics=True),
+                        care(injury, state.seconds),
+                    ):
+                        if words:
+                            lines.append(words)
+        return [ln for ln in lines if ln]
 
     def _doors_of_place(self, state, where: str) -> list[DoorState]:
         inside = self._visual_area_named(where)
@@ -2706,10 +2780,17 @@ class VisualRuntime:
                 self.note_ate(state, "food")
             elif kind == "drink":
                 self.note_ate(state, "drink")
-            elif kind == "wound":
-                state.wounds += op.count(1)
+            elif kind in ("injure", "wound"):
+                lines += self._keeper_injures(state, op)
+            elif kind == "treat":
+                lines += self._keeper_treats(state, op)
             elif kind == "heal":
+                lines += self._keeper_treats(state, Op(op="treat", args={"how": "care"}))
                 state.wounds = max(0, state.wounds - op.count(1))
+            elif kind == "status":
+                said = self.set_standing(state, op.get("who"), op.get("status"))
+                if said:
+                    lines.append(said)
             elif kind == "clock":
                 clock = self.map_clock()
                 state.seconds += op.minutes(clock[1] if clock else None) * 60

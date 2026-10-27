@@ -1564,12 +1564,39 @@ force it (strength, and a noise). What you newly see or hear is written in
 the log as you move, and each place says a line of its own the first time
 you enter it. **The dead** are the world's: they wander, come to a noise, and
 chase you on sight; one beside you attacks, and you can attack one from its
-menu. A fight is one number a side, yours with the best weapon you carry
-against theirs, and the higher wins: a loss is a wound, and three wounds are
-the end, with a fresh start offered from the opening. One of the dead you
-can't see but is near is a sound in the log, in its own colour; a shot rolls
-out, and everyone near knows it. **Wait an hour** and **Sleep till morning**
-on the toolbar pass the time where you stand. What a world starts with (its
+menu. A fight is rounds: a die each on top of your fighting score (your
+ability and the best weapon you carry, less what your injuries and your
+hunger cost) against theirs, and the margin says what happened. Beat them
+well and they go down; beat them a little and they take a hit; lose a little
+and you take bruises or a cut, which a day's rest with food and drink heals
+and which cost you nothing meanwhile; lose badly and you take **a serious
+injury**: a broken arm or leg, a deep wound, a bite from the dead. Someone
+whose score beats their opponents' can never take worse than a cut, so a
+capable fighter with a good weapon beats several of the dead, or a band of
+bandits, with nothing worse than bruises; outnumbered, each extra opponent
+beside you costs a point. **Retreat** (**R**) breaks you away from whoever is
+on you, freely unless you are clearly overwhelmed (three or more beside you,
+or disabled by an injury), when each gets a blow in as you go; the dead
+shamble after at their pace, slower than you walk. A serious injury disables
+you (a broken leg halves your walking and makes journeys long; a broken arm
+halves a rifle's use; every one weakens you in a fight) until it has had its
+days of rest, and heals in weeks: **first aid** within a few hours (a first
+aid kit, a bandage, a splint: **Carrying → Use**) or a break never sets
+straight and leaves a lasting limp or a weak arm; **proper care** (a medic
+who sets the break and cleans the wound: ask them, and a friend or companion
+sees to you while you sleep) brings the days down; a deep wound or a bite
+left undressed a day goes bad and costs you strength until **antibiotics**
+are found. Rest counts in full while you sleep or wait, half while you are up
+and about, half again while you are hungry or thirsty. Under the view your
+condition shows beside your hearts (**Fit**, **Bruised**, **Hurt**,
+**Disabled**, **Infected**), each injury and what it needs in its tooltip;
+the story's keeper and the people see them too. A finishing blow while you
+already carry a serious injury, or your strength worn down to nothing by
+hunger, thirst or infection, is the end, with a fresh start offered from the
+opening. One of the dead you can't see but is near is a sound in the log, in
+its own colour; a shot rolls out, and everyone near knows it. **Wait an
+hour** and **Sleep till morning** on the toolbar pass the time where you
+stand. What a world starts with (its
 locks and keys, its dead, things laid out, a line for each place, the
 weather) is its design, shipped beside its plot file.
 
@@ -1625,6 +1652,27 @@ painting of their own yet (a new stretch of country, a building's inside): in
 the background, while you play on the tiles, in the same storybook look as the
 rest, about 3¢ a place through the picture endpoint in Settings. **Game →
 Paint new places** turns it off.
+
+**Seeing and being seen.** Your character has a scouting ability (the world's
+design gives it; a card's scouting, tracking or stealth skill raises it).
+When someone comes within a hundred metres with a clear line of sight, a
+roll is made once: your scouting against their alertness. Won, you spot them
+first and the log says so; they have not seen you, and will not react until
+you come within twenty-five metres or act on them, so you can go round. Lost,
+they have seen you first, from afar, and do what they would on seeing a
+stranger: call out, come over, threaten, hide, run. **Standing.** How each
+person, or a whole group (a town, a band), stands with you shows beside their
+mood when you talk: a stranger, wary, hostile, a guest, a friend, an ally, a
+partner. The person's own words can change it, and so can the story's keeper;
+sleeping among friends keeps the night quiet, and a friend or companion sees
+to your injuries while you rest.
+
+**The people's pictures.** Whoever stands in a place you come to and has no
+portrait or sprite of their own gets both drawn in the background (a portrait
+from their card, kept on it, then their walking sprite from the portrait, by
+the same models as the rest; about 2¢ a person), under the same switch as the
+paintings (**Game → Paint new places**). Until then they walk as one of the
+tile set's own figures.
 
 **The people** are the model's. Each has a sheet in the world's design (who
 they are, what they want, what they know, what they never do, how they

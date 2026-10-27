@@ -42,7 +42,17 @@ CreatureState = Literal["wander", "drawn", "chase", "down"]
 # What a person may do of their own accord (engine/npc.py): the model
 # chooses one from a sheet; the program carries it out on the map.
 Intent = Literal[
-    "stay", "follow", "lead_to", "attack", "retreat", "hide", "fetch_help", "leave", "give"
+    "stay",
+    "follow",
+    "lead_to",
+    "attack",
+    "retreat",
+    "hide",
+    "fetch_help",
+    "leave",
+    "give",
+    "approach",
+    "treat",
 ]
 INTENTS: tuple[str, ...] = (
     "stay",
@@ -54,7 +64,25 @@ INTENTS: tuple[str, ...] = (
     "fetch_help",
     "leave",
     "give",
+    # Walk up to the player (someone who sees them from afar and comes
+    # over: a trader, a greeter), and tend the player's injuries (a medic,
+    # anyone with a first aid kit): the author's rulings, Oct 27 2026.
+    "approach",
+    "treat",
 )
+# How a person stands with the player (the author, Oct 27 2026): set by
+# the keeper, by the person's own reply, or for a whole group.
+STANDINGS: tuple[str, ...] = (
+    "stranger",
+    "wary",
+    "hostile",
+    "guest",
+    "friend",
+    "ally",
+    "partner",
+)
+# Standings under which a place's people let the player sleep in peace.
+SAFE_STANDINGS = frozenset({"guest", "friend", "ally", "partner"})
 
 
 class DoorState(BaseModel):
@@ -125,6 +153,39 @@ class PersonSheet(BaseModel):
     carries: list[str] = Field(default_factory=list)
     # Where they are through the day, when nothing else moves them.
     schedule: list[Shift] = Field(default_factory=list)
+    # Someone who can give proper care (a doctor, a nurse): sets a break,
+    # cleans a wound (engine/health.py `care`).
+    medic: bool = False
+    # The group they belong to (a town, a band): a standing with the group
+    # is a standing with each of them unless they have one of their own.
+    group: str = ""
+    # How well they see someone coming (engine/health.py and the scouting
+    # roll in engine/session_visual.py): the default is their ability.
+    alertness: int | None = None
+
+
+class Injury(BaseModel):
+    """A hurt the player carries (engine/health.py): minor (bruises, a
+    cut) or serious (a broken arm or leg, a deep wound, a bite); when it
+    was taken, what has been done for it, the rest it has had, and how it
+    turned out."""
+
+    id: str = Field(default_factory=new_id)
+    kind: str
+    serious: bool
+    # Seconds on the clock when it was taken, given first aid, given proper care.
+    at: int
+    treated: int | None = None
+    cared: int | None = None
+    # Seconds of mending rest it has had, and of festering while infected.
+    rested: int = 0
+    festered: int = 0
+    infected: bool = False
+    # A break never set in time, a wound that healed badly: a lasting penalty.
+    permanent: bool = False
+    healed: bool = False
+    # As it was told ("a bite on the forearm").
+    words: str = ""
 
 
 class NpcGoal(BaseModel):
@@ -220,3 +281,10 @@ class VisualDesign(BaseModel):
     # The wider world the story's map stands in (models/overmap.py): its
     # regions, roads and places, for journeys and exploring.
     overmap: Overmap | None = None
+    # Scouting ability by character name (the author, Oct 27 2026: a scout
+    # sees others before they see them); the rest take `default_scouting`.
+    scouting: dict[str, int] = Field(default_factory=dict)
+    default_scouting: int = 4
+    # Groups of people (a town, a band): a standing with the group holds
+    # for each member without one of their own.
+    groups: dict[str, list[str]] = Field(default_factory=dict)

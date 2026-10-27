@@ -2879,11 +2879,17 @@ _text(
     "with the player from now on), lead_to (take the player somewhere: name the place), "
     "attack (fight the player), retreat (back away, keep their distance), hide (get out "
     "of sight), fetch_help (go for others), leave (walk off), give (hand the player "
-    "something they carry: name it). Most people stay; nobody attacks or follows without "
-    "a reason the sheet gives. Reply with one JSON object and nothing else:\n\n"
+    "something they carry: name it), approach (walk over to the player: someone who sees "
+    "them from afar and comes to meet them), treat (see to the player's injuries, with what "
+    "they have). Most people stay; nobody attacks or follows without a reason the sheet "
+    "gives. When they first see the player, do what this person would on seeing a stranger "
+    "there: call out, come over, threaten, attack, hide, run. Reply with one JSON object and "
+    "nothing else:\n\n"
     '{"say": "what they say, or "" for silence", "mood": "one word", "intent": '
     '{"kind": "stay", "place": "", "what": ""}, "remember": "one line this person will '
-    'remember of this exchange, or """}',
+    'remember of this exchange, or """, "standing": "how they now stand with the player, '
+    "only when it has changed: stranger, wary, hostile, guest, friend, ally or partner; "
+    'else ""}',
 )
 
 _text(
@@ -2893,7 +2899,7 @@ _text(
     "The person's sheet as the talk call is given it: the design's words over their card.",
     "THE WORLD:\n{world}\n\nWHO YOU ARE: {name}\n{card}\nPersonality: {personality}\n"
     "Goals: {goals}\nWhat you want from a stranger: {wants}\nWhat you know: {knows}\n"
-    "What you never do or say: {never}\nHow you speak: {speech}",
+    "What you never do or say: {never}\nHow you speak: {speech}\n{care}",
     (
         ("world", "The world in brief"),
         ("name", "The person's name"),
@@ -2904,6 +2910,7 @@ _text(
         ("knows", "What they know"),
         ("never", "What they never do or say"),
         ("speech", "How they speak"),
+        ("care", "Whether they can give proper care to injuries"),
     ),
 )
 
@@ -2915,6 +2922,7 @@ _text(
     "player carries and has done where this person could see, what this person "
     "remembers, the conversation so far, and the player's words.",
     "WHERE: {where}. It is {when}.\nWHO IS ABOUT: {about}\nYOUR OWN STATE: {state}\n"
+    "HOW THE PLAYER STANDS WITH YOU: {standing}\n"
     "THE PLAYER'S CHARACTER, "
     "{player}: {player_words}\nWHAT YOU HAVE SEEN THEM DO: {witnessed}\nWHAT YOU REMEMBER: "
     "{memories}\nSAID HERE JUST NOW, BY OTHERS (answer to it, don't repeat it): {heard}\n\n"
@@ -2924,6 +2932,7 @@ _text(
         ("when", "The time of day"),
         ("about", "Who else is in sight or earshot"),
         ("state", "This person's own state, as the game has it (held, hurt), or as usual"),
+        ("standing", "How the player stands with them: a stranger, guest, friend, hostile…"),
         ("player", "The player's character's name"),
         ("player_words", "What can be seen of the player: weapon in hand, wounds"),
         ("witnessed", "What this person saw the player do"),
@@ -2977,7 +2986,12 @@ _text(
     "their state (a held person stays put and knows it); a place burnt, flooded or barred "
     'is "set_state"; the player over a wall, through a window or driven somewhere is "go". '
     "What the player carries and what stands here is listed, with each thing's state: "
-    "rule from it, never from things that aren't there.\n\nAn event you fire happens: its "
+    "rule from it, never from things that aren't there. The player's injuries are the "
+    'program\'s: hurt them with "injure" (a kind: bruises, cut, broken arm, broken leg, deep '
+    'wound, bite; "words" a name for it in a few words, "a broken left leg", not the story '
+    'of it), see to them with "treat" (first aid, care, antibiotics); how someone, or a '
+    'whole group by name, stands with the player (guest, friend, ally, hostile…) is "status".'
+    "\n\nAn event you fire happens: its "
     "facts are set and whoever it brings in is on the board, by the program; your script "
     "tells it (where people stand, what they say, what appears). Fire an event only when its "
     '"when" holds now, or it is overdue. Keep scripts short: a handful of operations.',
@@ -2992,6 +3006,8 @@ _text(
     "events that could happen, what has happened, the facts, and why now.",
     "WHERE THINGS STAND:\n{state}\n\nEVENTS THAT COULD HAPPEN NOW:\n{armed}\n\n"
     "WHAT HAS HAPPENED:\n{happened}\n\nTHE FACTS: {facts}\n\nWHY YOU ARE ASKED: {reason}\n\n"
+    "The time this took (a night slept, a journey made) has already passed on the clock: no "
+    '"clock" operation. '
     'Reply with one JSON object and nothing else: {"fire": [{"event": "its title", '
     '"variant": "its variant\'s title or """, "script": [operations]}], "script": '
     '[operations outside any event, usually none], "note": "a line for the player, or '
@@ -3127,6 +3143,43 @@ _text(
         "Directions are frame-relative; use no evaluative or quality words. Typical length is "
         "50 to 150 words.\n\n"
         "Output only the instruction."
+    ),
+)
+
+# The people of a place drawn when the player comes to it
+# (engine/session_people_art.py; the author, Oct 27 2026). The walker text
+# is the one the samples' walkers were drawn with (map-first, Oct 16 2026:
+# nine of nine kept hair, skin, build, clothes and colours); the person
+# text its words-only kin, for a card whose portrait couldn't be drawn.
+_text(
+    "visual.walker",
+    VISUAL,
+    "A person's sprite from their portrait",
+    "Draws a character's walking sprite as an edit of their portrait, the portrait alone "
+    "sent (FLUX.3 Klein's edit model).",
+    "Create a small full-body game character sprite of the person in image 1, in "
+    "hand-painted 16-bit pixel art, {style}: standing, facing the "
+    "viewer, the whole figure from head to feet with chibi proportions and a large head, "
+    "keeping their hair colour and style, skin tone, build, and the clothes and colours "
+    "they wear in image 1. Centred alone on a plain pure white background with a wide white "
+    "margin on every side, crisp dark outline.",
+    (("style", "the tile set's style words"),),
+)
+
+_text(
+    "visual.person",
+    VISUAL,
+    "A person's sprite from words",
+    "Draws a walking sprite for someone whose portrait couldn't be drawn, from how their "
+    "card describes them.",
+    "A hand-painted 16-bit pixel art game character sprite, {style}: {what}, in {world}, "
+    "standing, facing the viewer, the whole figure from head to feet with chibi proportions "
+    "and a large head. Centred alone on a plain pure white background with a wide white "
+    "margin on every side, crisp dark outline.",
+    (
+        ("what", "who they are and how they look"),
+        ("world", "the world, in a few words"),
+        ("style", "the tile set's style words"),
     ),
 )
 

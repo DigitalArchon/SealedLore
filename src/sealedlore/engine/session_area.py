@@ -1247,7 +1247,13 @@ class AreaRuntime:
         goal = (x, y)
         if beside or goal in others:  # never onto someone's tile
             goal = stand_near(area, goal, others | area.blocked() | {goal})
-        return path(area, (me.x, me.y), goal, blocked=others)
+        route = path(area, (me.x, me.y), goal, blocked=others)
+        if not route and others and goal not in others:
+            # Someone stands in the only way (a gate's gap, a doorway): they
+            # are squeezed past, never walked onto (live, Marcus in the
+            # south gate's gap kept John from reaching the doctor).
+            route = path(area, (me.x, me.y), goal, blocked=set())
+        return route
 
     def walked(self, steps: Sequence[tuple[int, int]]) -> AreaState:
         """The author's character has walked these tiles: where they stand,
@@ -1269,6 +1275,9 @@ class AreaRuntime:
         ):
             return state
         seconds = walk_seconds(walk_metres(area, steps))
+        if self.story.visual:
+            # A broken leg walks slow (engine/health.py `walk_factor`).
+            seconds = int(seconds / max(0.2, self.visual_walk_factor(state)))
         x, y = steps[-1]
         state.spots[held] = Spot(area=me.area, x=x, y=y)
         self._add_time(state, seconds, area.name, area.name)

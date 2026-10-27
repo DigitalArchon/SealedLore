@@ -153,16 +153,19 @@ from sealedlore.engine.scene_update import (
 from sealedlore.engine.session_archival import LEDGER_MAX_TOKENS, ArchivalRuntime
 from sealedlore.engine.session_area import AreaRuntime
 from sealedlore.engine.session_art import ArtRuntime
+from sealedlore.engine.session_health import HealthRuntime
 from sealedlore.engine.session_images import ImageRuntime
 from sealedlore.engine.session_merge import MergeRuntime, _close
 from sealedlore.engine.session_overmap import OvermapRuntime
 from sealedlore.engine.session_paint import PaintRuntime
+from sealedlore.engine.session_people_art import PeopleArtRuntime
 from sealedlore.engine.session_plot import NoticeSeverity, PlotRuntime, SessionNotice
 from sealedlore.engine.session_portraits import PortraitRuntime
 from sealedlore.engine.session_private import PrivateRuntime
 from sealedlore.engine.session_reasoning import ReasoningRuntime
 from sealedlore.engine.session_rebuild import RebuildRuntime
 from sealedlore.engine.session_recall import RecallRuntime
+from sealedlore.engine.session_scout import ScoutRuntime
 from sealedlore.engine.session_visual import VisualRuntime
 from sealedlore.engine.session_world import WorldRuntime
 from sealedlore.engine.tokens import TokenEstimator, updated_correction_factor
@@ -446,8 +449,11 @@ class StorySession(
     ArtRuntime,
     AreaRuntime,
     VisualRuntime,
+    HealthRuntime,
+    ScoutRuntime,
     OvermapRuntime,
     PaintRuntime,
+    PeopleArtRuntime,
     MergeRuntime,
     ArchivalRuntime,
     RebuildRuntime,

@@ -319,7 +319,9 @@
           "end": "07:00",
           "place": "The church"
         }
-      ]
+      ],
+      "alertness": 6,
+      "group": "Hellsville"
     },
     "Elena Ruiz": {
       "personality": "Warm, exhausted, stubborn about the living. She has buried too many and still counts each one.",
@@ -344,7 +346,10 @@
           "end": "07:00",
           "place": "The church"
         }
-      ]
+      ],
+      "medic": true,
+      "alertness": 4,
+      "group": "Hellsville"
     },
     "Ben": {
       "personality": "Bitter, angry, resentful of everyone still alive; sharp, resourceful, well supplied and proud of it.",
@@ -358,7 +363,8 @@
       "carries": [
         "a shotgun",
         "a sack of supplies"
-      ]
+      ],
+      "alertness": 7
     },
     "Evan Stevens": {
       "personality": "Twenty-two, cocky, bored, in love with his rifle. Cruel when he has the upper hand, cowardly when he doesn't.",
@@ -371,7 +377,9 @@
       "ability": 5,
       "carries": [
         "a scoped rifle"
-      ]
+      ],
+      "alertness": 5,
+      "group": "Evan's band"
     },
     "Tom Bell": {
       "card": "A heavyset man of forty who keeps Hellsville's south gate: a watchman's patience, a shotgun, and no small talk.",
@@ -397,7 +405,9 @@
           "end": "06:00",
           "place": "The church"
         }
-      ]
+      ],
+      "alertness": 5,
+      "group": "Hellsville"
     },
     "Ruth Calloway": {
       "card": "Hellsville's cook, sixty, who runs the diner's one stove and feeds the town from it.",
@@ -423,7 +433,9 @@
           "end": "06:00",
           "place": "The church"
         }
-      ]
+      ],
+      "alertness": 4,
+      "group": "Hellsville"
     },
     "Dale Fisk": {
       "card": "A wiry man of thirty with a hunting rifle who watches Hellsville's north gate and the hills beyond.",
@@ -449,7 +461,9 @@
           "end": "07:00",
           "place": "The church"
         }
-      ]
+      ],
+      "alertness": 7,
+      "group": "Hellsville"
     },
     "Lila Chen": {
       "card": "Elena's helper at the clinic, nineteen, who learned nursing from her in the last four years.",
@@ -473,7 +487,10 @@
           "end": "07:00",
           "place": "The church"
         }
-      ]
+      ],
+      "medic": true,
+      "alertness": 3,
+      "group": "Hellsville"
     },
     "Pastor Elias Hart": {
       "card": "A grey man of sixty who keeps the church where Hellsville sleeps, and buries its dead properly.",
@@ -485,7 +502,9 @@
       "speech": "Slow, kindly, scripture now and then.",
       "place": "The church",
       "ability": 2,
-      "carries": []
+      "carries": [],
+      "alertness": 3,
+      "group": "Hellsville"
     },
     "Sam": {
       "card": "A boy of nine, Hellsville-born, who knows every gap in the wall and every hiding place in town.",
@@ -499,7 +518,9 @@
       "ability": 1,
       "carries": [
         "a slingshot"
-      ]
+      ],
+      "alertness": 6,
+      "group": "Hellsville"
     },
     "Cole": {
       "card": "A bandit in Evan Stevens's band, thirty and heavy, who does the talking when Evan lets him.",
@@ -513,7 +534,9 @@
       "ability": 5,
       "carries": [
         "a pistol"
-      ]
+      ],
+      "alertness": 4,
+      "group": "Evan's band"
     },
     "Dutch": {
       "card": "A bandit in Evan Stevens's band, older and quieter than the others, with a shotgun and a limp.",
@@ -527,7 +550,9 @@
       "ability": 5,
       "carries": [
         "a shotgun"
-      ]
+      ],
+      "alertness": 6,
+      "group": "Evan's band"
     },
     "Agnes Moore": {
       "card": "Stillwater's leader, a retired schoolteacher in her sixties, small and unbending.",
@@ -541,7 +566,9 @@
       "ability": 3,
       "carries": [
         "a ring of keys"
-      ]
+      ],
+      "alertness": 5,
+      "group": "Stillwater"
     },
     "Tobias Grey": {
       "card": "A Stillwater fisherman and its best shot, forty, bearded, slow to speak.",
@@ -555,7 +582,9 @@
       "ability": 6,
       "carries": [
         "a hunting rifle"
-      ]
+      ],
+      "alertness": 7,
+      "group": "Stillwater"
     },
     "Marie Pellier": {
       "card": "A miller's widow hiding in Pellier's Mill with her two sons, thirty-five, thin and fierce.",
@@ -569,7 +598,8 @@
       "ability": 4,
       "carries": [
         "a hatchet"
-      ]
+      ],
+      "alertness": 6
     },
     "Kane": {
       "card": "The man who runs the Yard, Carrick's bandit stronghold: fifties, scarred, soft-voiced.",
@@ -584,7 +614,9 @@
       "carries": [
         "a revolver",
         "a box of cartridges"
-      ]
+      ],
+      "alertness": 6,
+      "group": "Kane's crew"
     }
   },
   "weather": "snow",
@@ -1535,5 +1567,34 @@
       }
     ],
     "road_kmh": 3.5
-  }
+  },
+  "groups": {
+    "Hellsville": [
+      "Marcus Webb",
+      "Elena Ruiz",
+      "Tom Bell",
+      "Ruth Calloway",
+      "Dale Fisk",
+      "Lila Chen",
+      "Pastor Elias Hart",
+      "Sam"
+    ],
+    "Evan's band": [
+      "Evan Stevens",
+      "Cole",
+      "Dutch"
+    ],
+    "Kane's crew": [
+      "Kane"
+    ],
+    "Stillwater": [
+      "Agnes Moore",
+      "Tobias Grey"
+    ]
+  },
+  "scouting": {
+    "John": 6,
+    "Jane": 7
+  },
+  "default_scouting": 4
 }

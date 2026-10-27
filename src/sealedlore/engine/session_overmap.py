@@ -684,7 +684,7 @@ class OvermapRuntime:
     def _pace(self, state) -> float:
         """The traveller's pace against a rested, fed one's."""
         short = self.visual_needs(state)
-        pace = 1.0
+        pace = self.visual_walk_factor(state)  # a broken leg (engine/health.py)
         if "weary" in short:
             pace *= 0.8
         if "starving" in short or "parched" in short:
@@ -791,6 +791,7 @@ class OvermapRuntime:
         self._use_up(state, "food", done.eaten)
         self._use_up(state, "drink", done.drunk)
         state.wounds += done.wounds
+        out.lines += self.advance_healing(state, done.seconds, resting=False)
         walked = legs[: done.legs + 1]
         out.lines += self._find_near(state, [(leg.x, leg.y) for leg in walked], FOUND_M)
         if done.dead or state.wounds >= self.visual_design().player_hits:
@@ -986,6 +987,10 @@ class OvermapRuntime:
         state = self.area_state()
         area, _me = self._visual_me(state)
         if om is None or area is None or area.indoor:
+            return None
+        if self.safe_here(state, area):
+            # A guest, a friend's: the people of the place keep the night
+            # (live, Kane's own men roused his guest at club-point).
             return None
         region = self.overmap_region(state)
         if region is None:

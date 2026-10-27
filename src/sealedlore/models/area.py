@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from sealedlore.models.overmap import OvermapState
 from sealedlore.models.plot import Chronicle
-from sealedlore.models.visual import Creature, DoorState, NpcGoal, PersonSheet
+from sealedlore.models.visual import Creature, DoorState, Injury, NpcGoal, PersonSheet
 
 ThingVerb = Literal["use", "take", "destroy", "eat"]
 PersonVerb = Literal["talk", "look", "attack"]
@@ -244,7 +244,7 @@ class AreaState(BaseModel):
     # a person answering knows what the others beside them just said (live,
     # three bandits at a roadblock each greeted the player with "that's far
     # enough").
-    heard: list[list[str]] = Field(default_factory=list)
+    heard: list[list[str | int]] = Field(default_factory=list)
     memories: dict[str, list[str]] = Field(default_factory=dict)
     witnessed: dict[str, list[str]] = Field(default_factory=dict)
     moods: dict[str, str] = Field(default_factory=dict)
@@ -282,6 +282,19 @@ class AreaState(BaseModel):
     # The wider world (models/overmap.py): places found, cells explored, and
     # what the traveller last ate, drank and slept.
     overmap: OvermapState = Field(default_factory=OvermapState)
+    # The player's injuries (engine/health.py), and the hits people have
+    # taken in fights (down at PERSON_HITS).
+    injuries: list[Injury] = Field(default_factory=list)
+    person_hits: dict[str, int] = Field(default_factory=dict)
+    # How each person, and each group, stands with the player (models/visual.py
+    # STANDINGS): "guest", "friend", "hostile"...
+    standing: dict[str, str] = Field(default_factory=dict)
+    group_standing: dict[str, str] = Field(default_factory=dict)
+    # People and the dead the player spotted before they were seen (by
+    # "<name>@<area id>"): they haven't noticed the player yet.
+    spotted: list[str] = Field(default_factory=list)
+    scout_rolled: list[str] = Field(default_factory=list)
+    noticed: list[str] = Field(default_factory=list)
 
 
 class LiveArea(BaseModel):
