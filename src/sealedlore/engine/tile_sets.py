@@ -71,7 +71,23 @@ LIGHT_WORDS = (
     "candle",
     "altar",
     "cauldron",
+    "fireplace",
+    "firepit",
+    "lamppost",
 )
+# A light word is the end of a word ("campfire", "oil drum fire"), never the
+# start of a longer one ("firewood": a farmstead's woodpile glowed, Oct 28
+# 2026), and a thing said to be out gives none.
+_LIGHT = re.compile(r"(?<![a-z])[a-z-]*?(" + "|".join(LIGHT_WORDS) + r")s?(?![a-z])")
+_UNLIT = re.compile(
+    r"\b(dead|cold|dark|unlit|out|snuffed|extinguished|broken|empty|rusted|rusty)\b"
+)
+
+
+def gives_light(name: str) -> bool:
+    """Whether a thing of this name gives light where it stands."""
+    words = name.lower()
+    return _LIGHT.search(words) is not None and _UNLIT.search(words) is None
 
 
 class TileSetInfo(BaseModel):

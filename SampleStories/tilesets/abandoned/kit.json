@@ -3588,7 +3588,8 @@
      "junk",
      30
     ]
-   ]
+   ],
+   "people": 3
   },
   "farmstead": {
    "name": "A farmstead",
@@ -3638,7 +3639,8 @@
      "farm_yard",
      50
     ]
-   ]
+   ],
+   "people": 40
   },
   "burned farm": {
    "name": "A burned farm",
@@ -3680,7 +3682,8 @@
      "ruins",
      50
     ]
-   ]
+   ],
+   "people": 8
   },
   "abandoned farm": {
    "name": "An abandoned farm",
@@ -3723,7 +3726,8 @@
      "farm_yard",
      50
     ]
-   ]
+   ],
+   "people": 10
   },
   "woods": {
    "name": "Pine woods",
@@ -3754,7 +3758,8 @@
      "h": 1.0,
      "chance": 15
     }
-   ]
+   ],
+   "people": 5
   },
   "campsite": {
    "name": "An abandoned campsite",
@@ -3797,7 +3802,8 @@
      "camp",
      60
     ]
-   ]
+   ],
+   "people": 25
   },
   "cabin": {
    "name": "A hunting cabin",
@@ -3837,7 +3843,8 @@
      "camp",
      40
     ]
-   ]
+   ],
+   "people": 40
   },
   "logging camp": {
    "name": "A logging camp",
@@ -3883,7 +3890,8 @@
      "camp",
      50
     ]
-   ]
+   ],
+   "people": 25
   },
   "road wreck": {
    "name": "A wreck on the road",
@@ -3933,7 +3941,8 @@
      "roadside",
      60
     ]
-   ]
+   ],
+   "people": 10
   },
   "roadblock": {
    "name": "A roadblock",
@@ -3975,7 +3984,8 @@
      "bandit_stash",
      40
     ]
-   ]
+   ],
+   "people": 100
   },
   "ruins": {
    "name": "Burned-out houses",
@@ -4025,7 +4035,8 @@
      "ruins",
      60
     ]
-   ]
+   ],
+   "people": 15
   },
   "marsh": {
    "name": "Frozen marsh",
@@ -4047,7 +4058,8 @@
      "stock": "hunting_stand",
      "stock_chance": 50
     }
-   ]
+   ],
+   "people": 5
   },
   "ice hut": {
    "name": "An ice-fishing hut",
@@ -4070,7 +4082,8 @@
      "chance": 50,
      "near": "water"
     }
-   ]
+   ],
+   "people": 30
   },
   "hills": {
    "name": "Rocky hillside",
@@ -4095,7 +4108,8 @@
      "h": 2.0,
      "chance": 30
     }
-   ]
+   ],
+   "people": 5
   },
   "sinkhole": {
    "name": "A sinkhole",
@@ -4145,7 +4159,8 @@
      "h": 1.0,
      "chance": 50
     }
-   ]
+   ],
+   "people": 10
   },
   "elevator": {
    "name": "A grain elevator",
@@ -4183,7 +4198,8 @@
      "farm_yard",
      40
     ]
-   ]
+   ],
+   "people": 20
   },
   "bridge": {
    "name": "A bridge",
@@ -4222,7 +4238,8 @@
      "roadside",
      50
     ]
-   ]
+   ],
+   "people": 50
   },
   "mill": {
    "name": "A mill",
@@ -4419,7 +4436,8 @@
      "camp",
      40
     ]
-   ]
+   ],
+   "people": 30
   },
   "train wreck": {
    "name": "A derailed train",
@@ -4456,7 +4474,8 @@
      "junk",
      50
     ]
-   ]
+   ],
+   "people": 15
   },
   "crash site": {
    "name": "A crashed helicopter",
@@ -4488,7 +4507,8 @@
      "chance": 50,
      "near": "middle"
     }
-   ]
+   ],
+   "people": 15
   },
   "rest stop": {
    "name": "A rest stop",
@@ -4543,7 +4563,8 @@
      "roadside",
      60
     ]
-   ]
+   ],
+   "people": 60
   },
   "ruined town": {
    "name": "A ruined town",

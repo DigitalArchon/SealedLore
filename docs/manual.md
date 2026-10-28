@@ -1651,7 +1651,17 @@ carry, goes so far; run dry and the drive ends where it stops).
 painting of their own yet (a new stretch of country, a building's inside): in
 the background, while you play on the tiles, in the same storybook look as the
 rest, about 3¢ a place through the picture endpoint in Settings. **Game →
-Paint new places** turns it off.
+Paint new places** turns it off. A place painted in play is painted bare, and
+everything standing in it (a wrecked car, a stove, a crate) stays a figure
+over the painting, exactly where it is, so what you see is what you can
+click. A place nobody lives in is painted dark: no light in a window, no
+smoke from a chimney.
+
+**Who lives where.** A place the wider world makes as you walk into it (a
+farmstead, a cabin, a roadblock) may have people: whoever lives there, holds
+it, or has stopped there. The first time you come in, the story's keeper
+says who they are and puts them on the board, and they take you as they
+find you. Most farms are empty; a roadblock never is.
 
 **Seeing and being seen.** Your character has a scouting ability (the world's
 design gives it; a card's scouting, tracking or stealth skill raises it).

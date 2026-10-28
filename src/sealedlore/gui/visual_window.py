@@ -724,9 +724,10 @@ class VisualWindow(QMainWindow):
             return
         info, read = session.tile_set()
         source = TileSource(info, read, cut_dir=None)
+        lit = session.lit_buildings(area)  # read here: the render runs on a thread
         started = session.start_paint(
             area,
-            lambda side, a=area: source_jpeg(a, source, side),
+            lambda side, a=area: source_jpeg(a, source, side, things=False, lit=lit),
             lambda data, a=area: trim_painting(data, a),
         )
         if started:

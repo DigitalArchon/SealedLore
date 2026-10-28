@@ -276,6 +276,11 @@ class MapPicture(BaseModel):
     name: str
     # As for sprites: the state it shows, drawn from the picture before it.
     state: str = ""
+    # A backdrop painted with the plan's fixed things in it (the shipped
+    # samples'), or of the ground alone with every thing a sprite over it
+    # (one painted in play since Oct 28 2026: Klein moved a wrecked car off
+    # its footprint and lost a truck, and nothing was there to click).
+    things_painted: bool = True
     file: str
     # A changed sprite: the picture it was drawn from. A person's avatar
     # ("walker"): the portrait file it was drawn from, "" when drawn from
@@ -415,6 +420,9 @@ class OverCell(BaseModel):
     template: str = ""
     places: list[WorldPlace] = Field(default_factory=list)
     made_at: str = ""
+    # Someone lives here, holds it or has stopped here: the template's
+    # `people` roll (models/kit.py), met on the first entry.
+    lived_in: bool = False
 
 
 class WorldArt(BaseModel):

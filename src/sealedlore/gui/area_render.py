@@ -21,7 +21,7 @@ from __future__ import annotations
 import hashlib
 import re
 import zlib
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -36,12 +36,12 @@ from sealedlore.engine.tile_sets import (
     DECK_FLOOR_ROLE,
     DECK_TEXTURES,
     GROUND_TINTS,
-    LIGHT_WORDS,
     ROOF_TINTS,
     TEXTURES,
     TileSetInfo,
     closest_item,
     deck_floor_wanted,
+    gives_light,
     ground_role,
     ground_wanted,
     head_noun,
@@ -675,7 +675,7 @@ def thing_light(f: Placement, px: int, *, indoor: bool) -> tuple[float, float, f
     """The light a thing gives where it stands (a lamp, a stove, a brazier),
     by its footprint, not its picture: so moving anything else leaves the
     ground's light as it was. A broken one gives none."""
-    if f.broken or not any(word in f.name.lower() for word in LIGHT_WORDS):
+    if f.broken or not gives_light(f.name):
         return None
     if f.kind == "furniture":
         height = px * (f.h + 1.0)
@@ -720,6 +720,7 @@ def render_ground(
     *,
     dress: bool = True,
     avoid: Sequence[Placement] | None = None,
+    lit: Collection[str] | None = None,
 ) -> Ground:
     """The area's ground (floor, walls, what grows and what is built), with
     no thing on it: they are sprites over it (`thing_picture`), so moving
@@ -727,10 +728,12 @@ def render_ground(
     they stand. `avoid`: the footprints a room's dressing (a rug, what
     stands along the walls) keeps clear of: the things as the plan put them,
     so the ground stays as it is while they are moved (default: as they are
-    now)."""
+    now). `lit`: outdoors, the buildings (place ids) whose windows show a
+    light; None lights every window (as every one was, until a deserted
+    farmstead was played "lights on", Oct 28 2026)."""
     if area.indoor:
         return _render_indoor(area, source, dress=dress, avoid=avoid)
-    return _render_outdoor(area, source)
+    return _render_outdoor(area, source, lit=lit)
 
 
 def _stars(w: int, h: int, seed: int) -> QImage:
@@ -1438,7 +1441,26 @@ def _side_door(
     p.fillRect(QRectF(door.right() - door.width() * 0.3, door.center().y() - 1, 2, 2), knob)
 
 
-def _render_outdoor(area: Area, source: TileSource) -> Ground:
+def _lit_boxes(
+    area: Area, boxes: Sequence[tuple[int, int, int, int]], lit: Collection[str]
+) -> set[tuple[int, int, int, int]]:
+    """The drawn boxes (walled rings the picture roofs) of the buildings
+    in `lit`: the ring whose box holds the building's middle."""
+    centres = [
+        ((x0 + x1) / 2, (y0 + y1) / 2)
+        for pid, (x0, y0, x1, y1) in area.buildings.items()
+        if pid in lit
+    ]
+    return {
+        box
+        for box in boxes
+        if any(box[0] <= cx <= box[2] and box[1] <= cy <= box[3] for cx, cy in centres)
+    }
+
+
+def _render_outdoor(
+    area: Area, source: TileSource, *, lit: Collection[str] | None = None
+) -> Ground:
     np = _np()
     info = source.info
     rows = area.rows
@@ -1447,6 +1469,7 @@ def _render_outdoor(area: Area, source: TileSource) -> Ground:
     W, H = w * px, h * px
     g = np.array([list(r) for r in rows])
     boxes = _building_boxes(area)
+    lit_boxes = None if lit is None else _lit_boxes(area, boxes, lit)
     roofed = np.zeros((h, w), bool)
     for x0, y0, x1, y1 in boxes:
         roofed[y0 : y1 + 1, x0 : x1 + 1] = True
@@ -1684,9 +1707,17 @@ def _render_outdoor(area: Area, source: TileSource) -> Ground:
                         )
                 elif c == "W":
                     glass = QRectF(x * px + px * 0.15, Y1 - face_h * 0.75, px * 0.7, face_h * 0.4)
-                    p.fillRect(glass, QColor(255, 210, 130))
+                    if lit_boxes is None or (x0, y0, x1, y1) in lit_boxes:
+                        p.fillRect(glass, QColor(255, 210, 130))
+                        lights.append(((x + 0.5) * px, Y1 + px * 0.6, px * 3.5))
+                    else:
+                        # Nobody in: dark glass with the sky in it.
+                        p.fillRect(glass, QColor(54, 62, 78))
+                        p.fillRect(
+                            QRectF(glass.x() + 1, glass.y() + 1.5, glass.width() * 0.4, 1.2),
+                            QColor(150, 165, 190, 120),
+                        )
                     p.fillRect(QRectF(glass.x(), glass.y(), glass.width(), 1.5), edge)
-                    lights.append(((x + 0.5) * px, Y1 + px * 0.6, px * 3.5))
             # Doors in the other walls: a door drawn on that wall, with a lit
             # knob and a step out of the roof's shadow. They were a faint
             # translucent step alone, and the author (Oct 23 2026) could not

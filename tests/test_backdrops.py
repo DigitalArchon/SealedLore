@@ -12,6 +12,7 @@ import pytest
 from sealedlore.engine.backdrops import (
     current_backdrop,
     loose_things,
+    paint_request,
     painted_things,
 )
 from sealedlore.engine.world_pictures import area_plan
@@ -108,3 +109,19 @@ def test_the_play_view_lays_its_sprites_over_the_painting(tmp_path, story, cast)
     assert ground.light is None
     # Only the loose things are drawn over it; the fixed ones are in the painting.
     assert {f.name for f in loose_things(house)} < {f.name for f in house.placements}
+
+
+def test_a_place_painted_in_play_is_painted_bare_and_told_who_lives_there(tmp_path, story, cast):
+    from sealedlore.engine.prompt_texts import DEFAULT_TEXTS as texts
+
+    session = make_session(tmp_path, story, cast)
+    house = session.area("house")
+    shipped = paint_request(house, words="the house")
+    played = paint_request(
+        house, words="the house", things=False, life=texts["visual.paint.deserted"]
+    )
+    assert texts["visual.paint.bare"] not in shipped
+    assert texts["visual.paint.bare"] in played and "Nobody lives here" in played
+    # A painting of the ground alone shows every thing as a sprite; a
+    # shipped one keeps its fixed things in the picture.
+    assert MapPicture(subject="backdrop", subject_id="x", name="x", file="f").things_painted

@@ -43,6 +43,7 @@ from sealedlore.engine.cells import (
     COLUMNS,
     ROWS,
     TERRAIN_NAMES,
+    cell_of_place,
     cell_place_id,
     choose_template,
     is_cell,
@@ -104,8 +105,10 @@ from sealedlore.models.world import OverCell, WorldDelta, WorldMap
 FOUND_M = 1500.0
 # Places this near a cell entered are found.
 FOUND_NEAR_M = 700.0
-# Walking into a cell not entered before rolls as for this long in it.
-EXPLORE_SECONDS = 900
+# Walking into a cell not entered before rolls as for this long in it: half
+# an hour looking it over (a quarter gave about 1 % a cell in the country
+# round Hellsville, and the author walked north through four with nothing).
+EXPLORE_SECONDS = 1800
 # Hungry, thirsty or weary from this long without: weaker in a fight.
 HUNGRY_AFTER = 24 * 3600
 THIRSTY_AFTER = 24 * 3600
@@ -114,6 +117,8 @@ KIND_WORDS = {
     "danger": "something dangerous",
     "opportunity": "a chance: something worth having, or someone who could help",
     "interest": "something of interest, no threat in itself",
+    "dwellers": "the people who are here: whoever lives in this place, holds it or has "
+    "stopped here",
 }
 
 
@@ -305,6 +310,7 @@ class OvermapRuntime:
                 template=key,
                 places=[made.place, *made.children],
                 made_at=made.layout.made_at,
+                lived_in=made.lived_in,
             )
             art.layouts.setdefault(made.place.id, {})[""] = made.layout
         self._save_art(art)
@@ -523,6 +529,31 @@ class OvermapRuntime:
         state.overmap.known.append(found.name)
         self._set_live(state)
         return f"Now on your map: {found.name}."
+
+    def cell_lived_in(self, area_id: str | None) -> bool:
+        """Whether the made cell this area is, or lies in, rolled someone
+        living in it, holding it or stopped there (`OutdoorTemplate.people`)."""
+        cell = cell_of_place(area_id or "")
+        if cell is None:
+            return False
+        made = self._art_read().cells.get(cell_key(cell))
+        return bool(made is not None and made.lived_in)
+
+    def _dwellers_stop(
+        self, state, cell: tuple[int, int], fresh: bool, out: Travelled, there: Area
+    ) -> None:
+        """A cell entered for the first time that rolled someone living in
+        it: the keeper is asked who, as for a happening on the way (one
+        rolled already stands: the keeper is asked once)."""
+        if not fresh or out.stop is not None or not self.cell_lived_in(there.id):
+            return
+        om = self.overmap()
+        region = region_of(om, cell) if om is not None else None
+        minute = (self.visual_start_minute() + state.seconds // 60) % (24 * 60)
+        out.stop = Stop(
+            kind="dwellers", leg=0, region=region.key if region else "", night=is_night(minute)
+        )
+        out.brief = self._stop_brief(out.stop, region, there.title, there.title)
 
     def _cell_flavour(self, world: WorldMap, area: Area) -> str:
         """A made cell's line the first time it is entered: the first
@@ -805,6 +836,7 @@ class OvermapRuntime:
         else:
             leg = legs[done.legs]
             cell, point = leg.cell, (leg.x, leg.y)
+        fresh = cell_key(cell) not in state.overmap.explored
         before = walked[-2] if len(walked) > 1 else None
         came_from = (before.x, before.y) if before is not None else start
         spot = self._land(
@@ -840,6 +872,8 @@ class OvermapRuntime:
             out.stop = done.stop
             region = region_named(om, done.stop.region)
             out.brief = self._stop_brief(done.stop, region, frm, to)
+        if there is not None and done.arrived:
+            self._dwellers_stop(state, cell, fresh, out, there)
         self.visual_lay_out()
         return out
 
@@ -964,6 +998,18 @@ class OvermapRuntime:
         name = region.name if region is not None else "the open country"
         words = f" ({region.words})" if region is not None and region.words else ""
         when = "camped for the night" if stop.camping else "at night" if stop.night else "by day"
+        if stop.kind == "dwellers":
+            # Someone lives in the place come to (`OutdoorTemplate.people`):
+            # who, in keeping with the place and the country, is the keeper's.
+            like = (region.interest + region.opportunity + region.danger) if region else []
+            return (
+                f"{held} has come to {to}, in {name}{words}, {when}, and someone is here: "
+                "whoever lives in this place, holds it or has stopped here, met now. Who they "
+                "are is yours, in keeping with what the place is and the country round it"
+                + (" (people like: " + "; ".join(like) + ")" if like else "")
+                + ". They may be wary, welcoming, hiding, or dangerous; they have been here "
+                "a while, with reasons of their own."
+            )
         examples = getattr(region, stop.kind, []) if region is not None else []
         doing = f"was on the way from {frm} to {to}" if to else "was exploring"
         if frm == to:
@@ -1098,6 +1144,7 @@ class OvermapRuntime:
                 kind = _pick_kind(rng, weights(region, night=night, asleep=False))
                 out.stop = Stop(kind=kind, leg=0, region=region.key if region else "", night=night)
                 out.brief = self._stop_brief(out.stop, region, there.title, there.title)
+        self._dwellers_stop(state, cell, fresh, out, there)
         self.visual_lay_out()
         return out
 

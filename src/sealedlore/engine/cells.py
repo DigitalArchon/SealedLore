@@ -115,6 +115,8 @@ class MadeCell:
     objects: list[OutObject] = field(default_factory=list)
     loot: list[tuple[str, int]] = field(default_factory=list)
     dead: int = 0
+    # Someone lives here, holds it or has stopped here (the template's `people`).
+    lived_in: bool = False
 
 
 def choose_template(region: OverRegion | None, seed: str, cell: tuple[int, int]) -> str:
@@ -355,6 +357,8 @@ def make_cell(
     dead = 0
     if region is not None and region.dead > 0:
         dead = sum(1 for _ in range(4) if rng.random() < region.dead / 4)
+    # Rolled last, so a cell made before this roll was added lays out the same.
+    lived_in = template is not None and template.people > 0 and rng.random() < template.people / 100
     return MadeCell(
         key=cell_key(cell),
         template=template_key,
@@ -364,6 +368,7 @@ def make_cell(
         objects=list(template.objects) if template is not None else [],
         loot=list(template.loot) if template is not None else [],
         dead=dead,
+        lived_in=lived_in,
     )
 
 

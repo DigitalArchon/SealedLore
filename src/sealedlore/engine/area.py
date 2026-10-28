@@ -41,7 +41,7 @@ from sealedlore.engine.levels import (
 )
 from sealedlore.engine.marks import footprint
 from sealedlore.engine.takeable import item_verbs
-from sealedlore.engine.tile_sets import LIGHT_WORDS, roof_material
+from sealedlore.engine.tile_sets import gives_light, roof_material
 from sealedlore.engine.world import key
 from sealedlore.engine.world_art import (
     GROUND,
@@ -132,7 +132,7 @@ class Placement:
 
     @property
     def lit(self) -> bool:
-        return any(word in self.name.lower() for word in LIGHT_WORDS)
+        return gives_light(self.name)
 
 
 @dataclass

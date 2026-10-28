@@ -2047,6 +2047,8 @@ class VisualRuntime:
             )
             if here_place is not None and here_place.what:
                 wider += f" {here_place.name}: {' '.join(here_place.what.split())[:300]}"
+            if here_place is not None and self.cell_lived_in(here_place.id):
+                wider += " Someone lives in this place, holds it or has stopped here."
         short = self.visual_needs(state)
         faring = f" {held} is {', '.join(short)}." if short else ""
         _word, hurts = self.visual_condition(state)

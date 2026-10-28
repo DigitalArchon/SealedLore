@@ -470,3 +470,13 @@ def test_a_burnt_out_building_gets_a_gutted_inside():
     assert any(":" in row for row in rows) and not any("&" in row for row in rows)
     # The walls and the door as they were.
     assert "+" in "".join(rows) and "#" in "".join(rows)
+
+
+def test_a_thing_gives_light_by_a_whole_word_and_not_when_it_is_out():
+    from sealedlore.engine.tile_sets import gives_light
+
+    assert gives_light("a brass lantern") and gives_light("campfire")
+    assert gives_light("a burning oil drum fire") and gives_light("a fireplace")
+    assert not gives_light("a stack of firewood") and not gives_light("stacked-firewood")
+    assert not gives_light("dead-campfire") and not gives_light("a street lamp, dark")
+    assert not gives_light("a rusted stove") and not gives_light("a flashlight")

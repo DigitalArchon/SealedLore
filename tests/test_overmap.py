@@ -672,3 +672,73 @@ def test_a_broken_leg_slows_a_journey_and_the_road_mends_nothing(doomsville):
     assert gone is not None and gone.arrived
     leg = doomsville.area_state().injuries[0]
     assert 0 < leg.rested < gone.seconds  # up and about: rest counts half
+
+
+def test_a_cell_rolls_whether_anyone_lives_there_by_the_templates_chance():
+    om = small_world()
+    cell = (10, 30)
+    empty = make_cell(om, cell, "story-1", template_key="farm", template=FARM)
+    lived = make_cell(
+        om, cell, "story-1", template_key="farm", template=FARM.model_copy(update={"people": 100})
+    )
+    assert not empty.lived_in and lived.lived_in
+    # Rolled last: the roll changes nothing of the lay-out.
+    assert lived.layout.spec == empty.layout.spec and lived.dead == empty.dead
+
+
+def _everyone_home(session, monkeypatch) -> None:
+    """Every template of the story's kit rolls someone living there."""
+    kit = session.visual_kit()
+    for template in kit.outdoor.values():
+        template.people = 100
+    monkeypatch.setattr(type(session), "visual_kit", lambda self: kit)
+
+
+def test_walking_into_a_place_someone_lives_in_asks_the_keeper_who_once(doomsville, monkeypatch):
+    for region in doomsville.overmap().regions:
+        region.chance = 0  # nothing else happens on the way
+    _everyone_home(doomsville, monkeypatch)
+    left = doomsville.area_state().spots[doomsville.held_name()]
+    gone = doomsville.overmap_cross("west")
+    assert gone is not None and gone.arrived
+    state = doomsville.area_state()
+    area = doomsville.area(state.spots[doomsville.held_name()].area)
+    assert doomsville.cell_lived_in(area.id)
+    assert doomsville.world_art.cells[area.id.removeprefix("cell:")].lived_in
+    assert gone.stop is not None and gone.stop.kind == "dwellers"
+    assert "someone is here" in gone.brief and area.title in gone.brief
+    asked = doomsville._keeper_messages("journey", gone.brief)[-1].parts[0].text
+    assert gone.brief in asked and "Someone lives in this place" in asked
+    # Every building of a lived-in place shows a light; the painter is told.
+    assert doomsville.lit_buildings(area) == set(area.buildings)
+    # Met once: back to where they left from and in again, nobody new is rolled.
+    back = doomsville.overmap_cross("east")
+    assert back is not None
+    doomsville.visual_stand(left.area, left.x, left.y)
+    again = doomsville.overmap_cross("west")
+    assert again is not None and again.to == area.title and again.stop is None
+
+
+def test_a_journey_that_ends_where_someone_lives_asks_the_keeper_too(doomsville, monkeypatch):
+    om = doomsville.overmap()
+    for region in om.regions:
+        region.chance = 0
+    _everyone_home(doomsville, monkeypatch)
+    lookout = next(p for p in om.places if p.name == "The fire lookout")
+    gone = doomsville.overmap_travel(lookout.x * 1000, lookout.y * 1000, "The fire lookout")
+    assert gone is not None and gone.arrived
+    assert gone.stop is not None and gone.stop.kind == "dwellers"
+    assert "The fire lookout" in gone.brief
+
+
+def test_windows_are_lit_where_someone_is_inside(doomsville):
+    from sealedlore.engine.area import area_of
+
+    world, art = doomsville.world(), doomsville._art_read()
+    hellsville = next(p for p in world.places.values() if p.name == "Hellsville")
+    town = doomsville.area(area_of(world, art, hellsville.id))
+    lit = {world.places[pid].name for pid in doomsville.lit_buildings(town)}
+    assert lit == {"The clinic", "The diner", "The church"}  # the design's people, at home
+    state = doomsville.area_state()
+    farm = doomsville.area(state.spots[doomsville.held_name()].area)
+    assert doomsville.lit_buildings(farm) == set()  # the player's own light counts for nothing

@@ -203,6 +203,12 @@ class OutdoorTemplate(BaseModel):
     objects: list[OutObject] = Field(default_factory=list)
     # Tables rolled for what lies about on open ground (table, chance).
     loot: list[tuple[str, int]] = Field(default_factory=list)
+    # The chance in a hundred that someone is here when the place is first
+    # made: whoever lives in it, holds it or has stopped here, met on the
+    # first entry (engine/session_overmap.py: a "dwellers" stop, the keeper
+    # asked who). The author, Oct 28 2026: a farmstead "full of stuff,
+    # lights on and so on" and nobody in it.
+    people: int = 0
 
 
 class Kit(BaseModel):

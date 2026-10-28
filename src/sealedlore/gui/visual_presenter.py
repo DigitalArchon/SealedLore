@@ -244,7 +244,9 @@ class VisualPresenter(QObject):
                 failed=failed,
                 places=places,
                 weather=session.world().weather or session.visual_design().weather,
-                things=self._thing_pictures(area, session, art, loose=backdrop is not None),
+                things=self._thing_pictures(
+                    area, session, art, loose=backdrop is not None and backdrop.things_painted
+                ),
             )
         if walk is not None:
             view.walk(walk[1])
@@ -361,6 +363,7 @@ class VisualPresenter(QObject):
             area.id,
             zlib.crc32(rows.encode()),
             lights,
+            tuple(sorted(self._lit(area, session))),
             pieces,
             tuple((p.x, p.y, p.w, p.h) for p in avoid),
             set_name,
@@ -369,6 +372,13 @@ class VisualPresenter(QObject):
             session.story.defaults.map_density,
         )
 
+    @staticmethod
+    def _lit(area: Area, session) -> set[str]:
+        """The buildings whose windows show a light (the session's
+        `lit_buildings`; every one, as before, for a session without it)."""
+        lit = getattr(session, "lit_buildings", None)
+        return lit(area) if callable(lit) else set(area.buildings)
+
     def _paint(self, area: Area, key_: object, avoid: list[Placement]) -> None:
         if key_ in self._area_painting or key_ in self._area_failed:
             return
@@ -376,12 +386,13 @@ class VisualPresenter(QObject):
         info, read = session.tile_set()
         source = TileSource(info, read, cut_dir=self._cut_dir())
         dress = session.story.defaults.map_density != "sparse"
+        lit = self._lit(area, session)
         self._area_painting.add(key_)
         signal = self._painted
 
         def paint() -> None:
             try:
-                ground = render_ground(area, source, dress=dress, avoid=avoid)
+                ground = render_ground(area, source, dress=dress, avoid=avoid, lit=lit)
             except Exception:  # noqa: BLE001 - a picture that fails is drawn plainly
                 log.exception("The area %r couldn't be painted; a plain map stands in", area.name)
                 ground = None

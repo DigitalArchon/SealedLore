@@ -120,7 +120,11 @@ class PaintRuntime:
             )
             if p
         )
-        request = paint_request(area, words=words, texts=self.texts)
+        life = ""
+        if not area.indoor and area.buildings:
+            lived = "visual.paint.lived_in" if self.lit_buildings(area) else "visual.paint.deserted"
+            life = self.texts[lived]
+        request = paint_request(area, words=words, things=False, life=life, texts=self.texts)
         client = ImageClient(media.base_url, media.api_key, api=media.api)
         detached = getattr(self.provider, "detached", None)
         text = detached() if callable(detached) else None
@@ -136,6 +140,25 @@ class PaintRuntime:
         self._paint_thread = thread
         thread.start()
         return True
+
+    def lit_buildings(self, area: Area) -> set[str]:
+        """The buildings of an outdoor area whose windows show a light: one
+        with someone (not the player) standing inside it, or every one of a
+        made cell that rolled someone living there. Every window was warm
+        lit glass before (the author, Oct 28 2026: a farmstead "full of
+        stuff, lights on and so on", and nobody there)."""
+        if area.indoor or not area.buildings or not self.story.visual:
+            return set()
+        if self.cell_lived_in(area.id):
+            return set(area.buildings)
+        state = self.area_state()
+        held = self.held_name()
+        inside = {
+            sp.area.split("#", 1)[0]
+            for n, sp in state.spots.items()
+            if n != held and n not in state.people_down
+        }
+        return {pid for pid in area.buildings if pid in inside}
 
     def _paint_setting(self) -> str:
         """The world's opening words, and the weather the play view draws
@@ -201,6 +224,7 @@ class PaintRuntime:
                 subject_id=area.id,
                 name=area.title,
                 state=state,
+                things_painted=False,
                 file=relative,
                 prompt=prompt,
                 model=model,

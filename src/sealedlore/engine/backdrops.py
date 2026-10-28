@@ -175,17 +175,25 @@ def paint_request(
     area: Area,
     *,
     words: str,
+    things: bool = True,
+    life: str = "",
     texts: PromptTexts = DEFAULT_TEXTS,
 ) -> str:
     """The short request the expander turns into the painter's instruction
     (and the prompt itself when no expander can run): the look, the place
     in words, what the picture shows and the one rule, every wall, doorway,
-    building and path exactly where it is, seen straight down."""
+    building and path exactly where it is, seen straight down. `things`
+    False: the render carries the ground alone (`visual.paint.bare`);
+    `life`: whether anyone lives here (`visual.paint.deserted` / `.lived_in`)."""
     doors = door_words(area)
     facts = texts.fill(
         "visual.paint.facts.indoor" if area.indoor else "visual.paint.facts.outdoor",
         doors=f" Doors: {doors}." if doors else "",
     )
+    if not things:
+        facts += " " + texts["visual.paint.bare"]
+    if life:
+        facts += " " + life
     return texts.fill(
         "visual.paint.request",
         style=texts["visual.paint.style"],

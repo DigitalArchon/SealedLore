@@ -3200,6 +3200,43 @@ _text(
     "are.{doors}",
     (("doors", "where the buildings' doors are (door_words), or nothing"),),
 )
+# A place painted in play is painted bare (Oct 28 2026): the author walked
+# into a wreck on the road, and Klein's painting put one car off its
+# footprint and lost the truck, so there was nothing to click where they
+# stood. Every thing is a sprite over the painting now, and the painter is
+# told to add none. Unmeasured.
+_text(
+    "visual.paint.bare",
+    VISUAL,
+    "Painting: nothing stands on the ground",
+    "Added to the facts when the render carries the ground alone (a place painted in play: "
+    "every thing is a sprite over the painting, so a click lands on it): the painter adds "
+    "nothing of its own.",
+    "No furniture, vehicle, object or person stands in the picture, and none is to be "
+    "painted in: the floors and the ground stay bare but for their marks and wear; what "
+    "stands on them is laid over the painting afterwards.",
+)
+# Every window was warm lit glass in the render and the request asked for
+# lamplight and chimney smoke wherever there were lamps and chimneys: a
+# deserted farmstead painted lived in (the author, Oct 28 2026: "full of
+# stuff, lights on and so on", and nobody there). Unmeasured.
+_text(
+    "visual.paint.deserted",
+    VISUAL,
+    "Painting: nobody lives here",
+    "Added to the facts for an outdoor place with buildings and nobody in them.",
+    "Nobody lives here: every window dark, no smoke from any chimney, no light anywhere, "
+    "and no path trodden to any door.",
+)
+_text(
+    "visual.paint.lived_in",
+    VISUAL,
+    "Painting: someone lives here",
+    "Added to the facts for an outdoor place with someone in one of its buildings, or a "
+    "made place that rolled someone living there.",
+    "Someone lives here: a window or two lit from inside, smoke from a chimney, a path "
+    "trodden to the door.",
+)
 _text(
     "visual.paint.expander",
     VISUAL,
