@@ -169,6 +169,13 @@ def tileable(image: QImage) -> QImage:
     return QImage(out.data, w, h, w * 3, QImage.Format_RGB888).copy()
 
 
+# A set's abandoned versions of its pictures (`aged/<slug>`, `aged/rug`…),
+# drawn as edits of them (SealedLoreDocs tools/visual/draw_aged.py), and the
+# debris laid on an abandoned room's floor (`aged/debris0`…).
+AGED = "aged"
+DEBRIS_ROLES = tuple(f"{AGED}/debris{i}" for i in range(3))
+
+
 def is_texture(role: str) -> bool:
     return (
         role in TEXTURES
@@ -273,10 +280,32 @@ class TileSource:
         drawn as a plain box. Something a person carries (`carried`) borrows
         only a picture of its very kind, never one that merely shares a
         word with it."""
+        role = self._item_role(name, carried)
+        return self.image(role) if role else None
+
+    def aged_item(self, name: str, *, carried: bool = False) -> QImage | None:
+        """The abandoned version of the picture `item` shows (the set's
+        `aged/<slug>`: drawers out, shelves stripped, dust), None when the
+        set has none drawn."""
+        role = self._item_role(name, carried)
+        if role is None or not role.startswith("items/"):
+            return None
+        return self.image(f"{AGED}/{role.removeprefix('items/')}")
+
+    def worn(self, role: str, abandoned: bool) -> QImage | None:
+        """A dressing role (the rug, a decoration) as an abandoned place
+        has it when the set has that drawn, else as it is."""
+        if abandoned:
+            found = self.image(f"{AGED}/{role}")
+            if found is not None:
+                return found
+        return self.image(role)
+
+    def _item_role(self, name: str, carried: bool) -> str | None:
+        """The role of the picture `item` shows for this name."""
         for found in item_slugs(name):
-            image = self.image(f"items/{found}")
-            if image is not None:
-                return image
+            if self.image(f"items/{found}") is not None:
+                return f"items/{found}"
         listing = getattr(self.read, "items", None)
         if callable(listing):
             if (name, carried) not in self._stand_ins:
@@ -290,9 +319,8 @@ class TileSource:
             if found is not None and not (
                 nature and head_noun(found.replace("-", " ")) != head_noun(name)
             ):
-                return self.image(f"items/{found}")
-        nature = NATURE_STAND_INS.get(head_noun(name))
-        return self.image(nature) if nature else None
+                return f"items/{found}"
+        return NATURE_STAND_INS.get(head_noun(name))
 
     def roof(self, material: str, scale_px: float) -> QBrush:
         """A roof of `material`: the set's (or the story's) own texture of it,
@@ -656,10 +684,9 @@ def thing_picture(
     source: TileSource, f: Placement, px: int, *, indoor: bool, aged: bool = False
 ) -> ThingPicture:
     """`f` drawn on its own, exactly as the area's picture drew it; `aged`
-    as an abandoned place leaves it."""
-    sprite = _placement_sprite(source, f, px, indoor=indoor)
-    if aged and sprite is not None:
-        sprite = _aged(sprite)
+    as an abandoned place leaves it (its drawn abandoned version, else its
+    picture faded)."""
+    sprite = _placement_sprite(source, f, px, indoor=indoor, aged=aged)
     sw, sh = (sprite.width(), sprite.height()) if sprite is not None else (0, 0)
     width = int(max(sw, f.w * px) + 2 * px)
     height = int(max(sh, f.h * px) + px)
@@ -749,7 +776,7 @@ def render_ground(
     dress: bool = True,
     avoid: Sequence[Placement] | None = None,
     lit: Collection[str] | None = None,
-    unlit: bool = False,
+    abandoned: bool = False,
 ) -> Ground:
     """The area's ground (floor, walls, what grows and what is built), with
     no thing on it: they are sprites over it (`thing_picture`), so moving
@@ -759,11 +786,13 @@ def render_ground(
     so the ground stays as it is while they are moved (default: as they are
     now). `lit`: outdoors, the buildings (place ids) whose windows show a
     light; None lights every window (as every one was, until a deserted
-    farmstead was played "lights on", Oct 28 2026). `unlit`: no lamp, stove
-    or fire gives light (a place nobody has lived in for years)."""
+    farmstead was played "lights on", Oct 28 2026). `abandoned`: a place
+    nobody has lived in for years: no lamp, stove or fire gives light, and
+    indoors the rug and what stands along the walls are their abandoned
+    versions (the set's `aged/` pictures), with debris on the floors."""
     if area.indoor:
-        return _render_indoor(area, source, dress=dress, avoid=avoid, unlit=unlit)
-    return _render_outdoor(area, source, lit=lit, unlit=unlit)
+        return _render_indoor(area, source, dress=dress, avoid=avoid, abandoned=abandoned)
+    return _render_outdoor(area, source, lit=lit, abandoned=abandoned)
 
 
 def _stars(w: int, h: int, seed: int) -> QImage:
@@ -815,7 +844,7 @@ def _render_indoor(
     *,
     dress: bool,
     avoid: Sequence[Placement] | None = None,
-    unlit: bool = False,
+    abandoned: bool = False,
 ) -> Ground:
     np = _np()
     info = source.info
@@ -927,14 +956,19 @@ def _render_indoor(
     taken = np.isin(grid, list("*:~"))
     for f in area.placements if avoid is None else avoid:
         taken[max(0, f.y - 1) : f.y + f.h + 1, max(0, f.x - 1) : f.x + f.w + 1] = True
-    decor = [source.image(f"decor{i}") for i in range(3)]
+    decor = [source.worn(f"decor{i}", abandoned) for i in range(3)]
+    debris = (
+        [d for d in (source.image(r) for r in DEBRIS_ROLES) if d is not None] if abandoned else []
+    )
     decor_lit = list(info.decor_lights) + [False] * 3
     for room in area.rooms if dress else []:
         x0, y0, x1, y1 = room.box
         rw, rh = x1 - x0 + 1, y1 - y0 + 1
         rr0 = np.random.default_rng(500 + room.index + _seed(area.id) % 1000)
         if rw >= 6 and rh >= 4 and room.cells >= 30 and rr0.random() < 0.55:
-            rug = _scaled(source.image("rug"), int(min(rh * rr0.uniform(0.35, 0.5), rw * 0.3) * px))
+            rug = _scaled(
+                source.worn("rug", abandoned), int(min(rh * rr0.uniform(0.35, 0.5), rw * 0.3) * px)
+            )
             if rug is not None:
                 cx, cy = room.cx + rr0.uniform(-0.15, 0.15) * rw, room.cy
                 gx0 = int(cx + 0.5 - rug.width() / px / 2)
@@ -976,8 +1010,34 @@ def _render_indoor(
                     int((y + 1.0) * px - sprite.height()),
                 )
             )
-            if decor_lit[which] and not unlit:
+            if decor_lit[which] and not abandoned:
                 lights.append(((x + 0.5) * px, (y + 0.4) * px, px * 3.0))
+        if debris:
+            # Nobody has lived here for years: papers, plaster and leaves on
+            # the floor, flat on the ground under everything that stands.
+            floor = [
+                (x, y)
+                for y in range(y0, y1 + 1)
+                for x in range(x0, x1 + 1)
+                if area.room_of[y][x] == room.index
+                and grid[y, x] == "_"
+                and not near_door[y, x]
+                and not taken[y, x]
+            ]
+            rd = np.random.default_rng(1500 + room.index + _seed(area.id) % 1000)
+            rd.shuffle(floor)
+            for k, (x, y) in enumerate(floor[: max(1, min(3, room.cells // 25))]):
+                piece = _scaled(debris[(k + room.index) % len(debris)], int(px * 1.4))
+                if piece is None:
+                    continue
+                taken[max(0, y - 1) : y + 2, max(0, x - 1) : x + 2] = True
+                p.setOpacity(0.9)
+                p.drawImage(
+                    int((x + 0.5) * px - piece.width() / 2),
+                    int((y + 0.5) * px - piece.height() / 2),
+                    piece,
+                )
+                p.setOpacity(1.0)
     # 6. walls, back to front: the cap on the tile, the face below wherever
     # no wall stands south (floor or the void: the south outer wall has a
     # face too), darker than the cap, the cap's north edge lit, so a wall
@@ -1073,7 +1133,7 @@ def _render_indoor(
     for f in sorted(area.placements, key=lambda f: f.y + f.h):
         if f.piece in DRAWN_PIECES:
             deck_look.piece(p, f, px)
-        elif not unlit and (light := thing_light(f, px, indoor=True)) is not None:
+        elif not abandoned and (light := thing_light(f, px, indoor=True)) is not None:
             lights.append(light)
     for sprite, X, Y in flames:
         p.drawImage(X, Y, sprite)
@@ -1215,14 +1275,29 @@ def carried(f: Placement) -> bool:
     return f.kind == "object" and "take" in f.verbs
 
 
-def _placement_sprite(source: TileSource, f: Placement, px: int, *, indoor: bool) -> QImage | None:
+def _thing_image(source: TileSource, name: str, *, carried: bool, aged: bool) -> QImage | None:
+    """A thing's picture as found: in an abandoned place (`aged`) its drawn
+    abandoned version, else its picture faded (`_aged`)."""
+    if aged:
+        drawn = source.aged_item(name, carried=carried)
+        if drawn is not None:
+            return drawn
+        plain = source.item(name, carried=carried)
+        return _aged(plain) if plain is not None else None
+    return source.item(name, carried=carried)
+
+
+def _placement_sprite(
+    source: TileSource, f: Placement, px: int, *, indoor: bool, aged: bool = False
+) -> QImage | None:
     """A thing's sprite at the size it stands at, None until it is drawn."""
     if carried(f):
-        sprite = _scaled(source.item(f.name, carried=True), int(px * CARRIED_TILES[indoor]))
+        picture = _thing_image(source, f.name, carried=True, aged=aged)
+        sprite = _scaled(picture, int(px * CARRIED_TILES[indoor]))
         if sprite is not None and sprite.width() > px * CARRIED_WIDEST:
             sprite = sprite.scaledToWidth(int(px * CARRIED_WIDEST), Qt.SmoothTransformation)
         return sprite
-    sprite = source.item(f.name)
+    sprite = _thing_image(source, f.name, carried=False, aged=aged)
     if sprite is None:
         return None
     if f.kind == "vehicle":
@@ -1494,7 +1569,7 @@ def _lit_boxes(
 
 
 def _render_outdoor(
-    area: Area, source: TileSource, *, lit: Collection[str] | None = None, unlit: bool = False
+    area: Area, source: TileSource, *, lit: Collection[str] | None = None, abandoned: bool = False
 ) -> Ground:
     np = _np()
     info = source.info
@@ -1596,7 +1671,7 @@ def _render_outdoor(
     # Things are sprites over the ground (`thing_picture`): here only their
     # light, and their tiles keep what the ground has under them.
     for f in area.placements:
-        if not unlit and (light := thing_light(f, px, indoor=False)) is not None:
+        if not abandoned and (light := thing_light(f, px, indoor=False)) is not None:
             lights.append(light)
     for y in range(h):
         for x in range(w):

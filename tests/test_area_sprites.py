@@ -223,3 +223,68 @@ def test_what_a_person_carries_is_drawn_small_and_borrows_only_its_own_kind(app)
     # What can't be carried still borrows by a shared word, at its old size.
     tub = _placement_sprite(source, thing("a tin tub", ("use", "destroy")), px, indoor=True)
     assert tub is not None and tub.height() == int(px * 2.2)
+
+
+def _png(colour: str, w: int = 12, h: int = 24) -> bytes:
+    from sealedlore.gui.image_codec import encoded
+
+    image = QImage(w, h, QImage.Format_ARGB32)
+    image.fill(QColor(colour))
+    return encoded(image, "PNG")
+
+
+def test_an_abandoned_place_shows_a_things_drawn_abandoned_version_else_its_picture_faded(app):
+    from sealedlore.engine.area import Placement
+    from sealedlore.gui.area_render import thing_picture
+
+    assets = {"items/a-chair": _png("#c08040"), "items/a-table": _png("#c08040")}
+    assets["aged/a-chair"] = _png("#5060a0")  # drawn abandoned; the table has none
+    source = TileSource(TileSetInfo(name="set"), assets.get)
+    assert source.aged_item("a chair") is not None and source.aged_item("a table") is None
+    chair = Placement(id="c", name="a chair", x=2, y=2, w=1, h=1, verbs=(), kind="furniture")
+    table = Placement(id="t", name="a table", x=4, y=2, w=1, h=1, verbs=(), kind="furniture")
+
+    def middle(picture) -> QColor:
+        image = picture.image
+        return image.pixelColor(image.width() // 2, image.height() // 2 - 4)
+
+    fresh, drawn = (thing_picture(source, chair, 24, indoor=True, aged=a) for a in (False, True))
+    assert middle(fresh).red() > middle(fresh).blue() and middle(drawn).blue() > middle(drawn).red()
+    plain, faded = (thing_picture(source, table, 24, indoor=True, aged=a) for a in (False, True))
+    assert middle(faded).red() < middle(plain).red()  # no drawing: the picture faded
+
+
+def test_an_abandoned_room_has_debris_and_no_lamp_light(app):
+    from sealedlore.engine.area import build_area
+
+    world, art = world_and_art([{"kind": "object", "name": "a brass lantern", "x": 6, "y": 6}])
+    house = build_area(world, art, "house")
+    assets = {f"aged/debris{i}": _png("#ff00ff", 20, 20) for i in range(3)}
+    source = TileSource(TileSetInfo(name="set"), assets.get)
+    kept = render_ground(house, source)
+    left = render_ground(house, source, abandoned=True)
+    assert kept.image.size() == left.image.size()
+
+    def magenta(image: QImage) -> int:
+        return sum(
+            1
+            for y in range(0, image.height(), 3)
+            for x in range(0, image.width(), 3)
+            if (c := image.pixelColor(x, y)).red() > 150 and c.blue() > 150 and c.green() < 120
+        )
+
+    assert magenta(kept.image) == 0 and magenta(left.image) > 0
+    # The lantern lights the kept room, not the abandoned one.
+    lantern = next(p for p in house.placements if "lantern" in p.name)
+    x, y = int((lantern.x + 0.5) * px_for(house)), int((lantern.y - 1) * px_for(house))
+    assert kept.image.pixelColor(x, y).lightness() > left.image.pixelColor(x, y).lightness()
+
+
+def test_every_abandoned_picture_a_shipped_set_has_is_of_a_picture_it_shows():
+    from sealedlore.storage.tile_sets import read_asset, shipped_sets
+
+    for name, (_info, folder) in shipped_sets().items():
+        for path in sorted((folder / "aged").glob("*.webp")):
+            slug = path.stem
+            own = slug.startswith(("debris", "decor")) or slug == "rug"
+            assert own or read_asset(folder, f"items/{slug}"), (name, slug)

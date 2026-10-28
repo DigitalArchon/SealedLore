@@ -117,6 +117,11 @@ class TileSetInfo(BaseModel):
     # own (`storage/tile_sets.py`): the abandoned town keeps Doomsville's
     # 194 sprites without a second copy of each.
     items_from: str = ""
+    # The set's abandoned versions of its things (`aged/<slug>`, drawn as
+    # edits of them), by slug: what each shows, in words, so what the
+    # keeper and a Look are told of a thing is what its picture shows
+    # (a gun cabinet drawn smashed was described "the glass is intact").
+    aged: dict[str, str] = Field(default_factory=dict)
 
 
 def slug(name: str) -> str:

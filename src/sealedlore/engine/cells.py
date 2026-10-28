@@ -359,6 +359,12 @@ def make_cell(
         dead = sum(1 for _ in range(4) if rng.random() < region.dead / 4)
     # Rolled last, so a cell made before this roll was added lays out the same.
     lived_in = template is not None and template.people > 0 and rng.random() < template.people / 100
+    if lived_in and template.lived and not what:
+        # Someone lives here: the place's own words say so, not the
+        # template's deserted ones (the region's words kept after).
+        place.what = " ".join(w for w in (template.lived, region.words if region else "") if w)[
+            :400
+        ]
     return MadeCell(
         key=cell_key(cell),
         template=template_key,

@@ -3230,6 +3230,25 @@ _text(
     "grey, drifts and weeds against the walls.",
 )
 _text(
+    "visual.paint.abandoned.indoor",
+    VISUAL,
+    "Painting: an abandoned building's inside",
+    "Added to the facts for the inside of a building nobody has lived in for years (a place "
+    "the wider world made that rolled nobody living there).",
+    "Nobody has lived here for years and it was looted long ago: dust thick on the floors "
+    "with drag marks through it, dead leaves and a little snow blown in, plaster fallen in "
+    "places, the paint or paper on the walls peeling, papers and broken glass strewn about.",
+)
+_text(
+    "visual.paint.lived_in.indoor",
+    VISUAL,
+    "Painting: a lived-in building's inside",
+    "Added to the facts for the inside of a building someone lives in now (a place the wider "
+    "world made that rolled someone living there): the set's look is an abandoned world's.",
+    "Someone lives here now and keeps it: the floors swept, the walls patched, the stove "
+    "warm, everything worn but cared for.",
+)
+_text(
     "visual.paint.lived_in",
     VISUAL,
     "Painting: someone lives here",
@@ -3338,7 +3357,8 @@ _text(
     "a plain name of their own), with a line of who they are and how they take to the "
     'player (hostile, wary, friendly, desperate), stood "nearby" or "beside the player": '
     '{"op": "stranger", "who": "Mara Quist", "card": "A woman walking east alone, thin and '
-    'tired", "attitude": "wary", "wants": "food", "where": "nearby"}; one who stops '
+    'tired", "attitude": "wary", "wants": "food", "where": "nearby"}; what they carry is '
+    'their "carries", never also a "place" on the ground; one who stops '
     "anyone who comes near with a demand (a toll keeper, a sentry, a robber) has "
     '"challenges": the demand itself, to the player ("a tin of food for the road", "your '
     'gun, set down"); leave it out for anyone who demands nothing. Never a "stranger" for '

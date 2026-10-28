@@ -1666,7 +1666,10 @@ find you. Most farms are empty; a roadblock never is.
 A place nobody lives in has been picked over long ago: its cupboards hold
 little, and almost nothing worth having (food, medicine, ammunition, a gun by
 the door are mostly gone), what is left is worn and aged, and no lamp is lit.
-A place someone lives in is kept and stocked as the world kit stocks it.
+You see it too: drawers pulled out, shelves stripped, cushions ripped, papers,
+plaster and leaves on the floors. A place someone lives in is kept and stocked
+as the world kit stocks it. Whoever lives there may stop you at the door; walk
+past them without an answer and they come in after you.
 
 **Seeing and being seen.** Your character has a scouting ability (the world's
 design gives it; a card's scouting, tracking or stealth skill raises it).

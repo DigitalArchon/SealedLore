@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import math
 
-from sealedlore.engine.area import Area, in_earshot, sees
+from sealedlore.engine.area import Area, in_earshot, sees, stand_near
 from sealedlore.engine.challenges import (
     ALLY_M,
     CHALLENGE_M,
@@ -154,6 +154,24 @@ class ChallengeRuntime:
                     theirs += 1
         return mine - theirs
 
+    def _follows_in(self, state, area: Area, me: Spot, name: str, spot, demand) -> bool:
+        """Whether a demander left behind on the other side of a door comes
+        after the player: their demand unanswered, the player within their
+        reach when last seen, the two areas parts of one place (a farm and
+        its farmhouse). Stands them beside the player when so."""
+        if spot is None or spot.area == area.id or demand.pending:
+            return False
+        if name in state.people_down or name == self.held_name():
+            return False
+        if state.goals.get(name, NpcGoal()).intent == "attack":
+            return False
+        if not 0 <= demand.last_metres <= ENFORCE_M or not self._same_root(spot.area, area.id):
+            return False
+        taken = area.blocked() | {(s.x, s.y) for s in state.spots.values() if s.area == area.id}
+        x, y = stand_near(area, (me.x, me.y), taken | {(me.x, me.y)})
+        state.spots[name] = Spot(area=area.id, x=x, y=y)
+        return True
+
     def demands_due(self) -> list[tuple[str, str]]:
         """After one of the player's actions: each standing demand the
         action ignored, with the step the program decides (saved on the
@@ -169,6 +187,22 @@ class ChallengeRuntime:
         key = self._action_key(state, me)
         for name, demand in list(state.demands.items()):
             spot = state.spots.get(name)
+            if self._follows_in(state, area, me, name, spot, demand):
+                # The player went through a door with the demand unanswered,
+                # within the demander's reach: they come in after them, and
+                # the going counts as ignoring them (live, Oct 28 2026: John
+                # walked past a patrol's rifle into a farmhouse and the demand
+                # lapsed without a word).
+                spot = state.spots[name]
+                demand.ignored += 1
+                demand.last_key = key
+                demand.last_metres = math.hypot(spot.x - me.x, spot.y - me.y) * area.tile_m
+                demand.pending = escalate(
+                    demand.ignored, self.standing_of(name, state), self.danger(state, area, name)
+                )
+                changed = True
+                out.append((name, demand.pending))
+                continue
             if (
                 spot is None
                 or spot.area != area.id

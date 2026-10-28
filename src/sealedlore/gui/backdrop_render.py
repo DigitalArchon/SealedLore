@@ -98,7 +98,7 @@ def render_source(
     painted in play goes with no thing at all (`things` False; the view lays
     every one over the painting), its windows lit as `lit` says
     (`area_render.render_ground`)."""
-    ground = render_ground(area, source, lit=lit, unlit=dark)
+    ground = render_ground(area, source, lit=lit, abandoned=dark)
     px = px_for(area)
     image = ground.image.convertToFormat(QImage.Format_RGB32)
     painter = QPainter(image)

@@ -2548,3 +2548,100 @@ def test_a_leader_s_word_on_the_player_is_their_group_s(peopled: VisualWindow):
     state = session.area_state()
     assert state.group_standing["The house"] == "hostile"
     assert session.standing_of("Maela Orr", state) == "guest"  # her own stands over the group's
+
+
+def test_going_through_a_door_with_a_demand_unanswered_brings_the_demander_after_you(
+    peopled: VisualWindow,
+):
+    session = peopled.session
+    design = session.visual_design()
+    design.people["Captain Idris"].challenges = "a toll for the road"
+    design.scouting["Serrik Vaun"] = 0
+    design.abilities["Serrik Vaun"] = 4  # outmatched
+    _on_the_road(peopled, player_tiles_off=8)
+    session.provider.responses = [TOLL]
+    peopled._after_action([])
+    _answer(peopled, TOLL)
+    # Into the house without a word: Idris comes in after them, and it counts.
+    state = session.area_state()
+    house = session.area("house")
+    x, y = next(
+        (x, y)
+        for y in range(house.height - 2, 0, -1)
+        for x in range(house.width)
+        if house.walkable(x, y)
+    )
+    state.spots["Serrik Vaun"] = Spot(area="house", x=x, y=y)
+    session._set_live(state)
+    due = session.demands_due()
+    state = session.area_state()
+    assert due == [("Captain Idris", "warn")]
+    assert state.spots["Captain Idris"].area == "house"
+    assert state.demands["Captain Idris"].ignored == 1
+    assert not session.encounter_due("Captain Idris")  # no fresh greeting inside
+
+
+def test_nobody_is_spotted_first_once_they_have_spoken_or_stand_close(peopled: VisualWindow):
+    session = peopled.session
+    design = session.visual_design()
+    design.scouting["Serrik Vaun"] = 20  # always wins the roll
+    farm = _on_the_road(peopled, player_tiles_off=4)  # about 13 m: close enough to be seen
+    state = session.area_state()
+    me = state.spots["Serrik Vaun"]
+    lines = session.scout_report(state, farm, me)
+    assert not any("Captain Idris first" in line for line in lines)
+    assert not session.unaware_of_player("Captain Idris", state)
+
+
+def test_a_challenger_the_keeper_has_speak_has_made_their_demand(peopled: VisualWindow):
+    from sealedlore.engine.keeper import Op
+
+    session = peopled.session
+    session.visual_design().people["Captain Idris"].challenges = "your name and your business"
+    _on_the_road(peopled, player_tiles_off=6)
+    lines = session.apply_script(
+        [Op(op="say", args={"who": "Captain Idris", "text": "Stop there. Who are you?"})]
+    )
+    assert "Captain Idris: Stop there. Who are you?" in lines
+    demand = session.area_state().demands["Captain Idris"]
+    assert demand.what == "your name and your business" and demand.ignored == 0
+    # Waiting instead of answering is ignoring it.
+    session.visual_wait(1)
+    assert session.demands_due() == [("Captain Idris", "warn")]
+
+
+def test_the_keeper_can_stand_someone_at_a_door_of_the_players_area(peopled: VisualWindow):
+    session = peopled.session
+    _on_the_road(peopled, player_tiles_off=6)
+    state = session.area_state()
+    farm = session.area("farm")
+    door = next(e for e in farm.entrances if e.place_id == "house")
+    spot = session._place_spot(state, "at the door of the house")
+    assert spot is not None and spot.area == "farm"
+    assert abs(spot.x - door.x) + abs(spot.y - door.y) <= 3
+    assert (spot.x, spot.y) not in {(e.x, e.y) for e in farm.entrances}
+
+
+def test_a_stranger_the_keeper_brings_in_and_has_speak_has_made_their_demand(
+    peopled: VisualWindow,
+):
+    from sealedlore.engine.keeper import Op
+
+    session = peopled.session
+    _on_the_road(peopled, player_tiles_off=6)
+    session.apply_script(
+        [
+            Op(
+                op="stranger",
+                args={
+                    "who": "Walt Pruitt",
+                    "card": "A lean farmer with a rifle",
+                    "attitude": "wary",
+                    "where": "nearby",
+                    "challenges": "your business, from there",
+                },
+            ),
+            Op(op="say", args={"who": "Walt Pruitt", "text": "State your business."}),
+        ]
+    )
+    assert session.area_state().demands["Walt Pruitt"].what == "your business, from there"

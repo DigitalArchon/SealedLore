@@ -400,7 +400,9 @@ class VisualPresenter(QObject):
 
         def paint() -> None:
             try:
-                ground = render_ground(area, source, dress=dress, avoid=avoid, lit=lit, unlit=dark)
+                ground = render_ground(
+                    area, source, dress=dress, avoid=avoid, lit=lit, abandoned=dark
+                )
             except Exception:  # noqa: BLE001 - a picture that fails is drawn plainly
                 log.exception("The area %r couldn't be painted; a plain map stands in", area.name)
                 ground = None

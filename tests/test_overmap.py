@@ -784,3 +784,39 @@ def test_a_place_nobody_lives_in_is_picked_over_and_a_lived_in_one_is_kept(dooms
         r.stocked, r.contents = False, []
     doomsville._stock(state, house)
     assert all(len(r.contents) == len(full) for r in stocked)
+
+
+def test_an_abandoned_things_record_says_what_its_drawn_picture_shows(doomsville, monkeypatch):
+    from sealedlore.engine import session_overmap as so
+
+    for region in doomsville.overmap().regions:
+        region.chance = 0
+    monkeypatch.setattr(so, "choose_template", lambda region, seed, cell: "farmstead")
+    kit = doomsville.visual_kit()
+    for template in kit.outdoor.values():
+        template.people = 0
+    monkeypatch.setattr(type(doomsville), "visual_kit", lambda self: kit)
+    info = doomsville.tile_set()[0]
+    assert info.aged  # the shipped set describes its abandoned pictures
+    doomsville.overmap_cross("west")
+    state = doomsville.area_state()
+    cell = doomsville.area(state.spots[doomsville.held_name()].area)
+    house = doomsville.area(next(iter(cell.buildings)))
+    doomsville._stock(state, house)
+    described = [
+        (p.name, state.things[p.id].seen)
+        for p in house.placements
+        if p.id in state.things and state.things[p.id].seen in info.aged.values()
+    ]
+    assert described  # e.g. a pantry cupboard "its doors hanging open, its shelves stripped…"
+
+
+def test_a_lived_in_place_is_described_as_lived_in():
+    om = small_world()
+    cell = (10, 30)
+    lived = FARM.model_copy(update={"people": 100, "lived": "A farm with smoke from the chimney."})
+    made = make_cell(om, cell, "story-1", template_key="farm", template=lived)
+    empty = make_cell(om, cell, "story-1", template_key="farm", template=FARM)
+    assert made.place.what.startswith("A farm with smoke") and empty.place.what.startswith(
+        "A farm."
+    )

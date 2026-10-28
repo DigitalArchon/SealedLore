@@ -121,7 +121,11 @@ class PaintRuntime:
             if p
         )
         life = ""
-        if not area.indoor and area.buildings:
+        if area.indoor and self.place_abandoned(area.id):
+            life = self.texts["visual.paint.abandoned.indoor"]
+        elif area.indoor and self.cell_lived_in(area.id):
+            life = self.texts["visual.paint.lived_in.indoor"]
+        elif not area.indoor and area.buildings:
             lived = "visual.paint.lived_in" if self.lit_buildings(area) else "visual.paint.deserted"
             life = self.texts[lived]
         request = paint_request(area, words=words, things=False, life=life, texts=self.texts)

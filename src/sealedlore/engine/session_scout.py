@@ -74,6 +74,12 @@ class ScoutRuntime:
             if metres > SCOUT_M or not sees(area, (me.x, me.y), (x, y)):
                 continue
             state.scout_rolled.append(tag)
+            if tag in state.greeted or metres <= NOTICE_M:
+                # They have spoken to the player already, or stand close
+                # enough to see them at once: nobody is spotted first (live,
+                # "You spot Denny first, about 0 m north: they haven't seen
+                # you" after Denny had hailed John from beside him).
+                continue
             where = self._whereabouts(area, me, (x, y))
             if scout + rng.randint(1, DIE) > alert + rng.randint(1, DIE):
                 state.spotted.append(tag)

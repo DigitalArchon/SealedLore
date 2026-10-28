@@ -1015,7 +1015,9 @@ class OvermapRuntime:
                 "are is yours, in keeping with what the place is and the country round it"
                 + (" (people like: " + "; ".join(like) + ")" if like else "")
                 + ". They may be wary, welcoming, hiding, or dangerous; they have been here "
-                "a while, with reasons of their own."
+                "a while, with reasons of their own. They stand where they live, not beside "
+                f'{held}: "where": "at the door" of the building they live in (its name '
+                "with it), or inside it."
             )
         examples = getattr(region, stop.kind, []) if region is not None else []
         doing = f"was on the way from {frm} to {to}" if to else "was exploring"

@@ -23,6 +23,7 @@ from sealedlore.engine.area import (
     area_of,
     bare,
     can_take_record,
+    front_of,
     in_earshot,
     path,
     sees,
@@ -98,7 +99,7 @@ from sealedlore.engine.session_area import (
     _close_quietly,
 )
 from sealedlore.engine.takeable import can_be_taken
-from sealedlore.engine.tile_sets import head_noun
+from sealedlore.engine.tile_sets import head_noun, item_slugs
 from sealedlore.engine.visual_rules import (
     DRIVE_M_PER_S,
     FORCE_DIFFICULTY,
@@ -729,6 +730,9 @@ class VisualRuntime:
                 found, rng_for(seed, *key, "picked"), lambda f: kind_of(f.name, f.kind)
             )
 
+        # What each thing's abandoned picture shows, as the keeper and a Look
+        # are told it (the set's `aged` words).
+        aged_words = self.tile_set()[0].aged if abandoned else {}
         for p in area.placements:
             if abandoned and "take" in p.verbs and kind_of(p.name) in VALUABLE_KINDS:
                 # A rifle by the door, a jerrycan: mostly gone from a place
@@ -737,6 +741,11 @@ class VisualRuntime:
                 if taken and p.id not in state.things:
                     state.things[p.id] = ThingRecord(state="gone", name=p.name)
                     continue
+            words = next((aged_words[s] for s in item_slugs(p.name) if s in aged_words), "")
+            if words:
+                record = state.things.setdefault(p.id, ThingRecord(state="seen", name=p.name))
+                if not record.seen:
+                    record.seen = words
             table, chance = p.stock, p.stock_chance
             if not table:
                 rule = container_rule(kit, p.name)
@@ -1869,6 +1878,11 @@ class VisualRuntime:
             return False
         if self.unaware_of_player(name, state):
             return False  # spotted first: they haven't seen the player yet
+        if name in state.demands:
+            # Mid-challenge (come in after the player, say): what they say
+            # next is the demand's step, not a first meeting (live, Delia
+            # Marsh warned John and then hailed him afresh inside her house).
+            return False
         if f"{name}@{me.area}" in state.greeted:
             return False
         if self.is_challenger(name, state):
@@ -2384,6 +2398,9 @@ class VisualRuntime:
         if area is not None and me is not None and any(w in words for w in OFF_WORDS):
             # A little way off, in sight: someone coming, the dead shambling up.
             return self._spot_off(state, area, me)
+        door = self._door_spot(state, area, words) if area is not None else None
+        if door is not None:
+            return door
         if not words or any(
             w in words for w in ("beside", "here", "player", "with them", "next to")
         ):
@@ -2403,6 +2420,33 @@ class VisualRuntime:
         taken = target.blocked() | {(s.x, s.y) for s in state.spots.values() if s.area == target.id}
         x, y = stand_near(target, at or (target.width // 2, target.height // 2), taken)
         return Spot(area=target.id, x=x, y=y)
+
+    def _door_spot(self, state, area: Area, words: str) -> Spot | None:
+        """At a door of the player's own area ("at the farmhouse door", "on
+        the porch", "in the doorway"): in front of the door of the building
+        the words name, else of the first; None when the words name no door
+        or the area has none. A made place's buildings share their names
+        with every other's, so a door is never looked for elsewhere (live,
+        Oct 28 2026: Walt Pruitt "steps out from the farmhouse doorway" and
+        was stood beside the player at the field's edge)."""
+        if not re.search(r"\b(door|doorway|doorstep|porch|threshold|at home)\b", words):
+            return None
+        doors = [e for e in area.entrances if not e.stairs and e.place_id in area.buildings]
+        if not doors:
+            return None
+        world = self._world_read()
+        named = [
+            e
+            for e in doors
+            if e.place_id in world.places
+            and bare(world.places[e.place_id].name).casefold() in words
+        ]
+        door = (named or doors)[0]
+        front = front_of(area, door.place_id, door.side) or (door.x, door.y)
+        taken = area.blocked() | {(s.x, s.y) for s in state.spots.values() if s.area == area.id}
+        taken |= {(e.x, e.y) for e in area.entrances}
+        x, y = stand_near(area, front, taken)
+        return Spot(area=area.id, x=x, y=y)
 
     def _spot_off(self, state, area: Area, me: Spot) -> Spot:
         """A tile 10 to 20 tiles from the player that they can see, else the
@@ -2635,6 +2679,7 @@ class VisualRuntime:
         action's or a Direction's outcome); off, it is kept to the board."""
         state = self.area_state()
         lines: list[str] = []
+        spoke: list[str] = []
         held = self.held_name() or ""
         area, me = self._visual_me(state)
         for op in ops:
@@ -2665,6 +2710,7 @@ class VisualRuntime:
                     continue
                 if text:
                     lines.append(f"{who}: {text}")
+                    spoke.append(who)
                     state.talks.setdefault(who, []).append([who, text])
                     if me is not None:
                         self._heard(state, me.area, who, text)
@@ -2870,6 +2916,20 @@ class VisualRuntime:
             elif kind == "end":
                 state.ended = op.get("text") or "The story ends here."
                 lines.append(state.ended)
+        for who in dict.fromkeys(spoke):
+            # A challenger the keeper has speak (a patrol it brought in) has
+            # made their demand: kept as if their own call had made it, so
+            # walking past them is ignoring it (live, Oct 28 2026: Denny's
+            # "State your name" came through the keeper and John walked into
+            # the farmhouse past his rifle with nothing to answer for).
+            card = self.visual_card(who)
+            name = card.name if card is not None else who
+            # A stranger this script made is in `state` alone until it is saved.
+            sheet = state.strangers.get(name) or self.visual_sheet(name)
+            challenge = sheet.challenges
+            if challenge and name not in state.demands and name not in state.people_down:
+                reply = NpcReply("", "", "stay", "", "", "", demand=challenge)
+                self.note_demand(state, name, reply)
         if state.wounds >= self.visual_design().player_hits:
             state.dead = True
             lines.append("That was one wound too many. You are dead.")

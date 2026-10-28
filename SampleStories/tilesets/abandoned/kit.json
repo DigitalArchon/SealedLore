@@ -3589,6 +3589,7 @@
      30
     ]
    ],
+   "lived": "Open fields under snow, and smoke from a fire someone has going out here.",
    "people": 3
   },
   "farmstead": {
@@ -3640,6 +3641,7 @@
      50
     ]
    ],
+   "lived": "A farmhouse and its outbuildings, smoke from the chimney: someone lives here.",
    "people": 40
   },
   "burned farm": {
@@ -3683,6 +3685,7 @@
      50
     ]
    ],
+   "lived": "A farmhouse burned to its frame; someone has made a home in the barn.",
    "people": 8
   },
   "abandoned farm": {
@@ -3727,6 +3730,7 @@
      50
     ]
    ],
+   "lived": "A farm left in a hurry, GONE EAST on its wall, and someone has moved in since.",
    "people": 10
   },
   "woods": {
@@ -3759,6 +3763,7 @@
      "chance": 15
     }
    ],
+   "lived": "Dark pines and deep snow, and a camp someone keeps in among them.",
    "people": 5
   },
   "campsite": {
@@ -3803,6 +3808,7 @@
      60
     ]
    ],
+   "lived": "A campsite in use: a fire still warm, a tent, someone close by.",
    "people": 25
   },
   "cabin": {
@@ -3844,6 +3850,7 @@
      40
     ]
    ],
+   "lived": "A log cabin in the trees, smoke from its chimney.",
    "people": 40
   },
   "logging camp": {
@@ -3891,6 +3898,7 @@
      50
     ]
    ],
+   "lived": "A bunkhouse and a shed among stacked logs, smoke from the bunkhouse stovepipe.",
    "people": 25
   },
   "road wreck": {
@@ -3942,6 +3950,7 @@
      60
     ]
    ],
+   "lived": "Cars piled up where something went wrong, long ago, and someone keeping an eye on them.",
    "people": 10
   },
   "roadblock": {
@@ -4036,6 +4045,7 @@
      60
     ]
    ],
+   "lived": "A street of burned houses, and someone living in the one still standing.",
    "people": 15
   },
   "marsh": {
@@ -4059,6 +4069,7 @@
      "stock_chance": 50
     }
    ],
+   "lived": "Reeds and black ice, and a hide someone keeps out here.",
    "people": 5
   },
   "ice hut": {
@@ -4083,6 +4094,7 @@
      "near": "water"
     }
    ],
+   "lived": "A frozen pond with a fishing hut out on the ice, smoke from its stovepipe.",
    "people": 30
   },
   "hills": {
@@ -4109,6 +4121,7 @@
      "chance": 30
     }
    ],
+   "lived": "Limestone ridges and scree, and someone camped in the lee of the rocks.",
    "people": 5
   },
   "sinkhole": {
@@ -4160,6 +4173,7 @@
      "chance": 50
     }
    ],
+   "lived": "A cut in the limestone, a rusted digger left in it, and someone sheltering there.",
    "people": 10
   },
   "elevator": {
@@ -4199,6 +4213,7 @@
      40
     ]
    ],
+   "lived": "A grain elevator and its office beside the road, a light in the office window.",
    "people": 20
   },
   "bridge": {
