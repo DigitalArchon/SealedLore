@@ -132,7 +132,20 @@ To check a download is what it claims to be, or to build one yourself, see
 
 ### Linux: from source
 
-Python 3.11 or newer:
+You need Python 3.11 or newer, git, Python's venv support and, on an X11
+desktop, the X11 libraries Qt draws its windows with. Install them first
+([System packages](#system-packages) says what each is for):
+
+- **Debian, Ubuntu, Mint:**
+
+  ```bash
+  sudo apt install git python3-venv libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-keysyms1 libxcb-xkb1
+  ```
+
+- **Fedora:** `sudo dnf install git xcb-util-cursor`
+- **Arch, CachyOS, Manjaro:** `sudo pacman -S git python xcb-util-cursor`
+
+Then:
 
 ```bash
 git clone https://github.com/DigitalArchon/SealedLore && cd SealedLore
@@ -147,16 +160,32 @@ stories are kept in the data folder, not here, so updating never touches them.
 
 #### System packages
 
-PySide6's wheels don't bundle `libxcb-cursor`, which Qt 6.5+ requires before
-it will load the `xcb` platform plugin. Without it the GUI aborts at startup
-with *"Could not load the Qt platform plugin xcb"*. On Debian/Ubuntu/Mint:
+A new Linux Mint or Ubuntu comes without git and without Python's venv
+support: `git clone` says *"command not found"*, and `python3 -m venv` says
+*"ensurepip is not available"* (delete the half-made `.venv` folder, or run
+the same command again, once `python3-venv` is installed).
 
-```bash
-sudo apt-get install -y libxcb-cursor0
+On an X11 desktop, Qt 6.5+ needs `libxcb-cursor0` and a few other X11
+libraries before it will load its `xcb` platform plugin, and PySide6 doesn't
+bundle them. Mint has all of them but `libxcb-cursor0`; Ubuntu without them
+lacks seven, and `libxcb-cursor0` alone brings only three. Fedora Workstation
+and the Arch-based systems come with all of them. A Wayland session (GNOME
+and KDE Plasma by default, Hyprland) doesn't load the plugin and needs none.
+
+If one is still missing when you start the app on X11, `sealedlore-gui` stops
+before Qt does and says which, with the command that installs them on your
+system:
+
+```text
+SealedLore can't start: Qt needs these X11 libraries, and they aren't installed:
+  libxcb-cursor.so.0
+Install them with:
+  sudo apt install libxcb-cursor0
+The AppImage carries these libraries, if you'd rather not install them.
 ```
 
-Wayland sessions don't need it. To check which platform plugin is in play,
-run with `QT_QPA_PLATFORM=xcb` or `QT_QPA_PLATFORM=wayland`.
+To check which platform plugin is in play, run with `QT_QPA_PLATFORM=xcb` or
+`QT_QPA_PLATFORM=wayland`.
 
 Playing videos uses Qt Multimedia, which needs the PulseAudio client library
 (`libpulse0` on Debian/Ubuntu/Mint), present on nearly every desktop. Without

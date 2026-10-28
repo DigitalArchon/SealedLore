@@ -294,8 +294,15 @@ rebuild: see [Checking the compiled Python](docs/building.md#checking-the-compil
 
 ### Linux: from source
 
-Python 3.11 or newer. On Debian, Ubuntu and Mint, X11 also needs
-`sudo apt-get install libxcb-cursor0`.
+Python 3.11 or newer, git, Python's venv support and, on an X11 desktop, the
+X11 libraries Qt needs. Install them first:
+
+- **Debian, Ubuntu, Mint:**
+  `sudo apt install git python3-venv libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-keysyms1 libxcb-xkb1`
+- **Fedora:** `sudo dnf install git xcb-util-cursor`
+- **Arch, CachyOS, Manjaro:** `sudo pacman -S git python xcb-util-cursor`
+
+Then:
 
 ```bash
 git clone https://github.com/DigitalArchon/SealedLore && cd SealedLore
@@ -305,8 +312,9 @@ pip install -e .
 sealedlore-gui
 ```
 
-To add it to your desktop's menu, see
-[Desktop entry](docs/manual.md#desktop-entry-optional).
+If an X11 library is still missing, `sealedlore-gui` says which and how to
+install it ([System packages](docs/manual.md#system-packages)). To add it to
+your desktop's menu, see [Desktop entry](docs/manual.md#desktop-entry-optional).
 
 ### Windows (from source)
 

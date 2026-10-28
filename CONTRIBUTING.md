@@ -15,9 +15,10 @@ ruff check . && ruff format --check .
 ```
 
 The tests run the Qt parts offscreen; on a machine without a display set
-`QT_QPA_PLATFORM=offscreen`. On Debian and Ubuntu the GUI itself also needs
-`libxcb-cursor0` (see the manual's
-[System packages](docs/manual.md#system-packages)). `sealedlore-gui --mock`
+`QT_QPA_PLATFORM=offscreen`. On X11 the GUI itself also needs Qt's X11
+libraries (the manual's [System packages](docs/manual.md#system-packages)
+lists them per system, and `sealedlore-gui` names any that are missing).
+`sealedlore-gui --mock`
 runs the app against a scripted model, so you can try a change with no
 endpoint. `tools/smoke/` drives the real window against a fake endpoint (its
 README says how), and [docs/building.md](docs/building.md) covers the

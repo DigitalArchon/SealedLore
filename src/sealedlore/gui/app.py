@@ -17,7 +17,7 @@ from PySide6.QtCore import QCoreApplication
 from PySide6.QtWidgets import QApplication
 
 from sealedlore import __version__
-from sealedlore.gui import theme
+from sealedlore.gui import theme, x11_check
 from sealedlore.gui.collector import install_collector_pause
 from sealedlore.gui.fields import install_wheel_guard
 from sealedlore.gui.main_window import MainWindow
@@ -136,6 +136,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--story", default=None, help="open this story id on start")
     options, qt_arguments = parser.parse_known_args(arguments[1:])
+    # Before Qt starts: on X11 with a library of Qt's missing, say which
+    # and how to install it, rather than Qt's abort naming only the first.
+    problem = x11_check.check(os.environ, qt_arguments)
+    if problem:
+        print(problem, file=sys.stderr)
+        return 1
     _no_core_dumps()
     _log_crashes(options.data_dir)
 
