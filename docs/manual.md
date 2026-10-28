@@ -1663,6 +1663,11 @@ it, or has stopped there. The first time you come in, the story's keeper
 says who they are and puts them on the board, and they take you as they
 find you. Most farms are empty; a roadblock never is.
 
+A place nobody lives in has been picked over long ago: its cupboards hold
+little, and almost nothing worth having (food, medicine, ammunition, a gun by
+the door are mostly gone), what is left is worn and aged, and no lamp is lit.
+A place someone lives in is kept and stocked as the world kit stocks it.
+
 **Seeing and being seen.** Your character has a scouting ability (the world's
 design gives it; a card's scouting, tracking or stealth skill raises it).
 When someone comes within a hundred metres with a clear line of sight, a

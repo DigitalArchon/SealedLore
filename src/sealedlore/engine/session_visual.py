@@ -59,7 +59,17 @@ from sealedlore.engine.keeper import (
     parse_ruling,
     variant_for,
 )
-from sealedlore.engine.kits import container_rule, has_words, kit_layout, rng_for, stock
+from sealedlore.engine.kits import (
+    ABANDONED_WORDS,
+    PICKED_VALUABLE,
+    VALUABLE_KINDS,
+    container_rule,
+    has_words,
+    kit_layout,
+    picked_over,
+    rng_for,
+    stock,
+)
 from sealedlore.engine.levels import level_area_id, place_of_area
 from sealedlore.engine.look import (
     LOOK_MAX_TOKENS,
@@ -551,6 +561,8 @@ class VisualRuntime:
         place = world.places.get(area.place_id)
         entry = place_for(area.name, self.visible_lore())
         words = [place.what if place is not None else "", entry.content if entry else ""]
+        if self.place_abandoned(area.id):
+            words.append(ABANDONED_WORDS)
         model = self.role_model("look")
         request = ChatRequest(
             model=model,
@@ -706,14 +718,32 @@ class VisualRuntime:
         if kit is None:
             return
         seed = self.visual_seed()
+        # Nobody has lived here for years: what the tables roll was mostly
+        # taken long ago (the author, Oct 28 2026).
+        abandoned = self.place_abandoned(area.id)
+
+        def left(found, *key):
+            if not abandoned:
+                return found
+            return picked_over(
+                found, rng_for(seed, *key, "picked"), lambda f: kind_of(f.name, f.kind)
+            )
+
         for p in area.placements:
+            if abandoned and "take" in p.verbs and kind_of(p.name) in VALUABLE_KINDS:
+                # A rifle by the door, a jerrycan: mostly gone from a place
+                # nobody has lived in for years, as a cupboard's food is.
+                taken = rng_for(seed, area.id, p.id, "gone").uniform(0, 100) >= PICKED_VALUABLE
+                if taken and p.id not in state.things:
+                    state.things[p.id] = ThingRecord(state="gone", name=p.name)
+                    continue
             table, chance = p.stock, p.stock_chance
             if not table:
                 rule = container_rule(kit, p.name)
                 if rule is None:
                     continue
                 table, chance = rule.table, rule.chance
-            found = stock(kit, table, chance, rng_for(seed, area.id, p.id))
+            found = left(stock(kit, table, chance, rng_for(seed, area.id, p.id)), area.id, p.id)
             record = state.things.get(p.id)
             if record is None:
                 record = state.things[p.id] = ThingRecord(state="seen", name=p.name)
@@ -732,7 +762,8 @@ class VisualRuntime:
             if r.spot is not None and r.spot.area == area.id
         }
         for x, y, table, chance in area.loot:
-            for f in stock(kit, table, chance, rng_for(seed, area.id, "loot", x, y)):
+            rolled = stock(kit, table, chance, rng_for(seed, area.id, "loot", x, y))
+            for f in left(rolled, area.id, "loot", x, y):
                 fx, fy = stand_near(area, (x, y), taken)
                 taken.add((fx, fy))
                 state.things[ITEM_PREFIX + new_id()] = ThingRecord(
@@ -2033,6 +2064,8 @@ class VisualRuntime:
             place = world.places.get(area.place_id)
             if place is not None and place.state:
                 place_state = f" The place is {place.state}."
+            if self.place_abandoned(area.id):
+                place_state += " " + ABANDONED_WORDS
         region = self.overmap_region(state) if self.overmap() is not None else None
         wider = (
             f" The country round about: {region.name} ({region.words})."

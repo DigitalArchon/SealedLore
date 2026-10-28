@@ -364,6 +364,7 @@ class VisualPresenter(QObject):
             zlib.crc32(rows.encode()),
             lights,
             tuple(sorted(self._lit(area, session))),
+            self._dark(area, session),
             pieces,
             tuple((p.x, p.y, p.w, p.h) for p in avoid),
             set_name,
@@ -379,6 +380,12 @@ class VisualPresenter(QObject):
         lit = getattr(session, "lit_buildings", None)
         return lit(area) if callable(lit) else set(area.buildings)
 
+    @staticmethod
+    def _dark(area: Area, session) -> bool:
+        """No lamp lit: a place nobody has lived in for years."""
+        abandoned = getattr(session, "place_abandoned", None)
+        return bool(abandoned(area.id)) if callable(abandoned) else False
+
     def _paint(self, area: Area, key_: object, avoid: list[Placement]) -> None:
         if key_ in self._area_painting or key_ in self._area_failed:
             return
@@ -387,12 +394,13 @@ class VisualPresenter(QObject):
         source = TileSource(info, read, cut_dir=self._cut_dir())
         dress = session.story.defaults.map_density != "sparse"
         lit = self._lit(area, session)
+        dark = self._dark(area, session)
         self._area_painting.add(key_)
         signal = self._painted
 
         def paint() -> None:
             try:
-                ground = render_ground(area, source, dress=dress, avoid=avoid, lit=lit)
+                ground = render_ground(area, source, dress=dress, avoid=avoid, lit=lit, unlit=dark)
             except Exception:  # noqa: BLE001 - a picture that fails is drawn plainly
                 log.exception("The area %r couldn't be painted; a plain map stands in", area.name)
                 ground = None
@@ -444,13 +452,14 @@ class VisualPresenter(QObject):
         px = px_for(area)
         out = []
         shown = loose_things(area, session.area_state().things) if loose else area.placements
+        aged = self._dark(area, session)
         for f in shown:
             if f.piece in DRAWN_PIECES:
                 continue
-            look = (f.name, f.w, f.h, f.kind, f.broken, "take" in f.verbs, px, area.indoor)
+            look = (f.name, f.w, f.h, f.kind, f.broken, "take" in f.verbs, px, area.indoor, aged)
             picture = self._thing_images.get(look)
             if picture is None:
-                picture = thing_picture(self._thing_source, f, px, indoor=area.indoor)
+                picture = thing_picture(self._thing_source, f, px, indoor=area.indoor, aged=aged)
                 if len(self._thing_images) > THING_PICTURES_KEPT:
                     self._thing_images.clear()
                 self._thing_images[look] = picture

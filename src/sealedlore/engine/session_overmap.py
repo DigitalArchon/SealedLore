@@ -539,6 +539,13 @@ class OvermapRuntime:
         made = self._art_read().cells.get(cell_key(cell))
         return bool(made is not None and made.lived_in)
 
+    def place_abandoned(self, area_id: str | None) -> bool:
+        """An area of a place the wider world made that nobody lives in:
+        picked over long ago, what is left worn (`kits.picked_over`)."""
+        world = self._world_read()
+        root = self._root_place(world, area_id) if area_id else None
+        return bool(root and is_cell(root) and not self.cell_lived_in(root))
+
     def _dwellers_stop(
         self, state, cell: tuple[int, int], fresh: bool, out: Travelled, there: Area
     ) -> None:

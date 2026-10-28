@@ -3225,8 +3225,9 @@ _text(
     VISUAL,
     "Painting: nobody lives here",
     "Added to the facts for an outdoor place with buildings and nobody in them.",
-    "Nobody lives here: every window dark, no smoke from any chimney, no light anywhere, "
-    "and no path trodden to any door.",
+    "Nobody lives here, and nobody has for years: every window dark, no smoke from any "
+    "chimney, no light anywhere, no path trodden to any door; paint peeling, boards gone "
+    "grey, drifts and weeds against the walls.",
 )
 _text(
     "visual.paint.lived_in",

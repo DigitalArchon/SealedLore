@@ -629,9 +629,37 @@ def foot_of(f: Placement, px: int) -> tuple[float, float]:
     return (f.x + f.w / 2) * px, (f.y + f.h) * px
 
 
-def thing_picture(source: TileSource, f: Placement, px: int, *, indoor: bool) -> ThingPicture:
-    """`f` drawn on its own, exactly as the area's picture drew it."""
+def _aged(image: QImage) -> QImage:
+    """A thing as years of neglect leave it: colour drained a little,
+    darker, the alpha kept (an abandoned place's things, Oct 28 2026)."""
+    np = _np()
+    img = image.convertToFormat(QImage.Format_ARGB32)
+    w, h = img.width(), img.height()
+    a = (
+        np.frombuffer(img.constBits(), np.uint8)
+        .reshape(h, img.bytesPerLine())[:, : w * 4]
+        .reshape(h, w, 4)
+        .astype(np.float32)
+    )
+    bgr = a[..., :3]
+    grey = bgr[..., 0] * 0.11 + bgr[..., 1] * 0.59 + bgr[..., 2] * 0.30
+    a[..., :3] = np.clip((bgr * 0.7 + grey[..., None] * 0.3) * 0.86, 0, 255)
+    out = np.ascontiguousarray(a.astype(np.uint8))
+    return (
+        QImage(out.data, w, h, w * 4, QImage.Format_ARGB32)
+        .copy()
+        .convertToFormat(QImage.Format_ARGB32_Premultiplied)
+    )
+
+
+def thing_picture(
+    source: TileSource, f: Placement, px: int, *, indoor: bool, aged: bool = False
+) -> ThingPicture:
+    """`f` drawn on its own, exactly as the area's picture drew it; `aged`
+    as an abandoned place leaves it."""
     sprite = _placement_sprite(source, f, px, indoor=indoor)
+    if aged and sprite is not None:
+        sprite = _aged(sprite)
     sw, sh = (sprite.width(), sprite.height()) if sprite is not None else (0, 0)
     width = int(max(sw, f.w * px) + 2 * px)
     height = int(max(sh, f.h * px) + px)
@@ -721,6 +749,7 @@ def render_ground(
     dress: bool = True,
     avoid: Sequence[Placement] | None = None,
     lit: Collection[str] | None = None,
+    unlit: bool = False,
 ) -> Ground:
     """The area's ground (floor, walls, what grows and what is built), with
     no thing on it: they are sprites over it (`thing_picture`), so moving
@@ -730,10 +759,11 @@ def render_ground(
     so the ground stays as it is while they are moved (default: as they are
     now). `lit`: outdoors, the buildings (place ids) whose windows show a
     light; None lights every window (as every one was, until a deserted
-    farmstead was played "lights on", Oct 28 2026)."""
+    farmstead was played "lights on", Oct 28 2026). `unlit`: no lamp, stove
+    or fire gives light (a place nobody has lived in for years)."""
     if area.indoor:
-        return _render_indoor(area, source, dress=dress, avoid=avoid)
-    return _render_outdoor(area, source, lit=lit)
+        return _render_indoor(area, source, dress=dress, avoid=avoid, unlit=unlit)
+    return _render_outdoor(area, source, lit=lit, unlit=unlit)
 
 
 def _stars(w: int, h: int, seed: int) -> QImage:
@@ -780,7 +810,12 @@ def _hull_brushes(source: TileSource, px: int, seed: int) -> tuple[QBrush, QBrus
 
 
 def _render_indoor(
-    area: Area, source: TileSource, *, dress: bool, avoid: Sequence[Placement] | None = None
+    area: Area,
+    source: TileSource,
+    *,
+    dress: bool,
+    avoid: Sequence[Placement] | None = None,
+    unlit: bool = False,
 ) -> Ground:
     np = _np()
     info = source.info
@@ -941,7 +976,7 @@ def _render_indoor(
                     int((y + 1.0) * px - sprite.height()),
                 )
             )
-            if decor_lit[which]:
+            if decor_lit[which] and not unlit:
                 lights.append(((x + 0.5) * px, (y + 0.4) * px, px * 3.0))
     # 6. walls, back to front: the cap on the tile, the face below wherever
     # no wall stands south (floor or the void: the south outer wall has a
@@ -1038,7 +1073,7 @@ def _render_indoor(
     for f in sorted(area.placements, key=lambda f: f.y + f.h):
         if f.piece in DRAWN_PIECES:
             deck_look.piece(p, f, px)
-        elif (light := thing_light(f, px, indoor=True)) is not None:
+        elif not unlit and (light := thing_light(f, px, indoor=True)) is not None:
             lights.append(light)
     for sprite, X, Y in flames:
         p.drawImage(X, Y, sprite)
@@ -1459,7 +1494,7 @@ def _lit_boxes(
 
 
 def _render_outdoor(
-    area: Area, source: TileSource, *, lit: Collection[str] | None = None
+    area: Area, source: TileSource, *, lit: Collection[str] | None = None, unlit: bool = False
 ) -> Ground:
     np = _np()
     info = source.info
@@ -1561,7 +1596,7 @@ def _render_outdoor(
     # Things are sprites over the ground (`thing_picture`): here only their
     # light, and their tiles keep what the ground has under them.
     for f in area.placements:
-        if (light := thing_light(f, px, indoor=False)) is not None:
+        if not unlit and (light := thing_light(f, px, indoor=False)) is not None:
             lights.append(light)
     for y in range(h):
         for x in range(w):

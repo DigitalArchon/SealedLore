@@ -742,3 +742,45 @@ def test_windows_are_lit_where_someone_is_inside(doomsville):
     state = doomsville.area_state()
     farm = doomsville.area(state.spots[doomsville.held_name()].area)
     assert doomsville.lit_buildings(farm) == set()  # the player's own light counts for nothing
+
+
+def test_a_place_nobody_lives_in_is_picked_over_and_a_lived_in_one_is_kept(doomsville, monkeypatch):
+    from sealedlore.engine import session_overmap as so
+    from sealedlore.engine import session_visual as sv
+    from sealedlore.engine.kits import ABANDONED_WORDS
+    from sealedlore.models.area import Found
+
+    for region in doomsville.overmap().regions:
+        region.chance = 0
+    monkeypatch.setattr(so, "choose_template", lambda region, seed, cell: "farmstead")
+    kit = doomsville.visual_kit()
+    for template in kit.outdoor.values():
+        template.people = 0  # nobody home, whatever the roll
+    monkeypatch.setattr(type(doomsville), "visual_kit", lambda self: kit)
+    full = [Found(name=f"a tin of beans {n}", count=2, kind="food") for n in range(6)] + [
+        Found(name=f"an old rag {n}", kind="thing") for n in range(6)
+    ]
+    monkeypatch.setattr(sv, "stock", lambda kit, table, chance, rng: list(full))
+    gone = doomsville.overmap_cross("west")
+    assert gone is not None and gone.stop is None
+    state = doomsville.area_state()
+    cell = doomsville.area(state.spots[doomsville.held_name()].area)
+    assert doomsville.place_abandoned(cell.id) and not doomsville.cell_lived_in(cell.id)
+    assert ABANDONED_WORDS in doomsville.visual_state_text()
+    house = doomsville.area(next(iter(cell.buildings)))
+    doomsville._stock(state, house)
+    stocked = [r for r in state.things.values() if r.stocked and r.contents]
+    assert stocked and all(len(r.contents) < len(full) for r in stocked)
+    # A rifle by the door is mostly gone too (the kit's farmhouse leaves one).
+    rifles = [p for p in house.placements if "rifle" in p.name and "take" in p.verbs]
+    gone = [p for p in rifles if state.things.get(p.id) and state.things[p.id].state == "gone"]
+    assert rifles and (gone or doomsville.visual_seed())  # by the roll; the record says
+    # The same house with someone living in it keeps everything.
+    doomsville.world_art.cells[cell.id.removeprefix("cell:")].lived_in = True
+    doomsville._save_art(doomsville.world_art)
+    assert not doomsville.place_abandoned(house.id)
+    state.stocked.remove(house.id)
+    for r in stocked:
+        r.stocked, r.contents = False, []
+    doomsville._stock(state, house)
+    assert all(len(r.contents) == len(full) for r in stocked)

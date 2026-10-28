@@ -90,6 +90,7 @@ def render_source(
     *,
     things: bool = True,
     lit: Collection[str] | None = None,
+    dark: bool = False,
 ) -> QImage:
     """What the painter is sent of an area: its ground, and on it (`things`)
     the things that stay put (`painted_things`), lit where they stand. What
@@ -97,7 +98,7 @@ def render_source(
     painted in play goes with no thing at all (`things` False; the view lays
     every one over the painting), its windows lit as `lit` says
     (`area_render.render_ground`)."""
-    ground = render_ground(area, source, lit=lit)
+    ground = render_ground(area, source, lit=lit, unlit=dark)
     px = px_for(area)
     image = ground.image.convertToFormat(QImage.Format_RGB32)
     painter = QPainter(image)
@@ -118,10 +119,11 @@ def source_jpeg(
     *,
     things: bool = True,
     lit: Collection[str] | None = None,
+    dark: bool = False,
 ) -> bytes | None:
     """The render padded onto a grey square `side` wide, as JPEG (a 2048
     PNG was refused as too large: HTTP 413)."""
-    square = padded_square(render_source(area, source, things=things, lit=lit), side)
+    square = padded_square(render_source(area, source, things=things, lit=lit, dark=dark), side)
     if square.isNull():
         return None
     return encoded(square, "JPEG", 92)

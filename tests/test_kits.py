@@ -480,3 +480,17 @@ def test_a_thing_gives_light_by_a_whole_word_and_not_when_it_is_out():
     assert not gives_light("a stack of firewood") and not gives_light("stacked-firewood")
     assert not gives_light("dead-campfire") and not gives_light("a street lamp, dark")
     assert not gives_light("a rusted stove") and not gives_light("a flashlight")
+
+
+def test_an_abandoned_place_keeps_little_of_worth_and_half_the_rest():
+    from sealedlore.engine.kits import picked_over
+
+    rolled = [Found(name="a tin of beans", count=4, kind="food")] * 50 + [
+        Found(name="a bent spoon", count=4, kind="thing")
+    ] * 50
+    left = picked_over(rolled, rng_for("story", "cupboard"), lambda f: f.kind)
+    worth = [f for f in left if f.kind == "food"]
+    plain = [f for f in left if f.kind == "thing"]
+    assert 2 <= len(worth) <= 15 and 18 <= len(plain) <= 38
+    assert all(f.count == 2 for f in left)
+    assert left == picked_over(rolled, rng_for("story", "cupboard"), lambda f: f.kind)

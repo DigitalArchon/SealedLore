@@ -136,6 +136,34 @@ def merged(found: Iterable[Found]) -> list[Found]:
     return list(out.values())
 
 
+# An abandoned place was picked over long ago (the author, Oct 28 2026:
+# "there's a big difference between a lived in home and an abandoned one in
+# reality"): of what a table rolls, what is worth having mostly went, the
+# rest half stays, and counts are cut in half.
+PICKED_VALUABLE = 15
+PICKED_PLAIN = 55
+VALUABLE_KINDS = frozenset({"food", "drink", "medicine", "weapon", "ammunition", "fuel"})
+# What an abandoned place is, for the keeper, the Look and the player.
+ABANDONED_WORDS = (
+    "This place is abandoned: what is left is worn, aged and weathered, and anything worth "
+    "having was taken long ago."
+)
+
+
+def picked_over(
+    found: Sequence[Found], rng: random.Random, kind: Callable[[Found], str]
+) -> list[Found]:
+    """What is left of `found` in a place nobody has lived in for years:
+    each thing kept by its kind's chance, its count halved."""
+    out: list[Found] = []
+    for f in found:
+        keep = PICKED_VALUABLE if kind(f) in VALUABLE_KINDS else PICKED_PLAIN
+        if rng.uniform(0, 100) >= keep:
+            continue
+        out.append(f.model_copy(update={"count": max(1, (f.count + 1) // 2)}))
+    return out
+
+
 def stock(kit: Kit, table: str, chance: int, rng: random.Random) -> list[Found]:
     """What a container stocked from `table` holds: nothing at all unless its
     `chance` comes up, else the table rolled, at most MAX_CONTENTS kinds."""
