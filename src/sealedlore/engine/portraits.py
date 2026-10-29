@@ -17,7 +17,6 @@ from collections.abc import Sequence
 from sealedlore.engine.jsonreply import extract_json
 from sealedlore.engine.places import place_size
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
-from sealedlore.engine.world_pictures import looks_of, picture_size
 from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.character import Character
 from sealedlore.models.lore import LoreEntry
@@ -45,6 +44,42 @@ PORTRAIT_TALLEST = 1536
 PORTRAIT_SIDE = 1024
 
 Card = Character | LoreEntry
+
+
+# What a card says of someone, at most, in a prompt.
+LOOKS_CHARS = 420
+
+
+def looks_of(summary: str | None, description: str | None) -> str:
+    """What a card says of someone, shortened at a sentence for a prompt."""
+    text = " ".join(" ".join(p.split()) for p in (summary, description) if p)
+    if len(text) <= LOOKS_CHARS:
+        return text
+    cut = text[:LOOKS_CHARS]
+    end = cut.rfind(". ")
+    return cut[: end + 1] if end > LOOKS_CHARS // 2 else cut.rstrip() + "…"
+
+
+def picture_size(model: ImageModelInfo | None, *, landscape: bool = False) -> str:
+    """The smallest square size the model lists at 512 or more; `landscape`
+    (a place's picture, the background), the widest landscape size up to 1360
+    across. Else the model's first size; "1024x1024" (landscape "1024x768")
+    when it isn't listed."""
+    sizes = list(model.resolutions) if model is not None else []
+    shapes = []
+    for size in sizes:
+        parts = size.replace("*", "x").split("x")
+        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+            shapes.append((int(parts[0]), int(parts[1]), size))
+    if landscape:
+        wide = sorted(s for s in shapes if s[0] > s[1] and s[0] <= 1360)
+        if wide:
+            return wide[-1][2]
+        return sizes[0] if sizes else "1024x768"
+    big_enough = sorted(s for s in shapes if s[0] == s[1] and s[0] >= 512)
+    if big_enough:
+        return big_enough[0][2]
+    return sizes[0] if sizes else "1024x1024"
 
 
 def portrait_style(

@@ -36,13 +36,11 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.plot_md import front_matter_of
 from sealedlore.gui.sizing import size_to_screen
-from sealedlore.storage.paths import sample_stories, visual_stories
+from sealedlore.storage.paths import sample_stories
 
 # What a choice is, as `chosen` carries it: the value is the story's id for
 # "open", the plot file for "sample", else None.
 OPEN, PREMISE, BLANK, CHAT, IMPORT, SAMPLE = "open", "premise", "blank", "chat", "import", "sample"
-# A visual story (the value is its plot file): a game played on its map.
-VISUAL = "visual"
 # The ways to start one's own, in the order shown, with what each says.
 OWN: tuple[tuple[str, str, str], ...] = (
     (
@@ -73,12 +71,6 @@ SAMPLES_TEXT = (
     "Ready-made stories with their own world, characters, plot and pictures: the "
     "quickest way to see what SealedLore does. Setup opens first, so you can look "
     "everything over and choose who you play."
-)
-VISUAL_HEADING = "Visual Stories"
-VISUAL_TEXT = (
-    "A world to play in on its map: walk it, go into its buildings, travel its roads. "
-    "The people you meet and the plot are the model's; everything else is the game's. "
-    "Early: the first steps of a new mode."
 )
 RECENT_HEADING = "Pick up where you left off"
 OWN_HEADING = "Start your own"
@@ -131,26 +123,6 @@ def samples(folder: Path | None = None) -> list[Sample]:
                 description=front.get("description", ""),
                 picture=picture,
             )
-        )
-    return found
-
-
-def visual_samples(folder: Path | None = None) -> list[Sample]:
-    """The visual stories, as their cards show them (`paths.visual_stories`)."""
-    found = []
-    for name, path in visual_stories(folder):
-        try:
-            front = front_matter_of(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError):
-            front = {}
-        picture = None
-        if front.get("background"):
-            from sealedlore.gui.ref_images import inside
-
-            target = inside(path.parent, front["background"])
-            picture = target if target is not None and target.is_file() else None
-        found.append(
-            Sample(path=path, title=name, description=front.get("description", ""), picture=picture)
         )
     return found
 
@@ -288,7 +260,6 @@ class StartChooser(QScrollArea):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._samples_folder = samples_folder
         self._sample_cards: list[tuple[Card, Sample]] = []
-        self._visual_cards: list[tuple[Card, Sample]] = []
         self._columns = 0
         self._pictures_shown = False
         self.cards: dict[str, Card] = {}
@@ -309,7 +280,6 @@ class StartChooser(QScrollArea):
         self._layout.setSpacing(10)
         self.cards = {}
         self._sample_cards = []
-        self._visual_cards = []
         self._columns = 0
         self._pictures_shown = False
         if self._heading:
@@ -337,7 +307,6 @@ class StartChooser(QScrollArea):
         else:
             self._samples()
             self._own()
-        self._visual()
         self._layout.addStretch(1)
         self.setWidget(page)
         if self.isVisible():
@@ -383,24 +352,6 @@ class StartChooser(QScrollArea):
         self._layout.addLayout(self._sample_grid)
         self._lay_samples()
 
-    def _visual(self) -> None:
-        """The visual stories, under the samples (the author, Oct 24 2026)."""
-        found = visual_samples(self._samples_folder)
-        if not found:
-            return
-        self._section(VISUAL_HEADING, VISUAL_TEXT)
-        grid = QGridLayout()
-        grid.setSpacing(12)
-        for index, sample in enumerate(found):
-            card = Card(sample.title, sample.description, picture=sample.picture is not None)
-            card.activated.connect(lambda p=sample.path: self.chosen.emit(VISUAL, p))
-            self.cards[f"{VISUAL}:{sample.path.name}"] = card
-            self._visual_cards.append((card, sample))
-            grid.addWidget(card, index // 3, index % 3)
-        for column in range(3):
-            grid.setColumnStretch(column, 1)
-        self._layout.addLayout(grid)
-
     def _lay_samples(self) -> None:
         """Three sample cards a row where there is room, else two."""
         if not self._sample_cards:
@@ -420,7 +371,7 @@ class StartChooser(QScrollArea):
         """The samples' pictures, read after the page is first drawn: six
         JPEGs decoded before it would hold up the first paint at launch."""
         self._pictures_shown = True
-        for card, sample in (*self._sample_cards, *self._visual_cards):
+        for card, sample in self._sample_cards:
             if sample.picture is not None:
                 card.set_picture(_picture(sample.picture))
 

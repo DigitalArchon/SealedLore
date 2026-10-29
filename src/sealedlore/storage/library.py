@@ -13,6 +13,7 @@ from pathlib import Path
 
 from sealedlore.storage.atomic import read_json
 from sealedlore.storage.paths import is_safe_story_id, stories_dir
+from sealedlore.storage.repository import VISUAL_ELSEWHERE
 
 
 @dataclass(frozen=True)
@@ -22,24 +23,9 @@ class StoryListing:
     messages: int
     updated: str  # story.json's updated_at, "" when it has none
     chat: bool = False
-    # A visual story (played on its map as a game): opened in its own window.
-    visual: bool = False
-    # A visual story: the day and hour it stands at (`Story.visual_when`).
-    visual_when: str = ""
-    keeps_map: bool = False
     # A story that can't be read: why. It is still listed, so it can be
     # looked into or deleted.
     error: str | None = None
-
-
-def story_mode(story_id: str, root: Path | None = None) -> str:
-    """A saved story's mode ("story", "chat", "visual"), read from its
-    story.json alone; "story" when it can't be read."""
-    try:
-        story = read_json(stories_dir(root) / story_id / "story.json")
-    except (OSError, ValueError):
-        return "story"
-    return str(story.get("mode") or "story") if isinstance(story, dict) else "story"
 
 
 def story_listings(root: Path | None = None) -> list[StoryListing]:
@@ -55,8 +41,20 @@ def story_listings(root: Path | None = None) -> list[StoryListing]:
             story = read_json(entry / "story.json")
             if not isinstance(story, dict):
                 raise ValueError("no story.json")
+            if story.get("mode") == "visual":
+                # A Visual Story, played here before it became a game of its
+                # own: listed so it can be found and deleted, never opened.
+                out.append(
+                    StoryListing(
+                        entry.name,
+                        str(story.get("title") or entry.name),
+                        0,
+                        str(story.get("updated_at") or ""),
+                        error=VISUAL_ELSEWHERE,
+                    )
+                )
+                continue
             nodes = read_json(entry / "nodes.json", [])
-            story.get("defaults")
             out.append(
                 StoryListing(
                     id=entry.name,
@@ -64,9 +62,6 @@ def story_listings(root: Path | None = None) -> list[StoryListing]:
                     messages=len(nodes) if isinstance(nodes, list) else 0,
                     updated=str(story.get("updated_at") or ""),
                     chat=story.get("mode") == "chat",
-                    visual=story.get("mode") == "visual",
-                    visual_when=str(story.get("visual_when") or ""),
-                    keeps_map=story.get("mode") == "visual",
                 )
             )
         except (OSError, ValueError) as exc:

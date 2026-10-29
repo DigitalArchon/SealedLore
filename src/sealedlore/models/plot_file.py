@@ -73,41 +73,6 @@ class EntryDoc(BaseModel):
     description: str = ""
 
 
-class WayDoc(BaseModel):
-    """A way from a map place to another: `- way: Hellsville | north, five miles`."""
-
-    to: str = ""
-    words: str = ""
-
-
-class ThingDoc(BaseModel):
-    """A thing that starts at a map place: `- thing: Pickup truck | out of fuel`."""
-
-    name: str = ""
-    state: str = ""
-
-
-class MapPlaceDoc(BaseModel):
-    name: str = ""
-    kind: str = ""
-    # As written: "1.5, -2" (east, north) and a width, in the map's unit.
-    at: str = ""
-    size: str = ""
-    inside: str = ""
-    known: bool = False
-    ways: list[WayDoc] = Field(default_factory=list)
-    things: list[ThingDoc] = Field(default_factory=list)
-    description: str = ""
-
-
-class MapDoc(BaseModel):
-    """`# Map`: a map drawn up beforehand (models/world.py)."""
-
-    unit: str = "km"
-    start: str = ""
-    places: list[MapPlaceDoc] = Field(default_factory=list)
-
-
 class FactDoc(BaseModel):
     name: str = ""
     initial: str = ""
@@ -173,8 +138,6 @@ class PlotDocument(BaseModel):
     start_time: str = "00:00"
     agency: AgencyMode | None = None
     world_activity: WorldActivity | None = None
-    # `scarce: yes`: things are scarce in this world (StoryDefaults.scarce).
-    scarce: bool = False
     perspective: Perspective | None = None
     length: FileLength | None = None
     # The picture behind the transcript, a file beside the plot file
@@ -191,7 +154,6 @@ class PlotDocument(BaseModel):
     # Timeline and optional events together, each saying which it is, so the
     # author can move one between the two without it changing lists.
     events: list[EventDoc] = Field(default_factory=list)
-    map: MapDoc | None = None
 
     # --- renaming: every reference follows -------------------------------------
 
@@ -213,21 +175,6 @@ class PlotDocument(BaseModel):
             for assignment in holder.sets:
                 if assignment.fact == old:
                     assignment.fact = new
-
-    def rename_map_place(self, old: str, new: str) -> None:
-        """A place on the map renamed: what it is in, the ways to it, the start."""
-        if self.map is None:
-            return
-        if self.map.start == old:
-            self.map.start = new
-        for place in self.map.places:
-            if place.name == old:
-                place.name = new
-            if place.inside == old:
-                place.inside = new
-            for way in place.ways:
-                if way.to == old:
-                    way.to = new
 
     def rename_place(self, old: str, new: str) -> None:
         for entry in (*self.places, *self.lore):

@@ -38,8 +38,6 @@ from sealedlore.engine.response_style import PRESETS
 from sealedlore.gui.composer import (
     AGENCY_LABELS,
     AGENCY_TIPS,
-    SCARCE_LABEL,
-    SCARCE_TIP,
     WORLD_ACTIVITY_LABELS,
     WORLD_ACTIVITY_TIPS,
 )
@@ -54,12 +52,8 @@ from sealedlore.models.plot_file import (
     EntryDoc,
     EventDoc,
     FactDoc,
-    MapDoc,
-    MapPlaceDoc,
     PlotDocument,
-    ThingDoc,
     VariantDoc,
-    WayDoc,
 )
 
 ROLE_LABELS = {
@@ -232,8 +226,6 @@ class StoryPage(Page):
             self.world_activity.setItemData(
                 self.world_activity.count() - 1, WORLD_ACTIVITY_TIPS[level], Qt.ToolTipRole
             )
-        self.scarce = QCheckBox(SCARCE_LABEL)
-        self.scarce.setToolTip(SCARCE_TIP)
         self.perspective = QComboBox()
         self.perspective.addItem(NOT_SET, None)
         for perspective, summary in PERSPECTIVE_SUMMARIES.items():
@@ -262,7 +254,6 @@ class StoryPage(Page):
         form.addRow(hint("The story's clock at the first passage. Events' days count from day 1."))
         form.addRow("Outcomes", self.agency)
         form.addRow("World", self.world_activity)
-        form.addRow("Scarcity", self.scarce)
         form.addRow("Perspective", self.perspective)
         form.addRow("Length", self.length)
         form.addRow("Background", self.background)
@@ -277,7 +268,6 @@ class StoryPage(Page):
             self.start_time,
             self.agency,
             self.world_activity,
-            self.scarce,
             self.perspective,
             self.length,
             self.background,
@@ -298,7 +288,6 @@ class StoryPage(Page):
             (self.length, document.length),
         ):
             combo.setCurrentIndex(max(combo.findData(value), 0) if value else 0)
-        self.scarce.setChecked(document.scarce)
         set_field_text(self.background, document.background)
         self.notes.setPlainText(document.notes)
 
@@ -311,7 +300,6 @@ class StoryPage(Page):
         document.start_time = self.start_time.time().toString("HH:mm")
         document.agency = self.agency.currentData()
         document.world_activity = self.world_activity.currentData()
-        document.scarce = self.scarce.isChecked()
         document.perspective = self.perspective.currentData()
         document.length = self.length.currentData()
         document.background = self.background.text().strip()
@@ -533,153 +521,6 @@ class EntryPage(Page):
         entry.hidden = self.hidden.isChecked()
         entry.description = self.description.toPlainText()
         self._name_changed(old, entry.name)
-
-
-class MapPage(Page):
-    """The map's own settings: its unit, and where the story starts on it."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.unit = QComboBox()
-        self.unit.addItems(["km", "miles", "m"])
-        self.start = QComboBox()
-        self.start.setEditable(True)
-        form = self._form
-        form.addRow(
-            hint(
-                "A map drawn up beforehand: the places below stand where you put them, and "
-                "the story starts on it with the map on. Where the story goes beyond it, the "
-                "storyteller decides what is there and the map grows to take it in."
-            )
-        )
-        form.addRow("Unit", self.unit)
-        form.addRow(hint("What “at” and “size” on the places count in."))
-        form.addRow("Start", self.start)
-        form.addRow(hint("The place the story begins at; blank leaves it to the first passage."))
-        self._watch(self.unit, self.start)
-
-    def _fill(self) -> None:
-        world: MapDoc = self.item
-        self.unit.setCurrentIndex(max(self.unit.findText(world.unit), 0))
-        self.start.clear()
-        self.start.addItem("")
-        self.start.addItems([p.name for p in world.places if p.name.strip()])
-        self.start.setCurrentText(world.start)
-
-    def _store(self) -> None:
-        world: MapDoc = self.item
-        world.unit = self.unit.currentText()
-        world.start = self.start.currentText().strip()
-
-
-class MapPlacePage(Page):
-    """A place on the map: where it stands, what it is in, the ways from it,
-    the things that start there."""
-
-    KINDS = ("", "region", "settlement", "site", "area", "route", "building", "room", "vehicle")
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.name = QLineEdit()
-        self.kind = QComboBox()
-        self.kind.addItems(self.KINDS)
-        self.at = QLineEdit()
-        self.at.setPlaceholderText("east, north: e.g. 0, 8")
-        self.size = QLineEdit()
-        self.size.setPlaceholderText("how wide, in the map's unit (blank: by its kind)")
-        self.inside = QComboBox()
-        self.inside.setEditable(True)
-        self.known = QCheckBox(
-            "Known from the start (otherwise under fog until the story finds it)"
-        )
-        self.ways = QPlainTextEdit()
-        self.ways.setPlaceholderText(
-            "A line each: Place | direction, distance\nHellsville | north, five miles"
-        )
-        self.things = QPlainTextEdit()
-        self.things.setPlaceholderText("A line each: Thing | its state\nPickup truck | out of fuel")
-        self.description = QPlainTextEdit()
-        form = self._form
-        form.addRow("Name", self.name)
-        form.addRow("Kind", self.kind)
-        form.addRow("At", self.at)
-        form.addRow(
-            hint(
-                "From the place it is in, or from the map's origin. Blank: placed by the "
-                "program from its ways and what it is in."
-            )
-        )
-        form.addRow("Size", self.size)
-        form.addRow("In", self.inside)
-        form.addRow(self.known)
-        form.addRow(
-            hint(
-                "Named like a place under Places, it is that place: hidden there, it stays off "
-                "the map until an event reveals it."
-            )
-        )
-        form.addRow("Ways", self.ways)
-        form.addRow("Things", self.things)
-        form.addRow("Description", self.description)
-        self._watch(
-            self.name,
-            self.kind,
-            self.at,
-            self.size,
-            self.inside,
-            self.known,
-            self.ways,
-            self.things,
-            self.description,
-        )
-
-    def _fill(self) -> None:
-        place: MapPlaceDoc = self.item
-        self.name.setText(place.name)
-        self.kind.setCurrentText(place.kind if place.kind in self.KINDS else "")
-        self.at.setText(place.at)
-        self.size.setText(place.size)
-        self.inside.clear()
-        self.inside.addItem("")
-        if self.document.map is not None:
-            self.inside.addItems(
-                [p.name for p in self.document.map.places if p is not place and p.name.strip()]
-            )
-        self.inside.setCurrentText(place.inside)
-        self.known.setChecked(place.known)
-        self.ways.setPlainText(
-            "\n".join(f"{w.to} | {w.words}" if w.words else w.to for w in place.ways)
-        )
-        self.things.setPlainText(
-            "\n".join(f"{t.name} | {t.state}" if t.state else t.name for t in place.things)
-        )
-        self.description.setPlainText(place.description)
-
-    def _store(self) -> None:
-        place: MapPlaceDoc = self.item
-        old = place.name
-        place.name = self.name.text()
-        place.kind = self.kind.currentText()
-        place.at = self.at.text()
-        place.size = self.size.text()
-        place.inside = self.inside.currentText().strip()
-        place.known = self.known.isChecked()
-        place.ways = [
-            WayDoc(to=to.strip(), words=words.strip())
-            for to, _, words in (
-                line.partition("|") for line in self.ways.toPlainText().split("\n")
-            )
-            if to.strip()
-        ]
-        place.things = [
-            ThingDoc(name=name.strip(), state=state.strip())
-            for name, _, state in (
-                line.partition("|") for line in self.things.toPlainText().split("\n")
-            )
-            if name.strip()
-        ]
-        place.description = self.description.toPlainText()
-        self._name_changed(old, place.name)
 
 
 class FactPage(Page):

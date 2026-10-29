@@ -185,13 +185,7 @@ class PlotRuntime:
         hidden |= {entry.id for entry in self.bundle.lore if entry.plot_hidden}
         if not hidden:
             return set()
-        if self.story.visual:
-            # A visual story's plot state lives on its live area state
-            # (engine/session_visual.py), not on passages. Read as stored:
-            # settling the state would fold the map, which asks this.
-            chronicle = self.visual_stored_chronicle()
-        else:
-            chronicle = chronicle_at(self.path() if path is None else path, plot)
+        chronicle = chronicle_at(self.path() if path is None else path, plot)
         shown = set(chronicle.brought_in)
         if pending:
             for event in plot.events:

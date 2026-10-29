@@ -322,8 +322,7 @@
   function renderStatus() {
     const state = S.state || {};
     let text = "";
-    if (state.desktop_playing) text = "The desktop is playing a visual story.";
-    else if (state.desktop_waiting) text = "The desktop is waiting for an answer.";
+    if (state.desktop_waiting) text = "The desktop is waiting for an answer.";
     else if (state.queued) text = "A turn is waiting to go.";
     else if (state.busy && !state.background) text = "Writing…";
     else if (state.busy) text = "Reading the passage…";
@@ -692,7 +691,7 @@
     const writing = state.busy && !state.background;
     send.textContent = writing ? "Stop" : state.busy ? "Queue" : "Send";
     send.className = "send " + (writing ? "danger" : "primary");
-    send.disabled = S.sending || (!writing && (!text.value.trim() || state.queued || state.desktop_waiting || state.desktop_playing));
+    send.disabled = S.sending || (!writing && (!text.value.trim() || state.queued || state.desktop_waiting));
   }
 
   async function send() {

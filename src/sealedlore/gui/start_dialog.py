@@ -47,11 +47,7 @@ class StartDialog(QDialog):
     ) -> None:
         """`without_pictures`: the characters and lore entries the models may
         see that have no picture yet; when there are any, a picture of each
-        is offered (a plot file or premise often brings none). `tile_sets`:
-        (name, title) of each set a new world's map may be drawn in; when
-        there are any, the look of the map is chosen here, before anything
-        is drawn (the author, Oct 18 2026: by hand, by the AI, or a new set
-        designed for the world)."""
+        is offered (a plot file or premise often brings none)."""
         super().__init__(parent)
         self.setWindowTitle(f"Start — {story.title}")
         self.setMinimumWidth(460)

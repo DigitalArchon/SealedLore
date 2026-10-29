@@ -425,9 +425,6 @@ class SettingsDialog(QDialog):
             "plot": "Plot model",
             "lore": "Lore model",
             "image_prompt": "Image prompt writer",
-            "look": "Look model",
-            "npc": "People model",
-            "keeper": "Plot keeper model",
         }
         return [(labels.get(role, role), field) for role, field in self._route_fields.items()]
 
@@ -841,32 +838,6 @@ class SettingsDialog(QDialog):
             "prompt, so it is cheap and has read everything."
         )
         form.addRow("Image prompt writer", self.image_prompt_model)
-        # A visual story's Look (engine/look.py): shown a part of the play
-        # view and told what the game knows of it.
-        self.look_model = self._routed_field(self.config.look_model or "")
-        self.look_model.setPlaceholderText("same as the story's model")
-        self.look_model.setToolTip(
-            "In a visual story, says what you see and find when you look closely at a part "
-            "of the place: it is shown that part of the picture (when it reads pictures) and "
-            "told what the game knows stands there. Blank uses the story's model."
-        )
-        form.addRow("Look model", self.look_model)
-        self.npc_model = self._routed_field(self.config.npc_model or "")
-        self.npc_model.setPlaceholderText("same as the story's model")
-        self.npc_model.setToolTip(
-            "In a visual story, speaks for each person you talk to, from their sheet, and "
-            "chooses what they do (come with you, lead you somewhere, back away, attack…). "
-            "One call a line. Blank uses the story's model."
-        )
-        form.addRow("People model", self.npc_model)
-        self.keeper_model = self._routed_field(self.config.keeper_model or "")
-        self.keeper_model.setPlaceholderText("same as the story's model")
-        self.keeper_model.setToolTip(
-            "In a visual story, keeps the plot: when an event is due, when you direct the "
-            "story, or when you attempt something the game has no rule for, it answers with "
-            "a script of changes the game carries out. Blank uses the story's model."
-        )
-        form.addRow("Plot keeper model", self.keeper_model)
 
         self.recommended = QPushButton("Use recommended models")
         self.recommended.setToolTip(
@@ -903,9 +874,6 @@ class SettingsDialog(QDialog):
             "plot": self.plot_model,
             "lore": self.lore_model,
             "image_prompt": self.image_prompt_model,
-            "look": self.look_model,
-            "npc": self.npc_model,
-            "keeper": self.keeper_model,
         }
         for role, field in self._route_fields.items():
             field.set_route(self.config.model_routes.get(role))
@@ -1892,9 +1860,6 @@ class SettingsDialog(QDialog):
         self.config.scene_model = self._role_model(self.scene_model) or None
         self.config.plot_reads = self.plot_reads.isChecked()
         self.config.plot_model = self._role_model(self.plot_model) or None
-        self.config.look_model = self._role_model(self.look_model) or None
-        self.config.npc_model = self._role_model(self.npc_model) or None
-        self.config.keeper_model = self._role_model(self.keeper_model) or None
         self.config.cache_control_mode = self.cache_mode.currentText()  # type: ignore[assignment]
         self.config.cache_ttl = self.cache_ttl.currentData()
 

@@ -99,9 +99,6 @@ TROUBLE_ROLE_NAMES = {
     "plot": "Plot",
     "lore": "Lore",
     "image_prompt": "Image prompt writer",
-    "look": "Look (visual stories)",
-    "npc": "People (visual stories)",
-    "keeper": "Plot keeper (visual stories)",
 }
 COLUMNS = ("Host", "First word", "Reasoning", "Tokens/s", "Answered", "Cost", "Notes")
 HOST_COLUMNS = ("Try", "Precision", "Keeps prompts?", "In $/M", "Out $/M")

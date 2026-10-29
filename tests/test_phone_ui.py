@@ -188,23 +188,21 @@ def test_a_refused_phone_is_not_kept(app, place, story):
     window.close()
 
 
-def test_stories_are_shared_from_the_dialog_and_one_with_a_map_never(app, place, story, cast):
-    mapped = story.model_copy(
-        update={
-            "id": "mapped",
-            "title": "With a map",
-            "mode": "visual",
-        }
-    )
-    window = window_with(place, story, cast, stories=[mapped])
+def test_stories_are_shared_from_the_dialog_and_a_visual_game_never(app, place, story, cast):
+    """A Visual Story left in the data folder (an app of its own now) can't
+    be opened, so it isn't offered to the phones."""
+    window = window_with(place, story, cast)
+    game = place / "data" / "stories" / "game"
+    game.mkdir()
+    (game / "story.json").write_text('{"id": "game", "title": "With a map", "mode": "visual"}')
     window.open_phone_devices()
     dialog = window._phone_dialog
     items = {
         dialog.stories.item(i).data(Qt.UserRole)[0]: dialog.stories.item(i)
         for i in range(dialog.stories.count())
     }
-    plain, with_map = items[story.id], items["mapped"]
-    assert not (with_map.flags() & Qt.ItemIsEnabled) and "visual story" in with_map.text()
+    assert "game" not in items
+    plain = items[story.id]
     plain.setCheckState(Qt.Checked)
     assert window.config.phone.shared_stories == [story.id]
     plain.setCheckState(Qt.Unchecked)

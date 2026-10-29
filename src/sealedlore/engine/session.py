@@ -151,24 +151,14 @@ from sealedlore.engine.scene_update import (
     strict_perspective,
 )
 from sealedlore.engine.session_archival import LEDGER_MAX_TOKENS, ArchivalRuntime
-from sealedlore.engine.session_area import AreaRuntime
-from sealedlore.engine.session_art import ArtRuntime
-from sealedlore.engine.session_challenge import ChallengeRuntime
-from sealedlore.engine.session_health import HealthRuntime
 from sealedlore.engine.session_images import ImageRuntime
 from sealedlore.engine.session_merge import MergeRuntime, _close
-from sealedlore.engine.session_overmap import OvermapRuntime
-from sealedlore.engine.session_paint import PaintRuntime
-from sealedlore.engine.session_people_art import PeopleArtRuntime
 from sealedlore.engine.session_plot import NoticeSeverity, PlotRuntime, SessionNotice
 from sealedlore.engine.session_portraits import PortraitRuntime
 from sealedlore.engine.session_private import PrivateRuntime
 from sealedlore.engine.session_reasoning import ReasoningRuntime
 from sealedlore.engine.session_rebuild import RebuildRuntime
 from sealedlore.engine.session_recall import RecallRuntime
-from sealedlore.engine.session_scout import ScoutRuntime
-from sealedlore.engine.session_visual import VisualRuntime
-from sealedlore.engine.session_world import WorldRuntime
 from sealedlore.engine.tokens import TokenEstimator, updated_correction_factor
 from sealedlore.engine.validators import locate_quote, mentions
 from sealedlore.ids import new_id, utc_now_iso
@@ -446,16 +436,6 @@ class _SceneRead:
 
 class StorySession(
     PlotRuntime,
-    WorldRuntime,
-    ArtRuntime,
-    AreaRuntime,
-    VisualRuntime,
-    HealthRuntime,
-    ChallengeRuntime,
-    ScoutRuntime,
-    OvermapRuntime,
-    PaintRuntime,
-    PeopleArtRuntime,
     MergeRuntime,
     ArchivalRuntime,
     RebuildRuntime,
@@ -656,11 +636,6 @@ class StorySession(
     def model(self) -> str:
         provider_config = self.config.active_provider()
         default = provider_config.model if provider_config else ""
-        if self.story.visual:
-            # A game follows Settings' story model: it has no model button,
-            # and one pinned when it was made could never be changed (the
-            # author, Oct 29 2026). Games made before still carry the pin.
-            return default
         return self.story.defaults.main_model or default
 
     @property
@@ -711,8 +686,6 @@ class StorySession(
             found = list(self._route_checks.items())
         roles_by_key: dict[tuple[str, str], list[str]] = {}
         for role in ROUTE_ROLES:
-            if role in ("look", "npc", "keeper") and not self.story.visual:
-                continue  # a visual story's alone
             _role, model = self._role_in_use(role)
             body = self.route_for(role)
             if body:
@@ -745,13 +718,10 @@ class StorySession(
             "lore": self.config.lore_model,
             "authoring": self.config.authoring_model,
             "image_prompt": self.config.image_prompt_model,
-            "look": self.config.look_model,
-            "npc": self.config.npc_model,
-            "keeper": self.config.keeper_model,
         }
         role = role_in_use(role, own)
         if self.story.chat and is_tee(self.model):
-            role = "story"  # a TEE chat's every call (summaries, its map) is its own model's
+            role = "story"  # a TEE chat's every call (its summaries) is its own model's
         return role, (self.model if role == "story" else own[role] or self.model)
 
     def route_for(self, role: str, model: str | None = None) -> dict[str, Any]:

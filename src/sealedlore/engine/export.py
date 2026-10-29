@@ -25,7 +25,7 @@ def markdown_user_name(story: Story, cast: Sequence[Character]) -> str | None:
     chat's name for its user, or the character a story's author is playing.
     None when a story holds nobody."""
     if story.chat:
-        return story.chat_character.strip() or CHAT_USER_NAME
+        return CHAT_USER_NAME
     held = next((c for c in cast if c.id == story.held_character_id), None)
     return held.name if held is not None else None
 

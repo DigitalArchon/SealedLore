@@ -25,9 +25,10 @@ the importer can point at it.
 ## How the file is laid out
 
 - Top-level sections are `# Headings`: World (or World info, Setting),
-  Opening (or Start), Characters (or Cast), Places, Lore, Map, Facts,
+  Opening (or Start), Characters (or Cast), Places, Lore, Facts,
   Timeline and Events (or Optional events). All are optional, and they can come in any
-  order. Any other `#` heading is reported and ignored.
+  order. Any other `#` heading is reported and ignored; a `# Map` section,
+  from a file made for a map, is skipped with a note.
 - Inside a section, each item is a `## Heading`. An event's variants are
   `### Headings`.
 - Settings are `- key: value` lines placed **straight after** a heading. The
@@ -47,7 +48,6 @@ description: One line for the story list.
 start: day 1, 15:30          <!-- the clock at the first passage -->
 agency: contested            <!-- fiat | plausible | contested | dice -->
 world activity: normal       <!-- quiet | normal | eventful -->
-scarce: yes                  <!-- yes | no (default): things are scarce in this world -->
 perspective: whole story     <!-- whole story | with character -->
 length: adaptive             <!-- adaptive | brief | standard | descriptive | literary (never custom) -->
 background: pictures/farm.jpg   <!-- the picture behind the story (see Pictures) -->
@@ -56,12 +56,6 @@ background: pictures/farm.jpg   <!-- the picture behind the story (see Pictures)
 
 (The notes after each value are comments, as anywhere in the file: a `#`
 there would be read as part of the value.)
-
-`scarce: yes` says things are scarce in this world (Story → Setup → About →
-Scarcity in the app): on a map, the open country the program designs keeps
-food, fuel, weapons and whatever else the world holds scarce rare, hidden or
-hard to reach rather than lying about for the taking. Leave it out for a
-world without scarcity.
 
 A key the importer doesn't know is noted and ignored, so there is no
 front-matter key for the picture style: set that in the app.
@@ -141,56 +135,6 @@ particular character whoever is held, put their name first:
 is only read from the prose while the author holds them, so progress they
 make off-screen (a search told as cutaways while the author plays someone
 else) is better kept in a fact that the events set.
-
-## Map
-
-A story can come with a map drawn up beforehand, so it starts in map mode
-with the country already laid out (`Doomsville with a map.md` is a worked
-example). Each `## Place` under `# Map` is somewhere on it:
-
-```markdown
-# Map
-- unit: km                 # what at: and size: count in: km (default), miles or m
-- start: The farmhouse     # where the story begins on the map
-
-## Hellsville
-- kind: settlement         # region | settlement | site | area | route | building | room | vehicle
-- at: 0, 8                 # east, north: from the map's origin, or from the place it is in
-- size: 1.5                # how wide; blank takes a size for its kind
-- known: yes               # on the map from the start; otherwise under fog until the story finds it
-- way: The north road | south, five miles   # a way to another place, in words; one line each
-- thing: The town's stores | rationed       # a thing that starts here; one line each
-A small walled town...
-
-## The diner
-- kind: building
-- in: Hellsville           # inside another place on the map
-- at: -0.18, -0.25         # from Hellsville's middle
-```
-
-- Places stand where the file puts them, and never move. A place with no
-  `at:` is placed by the program from its ways and what it is in.
-- A map place named like a place or lore entry (under `# Places` or `# Lore`)
-  is that entry. If the entry is `hidden: yes`, the place, and everything in
-  it, stays off the map, and away from every model, until an event reveals
-  it.
-- Ways are words, as the story would say them; they show on the map and help
-  the map read follow the story. The program doesn't measure them.
-- Everywhere the story goes beyond the map, the storyteller decides what is
-  there and the map grows to take it in, as it does for a story with no map.
-- A map turns the story's map on (Story → Setup → About), and the storyteller
-  is told the part of it around the player's character each turn: the
-  places, how far and which way, the ways and the things, as written here.
-  So what a place is like belongs in its text: the storyteller keeps to it.
-- A plot file played as a Visual Story ships with its map designed:
-  `<name>.world_art.json` beside `<name>.md` (Doomsville with a map does),
-  holding the plan of every area, and `<name>.visual.json`, the game's design
-  sheet. Every import of the file finds the same places (their ids come from
-  their names), so the art fits. Its pictures (an area's painted backdrop, a
-  character's walking figure) come too when their files are beside the plot
-  file: each picture's `file` is written from the plot file's folder, as a
-  picture line is written (`pictures/map/farm-backdrop.jpg`). One whose file
-  isn't there is left out. An ordinary story ignores the `# Map` section.
 
 ## Pictures
 

@@ -1,22 +1,24 @@
 """What one mode keeps from another, outside the window: the terminal and
-the copies a story is made from. The mode audit (Oct 29 2026) found the CLI
-playing a chat and a visual story as stories, and a visual story's copy a
-game with nobody in it."""
+the loaders. The mode audit (Oct 29 2026) found the CLI playing a chat as a
+story; the split (Oct 29 2026) left Visual Stories to an app of their own."""
 
 from __future__ import annotations
 
 import builtins
+import json
 from pathlib import Path
+
+import pytest
 
 from sealedlore.cli import main as cli_main
 from sealedlore.models.node import CHAT_USER_ID
 from sealedlore.models.story import Story
-from sealedlore.models.visual import PersonSheet, VisualDesign
-from sealedlore.storage.repository import StoryBundle, load_story_bundle, save_story_bundle
-from sealedlore.storage.scenario import (
-    bundle_from_scenario,
-    fresh_playthrough,
-    scenario_from_bundle,
+from sealedlore.storage.library import story_listings
+from sealedlore.storage.repository import (
+    VISUAL_ELSEWHERE,
+    StoryBundle,
+    load_story_bundle,
+    save_story_bundle,
 )
 
 
@@ -32,31 +34,36 @@ def _inputs(monkeypatch, lines: list[str]) -> None:
     monkeypatch.setattr(builtins, "input", answer)
 
 
-def _visual(story: Story, cast) -> StoryBundle:
-    story.mode = "visual"
-    story.held_character_id = "char-serrik"
-    story.visual_design = VisualDesign(people={"Maela Orr": PersonSheet(ability=3)})
-    return StoryBundle(story=story, cast=cast)
+def _game(root: Path, story_id: str = "game-1") -> str:
+    """A Visual Story's folder as SealedLore played them before they became a
+    game of their own: its story.json says mode "visual"."""
+    folder = root / "stories" / story_id
+    folder.mkdir(parents=True)
+    (folder / "story.json").write_text(
+        json.dumps({"id": story_id, "title": "Doomsville", "mode": "visual"}), encoding="utf-8"
+    )
+    return story_id
 
 
-def test_the_terminal_lists_each_mode_as_what_it_is(tmp_path: Path, story, cast, capsys):
-    save_story_bundle(_visual(story, cast), root=tmp_path)
+def test_a_visual_story_left_here_is_listed_and_never_opened(tmp_path: Path, monkeypatch, capsys):
+    """The visual mode is an app of its own now: a game played here before
+    is listed so it can be found and deleted, with the reason, and neither
+    the window, the terminal nor a loader takes it for a story."""
+    game = _game(tmp_path)
     chat = Story(title="A chat", mode="chat")
     save_story_bundle(StoryBundle(story=chat), root=tmp_path)
+    listing = {row.id: row for row in story_listings(tmp_path)}
+    assert listing[game].error == VISUAL_ELSEWHERE and listing[game].title == "Doomsville"
+    assert listing[chat.id].error is None
+    with pytest.raises(ValueError, match="its own app"):
+        load_story_bundle(game, root=tmp_path)
     cli_main(["--data-dir", str(tmp_path), "list"])
     out = capsys.readouterr().out
-    assert f"{story.id}  {story.title}  (visual story)" in out
-    assert f"{chat.id}  A chat  (chat, 0 messages)" in out
-
-
-def test_the_terminal_never_plays_a_visual_story(tmp_path: Path, story, cast, monkeypatch, capsys):
-    """It played one as a story: two messages, a scene read, the storyteller's
-    rules, in a story that must have none."""
-    save_story_bundle(_visual(story, cast), root=tmp_path)
+    assert f"{chat.id}  A chat  (chat, 0 messages)" in out and game not in out
     _inputs(monkeypatch, ["I look around."])
-    assert cli_main(["--data-dir", str(tmp_path), "chat", "--mock", story.id]) == 1
-    assert "played in the app's game window" in capsys.readouterr().out
-    assert load_story_bundle(story.id, root=tmp_path).nodes == []
+    assert cli_main(["--data-dir", str(tmp_path), "chat", "--mock", game]) == 1
+    assert VISUAL_ELSEWHERE in capsys.readouterr().err
+    assert not (tmp_path / "stories" / game / "nodes.json").exists()
 
 
 def test_a_chat_in_the_terminal_is_the_user_s_messages_and_nothing_of_a_story(
@@ -74,44 +81,3 @@ def test_a_chat_in_the_terminal_is_the_user_s_messages_and_nothing_of_a_story(
     nodes = load_story_bundle(chat.id, root=tmp_path).nodes
     mine = next(node for node in nodes if node.kind == "user")
     assert mine.speaker_id == CHAT_USER_ID and mine.ooc is None and mine.meta.roll is None
-
-
-def test_a_visual_story_s_copy_is_the_same_game_unplayed(story, cast):
-    """Duplicate settings (and the CLI's) went through a scenario that had no
-    design and no player: the copy opened on nobody, with nobody in it."""
-    source = _visual(story, cast)
-    copy = fresh_playthrough(source, "Again")
-    assert copy.story.visual and copy.story.title == "Again"
-    assert copy.story.visual_design == source.story.visual_design
-    assert copy.story.held_character_id == "char-serrik"
-    assert "char-serrik" in copy.story.scene.present_character_ids
-    assert copy.story.area_live is None
-    # Shared as a scenario, the design goes with it; the player is the
-    # importer's to choose (asked as the game opens).
-    imported = bundle_from_scenario(scenario_from_bundle(source))
-    assert imported.story.visual_design == source.story.visual_design
-    assert imported.story.held_character_id is None
-
-
-def test_a_game_follows_the_story_model_in_settings(tmp_path: Path, story, cast):
-    """A game has no model button, and the model pinned when it was made
-    could never change (the author, Oct 29 2026: follow Settings). A story
-    keeps its own."""
-    from sealedlore.engine.session import StorySession
-    from sealedlore.models.config import Config, ProviderConfig
-    from sealedlore.providers.mock import MockChatProvider
-
-    config = Config(
-        providers=[
-            ProviderConfig(
-                name="default", base_url="https://example.com/v1", api_key="k", model="new/model"
-            )
-        ],
-        active_provider_name="default",
-    )
-    bundle = _visual(story, cast)
-    bundle.story.defaults.main_model = "old/pinned"
-    game = StorySession(bundle, config, MockChatProvider(), root=tmp_path)
-    assert game.model == "new/model"
-    bundle.story.mode = "story"
-    assert game.model == "old/pinned"

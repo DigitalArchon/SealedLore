@@ -5,8 +5,7 @@ cut to the part you want or to the exact shape the app uses).
 Each fixed shape is the size the configured model draws, read from the image
 model listing the config keeps, so a picture brought in matches one drawn;
 the background's is the story area as the window is now, since the window
-scales the background to cover it; an isometric view's is the plan's own
-(5:3), since the map lays the view over the plan. Pure: no Qt, no network.
+scales the background to cover it. Pure: no Qt, no network.
 """
 
 from __future__ import annotations
@@ -14,9 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import gcd
 
-from sealedlore.engine.portraits import portrait_size
-from sealedlore.engine.world_art import LAYOUT_HEIGHT, LAYOUT_WIDTH
-from sealedlore.engine.world_pictures import picture_size
+from sealedlore.engine.portraits import picture_size, portrait_size
 from sealedlore.models.config import Config
 from sealedlore.providers.images import parse_image_models
 
@@ -25,7 +22,6 @@ ORIGINAL = "original"
 PORTRAIT = "portrait"
 PICTURE = "picture"
 BACKGROUND = "background"
-ISOMETRIC = "isometric"
 SQUARE = "square"
 
 # When a model's sizes can't be read ("1k", "auto"): the shapes it most often draws.
@@ -76,9 +72,6 @@ def picture_shapes(
     portrait_model = infos.get(config.portrait_model) if config is not None else None
     portrait = size_ratio(portrait_size(portrait_model)) or FALLBACK[PORTRAIT]
     picture = size_ratio(picture_size(portrait_model, landscape=True)) or FALLBACK[PICTURE]
-    # The view covers its area's plan on the map, whatever model painted it.
-    common = gcd(LAYOUT_WIDTH, LAYOUT_HEIGHT)
-    isometric = (LAYOUT_WIDTH // common, LAYOUT_HEIGHT // common)
     if background is not None and background[0] > 0 and background[1] > 0:
         common = gcd(*background)
         back = (background[0] // common, background[1] // common)
@@ -94,8 +87,5 @@ def picture_shapes(
             PICTURE, f"Place or lore picture ({_said(*picture)}, as they are drawn)", *picture
         ),
         PictureShape(BACKGROUND, back_label, *back),
-        PictureShape(
-            ISOMETRIC, f"Painting ({_said(*isometric)}, the shape of a map area)", *isometric
-        ),
         PictureShape(SQUARE, "Square (1:1)", 1, 1),
     ]

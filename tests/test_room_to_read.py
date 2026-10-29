@@ -17,7 +17,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QSize  # noqa: E402
-from PySide6.QtGui import QColor, QImage, QPalette  # noqa: E402
+from PySide6.QtGui import QColor, QPalette  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402
     QApplication,
     QDialog,
@@ -141,27 +141,3 @@ def test_the_box_to_type_in_can_be_made_taller_and_stays_so(app, tmp_path, story
     window._remember_layout()
     assert window.config.window.composer_height == window.composer.height()
     window.close()
-
-
-def test_the_map_keeps_its_last_picture_while_the_next_is_painted(app):
-    from sealedlore.engine.area import build_area
-    from sealedlore.gui.area_render import px_for
-    from sealedlore.gui.area_view import AreaView
-    from tests.test_area import world_and_art
-
-    world, art = world_and_art()
-    area = build_area(world, art, "farm")
-    px = px_for(area)
-    picture = QImage(area.width * px, area.height * px, QImage.Format_RGB32)
-    picture.fill(QColor(90, 120, 60))
-    view = AreaView()
-    view.set_area(area, picture, [], key=1)
-    first = view._background
-    assert first is not None and not view._stale
-    # New art came in: another key, its picture not painted yet.
-    view.set_area(area, None, [], key=2)
-    assert view._background is not None and view._stale, "the last picture stays"
-    assert view._note is None, "no dark stand-in saying it is drawing"
-    view.set_area(area, picture, [], key=2)
-    assert not view._stale, "the new picture replaces it when it comes"
-    view.deleteLater()

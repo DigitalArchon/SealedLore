@@ -54,7 +54,6 @@ HOW_TO_PAIR = (
     "phone's usual browser, which can't reach an onion address.) Then compare the four digits "
     "the phone shows with the ones SealedLore asks you to allow."
 )
-NO_MAP_YET = "A visual story: phones play text stories and chats only, for now."
 
 
 class QrWidget(QWidget):
@@ -278,23 +277,18 @@ class PhoneDevicesDialog(QDialog):
         if session is not None and session.memory_only:
             item = QListWidgetItem(f"{session.story.title} (this memory-only chat, for this run)")
             item.setData(Qt.UserRole, (session.story.id, True))
-            self._tick_item(item, window.phone_shared(session.story.id), session.story.visual)
+            self._tick_item(item, window.phone_shared(session.story.id))
             self.stories.addItem(item)
         for listing in story_listings(window.root):
             if listing.error is not None:
                 continue
             item = QListWidgetItem(listing.title)
             item.setData(Qt.UserRole, (listing.id, False))
-            self._tick_item(item, window.phone_shared(listing.id), listing.keeps_map)
+            self._tick_item(item, window.phone_shared(listing.id))
             self.stories.addItem(item)
         self.stories.blockSignals(False)
 
-    def _tick_item(self, item: QListWidgetItem, shared: bool, keeps_map: bool) -> None:
-        if keeps_map:
-            item.setFlags(item.flags() & ~Qt.ItemIsEnabled & ~Qt.ItemIsUserCheckable)
-            item.setText(item.text() + " · a visual story")
-            item.setToolTip(NO_MAP_YET)
-            return
+    def _tick_item(self, item: QListWidgetItem, shared: bool) -> None:
         item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
         item.setCheckState(Qt.Checked if shared else Qt.Unchecked)
 

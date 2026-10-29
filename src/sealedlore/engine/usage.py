@@ -53,11 +53,6 @@ KIND_LABELS: dict[str, str] = {
     "map_tileset_pick_response": "Map tile sets",
     "map_region_response": "Map regions",
     "isometric_prompt_response": "Isometric view prompts",
-    # A visual story's own calls: missing here, its total left them out.
-    "keeper_response": "Visual stories: the keeper",
-    "npc_response": "Visual stories: the people",
-    "look_response": "Visual stories: Look",
-    "paint_prompt_response": "Visual stories: painting prompts",
     "video_prompt_response": "Video prompts",
     # What the endpoint charged for the video (NanoGPT: on accepting it).
     "video_response": "Videos",

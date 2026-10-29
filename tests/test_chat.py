@@ -383,12 +383,10 @@ def test_a_chat_tail_travels_with_the_chat_but_not_to_the_picture_writer(tmp_pat
     archived, Oct 24 2026: the call used a method that no longer existed)."""
     session, provider = chat_session(tmp_path, ["Hi."])
     session.story.chat_tail = "Stay terse."
-    session.story.chat_character = "Ada"
     back = bundle_from_scenario(scenario_from_bundle(session.bundle, {}))
     assert back.story.chat_tail == "Stay terse."
-    assert back.story.chat_character == "Ada"
     again = fresh_playthrough(session.bundle, "Again").story
-    assert again.chat_tail == "Stay terse." and again.chat_character == "Ada"
+    assert again.chat_tail == "Stay terse."
 
     say(session, "Hello")
     provider.responses = ["not json: only the request matters here"]
@@ -415,9 +413,6 @@ def test_a_chats_markdown_export_names_the_user_as_the_chat_does(tmp_path):
     out = exported()
     assert "**You:** What is 1 + 1?" in out and "**You:** And 2 + 2?" in out
     assert "Unknown" not in out
-    story.chat_character = "Ada"
-    out = exported()
-    assert "**Ada:** What is 1 + 1?" in out and "You:" not in out
 
 
 def test_a_chat_is_never_sent_the_storys_stand_in_first_message(tmp_path):

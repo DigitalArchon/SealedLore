@@ -31,7 +31,7 @@ from sealedlore.gui.ref_images import image_of
 app = QApplication([])
 sets = Path(sys.argv[1])
 data = [p.read_bytes() for p in sorted(sets.rglob("*")) if p.suffix in (".webp", ".jpg")][:12]
-assert len(data) >= 4, "no tile set pictures to decode"
+assert len(data) >= 4, "no sample pictures to decode"
 stop = time.monotonic() + float(sys.argv[2])
 counts = [0, 0, 0]
 
@@ -60,13 +60,13 @@ print("decodes", counts)
 
 
 def test_decoding_on_two_threads_beside_the_gui_thread_never_hangs(tmp_path):
-    """Two threads decode the sample tile set's pictures while the main
+    """Two threads decode the samples' pictures while the main
     thread decodes and encodes: a few seconds of it, in a subprocess with a
     deadline. Before the lock this deadlocked within seconds, every time."""
     pytest.importorskip("PySide6")
     script = tmp_path / "race.py"
     script.write_text(RACE)
-    sets = ROOT / "SampleStories" / "tilesets" / "doomsville"
+    sets = ROOT / "SampleStories" / "pictures"
     env = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
     try:
         done = subprocess.run(

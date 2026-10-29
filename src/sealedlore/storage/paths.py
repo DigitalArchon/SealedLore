@@ -53,15 +53,6 @@ PLOT_WRITING_GUIDE = "WRITING_PLOTS.md"
 GUIDES = (PLOT_FORMAT_GUIDE, PLOT_WRITING_GUIDE)
 
 
-# Samples that exist only for their map (the same story as another sample,
-# with a map drawn up): not offered while maps are withdrawn.
-MAP_ONLY_SAMPLES = ("Doomsville with a map",)
-# The visual stories (the author, Oct 24 2026: a game mode of its own on a
-# predesigned map, Doomsville first): the sample file each is played from,
-# by the name the start page shows.
-VISUAL_SAMPLES: dict[str, str] = {"Doomsville": "Doomsville with a map"}
-
-
 def sample_stories(folder: Path | None = None) -> list[tuple[str, Path]]:
     """The sample stories offered by File → New story from a sample, as
     (name, path), sorted by name: every plot file (.md) in the samples folder
@@ -77,25 +68,7 @@ def sample_stories(folder: Path | None = None) -> list[tuple[str, Path]]:
         for path in folder.glob("*.md")
         if path.is_file() and path.name not in GUIDES
     ]
-    # A sample that is the same story with a map is played as a visual story
-    # (`VISUAL_SAMPLES`), never offered as a story of its own; the rest play
-    # as stories with a plot, their `# Map` unused.
-    found = [item for item in found if item[0] not in MAP_ONLY_SAMPLES]
     return sorted(found, key=lambda item: item[0].casefold())
-
-
-def visual_stories(folder: Path | None = None) -> list[tuple[str, Path]]:
-    """The visual stories offered on the start page, as (name, plot file):
-    `VISUAL_SAMPLES`, those whose file is in the samples folder."""
-    base = samples_dir() if folder is None else folder
-    out = []
-    if base is None:
-        return out
-    for name, stem in VISUAL_SAMPLES.items():
-        path = base / f"{stem}.md"
-        if path.is_file():
-            out.append((name, path))
-    return out
 
 
 DATA_DIR_MODE = 0o700

@@ -13,7 +13,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from sealedlore.models.area import Density
 from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef
 from sealedlore.models.lore import LoreEntry
@@ -28,8 +27,6 @@ from sealedlore.models.story import (
     StyleDirectives,
     WorldActivity,
 )
-from sealedlore.models.visual import VisualDesign
-from sealedlore.models.world import WorldArt, WorldDelta
 
 SCENARIO_FORMAT = "sealedlore-scenario"
 SCENARIO_VERSION = 1
@@ -52,23 +49,6 @@ class Scenario(BaseModel):
     agency_mode: AgencyMode = "contested"
     npc_scope: NpcScope = "all"
     world_activity: WorldActivity = DEFAULT_WORLD_ACTIVITY
-    # The map that grows as the story goes (models/world.py): a choice for the
-    # story, so a new playthrough keeps it.
-    world_map: bool = False
-    # How full its rooms are (map-first play, models/area.py).
-    map_density: Density = "normal"
-    # Things are scarce in this world (StoryDefaults.scarce): the world
-    # designer keeps them rare in the open country.
-    scarce: bool = False
-    # A map drawn up beforehand (a plot file's `# Map`): its places, ways and
-    # things, fixed from the start, and where the story begins on it.
-    world_base: WorldDelta | None = None
-    world_start: str | None = None
-    # The map's art as drawn so far (models/world.py WorldArt): a restart or a
-    # scenario file keeps what was drawn, and a plot file may ship with its
-    # art beside it (storage/world_art.py). Map pictures from an image model
-    # stay with the story they were drawn for.
-    world_art: WorldArt | None = None
     cast: list[Character] = Field(default_factory=list)
     lore: list[LoreEntry] = Field(default_factory=list)
     # Cards the story built up for people it introduced. Suggestions and
@@ -90,11 +70,6 @@ class Scenario(BaseModel):
     mode: StoryMode = "story"
     chat_prompt: str = ""
     chat_tail: str = ""
-    # A chat that keeps a map: the name the map tracks the user by.
-    chat_character: str = ""
-    # A visual story's predesigned sheet (models/visual.py: its people, locks,
-    # flavour, overmap): without it a copy was a game with nobody in it.
-    visual_design: VisualDesign | None = None
     reference_images: list[ImageRef] = Field(default_factory=list)
     # The story's own edits to the prompt texts: part of how it is told.
     prompt_edits: dict[str, PromptEdit] = Field(default_factory=dict)

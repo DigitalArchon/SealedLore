@@ -21,8 +21,6 @@ from sealedlore.engine.plot_md import (
     _EVENT_FIELDS,
     _FACT_NAME,
     _FIELD,
-    _MAP_FIELDS,
-    _MAP_PLACE_FIELDS,
     _OPENING_FIELDS,
     _PLACE_FIELDS,
     _ROLES,
@@ -49,13 +47,9 @@ from sealedlore.models.plot_file import (
     EntryDoc,
     EventDoc,
     FactDoc,
-    MapDoc,
-    MapPlaceDoc,
     PictureDoc,
     PlotDocument,
-    ThingDoc,
     VariantDoc,
-    WayDoc,
 )
 
 # Where a line of the rendered file came from: a section, the item's index
@@ -71,8 +65,6 @@ PLACE = "place"
 LORE = "lore"
 FACT = "fact"
 EVENT = "event"
-# The map's own settings are (MAP, -1, -1); its places (MAP, index, -1).
-MAP = "map"
 NOTES = "notes"
 
 UNNAMED = "Unnamed"
@@ -82,7 +74,6 @@ _FRONT_KEYS = (
     "start",
     "agency",
     "world_activity",
-    "scarce",
     "perspective",
     "length",
     "background",
@@ -236,7 +227,6 @@ def render_plot_markdown(document: PlotDocument) -> RenderedPlot:
         for key, value in (
             ("agency", document.agency),
             ("world activity", document.world_activity),
-            ("scarce", "yes" if document.scarce else None),
             ("perspective", document.perspective),
             ("length", document.length),
         )
@@ -310,32 +300,6 @@ def render_plot_markdown(document: PlotDocument) -> RenderedPlot:
             writer.flag("hidden", entry.hidden)
             writer.pictures(entry.pictures)
             writer.prose(entry.description)
-
-    if document.map is not None and (document.map.places or document.map.start.strip()):
-        world = document.map
-        writer.current = (MAP, -1, -1)
-        writer.heading(1, "Map")
-        if world.unit.strip() and _norm(world.unit) != "km":
-            writer.field("unit", world.unit.strip())
-        writer.field("start", world.start.strip())
-        for index, place in enumerate(world.places):
-            writer.current = (MAP, index, -1)
-            writer.heading(2, place.name)
-            writer.field("kind", place.kind.strip())
-            writer.field("at", place.at.strip())
-            writer.field("size", place.size.strip())
-            writer.field("in", place.inside.strip())
-            writer.flag("known", place.known)
-            for way in place.ways:
-                if way.to.strip():
-                    words = " ".join(way.words.split())
-                    writer.field("way", f"{way.to.strip()} | {words}" if words else way.to.strip())
-            for thing in place.things:
-                if thing.name.strip():
-                    state = " ".join(thing.state.split())
-                    name = thing.name.strip().replace("|", "/")
-                    writer.field("thing", f"{name} | {state}" if state else name)
-            writer.prose(place.description)
 
     if document.facts:
         writer.current = (FACT, 0, -1)
@@ -460,40 +424,6 @@ class _Reader:
             pictures=self._pictures(found, block.title),
             description=found.prose,
         )
-
-    def _map(self, block: _Block) -> MapDoc:
-        head = self.parser.fields(block, _MAP_FIELDS)
-        if head.prose:
-            self.problem(block.line, "Text directly under “# Map” has no place; left out.")
-        world = MapDoc(
-            unit=head.values.get("unit", (0, "km"))[1] or "km",
-            start=head.values.get("start", (0, ""))[1],
-        )
-        for child in block.children:
-            found = self.parser.body(child, _MAP_PLACE_FIELDS)
-            values = found.values
-            ways = []
-            for _line, text in found.repeated.get("way", []):
-                to, _, words = text.partition("|")
-                ways.append(WayDoc(to=to.strip(), words=words.strip()))
-            things = []
-            for _line, text in found.repeated.get("thing", []):
-                name, _, state = text.partition("|")
-                things.append(ThingDoc(name=name.strip(), state=state.strip()))
-            world.places.append(
-                MapPlaceDoc(
-                    name=child.title,
-                    kind=values.get("kind", (0, ""))[1],
-                    at=values.get("at", (0, ""))[1],
-                    size=values.get("size", (0, ""))[1],
-                    inside=values.get("in", (0, ""))[1],
-                    known=bool(self._flag(values, "known", "known")),
-                    ways=ways,
-                    things=things,
-                    description=found.prose,
-                )
-            )
-        return world
 
     def _facts(self, block: _Block) -> list[FactDoc]:
         facts: list[FactDoc] = []
@@ -627,8 +557,6 @@ class _Reader:
                     setattr(document, key, _key(value))
                 else:
                     self.problem(line, f"`{key}: {value}` isn't a choice the format has; left out.")
-        if "scarce" in front:
-            document.scarce = parser.flag(*front["scarce"], "scarce")
         if "background" in front:
             document.background = picture_parts(front["background"][1])[0]
         for key, (line, value) in front.items():
@@ -681,7 +609,13 @@ class _Reader:
                 for child in block.children:
                     self.problem(child.line, f"“{child.title}” under Facts was left out.")
         if "map" in sections:
-            document.map = self._map(sections["map"])
+            # The map was a Visual Story's (now its own app): kept by the
+            # importer as a note, but the editor can't keep it.
+            self.problem(
+                sections["map"].line,
+                "The # Map section is left out: SealedLore keeps no map. Saving from "
+                "the editor drops it.",
+            )
         # Events last: their conditions name everything else.
         for name, timeline in (("timeline", True), ("events", False)):
             block = sections.get(name)
@@ -752,12 +686,6 @@ def _document_problems(document: PlotDocument) -> list[DocProblem]:
         for index, entry in enumerate(entries):
             if not entry.name.strip():
                 add((section, index, -1), "This entry needs a name.")
-    if document.map is not None:
-        for index, place in enumerate(document.map.places):
-            if not place.name.strip():
-                add((MAP, index, -1), "This place needs a name.")
-            elif "|" in place.name:
-                add((MAP, index, -1), "A map place's name can't have “|” in it: ways split on it.")
     for index, fact in enumerate(document.facts):
         where = (FACT, index, -1)
         if not fact.name.strip():
@@ -816,8 +744,6 @@ def describe_where(document: PlotDocument, where: ItemRef | None) -> str:
         return "World"
     if section == OPENING:
         return "Opening"
-    if section == MAP and index < 0:
-        return "Map"
     items: list[str]
     if section == CHARACTER:
         items = [c.name for c in document.characters]
@@ -831,9 +757,6 @@ def describe_where(document: PlotDocument, where: ItemRef | None) -> str:
     elif section == FACT:
         items = [f.name for f in document.facts]
         label = "Fact"
-    elif section == MAP:
-        items = [p.name for p in document.map.places] if document.map is not None else []
-        label = "Map place"
     else:
         items = [e.title for e in document.events]
         label = "Event"
@@ -852,7 +775,6 @@ __all__ = [
     "FACT",
     "FRONT",
     "LORE",
-    "MAP",
     "NOTES",
     "OPENING",
     "PLACE",

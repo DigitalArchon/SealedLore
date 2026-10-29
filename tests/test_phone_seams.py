@@ -29,6 +29,7 @@ from sealedlore.providers.mock import MockChatProvider  # noqa: E402
 from sealedlore.storage import keychain  # noqa: E402
 from sealedlore.storage.library import story_listings  # noqa: E402
 from sealedlore.storage.repository import (  # noqa: E402
+    VISUAL_ELSEWHERE,
     StoryBundle,
     load_config,
     save_config,
@@ -164,32 +165,33 @@ def test_a_retake_can_be_given_its_shape(app, tmp_path: Path, story, cast):
 # --- the stories, listed once for the list and the phone -----------------------
 
 
-def test_stories_are_listed_with_whether_they_are_chats_or_keep_a_map(tmp_path: Path, story, cast):
+def test_stories_are_listed_with_whether_they_are_chats_or_cant_be_opened(
+    tmp_path: Path, story, cast
+):
     plain = story.model_copy(update={"id": "plain", "title": "Plain", "updated_at": "2026-10-01"})
     chat = story.model_copy(
         update={"id": "chat", "title": "A chat", "mode": "chat", "updated_at": "2026-10-03"}
     )
-    mapped = story.model_copy(
-        update={
-            "id": "mapped",
-            "title": "Mapped",
-            "updated_at": "2026-10-02",
-            "mode": "visual",
-        }
-    )
-    for each in (plain, chat, mapped):
+    for each in (plain, chat):
         save_story_bundle(StoryBundle(story=each, cast=cast), root=tmp_path)
+    # A Visual Story played here before the visual mode became its own app.
+    game = tmp_path / "stories" / "game"
+    game.mkdir()
+    (game / "story.json").write_text(
+        '{"id": "game", "title": "Mapped", "mode": "visual", "updated_at": "2026-10-02"}'
+    )
     broken = tmp_path / "stories" / "broken"
     broken.mkdir()
     (broken / "story.json").write_text("{not json")
 
     listings = story_listings(tmp_path)
-    assert [(s.id, s.chat, s.keeps_map, s.error is None) for s in listings] == [
-        ("chat", True, False, True),
-        ("mapped", False, True, True),
-        ("plain", False, False, True),
-        ("broken", False, False, False),
+    assert [(s.id, s.chat, s.error is None) for s in listings] == [
+        ("chat", True, True),
+        ("game", False, False),
+        ("plain", False, True),
+        ("broken", False, False),
     ]
+    assert listings[1].title == "Mapped" and listings[1].error == VISUAL_ELSEWHERE
     assert listings[0].title == "A chat" and listings[0].messages == 0
 
 

@@ -13,7 +13,6 @@ The strip edits an item's list in place, as the story's own strip does
 from __future__ import annotations
 
 import inspect
-import json
 import os
 import re
 import shutil
@@ -41,7 +40,6 @@ from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.ref_images import PICTURE_FILTER, THUMB, inside, picture_bytes, thumbnail
 from sealedlore.ids import new_id
 from sealedlore.models.plot_file import PictureDoc
-from sealedlore.storage.world_art import sidecar_art_path
 
 PICTURES_DIR = "pictures"
 # The folder the plot file is in; None until the file has been saved.
@@ -96,28 +94,6 @@ def copy_pictures(pictures: Iterable[PictureDoc], old: Path, new: Path) -> list[
         except OSError:
             failed.append(picture.file)
     return failed
-
-
-def copy_sidecar(old: Path, new: Path) -> list[str]:
-    """After Save as… under another name: the map drawn for the old file
-    (`<name>.world_art.json`, storage/world_art.py) goes beside the new one,
-    and, in another folder, the map pictures it names too. One already
-    there is left as it is. Returns what couldn't be copied."""
-    source, target = sidecar_art_path(old), sidecar_art_path(new)
-    if not source.is_file() or target.exists():
-        return []
-    try:
-        shutil.copyfile(source, target)
-    except OSError:
-        return [source.name]
-    if old.parent.resolve() == new.parent.resolve():
-        return []
-    try:
-        listed = json.loads(source.read_text(encoding="utf-8")).get("pictures") or []
-    except (OSError, ValueError, AttributeError):
-        return []
-    files = [PictureDoc(file=str(p.get("file") or "")) for p in listed if isinstance(p, dict)]
-    return copy_pictures([f for f in files if f.file], old.parent, new.parent)
 
 
 def _weak(method):

@@ -789,18 +789,6 @@ class Config(BaseModel):
     # there, in place of the story's own background; the story's own comes
     # back where the place has none. Settings → Images.
     location_backgrounds: bool = True
-    # A visual story's Look (engine/look.py): the model that is shown a part
-    # of the area and says what the player sees and finds there. Blank, the
-    # story model; one that reads no pictures is sent the words alone.
-    look_model: str | None = None
-    # A visual story's people (engine/npc.py): the model that speaks for
-    # each person from their sheet and chooses what they do. Blank, the
-    # story model.
-    npc_model: str | None = None
-    # A visual story's plot keeper (engine/keeper.py): the model that turns
-    # the plot's events, a Director line or an unusual action into a script
-    # the program applies. Blank, the story model.
-    keeper_model: str | None = None
 
     # Pictures (engine/image_prompt.py, providers/images.py). The image model
     # takes reference pictures: Seedream 5.0 Pro was the author's pick for
@@ -816,11 +804,6 @@ class Config(BaseModel):
     # the others, with what each is good at.
     portrait_model: str = "blackforestlabs/flux-3/klein/text-to-image"
     image_prompt_model: str | None = None
-    # A visual story paints each place it has no painting of in the
-    # background (engine/session_paint.py): on by default, and by this model
-    # (its edit version, given the render).
-    visual_paint: bool = True
-    visual_paint_model: str = "blackforestlabs/flux-3/klein/edit-image"
     # NanoGPT's host for each role's model (models/route.py), keyed by
     # `ROUTE_ROLES`; missing means the subscription's routing.
     model_routes: dict[str, ModelRoute] = Field(default_factory=dict)

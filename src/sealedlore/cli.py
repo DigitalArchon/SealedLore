@@ -74,7 +74,6 @@ from sealedlore.storage.scenario import (
     scenario_from_bundle,
     write_scenario,
 )
-from sealedlore.storage.world_art import carried_story_art
 from sealedlore.tree import active_path, sibling_position
 
 AGENCY_MODES: tuple[AgencyMode, ...] = ("fiat", "plausible", "contested", "dice")
@@ -246,12 +245,8 @@ def cmd_generate(args: argparse.Namespace) -> int:
 def cmd_scenario_export(args: argparse.Namespace) -> int:
     root: Path | None = args.data_dir
     bundle = load_story_bundle(args.story_id, root=root)
-    art, map_files = carried_story_art(args.story_id, root)
     try:
-        write_scenario(
-            args.file,
-            scenario_from_bundle(bundle, {**reference_files(bundle, root), **map_files}, art),
-        )
+        write_scenario(args.file, scenario_from_bundle(bundle, reference_files(bundle, root)))
     except ScenarioError as exc:
         print(exc, file=sys.stderr)
         return 1
@@ -322,10 +317,7 @@ def cmd_duplicate(args: argparse.Namespace) -> int:
         return 1
     title = f"{source.story.title} (copy)"
     if args.settings_only:
-        art, map_files = carried_story_art(args.story_id, root)
-        bundle = fresh_playthrough(
-            source, title, {**reference_files(source, root), **map_files}, art
-        )
+        bundle = fresh_playthrough(source, title, reference_files(source, root))
         save_story_bundle(bundle, root=root)
     else:
         bundle = copy_story(args.story_id, title=title, root=root)
@@ -365,13 +357,7 @@ def cmd_list(args: argparse.Namespace) -> int:
         except (FileNotFoundError, ValueError):
             continue
         story = bundle.story
-        what = (
-            "visual story"
-            if story.visual
-            else f"chat, {len(bundle.nodes)} messages"
-            if story.chat
-            else f"{len(bundle.nodes)} nodes"
-        )
+        what = f"chat, {len(bundle.nodes)} messages" if story.chat else f"{len(bundle.nodes)} nodes"
         print(f"{story.id}  {story.title}  ({what})")
     return 0
 
@@ -948,19 +934,21 @@ def cmd_chat(args: argparse.Namespace) -> int:
     root: Path | None = args.data_dir
     config = load_config(root=root)
     provider = build_provider(config, mock=args.mock)
-    session = StorySession.load(
-        args.story_id,
-        config,
-        provider,
-        root=root,
-        learn_corrections=not args.mock,
-        embeddings=build_embeddings(config),
-    )
+    try:
+        session = StorySession.load(
+            args.story_id,
+            config,
+            provider,
+            root=root,
+            learn_corrections=not args.mock,
+            embeddings=build_embeddings(config),
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"{args.story_id}: {exc}", file=sys.stderr)
+        return 1
     story = session.story
     refusal = None
-    if story.visual:
-        refusal = "a visual story is played in the app's game window, not here"
-    elif session.tee_chat and is_tee(session.model) and not is_private_mode(session.model):
+    if session.tee_chat and is_tee(session.model) and not is_private_mode(session.model):
         # The app attests a TEE chat each time it opens; the terminal can't.
         refusal = "a TEE chat is attested by the app each time it opens: play it there"
     if refusal is not None:

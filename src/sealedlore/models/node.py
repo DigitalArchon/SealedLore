@@ -7,10 +7,8 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from sealedlore.ids import new_id, utc_now_iso
-from sealedlore.models.area import AreaState
 from sealedlore.models.plot import Chronicle, Direction
 from sealedlore.models.scene import SceneShortcut, SceneState
-from sealedlore.models.world import WorldDelta
 
 NodeKind = Literal["user", "assistant"]
 AgencyMode = Literal["fiat", "plausible", "contested", "dice"]
@@ -90,19 +88,6 @@ class NodeMeta(BaseModel):
     # The plot's clock, facts and events after this node (models/plot.py),
     # kept the same way as `scene`. Only on stories with a plot.
     chronicle: Chronicle | None = None
-    # On a passage, in a story with the map on: what the passage added to it
-    # or changed (models/world.py). The map anywhere is these, applied in
-    # order along the path.
-    world: WorldDelta | None = None
-    # The author's corrections on the map at this message (engine/
-    # session_corrections.py: a name put right, a place merged, someone taken
-    # off it), one delta each, folded after `world` in the order made.
-    world_fixes: list[WorldDelta] = Field(default_factory=list)
-    # Map-first play (models/area.py): where everyone stood on the map's
-    # tiles after this node, and the map's clock. On an author's turn, the
-    # walking done before it was sent; on a passage, after the read placed
-    # whoever it moved.
-    area: AreaState | None = None
     # On a passage, for a lorebook too big to send whole: the entries the lore
     # model picked for the passage after it (`Config.lore_selector` "picker"),
     # read in the background. None = not picked; [] = picked, and none needed.

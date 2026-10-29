@@ -107,16 +107,6 @@ WORLD_ACTIVITY_TIPS: dict[WorldActivity, str] = {
     ),
 }
 
-# Things are scarce in this world (`StoryDefaults.scarce`, Story → Setup →
-# About, and a plot file's `scarce: yes`): what the world designer is told.
-SCARCE_LABEL = "Things are scarce in this world"
-SCARCE_TIP = (
-    "The map's open country keeps food, fuel, weapons and whatever else this world holds "
-    "scarce rare: hidden, guarded or hard to reach, never lying about for the taking. For a "
-    "world of want; in a world without scarcity, leave it off. A region designed already "
-    "keeps what it has."
-)
-
 SCOPE_LABELS: list[tuple[str, NpcScope]] = [
     # "All present NPCs" was a roleplayer's word for it.
     ("Everyone else here", "all"),

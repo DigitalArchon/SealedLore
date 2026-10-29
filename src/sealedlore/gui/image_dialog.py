@@ -51,11 +51,10 @@ from sealedlore.engine.image_variants import (
 )
 from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.places import PLACE_CAPTION, PLACE_CAPTION_AGAIN, place_size, place_title
-from sealedlore.engine.portraits import portrait_size
+from sealedlore.engine.portraits import picture_size, portrait_size
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.session_images import DEFAULT_MAX_REFS
 from sealedlore.engine.session_portraits import PORTRAIT_CAPTION
-from sealedlore.engine.world_pictures import picture_size
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.image_picker import ImagePickerDialog, pick_image_model

@@ -60,8 +60,8 @@ def test_a_sample_opens_clean_and_every_page_fills(app, editor: PlotEditorWindow
         editor.tree.setCurrentItem(item)
         app.processEvents()
         seen += 1
-    # 10 headers, 6 characters, 2 places, 1 lore entry, 3 facts, 6 events, 4 variants.
-    assert seen == 32
+    # 9 headers, 6 characters, 2 places, 1 lore entry, 3 facts, 6 events, 4 variants.
+    assert seen == 31
 
     editor._select((EVENT, 0, 1))
     page = editor.pages.currentWidget()
@@ -180,29 +180,6 @@ def test_saving_writes_what_reopens_and_imports(app, editor: PlotEditorWindow, t
     assert [c.name for c in again.document.characters][-1] == "Zed"
     parsed = parse_plot_markdown(path.read_text(encoding="utf-8"))
     assert parsed.ok and "Zed" in {c.name for c in parsed.scenario.cast}
-
-
-def test_the_story_page_says_whether_things_are_scarce(
-    app, editor: PlotEditorWindow, tmp_path: Path
-):
-    """`scarce: yes` has its box on the Story page, like the other settings
-    a story starts with."""
-    from sealedlore.engine.plot_file import FRONT
-
-    editor._select((FRONT, 0, -1))
-    page = editor.pages.currentWidget()
-    assert not page.scarce.isChecked() and not editor.document.scarce
-    page.scarce.setChecked(True)
-    assert editor.document.scarce and editor.modified
-    path = tmp_path / "want.md"
-    assert editor._write(path)
-    assert "\nscarce: yes\n" in path.read_text(encoding="utf-8")
-    assert parse_plot_markdown(path.read_text(encoding="utf-8")).scenario.scarce
-
-    again = PlotEditorWindow()
-    assert again.open_path(path) and again.problems == []
-    again._select((FRONT, 0, -1))
-    assert again.pages.currentWidget().scarce.isChecked()
 
 
 def test_discarding_on_close_really_discards(app, tmp_path: Path, monkeypatch):
@@ -342,20 +319,16 @@ def test_save_as_elsewhere_takes_the_pictures_along(app, tmp_path: Path):
     editor.close()
 
 
-def test_save_as_takes_the_background_and_the_map_drawn_for_it(app, tmp_path: Path):
+def test_save_as_takes_the_background(app, tmp_path: Path):
     """The review: Save as… left the background behind (the copy imported
-    with none), and the map drawn for the file, its sidecar and views, under
-    any other name."""
+    with none)."""
     import shutil
-
-    from sealedlore.storage.world_art import load_sidecar, sidecar_art_path
 
     samples = Path(__file__).resolve().parents[1] / "SampleStories"
     here = tmp_path / "here"
     here.mkdir()
-    source = here / "Doomsville with a map.md"
+    source = here / "Doomsville.md"
     shutil.copy(samples / source.name, source)
-    shutil.copy(sidecar_art_path(samples / source.name), sidecar_art_path(source))
     shutil.copytree(samples / "pictures", here / "pictures")
     editor = PlotEditorWindow()
     assert editor.open_path(source)
@@ -363,9 +336,6 @@ def test_save_as_takes_the_background_and_the_map_drawn_for_it(app, tmp_path: Pa
     assert editor._write(there)
     background = editor.document.background
     assert background and (there.parent / background).is_file()
-    assert sidecar_art_path(there).is_file()
-    art, files = load_sidecar(there)
-    assert art is not None and files and len(files) == len(art.pictures)
     editor.close()
 
 

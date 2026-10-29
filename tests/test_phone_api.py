@@ -30,13 +30,12 @@ class Clock:
 class FakeBackend:
     def __init__(self) -> None:
         self.rows = [
-            StoryRow("shared", "Doomsville", 12, chat=False, keeps_map=False),
-            StoryRow("private", f"Title {SECRET}", 3, chat=False, keeps_map=False),
-            StoryRow("mapped", "Doomsville with a map", 5, chat=False, keeps_map=True),
-            StoryRow("chat", "A chat", 2, chat=True, keeps_map=False),
+            StoryRow("shared", "Doomsville", 12, chat=False),
+            StoryRow("private", f"Title {SECRET}", 3, chat=False),
+            StoryRow("chat", "A chat", 2, chat=True),
         ]
         self.open_id: str | None = "shared"
-        self.shared = {"shared", "mapped", "chat"}
+        self.shared = {"shared", "chat"}
         self.device_list = [("phone-1", token_hash(TOKEN))]
         self.calls: list[tuple] = []
         self.refuse: Refused | None = None
@@ -254,14 +253,14 @@ def test_a_method_the_route_doesnt_take():
 # --- which story ----------------------------------------------------------------
 
 
-def test_only_stories_shared_and_without_a_map_are_listed():
+def test_only_stories_shared_are_listed():
     api, _ = make()
     status, body = answer(api, "GET", "/api/stories")
     assert status == 200
     assert [(s["id"], s["open"]) for s in body["stories"]] == [("shared", True), ("chat", False)]
 
 
-@pytest.mark.parametrize("story_id", ["private", "mapped", "nonexistent"])
+@pytest.mark.parametrize("story_id", ["private", "nonexistent"])
 def test_a_story_not_available_cant_be_opened_and_looks_like_no_story(story_id):
     api, backend = make()
     assert answer(api, "POST", f"/api/stories/{story_id}/open", {}) == (404, {"error": "Not Found"})
@@ -275,9 +274,9 @@ def test_a_shared_story_opens():
     assert backend.open_id == "chat"
 
 
-@pytest.mark.parametrize("open_id", ["private", "mapped"])
 @pytest.mark.parametrize("method, path, body", STORY_ROUTES)
-def test_nothing_about_a_story_not_shared_reaches_a_phone(open_id, method, path, body):
+def test_nothing_about_a_story_not_shared_reaches_a_phone(method, path, body):
+    open_id = "private"
     api, backend = make()
     backend.open_id = open_id
     status, answered = answer(api, method, path, body)

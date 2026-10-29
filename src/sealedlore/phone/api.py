@@ -5,8 +5,7 @@ which the window implements on the GUI thread. The rules that keep a story
 to itself are here, once, for every route:
 
 - every `/api/` route but pairing needs a paired phone's token;
-- only stories the author shared reach a phone, and no visual story
-  (version 1 is for text stories and chats). A story that isn't available is
+- only stories the author shared reach a phone. A story that isn't available is
   answered as if it didn't exist, and while one is open on the desktop every
   route about the open story answers 423 with no title;
 - every value a phone sends is checked against what the composer offers now.
@@ -49,7 +48,6 @@ class StoryRow:
     title: str
     messages: int
     chat: bool
-    keeps_map: bool
 
 
 @dataclass(frozen=True)
@@ -178,7 +176,7 @@ class Api:
     # --- availability --------------------------------------------------------
 
     def available(self, row: StoryRow) -> bool:
-        return not row.keeps_map and row.id in set(self.backend.shared_ids())
+        return row.id in set(self.backend.shared_ids())
 
     def open_available(self) -> bool:
         row = self.backend.open_story()

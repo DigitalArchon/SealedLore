@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
 from sealedlore.gui import theme
 from sealedlore.gui.start_page import Recent, when_played
 from sealedlore.storage.library import story_listings
+from sealedlore.storage.repository import VISUAL_ELSEWHERE
 
 
 class StoryListPanel(QWidget):
@@ -61,7 +62,8 @@ class StoryListPanel(QWidget):
         # Phone access (gui/window_phone.py): the shared stories while it is
         # on, None while it is off; and which stories keep a map (never shared).
         self._phone_shared: set[str] | None = None
-        self._maps: set[str] = set()
+        # Stories that can't be opened: never marked as on the phones.
+        self._unreadable: set[str] = set()
         self.root = root
 
         layout = QVBoxLayout(self)
@@ -102,7 +104,7 @@ class StoryListPanel(QWidget):
         """
         self.list.clear()
         self._played.clear()
-        self._maps.clear()
+        self._unreadable.clear()
         try:
             self._fill(selected_id)
         finally:
@@ -117,21 +119,18 @@ class StoryListPanel(QWidget):
             error = listing.error
             if error is None:
                 count = listing.messages
-                if listing.visual:
-                    # A game on its map has no messages: where its clock stands.
-                    when = listing.visual_when or "not begun yet"
-                    label = f"{listing.title}\nVisual story · {when}"
-                else:
-                    label = f"{listing.title}\n{count} message{'s' if count != 1 else ''}"
+                label = f"{listing.title}\n{count} message{'s' if count != 1 else ''}"
                 self._played.append((listing.id, label, listing.updated))
+            elif error == VISUAL_ELSEWHERE:
+                label = f"{listing.title}\nA Visual Story, not played here"
             else:
                 # Shown rather than skipped: a story that vanished without a
                 # word can't be looked into or deleted. Opening it says why.
                 reason = (error.splitlines() or ["unreadable"])[0][:80]
                 label = f"{listing.id}\n⚠ can't be read: {reason}"
             story_id = listing.id
-            if listing.keeps_map:
-                self._maps.add(story_id)
+            if error is not None:
+                self._unreadable.add(story_id)
             item = QListWidgetItem(label)
             item.setData(Qt.UserRole, story_id)
             item.setData(PHONE_ROLE, self._phone_mark(story_id))
@@ -175,14 +174,14 @@ class StoryListPanel(QWidget):
     def _phone_mark(self, story_id: str) -> str:
         if self._phone_shared is None or story_id not in self._phone_shared:
             return ""
-        return "" if story_id in self._maps else "on your phones"
+        return "" if story_id in self._unreadable else "on your phones"
 
     def menu_for(self, story_id: str) -> QMenu:
         """A story's right-click menu."""
         menu = QMenu(self)
         menu.addAction("Open", lambda: self.story_activated.emit(story_id))
         readable = any(played[0] == story_id for played in self._played)
-        if self._phone_shared is not None and readable and story_id not in self._maps:
+        if self._phone_shared is not None and readable:
             shared = story_id in self._phone_shared
             share = menu.addAction("Share with phone")
             share.setCheckable(True)

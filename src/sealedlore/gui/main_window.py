@@ -113,7 +113,6 @@ from sealedlore.gui.transcript import (
     speaker_label_for,
 )
 from sealedlore.gui.usage_dialog import UsageDialog
-from sealedlore.gui.visual_window import VisualWindow, player_choices
 from sealedlore.gui.welcome import setup_missing, welcome_html
 from sealedlore.gui.window_cast import CastWindow
 from sealedlore.gui.window_chat import ChatWindow
@@ -153,8 +152,7 @@ from sealedlore.storage.archive import (
     write_archive,
 )
 from sealedlore.storage.images import is_video_file, reference_files, without_videos
-from sealedlore.storage.library import story_mode
-from sealedlore.storage.paths import VISUAL_SAMPLES, data_home, samples_dir, story_dir
+from sealedlore.storage.paths import data_home, samples_dir, story_dir
 from sealedlore.storage.repository import (
     StoryBundle,
     copy_story,
@@ -175,8 +173,6 @@ from sealedlore.storage.scenario import (
     scenario_from_bundle,
     write_scenario,
 )
-from sealedlore.storage.visual_design import cards_for_design, load_design
-from sealedlore.storage.world_art import carried_story_art, load_sidecar
 from sealedlore.threads import BackgroundThread
 from sealedlore.tree import path_to
 
@@ -1112,121 +1108,6 @@ class MainWindow(
             self.import_file()
         elif kind == start_page.SAMPLE:
             self.import_sample(Path(str(value)))
-        elif kind == start_page.VISUAL:
-            self.open_visual_sample(Path(str(value)))
-
-    # --- visual stories (gui/visual_window.py) ------------------------------------
-
-    def open_visual_sample(self, path: Path) -> None:
-        """A new visual story from its plot file (the start page's Visual
-        Stories): the file's map and art, the character chosen, and the
-        game's window over this one."""
-        # Not `_private_allows_close`: the story open here stays open under
-        # the game's window and comes back when it closes, so a memory-only
-        # chat or scene loses nothing, and its Yes discarded the scene (the
-        # mode audit, Oct 29 2026).
-        if self._busy:
-            return
-        parsed = self._read_plot_file(path)
-        if parsed is None:
-            return
-        if parsed.scenario.world_base is None:
-            self._warn_plain("No map", f"{path.name} has no map to play on.")
-            return
-        names = {
-            p: n for n, p in ((n, samples_dir() / f"{s}.md") for n, s in VISUAL_SAMPLES.items())
-        }
-        # No model of its own: a game follows Settings' story model.
-        bundle = bundle_from_scenario(parsed.scenario, title=names.get(path))
-        bundle.world_art, files = load_sidecar(path)
-        bundle.pending_files.update(files)
-        story = bundle.story
-        story.mode = "visual"
-        # The predesigned sheet beside the file (storage/visual_design.py),
-        # and a card for each of its people the file has none for.
-        story.visual_design = load_design(path)
-        if story.visual_design is not None:
-            names = [c.name for c in (*bundle.cast, *bundle.supporting.characters)]
-            bundle.supporting.characters += cards_for_design(story.visual_design, names)
-        if not self._choose_player(bundle.cast, story, path.name):
-            return
-        save_story_bundle(bundle, root=self.root)
-        self.stories.refresh(selected_id=story.id)
-        self.open_visual_story(story.id)
-
-    def _choose_player(self, cast, story, source: str) -> bool:
-        """Who the game is played as, set on `story`: the only one there is,
-        or the author's pick. False when there is nobody, or they cancel."""
-        choices = player_choices(cast, story.setup.choose_one_of)
-        if not choices:
-            self._warn_plain("Nobody to play", f"{source} has no character to play as.")
-            return False
-        player = choices[0]
-        if len(choices) > 1:
-            labels = [c.name for c in choices]
-            label, ok = QInputDialog.getItem(self, "Who do you play?", "Play as:", labels, 0, False)
-            if not ok:
-                return False
-            player = choices[labels.index(label)]
-        story.held_character_id = player.id
-        if player.id not in story.scene.present_character_ids:
-            story.scene.present_character_ids.append(player.id)
-        return True
-
-    def open_visual_story(self, story_id: str) -> None:
-        """Play a visual story in its own window; this one hides until it
-        closes, with whatever it had open (see open_visual_sample)."""
-        if self._busy:
-            return
-        if getattr(self, "visual_window", None) is not None:
-            # One game at a time: a second replaced the first, which was then
-            # deleted unsaved when either closed (the mode audit, Oct 29 2026).
-            self.visual_window.raise_()
-            self.visual_window.activateWindow()
-            return
-        try:
-            session = StorySession.load(
-                story_id,
-                self.config,
-                self._current_provider(),
-                root=self.root,
-                estimator=self.estimator,
-                learn_corrections=not self.use_mock,
-            )
-        except (FileNotFoundError, ValueError) as exc:
-            self._warn_plain("Could not open story", str(exc))
-            return
-        if not session.story.visual:
-            session.close(wait_seconds=0)
-            self.open_story(story_id)
-            return
-        if session.story.held_character_id not in {c.id for c in session.cast}:
-            # Imported from a scenario, which leaves the player to whoever
-            # plays it: asked here, as a sample asks.
-            if not self._choose_player(session.cast, session.story, session.story.title):
-                session.close(wait_seconds=0)
-                return
-            session.save()
-        self.visual_window = VisualWindow(
-            session, self.config, self.root, on_close=self._visual_closed
-        )
-        self.hide()
-        self.visual_window.showMaximized()
-        self._phone_settled()  # the phones wait while the game is played
-
-    def _visual_closed(self) -> None:
-        """The game's window closed: back to the stories."""
-        window = getattr(self, "visual_window", None)
-        self.visual_window = None
-        if window is not None:
-            window.deleteLater()
-        self.stories.refresh()
-        if self.session is None:
-            # The start page's recent stories, with the game just played.
-            self.reload_transcript()
-        else:
-            self._phone_settled()  # the phones may play again
-        self.show()
 
     def import_sample(self, path: Path) -> None:
         """A new story from a sample plot file, exactly as File → Import… would.
@@ -1340,11 +1221,6 @@ class MainWindow(
         provider_config = self.config.active_provider()
         model = provider_config.model if provider_config and provider_config.model else None
         bundle = bundle_from_scenario(parsed.scenario, main_model=model)
-        if bundle.story.world_base is not None:
-            # A plot file may ship with its map's art drawn (a sample's),
-            # and its map pictures (the isometric views) beside it.
-            bundle.world_art, files = load_sidecar(path)
-            bundle.pending_files.update(files)
         self._open_new_bundle(bundle, review=True)
 
     def import_plot_into_story(self) -> None:
@@ -1397,9 +1273,7 @@ class MainWindow(
         again = "new chat" if self.session.story.chat else "new playthrough"
         title = f"{self.session.story.title} ({again})"
         files = reference_files(self.session.bundle, self.root)
-        self._open_new_bundle(
-            fresh_playthrough(self.session.bundle, title, files, None), review=review
-        )
+        self._open_new_bundle(fresh_playthrough(self.session.bundle, title, files), review=review)
 
     # --- the stories list's menu ---------------------------------------------
 
@@ -1420,18 +1294,12 @@ class MainWindow(
             return
         if (source := self._bundle_for(story_id)) is None:
             return
-        art, map_files = carried_story_art(story_id, self.root)
         bundle = fresh_playthrough(
-            source,
-            f"{source.story.title} (copy)",
-            {**reference_files(source, self.root), **map_files},
-            art,
+            source, f"{source.story.title} (copy)", reference_files(source, self.root)
         )
         save_story_bundle(bundle, root=self.root)
         self.stories.refresh(selected_id=bundle.story.id)
         self.open_story(bundle.story.id)
-        if bundle.story.visual:
-            return  # the game opens on its opening, in its own window
         next_step = (
             "Type the first message to begin."
             if bundle.story.chat
@@ -1464,18 +1332,11 @@ class MainWindow(
         if source is not None:
             title = source.story.title
             count = len(source.nodes)
-            if source.story.visual:
-                # A game has no messages: its state and its log are what go.
-                text = (
-                    f"Delete “{title}”?\n\nThe game as you left it, its log, its pictures "
-                    "and its cost history go to the Trash, where you can still restore them."
-                )
-            else:
-                text = (
-                    f"Delete “{title}”?\n\nIts {count} message{'s' if count != 1 else ''}, "
-                    "every branch, its summaries and its cost history go to the Trash, where "
-                    "you can still restore them."
-                )
+            text = (
+                f"Delete “{title}”?\n\nIts {count} message{'s' if count != 1 else ''}, "
+                "every branch, its summaries and its cost history go to the Trash, where "
+                "you can still restore them."
+            )
         else:
             title = story_id
             text = (
@@ -1592,7 +1453,7 @@ class MainWindow(
             path += SCENARIO_SUFFIX
         try:
             files = reference_files(self.session.bundle, self.root)
-            write_scenario(Path(path), scenario_from_bundle(self.session.bundle, files, None))
+            write_scenario(Path(path), scenario_from_bundle(self.session.bundle, files))
         except OSError as exc:
             self._warn_plain("Could not export scenario", f"{path}: {exc.strerror or exc}")
             return
@@ -1733,9 +1594,6 @@ class MainWindow(
 
     def open_story(self, story_id: str) -> None:
         if self._busy:
-            return
-        if story_mode(story_id, self.root) == "visual":
-            self.open_visual_story(story_id)
             return
         # Leaving a memory-only chat or scene loses it, whichever story opens
         # next (the same one again comes back from disk, without it): asked.

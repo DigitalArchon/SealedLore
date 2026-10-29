@@ -3,7 +3,7 @@
 A Linux and Windows application for AI-driven roleplay with many characters
 in an open world, with a number of particularly useful features.
 
-![The start page: five sample stories, each with its picture and a line on what it is, below them the ways to start a story of your own, and the Visual Stories, Doomsville first](docs/screenshots/start-page.webp)
+![The start page: five sample stories, each with its picture and a line on what it is, and below them the ways to start a story of your own](docs/screenshots/start-page.webp)
 
 *Beta.* This application has been tested extensively both through
 automation and manually by the developer. It is however still in early
@@ -30,13 +30,11 @@ most improvements here will be related to better integrating the plots into
 the story. Making it more natural, more consistent, etc. As above, nothing
 is broken, but there are definitely improvements to be made here.
 
-Visual Stories are new and early: a game played on a map designed in
-advance (Doomsville, to begin with), where the model plays the people you
-meet and keeps the plot, and the game's own rules do the rest. It plays
-through, and anything the rules don't cover goes to the model to resolve;
-expect rough edges, and tell me what you find. The map of the earlier 2.0
-betas is gone from ordinary stories: a story that was played on one goes on
-as a story without it.
+SealedLore is text: there is no map. The map of the earlier 2.0 betas is
+gone (a story that was played on one goes on as a story without it), and the
+Visual Stories of 2.0.0b7 have moved out to become a game of their own: one
+played here is still listed, so it can be found or deleted, but no longer
+opens.
 
 ### New in version 2
 
@@ -46,16 +44,6 @@ as a story without it.
   draws one for the place you are at, or a new one from the last as the place
   is now (the bar after the brawl). The samples come with a picture of each
   of their places. See [Pictures of places](#pictures-of-places) below.
-- **Visual Stories** (new in 2.0.0b7, early). A separate way to play: a
-  world on its map, the visuals centre stage, the model for the people you
-  meet and the plot, the game's own rules for everything else. The start
-  page lists them under the samples, Doomsville first: walk its map, talk to
-  its people, and try anything the rules don't cover (the keeper rules on it
-  and makes the outcome real on the board). Doomsville stands in a wider
-  world a hundred kilometres across to travel and explore: journeys take
-  days and food and water, something may happen on the way, and new places
-  are painted as you reach them. See [Visual
-  Stories](docs/manual.md#visual-stories) in the manual.
 - **A picture kept as a card's own** (new in 2.0.0b7). Right-click any
   picture and choose **Use as a character's picture…** or **Use as a place's
   picture…**: frame the one person, or the place without the people, and keep
@@ -100,8 +88,7 @@ as a story without it.
   branch from it.
 - **The earlier betas' map retired** (2.0.0b7). Ordinary stories no longer
   keep a map; a story that was played on one goes on without it, with
-  everything else it has. The map lives on as Visual Stories, and the
-  AppImage is about 20 MB smaller for it.
+  everything else it has, and the AppImage is about 20 MB smaller for it.
 
 ### Pictures of places
 

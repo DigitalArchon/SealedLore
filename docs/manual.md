@@ -34,7 +34,6 @@ part of the window, and what each feature does. The README's
   - [Pictures for the cards](#pictures-for-the-cards)
   - [Pictures of places](#pictures-of-places)
   - [A picture kept as a card's own](#a-picture-kept-as-a-cards-own)
-- [Visual Stories](#visual-stories)
 - [Videos](#videos)
 - [Private scenes](#private-scenes)
 - [Simple chat](#simple-chat)
@@ -465,14 +464,13 @@ stories, each with its picture. **File → New…** (Ctrl+N), and **New…** und
 the Stories list, show the same choices. A story saves itself as you go
 (Ctrl+S saves at once).
 
-![The start page with no stories yet: the sample stories first, each with its picture and a line on what it is, then the ways to start your own, then the Visual Stories](screenshots/start-page.webp)
+![The start page with no stories yet: the sample stories first, each with its picture and a line on what it is, then the ways to start your own](screenshots/start-page.webp)
 
 **Managing stories.** Right-click a story in the Stories list:
 - **Open folder** shows the story's files in your file manager (also for a
   story that can't be read).
 - **Duplicate settings only** makes a new, unplayed story with the same world,
-  cast, lore, style and opening. For a visual story it is the same game from
-  its beginning, played as the same character.
+  cast, lore, style and opening.
 - **Duplicate entire story** copies everything: every branch, summary and
   question, and its cost history.
 - **Delete…** moves it to the desktop's Trash, so it can be restored. The Delete
@@ -856,8 +854,8 @@ its picture and its line: Doomsville there is the same as importing
 `Doomsville.md`. The Ashen Reach, The Silverwood, Brasshaven and The Ninth
 Furnace show other kinds of world (grimdark science fiction, traditional
 fantasy, steampunk and a hellscape), each with a plot, a background picture,
-and a picture of every card and every place (a `# Map` section in a plot file
-is what a Visual Story plays on; an ordinary story ignores it). Rather than
+and a picture of every card and every place (a `# Map` section, from a plot
+file made for a map, is skipped with a note). Rather than
 write the format by hand, **File → Plot file editor…** writes it for you: the
 world, opening, characters, places, lore, facts and events each get a form,
 conditions and what an event brings or sets are picked from what the file
@@ -1157,8 +1155,10 @@ story went. That map is gone from ordinary stories: nothing offers one, and
 a story that was played on a map goes on as a story without it, with
 everything it has (its characters, plot, lore, pictures and branches). A
 story keeps a picture of each place it goes to instead (see "Pictures of
-places"), and the map lives on as Visual Stories: a game on a map designed
-in advance, with rules of its own (see "Visual Stories").
+places"). The Visual Stories of 2.0.0b7, a game on a map designed in
+advance, have moved out of SealedLore to become a game of their own: one
+played here is still listed in the Stories list, so it can be found or
+deleted, but no longer opens.
 
 ## Branches, takes and export
 
@@ -1536,251 +1536,6 @@ shown in it; for a place, the same place with nobody in it. The picture drawn
 becomes the portrait, or the place's current picture, and the part you kept
 stays among the card's pictures.
 
-## Visual Stories
-
-A separate way to play, early and growing: a world to play in on its map,
-with the visuals centre stage. The start page lists the visual stories under
-the samples (Doomsville, to begin with). Choose who you play and the game
-opens in a window of its own: the place you are in fills it, painted; the
-column at the right holds the log (what happens, what people say) and the
-line you type; your portrait, the place and the clock sit under the view.
-Click where to go and your character walks there; click a building to go
-inside or a door to go through it (the view fades through); **Map…** (or
-**M**) opens the map of the wider world to set out across it, and **Leave**
-walks on past an edge into the next stretch of country, the clock moving by
-the way's length. Everything is saved as you go, the log included, so
-closing the window (**Game → Close**, back to your stories; the story is in
-the Stories list, which says where the game's clock stands, and opens the
-game again) loses nothing; **Game → Quit** quits SealedLore. A game shared
-as a scenario file asks who you play when it first opens. The line at the
-bottom right says what this session has spent and what the game has in all;
-**Game → Usage and cost…** has every call, and **Game → Back up this game…**
-writes a story backup (File → Import… brings it back as a game). The game
-uses the story model in Settings → Models, whatever it was when the game
-began. The people you meet, and the plot, are the model's;
-walking, doors, what you carry, what you can see and hear, and fights are
-the game's own rules. A click while you walk turns you at once, and the view
-glides along with you. Outdoors the weather the world was designed with
-falls over the place, and the light follows the hour; a hit flashes your
-figure red, and whoever goes down lies where they fell. Doomsville's
-characters walk with stride frames of their own, drawn from their sprites.
-
-The game keeps its own rules, with no model behind them. Right-click a thing
-to **take it**, to take what a look found in it, or to **break it** (a noise
-the dead hear). **Carrying** under the view lists what you carry: food and
-drink are eaten and drunk, a first aid kit mends a wound, and anything can be
-put down where you stand. A locked door stops you until you carry its key, or
-force it (strength, and a noise). What you newly see or hear is written in
-the log as you move, and each place says a line of its own the first time
-you enter it. **The dead** are the world's: they wander, come to a noise, and
-chase you on sight; one beside you attacks, and you can attack one from its
-menu. A fight is rounds: a die each on top of your fighting score (your
-ability and the best weapon you carry, less what your injuries and your
-hunger cost) against theirs, and the margin says what happened. Beat them
-well and they go down; beat them a little and they take a hit; lose a little
-and you take bruises or a cut, which a day's rest with food and drink heals
-and which cost you nothing meanwhile; lose badly and you take **a serious
-injury**: a broken arm or leg, a deep wound, a bite from the dead. Someone
-whose score beats their opponents' can never take worse than a cut, so a
-capable fighter with a good weapon beats several of the dead, or a band of
-bandits, with nothing worse than bruises; outnumbered, each extra opponent
-beside you costs a point. **Retreat** (**R**) breaks you away from whoever is
-on you, freely unless you are clearly overwhelmed (three or more beside you,
-or disabled by an injury), when each gets a blow in as you go; the dead
-shamble after at their pace, slower than you walk. A serious injury disables
-you (a broken leg halves your walking and makes journeys long; a broken arm
-halves a rifle's use; every one weakens you in a fight) until it has had its
-days of rest, and heals in weeks: **first aid** within a few hours (a first
-aid kit, a bandage, a splint: **Carrying → Use**) or a break never sets
-straight and leaves a lasting limp or a weak arm; **proper care** (a medic
-who sets the break and cleans the wound: ask them, and a friend or companion
-sees to you while you sleep) brings the days down; a deep wound or a bite
-left undressed a day goes bad and costs you strength until **antibiotics**
-are found. Rest counts in full while you sleep or wait, half while you are up
-and about, half again while you are hungry or thirsty. Under the view your
-condition shows beside your hearts (**Fit**, **Bruised**, **Hurt**,
-**Disabled**, **Infected**), each injury and what it needs in its tooltip;
-the story's keeper and the people see them too. A finishing blow while you
-already carry a serious injury, or your strength worn down to nothing by
-hunger, thirst or infection, is the end, with a fresh start offered from the
-opening. One of the dead you can't see but is near is a sound in the log, in
-its own colour; a shot rolls out, and everyone near knows it. **Wait an
-hour** and **Sleep till morning** on the toolbar pass the time where you
-stand. What a world starts with (its
-locks and keys, its dead, things laid out, a line for each place, the
-weather) is its design, shipped beside its plot file.
-
-**What is in a cupboard** is decided by the game, once, the first time you
-enter a place: each dresser, pantry, medicine cabinet or toolbox is stocked
-from its world's tables of what such a thing holds, by chance, and keeps what
-it was given. Right-click it and **Search it** (half a minute) to see what is
-inside; from then on its menu lists what it holds, to **Take**. A new game
-rolls everything afresh.
-
-**The insides of buildings** come from their world's kit: for each kind of
-building (a farmhouse, a barn, a diner, a church…) a few hand-made layouts,
-picked by chance, turned so the door is where the map has it, with smaller
-pieces (a bedroom, a corner of the front room) chosen to go in them, and
-things in the yard round them out of doors. A building that has no inside yet
-gets one this way when the story opens, and keeps it. Doomsville's buildings
-were made from its kit and painted.
-
-**The wider world.** A visual story's places stand in a world of their own:
-Doomsville's is a hundred kilometres across, its regions each with their own
-country and dangers (the farm country round Hellsville, the Kettle Hills,
-the Empty Plains where the hordes cross, the North Woods, the frozen Marsh,
-and far to the south-west the Burn, where the bandits hold a ruined city),
-with roads, a river, a rail line, and places to find. **Map…** shows it:
-the regions, the roads and the river, the places you know, the country you
-have walked, and you. Click a place you know, or anywhere at all to go and
-explore it, and the map says what the journey will take before you set out:
-how long on foot, the nights out, the regions on the way and how dangerous
-each is, and the food and water it needs. **Set out**, and the journey is
-walked a stretch at a time: you walk by day and make camp at night, eat and
-drink from what you carry when it is time, and in each stretch something may
-happen, by the region (a danger, a chance worth stopping for, or simply
-something of interest: a traveller, a sight). When it does, the journey stops
-there, in that stretch of country, and the story's keeper says what it is: the
-dead, a stranger with a name and a mind of their own (talk to them like
-anyone else), something lying in the snow. A place you pass near, or are told
-of, goes on your map, and can be travelled to directly from then on. Every
-stretch of country is made the first time you are in it, from what its region
-holds (open fields, pine woods, a farmstead, a campsite, a wreck on the road),
-with buildings you can go into, and kept: come back and it is the same.
-**Leave** from any edge walks on into the next stretch. Going without food,
-water or sleep shows under the view (**Hungry**, **Thirsty**, **Weary**) and
-makes you weaker in a fight, and in the end wounds you; the colder country
-asks to be dressed warmer (a coat, gloves, a blanket carried count), and
-**Cold** shows when you are not. Sleeping out of doors has its own chance of
-something in the night. A vehicle you have got working is on the map as a
-way to go: fast on the roads, slower across country, never over a river but
-by a bridge, burning fuel as it goes (a full tank, and each can of fuel you
-carry, goes so far; run dry and the drive ends where it stops).
-
-**Places are painted** the first time you are in them, when they have no
-painting of their own yet (a new stretch of country, a building's inside): in
-the background, while you play on the tiles, in the same storybook look as the
-rest, about 3¢ a place through the picture endpoint in Settings. **Game →
-Paint new places** turns it off. A place painted in play is painted bare, and
-everything standing in it (a wrecked car, a stove, a crate) stays a figure
-over the painting, exactly where it is, so what you see is what you can
-click. A place nobody lives in is painted dark: no light in a window, no
-smoke from a chimney.
-
-**Who lives where.** A place the wider world makes as you walk into it (a
-farmstead, a cabin, a roadblock) may have people: whoever lives there, holds
-it, or has stopped there. The first time you come in, the story's keeper
-says who they are and puts them on the board, and they take you as they
-find you. Most farms are empty; a roadblock never is.
-
-A place nobody lives in has been picked over long ago: its cupboards hold
-little, and almost nothing worth having (food, medicine, ammunition, a gun by
-the door are mostly gone), what is left is worn and aged, and no lamp is lit.
-You see it too: drawers pulled out, shelves stripped, cushions ripped, papers,
-plaster and leaves on the floors. A place someone lives in is kept and stocked
-as the world kit stocks it. Whoever lives there may stop you at the door; walk
-past them without an answer and they come in after you.
-
-**Seeing and being seen.** Your character has a scouting ability (the world's
-design gives it; a card's scouting, tracking or stealth skill raises it).
-When someone comes within a hundred metres with a clear line of sight, a
-roll is made once: your scouting against their alertness. Won, you spot them
-first and the log says so; they have not seen you, and will not react until
-you come within twenty-five metres or act on them, so you can go round. Lost,
-they have seen you first, from afar, and do what they would on seeing a
-stranger: call out, come over, threaten, hide, run. **Standing.** How each
-person, or a whole group (a town, a band), stands with you shows beside their
-mood when you talk: a stranger, wary, hostile, a guest, a friend, an ally, a
-partner. The person's own words can change it, and so can the story's keeper;
-sleeping among friends keeps the night quiet, and a friend or companion sees
-to your injuries while you rest.
-
-**Challenges.** Some people demand something of anyone who comes near: a
-watchman wants you to stop and state your business, a toll keeper wants
-food for the road, a bandit wants your pack and your gun. Such a person
-does not greet you on sight: they hail you once you are within thirty
-metres, and what they demand stands until you answer it. Answer by
-speaking to them (**Talk to them**) or by handing over what they asked for
-(under **Carrying**, give it to them); they say whether that meets it. Do anything
-else, walk on, wait, look about, and you have ignored them, and the game
-decides what they do from how you stand with them and how the odds look
-(your fighting score and your companions against theirs and their group
-beside them): a neutral warns you once more, then attacks, or lets you be
-if you plainly outmatch them; someone already hostile attacks the first
-time, unless you look the stronger. Walk out of their reach and the demand
-lapses. The person speaks every step in their own words.
-
-**The people's pictures.** Whoever stands in a place you come to and has no
-portrait or sprite of their own gets both drawn in the background (a portrait
-from their card, kept on it, then their walking sprite from the portrait, by
-the same models as the rest; about 2¢ a person), under the same switch as the
-paintings (**Game → Paint new places**). Until then they walk as one of the
-tile set's own figures.
-
-**The people** are the model's. Each has a sheet in the world's design (who
-they are, what they want, what they know, what they never do, how they
-speak) over their card, and stands where the design puts them. When someone
-comes into your sight the model speaks for them first, or not, as they
-would. Right-click a person and **Talk to them**: the column names them, and
-what you type in the line is said to them; the model answers in their
-voice, remembers the exchange, and chooses what they do, which the game then
-carries out: come with you (they follow you through doors and on journeys),
-lead you somewhere, back away, hide, go for others, walk off, hand you
-something they carry, or go for you, in which case the game's own fight
-decides it. They see what you do in front of them, and are told. **Attack
-them** is the same fight, started by you. One call to the model a line, the
-story model unless **Settings → Models → People model** names another. The
-people keep their hours: the design says where each is through the day
-(Elena at the clinic by day, the church by night), and they are there when
-nothing else moves them. A world's townspeople need no card in its plot
-file: a line in the design makes one, so you can talk to the cook or the
-gate guard like anyone else.
-
-**The plot** is kept by the story's keeper (the story model unless **Settings
-→ Models → Plot keeper model** names another). The plot file's facts,
-timeline and events are the game's: the program keeps the clock, knows where
-you are, and decides what is due. When you arrive somewhere an event waits,
-a day comes with one due, or one is overdue, the keeper is asked, and
-answers with a script of changes the game carries out: people appear and
-speak, things are placed, doors unlock, a hidden place opens, a fact is set,
-the dead come. The keeper also takes two things from you. **Director** beside
-the line (or a line starting with `/d`) makes what you say so, whatever it
-takes: the Director has full command. And a line with nobody to talk to is
-an **attempt**: the keeper rules whether it can be done here with what you
-have, what roll it takes, and what happens on success and on failure; the
-dice roll, and the outcome is implemented on the board, so a wall climbed
-puts you over it and something found is in your hands. The keeper can end
-the story; a fresh start is offered.
-
-**Anything you try.** The game has few rules of its own on purpose; the
-keeper is how everything else gets done. Try to repair the truck in the barn
-with the parts you have gathered and the keeper rules on it: what it takes,
-what is still missing, and on success the truck becomes a new thing (a
-running pickup, fuelled) with what you can now do with it in its menu
-(**Drive it**), and the map offers every journey by it, at a vehicle's
-pace, the truck coming with you. The same way a thing can be lit, loaded,
-built or broken into what it now is, a person can be held, bound or knocked
-out (they stay put and know their state), and a place can be left burnt or
-flooded. A menu choice the rules have no verb for, and **Use** on anything
-the rules can't use, goes to the keeper as an attempt with the thing's state.
-A conversation can move the plot too: when something is waiting on what you
-ask or are told, the keeper is asked as you talk; and sleeping is a moment of
-the plot of its own.
-
-The model also **looks** for you. Press **Look at…** and drag
-a frame round any part of the place (or right-click a thing and choose
-**Look at it closely**): the model is shown that part of the picture and
-told what the game knows stands there, and says what you see and what you
-find on looking, inside, under or among what is there. A container the game
-has stocked holds what it holds: the look tells you of it and adds nothing.
-Whatever else it finds is in the game from then on: a thing's menu lists what
-it holds (**Take …**),
-and something found lying in the open is on the floor beside what you looked
-at. It stays there until you take it or something in the game moves it, and
-a later look is told so, and what you have taken. The model is the
-story model unless **Settings → Models → Look model** names another; one
-that reads no pictures is told the words alone.
-
 ## Videos
 
 **Story → Generate video…**, **Video…** in the Media tab, or **Video of this
@@ -2059,9 +1814,8 @@ branches, and **Forget this phone**. Pictures in the story show small, and
 whole when tapped.
 
 Some things wait for the desktop: while a question is open there (a summary
-to approve, say), the phone says "The desktop is waiting for an answer", and
-while a visual story is played there, "The desktop is playing a visual
-story". A private scene is begun and ended on the desktop.
+to approve, say), the phone says "The desktop is waiting for an answer". A
+private scene is begun and ended on the desktop.
 
 **Private scenes, memory-only chats and private models** can be played from
 the phone if their story is shared, and the computer asks first when you

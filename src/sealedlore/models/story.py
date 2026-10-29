@@ -12,7 +12,6 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from sealedlore.ids import new_id, utc_now_iso
-from sealedlore.models.area import Density, LiveArea
 from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef
 from sealedlore.models.node import AgencyMode, NpcScope, ResponseStyle
@@ -21,8 +20,6 @@ from sealedlore.models.private import Attestation, PrivatePrompt, PrivateSpan
 from sealedlore.models.prompt_edit import PromptEdit
 from sealedlore.models.route import ModelRoute
 from sealedlore.models.scene import SceneLogEntry, SceneState
-from sealedlore.models.visual import LogLine, VisualDesign
-from sealedlore.models.world import WorldDelta
 
 NarrativePerson = Literal["first", "second", "third"]
 NarrativeTense = Literal["past", "present"]
@@ -70,27 +67,10 @@ class StyleDirectives(BaseModel):
     detached: bool = False
 
 
-# The map is withdrawn while it is redesigned (the author, Oct 24 2026: the
-# story and plot modes work well, and a map game is to be a mode of its own,
-# with rules of its own, to come). Nothing offers a map, and a story saved
-# with one plays on as a story without it: `keeps_map` is what every reader
-# asks, so the saved choice stands for the day the flag goes back on. The
-# tests turn it on (conftest) to keep the map code covered meanwhile.
 class StoryDefaults(BaseModel):
     agency_mode: AgencyMode = "contested"
     npc_scope: NpcScope = "all"
     world_activity: WorldActivity = DEFAULT_WORLD_ACTIVITY
-    # The map that grows as the story goes (models/world.py): off unless the
-    # author turns it on, since its read is one more call after every passage.
-    world_map: bool = False
-    # How full the map's rooms are (models/area.py, engine/area.py): the
-    # furnishing's counts, halved or raised by two thirds.
-    map_density: Density = "normal"
-    # Things are scarce in this world (Story → Setup → About; a plot file's
-    # `scarce: yes`): the world designer is told to keep what the world holds
-    # scarce rare in the open country (`map.region.scarce`). A choice for
-    # worlds of want; off, its request is as it always was.
-    scarce: bool = False
     # The author's testing (Sept 2026): Sonnet 4.5/4.6 storytelling degrades
     # quickly past ~60k tokens of context, so 60k is the ceiling as well as
     # the default. Existing stories keep what they were saved with.
@@ -106,9 +86,7 @@ class StoryDefaults(BaseModel):
 
 
 OpeningMode = Literal["generate", "as_written"]
-# "visual": a story played on its map as a game (engine/session_visual.py,
-# gui/visual_window.py; the author, Oct 24 2026), a mode of its own.
-StoryMode = Literal["story", "chat", "visual"]
+StoryMode = Literal["story", "chat"]
 ChatKeep = Literal["disk", "memory"]
 
 
@@ -148,10 +126,6 @@ class Story(BaseModel):
     title: str
     created_at: str = Field(default_factory=utc_now_iso)
     updated_at: str = Field(default_factory=utc_now_iso)
-    # A map drawn up beforehand (a plot file's `# Map`, models/world.py): the
-    # base every branch's map grows from, and where the story starts on it.
-    world_base: WorldDelta | None = None
-    world_start: str | None = None
     # Stable setting/world material for the system block (§6.1); never
     # turn-specific, or it would invalidate the cache prefix every turn.
     world_bible: str | None = None
@@ -177,17 +151,6 @@ class Story(BaseModel):
     # its window (engine/chronicle.schedule). Shared by every branch; a
     # restart is a new story and draws again.
     plot_schedule: dict[str, int] = Field(default_factory=dict)
-    # Map-first play (models/area.py): walking done since the last turn,
-    # carried by the next one.
-    area_live: LiveArea | None = None
-    # A visual story's predesigned sheet (models/visual.py), copied from
-    # the plot file's `.visual.json` when the story is made.
-    visual_design: VisualDesign | None = None
-    # A visual story's log so far (the newest LOG_KEPT lines) and the day and
-    # hour it stands at, as the Stories list shows it (a visual story has no
-    # messages to count).
-    visual_log: list[LogLine] = Field(default_factory=list)
-    visual_when: str = ""
     # How pictures of this story should look ("painterly sci-fi concept art"),
     # given to whoever writes an image prompt. Never reaches the storyteller.
     image_style: str = ""
@@ -208,17 +171,6 @@ class Story(BaseModel):
     # that have been put on their character or lore entry: each is taken
     # once, so one the author removes from the card stays removed.
     card_pictures_taken: list[str] = Field(default_factory=list)
-    # The tile sets were offered once the map began (gui/tile_set_gallery.py):
-    # a line on the play view saying which set the map is drawn in, with the
-    # gallery a button away, shown until the author answers or chooses a set.
-    tile_set_offered: bool = False
-    # The play view's line offering Objects… while an area is set up at the
-    # start (engine/session_objects.py), answered or dismissed: it goes.
-    objects_offered: bool = False
-    # Edit Mode on the map was offered at the start: a map the story grows
-    # (not a plot file's, drawn beforehand) opens in it once, after the
-    # opening (engine/session_edit.py `map_setup_due`).
-    map_edit_offered: bool = False
     # Private scenes played in this story, oldest first (models/private.py),
     # and how the private model is told to write.
     private_spans: list[PrivateSpan] = Field(default_factory=list)
@@ -234,10 +186,6 @@ class Story(BaseModel):
     # A chat on a TEE model: "memory" keeps it off the disk entirely, the log
     # included (the author: "a full incognito conversation"). Fixed at start.
     chat_keep: ChatKeep = "disk"
-    # A chat that keeps a map (`defaults.world_map`, the author, Oct 2026):
-    # the name the map tracks the user by, since a chat has no cast. Blank
-    # is "You" (engine/session_world.py `chat_name`).
-    chat_character: str = ""
     # What the TEE check found when the chat was last opened.
     chat_attestation: Attestation | None = None
     # A chat's own reference pictures, added from disk (a story's are on its
@@ -250,9 +198,3 @@ class Story(BaseModel):
     @property
     def chat(self) -> bool:
         return self.mode == "chat"
-
-    @property
-    def visual(self) -> bool:
-        """A visual story: played on its map as a game, whatever the map
-        flag says for ordinary stories (`keeps_map`)."""
-        return self.mode == "visual"

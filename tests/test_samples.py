@@ -5,7 +5,6 @@ SampleStories/ is offered with no other change."""
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 from pathlib import Path
@@ -13,10 +12,6 @@ from pathlib import Path
 import pytest
 
 from sealedlore.engine.plot_md import parse_plot_markdown
-from sealedlore.engine.visual_rules import DEAD_SPRITE
-from sealedlore.engine.world import applied
-from sealedlore.engine.world_art import local_area
-from sealedlore.models.world import WorldMap
 from sealedlore.storage import paths
 from sealedlore.storage.paths import PLOT_FORMAT_GUIDE, PLOT_WRITING_GUIDE, sample_stories
 
@@ -166,23 +161,6 @@ def test_the_samples_any_time_events_wait_until_they_could_happen():
     assert "The way out" in _begins_armed(furnace, chronicle)
 
 
-def test_both_doomsville_samples_play_the_same_plot():
-    """The map sample is Doomsville on a map, so a fix to one's facts or
-    events belongs in both: `has_companions` flipped yes on a stranger met
-    on the road or a shared meal until its meaning said what doesn't count
-    (Oct 21 2026)."""
-    from tests.test_plot_file import normalised
-
-    def plot_of(name: str) -> dict:
-        scenario = parse_plot_markdown((SAMPLES / name).read_text(encoding="utf-8")).scenario
-        return normalised(scenario)["plot"]
-
-    plain, mapped = plot_of("Doomsville.md"), plot_of("Doomsville with a map.md")
-    assert plain == mapped
-    companions = next(f for f in plain["facts"] if f["name"] == "has_companions")
-    assert "meeting someone" in companions["meaning"] and companions["watched"]
-
-
 def test_doomsville_s_bandits_are_never_offered_in_town_and_keep_their_days():
     """The director was asked about the roadside ambush on every turn the
     character spent in Hellsville, where it can't begin. The gate is on a
@@ -201,7 +179,7 @@ def test_doomsville_s_bandits_are_never_offered_in_town_and_keep_their_days():
         found = armed(plot, chronicle, {}, mentioned=set())
         return "first_bandit_meeting" in {item.event.id for item in found}
 
-    for name in ("Doomsville.md", "Doomsville with a map.md"):
+    for name in ("Doomsville.md",):
         plot = parse_plot_markdown((SAMPLES / name).read_text(encoding="utf-8")).scenario.plot
         chronicle = initial_chronicle(plot)
         chronicle.minutes = clock_minutes(10, 12, 0)
@@ -506,55 +484,6 @@ def test_file_new_offers_the_samples_too(window, samples: Path, monkeypatch):
     assert window.imported == [samples / "Doomsville.md"]
 
 
-def test_a_sample_s_shipped_map_art_fits_its_map():
-    """A sample's world_art.json beside it (storage/world_art.py) names only
-    places and things the sample's map has, so every import gets it whole."""
-    from sealedlore.storage.world_art import load_sidecar, load_sidecar_art, sidecar_art_path
-
-    for path in sorted(SAMPLES.glob("*.md")):
-        if not sidecar_art_path(path).exists():
-            continue
-        art = load_sidecar_art(path)
-        assert art is not None, f"{path.name}: its art can't be read"
-        scenario = parse_plot_markdown(path.read_text(encoding="utf-8")).scenario
-        assert scenario.world_base is not None
-        ids = {p.id for p in scenario.world_base.places} | {
-            t.id for t in scenario.world_base.things
-        }
-        drawn = (
-            {s.subject_id for s in art.sprites}
-            | set(art.layouts)
-            | {t.place_id for t in art.terrain}
-        )
-        assert drawn <= ids, f"{path.name}: art for {drawn - ids}"
-        assert art.terrain and art.layouts, f"{path.name}: nothing drawn"
-        # Its map pictures (the isometric views) are files beside it, and
-        # every one listed comes with its file.
-        listed = json.loads(sidecar_art_path(path).read_text(encoding="utf-8"))["pictures"]
-        with_files, files = load_sidecar(path)
-        assert len(with_files.pictures) == len(listed), f"{path.name}: a map picture is missing"
-        # An upper floor's backdrop is its level's ("<place>#1").
-        places = {p.subject_id.split("#")[0] for p in with_files.pictures if p.subject != "walker"}
-        assert places <= ids
-        walkers = {p.subject_id for p in with_files.pictures if p.subject == "walker"}
-        assert walkers <= {c.name for c in scenario.cast} | {DEAD_SPRITE}  # a visual story's dead
-        assert sorted(files) == sorted(p.file for p in with_files.pictures)
-        # A showcase: every area with a plan comes with its painting: its
-        # backdrop (the play view's ground and the board's picture of it,
-        # engine/backdrops.py; the author, Oct 23 2026), else, for the
-        # samples from before backdrops, its isometric view (Oct 15 2026).
-        world = applied(WorldMap(), scenario.world_base, base=True)
-        areas = {
-            pid
-            for pid in art.layouts
-            if pid in world.places and (local_area(world, pid) or world.places[pid]).id == pid
-        }
-        painted = {
-            p.subject_id for p in with_files.pictures if p.subject in ("backdrop", "isometric")
-        }
-        assert areas <= painted, f"{path.name}: no painting of {sorted(areas - painted)}"
-
-
 def test_every_sample_character_comes_with_its_portrait():
     """The samples ship a portrait of every character (the author, Oct 15
     2026), read as any plot file's pictures are: none missing, none refused,
@@ -620,42 +549,3 @@ def test_the_writing_guide_s_place_gate_is_doomsville_s_own():
 
     assert shape(example) == shape(sample)
     assert example.variants[0].requires[0].place == "Hellsville"
-
-
-def test_a_map_sample_is_ready_to_play_on_its_map():
-    """Map-first play (engine/area.py): a sample that keeps a map ships its
-    tile set, every building with a plan furnished, a walking sprite for
-    every character, and a sprite for every thing in every area, so nothing
-    is drawn when it is played."""
-    from sealedlore.engine.area import build_area
-    from sealedlore.engine.tile_sets import item_slugs
-    from sealedlore.storage.tile_sets import read_asset, shipped_sets
-    from sealedlore.storage.world_art import load_sidecar, sidecar_art_path
-
-    sets = shipped_sets(SAMPLES)
-    for path in sorted(SAMPLES.glob("*.md")):
-        if not sidecar_art_path(path).exists():
-            continue
-        art, _files = load_sidecar(path)
-        scenario = parse_plot_markdown(path.read_text(encoding="utf-8")).scenario
-        assert art.tile_set in sets, f"{path.name}: no tile set {art.tile_set!r}"
-        _info, folder = sets[art.tile_set]
-        world = applied(WorldMap(), scenario.world_base, base=True)
-        walkers = {p.subject_id for p in art.pictures if p.subject == "walker"} - {DEAD_SPRITE}
-        assert walkers == {c.name for c in scenario.cast}, f"{path.name}: walkers"
-        names = [c.name for c in scenario.cast]
-        for pid in art.layouts:
-            area = build_area(world, art, pid, people=names)
-            if area is None:
-                continue
-            if area.indoor and world.places[pid].kind in ("building", "room") and area.rooms:
-                # By the model's furnishing, or by a world kit's template
-                # (its furniture is the plan's own: engine/kits.py).
-                kit_made = bool((art.layout_shown(pid, "").spec or {}).get("pieces"))
-                assert kit_made or art.furnishing_for(pid, "") is not None, (
-                    f"{area.name}: not furnished"
-                )
-            for thing in area.placements:
-                assert any(read_asset(folder, f"items/{s}") for s in item_slugs(thing.name)), (
-                    f"{path.name}: {area.name}: no sprite for {thing.name!r}"
-                )

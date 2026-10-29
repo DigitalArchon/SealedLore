@@ -21,7 +21,6 @@ from PySide6.QtWidgets import QApplication, QDialog, QFileDialog  # noqa: E402
 from sealedlore.engine.picture_shapes import (  # noqa: E402
     BACKGROUND,
     FREE,
-    ISOMETRIC,
     ORIGINAL,
     PICTURE,
     PORTRAIT,
@@ -62,8 +61,7 @@ def _listed(model: str, *sizes: str) -> dict:
 
 def test_each_shape_is_the_size_its_model_draws():
     """A picture brought in should match one drawn: a portrait is the tall
-    size the portrait model lists, a lore picture its landscape size. An
-    isometric view is the shape of the plan it is laid over on the map."""
+    size the portrait model lists, a lore picture its landscape size."""
     config = Config(
         portrait_model="flux",
         image_models=[
@@ -75,7 +73,6 @@ def test_each_shape_is_the_size_its_model_draws():
     assert [s.key for s in picture_shapes(config)][:2] == [FREE, ORIGINAL]
     assert (shapes[PORTRAIT].width, shapes[PORTRAIT].height) == (2, 3)
     assert (shapes[PICTURE].width, shapes[PICTURE].height) == (16, 9)  # widest up to 1360
-    assert (shapes[ISOMETRIC].width, shapes[ISOMETRIC].height) == (5, 3)
     # The background covers the story area, so its shape is the area's own.
     assert shapes[BACKGROUND].ratio == pytest.approx(935 / 660)
     assert "935 × 660" in shapes[BACKGROUND].label
@@ -85,7 +82,6 @@ def test_each_shape_is_the_size_its_model_draws():
 def test_without_a_listing_the_shapes_are_the_app_s_own_defaults():
     shapes = {s.key: s for s in picture_shapes(None)}
     assert shapes[PORTRAIT].ratio == pytest.approx(2 / 3)  # what portrait_size asks for unlisted
-    assert shapes[ISOMETRIC].ratio == pytest.approx(5 / 3)
     assert shapes[BACKGROUND].ratio == pytest.approx(16 / 9)
     assert size_ratio("1k") is None and size_ratio("1536*1024") == (3, 2)
 
@@ -160,7 +156,7 @@ def test_the_dialog_offers_every_shape_and_crops_to_the_one_chosen(app):
     dialog = CropDialog(_image(), picture_shapes(None), PORTRAIT)
     assert dialog.shape_key() == PORTRAIT
     keys = [dialog.shape.itemData(i) for i in range(dialog.shape.count())]
-    assert keys[:2] == [FREE, ORIGINAL] and {PORTRAIT, PICTURE, BACKGROUND, ISOMETRIC} <= set(keys)
+    assert keys[:2] == [FREE, ORIGINAL] and {PORTRAIT, PICTURE, BACKGROUND} <= set(keys)
     crop = dialog.view.crop()
     assert crop.width() / crop.height() == pytest.approx(2 / 3, abs=0.01)
     assert "Keeps 200 × 300 pixels" in dialog.size_label.text()
@@ -243,20 +239,17 @@ def test_a_crop_is_kept_upright_stripped_and_only_the_part_chosen(app, tmp_path,
 
 @pytest.fixture
 def window(app, tmp_path: Path, monkeypatch):
-    """Doomsville with a map, imported as a sample is, opened and not begun."""
+    """Doomsville, imported as a sample is, opened and not begun."""
     from sealedlore.engine.plot_md import parse_plot_markdown
     from sealedlore.gui.main_window import MainWindow
     from sealedlore.gui.ref_images import load_plot_pictures
     from sealedlore.storage.repository import save_story_bundle
     from sealedlore.storage.scenario import bundle_from_scenario
-    from sealedlore.storage.world_art import load_sidecar
 
-    plot = SAMPLES / "Doomsville with a map.md"
+    plot = SAMPLES / "Doomsville.md"
     parsed = parse_plot_markdown(plot.read_text(encoding="utf-8"))
     assert load_plot_pictures(parsed, plot.parent) == []
     bundle = bundle_from_scenario(parsed.scenario)
-    bundle.world_art, files = load_sidecar(plot)
-    bundle.pending_files.update(files)
     save_story_bundle(bundle, root=tmp_path / "data")
     window = MainWindow(root=tmp_path / "data", use_mock=True)
     window.open_story(bundle.story.id)
@@ -282,7 +275,7 @@ def test_every_way_a_picture_comes_in_keeps_nothing_hidden_and_offers_its_shape(
     window, tmp_path, monkeypatch
 ):
     """Cast and Lore pages, the portrait, the picture dialog, the background,
-    the plot editor and the isometric view: each offers the crop at its own
+    and the plot editor: each offers the crop at its own
     shape, and what is kept has no camera data, comments or anything after
     the image, cropped or whole."""
     from sealedlore.gui.image_dialog import ImageDialog
