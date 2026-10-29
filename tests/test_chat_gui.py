@@ -143,6 +143,33 @@ def test_a_first_message_is_kept_in_full_and_can_be_let_go(app, window, monkeypa
     assert reply.header.text().startswith("Assistant")
 
 
+def test_editing_a_chat_message_offers_no_ooc_note(app, window, monkeypatch):
+    """The author (Oct 29 2026): editing an earlier message of a chat showed a
+    story's OOC field, and what was typed there went nowhere: a chat's model
+    is sent each message as written. A note left by such an edit isn't shown,
+    in the window or on the phone."""
+    from sealedlore.gui.window_phone import _entries
+
+    make_chat(window, monkeypatch)
+    session = window.session
+    session.provider.responses = ["Hello there."]
+    list(session.send(TurnRequest(speaker_id=CHAT_USER_ID, user_text="Hi, I'm Ada.")))
+    mine = session.path()[0]
+    mine.ooc = "Left by an older edit."
+    window.reload_transcript()
+    widget = window.transcript.message_widget(mine.id)
+    assert widget.ooc is None
+    assert all(entry["ooc"] is None for entry in _entries(window)[0])
+    for rewrite in (False, True):
+        widget.begin_edit(rewrite=rewrite)
+        assert widget._editor is not None and widget._ooc_editor is None
+        widget.cancel_edit()
+    widget.begin_edit()
+    widget._editor.setPlainText("Hi, I'm Ada Lovelace.")
+    widget._commit_edit()
+    assert mine.content == "Hi, I'm Ada Lovelace." and mine.ooc == "Left by an older edit."
+
+
 def test_setup_for_a_chat_is_its_name_and_system_prompt(app, window, monkeypatch):
     make_chat(window, monkeypatch)
     dialog = SetupDialog(window.session.story, window.session.cast)

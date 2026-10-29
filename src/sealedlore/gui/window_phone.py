@@ -597,7 +597,7 @@ def _entries(window) -> tuple[list[dict], dict[str, str]]:
                 "kind": message_kind(node),
                 "label": speaker_label(node, cast_by_id, chat),
                 "text": node.content,
-                "ooc": node.ooc or None,
+                "ooc": None if chat else node.ooc or None,
                 "roll": chip_text(node.meta.roll) if node.meta.roll and show_rolls else None,
                 "take": [position, count] if count > 1 else None,
                 "branch_start": starts.get(node.id),

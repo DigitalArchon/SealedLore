@@ -521,8 +521,10 @@ class MessageWidget(QFrame):
         # An author's turn carries its OOC note: edited with the text, and
         # on a new branch from here (the author, Oct 2026: only Take back
         # could change it; Edit and New branch from here kept it as it was).
+        # A chat has no notes: its model is sent the message as written, so
+        # a note typed here went nowhere (the author, Oct 29 2026).
         ooc_editor: QPlainTextEdit | None = None
-        if self.kind != "assistant":
+        if self.kind != "assistant" and self._keep_full is None:
             ooc_editor = QPlainTextEdit(self._ooc_text)
             ooc_editor.setObjectName("oocEditor")
             ooc_editor.setPlaceholderText(
@@ -1543,7 +1545,8 @@ class TranscriptView(QScrollArea):
             label,
             node.content,
             message_kind(node),
-            node.ooc,
+            # A chat sends no notes; one left by an older edit isn't shown.
+            None if self._chat else node.ooc,
             node_id=node.id,
             archived=archived or unsent,
             rerollable=rerollable,
