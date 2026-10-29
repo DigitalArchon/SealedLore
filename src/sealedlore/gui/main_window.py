@@ -1098,7 +1098,11 @@ class MainWindow(
         """A new visual story from its plot file (the start page's Visual
         Stories): the file's map and art, the character chosen, and the
         game's window over this one."""
-        if self._busy or not self._private_allows_close():
+        # Not `_private_allows_close`: the story open here stays open under
+        # the game's window and comes back when it closes, so a memory-only
+        # chat or scene loses nothing, and its Yes discarded the scene (the
+        # mode audit, Oct 29 2026).
+        if self._busy:
             return
         parsed = self._read_plot_file(path)
         if parsed is None:
@@ -1122,27 +1126,41 @@ class MainWindow(
         if story.visual_design is not None:
             names = [c.name for c in (*bundle.cast, *bundle.supporting.characters)]
             bundle.supporting.characters += cards_for_design(story.visual_design, names)
-        choices = player_choices(bundle.cast, story.setup.choose_one_of)
-        if not choices:
-            self._warn_plain("Nobody to play", f"{path.name} has no character to play as.")
+        if not self._choose_player(bundle.cast, story, path.name):
             return
+        save_story_bundle(bundle, root=self.root)
+        self.stories.refresh(selected_id=story.id)
+        self.open_visual_story(story.id)
+
+    def _choose_player(self, cast, story, source: str) -> bool:
+        """Who the game is played as, set on `story`: the only one there is,
+        or the author's pick. False when there is nobody, or they cancel."""
+        choices = player_choices(cast, story.setup.choose_one_of)
+        if not choices:
+            self._warn_plain("Nobody to play", f"{source} has no character to play as.")
+            return False
         player = choices[0]
         if len(choices) > 1:
             labels = [c.name for c in choices]
             label, ok = QInputDialog.getItem(self, "Who do you play?", "Play as:", labels, 0, False)
             if not ok:
-                return
+                return False
             player = choices[labels.index(label)]
         story.held_character_id = player.id
         if player.id not in story.scene.present_character_ids:
             story.scene.present_character_ids.append(player.id)
-        save_story_bundle(bundle, root=self.root)
-        self.stories.refresh(selected_id=story.id)
-        self.open_visual_story(story.id)
+        return True
 
     def open_visual_story(self, story_id: str) -> None:
-        """Play a visual story in its own window; this one hides until it closes."""
-        if self._busy or not self._private_allows_close():
+        """Play a visual story in its own window; this one hides until it
+        closes, with whatever it had open (see open_visual_sample)."""
+        if self._busy:
+            return
+        if getattr(self, "visual_window", None) is not None:
+            # One game at a time: a second replaced the first, which was then
+            # deleted unsaved when either closed (the mode audit, Oct 29 2026).
+            self.visual_window.raise_()
+            self.visual_window.activateWindow()
             return
         try:
             session = StorySession.load(
@@ -1160,6 +1178,13 @@ class MainWindow(
             session.close(wait_seconds=0)
             self.open_story(story_id)
             return
+        if session.story.held_character_id not in {c.id for c in session.cast}:
+            # Imported from a scenario, which leaves the player to whoever
+            # plays it: asked here, as a sample asks.
+            if not self._choose_player(session.cast, session.story, session.story.title):
+                session.close(wait_seconds=0)
+                return
+            session.save()
         self.visual_window = VisualWindow(
             session, self.config, self.root, on_close=self._visual_closed
         )
@@ -1173,6 +1198,9 @@ class MainWindow(
         if window is not None:
             window.deleteLater()
         self.stories.refresh()
+        if self.session is None:
+            # The start page's recent stories, with the game just played.
+            self.reload_transcript()
         self.show()
 
     def import_sample(self, path: Path) -> None:
@@ -1377,6 +1405,8 @@ class MainWindow(
         save_story_bundle(bundle, root=self.root)
         self.stories.refresh(selected_id=bundle.story.id)
         self.open_story(bundle.story.id)
+        if bundle.story.visual:
+            return  # the game opens on its opening, in its own window
         next_step = (
             "Type the first message to begin."
             if bundle.story.chat
@@ -1409,11 +1439,18 @@ class MainWindow(
         if source is not None:
             title = source.story.title
             count = len(source.nodes)
-            text = (
-                f"Delete “{title}”?\n\nIts {count} message{'s' if count != 1 else ''}, every "
-                "branch, its summaries and its cost history go to the Trash, where you can "
-                "still restore them."
-            )
+            if source.story.visual:
+                # A game has no messages: its state and its log are what go.
+                text = (
+                    f"Delete “{title}”?\n\nThe game as you left it, its log, its pictures "
+                    "and its cost history go to the Trash, where you can still restore them."
+                )
+            else:
+                text = (
+                    f"Delete “{title}”?\n\nIts {count} message{'s' if count != 1 else ''}, "
+                    "every branch, its summaries and its cost history go to the Trash, where "
+                    "you can still restore them."
+                )
         else:
             title = story_id
             text = (
@@ -1487,6 +1524,7 @@ class MainWindow(
         self.session = None
         self._sync_stories_list()
         self.setWindowTitle("SealedLore")
+        self.statusBar().clearMessage()
         self.status_strip.reset_session_cost()
         self.status_strip.set_budget(None)
         self.status_strip.set_lore(None)
@@ -1498,6 +1536,9 @@ class MainWindow(
         self.summaries_panel.set_summaries([], on_path_ids=set(), archivable_turns=0)
         self.staleness.hide()
         self.held_away.hide()
+        # Only refresh_summaries hides it, and with no story it returns early:
+        # it stood over the start page with an Archive now that did nothing.
+        self.over_budget.hide()
         self.inspector.clear()
         self.refresh_images()
         self._apply_background()
@@ -1702,11 +1743,19 @@ class MainWindow(
         self.session.host_price = self._host_price
         self._fetch_host_prices()
         self.setWindowTitle(f"SealedLore — {self.session.story.title}")
+        # A notice still showing is about the story left ("Scene: …" over a
+        # chat just opened, a playtest of Oct 29 2026).
+        self.statusBar().clearMessage()
         for notice in self.session.bundle.notices:
             self.statusBar().showMessage(notice, 20000)
         # Length and outcome stick from turn to turn, but not from one story
         # to the next: this story's defaults are its own.
         self.composer.reset_turn_shape()
+        # Nor who speaks: kept, a chat's Narration (or a character the next
+        # story hasn't) opened the story as "Playing John / Speaking as
+        # Narration" (the mode audit, Oct 29 2026). Emptied, as Close story
+        # does, the speaker is the character held once the panels refresh.
+        self.composer.clear_cast()
         self.status_strip.reset_session_cost()
         self._refresh_story_cost()
         self._counted_summaries.clear()
@@ -1720,6 +1769,9 @@ class MainWindow(
         except (OSError, ValueError) as exc:
             self.statusBar().showMessage(f"Couldn't use the new background: {exc}", 12000)
         self.refresh_panels()
+        # Before the first page: a story opened from a chat found People still
+        # hidden, and the pages refuse a hidden one (it opened on Story so far).
+        self._sync_chat_ui()
         self._show_first_page()
         self.refresh_images()
         self._resume_videos()
@@ -1729,7 +1781,6 @@ class MainWindow(
         self.refresh_retrieval()
         self.refresh_inspector()
         self._tee_state = ""
-        self._sync_chat_ui()
         self._attest_chat()
         self._update_controls()
         self._sync_stories_list()
@@ -1789,6 +1840,7 @@ class MainWindow(
                 stale,
                 positions=self._chapter_numbers(stale),
                 rebuilding=any(summary.id in rebuilding for summary in stale),
+                chat=self.in_chat,
             )
         else:
             self.staleness.hide()
@@ -1822,6 +1874,7 @@ class MainWindow(
             full_total=prompt.full_total,
             budget=prompt.budget.budget,
             left_out=len(prompt.excluded_node_ids),
+            chat=self.in_chat,
         )
 
     def archive_to_target(self) -> None:
@@ -2264,6 +2317,8 @@ class MainWindow(
         self._show_nodes(before)
         label = speaker_label_for(node.speaker_id, self.session.cast)
         shown_ooc = (ooc.strip() or None) if ooc is not None else node.ooc
+        if self.in_chat:
+            shown_ooc = None  # a chat sends no notes, and shows none
         self.transcript.add_message(label, text, kind_for(node.speaker_id), shown_ooc)
         self.statusBar().showMessage(told, 10000)
         self._start(lambda: self.session.rewrite_from(node_id, text, name=name, ooc=ooc))
@@ -2516,6 +2571,8 @@ class MainWindow(
 
     def _shape_summary(self) -> str:
         """What a retake is about to change to, named in the status bar."""
+        if self.in_chat:
+            return "Regenerating"  # a chat's retake is the same message again
         length = self.composer.length.currentText().removesuffix(DEFAULT_SUFFIX)
         outcome = self.composer.agency.currentText().removesuffix(DEFAULT_SUFFIX)
         return f"Regenerating — {length}, {outcome}"
@@ -2712,22 +2769,31 @@ class MainWindow(
             return
 
         after = deletion.on_path - 1
-        details = ["The turn comes back in the composer with its settings, ready to edit and send."]
+        chat = self.in_chat
+        details = [
+            "The message comes back in the composer, ready to edit and send."
+            if chat
+            else "The turn comes back in the composer with its settings, ready to edit and send."
+        ]
         if after:
             details.append(f"{after} message(s) after it will be removed.")
         if deletion.other_branches:
             details.append(f"{deletion.other_branches} other take(s) below it will go too.")
         if deletion.summaries:
             details.append(
-                "The chapter summary covering it will be removed; the prose it "
+                "The summary covering it will be removed; the messages it covered go back "
+                "to the model word for word."
+                if chat
+                else "The chapter summary covering it will be removed; the prose it "
                 "covered goes back to the model word for word."
             )
         details.append("This can't be undone.")
 
+        word = "message" if chat else "turn"
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Question)
-        box.setWindowTitle("Take back this turn")
-        box.setText("Take this turn back to the composer?")
+        box.setWindowTitle(f"Take back this {word}")
+        box.setText(f"Take this {word} back to the composer?")
         box.setInformativeText("\n\n".join(details))
         take_back = box.addButton("Take back", QMessageBox.AcceptRole)
         cancel = box.addButton(QMessageBox.Cancel)
@@ -2742,7 +2808,9 @@ class MainWindow(
         self.refresh_summaries()
         self._reassemble_inspector()
         self._update_controls()
-        self.statusBar().showMessage("Turn taken back — edit it and send again", 6000)
+        self.statusBar().showMessage(
+            f"{'Message' if chat else 'Turn'} taken back — edit it and send again", 6000
+        )
 
     def _return_turn(self, node: Node) -> None:
         """The author's turn back in the composer with its settings, and it
@@ -3124,7 +3192,10 @@ class MainWindow(
             return
         title = f"{self._job_name} failed"
         if returned:
-            failed += "\n\nYour turn is back in the composer, ready to send again."
+            failed += (
+                f"\n\nYour {'message' if self.in_chat else 'turn'} is back in the composer, "
+                "ready to send again."
+            )
         self.statusBar().showMessage(f"{title}: {failed}", 10000)
         # The message can carry the endpoint's own words; never render it as HTML.
         self._warn_plain(title, failed)
@@ -4582,12 +4653,22 @@ class MainWindow(
         self.start_action.setEnabled(unstarted and not busy)
         # Once the story has begun it can only restart: greyed for good, it
         # was one more item to read past.
-        self.start_action.setVisible(unstarted)
+        self.start_action.setVisible(unstarted and not self.in_chat)
         self._update_image_controls()
         self._update_video_controls()
         self._update_private_controls()
+        # What only a story has isn't shown in a chat: greyed for good, each
+        # was one more item to read past (as Start story… once it has begun).
+        for action in (
+            self.review_action,
+            self.import_plot_action,
+            self.last_review_action,
+            self.undo_review_action,
+            self.portraits_action,
+        ):
+            action.setVisible(not self.in_chat)
         if self.in_chat:
-            # What only a story has; and nothing written for a memory-only chat.
+            # And nothing written for a memory-only chat.
             for action in (
                 self.start_action,
                 self.review_action,

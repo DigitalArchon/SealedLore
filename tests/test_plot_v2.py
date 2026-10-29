@@ -1904,3 +1904,21 @@ def test_the_roster_never_names_anyone_by_their_id():
     assert "- Ann" in text and ghost not in text
     alone = SceneState(tracked=True, present_character_ids=[ghost])
     assert ghost not in render_scene_block(alone, {"ann": ann}, "ann")
+
+
+def test_the_character_scan_is_never_told_a_hidden_character_s_name(tmp_path: Path):
+    """The scan's "already on file" list is sent to the summarisation model:
+    it named Mara while the plot still kept her from every model (the mode
+    audit, Oct 29 2026). Both the scan asked for and the one after archival."""
+    session = make_session(tmp_path, ["One.", "{}", read(), "[]", "[]", "[]"])
+    mara = session.character_by_name("Mara")
+    assert mara is not None and mara.id in session.hidden_ids()
+    list(session.send(turn(session, "I wait by the fire.")))
+    before = len(session.provider.requests)
+    list(session.scan_recent())
+    list(session.suggest_characters_after_archive(session.path()))
+    scans = session.provider.requests[before:]
+    assert len(scans) == 2
+    for request in scans:
+        text = "\n".join(part.text for message in request.messages for part in message.parts)
+        assert "Mara" not in text and "Ann" in text

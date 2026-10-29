@@ -31,6 +31,8 @@ ROLE_NAMES = {
 }
 
 
+VISUAL_ROLES = frozenset({"look", "npc", "keeper"})
+
 NO_MODEL = "No model chosen: File → Settings… → Models"
 NO_ENDPOINT = "No endpoint set up: File → Settings…"
 
@@ -111,6 +113,12 @@ def describe_session(session, *, tee_state: str = "") -> tuple[str, str]:
     if not story.chat:
         roles = []
         for role, name in ROLE_NAMES.items():
+            # Only the calls this story makes: Look, People and the keeper are
+            # a visual story's, the plot's calls a plot's (the mode audit).
+            if role in VISUAL_ROLES and not story.visual:
+                continue
+            if role == "plot" and story.plot is None:
+                continue
             role_model = model_label(session.role_model(role))
             route = session.route_text(role)
             roles.append(f"  {name}: {role_model}" + (f" ({route}, paid)" if route else ""))

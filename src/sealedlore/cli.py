@@ -38,6 +38,7 @@ from sealedlore.models.config import (
 )
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import (
+    CHAT_USER_ID,
     DIRECTOR_SPEAKER_ID,
     NARRATOR_SPEAKER_ID,
     AgencyMode,
@@ -50,6 +51,7 @@ from sealedlore.providers import make_session_provider
 from sealedlore.providers.base import ChatProvider, ChatRequest, ProviderError, TextDelta
 from sealedlore.providers.embeddings import OpenAICompatibleEmbeddings
 from sealedlore.providers.mock import MockChatProvider
+from sealedlore.providers.tee import is_private_mode, is_tee
 from sealedlore.storage import keychain
 from sealedlore.storage.archive import ArchiveError, import_archive, write_archive
 from sealedlore.storage.images import all_image_files, reference_files
@@ -362,14 +364,41 @@ def cmd_list(args: argparse.Namespace) -> int:
             bundle = load_story_bundle(entry.name, root=root)
         except (FileNotFoundError, ValueError):
             continue
-        print(f"{bundle.story.id}  {bundle.story.title}  ({len(bundle.nodes)} nodes)")
+        story = bundle.story
+        what = (
+            "visual story"
+            if story.visual
+            else f"chat, {len(bundle.nodes)} messages"
+            if story.chat
+            else f"{len(bundle.nodes)} nodes"
+        )
+        print(f"{story.id}  {story.title}  ({what})")
     return 0
+
+
+# What the terminal offers a simple chat: its messages, nothing of a story's.
+CHAT_COMMANDS = frozenset(
+    {
+        "quit",
+        "exit",
+        "q",
+        "help",
+        "regen",
+        "undo",
+        "path",
+        "inspect",
+        "budget",
+        "summaries",
+        "archive",
+    }
+)
 
 
 class Repl:
     def __init__(self, session: StorySession) -> None:
         self.session = session
-        self.speaker_id: str = NARRATOR_SPEAKER_ID
+        # A chat's messages are the user's: as Narrator the app labelled them so.
+        self.speaker_id: str = CHAT_USER_ID if session.story.chat else NARRATOR_SPEAKER_ID
         self.controlled_id: str | None = None
         self.pending_ooc: str | None = None
         self.npc_scope: NpcScope = session.story.defaults.npc_scope
@@ -494,6 +523,11 @@ class Repl:
 
         if name in {"quit", "exit", "q"}:
             return False
+        if story.chat and name not in CHAT_COMMANDS:
+            # Held characters, scenes, notes and dice are a story's: in a chat
+            # they were stored on its messages and never sent.
+            print(f"  /{name} is for stories; a chat has only its messages")
+            return True
         if name == "help":
             print(HELP)
         elif name == "cast":
@@ -922,6 +956,17 @@ def cmd_chat(args: argparse.Namespace) -> int:
         learn_corrections=not args.mock,
         embeddings=build_embeddings(config),
     )
+    story = session.story
+    refusal = None
+    if story.visual:
+        refusal = "a visual story is played in the app's game window, not here"
+    elif session.tee_chat and is_tee(session.model) and not is_private_mode(session.model):
+        # The app attests a TEE chat each time it opens; the terminal can't.
+        refusal = "a TEE chat is attested by the app each time it opens: play it there"
+    if refusal is not None:
+        session.close(wait_seconds=0)
+        print(f"{story.title}: {refusal}.")
+        return 1
     return Repl(session).run()
 
 

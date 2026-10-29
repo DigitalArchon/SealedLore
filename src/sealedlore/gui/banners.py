@@ -56,14 +56,17 @@ class StalenessBanner(QFrame):
         *,
         positions: Sequence[int] = (),
         rebuilding: bool = False,
+        chat: bool = False,
     ) -> None:
+        """`chat`: named as a chat's cards are ("Part 3"), and the chat intact."""
         if not summaries:
             self.hide()
             return
+        unit = "Part" if chat else "Chapter"
         if positions:
-            named = ", ".join(f"Chapter {position}" for position in positions)
+            named = ", ".join(f"{unit} {position}" for position in positions)
         else:
-            named = f"{len(summaries)} chapters"
+            named = f"{len(summaries)} {unit.lower()}s"
         self.rebuild_button.setEnabled(not rebuilding)
         if rebuilding:
             self.message.setText(
@@ -77,10 +80,10 @@ class StalenessBanner(QFrame):
         else:
             head = f"{named} cover text you have since edited, so their summaries are out of date."
         self.message.setText(
-            f"{head} The edit itself is saved and the story is intact. Nothing is rebuilt "
-            "until you ask, so make any other edits first. Rebuilding runs in the background "
-            "and costs a summariser call per chapter; each new summary changes the cached "
-            "prompt prefix once."
+            f"{head} The edit itself is saved and the {'chat' if chat else 'story'} is "
+            "intact. Nothing is rebuilt until you ask, so make any other edits first. "
+            f"Rebuilding runs in the background and costs a summariser call per {unit.lower()}; "
+            "each new summary changes the cached prompt prefix once."
         )
         self.show()
 
@@ -131,18 +134,25 @@ class OverBudgetBanner(QFrame):
         layout.addLayout(actions)
         self.hide()
 
-    def show_over(self, *, full_total: int, budget: int, left_out: int) -> None:
+    def show_over(self, *, full_total: int, budget: int, left_out: int, chat: bool = False) -> None:
         dropped = (
             f"the oldest {left_out} message{'s are' if left_out != 1 else ' is'} being left out "
             "of every prompt"
             if left_out
             else "the next turn will leave the oldest messages out"
         )
-        self.message.setText(
-            f"The story is over its context budget (~{full_total:,} of {budget:,} tokens), "
-            f"so {dropped}, and the storyteller no longer sees them. Archiving summarises "
-            "them into chapters so the story keeps the gist."
-        )
+        if chat:
+            self.message.setText(
+                f"The chat is over its context budget (~{full_total:,} of {budget:,} tokens), "
+                f"so {dropped}, and the model no longer sees them. Archiving summarises "
+                "them into parts so the chat keeps the gist."
+            )
+        else:
+            self.message.setText(
+                f"The story is over its context budget (~{full_total:,} of {budget:,} tokens), "
+                f"so {dropped}, and the storyteller no longer sees them. Archiving summarises "
+                "them into chapters so the story keeps the gist."
+            )
         self.show()
 
 

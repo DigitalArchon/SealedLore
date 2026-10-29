@@ -108,6 +108,11 @@ class ChatWindow:
         chat = self.in_chat
         self.composer.set_chat_mode(chat)
         self.view_toggle.set_chat(chat)
+        # The View menu's copy of the toggle says the same as the toggle.
+        self.storyteller_view_action.setText(
+            "What the &model sees" if chat else "What the &storyteller sees"
+        )
+        self.find_action.setText("&Find in chat…" if chat else "&Find in story…")
         for page in (
             self.people_page,
             self.scene_panel,

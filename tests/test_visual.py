@@ -291,6 +291,67 @@ def test_closing_the_game_saves_and_brings_the_main_window_back(app, window: Mai
     assert len([line for line in game.session.story.visual_log if line.text == "Hello?"]) == 1
 
 
+def test_a_visual_story_opens_over_a_memory_chat_or_scene_without_asking(
+    app, window: MainWindow, monkeypatch
+):
+    """The story open in the main window stays open under the game's window
+    and is back when it closes, so a memory-only chat or scene loses nothing.
+    The question it was asked said otherwise, and its Yes discarded a memory
+    scene (the mode audit, Oct 29 2026)."""
+    story_id = window.visual_window.session.story.id
+    window.visual_window.close()
+    pump(app)
+    asked = []
+    monkeypatch.setattr(window, "_private_allows_close", lambda: asked.append(1) or False)
+    window.open_story(story_id)
+    pump(app)
+    assert isinstance(window.visual_window, VisualWindow) and not asked
+
+
+def test_one_game_at_a_time_and_quit_quits(app, window: MainWindow, monkeypatch):
+    """A second open replaced the game's window, and the first's close then
+    deleted the second unsaved. Game → Quit only closed the game."""
+    import sealedlore.gui.visual_window as visual_window
+
+    game = window.visual_window
+    window.open_story(game.session.story.id)
+    pump(app)
+    assert window.visual_window is game
+    closed = []
+    monkeypatch.setattr(
+        visual_window.QApplication, "closeAllWindows", staticmethod(lambda: closed.append(1))
+    )
+    game._quit()
+    pump(app)
+    assert window.visual_window is None and closed == [1]
+
+
+def test_a_visual_story_with_nobody_played_asks_who(app, tmp_path: Path, story, cast, monkeypatch):
+    """A scenario leaves the player to whoever imports it: the game asks, as
+    a sample does, rather than opening on nobody."""
+    import sealedlore.gui.main_window as main_window
+
+    bundle, art = _visual_bundle(story, cast)
+    story.held_character_id = None
+    save_story_bundle(bundle, root=tmp_path)
+    save_world_art(story.id, art, tmp_path)
+    asked = []
+
+    def choose(_parent, _title, _label, labels, *_args):
+        asked.append(labels)
+        return "Maela Orr", True
+
+    monkeypatch.setattr(main_window.QInputDialog, "getItem", staticmethod(choose))
+    main = MainWindow(root=tmp_path, use_mock=True)
+    main.open_story(story.id)
+    pump(app)
+    assert asked and "Maela Orr" in asked[0]
+    assert main.visual_window.session.held_name() == "Maela Orr"
+    main.visual_window.close()
+    pump(app)
+    main.close()
+
+
 def test_who_can_be_played_and_the_opening_s_hour():
     cast = [
         Character(id="a", name="A"),

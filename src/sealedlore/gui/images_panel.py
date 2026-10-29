@@ -42,7 +42,7 @@ from sealedlore.gui.picture_words import (
     USE_PLACE_LABEL,
 )
 from sealedlore.gui.ref_images import thumbnail_of
-from sealedlore.gui.transcript import IMAGE_ACTIONS, picture_caption
+from sealedlore.gui.transcript import FOR_CARDS, IMAGE_ACTIONS, picture_caption
 from sealedlore.gui.video_view import VIDEO_ACTIONS, video_caption
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, ImageRef
@@ -110,6 +110,7 @@ class ImagesPanel(QWidget):
         # pictures listed on every `set_images`.
         self._thumbs: dict[tuple, QPixmap] = {}
         self._thumbs_used: set[tuple] = set()
+        self._chat = False
         # The story's own pictures and videos (`list`, as it has always been).
         self.list = _Gallery(GALLERY_THUMB)
         self.list.customContextMenuRequested.connect(self._menu)
@@ -189,6 +190,7 @@ class ImagesPanel(QWidget):
         background_drawn_as: str = "",
         drawn_for_cards: set[str] | None = None,
         added: list[ImageRef] | None = None,
+        chat: bool = False,
     ) -> None:
         """`cast` and `lore`: the cards whose pictures to show (those the
         author may see), each picture under its card's name;
@@ -198,6 +200,8 @@ class ImagesPanel(QWidget):
         standing for the picture it was drawn as; `added`: the pictures
         added from disk to no card."""
         cast, lore = cast or [], lore or []
+        # A chat has no cards: nothing here offers to make a picture one's.
+        self._chat = chat
         on_cards = {ref.drawn_as for card in (*cast, *lore) for ref in card.reference_images}
         on_cards |= drawn_for_cards or set()
         if background:
@@ -351,6 +355,8 @@ class ImagesPanel(QWidget):
                 if key == "-":
                     menu.addSeparator()
                     continue
+                if self._chat and key in FOR_CARDS:
+                    continue
                 menu.addAction(text).triggered.connect(
                     lambda _checked=False, k=key: self.added_action_requested.emit(k, image_id)
                 )
@@ -361,6 +367,8 @@ class ImagesPanel(QWidget):
                 if key == "-":
                     menu.addSeparator()
                     continue
+                if self._chat and key in FOR_CARDS:
+                    continue
                 menu.addAction(text).triggered.connect(
                     lambda _checked=False, k=key: self.background_action_requested.emit(k)
                 )
@@ -370,6 +378,8 @@ class ImagesPanel(QWidget):
             for key, text in VIDEO_ACTIONS:
                 if key == "-":
                     menu.addSeparator()
+                    continue
+                if self._chat and key in FOR_CARDS:
                     continue
                 if key == "play":
                     key, text = "show", "Show in the story"
@@ -382,6 +392,8 @@ class ImagesPanel(QWidget):
         for key, text in IMAGE_ACTIONS:
             if key == "-":
                 menu.addSeparator()
+                continue
+            if self._chat and key in FOR_CARDS:
                 continue
             action = menu.addAction(text)
             action.triggered.connect(

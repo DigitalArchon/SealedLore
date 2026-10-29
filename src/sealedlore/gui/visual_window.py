@@ -29,6 +29,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QAction, QColor, QImage, QKeySequence, QPainter, QPixmap
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QHBoxLayout,
     QLabel,
@@ -543,7 +544,7 @@ class VisualWindow(QMainWindow):
         game.addAction(close)
         quit_action = QAction("&Quit", self)
         quit_action.setShortcut(QKeySequence("Ctrl+Q"))
-        quit_action.triggered.connect(self.close)
+        quit_action.triggered.connect(self._quit)
         game.addAction(quit_action)
         if self.session.story.visual:
             game.addSeparator()
@@ -1520,6 +1521,12 @@ class VisualWindow(QMainWindow):
         super().resizeEvent(event)
         if self._fade.isVisible():
             self._fade.resize(self.area_view.view.viewport().size())
+
+    def _quit(self) -> None:
+        """Quit is the app's, as everywhere: it only closed the game. The
+        main window closes after it, asking what it asks (a memory-only chat)."""
+        if self.close():
+            QApplication.closeAllWindows()
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt's name
         self._settle_figure()

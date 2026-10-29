@@ -96,6 +96,9 @@ def scenario_from_bundle(
         chat_prompt=story.chat_prompt,
         chat_tail=story.chat_tail,
         chat_character=story.chat_character,
+        visual_design=(
+            story.visual_design.model_copy(deep=True) if story.visual_design is not None else None
+        ),
         reference_images=[ref.model_copy() for ref in story.reference_images],
         prompt_edits={key: edit.model_copy() for key, edit in story.prompt_edits.items()},
         reference_files={
@@ -163,6 +166,11 @@ def bundle_from_scenario(
         chat_prompt=scenario.chat_prompt,
         chat_tail=scenario.chat_tail,
         chat_character=scenario.chat_character,
+        visual_design=(
+            scenario.visual_design.model_copy(deep=True)
+            if scenario.visual_design is not None
+            else None
+        ),
         reference_images=[ref.model_copy() for ref in scenario.reference_images],
         prompt_edits={key: edit.model_copy() for key, edit in scenario.prompt_edits.items()},
     )
@@ -213,6 +221,13 @@ def fresh_playthrough(
     """
     bundle = bundle_from_scenario(scenario_from_bundle(source, files, world_art), title=title)
     bundle.story.defaults = source.story.defaults.model_copy(deep=True)
+    if source.story.visual and source.story.held_character_id in {c.id for c in bundle.cast}:
+        # A visual story's player is chosen as it is made (a scenario leaves
+        # it to whoever imports it): the same game again is the same player.
+        held = source.story.held_character_id
+        bundle.story.held_character_id = held
+        if held not in bundle.story.scene.present_character_ids:
+            bundle.story.scene.present_character_ids.append(held)
     return bundle
 
 

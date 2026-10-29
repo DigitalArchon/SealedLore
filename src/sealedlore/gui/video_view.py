@@ -431,7 +431,7 @@ class VideoMessageWidget(QFrame):
     # (action, video id): play, open, prompt, save, continue, frame, again, delete.
     action_requested = Signal(str, str)
 
-    def __init__(self, item: VideoItem) -> None:
+    def __init__(self, item: VideoItem, *, chat: bool = False) -> None:
         super().__init__()
         video = item.record
         self.setObjectName("message")
@@ -454,6 +454,8 @@ class VideoMessageWidget(QFrame):
                 continue  # a memory-only chat's video has no file to open
             if key in ("continue", "frame") and not video.last_frame:
                 continue
+            if key == "frame" and chat:
+                continue  # a card's picture, and a chat has no cards
             action = menu.addAction(text)
             action.triggered.connect(lambda _checked=False, k=key: self._act(k))
         more = QToolButton()

@@ -1378,8 +1378,8 @@ class StorySession(
         Only an in-character turn is an attempt. Direction and Narration are
         the author's fact, not something the dice get a say in.
         """
-        if turn.agency_mode != "dice" or turn.roll is not None:
-            return turn
+        if turn.agency_mode != "dice" or turn.roll is not None or self.story.chat:
+            return turn  # a chat has no characters and no dice
         held = self._character(turn.controlled_character_id)
         if held is None or turn.speaker_id != held.id:
             return turn
@@ -1395,7 +1395,10 @@ class StorySession(
             kind="user",
             speaker_id=turn.speaker_id,
             content=turn.user_text,
-            ooc=turn.ooc,
+            # A chat's model is sent each message as written (render_chat_node):
+            # a note would be kept and never sent (New branch from here copied
+            # one an older edit had left).
+            ooc=None if self.story.chat else turn.ooc,
             meta=NodeMeta(
                 agency_mode=turn.agency_mode,
                 npc_scope=turn.npc_scope,
@@ -2699,7 +2702,10 @@ class StorySession(
         if not prose.strip():
             return []
         supporting = self.bundle.supporting
-        on_file = [c.name for c in (*self.cast, *supporting.characters)]
+        # Only who the models may know of: a plot-hidden card's name went to
+        # the summariser as "already on file" (the mode audit, Oct 29 2026).
+        # The reply is still checked against every card (`known_names`).
+        on_file = [c.name for c in (*self.visible_cast(), *self.visible_supporting())]
         on_file += [suggestion.name for suggestion in supporting.suggestions]
         request = ChatRequest(
             model=self.summarization_model,

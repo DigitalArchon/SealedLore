@@ -28,6 +28,7 @@ from sealedlore.models.story import (
     StyleDirectives,
     WorldActivity,
 )
+from sealedlore.models.visual import VisualDesign
 from sealedlore.models.world import WorldArt, WorldDelta
 
 SCENARIO_FORMAT = "sealedlore-scenario"
@@ -91,6 +92,9 @@ class Scenario(BaseModel):
     chat_tail: str = ""
     # A chat that keeps a map: the name the map tracks the user by.
     chat_character: str = ""
+    # A visual story's predesigned sheet (models/visual.py: its people, locks,
+    # flavour, overmap): without it a copy was a game with nobody in it.
+    visual_design: VisualDesign | None = None
     reference_images: list[ImageRef] = Field(default_factory=list)
     # The story's own edits to the prompt texts: part of how it is told.
     prompt_edits: dict[str, PromptEdit] = Field(default_factory=dict)

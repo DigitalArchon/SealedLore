@@ -67,6 +67,8 @@ class PrivateWindow:
         self._pending_private_summary: str | None = None
         self._summarising = False
         self._tee_thread: QThread | None = None
+        # Every attestation still running, an older story's too: waited for on close.
+        self._attesting: list[QThread] = []
         self._tee_worker: GenerationWorker | None = None
         self._tee_state = ""
         # The private/ model nano-gpt no longer offers, found when it was
@@ -360,8 +362,18 @@ class PrivateWindow:
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.finished.connect(thread.quit)
-        thread.finished.connect(lambda: self._on_attested(span_id, tee, result, failure, retired))
+        # Its own story and thread go with the result: another TEE chat opened
+        # meanwhile took A's attestation as its own, and a finishing thread
+        # cleared the newer one's references (the mode audit, Oct 29 2026).
+        # The lambda holds the worker, as a running worker must be held.
+        session = self.session
+        thread.finished.connect(
+            lambda w=worker, t=thread: self._on_attested(
+                span_id, tee, result, failure, retired, session=session, thread=t
+            )
+        )
         self._tee_worker, self._tee_thread = worker, thread
+        self._attesting.append(thread)
         self._tee_state = "checking…"
         self._refresh_model_button()
         thread.start()
@@ -373,8 +385,18 @@ class PrivateWindow:
         result: list,
         failure: list,
         retired: list | None = None,
+        *,
+        session=None,
+        thread: QThread | None = None,
     ) -> None:
-        self._tee_worker, self._tee_thread = None, None
+        if thread in self._attesting:
+            self._attesting.remove(thread)
+        if thread is None or self._tee_thread is thread:
+            self._tee_worker, self._tee_thread = None, None
+        if session is not None and self.session is not session:
+            if tee is not None:
+                tee.close()
+            return  # for a story no longer open
         span = self.session.open_span if self.session is not None else None
         for_chat = span_id is None
         if (
@@ -843,5 +865,5 @@ class PrivateWindow:
         return True
 
     def _wait_for_attestation(self) -> None:
-        if self._tee_thread is not None:
-            self._tee_thread.wait(35_000)
+        for thread in list(self._attesting):
+            thread.wait(35_000)

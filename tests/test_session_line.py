@@ -17,6 +17,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 from sealedlore.engine.session import StorySession  # noqa: E402
 from sealedlore.gui.session_line import describe_session  # noqa: E402
 from sealedlore.models.config import Config, ProviderConfig  # noqa: E402
+from sealedlore.models.plot import Plot  # noqa: E402
 from sealedlore.models.route import ModelRoute  # noqa: E402
 from sealedlore.models.story import Story  # noqa: E402
 from sealedlore.providers.mock import MockChatProvider  # noqa: E402
@@ -61,6 +62,11 @@ def test_a_story_lists_every_calls_model_and_route(tmp_path):
     assert line.startswith("Story · Saved on disk")
     assert "anthropic/claude-sonnet-4.6" in line
     assert "Scene read: z-ai/glm-5.3 (Cheapest · FP8+, paid)" in tip
+    # Only the calls this story makes: no plot, and none of a visual story's.
+    for role in ("Plot:", "Look:", "People:", "Plot keeper:"):
+        assert role not in tip
+    story.plot = Plot()
+    line, tip = describe_session(session_for(story, cfg, tmp_path))
     assert "Plot: z-ai/glm-5.3 (Cheapest · FP8+, paid)" in tip, "the plot falls back to the scene"
 
 

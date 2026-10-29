@@ -220,7 +220,8 @@ class ArchivalRuntime:
         scan = None
         if self.config.suggest_characters and not self.story.chat:
             supporting = self.bundle.supporting
-            on_file = [c.name for c in (*self.cast, *supporting.characters)]
+            # Never a plot-hidden card's name (scan_for_characters).
+            on_file = [c.name for c in (*self.visible_cast(), *self.visible_supporting())]
             on_file += [s.name for s in supporting.suggestions]
             scan = _Call(
                 request=ChatRequest(

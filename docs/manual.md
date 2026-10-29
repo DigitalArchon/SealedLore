@@ -471,7 +471,8 @@ the Stories list, show the same choices. A story saves itself as you go
 - **Open folder** shows the story's files in your file manager (also for a
   story that can't be read).
 - **Duplicate settings only** makes a new, unplayed story with the same world,
-  cast, lore, style and opening.
+  cast, lore, style and opening. For a visual story it is the same game from
+  its beginning, played as the same character.
 - **Duplicate entire story** copies everything: every branch, summary and
   question, and its cost history.
 - **Delete…** moves it to the desktop's Trash, so it can be restored. The Delete
@@ -1545,9 +1546,10 @@ inside or a door to go through it (the view fades through); **Map…** (or
 **M**) opens the map of the wider world to set out across it, and **Leave**
 walks on past an edge into the next stretch of country, the clock moving by
 the way's length. Everything is saved as you go, the log included, so
-closing the window (back to your stories; the story is in the Stories list,
-which says where the game's clock stands, and opens the game again) loses
-nothing. The people you meet, and the plot, are the model's;
+closing the window (**Game → Close**, back to your stories; the story is in
+the Stories list, which says where the game's clock stands, and opens the
+game again) loses nothing; **Game → Quit** quits SealedLore. A game shared
+as a scenario file asks who you play when it first opens. The people you meet, and the plot, are the model's;
 walking, doors, what you carry, what you can see and hear, and fights are
 the game's own rules. A click while you walk turns you at once, and the view
 glides along with you. Outdoors the weather the world was designed with
@@ -1932,8 +1934,8 @@ keeps Sigstore's public trust root in `~/.cache/sigstore-python` and
 conversation with a model in
 SealedLore's window: your system prompt and your messages, sent exactly as you
 write them, with none of the storytelling around them (no rules, cast, lore,
-scene, plot or side models). Branches, takes, Edit, Find, pictures and the
-cost all work as in a story, and a long chat is summarised in parts as a
+scene, plot, OOC notes, dice, Questions or side models). Branches, takes, Edit,
+Find, pictures and the cost all work as in a story, and a long chat is summarised in parts as a
 story is (Settings → Context), with a plain summariser.
 - **Keep in full** (a message's ⋯ menu) sends a message word for word even
   once its part of the chat is summarised: it rides after that part's

@@ -170,6 +170,125 @@ def test_editing_a_chat_message_offers_no_ooc_note(app, window, monkeypatch):
     assert mine.content == "Hi, I'm Ada Lovelace." and mine.ooc == "Left by an older edit."
 
 
+def test_a_story_opened_after_a_chat_speaks_as_the_character_held(app, window, monkeypatch, story):
+    """The mode audit (Oct 29 2026): the composer kept the speaker it had if
+    the next story's list had it, so a chat's hidden Narration opened the
+    story as "Playing Serrik / Speaking as Narration": an in-character turn
+    went in as prose and dice never rolled."""
+    assert window.composer.speaker.currentData() == "char-serrik"
+    make_chat(window, monkeypatch)
+    assert window.composer.speaker.currentData() != "char-serrik"
+    window.open_story(story.id)
+    assert window.composer.speaker.currentData() == "char-serrik"
+    assert window.composer.held.currentData() == "char-serrik"
+
+
+def test_a_chat_takes_back_and_branches_without_an_old_note(app, window, monkeypatch):
+    """A chat message can still carry an OOC note an edit left before chats
+    lost the field: Take back put it in a box whose toggle a chat hides, and
+    New branch from here showed it and copied it onto the new message."""
+    from sealedlore.providers.mock import MockChatProvider
+
+    make_chat(window, monkeypatch)
+    session = window.session
+    session.provider.responses = ["Hello there.", "Hello again."]
+    list(session.send(TurnRequest(speaker_id=CHAT_USER_ID, user_text="Hi.", ooc="Sent?")))
+    mine = session.path()[0]
+    assert mine.ooc is None, "a chat's turn keeps no note"
+    mine.ooc = "Left by an older edit."
+    window.reload_transcript()
+    window._return_turn(mine)
+    composer = window.composer
+    assert composer.text() == "Hi."
+    assert not composer.ooc_toggle.isChecked() and composer.ooc.isHidden()
+    assert composer.ooc.toPlainText() == ""
+    composer.input.clear()
+    list(session.send(TurnRequest(speaker_id=CHAT_USER_ID, user_text="Hi.")))
+    first = session.path()[0]
+    first.ooc = "Left by an older edit."
+    session.provider = MockChatProvider(["Another way."])
+    list(session.rewrite_from(first.id, "Hello, another way."))
+    assert session.path()[0].content == "Hello, another way."
+    assert session.path()[0].ooc is None
+
+
+def test_a_chat_s_menus_and_status_name_no_story_settings(app, window, monkeypatch):
+    """An empty chat has no Start story… (it was there, greyed), the View
+    menu's toggle speaks of the model, and Regenerate names no Length or
+    Outcome: a chat's retake is the same message again."""
+    window.statusBar().showMessage("Scene: public scene, situation updated", 60000)
+    make_chat(window, monkeypatch)
+    assert window.statusBar().currentMessage() == "", "the story's notice went with it"
+    assert not window.start_action.isVisible()
+    assert window.storyteller_view_action.text().replace("&", "") == "What the model sees"
+    assert window._shape_summary() == "Regenerating"
+    window.close_story()
+    assert window.storyteller_view_action.text().replace("&", "") == "What the storyteller sees"
+
+
+def test_a_story_opened_from_a_chat_opens_on_its_people(app, window, monkeypatch, story):
+    """People was still hidden from the chat when the first page was chosen,
+    and the pages refuse a hidden one: the story opened on Story so far."""
+    make_chat(window, monkeypatch)
+    assert window.right_tabs.currentWidget() is window.summaries_panel
+    window.open_story(story.id)
+    assert window.right_tabs.currentWidget() is window.people_page
+
+
+def test_a_chat_shows_none_of_a_story_s_own_menu_items_or_card_pictures(
+    app, window, monkeypatch
+):
+    """Greyed in a chat, the review, the plot and the cards' pictures were one
+    more thing to read past; and "Use as a character's picture…" was offered
+    on a chat's pictures, and did nothing."""
+    from sealedlore.gui.transcript import ImageMessageWidget
+    from sealedlore.models.image import GeneratedImage
+
+    story_only = (
+        window.review_action,
+        window.import_plot_action,
+        window.last_review_action,
+        window.undo_review_action,
+        window.portraits_action,
+    )
+    assert all(action.isVisible() for action in story_only)
+    picture = GeneratedImage(file="images/p.png", prompt="p", model="m", size="1k")
+    texts = lambda w: [a.text() for a in w.more_button.menu().actions()]  # noqa: E731
+    assert "Use as a place's picture…" in texts(ImageMessageWidget(picture, None))
+    make_chat(window, monkeypatch)
+    assert not any(action.isVisible() for action in story_only)
+    in_chat = texts(ImageMessageWidget(picture, None, chat=True))
+    assert "Open full size" in in_chat
+    assert not any(text.startswith("Use as a") for text in in_chat)
+    window.close_story()
+    assert all(action.isVisible() for action in story_only)
+
+
+def test_a_chat_s_messages_speak_of_a_chat(app, window, monkeypatch):
+    """⋯ said "Take back this turn", "Regenerate this passage"; the private
+    part's summary was a "Private scene"."""
+    make_chat(window, monkeypatch)
+    session = window.session
+    session.provider.responses = ["Hello there."]
+    list(session.send(TurnRequest(speaker_id=CHAT_USER_ID, user_text="Hi.")))
+    window.reload_transcript()
+    mine, reply = (window.transcript.message_widget(n.id) for n in session.path())
+    assert mine.actions_["take_back"].text() == "Take back this message"
+    assert reply.actions_["regenerate"].text() == "Regenerate this reply"
+    assert reply.actions_["illustrate"].text() == "Illustrate this reply…"
+    assert window.view_toggle.written.text() == "Full chat"
+    assert window.find_action.text().replace("&", "") == "Find in chat…"
+
+
+def test_close_story_takes_the_over_budget_banner_away(app, window):
+    """Only refresh_summaries hid it, and with no story it returns early: it
+    stood over the start page, its Archive now doing nothing."""
+    window.over_budget.show_over(full_total=70_000, budget=60_000, left_out=4)
+    assert not window.over_budget.isHidden()
+    window.close_story()
+    assert window.over_budget.isHidden()
+
+
 def test_setup_for_a_chat_is_its_name_and_system_prompt(app, window, monkeypatch):
     make_chat(window, monkeypatch)
     dialog = SetupDialog(window.session.story, window.session.cast)

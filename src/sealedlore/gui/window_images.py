@@ -262,6 +262,7 @@ class ImagesWindow:
             background_drawn_as=session.story.background_drawn_as,
             drawn_for_cards=self._drawn_for_cards(),
             added=list(session.story.reference_images),
+            chat=session.story.chat,
         )
 
     def _media_cards(self) -> tuple[list, list]:

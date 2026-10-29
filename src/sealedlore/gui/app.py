@@ -150,7 +150,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     if options.story:
         window.open_story(options.story)
     window.place_on_screen()
-    window.show()
+    # A visual story plays in its own window, this one hidden until it closes
+    # (shown beside it, the same story could be opened twice).
+    if getattr(window, "visual_window", None) is None:
+        window.show()
     return app.exec()
 
 

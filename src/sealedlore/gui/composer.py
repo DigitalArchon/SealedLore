@@ -841,8 +841,11 @@ class Composer(QWidget):
         """
         meta = node.meta
         self.input.setPlainText(node.content)
-        self.ooc_toggle.setChecked(bool(node.ooc))
-        self.ooc.setPlainText(node.ooc or "")
+        # A chat has no OOC note: one an older edit left on its message would
+        # open a box its hidden toggle can't close.
+        ooc = None if self._chat else node.ooc
+        self.ooc_toggle.setChecked(bool(ooc))
+        self.ooc.setPlainText(ooc or "")
         if meta.controlled_character_id:
             self._select(self.held, meta.controlled_character_id)
         self._select(self.speaker, node.speaker_id)

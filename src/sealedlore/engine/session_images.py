@@ -216,7 +216,9 @@ class ImageRuntime:
                 summaries=split.summaries,
                 nodes_by_id=index_nodes(self.nodes),
                 estimator=self.estimator,
-                options=self.assembly_options(),
+                # In a private part, the private model's budget, as a story's
+                # scene has (it went at the main budget, ~1.5x the part's turns).
+                options=self.private_options() if span is not None else self.assembly_options(),
                 # The chat's tail is for its replies, not the picture's prompt.
                 with_chat_tail=False,
             )

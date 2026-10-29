@@ -466,3 +466,22 @@ def test_a_chat_is_never_sent_the_storys_stand_in_first_message(tmp_path):
         and sent[2] == ("assistant", "ok.")
         for sent in requests
     ), "no request was both summarised and cut after the summary"
+
+
+def test_a_private_part_s_picture_prompt_is_written_at_the_private_budget(tmp_path: Path):
+    """The picture writer in a chat's private part had the main budget, so
+    the private model was sent more of the chat than its own turns (44
+    messages against 30): a story's scene already used the private budget
+    (the mode audit, Oct 29 2026)."""
+    long = "word " * 900
+    config = make_config(auto_archive=False)
+    session, _provider = chat_session(tmp_path, [long] * 40, config=config)
+    for i in range(20):
+        say(session, f"Question {i}: " + long)
+    private = MockChatProvider([long, '{"prompt": "a cat", "references": []}'])
+    session.enter_private(keep="disk", provider=private, model="private-model")
+    list(session.send(TurnRequest(speaker_id=CHAT_USER_ID, user_text="A private thing.")))
+    assert session.last_prompt.excluded_node_ids, "the private budget left messages out"
+    session.write_image_prompt("a cat")
+    turn, picture = private.requests[0], private.requests[-1]
+    assert len(picture.messages) <= len(turn.messages) + 2

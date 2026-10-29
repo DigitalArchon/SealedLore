@@ -301,7 +301,8 @@ class MessageWidget(QFrame):
         self.edit_button.setText("Edit")
         self.edit_button.setToolTip(
             "Correct this message in place (summaries covering it are marked stale). "
-            "To take the story another way, use ⋯ → New branch from here…"
+            f"To take the {'chat' if keep_full is not None else 'story'} another way, "
+            "use ⋯ → New branch from here…"
         )
         self.edit_button.clicked.connect(self.begin_edit)
         # Hidden when unwanted, never shown here: shown before it has a
@@ -419,11 +420,14 @@ class MessageWidget(QFrame):
         self, row: QHBoxLayout, assistant: bool, rerollable: bool, retakeable: bool = True
     ) -> None:
         menu = QMenu(self)
+        # A chat's are messages and replies, and it is a chat: a story's words
+        # read oddly there (the mode audit, Oct 29 2026).
+        chat = self._keep_full is not None
         if not assistant:
             # The author's own turn, back in the composer with the settings it
             # was sent with: the alternative is copying the text out, deleting
             # the turn and its reply, and pasting it back in by hand.
-            take_back = menu.addAction("Take back this turn")
+            take_back = menu.addAction("Take back this message" if chat else "Take back this turn")
             take_back.setToolTip(
                 "Return this turn to the composer to edit and send again; "
                 "it and everything after it are removed"
@@ -431,10 +435,15 @@ class MessageWidget(QFrame):
             take_back.triggered.connect(lambda: self.take_back_requested.emit(self.node_id))
             self.actions_["take_back"] = take_back
         if assistant and retakeable:
-            regenerate = menu.addAction("Regenerate this passage")
+            regenerate = menu.addAction(
+                "Regenerate this reply" if chat else "Regenerate this passage"
+            )
             regenerate.setToolTip(
-                "Write another take of this passage, in its place; this one is kept (‹ ›), "
-                "and the story after it stays"
+                "Write another take of this reply, in its place; this one is kept (‹ ›), "
+                "and the chat after it stays"
+                if chat
+                else "Write another take of this passage, in its place; this one is kept "
+                "(‹ ›), and the story after it stays"
             )
             regenerate.triggered.connect(lambda: self.regenerate_requested.emit(self.node_id))
             self.actions_["regenerate"] = regenerate
@@ -457,14 +466,21 @@ class MessageWidget(QFrame):
             mark.triggered.connect(lambda: self.review_mark_requested.emit(self.node_id))
             self.actions_["review_mark"] = mark
         if assistant:
-            illustrate = menu.addAction("Illustrate this passage…")
-            illustrate.setToolTip("Write an image prompt for the moment this passage ends on")
+            illustrate = menu.addAction(
+                "Illustrate this reply…" if chat else "Illustrate this passage…"
+            )
+            illustrate.setToolTip(
+                "Write an image prompt for this reply"
+                if chat
+                else "Write an image prompt for the moment this passage ends on"
+            )
             illustrate.triggered.connect(lambda: self.illustrate_requested.emit(self.node_id))
             self.actions_["illustrate"] = illustrate
-            film = menu.addAction("Video of this passage…")
+            film = menu.addAction("Video of this reply…" if chat else "Video of this passage…")
             film.setToolTip(
-                "A few seconds of video of the moment this passage ends on. Far dearer than "
-                "a picture: you see the price before anything is sent"
+                "A few seconds of video of "
+                + ("this reply" if chat else "the moment this passage ends on")
+                + ". Far dearer than a picture: you see the price before anything is sent"
             )
             film.triggered.connect(lambda: self.video_requested.emit(self.node_id))
             self.actions_["video"] = film
@@ -480,8 +496,12 @@ class MessageWidget(QFrame):
         rewrite = menu.addAction("New branch from here…")
         rewrite.setToolTip(
             "Start a new branch at this message, changed or as it is"
-            + (" (your turn is answered at once)" if not assistant else "")
-            + "; the story as it is now is kept, under its own name"
+            + (
+                f" (your {'message' if chat else 'turn'} is answered at once)"
+                if not assistant
+                else ""
+            )
+            + f"; the {'chat' if chat else 'story'} as it is now is kept, under its own name"
         )
         rewrite.triggered.connect(lambda: self.begin_edit(rewrite=True))
         self.actions_["rewrite"] = rewrite
@@ -615,9 +635,7 @@ class MessageWidget(QFrame):
         if self._save_button is None:
             return
         self._save_button.setEnabled(not self._busy)
-        self._save_button.setToolTip(
-            "Saved once the story's current job is done" if self._busy else ""
-        )
+        self._save_button.setToolTip("Saved once the current job is done" if self._busy else "")
 
     def editing(self) -> bool:
         return self._editor is not None
@@ -766,7 +784,7 @@ class ImageMessageWidget(QFrame):
     # (action, image id): open, prompt, save, reference, again, background, delete.
     action_requested = Signal(str, str)
 
-    def __init__(self, image: GeneratedImage, data: bytes | None) -> None:
+    def __init__(self, image: GeneratedImage, data: bytes | None, *, chat: bool = False) -> None:
         super().__init__()
         self.setObjectName("message")
         self.setProperty("kind", "picture")
@@ -783,6 +801,8 @@ class ImageMessageWidget(QFrame):
         for key, text in IMAGE_ACTIONS:
             if key == "-":
                 menu.addSeparator()
+                continue
+            if chat and key in FOR_CARDS:
                 continue
             action = menu.addAction(text)
             action.triggered.connect(
@@ -818,6 +838,10 @@ class ImageMessageWidget(QFrame):
             self.picture.clicked.connect(lambda: self.action_requested.emit("open", self.image_id))
             layout.addWidget(self.picture)
 
+
+# What a picture offers only where there are cards: a chat has none, and
+# these did nothing there (the mode audit, Oct 29 2026).
+FOR_CARDS = frozenset({"character", "place", "frame"})
 
 IMAGE_ACTIONS = (
     ("open", "Open full size"),
@@ -994,6 +1018,7 @@ class SummaryCardWidget(QFrame):
 
 
 FULL_STORY_LABEL = "Full story"
+FULL_CHAT_LABEL = "Full chat"
 STORYTELLER_VIEW_LABEL = "What the storyteller sees"
 CHAT_VIEW_LABEL = "What the model sees"
 
@@ -1044,6 +1069,20 @@ class ViewToggle(QWidget):
     def set_chat(self, chat: bool) -> None:
         """A simple chat has a model, not a storyteller."""
         self.sent.setText(CHAT_VIEW_LABEL if chat else STORYTELLER_VIEW_LABEL)
+        self.written.setText(FULL_CHAT_LABEL if chat else FULL_STORY_LABEL)
+        self.written.setToolTip(
+            "The whole chat, every message, including those the model now gets as a summary"
+            if chat
+            else "The whole story, every message, including those the storyteller now gets "
+            "as a chapter summary"
+        )
+        self.sent.setToolTip(
+            "What the model is sent: summaries where older messages have been summarised, "
+            "then the messages it gets word for word (Ctrl+Shift+V)"
+            if chat
+            else "What the storyteller is sent: chapter summaries where older messages have "
+            "been summarised, then the messages it gets word for word (Ctrl+Shift+V)"
+        )
 
 
 @dataclass(frozen=True)
@@ -1362,14 +1401,16 @@ class TranscriptView(QScrollArea):
         )
 
     def add_picture(self, image: GeneratedImage, data: bytes | None) -> ImageMessageWidget:
-        widget = ImageMessageWidget(image, data)
+        widget = ImageMessageWidget(image, data, chat=self._chat)
         widget.action_requested.connect(self.image_action_requested)
         self._place(widget)
         return widget
 
     def add_video(self, item: VideoItem) -> QFrame:
         widget = (
-            VideoMessageWidget(item) if item.record.status == "done" else PendingVideoWidget(item)
+            VideoMessageWidget(item, chat=self._chat)
+            if item.record.status == "done"
+            else PendingVideoWidget(item)
         )
         widget.action_requested.connect(self.video_action_requested)
         self._place(widget)
@@ -1471,7 +1512,11 @@ class TranscriptView(QScrollArea):
 
         def note() -> None:
             label = QLabel(
-                "What the storyteller is given as the story so far: summaries where the "
+                "What the model is given of the chat so far: summaries where older "
+                "messages have been summarised, then the messages sent word for word. The "
+                "system prompt is on the Prompt page (View → Prompt page (advanced))."
+                if self._chat
+                else "What the storyteller is given as the story so far: summaries where the "
                 "prose has been archived, then the passages sent word for word. The world, "
                 "cast, lore and scene are on the Prompt page (View → Prompt page (advanced))."
             )
@@ -1532,8 +1577,11 @@ class TranscriptView(QScrollArea):
                 label += f"  ·  {chip_text(node.meta.roll)}"
         if unsent:
             label += "  ·  not sent: over the budget"
+        # A chat's private part is a part, as it says everywhere else
+        # (private_dialogs.chat_words); a story's is a scene.
+        part = "part" if self._chat else "scene"
         if node.meta.private_summary_of:
-            label = "Private scene  ·  summary"
+            label = f"Private {part}  ·  summary"
         elif node.meta.private_span or self._tee_look:
             if node.meta.private_span:
                 label += "  ·  private"
@@ -1563,13 +1611,13 @@ class TranscriptView(QScrollArea):
             widget.setToolTip("A TEE chat: every message goes to the attested model only.")
         if node.meta.private_span:
             widget.setProperty("private", "true")
-            widget.setToolTip("Written in a private scene: only the private model ever saw it.")
+            widget.setToolTip(f"Written in a private {part}: only the private model ever saw it.")
         if node.meta.tee in TEE_MARK_TIPS:
             widget.setToolTip(TEE_MARK_TIPS[node.meta.tee])
         if node.meta.private_summary_of:
             widget.setProperty("privatesummary", "true")
             widget.setToolTip(
-                "The approved summary of a private scene: all any other model knows of it."
+                f"The approved summary of a private {part}: all any other model knows of it."
             )
         for model in node.meta.reasoning_caught:
             widget.add_note("⚠ " + caught_note(model))
