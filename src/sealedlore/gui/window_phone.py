@@ -68,6 +68,9 @@ ALREADY_QUEUED = "A turn is already waiting to go."
 NO_ENDPOINT = "Set up an endpoint on the desktop first."
 LEAVING_ASKS = "Leaving this story needs an answer on the desktop."
 NOT_IN_PRIVATE = "That waits until the private scene ends."
+# While a visual story is played the window under it, and its story, wait
+# for the game to close (the author, Oct 29 2026): a phone played on behind it.
+PLAYING_A_GAME = "The desktop is playing a visual story. Close the game there first."
 NO_TOR = (
     "Phone access needs tor, and none was found. The AppImage brings its own; running "
     "from source, install tor (for example: sudo apt install tor). Only the program is "
@@ -423,6 +426,8 @@ class PhoneWindow:
 
     def _phone_refusal(self, *, sending: bool = False) -> None:
         """Raises Refused when the window can't act for a phone now."""
+        if self._playing_a_game():
+            raise Refused(409, PLAYING_A_GAME)
         if QApplication.activeModalWidget() is not None:
             raise Refused(409, WAITING_ON_DESKTOP)
         if self._busy:
@@ -435,6 +440,9 @@ class PhoneWindow:
         block = self.session.tee_block if self.session is not None else None
         if block:
             raise Refused(409, f"The private model can't be used now: {block}")
+
+    def _playing_a_game(self) -> bool:
+        return getattr(self, "visual_window", None) is not None
 
     def _phone_private_tag(self) -> str | None:
         session = self.session
@@ -666,6 +674,7 @@ class _Backend:
             "background": window._background,
             "queued": window._queued is not None,
             "desktop_waiting": QApplication.activeModalWidget() is not None,
+            "desktop_playing": window._playing_a_game(),
             "private": window._phone_private_tag(),
             "version": self.service.version,
         }
@@ -734,6 +743,8 @@ class _Backend:
 
     def open(self, story_id: str) -> None:
         window = self.window
+        if window._playing_a_game():
+            raise Refused(409, PLAYING_A_GAME)
         if window._busy:
             raise Refused(409, BUSY)
         if QApplication.activeModalWidget() is not None:

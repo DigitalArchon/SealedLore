@@ -113,6 +113,10 @@ class ChatWindow:
             "What the &model sees" if chat else "What the &storyteller sees"
         )
         self.find_action.setText("&Find in chat…" if chat else "&Find in story…")
+        # A chat's summaries are parts, as its cards say.
+        self.chapter_markdown_action.setText(
+            "Current &part as Markdown…" if chat else "Current &chapter as Markdown…"
+        )
         for page in (
             self.people_page,
             self.scene_panel,

@@ -350,6 +350,26 @@ def test_a_dialog_on_the_desktop_holds_the_phone_back(app, tmp_path, sockets, st
     window.close()
 
 
+def test_a_game_on_the_desktop_holds_the_phone_back(app, tmp_path, sockets, story, cast):
+    """While a visual story is played, the window under it waits, and so do
+    the phones: they played on behind the game, or opened another story into
+    the hidden window (the author, Oct 29 2026)."""
+    window, phone = open_window(tmp_path, sockets, story, cast, ["x"])
+    window.visual_window = object()  # a game's window, open over this one
+    try:
+        status, answer = phone.ask(
+            "POST", "/api/turn", {"text": "Hi", "speaker": NARRATOR_SPEAKER_ID}
+        )
+        assert (status, answer) == (409, {"error": window_phone.PLAYING_A_GAME})
+        status, answer = phone.ask("POST", f"/api/stories/{story.id}/open")
+        assert (status, answer) == (409, {"error": window_phone.PLAYING_A_GAME})
+        assert phone.ask("GET", "/api/state")[1]["desktop_playing"] is True
+    finally:
+        window.visual_window = None
+    assert phone.ask("GET", "/api/state")[1]["desktop_playing"] is False
+    window.close()
+
+
 def test_a_retake_and_a_take_switch_from_the_phone(app, tmp_path, sockets, story, cast):
     window, phone = open_window(
         tmp_path, sockets, story, cast, ["The door gives.", "The door holds."]

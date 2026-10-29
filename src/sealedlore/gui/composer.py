@@ -832,6 +832,21 @@ class Composer(QWidget):
             return None
         return self.ooc.toPlainText().strip() or None
 
+    def draft(self) -> tuple[str, str | None]:
+        """What is typed and not yet sent: the text as it stands and the OOC
+        note (None with OOC off). Kept per story by the window."""
+        ooc = self.ooc.toPlainText() if self.ooc_toggle.isChecked() else None
+        return self.input.toPlainText(), ooc
+
+    def set_draft(self, text: str = "", ooc: str | None = None) -> None:
+        """A story's unsent draft back in the composer (or an empty one); a
+        chat has no OOC note to put back."""
+        self.input.setPlainText(text)
+        keep = ooc is not None and not self._chat
+        self.ooc_toggle.setChecked(keep)
+        self.ooc.setVisible(keep)
+        self.ooc.setPlainText(ooc if keep else "")
+
     def restore_turn(self, node: Node) -> None:
         """Put a sent turn back in the composer, as it was sent (Take back).
 

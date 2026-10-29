@@ -399,13 +399,15 @@ def assemble_question(
     rendered: str | None = None,
     the_map: str = "",
     scene: SceneState | None = None,
+    story_time: str = "",
 ) -> AssembledPrompt:
     """Assemble an out-of-character question about the story (an aside).
 
     `rendered` replaces the author's question and its rules with a request
     of the program's own (the plot asking how a skipped-over event went),
     on the same cached prefix. `the_map` is the local map, and `scene` the
-    card as the map has it, as a turn has them.
+    card as the map has it, as a turn has them; `story_time` the plot's
+    events the author's character knows of, as a turn has them.
 
     Everything ahead of the tail is exactly what a story turn sends, so the
     question rides on the same cached prefix. `history_nodes` is the whole
@@ -422,6 +424,7 @@ def assemble_question(
         # every turn, and a new card must not cost a cache miss.
         (SECTION_SUPPORTING, render_supporting_block(supporting, texts)),
         (SECTION_SCENE_LOG, render_scene_log_block(scene_log, texts)),
+        (SECTION_STORY_TIME, story_time),
         (
             SECTION_SCENE,
             render_scene_block(

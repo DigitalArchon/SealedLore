@@ -318,6 +318,10 @@ class MainWindow(
         # Archival and summary rebuilds ride the same worker as generation but
         # produce no transcript message and no generation result.
         self._streaming_job = True
+        # Each story's unsent draft, and the story the composer's draft is for
+        # (`_keep_draft`).
+        self._drafts: dict[str, tuple[str, str | None]] = {}
+        self._draft_of: str | None = None
         self._staleness_dismissed = False
         # (leaf, held) where the author chose to leave the held character
         # off the roster: the banner stays away until either changes.
@@ -834,6 +838,25 @@ class MainWindow(
         stop_action.triggered.connect(self._on_escape)
         self.addAction(stop_action)
 
+    def _keep_draft(self) -> None:
+        """Keep what is typed for the story it was typed in (`_draft_of`): it
+        carried into the next story or chat, where Enter sent it (the author,
+        Oct 29 2026: separate per story). In memory, for the run: a
+        memory-only chat's draft is never written either."""
+        if self._draft_of is None:
+            return
+        text, ooc = self.composer.draft()
+        if text.strip() or (ooc or "").strip():
+            self._drafts[self._draft_of] = (text, ooc)
+        else:
+            self._drafts.pop(self._draft_of, None)
+
+    def _restore_draft(self, story_id: str | None) -> None:
+        """The draft kept for `story_id` back in the composer, or none."""
+        text, ooc = self._drafts.get(story_id, ("", None)) if story_id else ("", None)
+        self.composer.set_draft(text, ooc)
+        self._draft_of = story_id
+
     def _show_first_page(self) -> None:
         """The page a story opens on: who is in it, by their faces (People);
         a chat, which has no cast, its chapters."""
@@ -1110,12 +1133,11 @@ class MainWindow(
         if parsed.scenario.world_base is None:
             self._warn_plain("No map", f"{path.name} has no map to play on.")
             return
-        provider_config = self.config.active_provider()
-        model = provider_config.model if provider_config and provider_config.model else None
         names = {
             p: n for n, p in ((n, samples_dir() / f"{s}.md") for n, s in VISUAL_SAMPLES.items())
         }
-        bundle = bundle_from_scenario(parsed.scenario, main_model=model, title=names.get(path))
+        # No model of its own: a game follows Settings' story model.
+        bundle = bundle_from_scenario(parsed.scenario, title=names.get(path))
         bundle.world_art, files = load_sidecar(path)
         bundle.pending_files.update(files)
         story = bundle.story
@@ -1190,6 +1212,7 @@ class MainWindow(
         )
         self.hide()
         self.visual_window.showMaximized()
+        self._phone_settled()  # the phones wait while the game is played
 
     def _visual_closed(self) -> None:
         """The game's window closed: back to the stories."""
@@ -1201,6 +1224,8 @@ class MainWindow(
         if self.session is None:
             # The start page's recent stories, with the game just played.
             self.reload_transcript()
+        else:
+            self._phone_settled()  # the phones may play again
         self.show()
 
     def import_sample(self, path: Path) -> None:
@@ -1468,6 +1493,7 @@ class MainWindow(
             return
         if self.session is not None and self.session.story.id == story_id:
             self._close_story()
+        self._drafts.pop(story_id, None)
         folder = story_dir(story_id, self.root)
         trashed = QFile.moveToTrash(str(folder))
         if isinstance(trashed, tuple):  # PySide6 returns (ok, path in trash)
@@ -1522,6 +1548,8 @@ class MainWindow(
             self.session.close(wait_seconds=0)
             self.session.save()
         self.session = None
+        self._keep_draft()
+        self._restore_draft(None)
         self._sync_stories_list()
         self.setWindowTitle("SealedLore")
         self.statusBar().clearMessage()
@@ -1756,6 +1784,7 @@ class MainWindow(
         # Narration" (the mode audit, Oct 29 2026). Emptied, as Close story
         # does, the speaker is the character held once the panels refresh.
         self.composer.clear_cast()
+        self._keep_draft()
         self.status_strip.reset_session_cost()
         self._refresh_story_cost()
         self._counted_summaries.clear()
@@ -1772,6 +1801,7 @@ class MainWindow(
         # Before the first page: a story opened from a chat found People still
         # hidden, and the pages refuse a hidden one (it opened on Story so far).
         self._sync_chat_ui()
+        self._restore_draft(self.session.story.id)
         self._show_first_page()
         self.refresh_images()
         self._resume_videos()
@@ -2424,7 +2454,7 @@ class MainWindow(
         path = self._save_path("Export as Markdown", ".md", "Markdown")
         if not path:
             return
-        subtitle = "The current chapter" if chapter_only else None
+        subtitle = (f"The current {'part' if story.chat else 'chapter'}") if chapter_only else None
         try:
             path.write_text(
                 render_markdown(
@@ -4677,12 +4707,11 @@ class MainWindow(
                 self.undo_review_action,
             ):
                 action.setEnabled(False)
-            if self.memory_chat:
-                # Its pictures are kept in memory with it (storage.picture_store),
-                # and it can be exported (a backup, Markdown) but not restarted
-                # or made a scenario.
-                for action in (self.restart_action, self.export_action):
-                    action.setEnabled(False)
+        # A memory-only chat's pictures are kept in memory with it
+        # (storage.picture_store), and it can be exported (a backup,
+        # Markdown) but not restarted or made a scenario: not shown, as above.
+        for action in (self.restart_action, self.export_action):
+            action.setVisible(not self.memory_chat)
 
     def _may_lose_queued(self) -> bool:
         """Closing with a turn still waiting to go: asked, Keep playing first."""

@@ -567,7 +567,8 @@ archiving, rebuilding summaries.
   (a private scene) and **OOC** (an out-of-character note). It stays open or
   closed as you leave it, opens by itself while a private scene, a roll or an
   OOC note is in use, and names an outcome or voices you chose beside it
-  while closed.
+  while closed. What you have typed and not sent stays with its story or
+  chat: open another and its own comes back (for as long as the app runs).
 - **Make room to read and write.** Drag the line between the story and the
   composer to make the box you type in taller or shorter; it stays as you
   leave it. Text boxes grow with what you write in them, the columns of
@@ -1283,7 +1284,9 @@ react?") and gets a plain answer rather than more story. It appears in the
 transcript as a question and is never sent as part of the story. Ask about
 something long past ("what did Marcus promise Elena?") and the chapters that a
 merged part stands for are searched too, so detail the merge condensed away
-can still be answered (see [Parts](#the-context-budget-and-archiving)).
+can still be answered (see [Parts](#the-context-budget-and-archiving)). In a
+story with a plot, a Question is told the plot's events your character knows
+of, as a turn is, and never one they don't.
 
 Every message's ⋯ menu has **Delete from here…**, which removes it and
 everything after it, after confirming. Deleting a reply leaves your turn in place, so Regenerate can take
@@ -1549,7 +1552,12 @@ the way's length. Everything is saved as you go, the log included, so
 closing the window (**Game → Close**, back to your stories; the story is in
 the Stories list, which says where the game's clock stands, and opens the
 game again) loses nothing; **Game → Quit** quits SealedLore. A game shared
-as a scenario file asks who you play when it first opens. The people you meet, and the plot, are the model's;
+as a scenario file asks who you play when it first opens. The line at the
+bottom right says what this session has spent and what the game has in all;
+**Game → Usage and cost…** has every call, and **Game → Back up this game…**
+writes a story backup (File → Import… brings it back as a game). The game
+uses the story model in Settings → Models, whatever it was when the game
+began. The people you meet, and the plot, are the model's;
 walking, doors, what you carry, what you can see and hear, and fights are
 the game's own rules. A click while you walk turns you at once, and the view
 glides along with you. Outdoors the weather the world was designed with
@@ -1975,7 +1983,8 @@ story is (Settings → Context), with a plain summariser.
   gone. Its pictures are kept in memory with it (reference pictures and the
   background too). To keep anything, write it out first: **Story → Export →
   Story backup…** (the whole chat, its pictures and costs), Markdown, or
-  **Media → Save all…** for the pictures and videos. File → Import… of such a backup
+  **Media → Save all…** for the pictures and videos (it can't be restarted or
+  made a scenario, so those aren't offered). File → Import… of such a backup
   asks whether to open it in memory again, writing nothing, or save it as an
   ordinary chat. In memory only is about your computer, not the model: on an
   ordinary model the provider still receives every message (on NanoGPT, your
@@ -2050,8 +2059,9 @@ branches, and **Forget this phone**. Pictures in the story show small, and
 whole when tapped.
 
 Some things wait for the desktop: while a question is open there (a summary
-to approve, say), the phone says "The desktop is waiting for an answer". A
-private scene is begun and ended on the desktop.
+to approve, say), the phone says "The desktop is waiting for an answer", and
+while a visual story is played there, "The desktop is playing a visual
+story". A private scene is begun and ended on the desktop.
 
 **Private scenes, memory-only chats and private models** can be played from
 the phone if their story is shared, and the computer asks first when you

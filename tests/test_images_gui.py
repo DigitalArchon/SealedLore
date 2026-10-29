@@ -508,7 +508,8 @@ def test_a_memory_chat_exports_and_comes_back_in_memory_or_saved(
     window._update_controls()
     for action in (window.archive_action, window.markdown_action):
         assert action.isEnabled(), action.text()
-    assert not window.restart_action.isEnabled() and not window.export_action.isEnabled()
+    # Not offered at all (greyed, they were one more thing to read past).
+    assert not window.restart_action.isVisible() and not window.export_action.isVisible()
 
     before = data_listing(tmp_path)
     backup = tmp_path_factory.mktemp("backups") / "chat.sealedlore-backup.json"

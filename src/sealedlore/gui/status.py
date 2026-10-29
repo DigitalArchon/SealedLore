@@ -456,41 +456,15 @@ class StatusStrip(QWidget):
         self._show_cost()
 
     def _show_cost(self) -> None:
-        if not self._cost_reported and not self._story_calls:
-            # Nothing has been sent yet: nothing to say.
-            self.cost_label.setText("")
-            self.cost_label.setToolTip("")
-            return
-        about = "~" if self._session_estimated else ""
-        session = f"{about}${self._session_cost:.4f}" if self._cost_reported else "unpriced"
-        text = f"This session {session}"
-        tip = "Spend since this story was opened."
-        if not self._cost_reported:
-            tip += (
-                " Unpriced: no call has reported a cost or had a listed price yet (an "
-                "endpoint such as Anthropic's lists no prices)."
-            )
-        if self._story_cost is not None and self._story_unpriced >= self._story_calls:
-            # Nothing priced at all: a total would read "≥ $0.0000" (the
-            # author, Oct 18 2026: say unpriced).
-            text += f"  ·  Story unpriced ({self._story_calls} calls)"
-            tip += (
-                f" Story: none of its {self._story_calls} call(s) reported a cost or had a "
-                "listed price (Story → Usage and cost…)."
-            )
-        elif self._story_cost is not None:
-            # No cost at all for some calls makes the total a lower bound;
-            # costs worked out from listed prices make it an estimate.
-            prefix = "≥ " if self._story_unpriced else ("~" if self._story_estimated else "")
-            text += f"  ·  Story {prefix}${self._story_cost:.4f}"
-            tip += " Story: every call in its API log (Story → Usage and cost…)."
-            if self._story_estimated:
-                tip += (
-                    f" {self._story_estimated} call(s) didn't report a cost; estimated from "
-                    "the model's listed prices."
-                )
-            if self._story_unpriced:
-                tip += f" {self._story_unpriced} call(s) have no cost and no known price."
+        text, tip = cost_words(
+            session=self._session_cost,
+            session_reported=self._cost_reported,
+            session_estimated=self._session_estimated,
+            total=self._story_cost,
+            calls=self._story_calls,
+            unpriced=self._story_unpriced,
+            estimated=self._story_estimated,
+        )
         self.cost_label.setText(text)
         self.cost_label.setToolTip(tip)
 
@@ -525,3 +499,56 @@ class StatusStrip(QWidget):
         self.set_budget(None)
         self.bar.setToolTip("")
         self.budget_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+
+def cost_words(
+    *,
+    session: float,
+    session_reported: bool,
+    session_estimated: bool,
+    total: float | None,
+    calls: int,
+    unpriced: int,
+    estimated: int,
+    whole: str = "Story",
+    opened: str = "this story was opened",
+    report: str = "Story → Usage and cost…",
+) -> tuple[str, str]:
+    """The spend line and its tooltip: this session's, and the whole
+    story's from its API log. `whole`, `opened` and `report` name what is
+    counted, and where the full report is (a visual story's game window says
+    "Game"). Empty before anything is sent."""
+    if not session_reported and not calls:
+        # Nothing has been sent yet: nothing to say.
+        return "", ""
+    about = "~" if session_estimated else ""
+    spent = f"{about}${session:.4f}" if session_reported else "unpriced"
+    text = f"This session {spent}"
+    tip = f"Spend since {opened}."
+    if not session_reported:
+        tip += (
+            " Unpriced: no call has reported a cost or had a listed price yet (an "
+            "endpoint such as Anthropic's lists no prices)."
+        )
+    if total is not None and unpriced >= calls:
+        # Nothing priced at all: a total would read "≥ $0.0000" (the
+        # author, Oct 18 2026: say unpriced).
+        text += f"  ·  {whole} unpriced ({calls} calls)"
+        tip += (
+            f" {whole}: none of its {calls} call(s) reported a cost or had a "
+            f"listed price ({report})."
+        )
+    elif total is not None:
+        # No cost at all for some calls makes the total a lower bound;
+        # costs worked out from listed prices make it an estimate.
+        prefix = "≥ " if unpriced else ("~" if estimated else "")
+        text += f"  ·  {whole} {prefix}${total:.4f}"
+        tip += f" {whole}: every call in its API log ({report})."
+        if estimated:
+            tip += (
+                f" {estimated} call(s) didn't report a cost; estimated from "
+                "the model's listed prices."
+            )
+        if unpriced:
+            tip += f" {unpriced} call(s) have no cost and no known price."
+    return text, tip

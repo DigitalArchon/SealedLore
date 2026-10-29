@@ -1922,3 +1922,24 @@ def test_the_character_scan_is_never_told_a_hidden_character_s_name(tmp_path: Pa
     for request in scans:
         text = "\n".join(part.text for message in request.messages for part in message.parts)
         assert "Mara" not in text and "Ann" in text
+
+
+def test_a_question_is_told_the_events_the_character_knows_of_and_no_others(tmp_path: Path):
+    """A turn's tail carries # STORY TIME, the events the author's character
+    knows of; a Question was told none (the author, Oct 29 2026: told what
+    the character knows, never what it doesn't)."""
+    session = make_session(tmp_path, ["One.", "{}", read(), "[]", "[]", "[]"])
+    list(session.send(turn(session, "I wait by the fire.")))
+    leaf = session.path()[-1]
+    chronicle = session.chronicle.model_copy(deep=True)
+    raid = chronicle.events["the_raid"]
+    raid.state, raid.revealed = "happened", True
+    leaf.meta.chronicle = chronicle
+
+    def asked() -> str:
+        prompt = session.assemble_question("What do I know of the mill?")
+        return "\n".join(message.text for message in prompt.messages)
+
+    assert "- The raid: The mill was stripped bare" in asked()
+    raid.revealed = False  # it happened, but the character hasn't learnt of it
+    assert "The mill was stripped bare" not in asked()

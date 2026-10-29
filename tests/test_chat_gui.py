@@ -289,6 +289,26 @@ def test_close_story_takes_the_over_budget_banner_away(app, window):
     assert window.over_budget.isHidden()
 
 
+def test_each_story_and_chat_keeps_its_own_draft(app, window, monkeypatch, story):
+    """What was typed carried into the next story or chat, where Enter sent
+    it (the author, Oct 29 2026: separate per story)."""
+    composer = window.composer
+    composer.input.setPlainText("Serrik draws his blade.")
+    composer.ooc_toggle.setChecked(True)
+    composer.ooc.setPlainText("He is left-handed.")
+    make_chat(window, monkeypatch)
+    chat_id = window.session.story.id
+    assert composer.draft() == ("", None)
+    composer.input.setPlainText("What is a undercroft?")
+    window.open_story(story.id)
+    assert composer.draft() == ("Serrik draws his blade.", "He is left-handed.")
+    assert not composer.ooc.isHidden()
+    window.open_story(chat_id)
+    assert composer.draft() == ("What is a undercroft?", None)
+    window.close_story()
+    assert composer.draft() == ("", None)
+
+
 def test_setup_for_a_chat_is_its_name_and_system_prompt(app, window, monkeypatch):
     make_chat(window, monkeypatch)
     dialog = SetupDialog(window.session.story, window.session.cast)

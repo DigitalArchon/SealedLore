@@ -655,7 +655,13 @@ class StorySession(
     @property
     def model(self) -> str:
         provider_config = self.config.active_provider()
-        return self.story.defaults.main_model or (provider_config.model if provider_config else "")
+        default = provider_config.model if provider_config else ""
+        if self.story.visual:
+            # A game follows Settings' story model: it has no model button,
+            # and one pinned when it was made could never be changed (the
+            # author, Oct 29 2026). Games made before still carry the pin.
+            return default
+        return self.story.defaults.main_model or default
 
     @property
     def summarization_model(self) -> str:
@@ -3767,11 +3773,20 @@ class StorySession(
                 self._question_as_turn(question), history, allow_network=False
             ).entries
         split = self.split(history)
+        plot = self.story.plot
         prompt = assemble_question(
             story=self.story,
             cast=self.visible_cast(),
             history_nodes=split.verbatim,
             question=question,
+            # The events the author's character knows of, as a turn is told
+            # them, and nothing the character doesn't know (the author, Oct 29
+            # 2026: a Question in a plot story was told none).
+            story_time=(
+                render_story_time_block(plot, chronicle_at(history, plot), texts=self.texts)
+                if plot is not None
+                else ""
+            ),
             earlier=[
                 (a.question, a.answer)
                 for a in self.asides_at(anchor)

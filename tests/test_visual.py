@@ -352,6 +352,57 @@ def test_a_visual_story_with_nobody_played_asks_who(app, tmp_path: Path, story, 
     main.close()
 
 
+def test_the_game_shows_its_spend_and_backs_up(app, window: MainWindow, tmp_path, monkeypatch):
+    """A game's spend showed nowhere, and only the terminal could back one
+    up (the author, Oct 29 2026). The Game menu has what a game has of a
+    story's Export and Usage, and nothing else."""
+    import sealedlore.gui.visual_window as visual_window
+    from sealedlore.models.node import Usage
+    from sealedlore.storage.archive import read_archive
+    from sealedlore.storage.repository import append_api_log
+
+    game = window.visual_window
+    session = game.session
+    items = [
+        a.text().replace("&", "")
+        for m in game.menuBar().actions()
+        if m.menu() is not None
+        for a in m.menu().actions()
+    ]
+    assert "Usage and cost…" in items and "Back up this game…" in items
+    assert not any("Markdown" in item or "scenario" in item.lower() for item in items)
+    def spent() -> tuple[float, float]:
+        game._refresh_cost()
+        words = game.cost_label.text().replace("$", "").split()
+        return float(words[2]), float(words[-1])
+
+    session.unreported_usage.append(Usage(cost=0.0, cost_reported=True))
+    before = spent()
+    append_api_log(
+        session.story.id,
+        {"kind": "keeper_response", "usage": {"prompt_tokens": 10, "cost": 0.02}},
+        root=window.root,
+    )
+    session.unreported_usage.append(Usage(cost=0.01, cost_reported=True))
+    after = spent()
+    assert round(after[0] - before[0], 4) == 0.01 and round(after[1] - before[1], 4) == 0.02
+    assert game.cost_label.text().startswith("This session $") and "  ·  Game $" in (
+        game.cost_label.text()
+    )
+    assert "Game → Usage and cost…" in game.cost_label.toolTip()
+
+    target = tmp_path / "game.sealedlore-backup.json"
+    monkeypatch.setattr(
+        visual_window.QFileDialog,
+        "getSaveFileName",
+        staticmethod(lambda *_a, **_k: (str(target), "")),
+    )
+    game._back_up()
+    bundle, log = read_archive(target)
+    assert bundle.story.visual and bundle.story.held_character_id == "char-serrik"
+    assert any(entry.get("kind") == "keeper_response" for entry in log)
+
+
 def test_who_can_be_played_and_the_opening_s_hour():
     cast = [
         Character(id="a", name="A"),

@@ -93,3 +93,27 @@ def test_a_visual_story_s_copy_is_the_same_game_unplayed(story, cast):
     imported = bundle_from_scenario(scenario_from_bundle(source))
     assert imported.story.visual_design == source.story.visual_design
     assert imported.story.held_character_id is None
+
+
+def test_a_game_follows_the_story_model_in_settings(tmp_path: Path, story, cast):
+    """A game has no model button, and the model pinned when it was made
+    could never change (the author, Oct 29 2026: follow Settings). A story
+    keeps its own."""
+    from sealedlore.engine.session import StorySession
+    from sealedlore.models.config import Config, ProviderConfig
+    from sealedlore.providers.mock import MockChatProvider
+
+    config = Config(
+        providers=[
+            ProviderConfig(
+                name="default", base_url="https://example.com/v1", api_key="k", model="new/model"
+            )
+        ],
+        active_provider_name="default",
+    )
+    bundle = _visual(story, cast)
+    bundle.story.defaults.main_model = "old/pinned"
+    game = StorySession(bundle, config, MockChatProvider(), root=tmp_path)
+    assert game.model == "new/model"
+    bundle.story.mode = "story"
+    assert game.model == "old/pinned"

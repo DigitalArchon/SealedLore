@@ -24,6 +24,7 @@ from PySide6.QtCore import (
     QRectF,
     QSize,
     Qt,
+    QTimer,
     QVariantAnimation,
     Signal,
 )
@@ -31,6 +32,7 @@ from PySide6.QtGui import QAction, QColor, QImage, QKeySequence, QPainter, QPixm
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -49,17 +51,21 @@ from sealedlore.engine.area import Placement, bare
 from sealedlore.engine.keeper import Ruling
 from sealedlore.engine.look import LookReply, Rect
 from sealedlore.engine.npc import NpcReply
+from sealedlore.engine.usage import usage_fields, usage_report
 from sealedlore.gui.area_render import TileSource, px_for
 from sealedlore.gui.area_view import AreaView, Walker, _bare_name
 from sealedlore.gui.backdrop_render import source_jpeg, trim_painting
 from sealedlore.gui.image_codec import encoded
 from sealedlore.gui.overmap_view import OvermapDialog
 from sealedlore.gui.ref_images import pixmap_within
+from sealedlore.gui.status import cost_words
+from sealedlore.gui.usage_dialog import UsageDialog
 from sealedlore.gui.visual_presenter import VisualPresenter
 from sealedlore.models.character import Character
 from sealedlore.models.config import Config
 from sealedlore.models.visual import LOG_KEPT, LogLine
-from sealedlore.storage.repository import save_config
+from sealedlore.storage.archive import ARCHIVE_SUFFIX, write_archive
+from sealedlore.storage.repository import read_api_log, read_api_log_since, save_config
 
 # The side column's share of the window, and its narrowest.
 SIDE_SHARE = 0.26
@@ -68,6 +74,8 @@ SIDE_MIN = 320
 FADE_MS = 220
 # The portrait under the view.
 PORTRAIT = QSize(72, 96)
+# How often the spend line is read (`_build_cost`).
+COST_EVERY_MS = 2000
 # Verbs done beside whoever or whatever they are for.
 WALK_UP = ("talk", "attack", "use", "take", "eat", "destroy")
 # The line: an action with nobody to talk to, words to someone, a Direction.
@@ -505,6 +513,7 @@ class VisualWindow(QMainWindow):
         self.setCentralWidget(self.split)
         self._build_menus()
         self._build_toolbar()
+        self._build_cost()
         if session.overmap() is not None:
             # The wider world: Travel… opens the map (gui/overmap_view.py).
             travel = self.area_view.travel_button
@@ -546,6 +555,19 @@ class VisualWindow(QMainWindow):
         quit_action.setShortcut(QKeySequence("Ctrl+Q"))
         quit_action.triggered.connect(self._quit)
         game.addAction(quit_action)
+        game.addSeparator()
+        # What a game has of a story's Export and Usage, and nothing else:
+        # no Markdown (there are no messages), no scenario (the author
+        # shares games as backups for now).
+        usage = QAction("&Usage and cost…", self)
+        usage.triggered.connect(self._show_usage)
+        game.addAction(usage)
+        backup = QAction("&Back up this game…", self)
+        backup.setToolTip(
+            "Save the game as it stands to a backup file (File → Import… restores it)"
+        )
+        backup.triggered.connect(self._back_up)
+        game.addAction(backup)
         if self.session.story.visual:
             game.addSeparator()
             paint = QAction("&Paint new places", self)
@@ -563,6 +585,103 @@ class VisualWindow(QMainWindow):
         me.setShortcut(QKeySequence("Home"))
         me.triggered.connect(self.area_view.centre_on_me)
         view.addAction(me)
+
+    def _build_cost(self) -> None:
+        """This session's spend and the game's whole, at the status bar's right
+        (the author, Oct 29 2026: a game's spend showed nowhere). Its calls run
+        on threads of their own (paintings, people's pictures, the keeper's),
+        so the line is read every COST_EVERY_MS rather than after each one."""
+        self.cost_label = QLabel()
+        self.cost_label.setObjectName("statusLabel")
+        self.statusBar().addPermanentWidget(self.cost_label)
+        self._session_cost = 0.0
+        self._cost_reported = False
+        self._cost_estimated = False
+        self._log_seen: tuple[int, list[dict]] = (0, [])
+        self._cost_timer = QTimer(self)
+        self._cost_timer.setInterval(COST_EVERY_MS)
+        self._cost_timer.timeout.connect(self._refresh_cost)
+        self._cost_timer.start()
+        self._refresh_cost()
+
+    def _refresh_cost(self) -> None:
+        session = self.session
+        if session is None:
+            return
+        while session.unreported_usage:
+            usage = session.unreported_usage.pop(0)
+            # A reported zero is a cost (a subscription's included model).
+            if usage.cost or usage.cost_reported:
+                self._session_cost += usage.cost
+                self._cost_reported = True
+                self._cost_estimated |= usage.cost_estimated
+        offset, entries = self._log_seen
+        new, start, end = read_api_log_since(
+            session.story.id, offset, root=self.root, keep=usage_fields
+        )
+        if start != offset:  # the file was replaced: start over
+            entries = []
+        entries = entries + new
+        self._log_seen = (end, entries)
+        total = usage_report(
+            entries, self.config.model_prices, cache_ttl=self.config.cache_ttl
+        ).total
+        text, tip = cost_words(
+            session=self._session_cost,
+            session_reported=self._cost_reported,
+            session_estimated=self._cost_estimated,
+            total=total.cost if total.calls else None,
+            calls=total.calls,
+            unpriced=total.unpriced,
+            estimated=total.estimated,
+            whole="Game",
+            opened="this game was opened",
+            report="Game → Usage and cost…",
+        )
+        self.cost_label.setText(text)
+        self.cost_label.setToolTip(tip)
+
+    def _show_usage(self) -> None:
+        """Every call the game has made, by kind and model, as a story's."""
+        report = usage_report(
+            read_api_log(self.session.story.id, root=self.root),
+            self.config.model_prices,
+            cache_ttl=self.config.cache_ttl,
+        )
+        UsageDialog(self.session.story.title, report, self).exec()
+
+    def _back_up(self) -> None:
+        """The game as it stands, its log, art, pictures and costs, in a story
+        backup (File → Import… takes it back, a game again): only the terminal
+        could make one."""
+        self._settle_figure()
+        session = self.session
+        safe = "".join(c if c.isalnum() or c in " -_" else "_" for c in session.story.title)
+        chosen, _ = QFileDialog.getSaveFileName(
+            self,
+            "Back up this game",
+            str(Path.home() / f"{safe.strip() or 'game'}{ARCHIVE_SUFFIX}"),
+            f"SealedLore backups (*{ARCHIVE_SUFFIX})",
+        )
+        if not chosen:
+            return
+        path = Path(
+            chosen if chosen.endswith((ARCHIVE_SUFFIX, ".json")) else chosen + ARCHIVE_SUFFIX
+        )
+        session.save()
+        try:
+            write_archive(
+                path,
+                session.bundle_to_save(),
+                read_api_log(session.story.id, root=self.root),
+                session.backup_files(),
+            )
+        except OSError as exc:
+            QMessageBox.warning(
+                self, "Could not write the backup", f"{path}: {exc.strerror or exc}"
+            )
+            return
+        self.statusBar().showMessage(f"Backup written to {path}", 6000)
 
     def _build_toolbar(self) -> None:
         bar = QToolBar("Play")
@@ -1529,6 +1648,7 @@ class VisualWindow(QMainWindow):
             QApplication.closeAllWindows()
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt's name
+        self._cost_timer.stop()
         self._settle_figure()
         self._look_pending = None
         self._talk_pending = None
