@@ -14,15 +14,15 @@ Bundle ships.
 
 ## Qt and Qt for Python
 
-PySide6-Essentials 6.11.2 and shiboken6 6.11.2, which contain Qt 6.11.2, are
+PySide6-Essentials 6.11.3 and shiboken6 6.11.3, which contain Qt 6.11.3, are
 in `opt/python3.12/lib/python3.12/site-packages/PySide6` and `shiboken6`,
 unmodified. They are used under the GNU Lesser General Public License,
 version 3 (`texts/LGPL-3.0.txt`, which adds to `texts/GPL-3.0.txt`).
 
-- **Source:** Qt 6.11.2 at <https://download.qt.io/archive/qt/6.11/6.11.2/single/>
-  and Qt for Python 6.11.2 at
-  <https://download.qt.io/official_releases/QtForPython/pyside6/PySide6-6.11.2-src/>
-  (also tag `v6.11.2` of <https://code.qt.io/cgit/pyside/pyside-setup.git>).
+- **Source:** Qt 6.11.3 at <https://download.qt.io/archive/qt/6.11/6.11.3/single/>
+  and Qt for Python 6.11.3 at
+  <https://download.qt.io/official_releases/QtForPython/pyside6/PySide6-6.11.3-src/>
+  (also tag `v6.11.3` of <https://code.qt.io/cgit/pyside/pyside-setup.git>).
 - **Replacing them:** extract the AppImage, put your own build of these
   libraries in place of the bundled ones, and run `AppRun` from the extracted
   folder (or repack it with appimagetool).
@@ -30,14 +30,14 @@ version 3 (`texts/LGPL-3.0.txt`, which adds to `texts/GPL-3.0.txt`).
   on) is listed, with its licences, at
   <https://doc.qt.io/qt-6.11/licenses-used-in-qt.html>.
 
-Of PySide6-Addons 6.11.2, only Qt Multimedia is kept (`QtMultimedia.abi3.so`,
+Of PySide6-Addons 6.11.3, only Qt Multimedia is kept (`QtMultimedia.abi3.so`,
 `Qt/lib/libQt6Multimedia.so.6`, `Qt/plugins/multimedia/libffmpegmediaplugin.so`),
 for playing videos, under the same licence and from the same sources as above.
 
 ## FFmpeg
 
 Qt Multimedia plays video with FFmpeg 7.1, as built and shipped by The Qt
-Company in PySide6-Addons 6.11.2: `libavcodec.so.61`, `libavformat.so.61`,
+Company in PySide6-Addons 6.11.3: `libavcodec.so.61`, `libavformat.so.61`,
 `libavutil.so.59`, `libswresample.so.5` and `libswscale.so.8`, with Qt's
 `libQt6FFmpegStub-*` loaders, in `Qt/lib` beside the Qt libraries. FFmpeg is
 licensed under the GNU Lesser General Public License, version 2.1 or later
