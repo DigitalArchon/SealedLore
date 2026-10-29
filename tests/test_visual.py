@@ -371,6 +371,7 @@ def test_the_game_shows_its_spend_and_backs_up(app, window: MainWindow, tmp_path
     ]
     assert "Usage and cost…" in items and "Back up this game…" in items
     assert not any("Markdown" in item or "scenario" in item.lower() for item in items)
+
     def spent() -> tuple[float, float]:
         game._refresh_cost()
         words = game.cost_label.text().replace("$", "").split()

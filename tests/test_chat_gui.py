@@ -235,9 +235,7 @@ def test_a_story_opened_from_a_chat_opens_on_its_people(app, window, monkeypatch
     assert window.right_tabs.currentWidget() is window.people_page
 
 
-def test_a_chat_shows_none_of_a_story_s_own_menu_items_or_card_pictures(
-    app, window, monkeypatch
-):
+def test_a_chat_shows_none_of_a_story_s_own_menu_items_or_card_pictures(app, window, monkeypatch):
     """Greyed in a chat, the review, the plot and the cards' pictures were one
     more thing to read past; and "Use as a character's picture…" was offered
     on a chat's pictures, and did nothing."""

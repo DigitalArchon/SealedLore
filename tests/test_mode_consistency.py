@@ -49,9 +49,7 @@ def test_the_terminal_lists_each_mode_as_what_it_is(tmp_path: Path, story, cast,
     assert f"{chat.id}  A chat  (chat, 0 messages)" in out
 
 
-def test_the_terminal_never_plays_a_visual_story(
-    tmp_path: Path, story, cast, monkeypatch, capsys
-):
+def test_the_terminal_never_plays_a_visual_story(tmp_path: Path, story, cast, monkeypatch, capsys):
     """It played one as a story: two messages, a scene read, the storyteller's
     rules, in a story that must have none."""
     save_story_bundle(_visual(story, cast), root=tmp_path)
