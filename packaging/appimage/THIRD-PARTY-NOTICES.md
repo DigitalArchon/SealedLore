@@ -97,8 +97,8 @@ copyright file, with its licence (MIT/X11 style), is in
 
 ## Tor
 
-Phone access runs tor, taken unmodified from the Tor Expert Bundle 15.0.25
-for Linux x86_64 (<https://www.torproject.org/download/tor/>): `tor` 0.4.9.14
+Phone access runs tor, taken unmodified from the Tor Expert Bundle 16.0
+for Linux x86_64 (<https://www.torproject.org/download/tor/>): `tor` 0.4.9.15
 and the libraries it was built against, libevent 2.1.13 (`libevent-2.1.so.7`)
 and OpenSSL 3.5.9 (`libssl.so.3`, `libcrypto.so.3`), in `usr/lib/tor`. Tor is
 a program of its own, which SealedLore starts only while phone access is on.
@@ -110,11 +110,11 @@ a program of its own, which SealedLore starts only while phone access is on.
   (`texts/GPL-3.0.txt`), as `tor --version` says.
 - **libevent** is under the 3-clause BSD license (`tor/libevent.txt`).
 - **OpenSSL 3** is under the Apache License 2.0 (`tor/openssl.txt`).
-- **Source:** tor 0.4.9.14 is
-  <https://archive.torproject.org/tor-package-archive/tor-0.4.9.14.tar.gz>
-  (git tag `tor-0.4.9.14` of <https://gitlab.torproject.org/tpo/core/tor>).
+- **Source:** tor 0.4.9.15 is
+  <https://archive.torproject.org/tor-package-archive/tor-0.4.9.15.tar.gz>
+  (git tag `tor-0.4.9.15` of <https://gitlab.torproject.org/tpo/core/tor>).
   The bundle is built from it by Tor Browser's build system, tag
-  `tbb-15.0.25-build2` of
+  `tbb-16.0-build1` of
   <https://gitlab.torproject.org/tpo/applications/tor-browser-build>
   (`projects/tor`, `projects/libevent` and `projects/openssl`), which also
   names the libraries' sources: libevent `release-2.1.13-stable`

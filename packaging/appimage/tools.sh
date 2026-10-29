@@ -26,14 +26,14 @@ RUNTIME_SHA256="2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d
 # newest). Checked by hand once against its signature: the Tor Browser
 # Developers key, EF6E 286D DA85 EA2A 4BA7 DE68 4E2C 6E87 9329 8290. Bump it
 # for each release: the network refuses a tor once it is obsolete.
-TOR_BUNDLE_VERSION="15.0.25"
-TOR_VERSION="0.4.9.14"
+TOR_BUNDLE_VERSION="16.0"
+TOR_VERSION="0.4.9.15"
 TOR_URL="https://archive.torproject.org/tor-package-archive/torbrowser/$TOR_BUNDLE_VERSION/tor-expert-bundle-linux-x86_64-$TOR_BUNDLE_VERSION.tar.gz"
-TOR_SHA256="19cf18726eecb362e0f21d27afa9ea9efe5da928bfdfbb1ceb5fe54519e87f4a"
+TOR_SHA256="cc950ebe9acb80188325c3a2cd8817def7dd7237d6fdcd861bb87b234a0cb2fd"
 # The bundle's tor is built with --enable-gpl (the onion service's
 # proof-of-work defence), which makes that program GPL-3: THIRD-PARTY-NOTICES.md
 # names its exact source on the Tor Project's archive, and the tag of Tor
-# Browser's build system that built it (tor-browser-build tbb-15.0.25-build2).
+# Browser's build system that built it (tor-browser-build tbb-16.0-build1).
 
 fetch() {  # fetch <url> <file> <sha256>
     local url="$1" file="$2" sum="$3"
