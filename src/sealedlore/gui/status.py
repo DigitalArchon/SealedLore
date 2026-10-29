@@ -281,6 +281,21 @@ class ElidingLabel(QLabel):
         super().setToolTip(tip)
 
 
+class CostLabel(ElidingLabel):
+    """The spend readout. A click opens Story → Usage and cost… (the
+    author, Oct 29 2026): the breakdown is one click from the numbers it
+    explains, not only in the Story menu."""
+
+    clicked = Signal()
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt naming
+        if event.button() == Qt.LeftButton and self.text():
+            self.clicked.emit()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+
 def _short(tokens: int) -> str:
     """2,283 as "2.3k", 60,000 as "60k": a readout, the exact count in its tooltip."""
     if tokens < 1000:
@@ -305,8 +320,9 @@ class StatusStrip(QWidget):
         self.archive_label.setObjectName("statusLabel")
         self.cache_label = ElidingLabel("")
         self.cache_label.setObjectName("statusLabel")
-        self.cost_label = ElidingLabel("")
+        self.cost_label = CostLabel("")
         self.cost_label.setObjectName("statusLabel")
+        self.cost_label.setCursor(Qt.PointingHandCursor)
         # Pictures being drawn in the background (gui/image_jobs.py).
         self.pictures_label = ElidingLabel("")
         self.pictures_label.setObjectName("statusLabel")
@@ -466,7 +482,7 @@ class StatusStrip(QWidget):
             estimated=self._story_estimated,
         )
         self.cost_label.setText(text)
-        self.cost_label.setToolTip(tip)
+        self.cost_label.setToolTip(f"{tip} Click for the full breakdown." if tip else tip)
 
     def add_usage(self, usage: Usage) -> None:
         self.add_cost(usage)
@@ -516,8 +532,7 @@ def cost_words(
 ) -> tuple[str, str]:
     """The spend line and its tooltip: this session's, and the whole
     story's from its API log. `whole`, `opened` and `report` name what is
-    counted, and where the full report is (a visual story's game window says
-    "Game"). Empty before anything is sent."""
+    counted, and where the full report is. Empty before anything is sent."""
     if not session_reported and not calls:
         # Nothing has been sent yet: nothing to say.
         return "", ""

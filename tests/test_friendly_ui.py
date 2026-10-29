@@ -183,6 +183,31 @@ def test_the_status_bar_says_it_in_words_and_keeps_the_numbers_in_tooltips(app):
     assert strip.cost_label.text().startswith("This session $0.0100")
 
 
+def test_a_click_on_the_spend_opens_usage_and_cost(app, window, monkeypatch):
+    # The author, Oct 29 2026: the breakdown one click from the numbers.
+    from PySide6.QtTest import QTest
+
+    from sealedlore.gui import main_window
+
+    opened: list[str] = []
+    monkeypatch.setattr(main_window.UsageDialog, "exec", lambda self: opened.append("usage") or 0)
+    label = window.status_strip.cost_label
+    window.status_strip.set_story_cost(0.12, 0, 4)
+    assert "Click for the full breakdown" in label.toolTip()
+    QTest.mouseClick(label, Qt.LeftButton)
+    assert opened == ["usage"]
+    # Greyed in the Story menu (a job running): the click waits as well.
+    window.usage_action.setEnabled(False)
+    QTest.mouseClick(label, Qt.LeftButton)
+    assert opened == ["usage"]
+    assert "once the current job is done" in window.statusBar().currentMessage()
+    # Nothing spent, nothing shown: nothing to click.
+    window.usage_action.setEnabled(True)
+    window.status_strip.reset_session_cost()
+    QTest.mouseClick(label, Qt.LeftButton)
+    assert opened == ["usage"]
+
+
 def test_the_session_line_says_where_to_set_up_what_is_missing(app, window):
     from sealedlore.gui.session_line import NO_ENDPOINT, NO_MODEL, describe_session
 

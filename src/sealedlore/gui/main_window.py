@@ -603,6 +603,7 @@ class MainWindow(
         bar.addPermanentWidget(self.status_strip.archive_label)
         bar.addPermanentWidget(self.status_strip.cache_label)
         bar.addPermanentWidget(self.status_strip.cost_label)
+        self.status_strip.cost_label.clicked.connect(self._usage_from_status)
         bar.addPermanentWidget(self.status_strip.pictures_label)
         bar.addPermanentWidget(self.status_strip.route_label)
 
@@ -2357,6 +2358,14 @@ class MainWindow(
             cache_ttl=self.config.cache_ttl,
         )
         UsageDialog(self.session.story.title, report, self).exec()
+
+    def _usage_from_status(self) -> None:
+        """A click on the spend readout: Story → Usage and cost…, when the
+        menu offers it (a story open, nothing running)."""
+        if self.usage_action.isEnabled():
+            self.show_usage()
+        elif self.session is not None:
+            self.statusBar().showMessage("Usage and cost opens once the current job is done.", 4000)
 
     def _refresh_story_cost(self) -> None:
         if self.session is None:

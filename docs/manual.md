@@ -1206,8 +1206,8 @@ or reasoning. In the terminal: `sealedlore export <id> <file> [--markdown]`,
 at once.
 
 **Costs.** Each passage shows its tokens, cache use and cost; the status bar
-shows the session and whole-story spend, and **Story → Usage and cost…** breaks
-it down. Where the endpoint doesn't report a call's cost (NanoGPT often
+shows the session and whole-story spend; click it, or choose **Story → Usage
+and cost…**, for the breakdown. Where the endpoint doesn't report a call's cost (NanoGPT often
 doesn't), it's estimated from the model's listed prices and marked `~`.
 
 ## Outcomes and dice
