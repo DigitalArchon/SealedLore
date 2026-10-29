@@ -4,7 +4,7 @@ Everything the [README](../README.md) leaves out: installing in detail, every
 part of the window, and what each feature does. The README's
 [First five minutes](../README.md#first-five-minutes) is the quickest way in.
 
-![Playing The Silverwood: the story on the left, and beside it the People page with who is here now, by their faces](screenshots/people-page.webp)
+![Playing The Silverwood: the story on the left, and beside it the People page with who is here now, by their faces](screenshots/playing.webp)
 
 ## Contents
 
@@ -23,7 +23,6 @@ part of the window, and what each feature does. The README's
 - [Perspective and supporting characters](#perspective-and-supporting-characters)
 - [The People page](#the-people-page)
 - [The scene, and who can walk into it](#the-scene-and-who-can-walk-into-it)
-- [The map of the earlier betas](#the-map-of-the-earlier-betas)
 - [Branches, takes and export](#branches-takes-and-export)
 - [Outcomes and dice](#outcomes-and-dice)
 - [Response length and style](#response-length-and-style)
@@ -854,8 +853,7 @@ its picture and its line: Doomsville there is the same as importing
 `Doomsville.md`. The Ashen Reach, The Silverwood, Brasshaven and The Ninth
 Furnace show other kinds of world (grimdark science fiction, traditional
 fantasy, steampunk and a hellscape), each with a plot, a background picture,
-and a picture of every card and every place (a `# Map` section, from a plot
-file made for a map, is skipped with a note). Rather than
+and a picture of every card and every place. Rather than
 write the format by hand, **File → Plot file editor…** writes it for you: the
 world, opening, characters, places, lore, facts and events each get a form,
 conditions and what an event brings or sets are picked from what the file
@@ -1049,7 +1047,7 @@ the Cast page; right-click it to draw a portrait, choose a picture of your
 own, or play as that character. A card with no portrait has **Draw a
 portrait…** and **Choose a picture…** on it.
 
-![The People page in The Silverwood: where the story is and what is happening, then the ranger, the sellsword and the herbwife under Here now, by their portraits, and the queen under Not here](screenshots/people-page.webp)
+![The People page in The Silverwood: where the story is and what is happening, then the ranger, the sellsword and the herbwife under Here now, by their portraits, and three villagers the story named under Also here, with no card yet](screenshots/people-page.webp)
 
 Until the story has them, a panel at the top offers **Draw portraits…** for
 everyone who has none (you see and can change every prompt first, as in
@@ -1147,18 +1145,6 @@ all the fields for you to approve, for when the card has drifted.
 | Quiet | the world answers you but rarely intrudes |
 | Normal (default) | people pursue their own aims, anyone with a stake acts on it, earlier choices catch up |
 | Eventful | most passages bring something: an arrival, news, a complication |
-
-## The map of the earlier betas
-
-The earlier 2.0 betas could play a story on a pixel-art map that grew as the
-story went. That map is gone from ordinary stories: nothing offers one, and
-a story that was played on a map goes on as a story without it, with
-everything it has (its characters, plot, lore, pictures and branches). A
-story keeps a picture of each place it goes to instead (see "Pictures of
-places"). The Visual Stories of 2.0.0b7, a game on a map designed in
-advance, have moved out of SealedLore to become a game of their own: one
-played here is still listed in the Stories list, so it can be found or
-deleted, but no longer opens.
 
 ## Branches, takes and export
 
@@ -1343,7 +1329,7 @@ marks it "held back" or "mentioned".
 
 ## Pictures
 
-![The picture dialog: a direction, the prompt the story's model wrote from it naming the herbwife and the ranger as image 1 and image 2, their portraits and the village as the reference pictures, and the model, size and price, with Generate](screenshots/picture-dialog.png)
+![The picture dialog: a direction, the prompt the story's model wrote from it, the herbwife's and the ranger's portraits as the reference pictures, numbered as the prompt refers to them, and the model, size and price, with Generate](screenshots/picture-dialog.png)
 
 **Story → Draw a picture…** (Ctrl+Shift+I), the **Picture…** button beside the
 composer, or **Illustrate this passage…** in a passage's ⋯ menu asks the

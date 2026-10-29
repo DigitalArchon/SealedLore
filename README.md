@@ -30,12 +30,6 @@ most improvements here will be related to better integrating the plots into
 the story. Making it more natural, more consistent, etc. As above, nothing
 is broken, but there are definitely improvements to be made here.
 
-SealedLore is text: there is no map. The map of the earlier 2.0 betas is
-gone (a story that was played on one goes on as a story without it), and the
-Visual Stories of 2.0.0b7 have moved out to become a game of their own: one
-played here is still listed, so it can be found or deleted, but no longer
-opens.
-
 ### New in version 2
 
 - **Pictures of places** (new in 2.0.0b7). A picture of each place the
@@ -86,9 +80,6 @@ opens.
   passage length of your own; its other way in is called **Advanced setup…**;
   and a past turn's OOC note is edited with the turn, and goes with a new
   branch from it.
-- **The earlier betas' map retired** (2.0.0b7). Ordinary stories no longer
-  keep a map; a story that was played on one goes on without it, with
-  everything else it has, and the AppImage is about 20 MB smaller for it.
 
 ### Pictures of places
 
