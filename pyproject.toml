@@ -32,9 +32,7 @@ dependencies = [
     "numpy>=1.26",
     # Below 6.12: 6.12.0 drops a reference to None on every call that
     # returns nothing, which aborts Python 3.11 (None is immortal from 3.12
-    # on), and deletes a widget twice at exit. The AppImage locks 6.11.3:
-    # 6.11.2 segfaulted on Hyprland as Setup opened (in PeoplePage's
-    # QScrollArea resize, Oct 29 2026), every run within a few opens.
+    # on), and deletes a widget twice at exit. The AppImage locks 6.11.3.
     "PySide6>=6.6,<6.12",
     # End-to-end encrypted private models (providers/private_mode.py): Tinfoil's
     # own attestation and EHBP client, pinned exactly: it holds the plaintext.
