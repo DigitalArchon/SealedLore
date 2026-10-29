@@ -285,6 +285,27 @@ def test_a_story_without_a_map_opens_on_its_people(app, window):
     assert window.cast_panel._current.id == "char-maela"
 
 
+def test_the_people_page_keeps_its_scroll_bar_so_its_width_never_follows_its_height(app):
+    """Oct 29 2026: a card's picture is as tall as the card is wide, so with
+    the bar as needed a page about as tall as the view took it, got shorter,
+    lost it, got taller, and QScrollArea resized it inside its own resize
+    until the stack ran out (a segfault on Hyprland as Setup opened). With
+    the bar always there, a resize settles at once."""
+    from sealedlore.gui.people_page import PeoplePage, PeopleView, Person
+
+    people = [Person(f"c{i}", f"Person {i}", "Someone in town.", "") for i in range(8)]
+    page = PeoplePage(lambda: None)
+    assert page.verticalScrollBarPolicy() == Qt.ScrollBarAlwaysOn
+    page.set_view(PeopleView(story_id="s", here=people[:3], others=people[3:]))
+    page.show()
+    for width in range(400, 800, 7):
+        page.resize(width, 600)
+        settle(app)
+        # The cards are laid out for the viewport the bar leaves, at every width.
+        assert page._columns == page._columns_for(page.viewport().width())
+    page.close()
+
+
 def test_the_people_page_offers_faces_and_a_background_until_there_are_some(
     app, window, monkeypatch
 ):

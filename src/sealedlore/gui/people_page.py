@@ -372,6 +372,13 @@ class PeoplePage(QScrollArea):
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.NoFrame)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        # Always on: a card's picture is as tall as the card is wide, so the
+        # page's height follows its width. As needed, a page about as tall as
+        # the view took the bar, grew narrower and shorter, lost the bar,
+        # grew wider and taller, and QScrollArea resized it again inside its
+        # own resize until the stack ran out: a segfault on Hyprland as
+        # Setup opened (Oct 29 2026, gdb: 10,238 nested resizes).
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self._pictures = pictures
         self._view = PeopleView()
         self._columns: tuple[int, int] = (0, 0)
