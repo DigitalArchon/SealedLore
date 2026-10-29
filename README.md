@@ -30,6 +30,11 @@ most improvements here will be related to better integrating the plots into
 the story. Making it more natural, more consistent, etc. As above, nothing
 is broken, but there are definitely improvements to be made here.
 
+I decided to remove the mapping and Visual Story modes from this app. They
+were too experimental and not progressing quickly enough to a playable state.
+I plan to release that as an entirely separate game later when it is actually
+fun to play. This app will remain focused on text based roleplay.
+
 ### New in version 2
 
 - **Pictures of places** (new in 2.0.0b7). A picture of each place the
