@@ -37,6 +37,15 @@ fun to play. This app will remain focused on text based roleplay.
 
 ### New in version 2
 
+- **Text only, and steadier** (2.5.0b1). Visual Stories and the map are
+  gone (see above); a story or chat played with them before goes on without
+  them, and an old Visual Story is listed as one not played here. Each mode
+  now keeps to its own: a simple chat's messages are edited with no OOC
+  note, what you type and haven't sent stays with its own story or chat, a
+  Question in a plot story knows the events your character has seen, and the
+  menus show only what the open story or chat can use. Click the spend at the
+  bottom right for Usage and cost. A crash as a story's setup opened on
+  Hyprland is fixed, and the AppImage is on Qt 6.11.3 and about 15 MB smaller.
 - **Pictures of places** (new in 2.0.0b7). A picture of each place the
   story goes to, with nobody in it, kept on the place's lore entry and shown
   behind the story's text while the scene is there. A button above the story
