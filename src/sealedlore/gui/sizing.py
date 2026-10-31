@@ -12,7 +12,10 @@ all text and adjust column widths or field sizes" wherever possible.
 - `GrowingText`: a plain text box that starts a few lines tall and grows with
   what is written in it, up to a limit, then scrolls; one that is a page's
   main field (`fill`) also takes the height the window gives it. Boxes were
-  capped at 60-110px, two or three lines of a character's description.
+  capped at 60-110px, two or three lines of a character's description. In a
+  page that scrolls, the limit is most of the page's view (the author, Oct 31
+  2026: "When editing any text, the size of text box is fixed, and too small
+  for large texts").
 - `adjustable_columns`: every column of a table or tree may be dragged wider
   or narrower. Qt allows no dragging of a column that sizes itself to its
   contents, so the columns fit their contents until the author drags one,
@@ -21,12 +24,16 @@ all text and adjust column widths or field sizes" wherever possible.
 
 from __future__ import annotations
 
+from math import ceil
+
 from PySide6.QtCore import QObject, QSize, Qt, QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QAbstractScrollArea,
     QHeaderView,
     QPlainTextEdit,
+    QScrollArea,
     QSizePolicy,
     QTableView,
     QTreeView,
@@ -35,6 +42,8 @@ from PySide6.QtWidgets import (
 
 # A dialog never opens past this share of the screen it is on.
 MOST_OF_SCREEN = 0.92
+# A text box in a page that scrolls grows to this share of the page's view.
+MOST_OF_VIEW = 0.8
 
 
 def size_to_screen(
@@ -61,8 +70,9 @@ def size_to_screen(
 
 class GrowingText(QPlainTextEdit):
     """A text box as tall as its text: at least `lines` lines, growing with
-    what is written up to `most`, then scrolling. With `fill` it also takes
-    whatever height its layout has to give (a dialog's main field)."""
+    what is written up to `most`, or most of the view of a page that scrolls
+    if that is more, then scrolling. With `fill` it also takes whatever height
+    its layout has to give (a dialog's main field)."""
 
     def __init__(
         self, text: str = "", *, lines: int = 3, most: int = 16, fill: bool = False
@@ -70,40 +80,98 @@ class GrowingText(QPlainTextEdit):
         super().__init__(text)
         self._lines = max(1, lines)
         self._most = max(self._lines, most)
+        self._measuring = False
+        # What the box is taller than its view of the text: the frame and the
+        # stylesheet's padding, which no margin reports. Known once the box
+        # has been laid out (`resizeEvent`).
+        self._chrome = 2 * self.frameWidth()
         vertical = QSizePolicy.Expanding if fill else QSizePolicy.Preferred
         self.setSizePolicy(QSizePolicy.Expanding, vertical)
         self.document().documentLayout().documentSizeChanged.connect(self._grown)
+        # Grown past the bottom of a page that scrolls, the line being typed
+        # is off the page: once the page has laid the box out, bring it back.
+        self._follow = QTimer(self)
+        self._follow.setSingleShot(True)
+        self._follow.setInterval(0)
+        self._follow.timeout.connect(self._show_cursor)
+        self.cursorPositionChanged.connect(self._follow.start)
 
-    def _height(self, lines: int) -> int:
-        margins = self.contentsMargins()
-        document = self.document().documentMargin()
-        return int(
-            lines * self.fontMetrics().lineSpacing()
-            + 2 * document
-            + margins.top()
-            + margins.bottom()
-            + 2
-        )
+    def _scroll_area(self) -> QAbstractScrollArea | None:
+        """The page around this box that scrolls, if it is in one."""
+        widget = self.parentWidget()
+        while widget is not None:
+            if isinstance(widget, QAbstractScrollArea):
+                return widget
+            widget = None if widget.isWindow() else widget.parentWidget()
+        return None
 
-    def _wrapped_lines(self) -> int:
-        # A plain text document's layout is measured in lines, wrapped ones
-        # counted (QPlainTextDocumentLayout).
-        return int(self.document().documentLayout().documentSize().height())
+    def _most_lines(self) -> int:
+        area = self._scroll_area()
+        if area is None:
+            return self._most
+        fits = area.viewport().height() * MOST_OF_VIEW / self.fontMetrics().lineSpacing()
+        return max(self._most, int(fits))
+
+    def _text_height(self, most: float) -> float:
+        """How tall the text is, up to `most`. A block at a time, each laid
+        out first: a plain text document's own line count has a block it
+        hasn't painted as one line, so a text of several paragraphs measured
+        a line a paragraph, and grew by steps as it painted. In the document's
+        own heights: a font's lines aren't always a whole number of pixels."""
+        layout = self.document().documentLayout()
+        tall = 0.0
+        block = self.document().begin()
+        self._measuring = True
+        try:
+            while block.isValid() and tall < most:
+                layout.ensureBlockLayout(block)
+                tall += layout.blockBoundingRect(block).height()
+                block = block.next()
+        finally:
+            self._measuring = False
+        return tall
+
+    def _lines_tall(self, lines: int) -> float:
+        return lines * self.fontMetrics().lineSpacing() + self.document().documentMargin()
+
+    def _height(self, tall: float) -> int:
+        # The document's height holds one of its margins. One pixel more:
+        # QPlainTextEdit counts a line as out of view a pixel early, and a
+        # text that fitted got a scroll bar for its last line.
+        return ceil(tall + self.document().documentMargin() + self._chrome + 1)
 
     def sizeHint(self) -> QSize:  # noqa: N802 - Qt naming
-        lines = min(max(self._wrapped_lines(), self._lines), self._most)
-        return QSize(super().sizeHint().width(), self._height(lines))
+        most = self._lines_tall(self._most_lines())
+        tall = min(max(self._text_height(most), self._lines_tall(self._lines)), most)
+        return QSize(super().sizeHint().width(), self._height(tall))
 
     def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt naming
-        return QSize(super().minimumSizeHint().width(), self._height(self._lines))
+        # A resizable QScrollArea sizes its page from the minimum hints, so in
+        # a page that scrolls the minimum is the text's height: the page has
+        # the room, and once it was full every box was squeezed to `lines`.
+        width = super().minimumSizeHint().width()
+        if self._scroll_area() is not None:
+            return QSize(width, self.sizeHint().height())
+        return QSize(width, self._height(self._lines_tall(self._lines)))
 
     def _grown(self, *_args) -> None:
-        self.updateGeometry()
+        if not self._measuring:
+            self.updateGeometry()
+
+    def _show_cursor(self) -> None:
+        area = self._scroll_area()
+        if not self.hasFocus() or not isinstance(area, QScrollArea) or area.widget() is None:
+            return
+        cursor = self.cursorRect()
+        at = self.viewport().mapTo(area.widget(), cursor.center())
+        area.ensureVisible(at.x(), at.y(), 0, cursor.height())
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt naming
         super().resizeEvent(event)
+        chrome = self.height() - self.viewport().height()
         # A new width wraps the text into more or fewer lines.
-        if event.oldSize().width() != event.size().width():
+        if chrome != self._chrome or event.oldSize().width() != event.size().width():
+            self._chrome = chrome
             self.updateGeometry()
 
 

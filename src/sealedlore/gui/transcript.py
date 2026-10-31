@@ -34,6 +34,7 @@ from sealedlore.gui import theme
 from sealedlore.gui.markdown_text import markdown_html, shown_text
 from sealedlore.gui.picture_words import EDIT_LABEL, USE_CHARACTER_LABEL, USE_PLACE_LABEL
 from sealedlore.gui.ref_images import pixmap_of, pixmap_within
+from sealedlore.gui.sizing import GrowingText
 from sealedlore.gui.video_view import PendingVideoWidget, VideoItem, VideoMessageWidget
 from sealedlore.models.aside import Aside
 from sealedlore.models.character import Character
@@ -535,9 +536,9 @@ class MessageWidget(QFrame):
             return
         self._rewriting = rewrite
 
-        editor = QPlainTextEdit(self.body.source)
+        # As tall as the message, up to most of the view (gui/sizing.py).
+        editor = GrowingText(self.body.source, lines=6)
         editor.setObjectName("messageEditor")
-        editor.setMinimumHeight(120)
         # An author's turn carries its OOC note: edited with the text, and
         # on a new branch from here (the author, Oct 2026: only Take back
         # could change it; Edit and New branch from here kept it as it was).
@@ -545,7 +546,7 @@ class MessageWidget(QFrame):
         # a note typed here went nowhere (the author, Oct 29 2026).
         ooc_editor: QPlainTextEdit | None = None
         if self.kind != "assistant" and self._keep_full is None:
-            ooc_editor = QPlainTextEdit(self._ooc_text)
+            ooc_editor = GrowingText(self._ooc_text, lines=3)
             ooc_editor.setObjectName("oocEditor")
             ooc_editor.setPlaceholderText(
                 "OOC note (optional): a fact or instruction for the storyteller, not dialogue"
@@ -554,8 +555,6 @@ class MessageWidget(QFrame):
                 "Out-of-character addendum: authoritative fact or instruction, attached to "
                 "this turn with the same authority as Direction. Blank for none."
             )
-            ooc_editor.setMinimumHeight(60)
-            ooc_editor.setMaximumHeight(90)
 
         save = QPushButton("Save as a new branch" if rewrite else "Save")
         save.setObjectName("sendButton")
@@ -975,7 +974,12 @@ class TranscriptColumn(QWidget):
             return super().sizeHint().height()
         height = self._heights.get(width)
         if height is None:
-            height = self._heights[width] = layout.heightForWidth(width)
+            height = layout.heightForWidth(width)
+            if height < 0:
+                # Nothing here wraps: every message in the column is open in
+                # an editor. Told -1, the area squeezed them into its view.
+                height = layout.sizeHint().height()
+            self._heights[width] = height
         return height
 
     def sizeHint(self) -> QSize:  # noqa: N802 - Qt naming

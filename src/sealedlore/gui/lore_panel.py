@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMessageBox,
-    QPlainTextEdit,
     QPushButton,
     QSpinBox,
     QSplitter,
@@ -30,6 +29,7 @@ from sealedlore.engine.retrieval import RetrievalReport
 from sealedlore.gui.fields import FormScroll, set_field_text
 from sealedlore.gui.portrait_view import PortraitView
 from sealedlore.gui.ref_images import CardIcons, RefImageStrip, StoryPictures
+from sealedlore.gui.sizing import GrowingText
 from sealedlore.models.lore import LoreEntry
 
 # The pictures beside the titles in the list.
@@ -90,7 +90,7 @@ class LorePanel(QWidget):
 
     def _build_editor(self) -> QWidget:
         self.title = QLineEdit()
-        self.content = QPlainTextEdit()
+        self.content = GrowingText(lines=6)
         self.content.setPlaceholderText("The text injected into the prompt, verbatim.")
         self.keywords = QLineEdit()
         self.keywords.setPlaceholderText("comma-separated; matched as whole words")

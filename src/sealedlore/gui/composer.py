@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.dice import DIFFICULTY_ORDER
 from sealedlore.engine.response_style import PRESET_ORDER, PRESETS, label_for
+from sealedlore.gui.sizing import GrowingText
 from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.models.character import Character
 from sealedlore.models.node import (
@@ -145,27 +146,49 @@ END_PRIVATE_TIP = (
 )
 
 
-class TurnEditor(QPlainTextEdit):
-    """Enter sends, Shift+Enter starts a new line — the chat convention.
+def _sent_or_new_line(editor: QPlainTextEdit, event: QKeyEvent) -> bool:
+    """Enter sends, Shift+Enter starts a new line — the chat convention; True
+    when the key was one of those.
 
     Ctrl+Enter is left alone so the window's Send shortcut keeps working. The
     newline is inserted explicitly: Qt's own Shift+Enter inserts a Unicode line
     separator, which `toPlainText()` hands back as U+2028 rather than "\n".
     """
+    if event.key() not in (Qt.Key_Return, Qt.Key_Enter):
+        return False
+    modifiers = event.modifiers() & ~Qt.KeypadModifier
+    if modifiers == Qt.NoModifier:
+        editor.submitted.emit()
+        return True
+    if modifiers == Qt.ShiftModifier:
+        editor.textCursor().insertText("\n")
+        editor.ensureCursorVisible()
+        return True
+    return False
+
+
+class TurnEditor(QPlainTextEdit):
+    """The turn itself, as tall as the divider above the composer leaves it."""
 
     submitted = Signal()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802 - Qt naming
-        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
-            modifiers = event.modifiers() & ~Qt.KeypadModifier
-            if modifiers == Qt.NoModifier:
-                self.submitted.emit()
-                return
-            if modifiers == Qt.ShiftModifier:
-                self.textCursor().insertText("\n")
-                self.ensureCursorVisible()
-                return
-        super().keyPressEvent(event)
+        if not _sent_or_new_line(self, event):
+            super().keyPressEvent(event)
+
+
+class NoteEditor(GrowingText):
+    """An OOC note: two lines, growing with the note, keys as a turn's. It was
+    capped at three lines."""
+
+    submitted = Signal()
+
+    def __init__(self) -> None:
+        super().__init__(lines=2, most=8)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802 - Qt naming
+        if not _sent_or_new_line(self, event):
+            super().keyPressEvent(event)
 
 
 class Composer(QWidget):
@@ -332,12 +355,11 @@ class Composer(QWidget):
         controls.addLayout(who)
         controls.addWidget(self.more_row)
 
-        self.ooc = TurnEditor()
+        self.ooc = NoteEditor()
         self.ooc.setObjectName("oocInput")
         self.ooc.setPlaceholderText(
             "Treated as true and as instruction — not spoken, and no character hears it."
         )
-        self.ooc.setMaximumHeight(72)
         self.ooc.hide()
         self.ooc.submitted.connect(self.send_requested)
 

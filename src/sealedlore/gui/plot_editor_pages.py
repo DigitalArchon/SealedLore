@@ -241,11 +241,10 @@ class StoryPage(Page):
         self.background.setToolTip(
             "A picture beside the plot file, shown behind the story when it is imported."
         )
-        self.notes = QPlainTextEdit()
+        self.notes = GrowingText(lines=4)
         self.notes.setPlaceholderText(
             "Notes to yourself. Kept in the file; the app never reads them."
         )
-        self.notes.setMaximumHeight(120)
 
         form = self._form
         form.addRow("Title", self.title)
@@ -310,7 +309,7 @@ class StoryPage(Page):
 class WorldPage(Page):
     def __init__(self) -> None:
         super().__init__()
-        self.world = QPlainTextEdit()
+        self.world = GrowingText(lines=12, fill=True)
         self.world.setPlaceholderText(
             "The world bible: the standing rules of the setting, sent with every turn."
         )
@@ -338,7 +337,7 @@ class OpeningPage(Page):
         self.location = QLineEdit()
         self.time = QLineEdit()
         self.situation = QLineEdit()
-        self.notes = QPlainTextEdit()
+        self.notes = GrowingText(lines=8, fill=True)
         form = self._form
         form.addRow(self.generate)
         form.addRow(self.as_written)
@@ -389,7 +388,7 @@ class CharacterPage(Page):
         self.canon.setPlaceholderText("The work they come from, if the model already knows them")
         self.summary = QLineEdit()
         self.summary.setPlaceholderText("One line; otherwise the first sentence of the description")
-        self.description = QPlainTextEdit()
+        self.description = GrowingText(lines=8, fill=True)
         form = self._form
         form.addRow("Name", self.name)
         form.addRow("Role", self.role)
@@ -481,7 +480,7 @@ class EntryPage(Page):
         self.keywords.setPlaceholderText("comma-separated; the name itself is always one")
         self.always = QCheckBox("Sent every turn")
         self.hidden = QCheckBox("Hidden until an event reveals it")
-        self.description = QPlainTextEdit()
+        self.description = GrowingText(lines=8, fill=True)
         form = self._form
         form.addRow("Name", self.name)
         form.addRow("Keywords", self.keywords)
@@ -935,7 +934,7 @@ class WayPage(Page):
         self.aftermath = _short_edit(
             "What is left afterwards, and what people say. Passed on when it becomes relevant."
         )
-        self.tell = QPlainTextEdit()
+        self.tell = GrowingText(lines=6, fill=True)
         self.tell.setPlaceholderText("What the storyteller is told should happen.")
 
         form = self._form
