@@ -267,6 +267,35 @@ def test_share_with_phone_in_the_stories_list(app, place, story, cast):
     window.close()
 
 
+def test_the_sign_and_the_dialog_say_when_tor_is_out_of_date(app, place, story, monkeypatch):
+    tor, _ = fake_tor(place, "obsolete")
+    monkeypatch.setenv("SEALEDLORE_TOR", str(tor))
+    window = window_with(place, story, [])
+    notices: list[str] = []
+    real = window.statusBar().showMessage
+    monkeypatch.setattr(
+        window.statusBar(),
+        "showMessage",
+        lambda text, *rest: (notices.append(text), real(text, *rest))[1],
+    )
+    turned_on(app, window)
+    wait_for(app, lambda: "out of date" in window.phone_status.text())
+    assert window.phone_status.text() == "Phone: ready · tor out of date"
+    assert "Update the tor at" in window.phone_status.toolTip()
+    assert "out of date" in window.phone_words and window.phone_step == "ready"
+    assert len([n for n in notices if "out of date" in n]) == 1, "said once, not at every step"
+    window.close()
+
+
+def test_a_tor_that_is_current_changes_nothing_on_the_sign(app, place, story):
+    window = window_with(place, story, [])
+    turned_on(app, window)
+    assert window.phone_status.text() == "Phone: ready"
+    assert "out of date" not in window.phone_status.toolTip()
+    assert "out of date" not in window.phone_words
+    window.close()
+
+
 def test_the_status_bar_counts_only_the_shared_stories_that_are_here(app, place, story):
     """Live, a config copied from another machine said "3 stories shared" over
     a data folder holding none of them. The ids stay listed (a story may come

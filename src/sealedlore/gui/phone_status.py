@@ -3,7 +3,8 @@
 Shown only while it is on, among the permanent widgets so a notice never
 hides it: an onion-like mark drawn in the theme's colours and a few words
 ("Phone: connecting 45%", "Phone: ready", "Phone: 1 connected", "Phone: tor
-stopped"). A click opens File → Phone devices….
+stopped"), and "tor out of date" after them when tor says so of itself. A click
+opens File → Phone devices….
 """
 
 from __future__ import annotations
@@ -36,7 +37,14 @@ def phone_icon(colour_name: str) -> QIcon:
     return QIcon(pixmap)
 
 
-def short_words(step: str, words: str, progress: int, connected: int) -> str:
+def short_words(
+    step: str, words: str, progress: int, connected: int, *, outdated: bool = False
+) -> str:
+    said = _step_words(step, progress, connected)
+    return f"{said} · tor out of date" if outdated and step in ("publishing", "ready") else said
+
+
+def _step_words(step: str, progress: int, connected: int) -> str:
     if step == "ready":
         if connected:
             return f"Phone: {connected} connected"
@@ -64,7 +72,14 @@ class PhoneStatusButton(QToolButton):
         self.hide()
 
     def show_state(
-        self, step: str, words: str, *, progress: int = 0, connected: int = 0, shared: int = 0
+        self,
+        step: str,
+        words: str,
+        *,
+        progress: int = 0,
+        connected: int = 0,
+        shared: int = 0,
+        outdated: bool = False,
     ) -> None:
         """`step` is tor's ("off" hides the button)."""
         if step == "off":
@@ -72,11 +87,11 @@ class PhoneStatusButton(QToolButton):
             return
         colour = (
             "warning"
-            if step in ("failed", "restarting")
+            if outdated or step in ("failed", "restarting")
             else ("accent" if step == "ready" else "text_dim")
         )
         self.setIcon(phone_icon(colour))
-        self.setText(short_words(step, words, progress, connected))
+        self.setText(short_words(step, words, progress, connected, outdated=outdated))
         stories = f"{shared} stor{'y' if shared == 1 else 'ies'} shared"
         self.setToolTip(f"Phone access is on. {words} {stories}. Click for the phones and stories.")
         self.show()

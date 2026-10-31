@@ -9,6 +9,12 @@ FAKE_TOR_MODE (environment):
   crash_once    exits after bootstrapping the first time (a file marks it)
   liar          a wrong SAFECOOKIE server hash: not tor
   refuse        refuses ADD_ONION
+  obsolete, unrecommended, new
+                what status/version/current says (else "recommended")
+  no_version    refuses that question
+  late_warning  recommended at first, then a DANGEROUS_VERSION event, as when a
+                new consensus stops recommending it
+  new_warning   a DANGEROUS_VERSION event saying it is newer than the list
 FAKE_TOR_LOG: a file each command received is appended to.
 
 Stops when its control connection closes (TAKEOWNERSHIP), as tor does.
@@ -118,6 +124,19 @@ def main() -> None:
                 )
         elif command in ("TAKEOWNERSHIP", "SETEVENTS"):
             send("250 OK")
+        elif command == "GETINFO" and rest == "status/version/current":
+            if mode == "no_version":
+                send('552 Unrecognized key "status/version/current"')
+                continue
+            status = mode if mode in ("obsolete", "unrecommended", "new") else "recommended"
+            send(f"250-status/version/current={status}", "250 OK")
+            reason = {"late_warning": "OBSOLETE", "new_warning": "NEW"}.get(mode)
+            if reason:
+                time.sleep(0.05)
+                event(
+                    f'STATUS_GENERAL WARN DANGEROUS_VERSION CURRENT="0.4.9.14" '
+                    f'REASON={reason} RECOMMENDED="0.4.9.15, 0.4.9.16"'
+                )
         elif command == "GETINFO":
             send(
                 "250-status/bootstrap-phase=NOTICE BOOTSTRAP PROGRESS=50 TAG=loading_descriptors "

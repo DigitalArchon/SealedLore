@@ -7,8 +7,12 @@ window's (gui/tor_service.py). What is used, from tor's control spec:
     AUTHCHALLENGE SAFECOOKIE <nonce>    and AUTHENTICATE <hash>: the cookie is
                                         never sent, and tor proves it read it
     TAKEOWNERSHIP                       tor exits when this connection closes
-    SETEVENTS STATUS_CLIENT HS_DESC     bootstrap progress; the descriptor uploaded
+    SETEVENTS STATUS_CLIENT STATUS_GENERAL HS_DESC
+                                        bootstrap progress; a warning that its
+                                        version is out of date; the descriptor
+                                        uploaded
     GETINFO status/bootstrap-phase      progress so far
+    GETINFO status/version/current      what the network says of its version
     ADD_ONION …                         the onion service, for as long as
                                         this connection lives
 
@@ -27,6 +31,10 @@ from dataclasses import dataclass, field
 SERVER_TO_CONTROLLER = b"Tor safe cookie authentication server-to-controller hash"
 CONTROLLER_TO_SERVER = b"Tor safe cookie authentication controller-to-server hash"
 COOKIE_LENGTH = 32
+# What tor says of a version older than, or between, those the network
+# recommends. "new" and "new in series" are newer than the list (a release the
+# list hasn't caught up with), and "unknown" is a tor with no consensus yet.
+OUT_OF_DATE = frozenset({"old", "obsolete", "unrecommended"})
 _SERVICE_ID = re.compile(r"[a-z2-7]{56}")
 
 
@@ -176,6 +184,32 @@ def cookie_file(protocolinfo: Reply) -> str:
             if path:
                 return path
     raise ControlError("tor didn't say where its cookie is")
+
+
+def version_of(protocolinfo: Reply) -> str:
+    """Tor's version, from PROTOCOLINFO; "" when it doesn't say."""
+    for line in protocolinfo.lines:
+        if line.startswith("VERSION "):
+            return _fields(line).get("Tor", "")
+    return ""
+
+
+def version_status(reply: Reply) -> str:
+    """GETINFO status/version/current's answer; "" when tor gave none."""
+    if reply.ok:
+        for line in reply.lines:
+            key, _, value = line.partition("=")
+            if key == "status/version/current":
+                return value.strip().strip('"').lower()
+    return ""
+
+
+def dangerous_version(text: str) -> str:
+    """The reason in a STATUS_GENERAL DANGEROUS_VERSION event, as
+    `version_status` would say it; "" for any other event."""
+    if "DANGEROUS_VERSION" not in text:
+        return ""
+    return _fields(text).get("REASON", "").lower()
 
 
 @dataclass(frozen=True)

@@ -43,6 +43,7 @@ while time.monotonic() - start < 300 and service.step not in ("ready", "failed")
     app.processEvents()
     time.sleep(0.02)
 reached = service.step
+print(f"tor {service.version} says of its version: {service.version_status or 'nothing'}")
 if reached != "ready":
     print("\n".join(list(service.log)[-15:]))
 service.stop()

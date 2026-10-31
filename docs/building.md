@@ -36,14 +36,22 @@ proof-of-work defence), so the `tor` program is covered by the GPL, version 3.
 where its source is: the Tor Project's own tarball of that version, and the
 tag of Tor Browser's build system that built the bundle from it.
 
-Tor is updated with each release, since the network turns away a tor that has
-become obsolete: change the versions and sum in `tools.sh`, and the versions,
-source and build-system tag that `THIRD-PARTY-NOTICES.md` names (the tag's
-`projects/tor`, `projects/libevent` and `projects/openssl` in
+Tor is updated with each release, to carry its fixes: change the versions and
+sum in `tools.sh`, and the versions, source and build-system tag that
+`THIRD-PARTY-NOTICES.md` names (the tag's `projects/tor`, `projects/libevent` and
+`projects/openssl` in
 [tor-browser-build](https://gitlab.torproject.org/tpo/applications/tor-browser-build)
 give the bundle's versions). `tests/test_packaging_tor.py` checks that they
 agree, and `tools/smoke/appimage_tor.sh` checks a built AppImage's tor
 publishes an onion address (it needs the network).
+
+A new release of Tor doesn't by itself call for a new release of SealedLore. By
+[Tor's specification](https://spec.torproject.org/tor-spec/subprotocol-versioning.html),
+a client the network no longer recommends only warns. It stops connecting if the
+network comes to require a protocol it doesn't have, which isn't tied to Tor's
+releases. What does call for one is a Tor security fix that affects clients or
+onion services. When tor says its version is out of date, the app says so too
+(the status bar's phone sign, and File → Phone devices…).
 
 Running from source, phone access uses a `tor` on `PATH` (for example
 `sudo apt install tor`); only the program is used, never a tor service the

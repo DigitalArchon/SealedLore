@@ -108,6 +108,14 @@ def find_tor(environ: dict[str, str] | None = None) -> Path | None:
     return Path(found) if found else None
 
 
+def bundled(tor: Path) -> bool:
+    """The AppImage's own tor (build.sh's usr/lib/tor, with the bundle's
+    libraries beside it): only a newer SealedLore can replace it."""
+    return tor.parent.parts[-3:] == ("usr", "lib", "tor") and all(
+        (tor.parent / name).exists() for name in BUNDLED_LIBRARIES
+    )
+
+
 def tor_environment(tor: Path, environ: dict[str, str] | None = None) -> dict[str, str]:
     """A clean environment for tor: nothing of SealedLore's own (AppRun's
     LD_LIBRARY_PATH is the X11 helpers'), and the bundle's folder as its

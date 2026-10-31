@@ -228,6 +228,7 @@ def test_tor_is_started_logged_into_and_publishes_the_onion(app, place):
         "TAKEOWNERSHIP",
         "SETEVENTS",
         "GETINFO",
+        "GETINFO",
         "ADD_ONION",
     ]
     add_onion = log.read_text().splitlines()[-1]
@@ -238,6 +239,74 @@ def test_tor_is_started_logged_into_and_publishes_the_onion(app, place):
     service.stop()
     assert service.step == "stopped" and not service.running()
     assert not service.paths.control.exists() or not _listening(service.paths.control)
+
+
+@pytest.mark.parametrize("mode", ["obsolete", "unrecommended"])
+def test_a_tor_that_says_it_is_out_of_date_is_said_to_be_and_goes_on(app, place, mode):
+    service, seen, _log = run(app, place, mode)
+    wait_for(app, lambda: service.step == "ready")
+    assert service.outdated and service.version_status == mode
+    assert "0.4.9.14" in service.warning and "out of date" in service.warning
+    assert "still works" in service.warning
+    assert seen["address"], "phone access isn't held back by it"
+    service.stop()
+
+
+@pytest.mark.parametrize("mode", ["ok", "new", "no_version", "new_warning"])
+def test_a_tor_that_is_current_or_says_nothing_has_no_warning(app, place, mode):
+    """Newer than the list is a release the list hasn't caught up with. No
+    answer at all must never stop phone access."""
+    service, _seen, _log = run(app, place, mode)
+    wait_for(app, lambda: service.step == "ready")
+    app.processEvents()
+    assert not service.outdated and service.warning == ""
+    service.stop()
+
+
+def test_a_warning_later_in_the_run_is_heard_and_says_it_changed(app, place):
+    tor, _log = fake_tor(place, "late_warning")
+    service = TorService(tor, phone_paths(place / "data"), key=None)
+    heard: list[bool] = []
+    service.changed.connect(lambda *_: heard.append(service.outdated))
+    service.start()
+    wait_for(app, lambda: service.outdated)
+    assert service.version_status == "obsolete"
+    assert heard[-1] is True, "the window hears of it through `changed`"
+    wait_for(app, lambda: service.step == "ready")
+    service.stop()
+
+
+def test_what_to_do_about_it_depends_on_whose_tor_it_is(app, place):
+    from sealedlore.phone.torrc import BUNDLED_LIBRARIES, bundled
+
+    bundle = place / "app" / "usr" / "lib" / "tor"
+    bundle.mkdir(parents=True)
+    (bundle / "tor").touch()
+    assert not bundled(bundle / "tor"), "its libraries aren't beside it"
+    for name in BUNDLED_LIBRARIES:
+        (bundle / name).touch()
+    assert bundled(bundle / "tor")
+    assert not bundled(Path("/usr/bin/tor"))
+
+    theirs = TorService(Path("/usr/bin/tor"), phone_paths(place / "data"), key=None)
+    theirs.version_status = "obsolete"
+    assert "Update the tor at /usr/bin/tor." in theirs.warning
+    ours = TorService(bundle / "tor", phone_paths(place / "data"), key=None)
+    ours.version_status = "obsolete"
+    assert "A newer SealedLore brings a newer tor." in ours.warning
+
+
+def test_what_tor_says_of_its_version_is_read(app):
+    reader = ReplyReader()
+    (info,) = reader.feed(b'250-PROTOCOLINFO 1\r\n250-VERSION Tor="0.4.9.15"\r\n250 OK\r\n')
+    assert tor_control.version_of(info) == "0.4.9.15"
+    (answer,) = reader.feed(b"250-status/version/current=new in series\r\n250 OK\r\n")
+    assert tor_control.version_status(answer) == "new in series"
+    (refused,) = reader.feed(b'552 Unrecognized key "status/version/current"\r\n')
+    assert tor_control.version_status(refused) == ""
+    said = 'STATUS_GENERAL WARN DANGEROUS_VERSION CURRENT="0.4.8.1" REASON=OBSOLETE RECOMMENDED="x"'
+    assert tor_control.dangerous_version(said) == "obsolete"
+    assert tor_control.dangerous_version("STATUS_GENERAL NOTICE CLOCK_JUMPED TIME=120") == ""
 
 
 def _listening(path: Path) -> bool:

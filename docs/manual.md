@@ -1779,6 +1779,12 @@ Settings → Phone → Turn phone access on when SealedLore starts (off unless y
 tick it); Settings → Phone → Say when a phone connects shows a notice when
 one does.
 
+**If tor is out of date.** Tor checks its own version against what the Tor
+network recommends. If it is behind, the sign adds "tor out of date" and File →
+Phone devices… says what to do. Phone access keeps working, but that tor may be
+missing security fixes: a newer SealedLore brings a newer one, and running from
+source, you update the `tor` you installed.
+
 **Choosing what the phones see.** Nothing is shared until you choose it. Tick
 the stories under **Stories on your phones** in **File → Phone devices…**, or,
 while phone access is on, right-click a story in the Stories list and tick

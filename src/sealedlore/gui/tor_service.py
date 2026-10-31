@@ -19,6 +19,11 @@ The steps, each said by `changed` for the window to show:
 A tor that dies or drops its control connection is started again after 2,
 10, then 30 seconds; after that it is given up on and the window says why,
 with the last lines tor printed (`log`, kept in memory only).
+
+Tor knows when the network no longer recommends its version, and says so here
+(`outdated`, `warning`), asked once it has a consensus and told by event after
+that. Being old doesn't stop a tor connecting, so this never changes the step:
+the window says it and phone access goes on (the author, Oct 31 2026).
 """
 
 from __future__ import annotations
@@ -31,9 +36,10 @@ from PySide6.QtCore import QByteArray, QObject, QProcess, QProcessEnvironment, Q
 from PySide6.QtNetwork import QLocalSocket
 
 from sealedlore.phone import tor_control
-from sealedlore.phone.tor_control import ControlError, Reply, ReplyReader
+from sealedlore.phone.tor_control import OUT_OF_DATE, ControlError, Reply, ReplyReader
 from sealedlore.phone.torrc import (
     PhonePaths,
+    bundled,
     make_folders,
     onion_target,
     render_torrc,
@@ -71,6 +77,9 @@ class TorService(QObject):
         self.words = ""
         self.progress = 0
         self.service_id = ""
+        # Its version, and what the network says of it ("" until it has said).
+        self.version = ""
+        self.version_status = ""
         self.log: deque[str] = deque(maxlen=LOG_LINES)
         self._process: QProcess | None = None
         self._control: QLocalSocket | None = None
@@ -115,6 +124,26 @@ class TorService(QObject):
     def running(self) -> bool:
         return self._process is not None
 
+    @property
+    def outdated(self) -> bool:
+        return self.version_status in OUT_OF_DATE
+
+    @property
+    def warning(self) -> str:
+        """What to tell the author of an out-of-date tor; "" for any other."""
+        if not self.outdated:
+            return ""
+        which = f"its version ({self.version})" if self.version else "its version"
+        remedy = (
+            "A newer SealedLore brings a newer tor."
+            if bundled(self.tor)
+            else f"Update the tor at {self.tor}."
+        )
+        return (
+            f"Tor says {which} is out of date, so it may be missing security fixes. "
+            f"Phone access still works. {remedy}"
+        )
+
     # --- starting ------------------------------------------------------------------
 
     def _launch(self) -> None:
@@ -139,6 +168,7 @@ class TorService(QObject):
         self._reader = ReplyReader()
         self._waiting.clear()
         self.progress = 0
+        self.version_status = ""
         self._set("starting", "Starting tor…")
         process.start(
             str(self.tor),
@@ -189,6 +219,7 @@ class TorService(QObject):
         self._send("PROTOCOLINFO 1", self._on_protocolinfo)
 
     def _on_protocolinfo(self, reply: Reply) -> None:
+        self.version = tor_control.version_of(reply)
         cookie_path = tor_control.cookie_file(reply)
         with open(cookie_path, "rb") as cookie:
             self._cookie = cookie.read(tor_control.COOKIE_LENGTH + 1)
@@ -205,7 +236,7 @@ class TorService(QObject):
             raise ControlError(f"tor refused the login: {reply.text()}")
         self._cookie = b""
         self._send("TAKEOWNERSHIP", self._expect_ok)
-        self._send("SETEVENTS STATUS_CLIENT HS_DESC", self._expect_ok)
+        self._send("SETEVENTS STATUS_CLIENT STATUS_GENERAL HS_DESC", self._expect_ok)
         self._send("GETINFO status/bootstrap-phase", self._on_phase)
 
     def _expect_ok(self, reply: Reply) -> None:
@@ -224,6 +255,12 @@ class TorService(QObject):
             self._set("bootstrapping", f"Connecting to Tor {phase.progress}%")
             return
         self._set("publishing", "Publishing the address…")
+        # It has a consensus now, and so an answer. No answer is no warning:
+        # it must never be what stops phone access.
+        self._send(
+            "GETINFO status/version/current",
+            lambda reply: self._note_version(tor_control.version_status(reply)),
+        )
         self._send(tor_control.add_onion(self.key, onion_target(self.paths)), self._on_onion)
 
     def _on_onion(self, reply: Reply) -> None:
@@ -238,10 +275,20 @@ class TorService(QObject):
         text = event.text()
         if text.startswith("STATUS_CLIENT"):
             self._bootstrap(tor_control.bootstrap_of(text))
+        elif text.startswith("STATUS_GENERAL"):
+            self._note_version(tor_control.dangerous_version(text))
         elif self.service_id and tor_control.descriptor_uploaded(event, self.service_id):
             if self.step == "publishing":
                 self._restarts = 0
                 self._set("ready", "Phone access is on.")
+
+    def _note_version(self, status: str) -> None:
+        if not status:
+            return
+        was = self.outdated
+        self.version_status = status
+        if self.outdated != was:
+            self.changed.emit(self.step, self.words)
 
     # --- ending ------------------------------------------------------------------------
 

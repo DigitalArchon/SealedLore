@@ -89,6 +89,8 @@ class PhoneWindow:
         # which learns nothing from them.
         self._phone_memory_shared: set[str] = set()
         self._phone_dialog = None
+        # Tor's out-of-date warning said for this run of phone access.
+        self._phone_told_outdated = False
         self.queued_turn_returned.connect(self._phone_turn_returned)
         self.phone_access_changed.connect(self._sync_phone_controls)
 
@@ -113,6 +115,7 @@ class PhoneWindow:
         paths = phone_paths(self.root or data_home())
         make_folders(paths)
         self.start_phone_server(paths.http, "")
+        self._phone_told_outdated = False
         service = TorService(tor, paths, key=phone.onion.api_key or None, parent=self)
         service.changed.connect(self._on_tor_changed)
         service.address.connect(self._on_tor_address)
@@ -138,9 +141,15 @@ class PhoneWindow:
 
     @property
     def phone_words(self) -> str:
-        return self._tor.words if self._tor is not None else ""
+        if self._tor is None:
+            return ""
+        return " ".join(filter(None, (self._tor.words, self._tor.warning)))
 
     def _on_tor_changed(self, _step: str, _words: str) -> None:
+        warning = self._tor.warning if self._tor is not None else ""
+        if warning and not self._phone_told_outdated:
+            self._phone_told_outdated = True
+            self.statusBar().showMessage(warning, 20_000)
         self.phone_access_changed.emit()
 
     # --- the window's controls: File → Phone access, Phone devices…, the status bar ----
@@ -183,6 +192,7 @@ class PhoneWindow:
                 progress=self._tor.progress if self._tor is not None else 0,
                 connected=connected,
                 shared=len(self._phone_shared_here()) + len(self._phone_memory_shared),
+                outdated=self._tor is not None and self._tor.outdated,
             )
         stories = getattr(self, "stories", None)
         if stories is not None:
