@@ -806,7 +806,13 @@ def pick_model(
     allowed: Callable[[str], bool] | None = None,
     allowed_note: str = "",
 ) -> str | None:
-    """Open the picker; the chosen model id, or None if cancelled."""
+    """Open the picker; the chosen model id, or None if cancelled.
+
+    A picker closed is deleted, not left hidden under the window. A double-click
+    on a row closes it on the press, and where the release never comes (the
+    window has gone: Wayland), Qt keeps sending the mouse to the widget that was
+    pressed: moving over the story brought up the hidden rows' tooltips until
+    the next click (the author, Oct 31 2026), and it held every row for good."""
     dialog = ModelPickerDialog(
         catalog,
         source,
@@ -815,9 +821,10 @@ def pick_model(
         allowed=allowed,
         allowed_note=allowed_note,
     )
-    if dialog.exec() != QDialog.Accepted:
-        return None
-    return dialog.selected_model()
+    try:
+        return dialog.selected_model() if dialog.exec() == QDialog.Accepted else None
+    finally:
+        dialog.deleteLater()
 
 
 def pick_model_and_route(
@@ -834,10 +841,13 @@ def pick_model_and_route(
     dialog = ModelPickerDialog(
         catalog, source, current=current, parent=parent, route_endpoint=endpoint, route=route
     )
-    if dialog.exec() != QDialog.Accepted:
-        return None
-    chosen = dialog.selected_model()
-    return (chosen, dialog.chosen_route) if chosen else None
+    try:
+        if dialog.exec() != QDialog.Accepted:
+            return None
+        chosen = dialog.selected_model()
+        return (chosen, dialog.chosen_route) if chosen else None
+    finally:
+        dialog.deleteLater()
 
 
 def _weak(method):
