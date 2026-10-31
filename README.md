@@ -42,8 +42,9 @@ fun to play. This app will remain focused on text based roleplay.
   last played or title, and searches the text of every story. **Story → Setup… →
   Models** gives one story its own models, marked in the list; every other story
   goes with Settings and follows it. The model button in the status bar now
-  changes only the open story. Text boxes grow with what you are editing. On
-  Wayland, closing the model list no longer leaves its tooltips over the story.
+  changes only the open story. Text boxes grow with what you are editing. Phone
+  access says when tor reports its own version out of date. On Wayland, closing
+  the model list no longer leaves its tooltips over the story.
 - **Text only, and steadier** (2.5.0b1). Visual Stories and the map are
   gone (see above); a story or chat played with them before goes on without
   them, and an old Visual Story is listed as one not played here. Each mode
