@@ -95,7 +95,7 @@ from sealedlore.gui.route_dialog import RouteDialog
 from sealedlore.gui.scene_panel import ScenePanel
 from sealedlore.gui.session_line import SessionLine
 from sealedlore.gui.settings_dialog import SettingsDialog
-from sealedlore.gui.setup_dialog import SetupDialog
+from sealedlore.gui.setup_dialog import ModelChoices, SetupDialog
 from sealedlore.gui.speed_test import speed_tests
 from sealedlore.gui.start_dialog import StartDialog
 from sealedlore.gui.start_page import NewDialog, StartChooser
@@ -459,7 +459,11 @@ class MainWindow(
         self.setCentralWidget(centre)
 
         self.stories = StoryListPanel(root=self.root)
+        self.stories.use_config(lambda: self.config)
+        self.stories.set_sort(self.config.stories_sort)
         self.stories.story_activated.connect(self.open_story)
+        self.stories.found_story_activated.connect(self._open_found_story)
+        self.stories.sort_changed.connect(self._keep_stories_sort)
         self.stories.new_story_requested.connect(self.new_from_chooser)
         self.stories.duplicate_settings_requested.connect(self.duplicate_story_settings)
         self.stories.duplicate_story_requested.connect(self.duplicate_entire_story)
@@ -1019,11 +1023,7 @@ class MainWindow(
         skips to it."""
         if self._busy or not self._private_allows_close():
             return
-        provider_config = self.config.active_provider()
-        model = (
-            provider_config.model if provider_config is not None and provider_config.model else None
-        )
-        guide = NewStoryGuide(self, model=model)
+        guide = NewStoryGuide(self)
         self._guide = guide
         try:
             accepted = guide.exec() == QDialog.Accepted
@@ -1169,9 +1169,7 @@ class MainWindow(
         except ScenarioError as exc:
             self._warn_plain("Could not read scenario", str(exc))
             return
-        provider_config = self.config.active_provider()
-        model = provider_config.model if provider_config and provider_config.model else None
-        bundle = bundle_from_scenario(scenario, main_model=model)
+        bundle = bundle_from_scenario(scenario)
         bundle.pending_files = clean_incoming(bundle.pending_files)
         self._open_new_bundle(bundle, review=True)
 
@@ -1219,9 +1217,7 @@ class MainWindow(
         parsed = self._read_plot_file(path)
         if parsed is None:
             return
-        provider_config = self.config.active_provider()
-        model = provider_config.model if provider_config and provider_config.model else None
-        bundle = bundle_from_scenario(parsed.scenario, main_model=model)
+        bundle = bundle_from_scenario(parsed.scenario)
         self._open_new_bundle(bundle, review=True)
 
     def import_plot_into_story(self) -> None:
@@ -1275,6 +1271,18 @@ class MainWindow(
         title = f"{self.session.story.title} ({again})"
         files = reference_files(self.session.bundle, self.root)
         self._open_new_bundle(fresh_playthrough(self.session.bundle, title, files), review=review)
+
+    def _keep_stories_sort(self, sort: str) -> None:
+        self.config.stories_sort = sort
+        save_config(self.config, root=self.root)
+
+    def _open_found_story(self, story_id: str, words: str) -> None:
+        """A search's result opened: at what was searched for, where it is in
+        the story's messages (it may be in its lore, or on another branch)."""
+        self.open_story(story_id)
+        if words and self.session is not None and self.session.story.id == story_id:
+            self.open_find()
+            self.find_bar.field.setText(words)
 
     # --- the stories list's menu ---------------------------------------------
 
@@ -1471,6 +1479,7 @@ class MainWindow(
         start_before = _how_it_starts(self.session.story)
         # The Characters tab is the Cast page, lent (gui/window_cast.py).
         lent = None if self.session.story.chat else self.lend_cast_panel()
+        model_before = self.session.model
         dialog = SetupDialog(
             self.session.story,
             self.session.cast,
@@ -1478,6 +1487,13 @@ class MainWindow(
             texts=self.session.texts,
             parent=self,
             characters=lent,
+            models=ModelChoices(
+                self.config,
+                self._browse_models_and_route,
+                self._route_endpoint_of,
+                self._hosts_of,
+                self._qualify_recommended,
+            ),
         )
         self._setup_dialog = dialog
         try:
@@ -1508,6 +1524,9 @@ class MainWindow(
         self.setWindowTitle(self._window_title())
         self.stories.refresh(selected_id=self.session.story.id)
         self.reload_transcript()
+        self._fetch_host_prices()
+        if self.in_chat and self.session.model != model_before:
+            self._chat_model_changed()
         self._reassemble_inspector()
         self._update_controls()
         # The opening, the starting scene and the suggested character are only
@@ -3414,6 +3433,10 @@ class MainWindow(
         route = ModelRoute(priority="host", host=host.id, host_model=model, fp8=host.fp8_or_better)
         if role == "story":
             self._set_story_route(route)
+        elif self.session is not None and self.session.story.defaults.own_model(role):
+            # A route goes with its model, here this story's own.
+            self.session.story.defaults.model_routes[role] = route
+            self.session.save()
         else:
             self.config.model_routes[role] = route
             save_config(self.config, root=self.root)
@@ -3456,7 +3479,7 @@ class MainWindow(
         if not accepted or dialog.draft is None:
             return
         try:
-            bundle, warnings = dialog.draft.build(main_model=chat_model or None, root=self.root)
+            bundle, warnings = dialog.draft.build(root=self.root)
         except ValueError as exc:
             self._warn_plain("Could not use the draft", str(exc))
             return
@@ -3505,7 +3528,7 @@ class MainWindow(
         last = self.session.last_review
         dialog = ReviewRequestDialog(
             sizes=self.session.review_sizes(),
-            model=self.config.authoring_model or "",
+            model=self.session.story.defaults.authoring_model or self.config.authoring_model or "",
             default_model=self.session.authoring_model,
             context_for=self.session.cached_context_length,
             price_for=self.session.cached_price,
@@ -3519,7 +3542,11 @@ class MainWindow(
         if not accepted:
             self.reload_transcript()  # the marks may have been cleared
             return
-        self._remember_authoring_model(dialog.model_text())
+        if self.session.story.defaults.authoring_model:
+            # This story's own stays its own: a model typed here is this story's.
+            self.session.story.defaults.authoring_model = dialog.model_text() or None
+        else:
+            self._remember_authoring_model(dialog.model_text())
         complaint = dialog.complaint_text()
         replies = dialog.reply_count()
         whole_prompt = dialog.include_whole_prompt()
@@ -3579,8 +3606,6 @@ class MainWindow(
             for change in chosen
             if results.get(change.id)
         ]
-        if any(c.kind == "model" and c.field == "main_model" for c in applied):
-            self._set_default_model(self.session.story.defaults.main_model)
         self.composer.set_default_agency(self.session.story.defaults.agency_mode)
         self.setWindowTitle(f"SealedLore — {self.session.story.title}")
         self.stories.refresh(selected_id=self.session.story.id)
@@ -3748,6 +3773,12 @@ class MainWindow(
             self.catalog, self._model_source, current, route, self._route_endpoint_of, self
         )
 
+    def _qualify_recommended(self, model_id: str) -> str:
+        """A recommended id (NanoGPT's) as a field holds it: named with the
+        NanoGPT endpoint when that isn't the default (models/config.py)."""
+        nano = next((p for p in self.config.providers if on_nanogpt(p.base_url)), None)
+        return self.config.qualify(nano.name, model_id) if nano is not None else model_id
+
     def _nanogpt_url(self) -> str | None:
         """A NanoGPT endpoint's address, the default's first: the hosts
         listing is public and the same from any of them."""
@@ -3775,8 +3806,11 @@ class MainWindow(
         if url is None or self.use_mock:
             return
         routes = list(self.config.model_routes.values())
-        if self.session is not None and self.session.story.defaults.main_route:
-            routes.append(self.session.story.defaults.main_route)
+        if self.session is not None:
+            defaults = self.session.story.defaults
+            routes += defaults.model_routes.values()
+            if defaults.main_route:
+                routes.append(defaults.main_route)
         for route in routes:
             if route.priority == "host" and route.host_model:
                 hosts_catalog().ensure(url, split_model(route.host_model)[1])
@@ -3834,10 +3868,20 @@ class MainWindow(
         endpoint, bare = split_model(model)
         short = bare.rsplit("/", 1)[-1] or "no model"
         self.model_button.setText(f"{short}{f' · {endpoint}' if endpoint else ''} ▾")
-        self.model_button.setToolTip(
-            f"Storyteller model: {model_label(model) if model else 'none set'}. Click to "
-            "choose another."
-        )
+        shown = model_label(model) if model else "none set"
+        if self.session is None or self.in_chat:
+            tip = f"Storyteller model: {shown}. Click to choose another."
+        elif self.session.story.defaults.main_model:
+            tip = (
+                f"Storyteller model: {shown}, this story's own. Click to choose another for "
+                "this story; Story → Setup → Models puts it back to Settings'."
+            )
+        else:
+            tip = (
+                f"Storyteller model: {shown}, as in Settings. Click to choose another for "
+                "this story alone."
+            )
+        self.model_button.setToolTip(tip)
         self.model_button.setVisible(self.session is not None)
         self.model_button.setEnabled(self.session is not None and not self._busy)
 
@@ -3850,21 +3894,32 @@ class MainWindow(
             return
         if not self._chat_model_allowed(chosen):
             return
-        self.session.story.defaults.main_model = chosen
-        if not self.session.memory_only and not self.in_chat:
-            # A memory-only chat teaches the config nothing, its model included;
-            # Settings changes an open story's model only when its field changed.
-            # A chat's model is the chat's own (New simple chat never made it the
-            # default either): a chat moved to a TEE model used to become the
-            # story model for every new story.
-            self._set_default_model(chosen)
+        defaults = self.session.story.defaults
+        if self.in_chat:
+            defaults.main_model = chosen
+        else:
+            # This story's alone (the settings' story model is the one for
+            # every story that has none of its own, and they all follow it);
+            # the settings' own model is going back to them.
+            provider = self.config.active_provider()
+            following = provider is not None and chosen == provider.model
+            defaults.main_model = None if following else chosen
+            if following:
+                defaults.model_routes.pop("story", None)
         self.session.save()
         if self.in_chat:
             self._chat_model_changed()
+        self.stories.refresh(selected_id=self.session.story.id)
         self._reassemble_inspector()
         self._update_controls()
+        whose = (
+            ""
+            if self.in_chat
+            else (" for this story" if defaults.main_model else ", as in Settings")
+        )
         self.statusBar().showMessage(
-            f"Storyteller model: {chosen}. The next turn re-sends the whole prompt once.", 8000
+            f"Storyteller model{whose}: {chosen}. The next turn re-sends the whole prompt once.",
+            8000,
         )
 
     # --- the storyteller's route -------------------------------------------------
@@ -3884,17 +3939,24 @@ class MainWindow(
 
     def _story_route(self) -> ModelRoute | None:
         """The storyteller's route as it applies to its model now (a host
-        chosen for another model is the subscription's routing): a chat's
-        own, or the story role's in Settings → Models."""
-        story = self.session.story
-        route = story.defaults.main_route if story.chat else self.config.model_routes.get("story")
+        chosen for another model is the subscription's routing)."""
+        route = self.session.role_route("story")
         return route if route_body(route, self.session.model) else None
 
     def _set_story_route(self, route: ModelRoute | None) -> None:
-        """A chat's route is its own; a story's is the storyteller's in the
-        settings, for every story, as Settings → Models sets it."""
-        if self.session is not None and self.session.story.chat:
-            self.session.story.defaults.main_route = route
+        """A route goes with its model: a chat's is its own, as is a story's
+        with a model of its own; a story following the settings has the
+        storyteller's route in the settings, for every story that does."""
+        story = self.session.story if self.session is not None else None
+        if story is not None and story.chat:
+            story.defaults.main_route = route
+            self.session.save()
+            return
+        if story is not None and story.defaults.main_model:
+            if route is None:
+                story.defaults.model_routes.pop("story", None)
+            else:
+                story.defaults.model_routes["story"] = route
             self.session.save()
             return
         if route is None:
@@ -3909,7 +3971,12 @@ class MainWindow(
         if shown:
             text, tip = route_label(self._story_route())
             if not self.in_chat:
-                tip += " It is the storyteller's route in every story (Settings → Models)."
+                tip += (
+                    " It goes with this story's own model."
+                    if self.session.story.defaults.main_model
+                    else " It is the storyteller's route in every story following "
+                    "Settings → Models."
+                )
             self.route_button.setText(text)
             self.route_button.setToolTip(tip)
             self.route_button.setEnabled(not self._busy)
@@ -3937,18 +4004,6 @@ class MainWindow(
         self._reassemble_inspector()
         self._update_controls()
         self.statusBar().showMessage(f"Storyteller route: {describe_route(route)}.", 8000)
-
-    def _set_default_model(self, model: str | None) -> None:
-        """Make `model` the provider's default too, as saving Settings does.
-
-        Settings writes the provider's model onto the open story when saved, so
-        a story model set anywhere else has to become the provider's as well, or
-        the next save of Settings would quietly put the old one back.
-        """
-        provider_config = self.config.active_provider()
-        if model and provider_config is not None and provider_config.model != model:
-            provider_config.model = model
-            save_config(self.config, root=self.root)
 
     def infer_competence(self, character_id: str) -> None:
         if self.session is None or self._busy:
@@ -4465,6 +4520,8 @@ class MainWindow(
             else:
                 # The first-run welcome gives way, or says what is still missing.
                 self.reload_transcript()
+            # Which stories' models differ from the settings may have changed.
+            self.stories.refresh(selected_id=story.id if story is not None else None)
             self._update_controls()
 
     def open_prompt_editor(self) -> None:
@@ -4661,6 +4718,7 @@ class MainWindow(
             event.ignore()
             return
         self._wait_for_attestation()
+        self.stories.stop_search()
         self.catalog.wait()
         attestation_tests().wait()
         speed_tests().wait()

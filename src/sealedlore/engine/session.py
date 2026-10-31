@@ -180,7 +180,7 @@ from sealedlore.models.node import (
     Usage,
 )
 from sealedlore.models.private import PrivateSpan
-from sealedlore.models.route import ROUTE_ROLES
+from sealedlore.models.route import ROUTE_ROLES, ModelRoute
 from sealedlore.models.scene import SceneLogEntry, SceneSource, SceneState
 from sealedlore.models.story import Story
 from sealedlore.models.summary import Summary
@@ -458,6 +458,7 @@ class StorySession(
     ) -> None:
         self.bundle = bundle
         self.config = config
+        self._settle_models()
         # What each routed call's bill said about its route, latest per route
         # (`route_checks`); `host_price` is the window's lookup of a host's
         # listed price, None where it doesn't know it.
@@ -632,6 +633,22 @@ class StorySession(
                 return character
         return None
 
+    def _settle_models(self) -> None:
+        """Once for a story saved before it could go with the settings: it
+        was given the default model when it was made, so one still on the
+        default follows it from here. One on another model stays there, and
+        shows as its own: a model is never changed under a story without a
+        word. A chat's model is always its own."""
+        defaults = self.story.defaults
+        if defaults.models_settled:
+            return
+        defaults.models_settled = True
+        provider = self.config.active_provider()
+        if not self.story.chat and provider is not None and defaults.main_model == provider.model:
+            defaults.main_model = None
+        if defaults.summarization_model == self.config.summarization_model:
+            defaults.summarization_model = None
+
     @property
     def model(self) -> str:
         provider_config = self.config.active_provider()
@@ -652,7 +669,9 @@ class StorySession(
     @property
     def scene_model(self) -> str:
         """The model that reads the scene after each passage: small and fast is right."""
-        return self.config.scene_model or self.summarization_model
+        return (
+            self.story.defaults.scene_model or self.config.scene_model or self.summarization_model
+        )
 
     @property
     def provider(self) -> ChatProvider:
@@ -710,14 +729,14 @@ class StorySession(
     def _role_in_use(self, role: str) -> tuple[str, str]:
         """(the role whose model a call uses, that model): a blank role takes
         its fallback's model, and with it that role's route."""
+        defaults = self.story.defaults
         own = {
-            "summarisation": self.story.defaults.summarization_model
-            or self.config.summarization_model,
-            "scene": self.config.scene_model,
-            "plot": self.config.plot_model,
-            "lore": self.config.lore_model,
-            "authoring": self.config.authoring_model,
-            "image_prompt": self.config.image_prompt_model,
+            "summarisation": defaults.summarization_model or self.config.summarization_model,
+            "scene": defaults.scene_model or self.config.scene_model,
+            "plot": defaults.plot_model or self.config.plot_model,
+            "lore": defaults.lore_model or self.config.lore_model,
+            "authoring": defaults.authoring_model or self.config.authoring_model,
+            "image_prompt": defaults.image_prompt_model or self.config.image_prompt_model,
         }
         role = role_in_use(role, own)
         if self.story.chat and is_tee(self.model):
@@ -739,11 +758,18 @@ class StorySession(
         provider = self.config.endpoint_for(model)
         if provider is None or not routable(provider.base_url, model):
             return {}
+        return route_body(self.role_route(role), model)
+
+    def role_route(self, role: str) -> ModelRoute | None:
+        """A role's route as chosen: it goes with the role's model, so a model
+        of this story's own has the story's route and one from Settings has
+        Settings'. A chat's own model has its own."""
+        defaults = self.story.defaults
         if role == "story" and self.story.chat:
-            route = self.story.defaults.main_route
-        else:
-            route = self.config.model_routes.get(role)
-        return route_body(route, model)
+            return defaults.main_route
+        if defaults.own_model(role):
+            return defaults.model_routes.get(role)
+        return self.config.model_routes.get(role)
 
     @property
     def summaries(self) -> list[Summary]:
@@ -763,6 +789,7 @@ class StorySession(
             cast_token_cap=self.config.cast_token_cap,
             texts=self.texts,
             chapter_days=self.chapter_days(),
+            model=self.model,
         )
 
     def chapter_days(self) -> tuple[tuple[str, tuple[int, int]], ...]:
@@ -1041,7 +1068,7 @@ class StorySession(
             prose="\n\n".join(n.content for n in path[-3:]),
             scene=scene_line(self.story.scene.location, self._present_names()),
             vectors=vectors,
-            model=self.config.lore_model or self.scene_model,
+            model=self.story.defaults.lore_model or self.config.lore_model or self.scene_model,
             route=self.route_for("lore"),
         )
         detached = getattr(self.provider, "detached", None)
@@ -3287,7 +3314,7 @@ class StorySession(
 
     @property
     def authoring_model(self) -> str:
-        return self.config.authoring_model or self.model
+        return self.story.defaults.authoring_model or self.config.authoring_model or self.model
 
     def endpoint_models(self) -> dict[str, ModelInfo] | None:
         """The endpoint's chat models, fetched at most hourly; None if unavailable.

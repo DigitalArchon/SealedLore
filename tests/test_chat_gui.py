@@ -849,8 +849,8 @@ def test_a_new_chat_takes_its_own_route(app, window, monkeypatch, tmp_path):
 def test_the_storytellers_route_can_be_changed_beside_its_model(app, window, monkeypatch, tmp_path):
     """A route chosen only in New chat or Settings couldn't be swapped when a
     host let the storyteller down. The route button beside the model button
-    changes it: a story's is the storyteller's in the settings, a chat's its
-    own and never the settings'."""
+    changes it: a story following the settings has the storyteller's there, a
+    chat's is its own and never the settings'."""
     import sealedlore.gui.main_window as main_window_module
     from sealedlore.engine.catalog import ModelInfo
     from sealedlore.models.config import ProviderConfig
@@ -881,8 +881,8 @@ def test_the_storytellers_route_can_be_changed_beside_its_model(app, window, mon
 
     monkeypatch.setattr(main_window_module, "RouteDialog", Dialog)
 
-    # An ordinary story: the storyteller's route, for every story.
-    window.session.story.defaults.main_model = "z-ai/glm-5.3"
+    # An ordinary story on the settings' model: the storyteller's route there.
+    window.session.story.defaults.main_model = None
     window._update_controls()
     assert not window.route_button.isHidden() and window.route_button.text() == "Route…"
     chosen.append(ModelRoute(priority="latency"))
@@ -1079,7 +1079,8 @@ def test_the_model_button_leaves_the_default_model_alone_in_a_chat(
     assert load_story_bundle(window.session.story.id, root=tmp_path).story.defaults.main_model == (
         "TEE/gemma-3-27b"
     )
-    # A story's model set by the button still becomes the default, as before.
+    # Nor does a story's: it is that story's own (Story → Setup → Models).
     window.open_story("story-1")
     window.choose_story_model()
-    assert window.config.active_provider().model == "TEE/gemma-3-27b"
+    assert window.session.model == "TEE/gemma-3-27b"
+    assert window.config.active_provider().model == "z-ai/glm-5.3"

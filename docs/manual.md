@@ -465,6 +465,19 @@ the Stories list, show the same choices. A story saves itself as you go
 
 ![The start page with no stories yet: the sample stories first, each with its picture and a line on what it is, then the ways to start your own](screenshots/start-page.webp)
 
+**The Stories list.** Each row says what kind of story it is (**Simple**,
+**Standard** or **With Plot**), how many messages it has, when it was started
+and when it was last played, and **own models** when it is on models other than
+those in Settings (the tooltip says which). **Sort by** puts them in order of
+when they were last played, or by title.
+
+**Searching every story.** The box at the top of the list searches everything:
+every message on every branch, the chapters, your Questions, the world, the
+opening and the cards. A story is listed if it has all the words, with the
+words around them under its title. Open one and Find goes to them, when they are
+in its messages. What a plot is still keeping back isn't searched, unless you
+have chosen to see spoilers.
+
 **Managing stories.** Right-click a story in the Stories list:
 - **Open folder** shows the story's files in your file manager (also for a
   story that can't be read).
@@ -589,16 +602,24 @@ archiving, rebuilding summaries.
 
 ## Models
 
-Nineteen settings name a model; the text models are together on Settings →
+Eighteen settings name a model; the text models are together on Settings →
 Models, the picture models on Settings → Images. Blank ones fall back as
 shown; the defaults marked ★ are NanoGPT model ids, so on another endpoint
 set them to one it lists (Browse…).
 
+**A story's own models.** A story goes with Settings → Models and follows it when
+it changes. **Story → Setup… → Models** chooses any of the text models for that
+story alone, with its route; **Use the models in Settings** puts it back. The
+model button in the status bar chooses the storyteller for the open story alone.
+The Stories list says **own models** on a story that differs from Settings. A
+story from before this keeps the model it has been played on, unless that is
+what Settings has, and then it follows Settings. A simple chat always has its own
+model, chosen when it was made; a TEE or encrypted chat's calls all go to it.
+
 | Setting | Where | Used for | Blank means |
 |---|---|---|---|
-| Story model | Settings → Models | the story model for new stories | starts as `anthropic/claude-sonnet-4.6` |
-| This story's model | the status-bar model button | this story's storyteller | Settings → Models → Story model |
-| Summarisation model | Settings → Models | chapters, merges, for every story (and the open one, when changed with it open) | the story model |
+| Story model | Settings → Models | the storyteller, in every story without its own | starts as `anthropic/claude-sonnet-4.6` |
+| Summarisation model | Settings → Models | chapters, merges | the story model |
 | Scene model | Settings → Models | the scene read after each passage, and a plot's clock and facts | the summarisation model |
 | Plot model | Settings → Models | the plot's director (the clock and facts are read by the scene model) | the scene model |
 | Authoring model | Settings → Models | drafting from a premise, settings reviews | the story model |
@@ -815,7 +836,9 @@ Everything else keeps its default and is in Setup and on the Cast page;
   character to suggest playing. By default the opening decides who is there
   (the people at their posts, whoever the place would have); set someone to
   **Present** or **Not present** to decide it yourself. Anyone not there can
-  still come in later.
+  still come in later;
+- **Models**: the models this story uses in place of those in Settings (see
+  [Models](#models)).
 
 **Story → Start story…** asks who you're playing and who is there at the start
 (the same choice as Setup's, so a new story can have its cast made first), and
@@ -1340,7 +1363,7 @@ belongs to no card); it is copied into the story, its hidden data removed,
 and offered from then on. **Prompt written
 by** in the dialog picks another model for that (blank is the story model;
 your choice is kept, and is the same setting as Settings → Models → Image
-prompt writer). The story model reads the story from its cache; another model
+prompt writer, or the story's own writer if it has one). The story model reads the story from its cache; another model
 reads it at full price. The dialog shows the
 whole request — model, size, count, listed price, the pictures in order, and
 the prompt, which you can edit — and nothing is sent until you press

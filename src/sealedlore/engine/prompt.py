@@ -146,6 +146,9 @@ class AssemblyOptions:
     # A plot story's chapters, by summary id, with the story days each spans
     # from the plot's clock (`Config.plot_chapter_days`); empty otherwise.
     chapter_days: tuple[tuple[str, tuple[int, int]], ...] = ()
+    # The model the prompt goes to, for its token estimate: a story following
+    # Settings names none of its own.
+    model: str | None = None
 
 
 @dataclass(frozen=True)
@@ -520,7 +523,7 @@ def _assemble(
     stand-in first message is the chat's, not the story's."""
     estimator = estimator or TokenEstimator()
     options = options or AssemblyOptions()
-    model = story.defaults.main_model
+    model = options.model or story.defaults.main_model
     cast_by_id = {character.id: character for character in cast}
 
     def count(text: str) -> int:

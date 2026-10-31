@@ -166,8 +166,7 @@ class VideosWindow:
             # The next video starts from these, as the picture dialog's size does.
             self.config.video_model = dialog.request.model.id
             self.config.video_params = dict(dialog.request.settings)
-            if dialog.writer_model() != self.config.image_prompt_model:
-                self.config.image_prompt_model = dialog.writer_model()
+            self.session.keep_prompt_writer(dialog.writer_model())
             save_config(self.config, root=self.root)
         client = self.session.video_client()
         if client is None:

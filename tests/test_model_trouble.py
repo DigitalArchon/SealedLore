@@ -507,6 +507,13 @@ def test_using_a_host_makes_it_the_roles_route(window):
     assert (route.priority, route.host, route.host_model, route.fp8) == ("host", "sail", GLM, True)
     assert load_config(root=window.root).model_routes["scene"].host == "sail"
 
+    # A story with its own scene model keeps the route with that model.
+    window.session.story.defaults.scene_model = GLM
+    window._use_host("scene", GLM, HOSTS.host("morph"))
+    assert window.session.story.defaults.model_routes["scene"].host == "morph"
+    assert window.config.model_routes["scene"].host == "sail", "Settings' is left as it was"
+    assert window.session.role_route("scene").host == "morph"
+
 
 def test_a_passage_caught_reasoning_at_length_says_so_in_the_transcript(window):
     from PySide6.QtWidgets import QLabel

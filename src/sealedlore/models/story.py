@@ -67,6 +67,18 @@ class StyleDirectives(BaseModel):
     detached: bool = False
 
 
+# Each role's own model on `StoryDefaults`, by the roles of `models/route.py`.
+STORY_MODEL_FIELDS = {
+    "story": "main_model",
+    "summarisation": "summarization_model",
+    "authoring": "authoring_model",
+    "scene": "scene_model",
+    "plot": "plot_model",
+    "lore": "lore_model",
+    "image_prompt": "image_prompt_model",
+}
+
+
 class StoryDefaults(BaseModel):
     agency_mode: AgencyMode = "contested"
     npc_scope: NpcScope = "all"
@@ -75,14 +87,36 @@ class StoryDefaults(BaseModel):
     # quickly past ~60k tokens of context, so 60k is the ceiling as well as
     # the default. Existing stories keep what they were saved with.
     context_token_budget: int = 60_000
+    # This story's own models, chosen in Story → Setup → Models (the author,
+    # Oct 31 2026). Blank goes with Settings → Models, and follows it there.
+    # A chat always has its own `main_model`: moved by nothing but its owner.
     main_model: str | None = None
-    # A simple chat's own route for its model, chosen with it (New chat);
-    # a story's roles take theirs from `Config.model_routes`.
+    # A simple chat's own route for its model, chosen with it (New chat).
     main_route: ModelRoute | None = None
     summarization_model: str | None = None
+    authoring_model: str | None = None
+    scene_model: str | None = None
+    plot_model: str | None = None
+    lore_model: str | None = None
+    image_prompt_model: str | None = None
+    # The route of each role with its own model here, by role: a route belongs
+    # to its model, and a role following Settings takes Settings' route.
+    model_routes: dict[str, ModelRoute] = Field(default_factory=dict)
+    # Every story used to be given the default model when it was made. Once
+    # opened, one still on the default follows it (`StorySession` on opening);
+    # False for a story not opened since stories could.
+    models_settled: bool = False
     # Generation settings (temperature, max tokens, reasoning) are the
     # author's for every story (`Config.generation`); an older story.json's
     # own `generation` is ignored on load.
+
+    def own_model(self, role: str) -> str | None:
+        return getattr(self, STORY_MODEL_FIELDS[role])
+
+    def own_models(self) -> dict[str, str]:
+        """The roles with a model of this story's own, and those models."""
+        models = {role: self.own_model(role) for role in STORY_MODEL_FIELDS}
+        return {role: model for role, model in models.items() if model}
 
 
 OpeningMode = Literal["generate", "as_written"]

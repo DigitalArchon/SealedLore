@@ -113,12 +113,11 @@ class NewStoryGuide(QDialog):
     for the full Setup instead of starting, `discarded` whether a story made
     was moved to the trash on Cancel."""
 
-    def __init__(self, host: GuideHost, *, model: str | None = None) -> None:
+    def __init__(self, host: GuideHost) -> None:
         super().__init__(host if isinstance(host, QWidget) else None)
         self.setWindowTitle("Write a story from scratch")
         self.setMinimumSize(620, 520)
         self._host = host
-        self._model = model
         self.made = False
         self.full_setup = False
         self.discarded = False
@@ -325,8 +324,6 @@ class NewStoryGuide(QDialog):
         """The story, made with what the first step holds, and opened in the
         window behind the guide."""
         story = Story(title=self.title.text().strip())
-        if self._model:
-            story.defaults.main_model = self._model
         story.world_bible = self.world.toPlainText().strip() or None
         self.made = self._host.guide_make_story(StoryBundle(story=story))
         return self.made

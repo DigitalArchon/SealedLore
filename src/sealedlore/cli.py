@@ -200,12 +200,9 @@ def key_place(config: Config, slot: str, root: Path | None) -> str:
 
 def cmd_new(args: argparse.Namespace) -> int:
     root: Path | None = args.data_dir
-    config = load_config(root=root)
     story = Story(title=args.title)
     if args.model:
         story.defaults.main_model = args.model
-    elif (active := config.active_provider()) is not None:
-        story.defaults.main_model = active.model
     save_story_bundle(StoryBundle(story=story), root=root)
     print(f"Created story {story.title!r}\n  id: {story.id}")
     return 0
@@ -230,7 +227,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
     try:
         for _ in draft.stream():
             pass
-        bundle, warnings = draft.build(main_model=chat_model, root=root)
+        bundle, warnings = draft.build(root=root)
     except (ProviderError, ValueError) as exc:
         print(f"Could not draft the story: {exc}", file=sys.stderr)
         return 1
@@ -261,8 +258,7 @@ def cmd_scenario_import(args: argparse.Namespace) -> int:
     except ScenarioError as exc:
         print(exc, file=sys.stderr)
         return 1
-    active = load_config(root=root).active_provider()
-    bundle = bundle_from_scenario(scenario, main_model=active.model if active else None)
+    bundle = bundle_from_scenario(scenario)
     save_story_bundle(bundle, root=root)
     print(f"Created story {bundle.story.title!r}\n  id: {bundle.story.id}")
     print("  run `sealedlore chat <id>` and /begin <name> to start from the opening")

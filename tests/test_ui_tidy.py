@@ -275,23 +275,23 @@ def test_the_summarisation_model_is_set_for_every_story(app, window: MainWindow)
     assert story.defaults.summarization_model is None
     assert window.session.summarization_model == "every/story"
 
-    # A story's own wins, shows in the field, and an unrelated save leaves
-    # both as they were.
+    # A story's own (Story → Setup → Models) wins, and Settings is the one
+    # for every story: it doesn't show it, and no save reaches it.
     story.defaults.summarization_model = "this/story"
     dialog = _settings(window, story)
-    assert dialog.summarization_model.text() == "this/story"
+    assert dialog.summarization_model.text() == "every/story"
     dialog.lore_model.setText("lore/model")
     dialog._save()
     assert window.config.summarization_model == "every/story"
     assert story.defaults.summarization_model == "this/story"
     assert window.session.summarization_model == "this/story"
 
-    # Cleared with the story open: both go back to the story model.
     dialog = _settings(window, story)
     dialog.summarization_model.setText("")
     dialog._save()
     assert window.config.summarization_model is None
-    assert story.defaults.summarization_model is None
+    assert story.defaults.summarization_model == "this/story"
+    story.defaults.summarization_model = None
     assert window.session.summarization_model == window.session.model
 
 
@@ -331,7 +331,8 @@ def test_the_models_tab_saves_where_the_old_tabs_did(app, window: MainWindow):
     dialog.lore_model.setText("lore/model")
     dialog.image_prompt_model.setText("prompt/model")
     dialog._save()
-    assert story.defaults.summarization_model == "summary/model"
+    assert window.config.summarization_model == "summary/model"
+    assert story.defaults.summarization_model is None
     assert window.config.lore_model == "lore/model"
     assert window.config.image_prompt_model == "prompt/model"
 

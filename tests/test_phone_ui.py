@@ -262,8 +262,8 @@ def test_share_with_phone_in_the_stories_list(app, place, story, cast):
     from sealedlore.gui.stories import _StoryRow
 
     title, meta = _StoryRow._parts(panel.list.indexFromItem(row))
-    assert meta.endswith("on your phones")
-    assert row.text().split("\n")[1].endswith("messages")  # the item's own text unchanged
+    assert meta[0].endswith("on your phones")
+    assert "on your phones" not in row.text()  # the mark is drawn, not the item's text
     window.close()
 
 

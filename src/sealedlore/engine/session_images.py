@@ -51,7 +51,28 @@ DEFAULT_MAX_REFS = 4
 class ImageRuntime:
     @property
     def image_prompt_model(self) -> str:
-        return self.config.image_prompt_model or self.model
+        return (
+            self.story.defaults.image_prompt_model or self.config.image_prompt_model or self.model
+        )
+
+    def prompt_writer_chosen(self) -> str:
+        """What the picture dialogs' Prompt written by field holds: this
+        story's own writer, else the settings'; blank is the story model."""
+        return self.story.defaults.image_prompt_model or self.config.image_prompt_model or ""
+
+    def keep_prompt_writer(self, writer: str | None) -> bool:
+        """A writer picked in a picture dialog sticks: as this story's own if
+        it has one, else in the settings (True: the config changed)."""
+        defaults = self.story.defaults
+        if defaults.image_prompt_model:
+            if writer != defaults.image_prompt_model:
+                defaults.image_prompt_model = writer or None
+                self.save()
+            return False
+        if writer == self.config.image_prompt_model:
+            return False
+        self.config.image_prompt_model = writer
+        return True
 
     def image_path(self, anchor_id: str | None) -> list[Node]:
         """The path a picture is of: the active one, or up to a passage on it.

@@ -113,7 +113,7 @@ def session_with_routes(tmp_path: Path, story: Story, cast, **changes) -> tuple:
         model_routes=ROUTES,
         **changes,
     )
-    story.defaults.main_model = MODELS["story"]
+    cfg.active_provider().model = MODELS["story"]
     bundle = StoryBundle(story=story, cast=cast)
     save_story_bundle(bundle, root=tmp_path)
     provider = MockChatProvider([f"Passage {i}." for i in range(40)])

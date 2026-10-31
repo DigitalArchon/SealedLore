@@ -647,6 +647,11 @@ def settings_view(
         "model": {
             "main_model": story.defaults.main_model or model,
             "summarization_model": story.defaults.summarization_model,
+            **{
+                f"{name}_for_this_story": getattr(story.defaults, name)
+                for name in ("authoring_model", "scene_model", "plot_model", "lore_model")
+                if getattr(story.defaults, name)
+            },
             "context_token_budget": story.defaults.context_token_budget,
             # The author's, for every story: suggested, never applied.
             "generation": {

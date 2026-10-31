@@ -394,7 +394,9 @@ class SettingsDialog(QDialog):
         naming = [
             label for label, field in self._model_fields() if split_model(field.text())[0] == name
         ]
-        if self.story is not None and split_model(self.story.defaults.main_model or "")[0] == name:
+        if self.story is not None and any(
+            split_model(model)[0] == name for model in self.story.defaults.own_models().values()
+        ):
             naming.append("this story's own model")
         del self._endpoints[index]
         del self._origins[index]
@@ -735,6 +737,14 @@ class SettingsDialog(QDialog):
         intro.setObjectName("hintLabel")
         intro.setWordWrap(True)
         form.addRow(intro)
+        if self.story is not None and not self.story.chat and self.story.defaults.own_models():
+            own = QLabel(
+                "The open story has models of its own, which stay as they are: Story → Setup "
+                "→ Models."
+            )
+            own.setObjectName("hintLabel")
+            own.setWordWrap(True)
+            form.addRow(own)
 
         # A new setup starts on Sonnet 4.6 rather than a blank field: one
         # thing fewer before the first story.
@@ -743,25 +753,18 @@ class SettingsDialog(QDialog):
         )
         self.model.setPlaceholderText(DEFAULT_STORY_MODEL)
         self.model.setToolTip("The storyteller: writes every passage.")
-        # Only a model the author changes here becomes the open story's: saving
-        # for any other reason used to put the provider's model on whichever
-        # story was open. Compared with the field as it opened, so the default
-        # filled into a blank field doesn't count as a change either.
+        # A story goes with this unless it has a model of its own (Story →
+        # Setup → Models); a chat has its own, and only a change made here
+        # moves it. Compared with the field as it opened, so the default filled
+        # into a blank field doesn't count as a change either.
         self._model_at_open = self.model.text().strip()
         form.addRow("Story model", self.model)
 
-        # The open story's own, else the one for every story. Like the story
-        # model, only a change made here is saved (`_save`): it becomes the
-        # one for every story and the open story's. It used to be the story's
-        # alone, so the field was greyed out with no story open.
-        own = self.story.defaults.summarization_model if self.story is not None else None
-        self.summarization_model = self._routed_field(own or self.config.summarization_model or "")
+        self.summarization_model = self._routed_field(self.config.summarization_model or "")
         self.summarization_model.setPlaceholderText("same as the story model")
         self.summarization_model.setToolTip(
-            "Writes the chapters as the story is archived, and merges them. Set here for "
-            "every story" + (", and for the open one." if self.story is not None else ".")
+            "Writes the chapters as the story is archived, and merges them."
         )
-        self._summariser_at_open = self.summarization_model.text().strip()
         form.addRow("Summarisation model", self.summarization_model)
 
         self.authoring_model = self._routed_field(self.config.authoring_model or "")
@@ -920,19 +923,7 @@ class SettingsDialog(QDialog):
             )
 
         roles = [role("Story", self.model, kind="story")]
-        own = (self.story.defaults.main_model or "").strip() if self.story is not None else ""
-        if own and own != self.model.text().strip():
-            # A chat's own route is its own; a story's model takes the Story route.
-            route = self.story.defaults.main_route if self.story.chat else self.model.route
-            endpoint, _bare = self._resolve(own)
-            body = (
-                route_body(route, own)
-                if endpoint is not None and routable(endpoint.base_url, own)
-                else {}
-            )
-            roles.append(
-                Role("This story", own, endpoint, None, body, describe(route), kind="story")
-            )
+        roles += self._story_roles()
         roles += [
             role("Summarisation", self.summarization_model, "Story"),
             role("Authoring", self.authoring_model, "Story"),
@@ -946,6 +937,31 @@ class SettingsDialog(QDialog):
             roles.append(Role("Private", private.model, private, kind="story"))
         # The levels as they stand in the Generation tab, saved or not.
         return plan_targets(roles, reasoning_for=self._sent_to)
+
+    def _story_roles(self) -> list[Role]:
+        """The open story's own models, as its calls send them."""
+        if self.story is None:
+            return []
+        defaults = self.story.defaults
+        roles = []
+        for role, own in defaults.own_models().items():
+            if role == "story" and own == self.model.text().strip():
+                continue
+            route = (
+                defaults.main_route
+                if role == "story" and self.story.chat
+                else defaults.model_routes.get(role)
+            )
+            endpoint, _bare = self._resolve(own)
+            body = (
+                route_body(route, own)
+                if endpoint is not None and routable(endpoint.base_url, own)
+                else {}
+            )
+            name = "This story" if role == "story" else f"This story: {role.replace('_', ' ')}"
+            kind = "story" if role == "story" else "side"
+            roles.append(Role(name, own, endpoint, None, body, describe(route), kind=kind))
+        return roles
 
     def _test_speed(self) -> None:
         try:
@@ -1793,11 +1809,7 @@ class SettingsDialog(QDialog):
         self.config.key_storage = self.key_storage.currentData()
         provider.model = self.model.text().strip()
         self.config.active_provider_name = provider.name
-        summariser = self.summarization_model.text().strip()
-        if summariser != self._summariser_at_open:
-            self.config.summarization_model = summariser or None
-            if self.story is not None:
-                self.story.defaults.summarization_model = summariser or None
+        self.config.summarization_model = self.summarization_model.text().strip() or None
         self.config.authoring_model = self.authoring_model.text().strip() or None
         self.config.image_model = self.image_model.text().strip() or self.config.image_model
         self.config.image_size = self.image_size.currentText().strip() or self.config.image_size
@@ -1897,9 +1909,9 @@ class SettingsDialog(QDialog):
 
         if self.story is not None:
             self.story.defaults.context_token_budget = self.budget.value()
-            if provider.model and provider.model != self._model_at_open:
+            if self.story.chat and provider.model and provider.model != self._model_at_open:
                 current = self.story.defaults.main_model or ""
-                refusal = move_refusal(current, provider.model) if self.story.chat else None
+                refusal = move_refusal(current, provider.model)
                 if refusal:
                     # A TEE chat never moves to a model that can't be attested
                     # (StorySession.check_chat_model); the endpoint's default

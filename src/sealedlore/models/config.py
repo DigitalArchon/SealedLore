@@ -746,6 +746,8 @@ class Config(BaseModel):
     # default, for the story's room (the author, Oct 15 2026); Stories above
     # the transcript or View → Stories list brings it back, and that sticks.
     stories_list: bool = False
+    # The order of the Stories list: "played" (last played first) or "title".
+    stories_sort: str = "played"
     # Whether the composer's second row (More: model voices, outcome, a
     # private scene, an OOC note) is open. Put away by default (Oct 18 2026):
     # eight controls before the first turn confused a new player.

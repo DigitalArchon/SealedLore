@@ -266,7 +266,7 @@ class ImageDialog(QDialog):
         # Who writes the prompt: blank is the story model. Playtesting: the
         # setting was in Settings → Models only, so in play it couldn't be
         # found. A choice here is kept as that same setting.
-        self.writer = ModelField(self.session.config.image_prompt_model or "", self._browse)
+        self.writer = ModelField(self.session.prompt_writer_chosen(), self._browse)
         self.writer.setPlaceholderText(self.session.model or "the story's model")
         if self.session.in_private:
             self.writer.setText(self.session.open_span.model)

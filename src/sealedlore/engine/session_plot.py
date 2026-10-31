@@ -268,7 +268,7 @@ class PlotRuntime:
     def plot_model(self) -> str:
         """The model that directs the plot's events and settles overdue ones.
         The clock read after each passage runs on the scene model."""
-        return self.config.plot_model or self.scene_model
+        return self.story.defaults.plot_model or self.config.plot_model or self.scene_model
 
     def attach_plot(
         self,

@@ -365,8 +365,7 @@ class ImagesWindow:
         # setting stays as the author left it for stories. Nor from a chat
         # kept in memory only, which teaches the settings nothing.)
         private = self.session.in_private or self.session.tee_chat or self.session.memory_only
-        if not private and writer != self.config.image_prompt_model:
-            self.config.image_prompt_model = writer
+        if not private and self.session.keep_prompt_writer(writer):
             save_config(self.config, root=self.root)
         # The prompt writer's call, paid whether or not a picture follows.
         for usage in self.session.unreported_usage:

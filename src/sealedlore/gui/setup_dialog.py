@@ -15,7 +15,8 @@ line away, on another page).
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -34,6 +35,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
+from sealedlore.engine.routing import config_role_model
 from sealedlore.gui.composer import (
     AGENCY_LABELS,
     AGENCY_TIPS,
@@ -41,13 +43,16 @@ from sealedlore.gui.composer import (
     WORLD_ACTIVITY_TIPS,
 )
 from sealedlore.gui.fields import line_edit, set_field_text
+from sealedlore.gui.model_picker import BrowseRoute, ModelField, Qualify, RouteEndpoint
 from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.gui.start_presence import StartPresence
 from sealedlore.gui.style_panel import StylePanel
 from sealedlore.models.character import Character
+from sealedlore.models.config import RECOMMENDED_TEXT_MODELS, Config
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID, Node
 from sealedlore.models.scene import SceneState
-from sealedlore.models.story import Story
+from sealedlore.models.story import STORY_MODEL_FIELDS, Story
+from sealedlore.providers.tee import is_tee
 
 # How full the map's rooms are (models/area.py `Density`).
 DENSITY_LABELS = {
@@ -59,6 +64,34 @@ DENSITY_LABELS = {
 
 GENERATE_LABEL = "The model writes the opening from these notes"
 AS_WRITTEN_LABEL = "Use exactly as written — this is the opening passage"
+
+
+# A story's models as Settings → Models lists them: role, label, what it does.
+MODEL_ROLES = (
+    ("story", "Story model", "The storyteller: writes every passage."),
+    ("summarisation", "Summarisation model", "Writes the chapters as the story is archived."),
+    ("authoring", "Authoring model", "Reviews this story's settings."),
+    ("scene", "Scene model", "Reads the scene after every passage."),
+    ("plot", "Plot model", "Decides when the plot's events happen."),
+    ("lore", "Lore model", "Picks lore after each passage, when a lorebook is too large to send."),
+    ("image_prompt", "Image prompt writer", "Writes the image prompt from the story."),
+)
+# What a simple chat calls (engine/chat.py), and what it calls its own model.
+CHAT_MODEL_ROLES = ("story", "summarisation", "image_prompt")
+ALL_IN_SETTINGS = "Every model here goes with Settings → Models, and follows it when it changes."
+SOME_OF_ITS_OWN = "The filled-in ones are this story's alone; the rest go with Settings → Models."
+
+
+@dataclass(frozen=True)
+class ModelChoices:
+    """What the Models tab offers: the settings it goes with, and from the
+    window, the model list and each model's routes."""
+
+    config: Config
+    browse_route: BrowseRoute | None = None
+    route_endpoint: RouteEndpoint | None = None
+    hosts_of: Callable[[str], tuple[str, ...] | None] | None = None
+    qualify: Qualify | None = None
 
 
 def _hint(text: str) -> QLabel:
@@ -78,10 +111,11 @@ class SetupDialog(QDialog):
         texts: PromptTexts = DEFAULT_TEXTS,
         parent: QWidget | None = None,
         characters: QWidget | None = None,
+        models: ModelChoices | None = None,
     ) -> None:
         """`cast`: the story's own list, read again whenever the Starting
         scene tab is shown, since `characters` (the Cast page, lent) may
-        have changed it."""
+        have changed it. `models`: for the Models tab, shown with it."""
         super().__init__(parent)
         self.setWindowTitle("Story setup")
         self.texts = texts
@@ -91,12 +125,17 @@ class SetupDialog(QDialog):
         self._live_cast = cast
         self.cast = list(cast)
         self.first_message = first_message
+        self.model_fields: dict[str, ModelField] = {}
+        self._models = models
 
         self.tabs = QTabWidget()
         if story.chat:
             # A simple chat's setup is its name and its system prompt.
             self.tabs.addTab(self._chat_about_tab(), "About")
             self.tabs.addTab(self._chat_prompt_tab(), "System prompt")
+            # A TEE chat's every call is its own model's, moved by its button.
+            if models is not None and not is_tee(story.defaults.main_model or ""):
+                self.tabs.addTab(self._models_tab(models), "Models")
             self._add_buttons()
             return
         self.tabs.addTab(self._about_tab(), "About")
@@ -108,6 +147,8 @@ class SetupDialog(QDialog):
         self.scene_tab = self._scene_tab()
         self.tabs.addTab(self.scene_tab, "Starting scene")
         self.tabs.addTab(self._private_tab(), "Private scenes")
+        if models is not None:
+            self.tabs.addTab(self._models_tab(models), "Models")
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
         self._add_buttons()
@@ -185,6 +226,87 @@ class SetupDialog(QDialog):
         )
         layout.addWidget(self.style_panel, 1)
         return page
+
+    def _models_tab(self, models: ModelChoices) -> QWidget:
+        """This story's own models (the author, Oct 31 2026). Blank goes with
+        Settings → Models and follows it: the model it goes to is in grey."""
+        story = self.story
+        widget = QWidget()
+        form = QFormLayout(widget)
+        form.addRow(
+            _hint(
+                "Which model does each job in this chat. Blank uses the one in grey, from "
+                "Settings → Models. Its own model stays until you change it."
+                if story.chat
+                else "Which model does each job in this story. Blank uses the one in grey, "
+                "from Settings → Models, and follows it when that changes. Choose one here "
+                "to use it for this story alone; the Stories list marks a story that does."
+            )
+        )
+        for role, label, tip in MODEL_ROLES:
+            if story.chat and role not in CHAT_MODEL_ROLES:
+                continue
+            # A story with no plot has no plot calls.
+            if role == "plot" and story.plot is None:
+                continue
+            field = ModelField(
+                story.defaults.own_model(role) or "",
+                route_endpoint=models.route_endpoint,
+                browse_route=models.browse_route,
+                hosts_of=models.hosts_of,
+                recommended=RECOMMENDED_TEXT_MODELS.get(
+                    f"{role}_model" if role != "story" else role, ()
+                ),
+                qualify_recommended=models.qualify,
+            )
+            field.setPlaceholderText(config_role_model(models.config, role)[1])
+            field.setToolTip(tip)
+            field.set_route(self._own_route(role))
+            field.textChanged.connect(self._sync_models)
+            self.model_fields[role] = field
+            form.addRow("Model" if story.chat and role == "story" else label, field)
+        self.reset_models = QPushButton("Use the models in Settings")
+        self.reset_models.setToolTip(
+            "Empty every field here. Nothing is saved until you press Save."
+        )
+        self.reset_models.clicked.connect(self._use_settings_models)
+        form.addRow(self.reset_models)
+        self.models_note = _hint("")
+        form.addRow(self.models_note)
+        self._sync_models()
+        return widget
+
+    def _own_route(self, role: str):
+        defaults = self.story.defaults
+        if role == "story" and self.story.chat:
+            return defaults.main_route
+        return defaults.model_routes.get(role)
+
+    def _use_settings_models(self) -> None:
+        for field in self.model_fields.values():
+            field.setText("")
+            field.set_route(None)
+
+    def _sync_models(self, *_args) -> None:
+        own = any(field.text().strip() for field in self.model_fields.values())
+        self.reset_models.setEnabled(own)
+        self.models_note.setText(SOME_OF_ITS_OWN if own else ALL_IN_SETTINGS)
+
+    def _save_models(self) -> None:
+        story = self.story
+        defaults = story.defaults
+        for role, field in self.model_fields.items():
+            model = field.text().strip() or None
+            route = field.effective_route() if model else None
+            if role == "story" and story.chat:
+                # A chat always has a model of its own: blank is today's default.
+                model = model or field.placeholderText() or None
+                defaults.main_route = route
+            elif route is None:
+                defaults.model_routes.pop(role, None)
+            else:
+                defaults.model_routes[role] = route
+            setattr(defaults, STORY_MODEL_FIELDS[role], model)
 
     def _private_tab(self) -> QWidget:
         """How the private model is told to write. Only the rules are the
@@ -542,6 +664,7 @@ class SetupDialog(QDialog):
             story.setup.description = self.description.toPlainText().strip() or None
             story.chat_prompt = self.chat_prompt.toPlainText().strip()
             story.chat_tail = self.chat_tail.toPlainText().strip()
+            self._save_models()
             self.accept()
             return
         story.world_bible = self.world.toPlainText().strip() or None
@@ -560,4 +683,5 @@ class SetupDialog(QDialog):
         setup.absent_at_start = self._pinned()[1]
         if self.suggested is not None:
             setup.suggested_character_id = self.suggested.currentData()
+        self._save_models()
         self.accept()

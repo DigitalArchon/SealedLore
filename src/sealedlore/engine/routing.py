@@ -14,6 +14,7 @@ protection is the enclave it was attested on.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -89,6 +90,14 @@ def config_role_model(config: Config, role: str) -> tuple[str, str]:
     }
     used = role_in_use(role, own)
     return used, (story_model if used == "story" else own[used] or story_model)
+
+
+def differing_models(own: Mapping[str, str], config: Config) -> dict[str, str]:
+    """Those of a story's own models (by role) that aren't what the settings
+    give the role, so its calls go somewhere its settings don't say."""
+    return {
+        role: model for role, model in own.items() if model != config_role_model(config, role)[1]
+    }
 
 
 def config_route(config: Config, role: str, model: str) -> dict[str, Any]:

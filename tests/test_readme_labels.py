@@ -89,7 +89,7 @@ def _tabs(tabs: QTabWidget) -> Tree:
 def tree(tmp_path_factory) -> Tree:
     from sealedlore.gui.main_window import MainWindow
     from sealedlore.gui.settings_dialog import SettingsDialog
-    from sealedlore.gui.setup_dialog import SetupDialog
+    from sealedlore.gui.setup_dialog import ModelChoices, SetupDialog
     from sealedlore.models.story import Story
 
     _app = QApplication.instance() or QApplication([])
@@ -97,7 +97,13 @@ def tree(tmp_path_factory) -> Tree:
     story = Story(title="README")
     settings = _tabs(SettingsDialog(window.config, story, window).tabs)
     # As the window opens it: with the Cast page lent as its Characters tab.
-    lent = SetupDialog(story, [], parent=window, characters=window.lend_cast_panel())
+    lent = SetupDialog(
+        story,
+        [],
+        parent=window,
+        characters=window.lend_cast_panel(),
+        models=ModelChoices(window.config),
+    )
     setup = _tabs(lent.findChild(QTabWidget))
     window.return_cast_panel()
     menus = {

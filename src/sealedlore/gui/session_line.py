@@ -113,8 +113,11 @@ def describe_session(session, *, tee_state: str = "") -> tuple[str, str]:
                 continue
             role_model = model_label(session.role_model(role))
             route = session.route_text(role)
-            roles.append(f"  {name}: {role_model}" + (f" ({route}, paid)" if route else ""))
+            mine = " · this story's own" if story.defaults.own_model(role) else ""
+            roles.append(f"  {name}: {role_model}{mine}" + (f" ({route}, paid)" if route else ""))
         tips.append("The story's other calls:\n" + "\n".join(roles))
+        if story.defaults.main_model:
+            tips.append("The story model is this story's own (Story → Setup → Models).")
     return "  ·  ".join(parts), "\n\n".join(tips)
 
 

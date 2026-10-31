@@ -196,8 +196,8 @@ def test_the_stories_list_reads_only_the_story_file_and_sorts_by_last_played(
     panel = StoryListPanel(root=tmp_path)
     panel.refresh()
     labels = [panel.list.item(i).text() for i in range(panel.list.count())]
-    assert labels[0].startswith("Newer\n6 messages")
-    assert labels[1].startswith("Older\n2 messages")
+    assert labels[0].startswith("Newer\nStandard · 6 messages")
+    assert labels[1].startswith("Older\nStandard · 2 messages")
     assert "nodes" not in "".join(labels)
 
 

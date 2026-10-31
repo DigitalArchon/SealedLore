@@ -361,7 +361,7 @@ def test_play_as_from_a_card(app, window):
 
 
 def guide_to_characters(window, title: str = "The Long Night") -> NewStoryGuide:
-    guide = NewStoryGuide(window, model="anthropic/claude-sonnet-4.6")
+    guide = NewStoryGuide(window)
     window._guide = guide
     # Closed with the window at the end: kept, with no question to answer.
     guide._ask_leave = lambda: "keep"
@@ -382,7 +382,7 @@ def test_the_guide_makes_the_story_and_its_characters_on_the_cast_page(app, wind
     story = window.session.story
     assert guide.made and story.title == "The Long Night"
     assert story.world_bible.startswith("A farm")
-    assert story.defaults.main_model == "anthropic/claude-sonnet-4.6"
+    assert story.defaults.main_model is None, "a new story goes with the settings"
     panel = window.cast_panel
     assert guide.isAncestorOf(panel), "the Cast page stands in the guide"
     # A first card, its name ready to type.
