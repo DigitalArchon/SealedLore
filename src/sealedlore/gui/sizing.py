@@ -70,9 +70,9 @@ def size_to_screen(
 
 class GrowingText(QPlainTextEdit):
     """A text box as tall as its text: at least `lines` lines, growing with
-    what is written up to `most`, or most of the view of a page that scrolls
-    if that is more, then scrolling. With `fill` it also takes whatever height
-    its layout has to give (a dialog's main field)."""
+    what is written up to `most`, or in a page that scrolls up to most of its
+    view, then scrolling. With `fill` it also takes whatever height its layout
+    has to give (a dialog's main field)."""
 
     def __init__(
         self, text: str = "", *, lines: int = 3, most: int = 16, fill: bool = False
@@ -109,8 +109,10 @@ class GrowingText(QPlainTextEdit):
         area = self._scroll_area()
         if area is None:
             return self._most
+        # Past the view, Save would be off the page while the text is scrolled
+        # to: `most` alone made a box taller than a small window's view.
         fits = area.viewport().height() * MOST_OF_VIEW / self.fontMetrics().lineSpacing()
-        return max(self._most, int(fits))
+        return max(self._lines, int(fits))
 
     def _text_height(self, most: float) -> float:
         """How tall the text is, up to `most`. A block at a time, each laid

@@ -127,18 +127,38 @@ def test_a_long_text_in_a_full_page_that_scrolls_keeps_its_height(app):
     page = QWidget()
     layout = QVBoxLayout(page)
     layout.addSpacing(900)
-    box = GrowingText(LONG, lines=3, most=200)
+    box = GrowingText("Rain on the road to Hellsville, and no end to it. " * 12, lines=3, most=200)
     layout.addWidget(box)
     host.setWidget(page)
     host.setWidgetResizable(True)
     host.resize(600, 400)
     host.show()
     settle(app)
-    assert box.height() > 20 * box.fontMetrics().lineSpacing()
+    assert box.height() > 6 * box.fontMetrics().lineSpacing()
     assert box.verticalScrollBar().maximum() == 0
     box.setPlainText("Short.")
     settle(app)
     assert box.height() < 5 * box.fontMetrics().lineSpacing() + 40, "and gives the room back"
+    host.close()
+
+
+def test_a_box_never_outgrows_the_view_of_a_small_page(app):
+    """Its own `most` used to win: the lab's 1280x800 desktops had an editor
+    taller than the view, with Save off the page."""
+    needs_real_fonts()
+    host = QScrollArea()
+    page = QWidget()
+    layout = QVBoxLayout(page)
+    box = GrowingText(LONG * 5, lines=3, most=40)
+    layout.addWidget(box)
+    layout.addStretch(1)
+    host.setWidget(page)
+    host.setWidgetResizable(True)
+    host.resize(600, 300)
+    host.show()
+    settle(app)
+    assert box.height() <= host.viewport().height()
+    assert box.verticalScrollBar().maximum() > 0
     host.close()
 
 
