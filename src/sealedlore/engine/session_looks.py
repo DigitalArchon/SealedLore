@@ -134,7 +134,15 @@ class LooksRuntime:
         subjects = look_subjects([*cast, *supporting], before, present, node.content)
         if not subjects:
             return None
-        author_turn = render_chunk([author], cast, texts=self.texts) if author else ""
+        # A scene's own turn goes to the scene's own model: left out, the pick
+        # had nothing of the author's character in a private scene, the
+        # passage never writing them, and kept John "happy" with the dead at
+        # the door (live, Nov 3 2026).
+        author_turn = (
+            render_chunk([author], cast, include_private=span is not None, texts=self.texts)
+            if author
+            else ""
+        )
         messages = build_pick_messages(
             subjects, author_turn=author_turn, passage=node.content, texts=self.texts
         )

@@ -270,6 +270,10 @@ def test_in_a_private_scene_the_looks_are_chosen_on_a_private_model_only(tmp_pat
     assert len(main.requests) == sent_to_main
     assert private.requests[-1].model == "local/model"
     assert session.full_path()[-1].meta.looks == {held: "a"}
+    # The scene's own turn goes with it: the passage never writes the
+    # author's character, so without it the pick had nothing of them.
+    sent = "\n".join(part.text for part in private.requests[-1].messages[-1].parts)
+    assert "THE AUTHOR'S TURN" in sent and "I tell her the joke." in sent
     # Settings' private model for looks, only when the scene could move to it:
     # a TEE scene's looks never go to a model that isn't.
     span = session.open_span.model_copy(update={"model": "TEE/kimi-k3"})
