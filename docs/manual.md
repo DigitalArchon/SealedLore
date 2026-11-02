@@ -91,9 +91,9 @@ part of the window, and what each feature does. The README's
   or in memory only, handed back as a summary you approve.
 - **Drafting and review**: a whole story from a premise; a settings review
   that proposes typed changes you tick.
-- **SillyTavern cards and lorebooks**: a story from a character card (PNG,
-  JSON or CHARX, as Chub and JanitorAI share them), a card into a story, and
-  characters and lore exported for SillyTavern.
+- **SillyTavern cards and lorebooks**: a story from a character card (a PNG,
+  JSON or CHARX file, or a link to one on Chub or RisuRealm), a card into a
+  story, and characters and lore exported for SillyTavern.
 - **From your phone**: play the stories you share from a phone's Tor
   Browser, anywhere, through SealedLore's own tor; paired by scanning a code,
   with nothing to set up on your router. Text stories and chats, on Linux.
@@ -908,7 +908,9 @@ SealedLore reads and writes the character cards and lorebooks SillyTavern
 uses, which is also how Chub, JanitorAI and most card sites share them.
 
 **A new story from a card.** File → Import… takes a card: a PNG with the card
-inside it, a JSON file, or a CHARX. It asks:
+inside it, a JSON file, or a CHARX. File → Import from a link… (or **Start from
+a character card** on the start page) takes its link instead (below). It
+asks:
 
 - whether the card is **one character** the storyteller plays, or **a world,
   or a narrator for several people** (its description then becomes the
@@ -952,6 +954,29 @@ expressions, a chance below 100%, sticky, cooldown and delay, inclusion
 groups, a place in the prompt such as the Author's Note or a depth,
 recursion settings and character filters. Characters and lore the plot
 hasn't brought in yet are exported only with spoilers shown.
+
+**By link.** Instead of downloading a card first, paste its link: File →
+Import from a link… for a new story, **SillyTavern cards → Import a card from
+a link…** on the Cast page for the open story, and **SillyTavern lorebook →
+Import a lorebook from a link…** on the Lore page. It takes:
+
+- a character's or a lorebook's page on **Chub** (chub.ai or characterhub.org):
+  the card is put together from Chub's own fields, as SillyTavern does, with
+  its picture;
+- a character's page on **RisuRealm**, fetched as its own Download button
+  gives it (a CHARX, which may carry a whole set of pictures: only the card
+  and its main picture are read);
+- a link straight to a card's file (PNG, JSON or CHARX) or a lorebook's
+  (JSON), wherever it is kept.
+
+It goes on as for a file. SealedLore downloads it from that site, which sees
+your address as a browser would; nothing else of yours is sent, and only over
+https. A link the site turns down says why in the site's own words (some
+cards on RisuRealm can't be downloaded, at their creator's choice).
+**JanitorAI** lets no program download its characters (SillyTavern goes
+through a copy on JannyAI, which turns programs away), and a site that answers
+with a bot check is the same: download the card in a browser and import the
+file.
 
 ## Drafting a story, and reviewing its settings
 
@@ -2081,6 +2106,11 @@ no telemetry, no update check and no crash reporting.
   paired and the day it was last seen, and which stories are shared. What a
   phone shows is on the phone, and Tor Browser and Android may keep it (see
   [Playing from your phone](#playing-from-your-phone)).
+- **A card or a lorebook by link** (File → Import from a link…, and the
+  Cast and Lore pages): the link is fetched from its site (Chub's API and its
+  picture host for a Chub link, RisuRealm for a RisuRealm one, the link's own
+  host otherwise), which sees your address as a browser would. Only the
+  request for that link goes, with no key or anything from your stories.
 - **On first run from a source or pip install**, `tiktoken` downloads its
   token vocabulary from OpenAI's public file store; the AppImage bundles it.
   No data about you is sent.

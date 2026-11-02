@@ -41,6 +41,7 @@ from sealedlore.storage.paths import sample_stories
 # What a choice is, as `chosen` carries it: the value is the story's id for
 # "open", the plot file for "sample", else None.
 OPEN, PREMISE, BLANK, CHAT, IMPORT, SAMPLE = "open", "premise", "blank", "chat", "import", "sample"
+LINK = "link"
 # The ways to start one's own, in the order shown, with what each says.
 OWN: tuple[tuple[str, str, str], ...] = (
     (
@@ -63,7 +64,14 @@ OWN: tuple[tuple[str, str, str], ...] = (
     (
         IMPORT,
         "Import a file",
-        "A story backup, a scenario someone shared with you, or a plot file (.md).",
+        "A story backup, a scenario someone shared with you, a plot file (.md), or a "
+        "SillyTavern character card.",
+    ),
+    (
+        LINK,
+        "Start from a character card",
+        "Paste the link to a SillyTavern card on Chub or RisuRealm, or to a card's file: "
+        "its character becomes a new story.",
     ),
 )
 SAMPLES_HEADING = "Play a sample story"

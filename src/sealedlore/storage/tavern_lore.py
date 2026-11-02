@@ -257,9 +257,18 @@ def read_json(path: Path) -> Any:
     try:
         if Path(path).stat().st_size > MAX_BYTES:
             raise LorebookError(f"{name} is too large to read.")
-        return json.loads(Path(path).read_text(encoding="utf-8-sig"))
+        data = Path(path).read_bytes()
     except OSError as exc:
         raise LorebookError(f"Couldn't read {path}: {exc.strerror or exc}") from exc
+    return json_of(data, name)
+
+
+def json_of(data: bytes, name: str) -> Any:
+    """JSON from a file's bytes (or a download's), refused in plain words."""
+    if len(data) > MAX_BYTES:
+        raise LorebookError(f"{name} is too large to read.")
+    try:
+        return json.loads(data.decode("utf-8-sig"))
     except UnicodeDecodeError as exc:
         raise LorebookError(f"{name} isn't a text file.") from exc
     except json.JSONDecodeError as exc:

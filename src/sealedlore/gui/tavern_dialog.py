@@ -1,7 +1,8 @@
 """A new story from a SillyTavern character card: the few things the card
 can't say (who you play, which greeting opens it, whether it is one
 character or a world), asked before the story is made
-(storage/tavern_cards.py `scenario_from_card`)."""
+(storage/tavern_cards.py `scenario_from_card`); and the link a card or a
+lorebook is fetched by (providers/card_links.py)."""
 
 from __future__ import annotations
 
@@ -17,7 +18,9 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QLineEdit,
+    QPushButton,
     QRadioButton,
     QVBoxLayout,
     QWidget,
@@ -25,6 +28,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.gui.ref_images import thumbnail_of
 from sealedlore.gui.sizing import GrowingText, size_to_screen
+from sealedlore.providers.card_links import LinkError, read_link
 from sealedlore.storage.tavern_cards import TavernCard, first_sentence, macro_filler
 
 NO_OPENING = "None: I write the first turn"
@@ -35,6 +39,16 @@ CARD_EXPORT_LABEL = "Export this character as a card…"
 LOREBOOK_LABEL = "SillyTavern lorebook"
 LOREBOOK_IMPORT_LABEL = "Import a lorebook…"
 LOREBOOK_EXPORT_LABEL = "Export the lore as a lorebook…"
+# By link: File's (a new story from a card), the Cast and Lore pages' menus.
+LINK_IMPORT_LABEL = "Import from a link…"
+CARD_LINK_LABEL = "Import a card from a link…"
+LOREBOOK_LINK_LABEL = "Import a lorebook from a link…"
+LINK_SITES = (
+    "A character or a lorebook on Chub, a character on RisuRealm, or a link straight "
+    "to a card's file (PNG, JSON or CHARX) or a lorebook's (JSON). SealedLore "
+    "downloads it from that site, which sees your address as a browser would; "
+    "nothing else of yours is sent."
+)
 PICTURE_SIDE = 160
 
 
@@ -165,3 +179,60 @@ class CardImportDialog(QDialog):
             "world": self.as_world.isChecked(),
             "instructions": bool(self.card.instructions) and self.instructions.isChecked(),
         }
+
+
+class LinkDialog(QDialog):
+    """The link a card or a lorebook is fetched by, read as it is typed
+    (`read_link`): one that can't be fetched says why before anything is
+    sent."""
+
+    def __init__(self, title: str, lead: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        size_to_screen(self, 0.35, 0.3, at_least=QSize(620, 280))
+        heading = QLabel(lead)
+        heading.setWordWrap(True)
+        self.field = QLineEdit()
+        self.field.setPlaceholderText("https://chub.ai/characters/…")
+        self.field.setClearButtonEnabled(True)
+        self.problem = QLabel()
+        self.problem.setObjectName("warningLabel")
+        self.problem.setWordWrap(True)
+        self.problem.setTextFormat(Qt.PlainText)
+        self.problem.hide()
+        sites = QLabel(LINK_SITES)
+        sites.setObjectName("hintLabel")
+        sites.setWordWrap(True)
+        buttons = QDialogButtonBox()
+        self.import_button = QPushButton("Import")
+        self.import_button.setDefault(True)
+        buttons.addButton(self.import_button, QDialogButtonBox.AcceptRole)
+        buttons.addButton(QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout = QVBoxLayout(self)
+        layout.addWidget(heading)
+        layout.addWidget(self.field)
+        layout.addWidget(self.problem)
+        layout.addWidget(sites)
+        layout.addStretch(1)
+        layout.addWidget(buttons)
+        # Taller when a problem shows, rather than its words over the note's.
+        layout.setSizeConstraint(QLayout.SetMinimumSize)
+        self.field.textChanged.connect(self._check)
+        self._check()
+
+    def _check(self) -> None:
+        text = self.link()
+        problem = ""
+        if text:
+            try:
+                read_link(text)
+            except LinkError as exc:
+                problem = str(exc)
+        self.problem.setText(problem)
+        self.problem.setVisible(bool(problem))
+        self.import_button.setEnabled(bool(text) and not problem)
+
+    def link(self) -> str:
+        return self.field.text().strip()

@@ -250,8 +250,8 @@ Have fun!
   instruction SealedLore sends to a model, editable for one story or for every
   story, and exports or imports them as a prompt set to share.
 - **SillyTavern cards and lorebooks**: start a story from a character card
-  (PNG, JSON or CHARX, as Chub and JanitorAI share them), bring a card into a
-  story, and export characters and lore for SillyTavern.
+  (a PNG, JSON or CHARX file, or just its link on Chub or RisuRealm), bring a
+  card into a story, and export characters and lore for SillyTavern.
 - **Costs**: per passage, per session and per story.
 - **Routes**: on NanoGPT, choose which host serves each model (the fastest,
   the cheapest, or one you pick), and see whether the choice was followed.
@@ -448,6 +448,9 @@ encrypts the whole way.
   phone shows may stay on the phone (Tor Browser and Android keep screenshots,
   previews and what the keyboard learns), private scenes and memory-only
   chats included.
+- **A card or a lorebook by link** is fetched from its own site (Chub,
+  RisuRealm, or wherever the link points), which sees your address as a
+  browser would; nothing from your stories goes with it.
 - **On disk**, settings and stories live in a data folder only your user
   can read. API keys go to the system keychain, or into that folder's
   `config.json` in plain text where there is no keychain or you choose it. Each story keeps every

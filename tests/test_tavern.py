@@ -4,6 +4,7 @@ from it (storage/tavern_cards.py, storage/tavern_lore.py, storage/png_text.py)."
 from __future__ import annotations
 
 import base64
+import io
 import json
 import zipfile
 import zlib
@@ -13,10 +14,12 @@ import pytest
 
 from sealedlore.models.character import Character, Competence
 from sealedlore.models.lore import LoreEntry
+from sealedlore.storage import tavern_cards
 from sealedlore.storage.png_text import text_chunks, with_text
 from sealedlore.storage.scenario import bundle_from_scenario
 from sealedlore.storage.tavern_cards import (
     CardError,
+    TavernCard,
     card_data,
     card_png,
     character_from_card,
@@ -24,6 +27,7 @@ from sealedlore.storage.tavern_cards import (
     macro_filler,
     read_card,
     scenario_from_card,
+    tavern_from_file,
     write_card,
 )
 from sealedlore.storage.tavern_lore import (
@@ -155,6 +159,39 @@ def test_a_charx_card_brings_its_picture(tmp_path: Path):
         archive.writestr("assets/icon/images/main.png", tiny_png())
     card = read_card(path)
     assert card.name == "Elena" and card.picture is not None
+
+
+def test_a_large_charx_is_read_in_place(tmp_path: Path, monkeypatch):
+    # Its pictures are never read: it is held to MAX_ARCHIVE_BYTES, not to
+    # what a card read whole may be.
+    monkeypatch.setattr(tavern_cards, "MAX_BYTES", 600)
+    fields = {**ELENA, "assets": [{"type": "icon", "uri": "embeded://assets/main.png"}]}
+    path = tmp_path / "card.charx"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("card.json", json.dumps({"spec": "chara_card_v3", "data": fields}))
+        archive.writestr("assets/main.png", tiny_png())
+        archive.writestr("assets/expressions/happy.png", b"\0" * 4000)
+    assert path.stat().st_size > 600
+    assert read_card(path).name == "Elena"
+    big = tmp_path / "big.png"
+    big.write_bytes(tiny_png() + b"\0" * 1000)
+    with pytest.raises(CardError, match="too large"):
+        read_card(big)
+
+
+def test_bytes_say_what_they_are_whatever_the_name(tmp_path: Path):
+    png = png_card(tmp_path, {"chara": v2()}).read_bytes()
+    assert tavern_from_file(io.BytesIO(png), "download").name == "Elena"
+    card = tavern_from_file(io.BytesIO(json.dumps(v2()).encode()), "x", picture=tiny_png())
+    assert isinstance(card, TavernCard) and card.picture is not None
+    book = book_from_lore([LoreEntry(title="The ridge", content="Cold.")])
+    found = tavern_from_file(io.BytesIO(json.dumps(book).encode()), "x")
+    assert not isinstance(found, TavernCard) and looks_like_lorebook(found)
+    # A source that said "lorebook" isn't taken for a card.
+    with pytest.raises(CardError, match="neither a character card nor a lorebook"):
+        tavern_from_file(io.BytesIO(json.dumps(v2()).encode()), "x", lorebook=True)
+    with pytest.raises(CardError, match="neither a character card nor a lorebook"):
+        tavern_from_file(io.BytesIO(b"<html>a page</html>"), "x")
 
 
 @pytest.mark.parametrize(

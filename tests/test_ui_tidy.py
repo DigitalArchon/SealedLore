@@ -416,7 +416,11 @@ def _items(menu) -> list[str]:
 
 def test_the_menus_are_grouped(app, window: MainWindow, monkeypatch):
     file_items = _items(_menu(window, "File"))
-    assert [i for i in file_items if i.startswith("Import")] == ["Import…"]
+    # One import for every kind of file; a link is a source, not a kind.
+    assert [i for i in file_items if i.startswith("Import")] == [
+        "Import…",
+        "Import from a link…",
+    ]
     story = _menu(window, "Story")
     assert _items(window.export_menu) == [
         "Scenario…",
@@ -537,7 +541,7 @@ def test_with_no_story_open_the_window_says_so_and_offers_a_start(app, tmp_path:
         # the row above the transcript put away, greyed they only looked usable.
         assert window.centre_stack.currentWidget() is window.start_page
         cards = window.start_page.cards
-        assert {"premise", "blank", "chat", "import", f"open:{story.id}"} <= set(cards)
+        assert {"premise", "blank", "chat", "import", "link", f"open:{story.id}"} <= set(cards)
         assert not window.composer.isVisible() and _top_row_hidden(window)
         assert window.composer.input.placeholderText() == NO_STORY_PLACEHOLDER
         assert not window.story_menu.menuAction().isVisible()
@@ -589,6 +593,7 @@ def test_the_file_menu_has_one_new_and_only_what_applies(app, tmp_path: Path, st
         assert _shown(file_menu) == [
             "New…",
             "Import…",
+            "Import from a link…",
             "Plot file editor…",
             "Settings…",
             "Prompts (advanced)…",

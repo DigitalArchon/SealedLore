@@ -105,6 +105,7 @@ from sealedlore.gui.story_map import StoryMap
 from sealedlore.gui.style_panel import StylePanel
 from sealedlore.gui.summaries_panel import SummariesPanel
 from sealedlore.gui.tab_rows import TabRows
+from sealedlore.gui.tavern_dialog import LINK_IMPORT_LABEL
 from sealedlore.gui.transcript import (
     ChapterCard,
     TranscriptView,
@@ -639,10 +640,20 @@ class MainWindow(
         import_action = QAction("&Import…", self)
         import_action.setShortcut(QKeySequence.Open)
         import_action.setStatusTip(
-            "A new story from a scenario, a story backup or a plot file (.md)"
+            "A new story from a scenario, a story backup, a plot file (.md) or a "
+            "SillyTavern card; a lorebook or a prompt set too"
         )
         import_action.triggered.connect(self.import_file)
         file_menu.addAction(import_action)
+        # A source, not another kind of file: a card or a lorebook on Chub,
+        # RisuRealm or anywhere a file can be linked to.
+        link_action = QAction(LINK_IMPORT_LABEL, self)
+        link_action.setStatusTip(
+            "A new story from a SillyTavern card on Chub, RisuRealm or anywhere a card's "
+            "file is linked; a lorebook goes into the open story's lore"
+        )
+        link_action.triggered.connect(lambda _checked=False: self.import_from_link())
+        file_menu.addAction(link_action)
         # Leaving a story used to take opening another or making a new one.
         # Shown only while one is open (`_update_controls`).
         self.close_story_action = QAction("&Close story", self)
@@ -1127,6 +1138,8 @@ class MainWindow(
             self.new_chat()
         elif kind == start_page.IMPORT:
             self.import_file()
+        elif kind == start_page.LINK:
+            self.import_from_link()
         elif kind == start_page.SAMPLE:
             self.import_sample(Path(str(value)))
 
@@ -4819,6 +4832,7 @@ class MainWindow(
             return
         self._wait_for_attestation()
         self.stories.stop_search()
+        self.stop_link_fetch()
         self.catalog.wait()
         attestation_tests().wait()
         speed_tests().wait()

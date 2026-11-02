@@ -45,7 +45,12 @@ from sealedlore.gui.lore_cast_dialog import FILL_LABEL
 from sealedlore.gui.portrait_view import PortraitView
 from sealedlore.gui.ref_images import CardIcons, RefImageStrip, StoryPictures
 from sealedlore.gui.sizing import GrowingText
-from sealedlore.gui.tavern_dialog import CARD_EXPORT_LABEL, CARD_IMPORT_LABEL, TAVERN_LABEL
+from sealedlore.gui.tavern_dialog import (
+    CARD_EXPORT_LABEL,
+    CARD_IMPORT_LABEL,
+    CARD_LINK_LABEL,
+    TAVERN_LABEL,
+)
 from sealedlore.models.character import Character
 from sealedlore.models.supporting import CharacterSuggestion
 
@@ -86,6 +91,7 @@ class CastPanel(QWidget):
     # SillyTavern character cards (storage/tavern_cards.py): one read into
     # this story, or (character id) one written out.
     card_import_requested = Signal()
+    card_link_requested = Signal()
     card_export_requested = Signal(str)
 
     def __init__(self, pictures: StoryPictures | None = None) -> None:
@@ -136,6 +142,9 @@ class CastPanel(QWidget):
         tavern_menu = QMenu(self.tavern_button)
         tavern_menu.addAction(CARD_IMPORT_LABEL).triggered.connect(
             lambda _checked=False: self.card_import_requested.emit()
+        )
+        tavern_menu.addAction(CARD_LINK_LABEL).triggered.connect(
+            lambda _checked=False: self.card_link_requested.emit()
         )
         self.card_export_action = tavern_menu.addAction(CARD_EXPORT_LABEL)
         self.card_export_action.triggered.connect(self._export_card)

@@ -36,6 +36,7 @@ from sealedlore.gui.tavern_dialog import (
     LOREBOOK_EXPORT_LABEL,
     LOREBOOK_IMPORT_LABEL,
     LOREBOOK_LABEL,
+    LOREBOOK_LINK_LABEL,
 )
 from sealedlore.models.lore import LoreEntry
 
@@ -49,6 +50,7 @@ class LorePanel(QWidget):
     # A SillyTavern lorebook (storage/tavern_lore.py) read into this story's
     # lore, or the lore written out as one.
     lorebook_import_requested = Signal()
+    lorebook_link_requested = Signal()
     lorebook_export_requested = Signal()
     # (entry id, picture id or "", what): a picture drawn for the entry:
     # "new", or "again" or "edit" of that picture (as on the Cast page).
@@ -86,6 +88,9 @@ class LorePanel(QWidget):
         tavern_menu = QMenu(self.tavern_button)
         tavern_menu.addAction(LOREBOOK_IMPORT_LABEL).triggered.connect(
             lambda _checked=False: self.lorebook_import_requested.emit()
+        )
+        tavern_menu.addAction(LOREBOOK_LINK_LABEL).triggered.connect(
+            lambda _checked=False: self.lorebook_link_requested.emit()
         )
         tavern_menu.addAction(LOREBOOK_EXPORT_LABEL).triggered.connect(
             lambda _checked=False: self.lorebook_export_requested.emit()

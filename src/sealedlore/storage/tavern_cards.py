@@ -30,7 +30,7 @@ import zipfile
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 from pydantic import ValidationError
 
@@ -49,14 +49,19 @@ from sealedlore.storage.tavern_lore import (
     LorebookError,
     LoreImport,
     character_book_from_lore,
+    json_of,
     looks_like_lorebook,
     lore_from_book,
     read_json,
 )
 
 CARD_SUFFIXES = (".png", ".json", ".charx")
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 # Far past any card (a big PNG card is a few megabytes): something else.
 MAX_BYTES = 64 * 1024 * 1024
+# A CHARX may carry a whole set of expression pictures (RisuRealm's run past
+# MAX_BYTES): only its card.json and its icon are read, from the file as it is.
+MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 # A CHARX's card.json and its picture may not inflate past this.
 MAX_INFLATED = 32 * 1024 * 1024
 SPEC_V2 = "chara_card_v2"
@@ -183,9 +188,9 @@ def _png_card(data: bytes, name: str) -> TavernCard:
     raise CardError(f"{name} is a picture with no character card in it.")
 
 
-def _charx_card(data: bytes, name: str) -> TavernCard:
+def _charx_card(source: BinaryIO, name: str) -> TavernCard:
     try:
-        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        with zipfile.ZipFile(source) as archive:
             card = _member(archive, "card.json", name)
             if card is None:
                 raise CardError(f"{name} has no card.json in it.")
@@ -235,13 +240,52 @@ def read_card(path: Path) -> TavernCard:
             raise CardError(str(exc)) from exc
     if suffix not in CARD_SUFFIXES:
         raise CardError(f"{path.name} isn't a card: a card is a .png, .json or .charx file.")
+    limit = MAX_BYTES if suffix == ".png" else MAX_ARCHIVE_BYTES
     try:
-        if path.stat().st_size > MAX_BYTES:
+        if path.stat().st_size > limit:
             raise CardError(f"{path.name} is too large to be a card.")
+        if suffix == ".charx":
+            with path.open("rb") as file:
+                return _charx_card(file, path.name)
         data = path.read_bytes()
     except OSError as exc:
         raise CardError(f"Couldn't read {path}: {exc.strerror or exc}") from exc
-    return _png_card(data, path.name) if suffix == ".png" else _charx_card(data, path.name)
+    return _png_card(data, path.name)
+
+
+def tavern_from_file(
+    file: BinaryIO, name: str, picture: bytes | None = None, *, lorebook: bool = False
+) -> TavernCard | Mapping[str, Any]:
+    """What a file holds, told by its bytes rather than a name (a link's may
+    say nothing): a card, as a PNG, a CHARX zip (one with a picture before it
+    too, as RisuRealm's) or JSON, with `picture` beside a JSON card built from
+    a site's fields; or a lorebook, as its JSON. `lorebook` when the source
+    said that is what it is. `file` is read from its start and may be large
+    only as a CHARX, which is read in place. CardError, in words, for
+    anything else."""
+    file.seek(0, io.SEEK_END)
+    size = file.tell()
+    file.seek(0)
+    png = file.read(len(PNG_SIGNATURE)) == PNG_SIGNATURE
+    file.seek(0)
+    if not lorebook and not png and size <= MAX_ARCHIVE_BYTES and zipfile.is_zipfile(file):
+        file.seek(0)
+        return _charx_card(file, name)
+    if size > MAX_BYTES:
+        raise CardError(f"{name} is too large to be a card.")
+    file.seek(0)
+    data = file.read()
+    if not lorebook and png:
+        return _png_card(data, name)
+    try:
+        parsed = json_of(data, name)
+    except LorebookError as exc:
+        raise CardError(f"{name} is neither a character card nor a lorebook: {exc}") from exc
+    if not lorebook and looks_like_card(parsed):
+        return _card_of(parsed, name, stripped_or_same(picture) if picture else None)
+    if looks_like_lorebook(parsed):
+        return parsed
+    raise CardError(f"{name} is neither a character card nor a lorebook.")
 
 
 def tavern_kind(path: Path) -> str | None:

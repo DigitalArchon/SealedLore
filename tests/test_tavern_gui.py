@@ -4,8 +4,11 @@ and lorebooks both ways (the Lore page)."""
 
 from __future__ import annotations
 
+import io
 import json
 import os
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -13,18 +16,23 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox  # noqa: E402
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QPushButton  # noqa: E402
 
 import sealedlore.gui.window_tavern as window_tavern  # noqa: E402
 from sealedlore.gui.main_window import MainWindow  # noqa: E402
-from sealedlore.gui.tavern_dialog import NO_OPENING, CardImportDialog  # noqa: E402
+from sealedlore.gui.tavern_dialog import NO_OPENING, CardImportDialog, LinkDialog  # noqa: E402
 from sealedlore.models.character import Character  # noqa: E402
 from sealedlore.models.image import ImageRef  # noqa: E402
 from sealedlore.models.lore import LoreEntry  # noqa: E402
+from sealedlore.providers.card_links import Fetched, LinkError  # noqa: E402
 from sealedlore.storage.png_text import text_chunks  # noqa: E402
 from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
 from sealedlore.storage.tavern_cards import read_card  # noqa: E402
-from sealedlore.storage.tavern_lore import read_lorebook, write_lorebook  # noqa: E402
+from sealedlore.storage.tavern_lore import (  # noqa: E402
+    book_from_lore,
+    read_lorebook,
+    write_lorebook,
+)
 from tests.test_tavern import ELENA, png_card, tiny_png, v2  # noqa: E402
 
 
@@ -254,4 +262,172 @@ def test_a_card_with_no_lorebook_says_so(app, tmp_path: Path, monkeypatch, story
     window.import_lorebook()
     assert warned == ["card.png has no lorebook in it."]
     assert window_tavern.CARD_FILTER.startswith("Character cards")
+    window.close()
+
+
+# --- by link ---------------------------------------------------------------------------
+
+
+def wait_for(app: QApplication, condition, timeout: float = 10.0) -> None:
+    deadline = time.monotonic() + timeout
+    while not condition():
+        if time.monotonic() > deadline:
+            raise AssertionError("timed out")
+        app.processEvents()
+        time.sleep(0.002)
+
+
+def paste_link(monkeypatch, link: str) -> None:
+    def accepted(dialog: LinkDialog) -> int:
+        dialog.field.setText(link)
+        assert dialog.import_button.isEnabled()
+        return QDialog.Accepted
+
+    monkeypatch.setattr(LinkDialog, "exec", accepted)
+
+
+def answered_with(monkeypatch, answer, gate: threading.Event | None = None) -> list[str]:
+    """The fetch, answered on its thread (after `gate`, when given); the links asked."""
+    asked: list[str] = []
+
+    def fetch(link: str, *, stop=None, transport=None):
+        asked.append(link)
+        if gate is not None:
+            gate.wait(10)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(window_tavern, "fetch_link", fetch)
+    return asked
+
+
+def a_card(picture: bytes | None = None) -> Fetched:
+    return Fetched(io.BytesIO(json.dumps(v2()).encode()), "elena.json", "Chub", picture=picture)
+
+
+def test_the_link_dialog_says_what_can_t_be_fetched_before_sending(app):
+    dialog = LinkDialog("Import from a link", "Paste the link:")
+    assert not dialog.import_button.isEnabled()
+    dialog.field.setText("https://janitorai.com/characters/1234_character-elena")
+    assert not dialog.import_button.isEnabled() and "JanitorAI" in dialog.problem.text()
+    dialog.field.setText("https://chub.ai/characters/someone/elena-1234")
+    assert dialog.import_button.isEnabled() and dialog.problem.isHidden()
+    dialog.deleteLater()
+
+
+def test_a_card_by_link_makes_a_story(app, tmp_path: Path, monkeypatch):
+    window = window_on(tmp_path)
+    paste_link(monkeypatch, "https://chub.ai/characters/someone/elena-1234")
+    asked = answered_with(monkeypatch, a_card(picture=tiny_png()))
+
+    def accepted(dialog) -> int:
+        dialog.player.setText("John")
+        return QDialog.Accepted
+
+    monkeypatch.setattr(CardImportDialog, "exec", accepted)
+    no_boxes(monkeypatch)
+    monkeypatch.setattr(window, "open_setup", lambda: False)
+
+    window.import_from_link()
+    wait_for(app, lambda: window.session is not None)
+
+    assert asked == ["https://chub.ai/characters/someone/elena-1234"]
+    assert [c.name for c in window.session.cast] == ["Elena", "John"]
+    portrait = window.session.cast[0].reference_images[0]
+    assert window.session.pictures.read(portrait.file)
+    assert window._link_fetch is None and window._link_progress is None
+    window.close()
+
+
+def test_a_card_by_link_joins_the_open_story(app, tmp_path: Path, monkeypatch, story, cast):
+    window = window_on(tmp_path, story, cast)
+    paste_link(monkeypatch, "https://files.catbox.moe/elena.json")
+    answered_with(monkeypatch, a_card())
+    monkeypatch.setattr(window, "_ask_where_card_goes", lambda character, lore: (True, False))
+    no_boxes(monkeypatch)
+
+    window.cast_panel.card_link_requested.emit()
+    wait_for(app, lambda: any(c.name == "Elena" for c in window.session.cast))
+    assert "Hellsville" not in [entry.title for entry in window.session.bundle.lore]
+    window.close()
+
+
+def test_a_lorebook_by_link_goes_into_the_lore(app, tmp_path: Path, monkeypatch, story, cast):
+    window = window_on(tmp_path, story, cast)
+    book = book_from_lore([LoreEntry(title="The ridge", content="Cold.", keywords=["ridge"])])
+    paste_link(monkeypatch, "https://chub.ai/lorebooks/someone/the-ridge")
+    answered_with(
+        monkeypatch,
+        Fetched(io.BytesIO(json.dumps(book).encode()), "the-ridge.json", "Chub", lorebook=True),
+    )
+    no_boxes(monkeypatch)
+
+    window.lore_panel.lorebook_link_requested.emit()
+    wait_for(app, lambda: window.session.bundle.lore)
+    assert [entry.title for entry in window.session.bundle.lore] == ["The ridge"]
+
+    # A card's own lorebook by link, from the Lore page.
+    answered_with(monkeypatch, a_card())
+    window.lore_panel.lorebook_link_requested.emit()
+    wait_for(app, lambda: len(window.session.bundle.lore) == 2)
+    assert window.session.bundle.lore[-1].title == "Hellsville"
+    window.close()
+
+
+def test_a_lorebook_by_link_with_no_story_says_where_it_goes(app, tmp_path: Path, monkeypatch):
+    window = window_on(tmp_path)
+    book = book_from_lore([LoreEntry(title="The ridge", content="Cold.")])
+    paste_link(monkeypatch, "https://chub.ai/lorebooks/someone/the-ridge")
+    answered_with(monkeypatch, Fetched(io.BytesIO(json.dumps(book).encode()), "b.json", "Chub"))
+    warned: list[str] = []
+    monkeypatch.setattr(window, "_warn_plain", lambda title, text: warned.append(text))
+    window.import_from_link()
+    wait_for(app, lambda: warned)
+    assert "Open the story it is for" in warned[0] and window.session is None
+    window.close()
+
+
+def test_a_link_that_fails_says_why(app, tmp_path: Path, monkeypatch):
+    window = window_on(tmp_path)
+    paste_link(monkeypatch, "https://chub.ai/characters/someone/gone")
+    answered_with(monkeypatch, LinkError("Chub has nothing at that address."))
+    warned: list[str] = []
+    monkeypatch.setattr(window, "_warn_plain", lambda title, text: warned.append(text))
+    window.import_from_link()
+    wait_for(app, lambda: warned)
+    assert warned == ["Chub has nothing at that address."]
+    assert window._link_fetch is None and window.session is None
+    window.close()
+
+
+def test_stop_drops_what_the_link_brings_later(app, tmp_path: Path, monkeypatch):
+    window = window_on(tmp_path)
+    paste_link(monkeypatch, "https://chub.ai/characters/someone/elena-1234")
+    gate = threading.Event()
+    late = a_card()
+    answered_with(monkeypatch, late, gate)
+    window.import_from_link()
+    progress = window._link_progress
+    assert progress is not None and progress.isVisible()
+    # Its own button: cancel() from code doesn't emit canceled.
+    progress.findChild(QPushButton).click()
+    assert window._link_fetch is None and not progress.isVisible()
+    gate.set()
+    wait_for(app, lambda: late.file.closed)
+    assert window.session is None
+    window.close()
+
+
+def test_the_start_page_starts_from_a_card_s_link(app, tmp_path: Path, monkeypatch):
+    window = window_on(tmp_path)
+    shown: list[str] = []
+
+    def rejected(dialog: LinkDialog) -> int:
+        shown.append(dialog.windowTitle())
+        return QDialog.Rejected
+
+    monkeypatch.setattr(LinkDialog, "exec", rejected)
+    window.start_page.cards["link"].activated.emit()
+    assert shown == ["Import from a link"] and window._link_fetch is None
     window.close()
