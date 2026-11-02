@@ -86,7 +86,8 @@ def test_a_set_of_expressions_is_one_edit_each_every_prompt_shown(app, window):
         window.session, character, source_id="a", catalog=None, browse=None
     )
     assert dialog.source_ref().id == "a"
-    assert list(dialog._boxes) == ["neutral", "happy", "sad", "angry"]
+    # Neutral is left out: the armour picture is his neutral one already.
+    assert list(dialog._boxes) == ["happy", "sad", "angry"]
     dialog.ticks["neutral"].setChecked(False)
     dialog.others.setText("laughing, Angry, asleep")
     assert list(dialog._boxes) == ["happy", "sad", "angry", "laughing", "asleep"]
@@ -101,6 +102,31 @@ def test_a_set_of_expressions_is_one_edit_each_every_prompt_shown(app, window):
     assert all([u.ref_id for u in r.references] == ["a"] for r in requests)
     assert requests[0].prompt == "Make him look quietly sad."
     assert "Change their expression or pose to: laughing." in requests[2].prompt
+    dialog.deleteLater()
+
+
+def test_a_set_of_expressions_begins_with_only_what_the_look_lacks(app, window):
+    """Doomsville's John has neutral, happy, sad and angry in his coat:
+    ticked anyway, they were drawn and paid for again (the lab walk)."""
+    character = serrik(window)
+    for ref_id, expression in (("h", "happy"), ("s", "sad"), ("g", "angry")):
+        character.reference_images.append(
+            ImageRef(
+                id=ref_id, file="images/refs/p.png", look="normal clothes", expression=expression
+            )
+        )
+    character.reference_images[0].expression = "neutral"
+    dialog = ExpressionSetDialog(
+        window.session, character, source_id="p", catalog=None, browse=None
+    )
+    assert dialog.expressions() == [] and not dialog.draw_button.isEnabled()
+    # Another picture to draw from: its own look's gaps.
+    dialog.source.setCurrentIndex(dialog.source.findData("a"))
+    assert dialog.expressions() == ["happy", "sad", "angry"]
+    # Once a tick has been clicked, the author's choice stands.
+    dialog.ticks["afraid"].click()
+    dialog.source.setCurrentIndex(dialog.source.findData("p"))
+    assert dialog.expressions() == ["happy", "sad", "angry", "afraid"]
     dialog.deleteLater()
 
 

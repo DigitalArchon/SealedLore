@@ -47,7 +47,9 @@ SET_TIP = (
     "every prompt and the price first."
 )
 THUMB_SIDE = 120
-# Ticked to begin with: a small set that covers most scenes.
+# Ticked to begin with: a small set that covers most scenes, less what the
+# picture's look already has (Doomsville's John has all four in his coat:
+# ticked anyway, they would be drawn and paid for again).
 FIRST_TICKED = ("neutral", "happy", "sad", "angry")
 
 
@@ -69,6 +71,9 @@ class ExpressionSetDialog(QDialog):
         self._catalog = catalog
         self._prompts: dict[str, str] = {}  # an expression's prompt, as the author left it
         self._boxes: dict[str, GrowingText] = {}
+        # The author has clicked a tick: another picture to draw from no
+        # longer resets them.
+        self._ticked_by_hand = False
         self.setWindowTitle(f"A set of expressions: {character.name}")
         self.setMinimumWidth(640)
         size_to_screen(self, 0.5, 0.85)
@@ -96,8 +101,8 @@ class ExpressionSetDialog(QDialog):
         self.ticks: dict[str, QCheckBox] = {}
         for index, expression in enumerate(COMMON_EXPRESSIONS):
             box = QCheckBox(expression)
-            box.setChecked(expression in FIRST_TICKED)
             box.toggled.connect(self._rebuild)
+            box.clicked.connect(self._by_hand)
             self.ticks[expression] = box
             ticks.addWidget(box, index // 3, index % 3)
         self.others = QLineEdit()
@@ -164,7 +169,27 @@ class ExpressionSetDialog(QDialog):
             look_change(expression=expression, texts=self.session.texts), keep="person"
         )
 
+    def _by_hand(self, *_args) -> None:
+        self._ticked_by_hand = True
+
+    def first_ticked(self) -> list[str]:
+        """FIRST_TICKED less the expressions the picture's look already has
+        among their pictures (the picture's own included)."""
+        look = self.source_ref().look.strip().lower()
+        have = {
+            ref.expression.strip().lower()
+            for ref in self.character.reference_images
+            if ref.look.strip().lower() == look and ref.expression.strip()
+        }
+        return [expression for expression in FIRST_TICKED if expression not in have]
+
     def _on_source(self, *_args) -> None:
+        if not self._ticked_by_hand:
+            first = self.first_ticked()
+            for expression, box in self.ticks.items():
+                box.blockSignals(True)
+                box.setChecked(expression in first)
+                box.blockSignals(False)
         store = self.session.pictures
         data = store.read(self.source_ref().file) if store is not None else None
         thumb = thumbnail_of(data, THUMB_SIDE) if data else None
