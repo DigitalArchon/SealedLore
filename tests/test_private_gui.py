@@ -157,6 +157,21 @@ def test_close_story_mid_memory_scene_asks_and_discards(app, window: MainWindow,
     assert not session.in_private
 
 
+def test_continue_waits_for_the_scene_s_own_passage(app, window: MainWindow):
+    passage = window.session.full_path()[-1]
+    assert window.composer.continue_button.isEnabled()
+    window.composer.private_toggle.click()
+    assert window.session.in_private
+    # The latest passage is the story model's: carried on in the scene, it
+    # would be sent there.
+    assert not window.composer.continue_button.isEnabled()
+    assert not window.transcript.message_widget(passage.id).actions_["continue"].isVisible()
+    window.continue_passage()
+    assert not window._busy
+    send(app, window, "I lower my voice.")
+    assert window.composer.continue_button.isEnabled()
+
+
 def test_no_private_model_says_where_to_set_one(app, window: MainWindow, monkeypatch):
     window.config.private_provider = None
     shown = []

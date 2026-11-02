@@ -378,6 +378,26 @@ def test_a_chat_reply_is_carried_on_with_the_chats_own_words(tmp_path: Path):
     assert "REMEMBER" not in ask
 
 
+def test_a_private_scene_carries_on_only_its_own_passages(tmp_path: Path):
+    session, main, held = build_private(tmp_path)
+    for _event in session.send(
+        TurnRequest(speaker_id=held, user_text="I walk in.", controlled_character_id=held)
+    ):
+        pass
+    assert session.can_continue()
+    enter_private(session)
+    # The latest passage is the story's, and the scene is open: carrying it
+    # on would send it to the story's model.
+    assert continuable(session.full_path()) and not session.can_continue()
+    with pytest.raises(ValueError, match="leave the private scene"):
+        list(session.continue_passage())
+    for _event in session.send(
+        TurnRequest(speaker_id=held, user_text="I whisper.", controlled_character_id=held)
+    ):
+        pass
+    assert session.can_continue()
+
+
 def test_in_a_private_scene_it_goes_to_the_private_model_only(tmp_path: Path):
     session, main, held = build_private(tmp_path)
     private = enter_private(session)

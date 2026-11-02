@@ -109,6 +109,9 @@ class FakeBackend:
     def reroll(self, node_id):
         self._act("reroll", node_id)
 
+    def continue_passage(self, retake):
+        self._act("continue", retake)
+
     def switch_take(self, node_id, step):
         self._act("take", node_id, step)
 
@@ -184,6 +187,7 @@ AUTH_ROUTES = [
     ("POST", "/api/stop", {}),
     ("POST", "/api/regenerate", {}),
     ("POST", "/api/reroll", {"node_id": "n1"}),
+    ("POST", "/api/continue", {"node_id": "n1"}),
     ("POST", "/api/take", {"node_id": "n1", "step": 1}),
     ("GET", "/api/branches", None),
     ("POST", "/api/branch", {"start_id": "n5"}),
@@ -367,6 +371,12 @@ def test_retakes_takes_and_branches_are_checked():
     assert answer(api, "POST", "/api/regenerate", {"node_id": "n1", "length": "brief"})[0] == 202
     assert backend.calls[-1] == ("regenerate", Retake("n1", length="brief"))
     assert answer(api, "POST", "/api/regenerate", {"node_id": "../x"})[0] == 400
+    assert answer(api, "POST", "/api/continue", {"node_id": "n1", "length": "brief"})[0] == 202
+    assert backend.calls[-1] == ("continue", Retake("n1", length="brief"))
+    # Which passage is always said: a phone behind the story mustn't carry
+    # on one it hasn't seen.
+    assert answer(api, "POST", "/api/continue", {})[0] == 400
+    assert answer(api, "POST", "/api/continue", {"node_id": "n1", "length": "epic"})[0] == 400
     assert answer(api, "POST", "/api/take", {"node_id": "n1", "step": 2})[0] == 400
     assert answer(api, "POST", "/api/take", {"node_id": "n1", "step": True})[0] == 400
     assert answer(api, "POST", "/api/take", {"node_id": "n1", "step": -1})[0] == 200

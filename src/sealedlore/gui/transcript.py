@@ -1421,6 +1421,15 @@ class TranscriptView(QScrollArea):
             if self._layout.indexOf(widget) >= 0:
                 widget.set_busy(busy)
 
+    def offer_continue(self, can: bool) -> None:
+        """Whether the latest passage's ⋯ → Continue is offered, as the
+        session says now: entering a private scene withdraws it from a passage
+        written before the scene, and that rebuilds nothing."""
+        for widget in self._container.findChildren(MessageWidget):
+            action = widget.actions_.get("continue")
+            if action is not None and self._layout.indexOf(widget) >= 0:
+                action.setVisible(can)
+
     def editing(self) -> bool:
         """Whether a message's editor is open: a rebuild would destroy it."""
         return any(
@@ -1476,9 +1485,12 @@ class TranscriptView(QScrollArea):
         pictures_for: PicturesFor | None = None,
         branch_starts: Mapping[str, str] | None = None,
         empty_actions: Sequence[tuple[str, Callable[[], None]]] = (),
+        can_continue: bool | None = None,
     ) -> None:
         """`empty_actions`: buttons under `empty_text` when there are no
-        messages (Start the story…)."""
+        messages (Start the story…). `can_continue`: the session's word on
+        whether the last message can be carried on (a private scene's rule);
+        None reads it from the messages alone."""
         cast_by_id = {character.id: character for character in cast}
         self.clear()
 
@@ -1513,7 +1525,7 @@ class TranscriptView(QScrollArea):
             add_asides(node.id)
 
         retakeable = _retakeable_ids(nodes)
-        carries_on = continuable(nodes)
+        carries_on = continuable(nodes) if can_continue is None else can_continue
 
         units: list[_Unit] = [(None, lambda: add_asides(None))]
         units += [(node.id, lambda node=node: build(node)) for node in nodes]

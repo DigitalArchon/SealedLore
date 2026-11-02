@@ -1252,7 +1252,9 @@ gives another take of the turn as you sent it. The storyteller is shown
 where the passage stops and asked to pick up exactly there; if it writes the
 passage out again before going on, the repeat is left out and the status bar
 says so. Once the new text is in, the scene and the plot are read again over
-the whole passage. In a simple chat it is **⋯ → Continue this reply**.
+the whole passage. In a simple chat it is **⋯ → Continue this reply**. In a
+private scene only the scene's own passages can be continued: one written
+before it is the story model's. A paired phone has Continue too.
 
 A **branch** is a line of the story you split off on purpose. **Edit** on a
 message corrects it in place (a typo, a name); on a turn of yours the editor
@@ -1899,7 +1901,9 @@ both at once. Under the box are **Speaking as**, the length, and behind
 everything else (who you play, who the model may voice) is the desktop's
 composer's. Send becomes Stop while a passage is written, and a turn sent
 while the reads after a passage finish waits to go (Queue). Under a passage
-are ‹ › for its takes, **Regenerate** and **Roll again**. The ☰ menu lists the
+are ‹ › for its takes, **Regenerate** and **Roll again**, and under the latest
+**Continue**, which writes more of it onto its end (the length under the box
+says how much). The ☰ menu lists the
 shared stories (opening one opens it on the desktop too), the story's
 branches, and **Forget this phone**. Pictures in the story show small, and
 whole when tapped.

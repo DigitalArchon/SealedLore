@@ -369,6 +369,41 @@ def test_a_retake_and_a_take_switch_from_the_phone(app, tmp_path, sockets, story
     window.close()
 
 
+def test_a_passage_carried_on_from_the_phone(app, tmp_path, sockets, story, cast):
+    window, phone = open_window(
+        tmp_path, sockets, story, cast, ["The door gives.", "Beyond it, stairs go down."]
+    )
+    phone.ask("POST", "/api/turn", {"text": "I push.", "speaker": NARRATOR_SPEAKER_ID})
+    wait_for(app, lambda: not window._busy and window._phone.entries)
+    turn, passage = window.session.path()[-2:]
+    _, page = phone.ask("GET", "/api/transcript")
+    assert [m["can_continue"] for m in page["messages"]] == [False, True]
+    # Only the latest passage, named by the phone.
+    assert phone.ask("POST", "/api/continue", {"node_id": turn.id})[0] == 409
+
+    events = phone.stream()
+    events.wait_for("hello")
+    status, _ = phone.ask("POST", "/api/continue", {"node_id": passage.id, "length": "brief"})
+    assert status == 202
+    events.wait_for("changed")
+    started = [data for name, data in events.events() if name == "job_started"]
+    assert started == [{"streaming": True, "question": False, "continues": passage.id}]
+    texts = "".join(data["text"] for name, data in events.events() if name == "text")
+    assert texts == "\n\nBeyond it, stairs go down."
+
+    assert window.session.path()[-1] is passage
+    assert passage.content == "The door gives.\n\nBeyond it, stairs go down."
+    sent = window._provider.requests[-1].messages
+    assert "CONTINUE THE PASSAGE" in sent[-1].text
+    assert sent[-2].role == "assistant" and sent[-2].text == "The door gives."
+    # The phone's Length was for what was added: the turn keeps its own.
+    assert turn.meta.response_style is None
+    _, page = phone.ask("GET", "/api/transcript")
+    assert page["messages"][-1]["text"] == passage.content
+    assert page["messages"][-1]["can_continue"]
+    window.close()
+
+
 # --- nothing that isn't shared ---------------------------------------------------------
 
 

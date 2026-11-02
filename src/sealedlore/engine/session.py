@@ -1980,6 +1980,17 @@ class StorySession(
             turn, roll_explanation=explain(turn.roll, held.name if held else "The character")
         )
 
+    def can_continue(self) -> bool:
+        """Whether Continue has a passage to carry on now: the latest, written
+        for a turn (`continuable`), and from the private scene that is open,
+        or from outside any scene while none is (`continue_passage` refuses
+        the rest)."""
+        path = self.full_path()
+        if not continuable(path):
+            return False
+        open_id = self.open_span.id if self.open_span is not None else None
+        return path[-1].meta.private_span == open_id
+
     def continue_passage(
         self, shape: TurnShape | None = None
     ) -> Iterator[StreamEvent | SessionNotice | PassageDone]:

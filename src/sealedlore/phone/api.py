@@ -106,6 +106,8 @@ class Backend(Protocol):
 
     def reroll(self, node_id: str) -> None: ...
 
+    def continue_passage(self, retake: Retake) -> None: ...
+
     def switch_take(self, node_id: str, step: int) -> None: ...
 
     def switch_branch(self, start_id: str) -> None: ...
@@ -162,6 +164,7 @@ class Api:
             _Route("POST", re.compile(r"/api/stop"), self._stop, story=True),
             _Route("POST", re.compile(r"/api/regenerate"), self._regenerate, story=True),
             _Route("POST", re.compile(r"/api/reroll"), self._reroll, story=True),
+            _Route("POST", re.compile(r"/api/continue"), self._continue, story=True),
             _Route("POST", re.compile(r"/api/take"), self._take, story=True),
             _Route("GET", re.compile(r"/api/branches"), self._branches, story=True),
             _Route("POST", re.compile(r"/api/branch"), self._branch, story=True),
@@ -380,6 +383,17 @@ class Api:
 
     def _reroll(self, request: Request, *, device: str) -> Response:
         self.backend.reroll(_node_id(_object(request)) or "")
+        return json_response(202, {"started": True})
+
+    def _continue(self, request: Request, *, device: str) -> Response:
+        """More of the latest passage: which one, so a phone behind the story
+        can't carry on one it hasn't seen, and the length of what is added."""
+        body = _object(request)
+        retake = Retake(
+            node_id=_node_id(body),
+            length=_choice(body, "length", self.backend.composer()),
+        )
+        self.backend.continue_passage(retake)
         return json_response(202, {"started": True})
 
     def _take(self, request: Request, *, device: str) -> Response:

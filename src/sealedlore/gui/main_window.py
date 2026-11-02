@@ -36,7 +36,6 @@ from sealedlore.engine.archival import chapter_number, chapter_numbers, turns_in
 from sealedlore.engine.authoring import describe, stale_voicing_notes
 from sealedlore.engine.branches import next_branch_name, unique_branch_name
 from sealedlore.engine.chronicle import format_clock
-from sealedlore.engine.continuation import continuable
 from sealedlore.engine.export import markdown_user_name, render_markdown
 from sealedlore.engine.plot_md import PLOT_SUFFIX, ParsedPlotFile, parse_plot_markdown
 from sealedlore.engine.prompt import TurnRequest
@@ -1978,6 +1977,16 @@ class MainWindow(
             pictures_for=self._pictures_for,
             branch_starts=self.session.branch_start_names(),
             empty_actions=empty_actions,
+            can_continue=self._continues_last(nodes),
+        )
+
+    def _continues_last(self, nodes: list[Node]) -> bool:
+        """Whether the last of the messages shown is the passage Continue
+        would carry on: the story as it stands, not a part of it shown while
+        an older passage is retaken."""
+        latest = self.session.full_path()
+        return (
+            bool(nodes and latest) and nodes[-1].id == latest[-1].id and self.session.can_continue()
         )
 
     def _chapter_cards(self, nodes: list[Node], split) -> list[ChapterCard]:
@@ -2697,21 +2706,22 @@ class MainWindow(
 
     def continue_passage(self, shape: TurnShape | None = None) -> None:
         """More of the latest passage, written into it. The composer's Length
-        says how much; nothing else about the turn changes."""
+        says how much (`shape` is the phone's); nothing else about the turn
+        changes."""
         if self.session is None or self._busy:
             return
-        path = self.session.full_path()
-        if not continuable(path) or not self._tee_allows_send():
+        if not self.session.can_continue() or not self._tee_allows_send():
             return
         self.session.provider = self._current_provider()
+        words = "Continuing"
         if shape is None:
             shape = self._current_shape()
-        if self.in_chat:
-            self.statusBar().showMessage("Continuing", 6000)
-        else:
-            length = self.composer.length.currentText().removesuffix(DEFAULT_SUFFIX)
-            self.statusBar().showMessage(f"Continuing — {length}", 6000)
-        self._start(lambda: self.session.continue_passage(shape), continuing=path[-1].id)
+            if not self.in_chat:
+                length = self.composer.length.currentText().removesuffix(DEFAULT_SUFFIX)
+                words = f"Continuing — {length}"
+        self.statusBar().showMessage(words, 6000)
+        passage = self.session.full_path()[-1]
+        self._start(lambda: self.session.continue_passage(shape), continuing=passage.id)
 
     def _continue_node(self, node_id: str) -> None:
         """⋯ → Continue this passage, offered on the latest passage only."""
@@ -3118,7 +3128,9 @@ class MainWindow(
         worker.waiting.connect(self._waits.wait)
         worker.passage_done.connect(self._on_passage_done)
         worker.failed.connect(self._on_failed)
-        self._phone_job_started(worker, streaming=streaming, question=question)
+        self._phone_job_started(
+            worker, streaming=streaming, question=question, continuing=continuing
+        )
         worker.finished.connect(thread.quit)
         # Cleanup hangs off the thread rather than the worker: the worker must
         # stay alive until its own thread has actually stopped, so dropping
@@ -4631,12 +4643,14 @@ class MainWindow(
     def _update_controls(self) -> None:
         busy = self._busy
         has_story = self.session is not None
+        can_continue = has_story and self.session.can_continue()
         self._refresh_model_button()
+        self.transcript.offer_continue(can_continue)
         self.composer.set_busy(
             busy,
             has_story=has_story,
             can_regenerate=self._can_regenerate(),
-            can_continue=self.session is not None and continuable(self.session.full_path()),
+            can_continue=can_continue,
             background=self._background,
             queued=self._queued is not None,
         )

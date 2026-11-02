@@ -21,6 +21,7 @@
     branches: [],
     version: -1,
     writing: null, // { card, text } while a passage streams
+    continuing: null, // { id, words, text, label, labelText } while a passage is carried on
     reconnects: 0,
     ended: false, // revoked or forgotten: nothing more to do
     acknowledged: new Set(), // private kinds the author chose to see, this page session
@@ -283,6 +284,7 @@
     }
     if (branches.ok) S.branches = branches.data.branches || [];
     S.writing = null;
+    S.continuing = null;
   }
 
   async function loadEarlier() {
@@ -421,14 +423,23 @@
     if (message.roll) label += " · " + message.roll;
     if (message.private_summary) label = "Private scene · summary";
     else if (kind) label += " · " + (kind === "tee" ? "private model" : "private");
-    card.appendChild(el("div", { cls: "label", text: label }));
+    const labelNode = el("div", { cls: "label", text: label });
+    card.appendChild(labelNode);
     if (hidden(kind)) {
       card.appendChild(
         button(PRIVATE_PLACEHOLDER[kind] + " Tap to see it.", () => askToShow(kind), "placeholder")
       );
       return card;
     }
-    card.appendChild(el("div", { cls: "text", text: message.text }));
+    const text = el("div", { cls: "text", text: message.text });
+    card.appendChild(text);
+    const going = S.continuing;
+    if (going && going.id === message.id) {
+      // Carried on: what comes is added to the end of this message.
+      card.classList.add("writing");
+      Object.assign(going, { text, base: message.text, label: labelNode, labelText: label });
+      showContinuing();
+    }
     if (message.ooc) card.appendChild(el("div", { cls: "ooc", text: "Out of character: " + message.ooc }));
     if (message.pictures && message.pictures.length) {
       const strip = el("div", { cls: "pictures" });
@@ -453,6 +464,7 @@
       actions.children[2].disabled = position >= count;
     }
     if (message.can_regenerate && isLast) actions.appendChild(button("Regenerate", () => regenerate(message.id)));
+    if (message.can_continue) actions.appendChild(button("Continue", () => continuePassage(message.id)));
     if (message.can_reroll) actions.appendChild(button("Roll again", () => reroll(message.id)));
     if (actions.children.length) card.appendChild(actions);
     return card;
@@ -471,6 +483,7 @@
       nodes.push(el("p", { cls: "placeholder", text: "Nothing written yet. Write the first turn below." }));
     }
     const lastPassage = [...S.messages].reverse().find((m) => m.kind === "assistant");
+    if (S.continuing) S.continuing.text = null; // found again below, unless it is hidden
     S.messages.forEach((message) => nodes.push(messageCard(message, message === lastPassage)));
     if (S.writing) nodes.push(S.writing.card);
     box.replaceChildren(...nodes);
@@ -575,6 +588,17 @@
     if (!w) return;
     const kind = S.state && S.state.private;
     w.text.textContent = hidden(kind) ? "Private text is being written. Tap the placeholder above to see it." : w.words;
+  }
+
+  function startContinuing(id) {
+    S.continuing = { id, words: "", text: null, label: null, labelText: "" };
+    renderMessages();
+  }
+
+  function showContinuing() {
+    const c = S.continuing;
+    if (!c || !c.text) return;
+    c.text.textContent = c.base + c.words;
   }
 
   // --- the composer ------------------------------------------------------------------------
@@ -736,6 +760,13 @@
     if (S.choices.length) body.length = S.choices.length;
     if (S.choices.outcome) body.outcome = S.choices.outcome;
     const answer = await call("POST", "/api/regenerate", body);
+    if (!answer.ok) toast(messageOf(answer), true);
+  }
+
+  async function continuePassage(nodeId) {
+    const body = { node_id: nodeId };
+    if (S.choices.length) body.length = S.choices.length;
+    const answer = await call("POST", "/api/continue", body);
     if (!answer.ok) toast(messageOf(answer), true);
   }
 
@@ -901,12 +932,21 @@
         renderMessages();
         break;
       case "job_started":
-        if (data.streaming) writingCard(data.question ? "Answer" : S.composer && S.composer.chat ? "Assistant" : "Story");
+        if (data.continues) startContinuing(data.continues);
+        else if (data.streaming) writingCard(data.question ? "Answer" : S.composer && S.composer.chat ? "Assistant" : "Story");
         break;
       case "thinking":
         if (S.writing && !S.writing.words) S.writing.label.textContent = "Thinking…";
+        else if (S.continuing && !S.continuing.words && S.continuing.label) S.continuing.label.textContent = "Thinking…";
         break;
       case "text":
+        if (S.continuing) {
+          S.continuing.words += data.text;
+          if (S.continuing.label) S.continuing.label.textContent = S.continuing.labelText;
+          showContinuing();
+          if (nearBottom()) scrollToEnd();
+          break;
+        }
         if (!S.writing) writingCard("Story");
         S.writing.words += data.text;
         S.writing.label.textContent = S.writing.labelText;

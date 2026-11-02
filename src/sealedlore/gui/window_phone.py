@@ -411,9 +411,13 @@ class PhoneWindow:
             return
         service.rebuild()
 
-    def _phone_job_started(self, worker: GenerationWorker, *, streaming: bool, question) -> None:
+    def _phone_job_started(
+        self, worker: GenerationWorker, *, streaming: bool, question, continuing: str | None = None
+    ) -> None:
         if self._phone is not None:
-            self._phone.job_started(worker, streaming=streaming, question=question is not None)
+            self._phone.job_started(
+                worker, streaming=streaming, question=question is not None, continues=continuing
+            )
 
     def _phone_job_finished(self) -> None:
         if self._phone is not None:
@@ -522,7 +526,16 @@ class _PhoneService(QObject):
 
     # --- a job ---------------------------------------------------------------------------
 
-    def job_started(self, worker: GenerationWorker, *, streaming: bool, question: bool) -> None:
+    def job_started(
+        self,
+        worker: GenerationWorker,
+        *,
+        streaming: bool,
+        question: bool,
+        continues: str | None = None,
+    ) -> None:
+        """`continues`: the passage the job writes more of, which the page
+        streams onto the end of that message rather than into a new one."""
         self._text.clear()
         worker.text_delta.connect(self.on_text)
         worker.reasoning_delta.connect(self.on_reasoning)
@@ -530,7 +543,9 @@ class _PhoneService(QObject):
         worker.waiting.connect(self.on_waiting)
         worker.passage_done.connect(self.on_passage_done)
         worker.failed.connect(self.on_failed)
-        self.publish("job_started", {"streaming": streaming, "question": question})
+        self.publish(
+            "job_started", {"streaming": streaming, "question": question, "continues": continues}
+        )
         self.publish_state()
 
     def job_finished(self) -> None:
@@ -585,6 +600,7 @@ def _entries(window) -> tuple[list[dict], dict[str, str]]:
     cast_by_id = {c.id: c for c in session.cast}
     archived = session.split().archived_ids
     take_of = session.take_positions()
+    carries_on = session.can_continue()
     starts = session.branch_start_names()
     spans = {span.id: span for span in session.story.private_spans}
     show_rolls = window.config.show_dice_rolls
@@ -623,6 +639,7 @@ def _entries(window) -> tuple[list[dict], dict[str, str]]:
                 ],
                 "can_regenerate": assistant,
                 "can_reroll": assistant and index == len(path) - 1 and node.meta.roll is not None,
+                "can_continue": carries_on and index == len(path) - 1,
             }
         )
     return entries, files
@@ -808,6 +825,13 @@ class _Backend:
         if entry is None or not entry["can_reroll"]:
             raise Refused(409, "Only the latest roll can be rolled again.")
         self.window.reroll(node_id, self._shape(Retake(node_id)))
+
+    def continue_passage(self, retake: Retake) -> None:
+        self.window._phone_refusal()
+        entry = next((e for e in self.service.entries if e["id"] == retake.node_id), None)
+        if entry is None or not entry["can_continue"]:
+            raise Refused(409, "Only the latest passage can be continued.")
+        self.window.continue_passage(self._shape(retake))
 
     def switch_take(self, node_id: str, step: int) -> None:
         self.window._phone_refusal()
