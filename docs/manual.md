@@ -1218,6 +1218,14 @@ now. A picture of the story (Draw a picture…) is given each character's
 current look first, so it draws them as they look now unless you ask
 otherwise.
 
+**As a visual novel.** Two switches under View, off unless you turn them on:
+**Characters above the box you type in** shows who is in the scene now, large,
+in the look each is shown with, between the story and the box you type in;
+**Characters on each passage** puts small pictures over every passage of who
+was there and how they looked then, so scrolling back shows it too. Both
+take room (the second slows scrolling a little on a long story), and both
+show on a paired phone as well.
+
 Pictures of other expressions can come with a character: a CHARX card's
 expression pictures (File → Import… asks whether to keep them, and gives
 their size), or a SillyTavern expression pack, a zip of pictures named by
@@ -1979,7 +1987,10 @@ composer's. Send becomes Stop while a passage is written, and a turn sent
 while the reads after a passage finish waits to go (Queue). Under a passage
 are ‹ › for its takes, **Regenerate** and **Roll again**, and under the latest
 **Continue**, which writes more of it onto its end (the length under the box
-says how much). The ☰ menu lists the
+says how much). With the desktop's View → Characters above the box you type
+in, the phone shows who is in the scene at the top of its box, and with
+Characters on each passage, small pictures over each passage (in a private
+scene, only once you choose to see it). The ☰ menu lists the
 shared stories (opening one opens it on the desktop too), the story's
 branches, and **Forget this phone**. Pictures in the story show small, and
 whole when tapped.

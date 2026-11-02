@@ -516,3 +516,33 @@ def test_phone_access_off_by_default_and_on_only_when_started(app, tmp_path, sto
 def test_the_phone_refuses_a_value_list_it_doesnt_know():
     # The API's lists are the composer's: one it hasn't heard of is refused.
     assert set(phone_api._OPTION_LISTS) == {"speaker", "length", "outcome", "skill", "difficulty"}
+
+
+def test_the_phone_shows_the_looks_when_the_desktop_does(app, tmp_path, sockets, story, cast):
+    from PySide6.QtGui import QImage
+
+    from sealedlore.gui.image_codec import encoded
+    from sealedlore.models.image import ImageRef
+
+    window, phone = open_window(tmp_path, sockets, story, cast, ["The hall falls quiet."])
+    image = QImage(30, 40, QImage.Format_RGB32)
+    image.fill(0x335577)
+    window.session.pictures.write("images/refs/serrik.png", encoded(image, "PNG"))
+    serrik = next(c for c in window.session.cast if c.id == "char-serrik")
+    serrik.reference_images = [ImageRef(id="serrik-portrait", file="images/refs/serrik.png")]
+    phone.ask("POST", "/api/turn", {"text": "I wait.", "speaker": NARRATOR_SPEAKER_ID})
+    wait_for(app, lambda: not window._busy and window._phone.entries)
+    _, state = phone.ask("GET", "/api/state")
+    assert state["stage"] == []  # off unless the desktop shows it
+    assert phone.ask("GET", "/api/pictures/serrik-portrait")[0] == 404
+
+    window.stage_action.setChecked(True)
+    window.passage_faces_action.setChecked(True)
+    window._phone_settled()
+    _, state = phone.ask("GET", "/api/state")
+    assert state["stage"] == [{"name": "Serrik Vaun", "picture": "serrik-portrait"}]
+    _, page = phone.ask("GET", "/api/transcript")
+    assert page["messages"][-1]["faces"] == [{"name": "Serrik Vaun", "picture": "serrik-portrait"}]
+    status, body = phone.ask("GET", "/api/pictures/serrik-portrait?thumb=1")
+    assert status == 200 and body[:3] == b"\xff\xd8\xff"
+    window.close()

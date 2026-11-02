@@ -484,6 +484,7 @@ class _PhoneService(QObject):
         self.server.streams_changed.connect(window._sync_phone_controls)
         self.entries: list[dict] = []
         self.branches: list[dict] = []
+        self.stage: list[dict] = []
         self.picture_files: dict[str, str] = {}  # picture id -> its file, for what is shown
         self.version = 0
         self.dirty = False
@@ -517,9 +518,14 @@ class _PhoneService(QObject):
         self.dirty = False
         window = self.window
         self.entries, self.branches, self.picture_files = [], [], {}
+        self.stage = []
         if window.session is not None and self.api.open_available():
             self.entries, self.picture_files = _entries(window)
             self.branches = views.branch_rows(window.session.branch_list())
+            # The stage (View → Characters above the box you type in).
+            for name, picture, file in window._stage_people():
+                self.stage.append({"name": name, "picture": picture})
+                self.picture_files[picture] = file
         self.version += 1
         self.publish("changed", {"version": self.version})
         self.publish_state()
@@ -601,6 +607,9 @@ def _entries(window) -> tuple[list[dict], dict[str, str]]:
     archived = session.split().archived_ids
     take_of = session.take_positions()
     carries_on = session.can_continue()
+    # Who was there on each passage, as they looked (View → Characters on each
+    # passage), when the desktop shows them.
+    faces = window._faces_along(path) or {}
     starts = session.branch_start_names()
     spans = {span.id: span for span in session.story.private_spans}
     show_rolls = window.config.show_dice_rolls
@@ -640,8 +649,13 @@ def _entries(window) -> tuple[list[dict], dict[str, str]]:
                 "can_regenerate": assistant,
                 "can_reroll": assistant and index == len(path) - 1 and node.meta.roll is not None,
                 "can_continue": carries_on and index == len(path) - 1,
+                "faces": [
+                    {"name": character.name, "picture": ref.id}
+                    for character, ref in faces.get(node.id, [])
+                ],
             }
         )
+        files.update({ref.id: ref.file for _character, ref in faces.get(node.id, [])})
     return entries, files
 
 
@@ -692,6 +706,7 @@ class _Backend:
             "desktop_waiting": QApplication.activeModalWidget() is not None,
             "private": window._phone_private_tag(),
             "version": self.service.version,
+            "stage": self.service.stage,
         }
 
     def transcript(self, before: str | None, limit: int) -> dict:

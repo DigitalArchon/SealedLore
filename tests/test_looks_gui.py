@@ -144,3 +144,37 @@ def test_a_look_found_missing_is_offered_to_draw(app, window, monkeypatch):
     monkeypatch.setattr(window.image_catalog, "ensure", lambda *args, **kwargs: None)
     actions["Draw them as combat armour · grinning…"]()
     assert seen == [("combat armour", "grinning")]
+
+
+def test_the_stage_and_the_passages_show_who_is_there_when_asked(app, window):
+    from PySide6.QtGui import QImage
+
+    from sealedlore.gui.image_codec import encoded
+
+    image = QImage(30, 40, QImage.Format_RGB32)
+    image.fill(0x335577)
+    for name in ("p", "a"):
+        window.session.pictures.write(f"images/refs/{name}.png", encoded(image, "PNG"))
+    window.session.story.scene.present_character_ids = ["char-serrik"]
+    window.reload_transcript()
+    assert not window.stage.isVisibleTo(window)
+    assert all(w.faces_row is None for w in _passages(window))
+    window.stage_action.setChecked(True)
+    window.passage_faces_action.setChecked(True)
+    assert window.config.looks_stage and window.config.looks_passages
+    assert window.stage.isVisibleTo(window)
+    assert [face.name for face in window.stage.faces] == ["Serrik Vaun"]
+    rows = [w.faces_row for w in _passages(window)]
+    assert rows and all(row is not None for row in rows)
+    window.stage_action.setChecked(False)
+    assert not window.stage.isVisibleTo(window)
+
+
+def _passages(window):
+    from sealedlore.gui.transcript import MessageWidget
+
+    return [
+        w
+        for w in window.transcript.findChildren(MessageWidget)
+        if window.transcript._layout.indexOf(w) >= 0 and w.kind == "assistant"
+    ]

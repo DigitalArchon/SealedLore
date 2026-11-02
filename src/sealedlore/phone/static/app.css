@@ -75,6 +75,15 @@ body.story-view #footer { display: none; }
 .message details summary { color: var(--dim); }
 .branch-start { font-size: 13px; color: var(--gold); margin-bottom: 4px; }
 .pictures { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+/* Who was there, as they looked (the desktop's Characters on each passage). */
+.faces { display: flex; gap: 4px; flex-wrap: wrap; margin: 2px 0 6px; }
+.faces img { height: 44px; width: auto; border-radius: 6px; }
+/* The stage (the desktop's Characters above the box you type in). */
+#stage { display: flex; gap: 10px; justify-content: center; overflow-x: auto; padding: 2px 0 6px; }
+#stage:empty { display: none; }
+#stage figure { margin: 0; text-align: center; flex: none; }
+#stage img { height: 96px; width: auto; border-radius: 8px; display: block; }
+#stage figcaption { font-size: 12px; color: var(--dim); margin-top: 2px; }
 .pictures img { max-width: 100%; max-height: 240px; border-radius: 8px; }
 .placeholder { color: var(--dim); font-style: italic; }
 #earlier { align-self: center; }

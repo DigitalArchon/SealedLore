@@ -22,6 +22,8 @@
     version: -1,
     writing: null, // { card, text } while a passage streams
     continuing: null, // { id, words, text, label, labelText } while a passage is carried on
+    faceUrls: new Map(), // a character's picture, fetched once: id -> object URL
+    stageEl: null, // the stage, kept across the composer's rebuilds
     reconnects: 0,
     ended: false, // revoked or forgotten: nothing more to do
     acknowledged: new Set(), // private kinds the author chose to see, this page session
@@ -431,6 +433,9 @@
       );
       return card;
     }
+    if (message.faces && message.faces.length) {
+      card.appendChild(el("div", { cls: "faces" }, message.faces.map((f) => faceImage(f.picture, f.name))));
+    }
     const text = el("div", { cls: "text", text: message.text });
     card.appendChild(text);
     const going = S.continuing;
@@ -498,6 +503,43 @@
 
   function scrollToEnd() {
     window.scrollTo(0, document.scrollingElement.scrollHeight);
+  }
+
+  // A character as they look (the faces over a passage, the stage): fetched
+  // once for the page's life, since a picture's id never changes what it is.
+  function faceImage(id, name) {
+    const image = el("img", { attrs: { alt: name, title: name } });
+    const known = S.faceUrls.get(id);
+    if (known) {
+      image.src = known;
+      return image;
+    }
+    fetch("/api/pictures/" + encodeURIComponent(id) + "?thumb=1", { headers: auth(), cache: "no-store" })
+      .then((r) => (r.ok ? r.blob() : null))
+      .then((blob) => {
+        if (!blob) return;
+        const url = S.faceUrls.get(id) || URL.createObjectURL(blob);
+        S.faceUrls.set(id, url);
+        image.src = url;
+      })
+      .catch(() => {});
+    return image;
+  }
+
+  // The stage: who is in the scene now, as they look, at the top of the box.
+  function renderStage() {
+    if (!S.stageEl) S.stageEl = el("div", { attrs: { id: "stage" } });
+    const state = S.state || {};
+    const people = state.stage || [];
+    const kind = state.private;
+    if (!people.length || hidden(kind)) {
+      S.stageEl.replaceChildren();
+      return S.stageEl;
+    }
+    S.stageEl.replaceChildren(
+      ...people.map((p) => el("figure", {}, [faceImage(p.picture, p.name), el("figcaption", { text: p.name })]))
+    );
+    return S.stageEl;
   }
 
   function thumbnail(id) {
@@ -693,7 +735,7 @@
       }
       rows.push(more);
     }
-    form.replaceChildren(...rows);
+    form.replaceChildren(renderStage(), ...rows);
     if (focused) text.focus();
     syncSendButton();
     fitComposerSpace();
@@ -912,6 +954,8 @@
         else {
           renderStatus();
           renderBanner();
+          renderStage();
+          fitComposerSpace();
           offerPrivate();
         }
         break;

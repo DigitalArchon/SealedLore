@@ -466,6 +466,26 @@ QDockWidget::title {
   padding-top: 10px;
 }
 
+/* The stage (gui/stage.py): who is in the scene now, under the story. */
+#stage {
+  background: @panel;
+  border: 1px solid @border;
+  border-radius: 8px;
+}
+
+/* The faces over a passage (View → Characters on each passage). */
+#passageFaces,
+#passageFaces QLabel {
+  background: transparent;
+}
+
+#stageName {
+  color: @text_bright;
+  font-size: 13px;
+  font-weight: 600;
+  background: transparent;
+}
+
 #personCard {
   background: @panel;
   border: 1px solid @border;

@@ -97,6 +97,7 @@ from sealedlore.gui.session_line import SessionLine
 from sealedlore.gui.settings_dialog import SettingsDialog
 from sealedlore.gui.setup_dialog import ModelChoices, SetupDialog
 from sealedlore.gui.speed_test import speed_tests
+from sealedlore.gui.stage import Stage
 from sealedlore.gui.start_dialog import StartDialog
 from sealedlore.gui.start_page import NewDialog, StartChooser
 from sealedlore.gui.status import NoticeStatusBar, StatusStrip, WaitCounter
@@ -120,6 +121,7 @@ from sealedlore.gui.window_chat import ChatWindow
 from sealedlore.gui.window_find import FindWindow
 from sealedlore.gui.window_images import ImagesWindow
 from sealedlore.gui.window_layout import LayoutWindow, StoriesDock
+from sealedlore.gui.window_looks import LooksWindow
 from sealedlore.gui.window_phone import PhoneWindow
 from sealedlore.gui.window_private import PrivateWindow
 from sealedlore.gui.window_tavern import TavernWindow
@@ -243,6 +245,7 @@ MANUAL_URL = "https://github.com/DigitalArchon/SealedLore/blob/master/docs/manua
 class MainWindow(
     CastWindow,
     TavernWindow,
+    LooksWindow,
     ChatWindow,
     FindWindow,
     ImagesWindow,
@@ -453,7 +456,17 @@ class MainWindow(
         self.story_split.setObjectName("storySplit")
         self.story_split.setChildrenCollapsible(False)
         self.story_split.setHandleWidth(10)
-        self.story_split.addWidget(self.centre_stack)
+        # The stage (View → Characters above the box you type in, window_looks.py)
+        # under the story, in the same pane: it goes with the story, not the box.
+        self.story_area = QWidget()
+        area = QVBoxLayout(self.story_area)
+        area.setContentsMargins(0, 0, 0, 0)
+        area.setSpacing(4)
+        area.addWidget(self.centre_stack, 1)
+        self.stage = Stage(self.story_area)
+        self.stage.hide()
+        area.addWidget(self.stage)
+        self.story_split.addWidget(self.story_area)
         self.story_split.addWidget(self.composer)
         self.story_split.setStretchFactor(0, 1)
         self.story_split.setStretchFactor(1, 0)
@@ -539,6 +552,7 @@ class MainWindow(
         ]
         self._init_cast()
         self._init_tavern()
+        self._init_looks()
         self._init_images()
         self._init_phone()
         self._init_videos()
@@ -823,6 +837,7 @@ class MainWindow(
         )
         self.dice_rolls_action.toggled.connect(self.set_show_dice_rolls)
         view_menu.addAction(self.dice_rolls_action)
+        self._looks_actions(view_menu)
         self._text_size_actions(view_menu)
         self._background_actions(view_menu)
 
@@ -937,31 +952,34 @@ class MainWindow(
         self._people_dirty = True
         if self.right_tabs.currentWidget() is self.people_page:
             self._build_people()
+        self._sync_stage()
 
     def _build_people(self) -> None:
         self._people_dirty = False
+        self.people_page.set_view(self._people_view())
+
+    def _people_view(self):
+        """Who is in the story by their faces, as the People page and the
+        stage show them."""
         session = self.session
         if session is None or session.story.chat:
-            self.people_page.set_view(people_view([], [], SceneState(), None))
-            return
+            return people_view([], [], SceneState(), None)
         hidden = set() if self.config.show_plot_spoilers else session.hidden_ids()
         missing, _lore = session.without_pictures()
         scene, unnamed = session.story.scene, []
-        self.people_page.set_view(
-            people_view(
-                [c for c in session.cast if c.id not in hidden],
-                [c for c in session.supporting if c.id not in hidden],
-                scene,
-                session.story.held_character_id,
-                story_id=session.story.id,
-                begun=bool(session.nodes),
-                missing=[c.name for c in missing],
-                pictures_ready=session.config.images() is not None,
-                background=bool(session.story.background_image),
-                unnamed=unnamed,
-                looks=session.looks_now(),
-                wanted=session.looks_wanted_now(),
-            )
+        return people_view(
+            [c for c in session.cast if c.id not in hidden],
+            [c for c in session.supporting if c.id not in hidden],
+            scene,
+            session.story.held_character_id,
+            story_id=session.story.id,
+            begun=bool(session.nodes),
+            missing=[c.name for c in missing],
+            pictures_ready=session.config.images() is not None,
+            background=bool(session.story.background_image),
+            unnamed=unnamed,
+            looks=session.looks_now(),
+            wanted=session.looks_wanted_now(),
         )
 
     def _show_look(self, card_id: str, ref_id: str) -> None:
@@ -2020,6 +2038,7 @@ class MainWindow(
             branch_starts=self.session.branch_start_names(),
             empty_actions=empty_actions,
             can_continue=self._continues_last(nodes),
+            faces_for=self._passage_faces(nodes),
         )
 
     def _continues_last(self, nodes: list[Node]) -> bool:

@@ -773,6 +773,10 @@ class Config(BaseModel):
     # it is shown with (engine/look_pick.py), on the scene model. Only for
     # someone with more than one picture: a story without looks pays nothing.
     look_picks: SceneLedger = "every_turn"
+    # View → Characters above the box you type in (the stage) and Characters
+    # on each passage (gui/window_looks.py): off unless chosen.
+    looks_stage: bool = False
+    looks_passages: bool = False
     # The model for that read: an easy task, made on every turn, so a small
     # fast one is right. Blank means the story's summarisation model.
     scene_model: str | None = None

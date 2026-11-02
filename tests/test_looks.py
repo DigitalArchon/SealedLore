@@ -277,3 +277,36 @@ def test_in_a_private_scene_the_looks_are_chosen_on_a_private_model_only(tmp_pat
     assert session._private_look_model(span) == "TEE/kimi-k3"
     session.config.private_look_model = "TEE/glm-5.3-flash"
     assert session._private_look_model(span) == "TEE/glm-5.3-flash"
+
+
+# --- the faces on each passage -------------------------------------------------------------
+
+from sealedlore.engine.looks import faces_along  # noqa: E402
+from sealedlore.models.scene import SceneState  # noqa: E402
+
+
+def test_each_passage_carries_who_was_there_as_they_looked():
+    serrik = with_pictures(Character(id="char-serrik", name="Serrik Vaun"))
+    maela = with_pictures(Character(id="char-maela", name="Maela Orr"))
+    turn1 = Node(kind="user", speaker_id="char-serrik", content="I wait.")
+    turn1.meta.controlled_character_id = "char-serrik"
+    first = Node(kind="assistant", speaker_id="__narrator__", content="Nothing.")
+    turn2 = Node(kind="user", speaker_id="char-serrik", content="I call Maela.")
+    second = Node(kind="assistant", speaker_id="__narrator__", content="Maela comes in.")
+    second.meta.scene = SceneState(present_character_ids=["char-serrik", "char-maela"])
+    second.meta.looks = {"char-serrik": "g"}
+    private = Node(kind="assistant", speaker_id="__narrator__", content="Quietly.")
+    private.meta.private_span = "span-1"
+    private.meta.looks = {"char-serrik": "a"}
+    after = Node(kind="assistant", speaker_id="__narrator__", content="Later.")
+    path = [turn1, first, turn2, second, private, after]
+    faces = faces_along(path, [serrik, maela], held_id="char-serrik")
+    assert [(c.id, r.id) for c, r in faces[first.id]] == [("char-serrik", "p")]
+    assert [(c.id, r.id) for c, r in faces[second.id]] == [
+        ("char-serrik", "g"),
+        ("char-maela", "p"),
+    ]
+    # An ended private scene's looks don't carry on; an open one's do.
+    assert [r.id for _c, r in faces[after.id]][0] == "g"
+    open_faces = faces_along(path, [serrik, maela], held_id="char-serrik", open_span="span-1")
+    assert [r.id for _c, r in open_faces[after.id]][0] == "a"

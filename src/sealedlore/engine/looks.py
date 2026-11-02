@@ -86,3 +86,47 @@ def look_change(*, look: str = "", expression: str = "", texts: PromptTexts = DE
             texts.fill("pictures.look.expression", expression=" ".join(expression.split()))
         )
     return " ".join(parts)
+
+
+def faces_along(
+    path: Sequence[Node],
+    characters: Sequence[Character],
+    *,
+    start_present: Iterable[str] = (),
+    held_id: str | None = None,
+    open_span: str | None = None,
+    same_person=None,
+) -> dict[str, list[tuple[Character, ImageRef]]]:
+    """For each passage on `path`, who was in the scene at it and the picture
+    they were shown with then: (character, picture), the one the author
+    played first, only those with a picture. One pass along the path, the
+    scene and the looks carried as they are kept (the nearest above counts).
+    A private scene's looks count only while it is open (`open_span`), as
+    `LooksRuntime` reads them. `same_person(name, character)` matches the
+    scene's named others to supporting cards (engine/scene_state.py)."""
+    present: set[str] = set(start_present)
+    others: list[str] = []
+    looks: dict[str, str] = {}
+    held = held_id
+    faces: dict[str, list[tuple[Character, ImageRef]]] = {}
+    for node in path:
+        if node.meta.scene is not None:
+            present = set(node.meta.scene.present_character_ids)
+            others = list(node.meta.scene.present_others)
+        if node.meta.looks is not None and node.meta.private_span in (None, open_span):
+            looks = node.meta.looks
+        if node.kind == "user" and node.meta.controlled_character_id:
+            held = node.meta.controlled_character_id
+        if node.kind != "assistant":
+            continue
+        here = []
+        for character in characters:
+            there = character.id in present or character.id == held
+            if not there and same_person is not None:
+                there = any(same_person(name, character) for name in others)
+            picture = shown_picture(character, looks) if there else None
+            if picture is not None:
+                here.append((character, picture))
+        here.sort(key=lambda item: item[0].id != held)
+        faces[node.id] = here
+    return faces

@@ -342,6 +342,8 @@ class MessageWidget(QFrame):
             self.branch_label.setTextFormat(Qt.PlainText)
             layout.addWidget(self.branch_label)
 
+        # Who was there, as they looked (View → Characters on each passage).
+        self.faces_row: QWidget | None = None
         self.body = TextBody()
         # Model prose, names and imported text: Markdown, never HTML.
         self.body.set_markdown(text)
@@ -390,6 +392,26 @@ class MessageWidget(QFrame):
             self.usage = QLabel(line)
             self.usage.setObjectName("messageUsage")
             layout.addWidget(self.usage)
+
+    def add_faces(self, faces: Sequence[tuple[str, QPixmap]]) -> None:
+        """A row of small pictures over the passage: who was in the scene at
+        it, in the look each was shown with then (engine/looks.py)."""
+        if not faces:
+            return
+        row = QWidget(self)
+        row.setObjectName("passageFaces")
+        line = QHBoxLayout(row)
+        line.setContentsMargins(0, 0, 0, 0)
+        line.setSpacing(6)
+        for name, pixmap in faces:
+            face = QLabel(row)
+            face.setPixmap(pixmap)
+            face.setToolTip(name)
+            face.setAccessibleName(name)
+            line.addWidget(face)
+        line.addStretch(1)
+        self.layout_.insertWidget(self.layout_.indexOf(self.body), row)
+        self.faces_row = row
 
     def add_note(self, text: str) -> None:
         """A line under the passage that can't be missed: why it was slow."""
@@ -1486,6 +1508,7 @@ class TranscriptView(QScrollArea):
         branch_starts: Mapping[str, str] | None = None,
         empty_actions: Sequence[tuple[str, Callable[[], None]]] = (),
         can_continue: bool | None = None,
+        faces_for: Callable[[str], Sequence[tuple[str, QPixmap]]] | None = None,
     ) -> None:
         """`empty_actions`: buttons under `empty_text` when there are no
         messages (Start the story…). `can_continue`: the session's word on
@@ -1493,6 +1516,7 @@ class TranscriptView(QScrollArea):
         None reads it from the messages alone."""
         cast_by_id = {character.id: character for character in cast}
         self.clear()
+        self._faces_for = faces_for
 
         def add_asides(anchor: str | None) -> None:
             for aside in asides_for(anchor) if asides_for else ():
@@ -1552,6 +1576,7 @@ class TranscriptView(QScrollArea):
         Asides and pictures are left out: it never sees them."""
         cast_by_id = {character.id: character for character in cast}
         self.clear()
+        self._faces_for = None  # what the storyteller is sent: words only
 
         def note() -> None:
             label = QLabel(
@@ -1670,6 +1695,9 @@ class TranscriptView(QScrollArea):
         # status bar's notice is gone in seconds (engine `_kept_notice`).
         for note in node.meta.notes:
             widget.add_note("⚠ " + note)
+        faces_for = getattr(self, "_faces_for", None)
+        if faces_for is not None and node.kind == "assistant":
+            widget.add_faces(faces_for(node.id))
         return widget
 
     # --- paging -------------------------------------------------------------
