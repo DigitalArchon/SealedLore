@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.gui.expression_set import SET_LABEL, SET_TIP
 from sealedlore.gui.image_dialog import FitPicture
 from sealedlore.gui.picture_labels import LABELS_LABEL, LABELS_TIP
 from sealedlore.gui.picture_words import (
@@ -111,6 +112,7 @@ class PortraitView(QWidget):
     add_requested = Signal()
     remove_requested = Signal()
     labels_requested = Signal()
+    set_requested = Signal()
 
     def __init__(self, *, person: bool = True) -> None:
         super().__init__()
@@ -155,6 +157,7 @@ class PortraitView(QWidget):
             "the same face. It is added to their pictures.",
             self.scene_requested,
         )
+        self.set_button = self._button(SET_LABEL, SET_TIP, self.set_requested)
         self.from_words = QLabel(FROM_WORDS)
         self.from_words.setObjectName("hintLabel")
         self.sends_picture = QLabel(SENDS_PICTURE)
@@ -178,7 +181,7 @@ class PortraitView(QWidget):
         for button in (self.draw_button, self.again_button):
             words.add_group([button])
         sends = WrapRow(spacing=6, group_spacing=6)
-        for button in (self.edit_button, self.scene_button):
+        for button in (self.edit_button, self.scene_button, self.set_button):
             sends.add_group([button])
         files = WrapRow(spacing=6, group_spacing=6)
         for button in (self.labels_button, self.add_button, self.remove_button):
@@ -241,6 +244,7 @@ class PortraitView(QWidget):
         self.sends_picture.setVisible(on and has)
         # Their portrait is what keeps the face: with none, Draw a portrait first.
         self.scene_button.setVisible(on and has and self._person)
+        self.set_button.setVisible(on and has and self._person)
 
     def _show_whole(self) -> None:
         if not self._data:

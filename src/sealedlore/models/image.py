@@ -80,6 +80,9 @@ class GeneratedImage(BaseModel):
     card_id: str | None = None
     card_first: bool = False
     card_caption: str = ""
+    # Its labels there, a character's (engine/looks.py).
+    card_look: str = ""
+    card_expression: str = ""
     # Drawn to be the story's background (Media → the background → Draw a
     # new background… or Edit…): put behind the story once drawn, once
     # (`Story.backgrounds_taken`).

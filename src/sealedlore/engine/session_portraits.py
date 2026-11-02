@@ -184,12 +184,15 @@ class PortraitRuntime:
         caption: str = "",
         source: ImageRef | None = None,
         references: Sequence[RefUse] = (),
+        look: str = "",
+        expression: str = "",
     ) -> ImageRequest:
         """The request for one picture of a card, its prompt exactly as
         approved. `first`: it becomes the card's first picture (a new
         portrait); else it goes after the others. `source`: the picture
         an edit is of, sent with the prompt; else `references`, the pictures
-        a picture drawn again was drawn from."""
+        a picture drawn again was drawn from. `look` and `expression`: its
+        labels on the card (engine/looks.py)."""
         person = isinstance(card, Character)
         references = tuple(references)
         sending = 1 if source is not None else len(references)
@@ -221,6 +224,8 @@ class PortraitRuntime:
             # A lore entry's first picture is no portrait (the Lore page
             # captioned Hellsville so, and the writer's catalogue named it so).
             card_caption=caption or (PORTRAIT_CAPTION if first and person else ""),
+            card_look=look if person else "",
+            card_expression=expression if person else "",
         )
 
     def card_edit_prompt(self, card: Card, change: str) -> str:
@@ -298,6 +303,8 @@ class PortraitRuntime:
                     prompt=image.prompt,
                     model=image.model,
                     drawn_as=image.id,
+                    look=image.card_look,
+                    expression=image.card_expression,
                 )
                 if image.card_first:
                     card.reference_images.insert(0, ref)

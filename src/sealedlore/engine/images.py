@@ -58,6 +58,9 @@ class ImageRequest:
     card_id: str | None = None
     card_first: bool = False
     card_caption: str = ""
+    # A character's picture's labels once on their card (engine/looks.py).
+    card_look: str = ""
+    card_expression: str = ""
     # Drawn to be the story's background (`GeneratedImage.background`).
     background: bool = False
 
@@ -156,6 +159,8 @@ def run_image_request(
                 card_id=request.card_id,
                 card_first=request.card_first,
                 card_caption=request.card_caption,
+                card_look=request.card_look,
+                card_expression=request.card_expression,
                 background=request.background,
             )
         )

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 
+from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef
 from sealedlore.models.node import Node
@@ -72,3 +73,16 @@ def labels_in_use(refs: Iterable[ImageRef]) -> tuple[list[str], list[str]]:
         if ref.expression.strip():
             expressions.setdefault(ref.expression.strip(), None)
     return list(looks), list(expressions)
+
+
+def look_change(*, look: str = "", expression: str = "", texts: PromptTexts = DEFAULT_TEXTS) -> str:
+    """What an edit of a character's picture is asked to change for a new
+    look or expression (either may be blank: unchanged)."""
+    parts = []
+    if look.strip():
+        parts.append(texts.fill("pictures.look.clothes", look=" ".join(look.split())))
+    if expression.strip():
+        parts.append(
+            texts.fill("pictures.look.expression", expression=" ".join(expression.split()))
+        )
+    return " ".join(parts)

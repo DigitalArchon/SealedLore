@@ -24,6 +24,7 @@ from sealedlore.engine.image_prompt import (
 )
 from sealedlore.engine.image_variants import ImageFamily, family_of, fitting_model
 from sealedlore.engine.images import ImageRequest
+from sealedlore.engine.looks import looks_at
 from sealedlore.engine.places import newest_picture, place_for, place_title
 from sealedlore.engine.portraits import edit_prompt
 from sealedlore.engine.prompt import assemble_chat, assemble_question
@@ -134,6 +135,9 @@ class ImageRuntime:
         picture would be the first a model heard of them. Pictures added from
         disk (`Story.reference_images`) belong to no card and come last. A
         simple chat has no cards: it offers those and every picture it made.
+        A character's picture they are shown with now (engine/looks.py) comes
+        first among theirs, its caption saying so, so the writer draws them
+        as they look now unless asked otherwise.
         """
         added = [
             (_use("story", self.story.id, ref.caption or "Added picture", ref), False)
@@ -149,11 +153,15 @@ class ImageRuntime:
         scene = scene_at(path, self.story.scene) if path else self.story.scene
         present_ids = set(scene.present_character_ids)
         present_names = {name.lower() for name in scene.present_others}
+        looks = looks_at(path)
         uses: list[tuple[RefUse, bool]] = []
         for character in [*self.visible_cast(path), *self.visible_supporting()]:
             present = character.id in present_ids or character.name.lower() in present_names
-            for ref in character.reference_images:
-                uses.append((_use("character", character.id, character.name, ref), present))
+            now = looks.get(character.id)
+            refs = sorted(character.reference_images, key=lambda ref: ref.id != now)
+            for ref in refs:
+                use = _use("character", character.id, character.name, ref, now=ref.id == now)
+                uses.append((use, present))
         for entry in self.visible_lore():
             if entry.enabled:
                 for ref in entry.reference_images:
@@ -541,12 +549,18 @@ class ImageRuntime:
         return next((i for i in self.generated_images() if i.id == drawn), None)
 
 
-def _use(kind, owner_id: str, name: str, ref) -> RefUse:
+def _use(kind, owner_id: str, name: str, ref, *, now: bool = False) -> RefUse:
+    """A picture as a reference; a character's with its look labels in its
+    caption, and "as they look now" on the one they are shown with."""
+    labels = [getattr(ref, "look", ""), getattr(ref, "expression", "")]
+    caption = " · ".join(part for part in (ref.caption, *labels) if part)
+    if now:
+        caption = f"as they look now: {caption}" if caption else "as they look now"
     return RefUse(
         owner_kind=kind,
         owner_id=owner_id,
         owner_name=name,
         ref_id=ref.id,
         file=ref.file,
-        caption=ref.caption,
+        caption=caption,
     )

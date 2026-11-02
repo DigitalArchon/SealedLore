@@ -27,6 +27,7 @@ from sealedlore.engine.picture_shapes import BACKGROUND
 from sealedlore.engine.picture_use import KEEP_DRAW
 from sealedlore.engine.places import newest_picture
 from sealedlore.gui.crop_dialog import cropped_picture
+from sealedlore.gui.expression_set import ask_expression_set
 from sealedlore.gui.image_dialog import (
     FitPicture,
     ImageDialog,
@@ -466,8 +467,9 @@ class ImagesWindow:
         return bool(requests)
 
     def _on_card_picture(self, card_id: str, ref_id: str, what: str) -> None:
-        """A picture asked for on a card (the Cast or Lore page): "new",
-        "again" or "edit" of picture `ref_id`, or "scene"."""
+        """A picture asked for on a card (the Cast or Lore page, the People
+        page): "new", "again" or "edit" of picture `ref_id`, "set" (a set of
+        expressions drawn from it), or "scene"."""
         session = self.session
         if self._card_pictures_refused(session):
             return
@@ -494,6 +496,19 @@ class ImagesWindow:
             return
         source = next((r for r in card.reference_images if r.id == ref_id), None)
         if source is None:
+            return
+        if what == "set":
+            requests, chosen = ask_expression_set(
+                self._dialog_parent(),
+                session,
+                card,
+                source_id=source.id,
+                catalog=self.image_catalog,
+                browse=self._browse_pictures,
+            )
+            self._drain_side_costs()
+            if requests:
+                self._start_card_pictures(requests)
             return
         dialog = PictureVariantDialog(
             session,

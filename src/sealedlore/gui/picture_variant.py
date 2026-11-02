@@ -12,6 +12,11 @@ another. Edit sends the picture itself with the change, to a model that can
 be given a picture: the picture's own model when it can, else the default
 edit model. Either way the dialog shows the whole request and its price, and
 nothing is sent before Draw; the prompt is sent exactly as it stands.
+
+An edit of a character's picture is also how another look is drawn
+(engine/looks.py): its Look and Expression or pose start as the picture's
+own, a changed one becomes the change asked for (`look_change`), and the
+new picture is labelled with them.
 """
 
 from __future__ import annotations
@@ -22,6 +27,7 @@ from dataclasses import dataclass
 
 from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import (
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -39,6 +45,7 @@ from sealedlore.engine.image_variants import (
     version_words,
 )
 from sealedlore.engine.images import ImageRequest
+from sealedlore.engine.looks import COMMON_EXPRESSIONS, COMMON_LOOKS, labels_in_use, look_change
 from sealedlore.engine.portraits import Card, card_size, size_like
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.model_picker import ModelField
@@ -211,6 +218,16 @@ class PictureVariantDialog(QDialog):
             examples = "at night, in a storm · burned out and abandoned · in high summer"
         self.change.setPlaceholderText(examples)
         self.change.textChanged.connect(self._compose)
+        # Another look: a character's picture, labelled as it is drawn.
+        self.labelled = edit and subject.keep == "person" and subject.source is not None
+        self.look: QComboBox | None = None
+        self.expression: QComboBox | None = None
+        if self.labelled:
+            looks, expressions = labels_in_use(subject.card.reference_images)
+            self.look = self._labels_box(looks, COMMON_LOOKS, subject.source.look)
+            self.expression = self._labels_box(
+                expressions, COMMON_EXPRESSIONS, subject.source.expression
+            )
         self.prompt = GrowingText(lines=6, most=30, fill=True)
         self.prompt.setPlaceholderText("This text is sent exactly as it is here.")
         self.prompt.textChanged.connect(self._on_prompt_edited)
@@ -231,8 +248,21 @@ class PictureVariantDialog(QDialog):
         self.busy.hide()
 
         form = QFormLayout()
+        if self.labelled:
+            form.addRow("Look", self.look)
+            form.addRow("Expression or pose", self.expression)
+            if subject.source.look or subject.source.expression:
+                form.addRow(
+                    "",
+                    self._hint(
+                        "This picture's own: change either for a new look. The new picture "
+                        "is labelled with them."
+                    ),
+                )
+            else:
+                form.addRow("", self._hint("The new picture is labelled with them."))
         if edit:
-            form.addRow("What to change", self.change)
+            form.addRow("What else to change" if self.labelled else "What to change", self.change)
         form.addRow("Prompt", self.prompt)
         form.addRow("Drawn by", self.model)
         form.addRow(self.note)
@@ -264,6 +294,47 @@ class PictureVariantDialog(QDialog):
             catalog.ensure()
         self._sync()
 
+    @staticmethod
+    def _hint(text: str) -> QLabel:
+        label = QLabel(text)
+        label.setObjectName("hintLabel")
+        label.setWordWrap(True)
+        return label
+
+    def _labels_box(self, in_use, common, value: str) -> QComboBox:
+        combo = QComboBox()
+        combo.setEditable(True)
+        combo.addItem("")
+        seen = set()
+        for word in (*in_use, *common):
+            if word.lower() not in seen:
+                seen.add(word.lower())
+                combo.addItem(word)
+        combo.setCurrentText(value)
+        combo.currentTextChanged.connect(self._compose)
+        return combo
+
+    def labels(self) -> tuple[str, str]:
+        """The new picture's (look, expression), blank when not labelled."""
+        if self.look is None or self.expression is None:
+            return "", ""
+        return (
+            " ".join(self.look.currentText().split()),
+            " ".join(self.expression.currentText().split()),
+        )
+
+    def _label_change(self) -> str:
+        """The change the labels ask for: those that differ from the picture's."""
+        if not self.labelled:
+            return ""
+        look, expression = self.labels()
+        source = self.subject.source
+        return look_change(
+            look=look if look.lower() != source.look.lower() else "",
+            expression=expression if expression.lower() != source.expression.lower() else "",
+            texts=self.session.texts,
+        )
+
     def _first_model(self) -> str:
         """Drawing again: the picture's own model, else the portrait model.
         Editing: the picture's own model if it can be given a picture, else
@@ -287,13 +358,16 @@ class PictureVariantDialog(QDialog):
         self.prompt.blockSignals(False)
         self._sync()
 
-    def _compose(self) -> None:
-        """The edit's prompt from the change, until the author writes in
-        the prompt itself."""
+    def _compose(self, *_args) -> None:
+        """The edit's prompt from the change (the labels' and the author's
+        words), until the author writes in the prompt itself."""
+        if not hasattr(self, "prompt"):
+            return  # the labels are filled before the prompt exists
         if self.edit and not self._hand_edited:
-            self._set_prompt(
-                self.session.picture_edit_prompt(self.change.text(), keep=self.subject.keep)
-            )
+            change = " ".join(part for part in (self._label_change(), self.change.text()) if part)
+            self._set_prompt(self.session.picture_edit_prompt(change, keep=self.subject.keep))
+        else:
+            self._sync()
 
     def _on_prompt_edited(self) -> None:
         self._hand_edited = True
@@ -432,7 +506,9 @@ class PictureVariantDialog(QDialog):
         self.sends.setText(self._sends_words(takes))
         ready = self._worker is None and bool(model) and bool(self.prompt.toPlainText().strip())
         if self.edit:
-            ready = ready and bool(self.change.text().strip() or self._hand_edited)
+            ready = ready and bool(
+                self.change.text().strip() or self._label_change() or self._hand_edited
+            )
         self.draw_button.setEnabled(ready and not cannot)
 
     def _sends_words(self, takes: int | None) -> str:
@@ -470,15 +546,21 @@ class PictureVariantDialog(QDialog):
             )
         caption = " ".join(self.change.text().split()) if self.edit else AGAIN_CAPTION
         takes = info.max_inputs if info is not None else len(self._from)
+        look, expression = self.labels()
+        if not self.labelled and self.source is not None and not self.edit:
+            # Drawn again: the same look as the picture it was drawn from.
+            look, expression = self.source.look, self.source.expression
         return self.session.card_request(
             self.card,
             prompt,
             model=model,
             info=info,
             first=False,
-            caption=caption or "edited",
+            caption=caption or ("" if look or expression else "edited"),
             source=self.source if self.edit else None,
             references=self._from[:takes],
+            look=look,
+            expression=expression,
         )
 
     def reject(self) -> None:

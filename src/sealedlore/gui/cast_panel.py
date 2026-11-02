@@ -276,6 +276,7 @@ class CastPanel(QWidget):
         self.portrait.add_requested.connect(self._add_portrait)
         self.portrait.remove_requested.connect(self._remove_portrait)
         self.portrait.labels_requested.connect(self._label_portrait)
+        self.portrait.set_requested.connect(lambda: self._ask("set", first=True))
         self.pictures.again_requested.connect(lambda ref: self._ask("again", ref))
         self.pictures.edit_requested.connect(lambda ref: self._ask("edit", ref))
         self.pictures.changed.connect(self._on_pictures_changed)

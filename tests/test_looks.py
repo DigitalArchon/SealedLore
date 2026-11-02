@@ -96,3 +96,66 @@ def test_in_a_private_scene_a_choice_stays_on_the_scene_s_messages(tmp_path: Pat
     assert session.looks_now() == {}
     session.show_look(held, "a")
     assert session.full_path()[-1].meta.looks == {held: "a"}
+
+
+# --- drawing new looks ------------------------------------------------------------------
+
+
+def test_a_look_s_change_is_asked_in_the_labels_words():
+    from sealedlore.engine.looks import look_change
+
+    assert look_change(look="combat armour", expression="angry") == (
+        "Change their clothes or state to: combat armour. "
+        "Change their expression or pose to: angry."
+    )
+    assert look_change(expression="  in a  fighting stance ") == (
+        "Change their expression or pose to: in a fighting stance."
+    )
+    assert look_change() == ""
+
+
+def test_a_picture_drawn_for_a_look_lands_on_the_card_labelled(tmp_path: Path, story, cast):
+    from sealedlore.models.image import GeneratedImage
+
+    session = make_session(tmp_path, story, cast, [])
+    serrik = with_pictures(session.cast[0])
+    session.pictures.write("images/refs/p.png", b"portrait")
+    request = session.card_request(
+        serrik,
+        "Edit this picture: …",
+        model="m",
+        info=None,
+        first=False,
+        source=serrik.reference_images[0],
+        look="combat armour",
+        expression="laughing",
+    )
+    assert (request.card_look, request.card_expression) == ("combat armour", "laughing")
+    session.pictures.write("images/drawn.png", b"drawn")
+    session.pictures.add_images(
+        [
+            GeneratedImage(
+                file="images/drawn.png",
+                prompt=request.prompt,
+                model="m",
+                size="1024x1024",
+                card_id=serrik.id,
+                card_look=request.card_look,
+                card_expression=request.card_expression,
+            )
+        ]
+    )
+    session.take_card_pictures()
+    landed = serrik.reference_images[-1]
+    assert (landed.look, landed.expression) == ("combat armour", "laughing")
+
+
+def test_a_scene_picture_offers_each_character_as_they_look_now(tmp_path: Path, story, cast):
+    session = make_session(tmp_path, story, cast, ["The door gives."])
+    with_pictures(session.cast[0])
+    list(session.send(turn()))
+    session.show_look("char-serrik", "g")
+    serrik = [c.use for c in session.image_ref_choices() if c.use.owner_id == "char-serrik"]
+    assert serrik[0].ref_id == "g"
+    assert serrik[0].caption == "as they look now: combat armour · angry"
+    assert [use.caption for use in serrik[1:]] == ["portrait", "combat armour"]

@@ -910,6 +910,7 @@ class MainWindow(
         page.file_requested.connect(self._choose_card_picture)
         page.play_requested.connect(self._play_as)
         page.look_requested.connect(self._show_look)
+        page.variant_requested.connect(self._on_card_picture)
         page.draw_all_requested.connect(lambda: self.draw_card_pictures())
         page.background_requested.connect(lambda: self.generate_image(background=True))
         page.background_file_requested.connect(self.choose_background)

@@ -44,6 +44,7 @@ from PySide6.QtWidgets import (
 from sealedlore.engine.looks import look_words, shown_picture
 from sealedlore.engine.scene_state import same_person
 from sealedlore.gui import theme
+from sealedlore.gui.expression_set import SET_LABEL
 from sealedlore.models.character import Character
 from sealedlore.models.scene import SceneState
 
@@ -67,6 +68,7 @@ NOT_BEGUN = (
 CARD_TIP = "Click to open {name}'s profile. Right-click for more."
 SHOW_AS = "Show as"
 PORTRAIT_WORDS = "Their portrait"
+ANOTHER_LOOK = "Draw another look…"
 ALSO_HERE_HEADING = "Also here, with no card yet"
 NAME_LABEL = "Name…"
 # How the map's scene lists someone it has no name for (engine/map_presence.py).
@@ -246,6 +248,8 @@ class PersonCard(QFrame):
     play_requested = Signal(str)
     # (card id, picture id): show them with that picture from here on.
     look_requested = Signal(str, str)
+    # (card id, picture id, what): "edit" or "set" of the picture shown.
+    variant_requested = Signal(str, str, str)
 
     def __init__(self, person: Person, *, max_height: int, can_draw: bool, can_play: bool) -> None:
         super().__init__()
@@ -362,6 +366,17 @@ class PersonCard(QFrame):
         if self._can_draw:
             label = "Draw a new portrait…" if person.picture else "Draw a portrait…"
             actions.append((label, lambda: self.draw_requested.emit(person.card_id)))
+            if person.shown:
+                # From the picture they are shown with now: its face, its look.
+                for words, what in ((ANOTHER_LOOK, "edit"), (SET_LABEL, "set")):
+                    actions.append(
+                        (
+                            words,
+                            lambda what=what: self.variant_requested.emit(
+                                person.card_id, person.shown, what
+                            ),
+                        )
+                    )
         actions.append(("Choose a picture…", lambda: self.file_requested.emit(person.card_id)))
         if self._can_play and person.playable and not person.you:
             actions.append(
@@ -408,6 +423,7 @@ class PeoplePage(QScrollArea):
     file_requested = Signal(str)
     play_requested = Signal(str)
     look_requested = Signal(str, str)
+    variant_requested = Signal(str, str, str)
     draw_all_requested = Signal()
     background_requested = Signal()
     background_file_requested = Signal()
@@ -626,6 +642,7 @@ class PeoplePage(QScrollArea):
             card.file_requested.connect(self.file_requested)
             card.play_requested.connect(self.play_requested)
             card.look_requested.connect(self.look_requested)
+            card.variant_requested.connect(self.variant_requested)
             self.cards[person.card_id] = card
             grid.addWidget(card, index // columns, index % columns, Qt.AlignTop)
         for column in range(columns):

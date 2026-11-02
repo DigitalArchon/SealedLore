@@ -2724,6 +2724,34 @@ _text(
     "and the composition, framing and light unless the change says otherwise",
 )
 
+# Looks (engine/looks.py `look_change`): an edit of a character's picture
+# into another look, and A set of expressions…. The change, then
+# `pictures.edit`'s "keep the same person; change nothing else". Checked live
+# on John's Doomsville portrait (Nov 2 2026, angry, laughing, combat armour,
+# injured and in pain; SealedLoreDocs design/images.md, "Looks"): FLUX.2 klein
+# and FLUX.3 Klein both changed what was asked and kept his face, framing and
+# the snow behind him; for "injured" FLUX.2 klein also changed his coat
+# ("clothes or state"), FLUX.3 Klein kept it. Not A/B'd.
+_text(
+    "pictures.look.clothes",
+    PICTURES,
+    "Looks: another look",
+    "The change asked for when a character's picture is drawn in another look (clothes, "
+    "armour, injured): the Look the new picture is labelled with.",
+    "Change their clothes or state to: {look}.",
+    (("look", "The look the new picture is labelled with"),),
+)
+
+_text(
+    "pictures.look.expression",
+    PICTURES,
+    "Looks: another expression or pose",
+    "The change asked for when a character's picture is drawn with another expression or "
+    "pose: the Expression or pose the new picture is labelled with.",
+    "Change their expression or pose to: {expression}.",
+    (("expression", "The expression or pose the new picture is labelled with"),),
+)
+
 # Draw a new background… (Media): the direction the story's prompt writer is
 # given for a picture to stand behind the story's text. The author sees it
 # in the picture dialog and can change it before anything is written.

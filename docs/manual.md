@@ -1191,6 +1191,19 @@ branch or another take of a passage keeps its own, and **Their portrait**
 puts the portrait back. In a private scene a look is chosen once the scene
 has a message of its own, and counts only until the scene ends.
 
+**Drawing new looks.** **Change this picture…** on a character's picture
+starts from its Look and Expression or pose: change either, and the new
+picture is drawn from this one with that change (so it is the same face) and
+labelled with them; **What else to change** adds anything more. **A set of
+expressions…** (under the portrait) draws them with each expression you tick
+(neutral, happy, sad, angry and so on, or your own), each from the same
+picture, showing every prompt and the price of the whole set before anything
+is sent. On the People page, right-click a character for **Draw another
+look…** or **A set of expressions…** from the picture they are shown with
+now. A picture of the story (Draw a picture…) is given each character's
+current look first, so it draws them as they look now unless you ask
+otherwise.
+
 Pictures of other expressions can come with a character: a CHARX card's
 expression pictures (File → Import… asks whether to keep them, and gives
 their size), or a SillyTavern expression pack, a zip of pictures named by
