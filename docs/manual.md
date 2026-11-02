@@ -964,12 +964,17 @@ Import a lorebook from a link…** on the Lore page. It takes:
   the card is put together from Chub's own fields, as SillyTavern does, with
   its picture;
 - a character's page on **RisuRealm**, fetched as its own Download button
-  gives it (a CHARX, which may carry a whole set of pictures: only the card
-  and its main picture are read);
+  gives it: an older card as a PNG card, a newer one only as a CHARX, which
+  carries every picture the card has for RisuAI (a set of expressions can
+  run to tens of megabytes) though only the card and its main picture are
+  read;
 - a link straight to a card's file (PNG, JSON or CHARX) or a lorebook's
   (JSON), wherever it is kept.
 
-It goes on as for a file. SealedLore downloads it from that site, which sees
+A card's file over 20 MB is asked about before it is downloaded, with its
+size: a card is its text and a picture, a few megabytes at most, and the
+rest is pictures SealedLore doesn't keep. It goes on as for a file.
+SealedLore downloads it from that site, which sees
 your address as a browser would; nothing else of yours is sent, and only over
 https. A link the site turns down says why in the site's own words (some
 cards on RisuRealm can't be downloaded, at their creator's choice).

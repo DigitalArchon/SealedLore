@@ -29,8 +29,10 @@ from sealedlore.gui.tavern_dialog import CardImportDialog, LinkDialog
 from sealedlore.models.character import Character
 from sealedlore.models.lore import LoreEntry
 from sealedlore.providers.card_links import (
+    ASK_BYTES,
     Fetched,
     LinkError,
+    LinkLarge,
     LinkStopped,
     fetch_link,
     read_link,
@@ -72,19 +74,24 @@ class _LinkFetch(QObject):
 
     fetched = Signal(object, object)  # this fetch, Fetched
     failed = Signal(object, str)  # this fetch, the reason in words
+    large = Signal(object, object)  # this fetch, the size in bytes or None
 
-    def __init__(self, link: str, parent: QObject) -> None:
+    def __init__(self, link: str, parent: QObject, *, large_ok: bool = False) -> None:
         super().__init__(parent)
         self.link = link
+        self.large_ok = large_ok
         self.stopped = threading.Event()
 
     def start(self) -> None:
-        link, stopped = self.link, self.stopped
+        link, stopped, large_ok = self.link, self.stopped, self.large_ok
 
         def run() -> None:
             try:
-                result = fetch_link(link, stop=stopped)
+                result = fetch_link(link, stop=stopped, large_ok=large_ok)
             except LinkStopped:
+                return
+            except LinkLarge as exc:
+                self._say(self.large, exc.size)
                 return
             except LinkError as exc:
                 self._say(self.failed, str(exc))
@@ -481,15 +488,16 @@ class TavernWindow:
         if accepted and link:
             self._fetch_link(link, where)
 
-    def _fetch_link(self, link: str, where: str) -> None:
+    def _fetch_link(self, link: str, where: str, *, large_ok: bool = False) -> None:
         try:
             host = read_link(link).host
         except LinkError as exc:
             self._warn_plain(LINK_FAILED, str(exc))
             return
-        fetch = _LinkFetch(link, self)
+        fetch = _LinkFetch(link, self, large_ok=large_ok)
         fetch.fetched.connect(self._on_link_fetched)
         fetch.failed.connect(self._on_link_failed)
+        fetch.large.connect(self._on_link_large)
         self._link_fetch, self._link_where = fetch, where
         dialog = QProgressDialog(f"Fetching from {host}…", "Stop", 0, 0, self._dialog_parent())
         dialog.setWindowTitle("SealedLore")
@@ -521,6 +529,40 @@ class TavernWindow:
             return
         self.stop_link_fetch()
         self._warn_plain(LINK_FAILED, reason)
+
+    def _on_link_large(self, fetch: _LinkFetch, size: int | None) -> None:
+        """A card's file over ASK_BYTES, nothing of it read yet: asked
+        about, and fetched again only on a yes."""
+        if fetch is not self._link_fetch:
+            return
+        link, where = fetch.link, self._link_where
+        self.stop_link_fetch()
+        if self._download_large_card(size):
+            self._fetch_link(link, where, large_ok=True)
+
+    def _download_large_card(self, size: int | None) -> bool:
+        megabytes = f"{size / (1024 * 1024):.0f} MB" if size else None
+        box = QMessageBox(self._dialog_parent())
+        box.setIcon(QMessageBox.Question)
+        box.setWindowTitle("A large card")
+        box.setText(
+            f"This card's file is {megabytes}."
+            if megabytes
+            else f"This card's file is over {ASK_BYTES // (1024 * 1024)} MB."
+        )
+        box.setInformativeText(
+            "A card is its text and a picture, a few megabytes at most: the rest is "
+            "pictures for other apps, such as a set of expressions. SealedLore keeps only "
+            "the card's text and its main picture, but has to download the whole file "
+            "to get them."
+        )
+        download = box.addButton(
+            f"Download {megabytes}" if megabytes else "Download it", QMessageBox.AcceptRole
+        )
+        box.addButton(QMessageBox.Cancel)
+        box.setDefaultButton(QMessageBox.Cancel)
+        box.exec()
+        return box.clickedButton() is download
 
     def _on_link_fetched(self, fetch: _LinkFetch, result: Fetched) -> None:
         if fetch is not self._link_fetch:

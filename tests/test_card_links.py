@@ -19,6 +19,7 @@ from sealedlore.providers.card_links import (
     BOT_CHECK,
     WEB_PAGE,
     LinkError,
+    LinkLarge,
     LinkStopped,
     fetch_link,
     read_link,
@@ -196,29 +197,83 @@ def test_a_chub_lorebook_is_chub_s_own_export():
     assert sites.asked[-1] == export
 
 
-def test_a_risurealm_character_is_its_charx_even_with_a_picture_before_the_zip():
+RISU_PNG = "https://realm.risuai.net/api/v1/download/png-v3/7adb0ed8-d818"
+RISU_CHARX = "https://realm.risuai.net/api/v1/download/charx-v3/7adb0ed8-d818"
+NOT_IN_THIS_FORMAT = httpx.Response(
+    403,
+    json={
+        "error": "Forbidden",
+        "message": "This card is not allowed to be downloaded in this format.",
+    },
+)
+
+
+def png_card_bytes() -> bytes:
+    import base64
+
+    from sealedlore.storage.png_text import with_text
+
+    return with_text(tiny_png(), {"chara": base64.b64encode(json.dumps(v2()).encode()).decode()})
+
+
+def test_an_older_risurealm_card_is_its_png_card():
+    sites = Sites({RISU_PNG: httpx.Response(200, content=png_card_bytes())})
+    card = fetched_card("https://realm.risuai.net/character/7adb0ed8-d818", sites)
+    assert card.name == "Elena" and card.picture
+    assert sites.asked == [RISU_PNG]  # never the archive
+
+
+def test_a_newer_risurealm_card_is_its_charx_even_with_a_picture_before_the_zip():
     sites = Sites(
         {
-            "https://realm.risuai.net/api/v1/download/charx-v3/7adb0ed8-d818": httpx.Response(
-                200, content=charx(prefix=b"\xff\xd8\xff\xe0 a picture first")
-            ),
+            RISU_PNG: NOT_IN_THIS_FORMAT,
+            RISU_CHARX: httpx.Response(200, content=charx(prefix=b"\xff\xd8\xff\xe0 a picture")),
         }
     )
     card = fetched_card("https://realm.risuai.net/character/7adb0ed8-d818", sites)
     assert card.name == "Elena" and card.spec == "chara_card_v3" and card.picture
+    assert sites.asked == [RISU_PNG, RISU_CHARX]
 
 
 def test_risurealm_s_own_refusal_is_passed_on():
-    message = "This card is not allowed to be downloaded in this format."
-    sites = Sites(
-        {
-            "https://realm.risuai.net/api/v1/download/charx-v3/7adb0ed8-d818": httpx.Response(
-                403, json={"error": "Forbidden", "message": message}
-            ),
-        }
-    )
+    sites = Sites({RISU_PNG: NOT_IN_THIS_FORMAT, RISU_CHARX: NOT_IN_THIS_FORMAT})
     with pytest.raises(LinkError, match="RisuRealm refused \\(HTTP 403\\): This card is not"):
         fetch_link("https://realm.risuai.net/character/7adb0ed8-d818", transport=sites.transport())
+
+
+def test_a_large_card_file_is_asked_about_before_it_is_read(monkeypatch):
+    monkeypatch.setattr(card_links, "ASK_BYTES", 1000)
+    big = charx() + b"\0" * 2000  # a zip's directory is found from its end: still a CHARX
+    sites = Sites({RISU_PNG: NOT_IN_THIS_FORMAT, RISU_CHARX: httpx.Response(200, content=big)})
+    link = "https://realm.risuai.net/character/7adb0ed8-d818"
+    with pytest.raises(LinkLarge) as raised:
+        fetch_link(link, transport=sites.transport())
+    assert raised.value.size == len(big)
+    result = fetch_link(link, large_ok=True, transport=sites.transport())
+    try:
+        assert tavern_from_file(result.file, result.name).name == "Elena"
+    finally:
+        result.close()
+    # No size said: asked once it runs past.
+    plain = "https://example.com/card.charx"
+    streamed = Sites({plain: httpx.Response(200, content=iter([big[:900], big[900:]]))})
+    with pytest.raises(LinkLarge) as raised:
+        fetch_link(plain, transport=streamed.transport())
+    assert raised.value.size is None
+
+
+def test_chub_s_pictures_are_never_asked_about(monkeypatch):
+    monkeypatch.setattr(card_links, "ASK_BYTES", 10)
+    sites = Sites(
+        {
+            "https://api.chub.ai/api/characters/someone/elena-1234?full=true": httpx.Response(
+                200, json=CHUB_META
+            ),
+            CHUB_META["node"]["max_res_url"]: httpx.Response(200, content=tiny_png()),
+        }
+    )
+    card = fetched_card("https://chub.ai/characters/someone/elena-1234", sites)
+    assert card.name == "Elena" and card.picture
 
 
 @pytest.mark.parametrize(

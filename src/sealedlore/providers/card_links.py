@@ -6,8 +6,11 @@ of 1.19.0), for the sites whose way of handing a card out was checked here:
 - Chub (chub.ai, characterhub.org): a character's fields come from Chub's API
   and its picture from Chub's own copy, the card built as SillyTavern builds
   it; a lorebook is Chub's own SillyTavern export of it.
-- RisuRealm: the CHARX its own Download button gives (its PNG export, which
-  SillyTavern asks for, is refused for most cards).
+- RisuRealm: what its own Download button gives. An older card is a PNG
+  card (its picture with the card inside); a newer one is offered only as a
+  CHARX, which carries the card's whole set of expression pictures (82 MB
+  for one), so a large one is asked about first (`LinkLarge`). Its JSON
+  export has no picture, so it isn't used.
 - Anything else is downloaded as it is and must turn out to be a card (PNG,
   JSON or CHARX) or a lorebook (JSON): a link straight to the file.
 
@@ -18,7 +21,8 @@ plain GET each time, https only (http on this machine, as everywhere), and
 nothing followed off https (`make_client`). What comes is kept in memory up
 to `SPOOL_BYTES` and past that in an unnamed temporary file, to
 `MAX_ARCHIVE_BYTES` (a CHARX, read in place) or `MAX_BYTES` (anything read
-whole).
+whole). A card's file over `ASK_BYTES` is fetched only once the author has
+said yes (`large_ok`): it is nearly all pictures SealedLore doesn't keep.
 """
 
 from __future__ import annotations
@@ -44,6 +48,9 @@ from sealedlore.providers.http import make_client
 MAX_BYTES = 64 * 1024 * 1024
 MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 SPOOL_BYTES = 8 * 1024 * 1024
+# Past this a card's file is asked about before it is downloaded: a card is
+# text and a picture, a few megabytes at most.
+ASK_BYTES = 20 * 1024 * 1024
 TIMEOUT = httpx.Timeout(60.0, connect=15.0)
 USER_AGENT = "SealedLore"
 CHUB_API = "https://api.chub.ai"
@@ -75,6 +82,23 @@ class LinkError(Exception):
 
 class LinkStopped(LinkError):
     """The author stopped waiting."""
+
+
+class LinkRefused(LinkError):
+    """The site said no (an HTTP error), in its words; `status` is its code."""
+
+    def __init__(self, message: str, status: int) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+class LinkLarge(LinkError):
+    """The card's file is over ASK_BYTES: nothing was read yet. `size` in
+    bytes when the site said it, else None (it ran past while coming)."""
+
+    def __init__(self, size: int | None) -> None:
+        super().__init__("That card's file is large.")
+        self.size = size
 
 
 @dataclass(frozen=True, eq=False)
@@ -162,11 +186,13 @@ def fetch_link(
     text: str,
     *,
     stop: threading.Event | None = None,
+    large_ok: bool = False,
     transport: httpx.BaseTransport | None = None,
 ) -> Fetched:
     """The card or lorebook a link leads to, read by its site's way. Blocks:
     run it off the GUI thread. `stop` set ends it at the next piece read
-    (LinkStopped); `transport` is a test's."""
+    (LinkStopped); a card's file over ASK_BYTES raises LinkLarge unless
+    `large_ok`; `transport` is a test's."""
     link = read_link(text)
     kwargs: dict[str, Any] = {
         "timeout": TIMEOUT,
@@ -176,15 +202,13 @@ def fetch_link(
     if transport is not None:
         kwargs["transport"] = transport
     with make_client(link.url, **kwargs) as client:
-        get = _Getter(client, stop)
+        get = _Getter(client, stop, large_ok)
         if link.kind == "chub_character":
             return _chub_character(get, link)
         if link.kind == "chub_lorebook":
             return _chub_lorebook(get, link)
         if link.kind == "risu":
-            address = f"{RISU}/api/v1/download/charx-v3/{quote(link.ident)}"
-            file, _type = get.file(address, "RisuRealm", limit=MAX_ARCHIVE_BYTES)
-            return Fetched(file, f"{link.ident}.charx", "RisuRealm")
+            return _risu(get, link)
         return _file(get, link)
 
 
@@ -265,8 +289,24 @@ def _chub_lorebook(get: _Getter, link: Link) -> Fetched:
     return Fetched(file, f"{link.slug}.json", "Chub", lorebook=True)
 
 
+def _risu(get: _Getter, link: Link) -> Fetched:
+    """The PNG card an older card is offered as; else the CHARX, the only way
+    a newer one is (RisuRealm answers the other with 400 or 403)."""
+    ident = quote(link.ident)
+    try:
+        file, _type = get.file(f"{RISU}/api/v1/download/png-v3/{ident}", "RisuRealm")
+        return Fetched(file, f"{link.ident}.png", "RisuRealm")
+    except LinkRefused as exc:
+        if exc.status not in (400, 403):
+            raise
+    file, _type = get.file(
+        f"{RISU}/api/v1/download/charx-v3/{ident}", "RisuRealm", limit=MAX_ARCHIVE_BYTES, ask=True
+    )
+    return Fetched(file, f"{link.ident}.charx", "RisuRealm")
+
+
 def _file(get: _Getter, link: Link) -> Fetched:
-    file, content_type = get.file(link.url, link.host, limit=MAX_ARCHIVE_BYTES)
+    file, content_type = get.file(link.url, link.host, limit=MAX_ARCHIVE_BYTES, ask=True)
     head = file.read(512).lstrip().lower()
     file.seek(0)
     if content_type.lower().startswith("text/html") or head.startswith((b"<!doctype", b"<html")):
@@ -280,9 +320,12 @@ def _file(get: _Getter, link: Link) -> Fetched:
 
 
 class _Getter:
-    def __init__(self, client: httpx.Client, stop: threading.Event | None) -> None:
+    def __init__(
+        self, client: httpx.Client, stop: threading.Event | None, large_ok: bool = False
+    ) -> None:
         self.client = client
         self.stop = stop
+        self.large_ok = large_ok
 
     def json(self, url: str, site: str) -> Any:
         data, _type = self.bytes(url, site, accept="application/json")
@@ -298,10 +341,17 @@ class _Getter:
             return file.read(), content_type
 
     def file(
-        self, url: str, site: str, accept: str = "*/*", *, limit: int = MAX_BYTES
+        self,
+        url: str,
+        site: str,
+        accept: str = "*/*",
+        *,
+        limit: int = MAX_BYTES,
+        ask: bool = False,
     ) -> tuple[BinaryIO, str]:
         """The body, a piece at a time to `limit`, in a spooled file (memory,
-        then an unnamed file past SPOOL_BYTES), rewound; and its content type."""
+        then an unnamed file past SPOOL_BYTES), rewound; and its content type.
+        `ask`: a card's own file, over ASK_BYTES only when `large_ok`."""
         self._check_stop()
         host = urlparse(url).hostname or site
         too_large = TOO_LARGE.format(size=limit // (1024 * 1024))
@@ -309,16 +359,21 @@ class _Getter:
         try:
             with self.client.stream("GET", url, headers={"Accept": accept}) as response:
                 if response.status_code >= 400:
-                    raise LinkError(_refusal(response, site))
+                    raise LinkRefused(_refusal(response, site), response.status_code)
                 declared = response.headers.get("content-length", "")
                 if declared.isdigit() and int(declared) > limit:
                     raise LinkError(too_large)
+                asking = ask and not self.large_ok
+                if asking and declared.isdigit() and int(declared) > ASK_BYTES:
+                    raise LinkLarge(int(declared))
                 size = 0
                 for piece in response.iter_bytes():
                     self._check_stop()
                     size += len(piece)
                     if size > limit:
                         raise LinkError(too_large)
+                    if asking and size > ASK_BYTES:
+                        raise LinkLarge(None)
                     spool.write(piece)
                 spool.seek(0)
                 return spool, response.headers.get("content-type", "")

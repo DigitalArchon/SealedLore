@@ -24,7 +24,7 @@ from sealedlore.gui.tavern_dialog import NO_OPENING, CardImportDialog, LinkDialo
 from sealedlore.models.character import Character  # noqa: E402
 from sealedlore.models.image import ImageRef  # noqa: E402
 from sealedlore.models.lore import LoreEntry  # noqa: E402
-from sealedlore.providers.card_links import Fetched, LinkError  # noqa: E402
+from sealedlore.providers.card_links import Fetched, LinkError, LinkLarge  # noqa: E402
 from sealedlore.storage.png_text import text_chunks  # noqa: E402
 from sealedlore.storage.repository import StoryBundle, save_story_bundle  # noqa: E402
 from sealedlore.storage.tavern_cards import read_card  # noqa: E402
@@ -290,7 +290,7 @@ def answered_with(monkeypatch, answer, gate: threading.Event | None = None) -> l
     """The fetch, answered on its thread (after `gate`, when given); the links asked."""
     asked: list[str] = []
 
-    def fetch(link: str, *, stop=None, transport=None):
+    def fetch(link: str, *, stop=None, large_ok=False, transport=None):
         asked.append(link)
         if gate is not None:
             gate.wait(10)
@@ -430,4 +430,42 @@ def test_the_start_page_starts_from_a_card_s_link(app, tmp_path: Path, monkeypat
     monkeypatch.setattr(LinkDialog, "exec", rejected)
     window.start_page.cards["link"].activated.emit()
     assert shown == ["Import from a link"] and window._link_fetch is None
+    window.close()
+
+
+def test_a_large_card_is_downloaded_only_on_a_yes(app, tmp_path: Path, monkeypatch):
+    window = window_on(tmp_path)
+    paste_link(monkeypatch, "https://realm.risuai.net/character/7adb0ed8-d818")
+    calls: list[bool] = []
+
+    def fetch(link: str, *, stop=None, large_ok=False, transport=None):
+        calls.append(large_ok)
+        if not large_ok:
+            raise LinkLarge(82 * 1024 * 1024)
+        return a_card()
+
+    monkeypatch.setattr(window_tavern, "fetch_link", fetch)
+    said: list[str] = []
+
+    def exec_(box) -> int:
+        said.append(" | ".join([box.text(), *(b.text() for b in box.buttons())]))
+        return QMessageBox.Cancel
+
+    monkeypatch.setattr(QMessageBox, "exec", exec_)
+    window.import_from_link()
+    wait_for(app, lambda: said)
+    assert calls == [False] and window._link_fetch is None and window.session is None
+    assert "This card's file is 82 MB." in said[0] and "Download 82 MB" in said[0]
+
+    monkeypatch.setattr(window, "_download_large_card", lambda size: True)
+
+    def accepted(dialog) -> int:
+        dialog.player.setText("John")
+        return QDialog.Accepted
+
+    monkeypatch.setattr(CardImportDialog, "exec", accepted)
+    monkeypatch.setattr(window, "open_setup", lambda: False)
+    window.import_from_link()
+    wait_for(app, lambda: window.session is not None)
+    assert calls == [False, False, True]
     window.close()
