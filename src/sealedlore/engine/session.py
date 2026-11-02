@@ -70,6 +70,14 @@ from sealedlore.engine.chronicle import (
     day_of,
 )
 from sealedlore.engine.competence import build_inference_messages, parse_tiers
+from sealedlore.engine.continuation import (
+    NOT_CONTINUABLE,
+    continuable,
+    continue_request,
+    continued,
+    joiner,
+    repeat_length,
+)
 from sealedlore.engine.dice import explain, roll_for
 from sealedlore.engine.director import (
     render_story_time_block,
@@ -94,6 +102,7 @@ from sealedlore.engine.lore_pick import (
 )
 from sealedlore.engine.pricing import estimate_cost
 from sealedlore.engine.prompt import (
+    SECTION_REMINDER,
     AssembledPrompt,
     AssemblyOptions,
     TurnRequest,
@@ -358,6 +367,9 @@ def _as(suggestion: CharacterSuggestion) -> Character:
     return Character(id="", name=suggestion.name, aliases=list(suggestion.aliases))
 
 
+CUT_OFF = "The passage was cut off at the length limit"
+
+
 def cut_off_notice(max_tokens: int | None, completed: StreamCompleted) -> str:
     """What to tell the author when a passage stopped at the token limit.
 
@@ -370,8 +382,21 @@ def cut_off_notice(max_tokens: int | None, completed: StreamCompleted) -> str:
     )
     spent = f"; {thinking:,} of them went on the model's reasoning" if thinking else ""
     return (
-        f"The passage was cut off at the length limit ({max_tokens or 0:,} tokens{spent}). "
-        "Raise Max tokens in the story's generation settings, then Regenerate."
+        f"{CUT_OFF} ({max_tokens or 0:,} tokens{spent}). Continue carries it on from "
+        "there; raising Max tokens under Settings → Generation keeps it from happening again."
+    )
+
+
+def added_usage(first: Usage, more: Usage) -> Usage:
+    """Two calls' usage as one message's: a passage and its continuation."""
+    return Usage(
+        prompt_tokens=first.prompt_tokens + more.prompt_tokens,
+        completion_tokens=first.completion_tokens + more.completion_tokens,
+        cache_creation_tokens=first.cache_creation_tokens + more.cache_creation_tokens,
+        cache_read_tokens=first.cache_read_tokens + more.cache_read_tokens,
+        cost=first.cost + more.cost,
+        cost_estimated=first.cost_estimated or more.cost_estimated,
+        cost_reported=first.cost_reported and more.cost_reported,
     )
 
 
@@ -478,6 +503,9 @@ class StorySession(
         self.learn_corrections = learn_corrections
         self.last_prompt: AssembledPrompt | None = None
         self.last_result: GenerationResult | None = None
+        # Continue: the last continuation began by writing its passage out
+        # again, and the repeat was left out (`_without_repeat`).
+        self.repeat_dropped = False
         self.last_retrieval: RetrievalReport | None = None
         self._decisions_client: DecisionsClient | None = None
         # Spend outside a turn or a summary — character scans — waiting for
@@ -1871,33 +1899,14 @@ class StorySession(
         # Outside a private scene, the story's own messages only.
         history = self.model_nodes(history, include_span=span_id)
 
-        turn = TurnRequest(
-            speaker_id=user_node.speaker_id,
-            user_text=user_node.content,
-            controlled_character_id=user_node.meta.controlled_character_id,
-            turn_node_id=user_node.id,
-            ooc=user_node.ooc,
-            npc_scope=user_node.meta.npc_scope or self.story.defaults.npc_scope,
-            npc_scope_ids=tuple(user_node.meta.npc_scope_ids),
-            agency_mode=user_node.meta.agency_mode or self.story.defaults.agency_mode,
-            roll=user_node.meta.roll,
-            # Without these a regenerated take would silently revert to the
-            # story default and come back at the wrong length.
-            response_style=user_node.meta.response_style,
-            length_hint=user_node.meta.length_hint,
-            dice_domain=user_node.meta.dice_domain,
-            difficulty=user_node.meta.difficulty or "standard",
-        )
+        turn = self._turn_of(user_node)
         if shape is not None:
             turn = self._reshape(turn, shape, user_node)
         if reroll:
             turn = self._rolled(replace(turn, roll=None))
             user_node.meta.roll = turn.roll
         elif turn.roll is not None:
-            held = self._character(turn.controlled_character_id)
-            turn = replace(
-                turn, roll_explanation=explain(turn.roll, held.name if held else "The character")
-            )
+            turn = self._explained(turn)
         # The scene as this turn found it, not as the take being replaced left
         # it: that take's read moved the roster on past the author's turn.
         self._sync_scene([*history, user_node])
@@ -1940,6 +1949,124 @@ class StorySession(
         yield from self.read_after_turn()
         yield from self._finish_lore_pick(pick)
         # Off this thread entirely: adopted when archival is next due.
+        self.prepare_archival()
+        self.start_background_merge()
+
+    def _turn_of(self, user_node: Node) -> TurnRequest:
+        """The turn an author's message was sent as, for another take of its
+        passage or more of it."""
+        return TurnRequest(
+            speaker_id=user_node.speaker_id,
+            user_text=user_node.content,
+            controlled_character_id=user_node.meta.controlled_character_id,
+            turn_node_id=user_node.id,
+            ooc=user_node.ooc,
+            npc_scope=user_node.meta.npc_scope or self.story.defaults.npc_scope,
+            npc_scope_ids=tuple(user_node.meta.npc_scope_ids),
+            agency_mode=user_node.meta.agency_mode or self.story.defaults.agency_mode,
+            roll=user_node.meta.roll,
+            # Without these a regenerated take would silently revert to the
+            # story default and come back at the wrong length.
+            response_style=user_node.meta.response_style,
+            length_hint=user_node.meta.length_hint,
+            dice_domain=user_node.meta.dice_domain,
+            difficulty=user_node.meta.difficulty or "standard",
+        )
+
+    def _explained(self, turn: TurnRequest) -> TurnRequest:
+        """A kept roll with its explanation, which isn't stored with it."""
+        held = self._character(turn.controlled_character_id)
+        return replace(
+            turn, roll_explanation=explain(turn.roll, held.name if held else "The character")
+        )
+
+    def continue_passage(
+        self, shape: TurnShape | None = None
+    ) -> Iterator[StreamEvent | SessionNotice | PassageDone]:
+        """More of the latest passage: the storyteller carries it on from where
+        it stops, into the same message (engine/continuation.py).
+
+        The request is the passage's own turn as Regenerate would send it,
+        then the passage so far and the request to carry it on. `shape` gives
+        the length of what is added (the composer's Length as it stands); the
+        turn itself is left as it was sent, so Regenerate still reproduces it.
+
+        The reads then run over the whole passage, from the scene and plot as
+        the author's turn found them, as after a new passage. A continuation
+        stopped partway keeps what came and is not read, as a stopped passage
+        isn't; one that brought nothing leaves the passage as it was.
+        """
+        self._tee_guard()
+        path = self.full_path()
+        if not continuable(path):
+            raise ValueError(NOT_CONTINUABLE)
+        passage, user_node = path[-1], path[-2]
+        span_id = passage.meta.private_span
+        if span_id is not None and (self.open_span is None or self.open_span.id != span_id):
+            raise ValueError("that private scene has ended; its messages can't be continued")
+        if span_id is None and self.in_private:
+            raise ValueError("leave the private scene before continuing a passage from outside it")
+        history = self.model_nodes(path[:-2], include_span=span_id)
+        turn = self._turn_of(user_node)
+        if shape is not None:
+            turn = replace(turn, response_style=shape.response_style, length_hint=shape.length_hint)
+        if turn.roll is not None:
+            turn = self._explained(turn)
+        # The scene as the author's turn found it, as the passage was written
+        # against; put back to the passage's own once the request is out.
+        self._sync_scene([*history, user_node])
+        span = self.open_span if span_id is not None else None
+        try:
+            if span is not None:
+                prompt = self.private_assemble(turn, history, span)
+                provider, model = self.private_provider, span.model
+            else:
+                turn = self._directed(turn, user_node.meta.direction, [*history, user_node])
+                lore = self._retrieve_for_turn(turn, history)
+                recall = self._recall_for_turn(self._recall_query(turn, history), history)
+                prompt = self.assemble(turn, history_nodes=history, lore=lore, recall=recall)
+                provider, model = None, None
+            reminder = prompt.section(SECTION_REMINDER)
+            so_far = passage.content.rstrip()
+            request = continue_request(
+                self.texts,
+                passage=so_far,
+                reminder=reminder.text if reminder else "",
+                chat=self.story.chat,
+            )
+            prompt = continued(prompt, so_far, request, self.estimator)
+            self.last_prompt = prompt
+            self.repeat_dropped = False
+            yield from self._generate(
+                prompt,
+                turn,
+                parent=user_node,
+                provider=provider,
+                model=model,
+                span=span,
+                extend=passage,
+            )
+        finally:
+            self._sync_scene()
+            self.save()
+        if self.repeat_dropped:
+            yield SessionNotice(
+                "The storyteller began by writing the passage out again: the repeat is left "
+                "out, and the passage goes on from where it stopped."
+                if self.last_result is not None and self.last_result.node is not None
+                else "The storyteller only wrote the passage out again; it is as it was."
+            )
+        yield PassageDone()
+        if span is not None:
+            self._check_tee(passage)
+            self.save()
+            return
+        result = self.last_result
+        if result is None or result.node is None or result.stopped_early:
+            return
+        pick = self._start_lore_pick()
+        yield from self.read_after_turn()
+        yield from self._finish_lore_pick(pick)
         self.prepare_archival()
         self.start_background_merge()
 
@@ -1989,7 +2116,10 @@ class StorySession(
         provider: ChatProvider | None = None,
         model: str | None = None,
         span: PrivateSpan | None = None,
+        extend: Node | None = None,
     ) -> Iterator[StreamEvent | SessionNotice]:
+        """Stream a passage into a new message under `parent`, or, with
+        `extend`, onto the end of that one (Continue)."""
         provider = provider or self.provider
         model = model or self.model
         request = ChatRequest(
@@ -2001,14 +2131,22 @@ class StorySession(
             cache_ttl=self.config.cache_ttl,
         )
         payload = provider.build_payload(request)
-        log_ref = self._log_turn("request", {"node_id": parent.id, "payload": payload}, span)
+        body: dict[str, Any] = {"node_id": parent.id, "payload": payload}
+        if extend is not None:
+            body["continues"] = extend.id
+        log_ref = self._log_turn("request", body, span)
 
         text: list[str] = []
         reasoning: list[str] = []
         completed: StreamCompleted | None = None
+        # Continue: what goes between the passage and the new text, decided
+        # by the first text that comes (the window shows it as it streams).
+        before = extend.content.rstrip() if extend is not None else None
         try:
             for event in provider.stream(request):
                 if isinstance(event, TextDelta):
+                    if before is not None and not text and event.text:
+                        event = TextDelta(joiner(before, event.text) + event.text)
                     text.append(event.text)
                 elif isinstance(event, ReasoningDelta):
                     reasoning.append(event.text)
@@ -2026,6 +2164,7 @@ class StorySession(
                 log_ref=log_ref,
                 model=model,
                 span=span,
+                extend=extend,
             )
         # A TEE reply's signature is fetched under this (session_private).
         self._last_response_id = completed.response_id if completed is not None else None
@@ -2057,16 +2196,25 @@ class StorySession(
         log_ref: str,
         model: str | None = None,
         span: PrivateSpan | None = None,
+        extend: Node | None = None,
     ) -> None:
         model = model or prompt.model or self.model
         usage = self.priced(completed.usage if completed else Usage(), model)
+        raw_text = text
 
         # A request that failed or was stopped before any text arrived has
         # nothing to record. Attaching an empty node would leave a dead turn in
         # the tree and in the transcript; leaving the author's turn as the leaf
         # instead means regenerate() can simply retry it.
         node: Node | None = None
-        if text or reasoning:
+        self.repeat_dropped = False
+        if extend is not None:
+            added = self._without_repeat(extend.content.rstrip(), text)
+            if added.strip():
+                node = extend
+                self._carry_on(extend, added, reasoning, usage, model)
+            text = added if added.strip() else ""
+        elif text or reasoning:
             node = Node(
                 kind="assistant",
                 speaker_id="__narrator__",
@@ -2091,11 +2239,12 @@ class StorySession(
             {
                 "request_log_ref": log_ref,
                 "node_id": node.id if node else None,
-                "text": text,
+                "text": raw_text,
                 "reasoning": reasoning,
                 "finish_reason": completed.finish_reason if completed else None,
                 "usage": completed.raw_usage if completed else {},
                 "stopped_early": completed is None,
+                **({"continues": extend.id} if extend is not None else {}),
             },
             span,
         )
@@ -2110,6 +2259,37 @@ class StorySession(
             stopped_early=completed is None,
         )
         self.save()
+
+    def _carry_on(
+        self, node: Node, text: str, reasoning: str | None, usage: Usage, model: str
+    ) -> None:
+        """A continuation written onto its passage: the text joined (`text`
+        starts with its joiner), the reasoning after the first's, the cost
+        added. The note that it was cut off goes: it has been carried on."""
+        node.content = node.content.rstrip() + text
+        if reasoning:
+            node.meta.reasoning = "\n\n".join(
+                part for part in (node.meta.reasoning, reasoning) if part
+            )
+        node.meta.usage = added_usage(node.meta.usage, usage)
+        node.meta.model = model
+        node.meta.notes = [note for note in node.meta.notes if not note.startswith(CUT_OFF)]
+        node.edited_at = utc_now_iso()
+        # What was found in the old text may no longer stand as it was.
+        self.prune_shortcuts(node)
+        mark_stale(self.bundle.summaries, node.id)
+
+    def _without_repeat(self, before: str, text: str) -> str:
+        """A continuation that began by writing the passage out again, from its
+        first word, has added only what follows the repeat (`repeat_length`).
+        The repeat is left out, said (`repeat_dropped`), and kept in the API
+        log with the reply as it came."""
+        repeat = repeat_length(before, text)
+        if not repeat:
+            return text
+        self.repeat_dropped = True
+        rest = text[repeat:]
+        return joiner(before, rest) + rest if rest.strip() else ""
 
     # --- archival (§5.2, §5.3) ---------------------------------------------
 
@@ -3057,6 +3237,11 @@ class StorySession(
                 ),
             )
             if locate_quote(node.content, shortcut.quote) is not None
+        ]
+        # A passage read again (carried on by Continue) logs its scene's end
+        # once, as it reads now.
+        self.story.scene_log = [
+            entry for entry in self.story.scene_log if entry.closed_at_node_id != node.id
         ]
         if delta.closed:
             self._close_scene(before, gist=delta.gist, node_id=node.id, cast_by_id=cast_by_id)

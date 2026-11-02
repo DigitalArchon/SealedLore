@@ -242,8 +242,9 @@ Have fun!
   caching. Edit any chapter or rebuild it in the background; ask a Question
   about something long merged and its chapters come back, for the Question
   and the next few turns.
-- **Takes and branches**: regenerate any passage in place, or rewrite any
-  earlier message as a named branch; a diagram shows them all.
+- **Takes and branches**: regenerate any passage in place, carry the latest
+  on from where it stops (**Continue**), or rewrite any earlier message as a
+  named branch; a diagram shows them all.
 - **Drafting**: a whole story drafted from a premise.
 - **Costs**: per passage, per session and per story.
 - **Routes**: on NanoGPT, choose which host serves each model (the fastest,

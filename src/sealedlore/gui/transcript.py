@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.continuation import continuable
 from sealedlore.engine.dice import chip_text
 from sealedlore.engine.reasoning import caught_note
 from sealedlore.gui import theme
@@ -227,6 +228,8 @@ def _retakeable_ids(nodes: Sequence[Node]) -> set[str]:
 
 class MessageWidget(QFrame):
     regenerate_requested = Signal(str)
+    # More of this passage, written into it (engine/continuation.py).
+    continue_requested = Signal(str)
     take_back_requested = Signal(str)
     # Toggle this passage as evidence for the next settings review.
     review_mark_requested = Signal(str)
@@ -257,6 +260,7 @@ class MessageWidget(QFrame):
         archived: bool = False,
         rerollable: bool = False,
         retakeable: bool = True,
+        continuable: bool = False,
         variant: tuple[int, int] | None = None,
         usage: Usage | None = None,
         reasoning: str | None = None,
@@ -326,7 +330,9 @@ class MessageWidget(QFrame):
         self.more_button: QToolButton | None = None
         self.actions_: dict[str, QAction] = {}
         if node_id:
-            self._add_more_menu(header_row, kind == "assistant", rerollable, retakeable)
+            self._add_more_menu(
+                header_row, kind == "assistant", rerollable, retakeable, continuable
+            )
         layout.addLayout(header_row)
         # Where a branch begins: the one place in the story it shows.
         self.branch_label: QLabel | None = None
@@ -418,7 +424,12 @@ class MessageWidget(QFrame):
         row.addWidget(following)
 
     def _add_more_menu(
-        self, row: QHBoxLayout, assistant: bool, rerollable: bool, retakeable: bool = True
+        self,
+        row: QHBoxLayout,
+        assistant: bool,
+        rerollable: bool,
+        retakeable: bool = True,
+        continuable: bool = False,
     ) -> None:
         menu = QMenu(self)
         # A chat's are messages and replies, and it is a chat: a story's words
@@ -448,6 +459,16 @@ class MessageWidget(QFrame):
             )
             regenerate.triggered.connect(lambda: self.regenerate_requested.emit(self.node_id))
             self.actions_["regenerate"] = regenerate
+        if assistant and continuable:
+            carry_on = menu.addAction("Continue this reply" if chat else "Continue this passage")
+            carry_on.setToolTip(
+                "Write more of this reply, carried on from where it stops"
+                if chat
+                else "Write more of this passage, carried on from where it stops; "
+                "Length (below) says how much"
+            )
+            carry_on.triggered.connect(lambda: self.continue_requested.emit(self.node_id))
+            self.actions_["continue"] = carry_on
         if rerollable:
             # Regenerate keeps the roll; this is the deliberate way to roll again.
             reroll = menu.addAction("Reroll the dice")
@@ -1149,6 +1170,7 @@ TEE_MARK_TIPS = {
 
 class TranscriptView(QScrollArea):
     regenerate_requested = Signal(str)
+    continue_requested = Signal(str)
     take_back_requested = Signal(str)
     review_mark_requested = Signal(str)
     # (node id, text, the OOC note or None when the message has no such field).
@@ -1348,6 +1370,7 @@ class TranscriptView(QScrollArea):
         archived: bool = False,
         rerollable: bool = False,
         retakeable: bool = True,
+        continuable: bool = False,
         variant: tuple[int, int] | None = None,
         usage: Usage | None = None,
         reasoning: str | None = None,
@@ -1364,6 +1387,7 @@ class TranscriptView(QScrollArea):
             archived=archived,
             rerollable=rerollable,
             retakeable=retakeable,
+            continuable=continuable,
             variant=variant,
             usage=usage,
             reasoning=reasoning,
@@ -1380,6 +1404,7 @@ class TranscriptView(QScrollArea):
         widget.illustrate_requested.connect(self.illustrate_requested)
         widget.video_requested.connect(self.video_requested)
         widget.regenerate_requested.connect(self.regenerate_requested)
+        widget.continue_requested.connect(self.continue_requested)
         widget.take_back_requested.connect(self.take_back_requested)
         widget.edit_committed.connect(self.edit_committed)
         widget.edit_closed.connect(self.edit_closed)
@@ -1479,6 +1504,7 @@ class TranscriptView(QScrollArea):
                     node is nodes[-1] and node.kind == "assistant" and node.meta.roll is not None
                 ),
                 retakeable=node.id in retakeable,
+                continuable=node is nodes[-1] and carries_on,
                 variant=variant_of(node.id) if variant_of else None,
                 marked=node.id in marked_ids,
                 show_rolls=show_rolls,
@@ -1487,6 +1513,7 @@ class TranscriptView(QScrollArea):
             add_asides(node.id)
 
         retakeable = _retakeable_ids(nodes)
+        carries_on = continuable(nodes)
 
         units: list[_Unit] = [(None, lambda: add_asides(None))]
         units += [(node.id, lambda node=node: build(node)) for node in nodes]
@@ -1568,6 +1595,7 @@ class TranscriptView(QScrollArea):
         unsent: bool = False,
         rerollable: bool = False,
         retakeable: bool = True,
+        continuable: bool = False,
         variant: tuple[int, int] | None = None,
         marked: bool = False,
         show_rolls: bool = True,
@@ -1603,6 +1631,7 @@ class TranscriptView(QScrollArea):
             archived=archived or unsent,
             rerollable=rerollable,
             retakeable=retakeable,
+            continuable=continuable,
             variant=variant,
             usage=node.meta.usage if node.kind == "assistant" else None,
             reasoning=node.meta.reasoning if node.kind == "assistant" else None,
@@ -1970,6 +1999,16 @@ class TranscriptView(QScrollArea):
         # The label the rebuild gives it afterwards (`speaker_label`): a
         # chat's header read "Story" while the reply streamed, then flipped.
         self._streaming = self.add_message("Assistant" if self._chat else "Story", "", "assistant")
+        self.scroll_to_end()
+
+    def begin_continuing(self, node_id: str) -> None:
+        """Continue: the new text streams onto the end of the passage it
+        carries on, in its own message."""
+        self.ensure_at_latest()
+        self._streaming = self.message_widget(node_id)
+        if self._streaming is None:
+            self.begin_streaming()
+            return
         self.scroll_to_end()
 
     def begin_aside(self, question: str) -> None:

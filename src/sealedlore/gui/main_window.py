@@ -36,6 +36,7 @@ from sealedlore.engine.archival import chapter_number, chapter_numbers, turns_in
 from sealedlore.engine.authoring import describe, stale_voicing_notes
 from sealedlore.engine.branches import next_branch_name, unique_branch_name
 from sealedlore.engine.chronicle import format_clock
+from sealedlore.engine.continuation import continuable
 from sealedlore.engine.export import markdown_user_name, render_markdown
 from sealedlore.engine.plot_md import PLOT_SUFFIX, ParsedPlotFile, parse_plot_markdown
 from sealedlore.engine.prompt import TurnRequest
@@ -357,6 +358,7 @@ class MainWindow(
     def _build_ui(self) -> None:
         self.transcript = TranscriptView()
         self.transcript.regenerate_requested.connect(self._regenerate_node)
+        self.transcript.continue_requested.connect(self._continue_node)
         self.transcript.take_back_requested.connect(self._take_back)
         self.transcript.review_mark_requested.connect(self._toggle_review_mark)
         self.transcript.edit_committed.connect(self._edit_node)
@@ -383,6 +385,7 @@ class MainWindow(
         self.composer.send_requested.connect(self.send_turn)
         self.composer.stop_requested.connect(self.stop_generation)
         self.composer.regenerate_requested.connect(self.regenerate)
+        self.composer.continue_requested.connect(self.continue_passage)
         self.composer.held_character_changed.connect(self._on_held_changed)
         self.composer.set_more(self.config.composer_more)
         self.composer.more_toggled.connect(self._keep_composer_more)
@@ -2645,6 +2648,32 @@ class MainWindow(
             shape = self._current_shape()
         self._start(lambda: self.session.regenerate(reroll=True, shape=shape))
 
+    def continue_passage(self, shape: TurnShape | None = None) -> None:
+        """More of the latest passage, written into it. The composer's Length
+        says how much; nothing else about the turn changes."""
+        if self.session is None or self._busy:
+            return
+        path = self.session.full_path()
+        if not continuable(path) or not self._tee_allows_send():
+            return
+        self.session.provider = self._current_provider()
+        if shape is None:
+            shape = self._current_shape()
+        if self.in_chat:
+            self.statusBar().showMessage("Continuing", 6000)
+        else:
+            length = self.composer.length.currentText().removesuffix(DEFAULT_SUFFIX)
+            self.statusBar().showMessage(f"Continuing — {length}", 6000)
+        self._start(lambda: self.session.continue_passage(shape), continuing=path[-1].id)
+
+    def _continue_node(self, node_id: str) -> None:
+        """⋯ → Continue this passage, offered on the latest passage only."""
+        if self.session is None or self._busy:
+            return
+        path = self.session.full_path()
+        if path and path[-1].id == node_id:
+            self.continue_passage()
+
     def _regenerate_node(self, node_id: str, shape: TurnShape | None = None) -> None:
         """Another take of any passage; the old one stays as a sibling (§2.2)."""
         if self.session is None or self._busy:
@@ -3002,6 +3031,7 @@ class MainWindow(
         provider=None,
         job: str | None = None,
         sent: _Sent | None = None,
+        continuing: str | None = None,
     ) -> None:
         """Run a job on the worker thread.
 
@@ -3009,13 +3039,16 @@ class MainWindow(
         review, a summary, a scan: with nothing else moving on screen they
         looked as if they had failed, so a progress dialog says what's running
         and offers Stop. `job` names it in a failure ("Review failed"); `sent`
-        is the turn or Question it answers.
+        is the turn or Question it answers; `continuing` the passage the job
+        writes more of, which streams onto its end.
         """
         self._job_name = job or ("Question" if question is not None else "Generation")
         self._sent = sent
         self._failed = None
         if question is not None:
             self.transcript.begin_aside(question)
+        elif continuing is not None:
+            self.transcript.begin_continuing(continuing)
         elif streaming:
             self.transcript.begin_streaming()
         self._streaming_job = streaming
@@ -4551,6 +4584,7 @@ class MainWindow(
             busy,
             has_story=has_story,
             can_regenerate=self._can_regenerate(),
+            can_continue=self.session is not None and continuable(self.session.full_path()),
             background=self._background,
             queued=self._queued is not None,
         )

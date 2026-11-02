@@ -195,6 +195,7 @@ class Composer(QWidget):
     send_requested = Signal()
     stop_requested = Signal()
     regenerate_requested = Signal()
+    continue_requested = Signal()
     image_requested = Signal()
     # The author pressed Private scene: True to begin one, False to end it.
     private_requested = Signal(bool)
@@ -379,6 +380,11 @@ class Composer(QWidget):
         self.stop_button.clicked.connect(self.stop_requested)
         self.regenerate_button = QPushButton("Regenerate")
         self.regenerate_button.clicked.connect(self.regenerate_requested)
+        self.continue_button = QPushButton("Continue")
+        self.continue_button.setToolTip(
+            "Write more of the latest passage, carried on from where it stops; Length says how much"
+        )
+        self.continue_button.clicked.connect(self.continue_requested)
         self.image_button = QPushButton("Picture…")
         self.image_button.setToolTip(
             "Generate a picture of what is happening now (Ctrl+Shift+I). You see and approve "
@@ -391,6 +397,7 @@ class Composer(QWidget):
         buttons.addWidget(self.send_button)
         buttons.addWidget(self.stop_button)
         buttons.addWidget(self.regenerate_button)
+        buttons.addWidget(self.continue_button)
         buttons.addWidget(self.image_button)
 
         entry = QHBoxLayout()
@@ -752,6 +759,12 @@ class Composer(QWidget):
                 widget.hide()
         else:
             self._sync_scope_button()
+        self.continue_button.setToolTip(
+            "Write more of the latest reply, carried on from where it stops"
+            if on
+            else "Write more of the latest passage, carried on from where it stops; "
+            "Length says how much"
+        )
         self._sync_question_mode()
         self._sync_private_tips()
         self._sync_more()
@@ -928,6 +941,7 @@ class Composer(QWidget):
         *,
         has_story: bool,
         can_regenerate: bool,
+        can_continue: bool = False,
         background: bool = False,
         queued: bool = False,
     ) -> None:
@@ -946,6 +960,7 @@ class Composer(QWidget):
         )
         self.stop_button.setEnabled(busy)
         self.regenerate_button.setEnabled(has_story and not busy and can_regenerate)
+        self.continue_button.setEnabled(has_story and not busy and can_continue)
         self.image_button.setEnabled(has_story and not busy)
         self.private_toggle.setEnabled(has_story and not busy)
         self.private_keep.setEnabled(has_story and not busy and not self.private_toggle.isChecked())

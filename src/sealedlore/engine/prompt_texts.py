@@ -878,6 +878,26 @@ _text(
     "[OOC — authoritative fact or instruction from the author, not speech]",
 )
 
+# Continue (engine/continuation.py): after the passage so far, in a message of
+# its own, with the turn's REMEMBER line after it. Live (Nov 2026, Sonnet 4.6, a
+# Doomsville passage cut at four points, 12 takes a wording): saying only
+# "stops there" and "don't repeat", 4 takes wrote the passage out again from
+# its first word; quoting where it stops and saying the reply begins with the
+# words that come next, 1. GLM 5.3 never did. A repeat written out word for
+# word is left out in code (`continuation.repeat_length`).
+_text(
+    "turn.continue",
+    TURN,
+    "Continue: carry the passage on",
+    "Sent after the passage so far when the author asks for more of it (Continue), "
+    "followed by the turn's REMEMBER line again.",
+    "Your passage above stops at “{ending}”. Carry it on from exactly there, as more "
+    "of the same passage: your reply begins with the words that come next, finishing "
+    "the sentence first if it stops partway through one. Never start the passage over "
+    "or repeat any of it. The length on the line below is for what you add now.",
+    (("ending", "the passage's last few words"),),
+)
+
 _text(
     "turn.speaker.narrator",
     TURN,
@@ -2007,6 +2027,17 @@ _text(
     "the assistant's (the one before it summarised, or cut for room), because the history "
     "must start with the user.",
     "[Continuing the conversation.]",
+)
+
+_text(
+    "chat.continue",
+    CHAT,
+    "Continue: carry the reply on",
+    "Sent after the reply so far when the user asks for more of it (Continue).",
+    "Your reply above stops at “{ending}”. Carry it on from exactly there: your "
+    "message begins with the words that come next, finishing the sentence first if it "
+    "stops partway through one. Never start the reply over or repeat any of it.",
+    (("ending", "the reply's last few words"),),
 )
 
 _text(

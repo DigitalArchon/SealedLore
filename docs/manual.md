@@ -76,8 +76,8 @@ part of the window, and what each feature does. The README's
   old chapters merged into parts, an optional fact ledger, and the prompt
   laid out for Anthropic prompt caching through OpenRouter or NanoGPT.
 - **Takes and branches**: regenerate any passage (the take swaps in place),
-  rewrite any earlier message as a named branch, take a turn back into the
-  composer; every take is kept.
+  continue the latest one from where it stops, rewrite any earlier message as
+  a named branch, take a turn back into the composer; every take is kept.
 - **Pictures**: a prompt written from the story on the story's cached prefix,
   approved before anything is sent, with the cast's reference pictures. Every
   picture and video in one place, the Media page. An image model is chosen
@@ -549,9 +549,10 @@ archiving, rebuilding summaries.
   storyteller sees* shows the chapter summaries standing in for archived
   prose and marks anything left out for budget (View → What the storyteller
   sees, Ctrl+Shift+V).
-- **Each message** has Edit and a ⋯ menu: Regenerate this passage, Take back
-  this turn (your turns), Reroll the dice, Use as evidence in a review,
-  Illustrate this passage…, New branch from here…, and Delete from here….
+- **Each message** has Edit and a ⋯ menu: Regenerate this passage, Continue
+  this passage (the latest one), Take back this turn (your turns), Reroll the
+  dice, Use as evidence in a review, Illustrate this passage…, New branch
+  from here…, and Delete from here….
 - **Markdown in a message is shown as it reads**, in stories, simple chats,
   Questions and chapter summaries alike: **bold**, *italics*, headings,
   lists, quotes, code, tables and rules, with each line break kept where it
@@ -1179,6 +1180,17 @@ story after it stays where it is, whichever take is showing (if a chapter
 summary covers it, the summary is marked out of date). The **⋯** menu on a
 message offers **Regenerate this passage** (any passage, not just the latest).
 
+**Continue**, under Regenerate in the bottom bar (and **⋯ → Continue this
+passage** on the latest passage), writes more of the latest passage into it,
+carried on from where it stops: the way on when a passage ends too soon, or
+was cut off at the length limit mid-sentence. The **Length** control says how
+much is added, and nothing else about the turn changes, so Regenerate still
+gives another take of the turn as you sent it. The storyteller is shown
+where the passage stops and asked to pick up exactly there; if it writes the
+passage out again before going on, the repeat is left out and the status bar
+says so. Once the new text is in, the scene and the plot are read again over
+the whole passage. In a simple chat it is **⋯ → Continue this reply**.
+
 A **branch** is a line of the story you split off on purpose. **Edit** on a
 message corrects it in place (a typo, a name); on a turn of yours the editor
 carries its OOC note under the text, to change or clear; **⋯ → New branch
@@ -1268,7 +1280,8 @@ what makes it keep them. The **Length** control in
 the bottom bar overrides it from here on: your choice stays until you change it
 back, and the story's own setting is the first entry, marked *(story default)*.
 **Outcome** works the same way. Regenerate uses whatever the two are set to
-now, so you can ask for a longer passage and press **Regenerate** to get one.
+now, so you can ask for a longer passage and press **Regenerate** to get one,
+or press **Continue** to add that much to the passage you have.
 
 | Preset | Target |
 |---|---|

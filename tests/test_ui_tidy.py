@@ -203,13 +203,14 @@ def test_the_column_stops_at_a_reading_width(app, window: MainWindow):
 
 
 def test_every_prompt_section_has_a_plain_name():
+    import sealedlore.engine.continuation as continuation
     import sealedlore.engine.private_prompt as private_prompt
     import sealedlore.engine.prompt as prompt
     from sealedlore.gui.inspector import SECTION_LABELS
 
     names = {
         value
-        for module in (prompt, private_prompt)
+        for module in (prompt, private_prompt, continuation)
         for key, value in vars(module).items()
         if key.startswith("SECTION_") and isinstance(value, str)
     }

@@ -60,6 +60,8 @@ SECTION_LABELS = {
     "tail.author_turn": "Your turn",
     "tail.question": "Your question",
     "tail.reminder": "Final reminder",
+    "continue.so_far": "The passage so far",
+    "continue.request": "Continue",
 }
 
 
