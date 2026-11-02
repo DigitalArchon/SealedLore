@@ -49,6 +49,7 @@ from sealedlore.gui.tavern_dialog import (
     CARD_EXPORT_LABEL,
     CARD_IMPORT_LABEL,
     CARD_LINK_LABEL,
+    EXPRESSIONS_LABEL,
     TAVERN_LABEL,
 )
 from sealedlore.models.character import Character
@@ -92,6 +93,8 @@ class CastPanel(QWidget):
     # this story, or (character id) one written out.
     card_import_requested = Signal()
     card_link_requested = Signal()
+    # (character id) a SillyTavern expression pack for this character.
+    expressions_requested = Signal(str)
     card_export_requested = Signal(str)
 
     def __init__(self, pictures: StoryPictures | None = None) -> None:
@@ -148,6 +151,16 @@ class CastPanel(QWidget):
         )
         self.card_export_action = tavern_menu.addAction(CARD_EXPORT_LABEL)
         self.card_export_action.triggered.connect(self._export_card)
+        self.expressions_action = tavern_menu.addAction(EXPRESSIONS_LABEL)
+        self.expressions_action.setToolTip(
+            "SillyTavern's expression sprites for this character (a zip of pictures named "
+            "by expression): added to their pictures, labelled"
+        )
+        self.expressions_action.triggered.connect(
+            lambda _checked=False: self.expressions_requested.emit(
+                self._current.id if self._current is not None else ""
+            )
+        )
         self.tavern_button.setMenu(tavern_menu)
         fill_row = QHBoxLayout()
         fill_row.setContentsMargins(0, 0, 0, 0)
@@ -262,6 +275,7 @@ class CastPanel(QWidget):
         self.portrait.scene_requested.connect(lambda: self._ask("scene"))
         self.portrait.add_requested.connect(self._add_portrait)
         self.portrait.remove_requested.connect(self._remove_portrait)
+        self.portrait.labels_requested.connect(self._label_portrait)
         self.pictures.again_requested.connect(lambda ref: self._ask("again", ref))
         self.pictures.edit_requested.connect(lambda ref: self._ask("edit", ref))
         self.pictures.changed.connect(self._on_pictures_changed)
@@ -539,6 +553,15 @@ class CastPanel(QWidget):
             if self._current.id == character.id:
                 self.pictures.remove_ref(shown)
 
+    def _label_portrait(self) -> None:
+        character = self._current
+        if character is None or not character.reference_images:
+            return
+        from sealedlore.gui.picture_labels import edit_labels
+
+        if edit_labels(self, character.reference_images[0], character.reference_images):
+            self._on_pictures_changed()
+
     def _show_portrait(self) -> None:
         character = self._current
         first = character.reference_images[0] if character and character.reference_images else None
@@ -546,6 +569,9 @@ class CastPanel(QWidget):
         data = store.read(first.file) if first is not None and store is not None else None
         name = character.name if character is not None else ""
         caption = first.caption if first is not None and first.caption != "portrait" else ""
+        if first is not None and (first.look or first.expression):
+            labels = " · ".join(part for part in (first.look, first.expression) if part)
+            caption = f"{caption}\n{labels}" if caption else labels
         self.portrait.show_portrait(data, caption, name)
         self.portrait.set_offered(character is not None, character is not None)
         item = self.list.currentItem()

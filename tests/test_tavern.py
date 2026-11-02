@@ -23,6 +23,8 @@ from sealedlore.storage.tavern_cards import (
     card_data,
     card_png,
     character_from_card,
+    expression_of,
+    expressions_from_zip,
     is_card_file,
     macro_filler,
     read_card,
@@ -433,3 +435,85 @@ def test_a_lorebook_is_told_from_a_card_and_from_other_files(tmp_path: Path):
     path.write_text(json.dumps(v2()))
     with pytest.raises(LorebookError, match="isn't a SillyTavern lorebook"):
         read_lorebook(path)
+
+
+# --- expression pictures ---------------------------------------------------------------
+
+
+def charx_with_expressions(tmp_path: Path, names: list[str], *, linked: int = 0) -> Path:
+    assets = [{"type": "icon", "uri": "embeded://assets/icon/main.png", "name": "main"}]
+    assets += [
+        {"type": "emotion", "uri": f"embeded://assets/emotion/{name}.png", "name": name}
+        for name in names
+    ]
+    assets += [
+        {"type": "emotion", "uri": f"https://example.com/{n}.png", "name": f"far{n}"}
+        for n in range(linked)
+    ]
+    path = tmp_path / "card.charx"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr(
+            "card.json", json.dumps({"spec": "chara_card_v3", "data": {**ELENA, "assets": assets}})
+        )
+        archive.writestr("assets/icon/main.png", tiny_png())
+        for name in names:
+            archive.writestr(f"assets/emotion/{name}.png", tiny_png())
+    return path
+
+
+def test_a_charx_brings_its_expression_pictures_labelled(tmp_path: Path):
+    card = read_card(charx_with_expressions(tmp_path, ["joy", "anger"], linked=1))
+    assert [name for name, _data in card.expressions] == ["joy", "anger"]
+    assert all(text_chunks(data) == {} for _name, data in card.expressions)
+    # One named by a link is never fetched, and that is said.
+    assert card.expression_notes and "a link" in card.expression_notes[0]
+
+
+def test_expression_pictures_stop_at_the_limit_and_say_so(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(tavern_cards, "MAX_EXPRESSIONS", 2)
+    card = read_card(charx_with_expressions(tmp_path, ["joy", "anger", "fear"]))
+    assert len(card.expressions) == 2
+    assert "1 expression picture couldn't be read or went past" in card.expression_notes[0]
+
+
+@pytest.mark.parametrize(
+    ("name", "label"),
+    [
+        ("joy.png", "joy"),
+        ("joy-2.png", "joy"),
+        ("sprites/anger_1.webp", "anger"),
+        ("combat_stance.png", "combat stance"),
+        ("Half-smile.jpg", "Half-smile"),
+    ],
+)
+def test_an_expression_picture_is_labelled_by_its_name(name: str, label: str):
+    assert expression_of(name) == label
+
+
+def test_a_sillytavern_expression_pack_is_read(tmp_path: Path):
+    path = tmp_path / "pack.zip"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("elena/joy.png", tiny_png())
+        archive.writestr("elena/joy-2.png", tiny_png())
+        archive.writestr("elena/readme.txt", "not a picture")
+        archive.writestr("elena/broken.png", b"not a picture either")
+    found, notes = expressions_from_zip(path)
+    assert [name for name, _data in found] == ["joy", "joy-2"]
+    assert notes and "couldn't be read" in notes[0]
+    (tmp_path / "plain.zip").write_bytes(b"no zip")
+    with pytest.raises(CardError, match="isn't a zip of pictures"):
+        expressions_from_zip(tmp_path / "plain.zip")
+
+
+def test_a_new_story_keeps_the_expressions_on_its_character(tmp_path: Path):
+    card = read_card(charx_with_expressions(tmp_path, ["joy", "anger"]))
+    scenario = scenario_from_card(card, player="John").scenario
+    elena = scenario.cast[0]
+    assert [ref.expression for ref in elena.reference_images] == ["", "joy", "anger"]
+    assert elena.reference_images[0].caption == "portrait"
+    assert all(ref.file in scenario.reference_files for ref in elena.reference_images)
+    left = scenario_from_card(card, player="John", expressions=False)
+    assert len(left.scenario.cast[0].reference_images) == 1
+    assert any("expression pictures were left out" in note for note in left.notes)
+    world = scenario_from_card(card, player="John", world=True)
+    assert any("belong to one character" in note for note in world.notes)

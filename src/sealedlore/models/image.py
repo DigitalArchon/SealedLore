@@ -37,6 +37,12 @@ class ImageRef(BaseModel):
     # The picture drawn for this story it was copied from (GeneratedImage
     # id): the Media tab shows that drawing under its card, not twice.
     drawn_as: str = ""
+    # A character's picture, for showing them as the story has them now
+    # (engine/looks.py): `look` lasts until the story changes it ("combat
+    # armour", "injured"), `expression` is the moment's ("angry", "in a
+    # combat stance"). Blank: not said.
+    look: str = ""
+    expression: str = ""
 
 
 class RefUse(BaseModel):

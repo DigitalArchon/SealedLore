@@ -909,6 +909,7 @@ class MainWindow(
         page.draw_requested.connect(lambda card_id: self._on_card_picture(card_id, "", "new"))
         page.file_requested.connect(self._choose_card_picture)
         page.play_requested.connect(self._play_as)
+        page.look_requested.connect(self._show_look)
         page.draw_all_requested.connect(lambda: self.draw_card_pictures())
         page.background_requested.connect(lambda: self.generate_image(background=True))
         page.background_file_requested.connect(self.choose_background)
@@ -952,8 +953,29 @@ class MainWindow(
                 pictures_ready=session.config.images() is not None,
                 background=bool(session.story.background_image),
                 unnamed=unnamed,
+                looks=session.looks_now(),
             )
         )
+
+    def _show_look(self, card_id: str, ref_id: str) -> None:
+        """Show as on a card of the People page: that picture from here on
+        (their portrait, the first, goes back to none chosen)."""
+        session = self.session
+        if session is None:
+            return
+        if self._busy:
+            self.statusBar().showMessage(
+                "A look can be chosen once the story's current job is done.", 6000
+            )
+            return
+        character = next((c for c in (*session.cast, *session.supporting) if c.id == card_id), None)
+        first = character.reference_images[0].id if character and character.reference_images else ""
+        try:
+            session.show_look(card_id, None if ref_id == first else ref_id)
+        except ValueError as exc:
+            self.statusBar().showMessage(str(exc), 8000)
+            return
+        self._refresh_people()
 
     def _open_profile(self, card_id: str) -> None:
         """A card on the People page: their profile, on the Cast page."""

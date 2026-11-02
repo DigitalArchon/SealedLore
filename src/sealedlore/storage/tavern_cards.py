@@ -64,9 +64,46 @@ MAX_BYTES = 64 * 1024 * 1024
 MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 # A CHARX's card.json and its picture may not inflate past this.
 MAX_INFLATED = 32 * 1024 * 1024
+# A card's expression pictures (a CHARX's "emotion" assets, a SillyTavern
+# expression pack) are kept to this many, and this much in all: past it the
+# rest are counted and said, not read.
+MAX_EXPRESSIONS = 120
+MAX_EXPRESSION_BYTES = 96 * 1024 * 1024
 SPEC_V2 = "chara_card_v2"
 SPEC_V3 = "chara_card_v3"
 PORTRAIT_CAPTION = "portrait"
+# SillyTavern's expression names (its Character Expressions' classifier),
+# which its sprite packs are named by: "joy.png", or "joy-2.png" for another.
+SILLYTAVERN_EXPRESSIONS = (
+    "admiration",
+    "amusement",
+    "anger",
+    "annoyance",
+    "approval",
+    "caring",
+    "confusion",
+    "curiosity",
+    "desire",
+    "disappointment",
+    "disapproval",
+    "disgust",
+    "embarrassment",
+    "excitement",
+    "fear",
+    "gratitude",
+    "grief",
+    "joy",
+    "love",
+    "nervousness",
+    "neutral",
+    "optimism",
+    "pride",
+    "realization",
+    "relief",
+    "remorse",
+    "sadness",
+    "surprise",
+)
 # Pygmalion's old field names, and V1's.
 _PYGMALION = {
     "char_name": "name",
@@ -102,6 +139,10 @@ class TavernCard:
     fields: dict[str, Any]
     picture: bytes | None = None
     spec: str = SPEC_V2
+    # Its expression pictures as read (name, bytes), each stripped of hidden
+    # data; and what of them couldn't come (engine/looks.py labels them).
+    expressions: list[tuple[str, bytes]] = field(default_factory=list)
+    expression_notes: list[str] = field(default_factory=list)
 
     def text(self, key: str) -> str:
         value = self.fields.get(key)
@@ -166,7 +207,16 @@ def _card_of(data: Any, name: str, picture: bytes | None = None) -> TavernCard:
     if found is None:
         raise CardError(f"{name} isn't a character card.")
     fields, spec = found
-    return TavernCard(fields=fields, picture=picture, spec=spec)
+    card = TavernCard(fields=fields, picture=picture, spec=spec)
+    # Outside a CHARX an expression picture can only be named, never held.
+    assets = fields.get("assets")
+    named = sum(
+        1
+        for asset in (assets if isinstance(assets, list) else ())
+        if isinstance(asset, Mapping) and asset.get("type") == "emotion"
+    )
+    card.expression_notes = _expression_notes(0, named)
+    return card
 
 
 def _decoded(text: str, name: str) -> Any:
@@ -200,6 +250,9 @@ def _charx_card(source: BinaryIO, name: str) -> TavernCard:
                 raise CardError(f"{name}'s card.json isn't valid JSON.") from exc
             result = _card_of(parsed, name)
             result.picture = _charx_icon(archive, result.fields, name)
+            result.expressions, result.expression_notes = _charx_expressions(
+                archive, result.fields, name
+            )
             return result
     except zipfile.BadZipFile as exc:
         raise CardError(f"{name} isn't a CHARX file.") from exc
@@ -215,6 +268,99 @@ def _member(archive: zipfile.ZipFile, member: str, name: str) -> bytes | None:
     return archive.read(info)
 
 
+def _embedded(uri: str) -> str | None:
+    """The archive path an asset's uri names, or None for one outside it."""
+    for scheme in ("embeded://", "embedded://", "__asset:"):
+        if uri.startswith(scheme):
+            return uri.removeprefix(scheme)
+    return None
+
+
+def _charx_expressions(
+    archive: zipfile.ZipFile, fields: Mapping[str, Any], name: str
+) -> tuple[list[tuple[str, bytes]], list[str]]:
+    """The card's expression pictures (the spec's "emotion" assets) in the
+    archive, within MAX_EXPRESSIONS and MAX_EXPRESSION_BYTES; one named by a
+    link is never fetched."""
+    assets = fields.get("assets")
+    found: list[tuple[str, bytes]] = []
+    total = left = linked = 0
+    for asset in assets if isinstance(assets, list) else ():
+        if not isinstance(asset, Mapping) or asset.get("type") != "emotion":
+            continue
+        member = _embedded(str(asset.get("uri") or ""))
+        if member is None:
+            linked += 1
+            continue
+        try:
+            info = archive.getinfo(member)
+        except KeyError:
+            left += 1
+            continue
+        if len(found) >= MAX_EXPRESSIONS or total + info.file_size > MAX_EXPRESSION_BYTES:
+            left += 1
+            continue
+        data = _member(archive, member, name)
+        if not data:
+            left += 1
+            continue
+        total += len(data)
+        label = str(asset.get("name") or "").strip() or Path(member).stem
+        found.append((label, stripped_or_same(data)))
+    return found, _expression_notes(left, linked)
+
+
+def _expression_notes(left: int, linked: int) -> list[str]:
+    notes = []
+    if left:
+        notes.append(
+            f"{left} expression picture{'s' if left > 1 else ''} couldn't be read or went past "
+            f"what SealedLore takes ({MAX_EXPRESSIONS} pictures, "
+            f"{MAX_EXPRESSION_BYTES // (1024 * 1024)} MB)."
+        )
+    if linked:
+        notes.append(
+            f"{linked} expression picture{'s are' if linked > 1 else ' is'} a link, not in the "
+            "card: nothing is fetched for it."
+        )
+    return notes
+
+
+def expressions_from_zip(path: Path) -> tuple[list[tuple[str, bytes]], list[str]]:
+    """A SillyTavern expression pack: a zip of pictures named by expression
+    ("joy.png", "joy-2.png"), at any depth. (name, bytes) each, stripped of
+    hidden data, within the same limits as a card's; and what was left out.
+    CardError when it isn't a zip at all."""
+    found: list[tuple[str, bytes]] = []
+    total = left = 0
+    try:
+        with zipfile.ZipFile(path) as archive:
+            for info in archive.infolist():
+                if info.is_dir() or Path(info.filename).suffix.lower() not in (
+                    ".png",
+                    ".jpg",
+                    ".jpeg",
+                    ".webp",
+                ):
+                    continue
+                if (
+                    len(found) >= MAX_EXPRESSIONS
+                    or info.file_size > MAX_INFLATED
+                    or total + info.file_size > MAX_EXPRESSION_BYTES
+                ):
+                    left += 1
+                    continue
+                data = archive.read(info)
+                if picture_kind(data) is None:
+                    left += 1
+                    continue
+                total += len(data)
+                found.append((Path(info.filename).stem, stripped_or_same(data)))
+    except (OSError, zipfile.BadZipFile) as exc:
+        raise CardError(f"{Path(path).name} isn't a zip of pictures: {exc}") from exc
+    return found, _expression_notes(left, 0)
+
+
 def _charx_icon(archive: zipfile.ZipFile, fields: Mapping[str, Any], name: str) -> bytes | None:
     """The card's main picture: its "icon" asset (the spec writes
     "embeded://" for a file in the archive), else none."""
@@ -222,11 +368,10 @@ def _charx_icon(archive: zipfile.ZipFile, fields: Mapping[str, Any], name: str) 
     for asset in assets if isinstance(assets, list) else ():
         if not isinstance(asset, Mapping) or asset.get("type") != "icon":
             continue
-        uri = str(asset.get("uri") or "")
-        for scheme in ("embeded://", "embedded://", "__asset:"):
-            if uri.startswith(scheme):
-                data = _member(archive, uri.removeprefix(scheme), name)
-                return stripped_or_same(data) if data else None
+        member = _embedded(str(asset.get("uri") or ""))
+        if member is not None:
+            data = _member(archive, member, name)
+            return stripped_or_same(data) if data else None
     return None
 
 
@@ -405,6 +550,38 @@ def _picture_ref(card: TavernCard, scenario: Scenario, caption: str) -> ImageRef
     return ref
 
 
+def expression_of(name: str) -> str:
+    """An expression picture's name read as its label: SillyTavern's
+    "joy-2" is another "joy"; anything else as written, its underscores
+    spaces."""
+    stem = name.strip().rsplit("/", 1)[-1]
+    stem = re.sub(r"\.(png|jpe?g|webp|gif)$", "", stem, flags=re.I)
+    lowered = stem.lower()
+    for known in SILLYTAVERN_EXPRESSIONS:
+        if lowered == known or re.fullmatch(rf"{known}[-._ ].+", lowered):
+            return known
+    return " ".join(stem.replace("_", " ").split())
+
+
+def expression_refs(
+    expressions: Sequence[tuple[str, bytes]], keep: Callable[[bytes, str, str], ImageRef | None]
+) -> tuple[list[ImageRef], int]:
+    """Expression pictures as a character's pictures, labelled
+    (`expression_of`): `keep(data, suffix, label)` stores one
+    and returns its ref. How many were in a format SealedLore doesn't keep."""
+    refs: list[ImageRef] = []
+    skipped = 0
+    for name, data in expressions:
+        suffix = picture_kind(data)
+        if suffix is None:
+            skipped += 1
+            continue
+        ref = keep(data, suffix, expression_of(name))
+        if ref is not None:
+            refs.append(ref)
+    return refs, skipped
+
+
 def scenario_from_card(
     card: TavernCard,
     *,
@@ -413,12 +590,14 @@ def scenario_from_card(
     opening: int | None = 0,
     world: bool = False,
     instructions: bool = False,
+    expressions: bool = True,
 ) -> CardImport:
     """A new story from a card: `player` is the author's character (the
     card's `{{user}}`), `opening` which greeting opens it (None: the author
     writes the first turn), `world` that the card is a world or a narrator
     for several people rather than one character, `instructions` that the
-    card's own system prompt goes into the style's notes."""
+    card's own system prompt goes into the style's notes, `expressions` that
+    its expression pictures come too (labelled, for its character's looks)."""
     fill = macro_filler(card.name, player)
     notes: list[str] = []
     you = Character(name=player, summary=about_player.strip() or None)
@@ -446,14 +625,43 @@ def scenario_from_card(
             scenario.background_image = background.file
         if card.text("mes_example").strip():
             notes.append("The card's example messages were left out: they belong to one character.")
+        if card.expressions:
+            notes.append(
+                f"The card's {len(card.expressions)} expression pictures were left out: they "
+                "belong to one character."
+            )
     else:
         character = character_from_card(card, fill)
         portrait = _picture_ref(card, scenario, PORTRAIT_CAPTION)
         if portrait is not None:
             character.reference_images.append(portrait)
+        if card.expressions and expressions:
+
+            def keep(data: bytes, suffix: str, label: str) -> ImageRef:
+                ref_id = new_id()
+                ref = ImageRef(id=ref_id, file=f"{REFS_DIR}/{ref_id}{suffix}", expression=label)
+                scenario.reference_files[ref.file] = base64.b64encode(data).decode("ascii")
+                return ref
+
+            refs, skipped = expression_refs(card.expressions, keep)
+            character.reference_images += refs
+            if skipped:
+                notes.append(
+                    f"{skipped} expression picture{'s were' if skipped > 1 else ' was'} in a "
+                    "format SealedLore doesn't keep."
+                )
+        elif card.expressions:
+            notes.append(f"The card's {len(card.expressions)} expression pictures were left out.")
+        notes += card.expression_notes
         scenario.world_bible = setting or None
         scenario.cast = [character, you]
-    if card.picture is not None and not scenario.reference_files:
+    if (
+        card.picture is not None
+        and not any(
+            ref.caption == PORTRAIT_CAPTION for c in scenario.cast for ref in c.reference_images
+        )
+        and not scenario.background_image
+    ):
         notes.append(
             "The card's picture is in a format SealedLore doesn't keep, so it was left out."
         )

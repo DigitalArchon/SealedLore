@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.looks import look_words
 from sealedlore.engine.plot_md import ParsedPlotFile, PlotProblem
 from sealedlore.gui.image_codec import encoded, read_image
 from sealedlore.gui.picture_words import AGAIN_LABEL, EDIT_LABEL
@@ -337,12 +338,19 @@ class RefImageStrip(QWidget):
             "draws them the same way"
         )
         self.add_button.clicked.connect(self._add)
-        self.caption_button = QPushButton("Caption…")
-        self.caption_button.setToolTip("What the picture shows: 'front view', 'in flight gear'")
+        person = owner_word == "them"
+        self._person = person
+        # A character's pictures are labelled for looks too (gui/picture_labels.py).
+        self.caption_button = QPushButton("Labels…" if person else "Caption…")
+        self.caption_button.setToolTip(
+            "What the picture shows, and for showing them as the story has them: the look "
+            "that lasts and the moment's expression or pose"
+            if person
+            else "What the picture shows: 'front view', 'in flight gear'"
+        )
         self.caption_button.clicked.connect(lambda: self._edit_caption(self.list.currentItem()))
         self.remove_button = QPushButton("Remove")
         self.remove_button.clicked.connect(self._remove)
-        person = owner_word == "them"
         self.portrait_button = QPushButton("Make portrait" if person else "Show first")
         self.portrait_button.setToolTip(
             "Show this one large, as their portrait" if person else "Show this one large, first"
@@ -400,10 +408,24 @@ class RefImageStrip(QWidget):
         self.list.clear()
         store = self._pictures()
         shown = (refs or [])[1:] if self._after_portrait else (refs or [])
-        for ref in shown:
-            item = QListWidgetItem(ref.caption or "(no caption)")
+        for number, ref in enumerate(shown, 2 if self._after_portrait else 1):
+            if self._person:
+                words = look_words(ref) if (ref.look or ref.expression or ref.caption) else ""
+                item = QListWidgetItem(words or "(no labels)")
+                tip = "\n".join(
+                    part
+                    for part in (
+                        ref.caption,
+                        f"Look: {ref.look}" if ref.look else "",
+                        f"Expression or pose: {ref.expression}" if ref.expression else "",
+                    )
+                    if part
+                )
+                item.setToolTip(tip or f"Picture {number}")
+            else:
+                item = QListWidgetItem(ref.caption or "(no caption)")
+                item.setToolTip(ref.caption or ref.file)
             item.setData(Qt.UserRole, ref.id)
-            item.setToolTip(ref.caption or ref.file)
             if store is not None:
                 item.setIcon(QIcon(thumbnail_of(store.read(ref.file))))
             self.list.addItem(item)
@@ -457,6 +479,13 @@ class RefImageStrip(QWidget):
             return  # a double-click while the page is locked (gui/busy_lock.py)
         ref = self._ref(item)
         if ref is None:
+            return
+        if self._person:
+            from sealedlore.gui.picture_labels import edit_labels
+
+            if edit_labels(self, ref, self._refs or []):
+                self.set_refs(self._refs)
+                self.changed.emit()
             return
         text, ok = QInputDialog.getText(
             self, "Caption", "What this picture shows:", text=ref.caption

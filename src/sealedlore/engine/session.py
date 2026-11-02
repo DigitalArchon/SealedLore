@@ -161,6 +161,7 @@ from sealedlore.engine.scene_update import (
 )
 from sealedlore.engine.session_archival import LEDGER_MAX_TOKENS, ArchivalRuntime
 from sealedlore.engine.session_images import ImageRuntime
+from sealedlore.engine.session_looks import LooksRuntime
 from sealedlore.engine.session_merge import MergeRuntime, _close
 from sealedlore.engine.session_plot import NoticeSeverity, PlotRuntime, SessionNotice
 from sealedlore.engine.session_portraits import PortraitRuntime
@@ -469,6 +470,7 @@ class StorySession(
     PortraitRuntime,
     PrivateRuntime,
     ReasoningRuntime,
+    LooksRuntime,
 ):
     def __init__(
         self,

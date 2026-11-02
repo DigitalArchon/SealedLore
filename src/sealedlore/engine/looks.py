@@ -1,0 +1,74 @@
+"""How each character is shown as the story stands: which of their pictures.
+
+A character's pictures carry two labels (models/image.py `ImageRef`): a look
+that lasts until the story changes it (normal clothes, combat armour,
+injured) and the moment's expression or pose (angry, talking, in a combat
+stance). Which one a character is shown with is kept on the nodes
+(`NodeMeta.looks`), as the scene is: the nearest above the end of a path
+counts, so it follows branches, takes and deletions with nothing to keep in
+step. With none chosen, a character shows their first picture, the portrait.
+
+Pure: the session and the window read and write through it.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterable, Mapping, Sequence
+
+from sealedlore.models.character import Character
+from sealedlore.models.image import ImageRef
+from sealedlore.models.node import Node
+
+# Offered when labelling a picture, beside the labels the card already uses.
+COMMON_LOOKS = ("normal clothes", "formal clothes", "armour", "sleepwear", "injured")
+COMMON_EXPRESSIONS = (
+    "neutral",
+    "happy",
+    "sad",
+    "angry",
+    "afraid",
+    "surprised",
+    "talking",
+    "thinking",
+    "in a fighting stance",
+)
+
+
+def looks_at(path: Sequence[Node]) -> dict[str, str]:
+    """Who is shown with which picture at the end of `path` (character id →
+    picture id): the nearest choice above it, or none."""
+    for node in reversed(path):
+        if node.meta.looks is not None:
+            return dict(node.meta.looks)
+    return {}
+
+
+def shown_picture(character: Character, looks: Mapping[str, str]) -> ImageRef | None:
+    """The picture a character is shown with: the chosen one while it is
+    still on their card, else their first (their portrait), else none."""
+    chosen = looks.get(character.id)
+    if chosen:
+        for ref in character.reference_images:
+            if ref.id == chosen:
+                return ref
+    return character.reference_images[0] if character.reference_images else None
+
+
+def look_words(ref: ImageRef, number: int | None = None) -> str:
+    """A picture as a choice is named: its look and expression, else its
+    caption, else its place among the pictures."""
+    words = " · ".join(part for part in (ref.look.strip(), ref.expression.strip()) if part)
+    return words or ref.caption.strip() or (f"Picture {number}" if number else "A picture")
+
+
+def labels_in_use(refs: Iterable[ImageRef]) -> tuple[list[str], list[str]]:
+    """The looks and expressions these pictures already carry, each once,
+    in the order first used."""
+    looks: dict[str, None] = {}
+    expressions: dict[str, None] = {}
+    for ref in refs:
+        if ref.look.strip():
+            looks.setdefault(ref.look.strip(), None)
+        if ref.expression.strip():
+            expressions.setdefault(ref.expression.strip(), None)
+    return list(looks), list(expressions)

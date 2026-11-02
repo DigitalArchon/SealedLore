@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.gui.image_dialog import FitPicture
+from sealedlore.gui.picture_labels import LABELS_LABEL, LABELS_TIP
 from sealedlore.gui.picture_words import (
     AGAIN_LABEL,
     DRAW_LABELS,
@@ -109,6 +110,7 @@ class PortraitView(QWidget):
     scene_requested = Signal()
     add_requested = Signal()
     remove_requested = Signal()
+    labels_requested = Signal()
 
     def __init__(self, *, person: bool = True) -> None:
         super().__init__()
@@ -168,6 +170,7 @@ class PortraitView(QWidget):
             f"Take this {self._noun} off; the next picture takes its place",
             self.remove_requested,
         )
+        self.labels_button = self._button(LABELS_LABEL, LABELS_TIP, self.labels_requested)
         # Wraps rather than widen the Inspector.
         # Each kind under its caption, the buttons wrapping under it: as narrow
         # as the widest button, so the portrait's column keeps its width.
@@ -178,7 +181,7 @@ class PortraitView(QWidget):
         for button in (self.edit_button, self.scene_button):
             sends.add_group([button])
         files = WrapRow(spacing=6, group_spacing=6)
-        for button in (self.add_button, self.remove_button):
+        for button in (self.labels_button, self.add_button, self.remove_button):
             files.add_group([button])
         buttons = QVBoxLayout()
         buttons.setSpacing(4)
@@ -234,6 +237,7 @@ class PortraitView(QWidget):
         self.add_button.setVisible(on)
         for button in (self.again_button, self.edit_button, self.remove_button):
             button.setVisible(on and has)
+        self.labels_button.setVisible(on and has and self._person)
         self.sends_picture.setVisible(on and has)
         # Their portrait is what keeps the face: with none, Draw a portrait first.
         self.scene_button.setVisible(on and has and self._person)

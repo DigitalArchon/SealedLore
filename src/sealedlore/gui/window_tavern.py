@@ -45,6 +45,8 @@ from sealedlore.storage.tavern_cards import (
     TavernCard,
     card_data,
     character_from_card,
+    expression_refs,
+    expressions_from_zip,
     lore_from_card,
     macro_filler,
     read_card,
@@ -120,6 +122,7 @@ class TavernWindow:
         self.cast_panel.card_import_requested.connect(lambda: self.import_card_to_cast())
         self.cast_panel.card_link_requested.connect(lambda: self.import_from_link("cast"))
         self.cast_panel.card_export_requested.connect(self.export_card)
+        self.cast_panel.expressions_requested.connect(self.import_expressions)
         self.lore_panel.lorebook_import_requested.connect(lambda: self.import_lorebook())
         self.lore_panel.lorebook_link_requested.connect(lambda: self.import_from_link("lore"))
         self.lore_panel.lorebook_export_requested.connect(self.export_lorebook)
@@ -212,6 +215,16 @@ class TavernWindow:
                 character.reference_images.append(ref)
             else:
                 notes.append("Its picture is in a format SealedLore doesn't keep.")
+        if card.expressions:
+            refs, skipped = self._keep_expressions(card.expressions)
+            character.reference_images += refs
+            notes.append(
+                f"{len(refs)} expression picture{'s' if len(refs) != 1 else ''} came with the "
+                "card: the People page can show them with whichever fits (Show as)."
+            )
+            if skipped:
+                notes.append(f"{skipped} more were in a format SealedLore doesn't keep.")
+        notes += card.expression_notes
         if any(
             c.name.lower() == character.name.lower() for c in (*session.cast, *session.supporting)
         ):
@@ -613,3 +626,68 @@ class TavernWindow:
         imported = lore_from_book(book, macro_filler("{{char}}", held.name if held else None))
         title = book.get("name")
         self._lore_into_story(imported, title if isinstance(title, str) and title else name)
+
+    # --- expression pictures (a card's own, or a SillyTavern pack) -------------------
+
+    def _keep_expressions(self, expressions) -> tuple[list, int]:
+        """Expression pictures stored with the open story, labelled; how many
+        weren't a format SealedLore keeps."""
+        session = self.session
+        cleaned = clean_incoming({str(i): data for i, (_name, data) in enumerate(expressions)})
+        named = [(name, cleaned[str(i)]) for i, (name, _data) in enumerate(expressions)]
+
+        def keep(data: bytes, suffix: str, label: str):
+            ref = store_reference(data, suffix, session.pictures)
+            ref.expression = label
+            return ref
+
+        return expression_refs(named, keep)
+
+    def import_expressions(self, character_id: str) -> None:
+        """A SillyTavern expression pack (a zip of pictures named by
+        expression) added to a character's pictures, each labelled."""
+        session = self.session
+        if session is None or self._busy or self.in_chat:
+            return
+        character = next(
+            (c for c in (*session.cast, *session.supporting) if c.id == character_id), None
+        )
+        if character is None:
+            self.statusBar().showMessage("Choose a character first.", 6000)
+            return
+        chosen, _ = QFileDialog.getOpenFileName(
+            self._dialog_parent(),
+            f"Expression pictures for {character.name}",
+            str(Path.home()),
+            "Expression packs (*.zip);;All files (*)",
+        )
+        if not chosen:
+            return
+        try:
+            expressions, notes = expressions_from_zip(Path(chosen))
+        except CardError as exc:
+            self._warn_plain("Could not read the expression pictures", str(exc))
+            return
+        if not expressions:
+            self._warn_plain(
+                "No expression pictures",
+                f"{Path(chosen).name} has no pictures SealedLore keeps (PNG, JPEG or WebP).",
+            )
+            return
+        refs, skipped = self._keep_expressions(expressions)
+        character.reference_images += refs
+        if skipped:
+            notes.append(f"{skipped} were in a format SealedLore doesn't keep.")
+        session.forget_review_undo()
+        session.save()
+        self.refresh_panels()
+        self._refresh_people()
+        self.cast_panel.select_character(character.id)
+        lead = (
+            f"Added {len(refs)} expression picture{'s' if len(refs) != 1 else ''} to "
+            f"{character.name}, labelled by their names."
+        )
+        if notes:
+            self._say_left_out("Expression pictures", lead, notes)
+        else:
+            self.statusBar().showMessage(lead, 8000)

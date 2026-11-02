@@ -98,6 +98,7 @@ def test_the_dialog_asks_who_you_play_before_it_makes_anything(app, tmp_path: Pa
         "opening": None,
         "world": True,
         "instructions": True,
+        "expressions": False,
     }
     dialog.deleteLater()
 

@@ -36,6 +36,7 @@ NO_OPENING = "None: I write the first turn"
 TAVERN_LABEL = "SillyTavern cards"
 CARD_IMPORT_LABEL = "Import a character card…"
 CARD_EXPORT_LABEL = "Export this character as a card…"
+EXPRESSIONS_LABEL = "Add expression pictures from a zip…"
 LOREBOOK_LABEL = "SillyTavern lorebook"
 LOREBOOK_IMPORT_LABEL = "Import a lorebook…"
 LOREBOOK_EXPORT_LABEL = "Export the lore as a lorebook…"
@@ -130,6 +131,17 @@ class CardImportDialog(QDialog):
             "most cards' instructions repeat them, or ask for things they already forbid"
         )
         self.instructions.setVisible(bool(card.instructions))
+        count = len(card.expressions)
+        size = sum(len(data) for _name, data in card.expressions) / (1024 * 1024)
+        self.expressions = QCheckBox(
+            f"Keep its {count} expression picture{'s' if count != 1 else ''} ({size:.0f} MB)"
+        )
+        self.expressions.setToolTip(
+            "Pictures of the character with other expressions, labelled with them, kept "
+            "with the story: the People page can show the character with whichever fits"
+        )
+        self.expressions.setChecked(True)
+        self.expressions.setVisible(bool(card.expressions))
 
         form = QFormLayout()
         form.addRow("The card is", kind_widget)
@@ -138,6 +150,7 @@ class CardImportDialog(QDialog):
         form.addRow("Opening", self.opening)
         form.addRow("", self.preview)
         form.addRow("", self.instructions)
+        form.addRow("", self.expressions)
 
         note = QLabel(
             "Setup opens next, to set the style (person, tense, length) before the story "
@@ -178,6 +191,7 @@ class CardImportDialog(QDialog):
             "opening": self.opening.currentData(),
             "world": self.as_world.isChecked(),
             "instructions": bool(self.card.instructions) and self.instructions.isChecked(),
+            "expressions": bool(self.card.expressions) and self.expressions.isChecked(),
         }
 
 

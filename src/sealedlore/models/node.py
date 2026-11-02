@@ -88,6 +88,10 @@ class NodeMeta(BaseModel):
     # The plot's clock, facts and events after this node (models/plot.py),
     # kept the same way as `scene`. Only on stories with a plot.
     chronicle: Chronicle | None = None
+    # Which of their pictures each character is shown with after this node
+    # (character id → picture id), kept the same way as `scene`: the
+    # nearest above counts (engine/looks.py). None: unchanged here.
+    looks: dict[str, str] | None = None
     # On a passage, for a lorebook too big to send whole: the entries the lore
     # model picked for the passage after it (`Config.lore_selector` "picker"),
     # read in the background. None = not picked; [] = picked, and none needed.

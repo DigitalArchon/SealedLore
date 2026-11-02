@@ -14,12 +14,15 @@ story.
 
 Who is here is the scene card's, as the Scene page shows it (playtesting:
 the scene read is wrong too often to go unwatched; here it is watched by
-face), and "Correct the scene…" goes there. The page reads; the window acts.
+face), and "Correct the scene…" goes there. Each card shows the picture the
+character is shown with now (engine/looks.py): their look, chosen from their
+labelled pictures (Show as on the card's menu), else their portrait. The
+page reads; the window acts.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from PySide6.QtCore import QPoint, QSize, Qt, Signal
@@ -38,6 +41,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.looks import look_words, shown_picture
 from sealedlore.engine.scene_state import same_person
 from sealedlore.gui import theme
 from sealedlore.models.character import Character
@@ -61,6 +65,8 @@ NOT_BEGUN = (
     "opening places everyone."
 )
 CARD_TIP = "Click to open {name}'s profile. Right-click for more."
+SHOW_AS = "Show as"
+PORTRAIT_WORDS = "Their portrait"
 ALSO_HERE_HEADING = "Also here, with no card yet"
 NAME_LABEL = "Name…"
 # How the map's scene lists someone it has no name for (engine/map_presence.py).
@@ -84,12 +90,17 @@ class Person:
     name: str
     # The first sentence of their summary.
     line: str
-    # Their first picture's file in the story's store (the portrait), or "".
+    # The file of the picture they are shown with now (their look, else
+    # their portrait) in the story's store, or "".
     picture: str
     you: bool = False
     playable: bool = False
     # Where they are, when it is known and not here.
     note: str = ""
+    # Their pictures to be shown as, (picture id, words), the portrait first;
+    # and which is shown now.
+    looks: tuple[tuple[str, str], ...] = ()
+    shown: str = ""
 
 
 @dataclass
@@ -125,16 +136,29 @@ def first_sentence(text: str | None, limit: int = 140) -> str:
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
-def _person(character: Character, held_id: str | None, note: str = "") -> Person:
-    first = character.reference_images[0].file if character.reference_images else ""
+def _person(
+    character: Character,
+    held_id: str | None,
+    note: str = "",
+    looks: Mapping[str, str] | None = None,
+) -> Person:
+    shown = shown_picture(character, looks or {})
+    refs = character.reference_images
     return Person(
         card_id=character.id,
         name=character.name,
         line=first_sentence(character.summary or character.full_description),
-        picture=first,
+        picture=shown.file if shown is not None else "",
         you=character.id == held_id,
         playable=character.is_player_available,
         note=note,
+        looks=tuple(
+            (ref.id, PORTRAIT_WORDS if number == 1 else look_words(ref, number))
+            for number, ref in enumerate(refs, 1)
+        )
+        if len(refs) > 1
+        else (),
+        shown=shown.id if shown is not None else "",
     )
 
 
@@ -150,11 +174,13 @@ def people_view(
     pictures_ready: bool = False,
     background: bool = False,
     unnamed: Sequence[tuple[str, str]] = (),
+    looks: Mapping[str, str] | None = None,
 ) -> PeopleView:
     """Who is where, from the scene card. `cast` and `supporting` are the
     cards the author may see (the plot's hidden ones already left out).
     `unnamed`: on a map, the people it has here not named yet (label,
-    description); the map's scene lists them as "… (not named yet)"."""
+    description); the map's scene lists them as "… (not named yet)".
+    `looks`: which picture each is shown with now (engine/looks.py)."""
     present = set(scene.present_character_ids)
     notes = {entry.character_id: entry.note for entry in scene.offstage_but_nearby}
     view = PeopleView(
@@ -169,14 +195,15 @@ def people_view(
     )
     for character in cast:
         if character.id in present:
-            view.here.append(_person(character, held_id))
+            view.here.append(_person(character, held_id, looks=looks))
         else:
-            view.away.append(_person(character, held_id, notes.get(character.id, "")))
+            note = notes.get(character.id, "")
+            view.away.append(_person(character, held_id, note, looks))
     for character in supporting:
         if any(same_person(name, character) for name in scene.present_others):
-            view.here.append(_person(character, held_id))
+            view.here.append(_person(character, held_id, looks=looks))
         else:
-            view.others.append(_person(character, held_id))
+            view.others.append(_person(character, held_id, looks=looks))
     view.also_here = [
         name
         for name in scene.present_others
@@ -217,6 +244,8 @@ class PersonCard(QFrame):
     draw_requested = Signal(str)
     file_requested = Signal(str)
     play_requested = Signal(str)
+    # (card id, picture id): show them with that picture from here on.
+    look_requested = Signal(str, str)
 
     def __init__(self, person: Person, *, max_height: int, can_draw: bool, can_play: bool) -> None:
         super().__init__()
@@ -340,10 +369,33 @@ class PersonCard(QFrame):
             )
         return actions
 
+    def look_actions(self) -> list[tuple[str, bool, Callable[[], None]]]:
+        """Show as: each of their pictures (words, shown now, act), once the
+        story has begun and they have more than one."""
+        person = self.person
+        if not self._can_play:
+            return []
+        return [
+            (
+                words,
+                ref_id == person.shown,
+                lambda ref_id=ref_id: self.look_requested.emit(person.card_id, ref_id),
+            )
+            for ref_id, words in person.looks
+        ]
+
     def _menu(self, at: QPoint) -> None:
         menu = QMenu(self)
         for label, act in self.menu_actions():
             menu.addAction(label).triggered.connect(act)
+        looks = self.look_actions()
+        if looks:
+            show_as = menu.addMenu(SHOW_AS)
+            for words, shown, act in looks:
+                action = show_as.addAction(words)
+                action.setCheckable(True)
+                action.setChecked(shown)
+                action.triggered.connect(act)
         menu.exec(self.mapToGlobal(at))
 
 
@@ -355,6 +407,7 @@ class PeoplePage(QScrollArea):
     draw_requested = Signal(str)
     file_requested = Signal(str)
     play_requested = Signal(str)
+    look_requested = Signal(str, str)
     draw_all_requested = Signal()
     background_requested = Signal()
     background_file_requested = Signal()
@@ -572,6 +625,7 @@ class PeoplePage(QScrollArea):
             card.draw_requested.connect(self.draw_requested)
             card.file_requested.connect(self.file_requested)
             card.play_requested.connect(self.play_requested)
+            card.look_requested.connect(self.look_requested)
             self.cards[person.card_id] = card
             grid.addWidget(card, index // columns, index % columns, Qt.AlignTop)
         for column in range(columns):

@@ -1161,8 +1161,8 @@ story** have the rest of the cast and the supporting characters, smaller,
 with where they are when the story has said. Each card is a portrait, a name
 and the first line of their summary. Click a card for the whole profile, on
 the Cast page; right-click it to draw a portrait, choose a picture of your
-own, or play as that character. A card with no portrait has **Draw a
-portrait…** and **Choose a picture…** on it.
+own, play as that character, or show them in another look (below). A card
+with no portrait has **Draw a portrait…** and **Choose a picture…** on it.
 
 ![The People page in The Silverwood: where the story is and what is happening, then the ranger, the sellsword and the herbwife under Here now, by their portraits, and three villagers the story named under Also here, with no card yet](screenshots/people-page.webp)
 
@@ -1178,6 +1178,25 @@ do on the Cast page.
 Who is here is the scene's (below), so the faces show at a glance who the
 storyteller thinks is in the room; **Correct the scene…** goes to the Scene
 page to put it right.
+
+**Looks.** A character can have several pictures: in normal clothes and in
+armour, angry, laughing, in a fighting stance. Label each on the Cast page
+(**Labels…** under the portrait, or on one of the pictures below it) with its
+**Look**, which lasts until the story changes it (normal clothes, combat
+armour, injured), and its **Expression or pose**, which is the moment's
+(angry, talking, in a fighting stance). Then right-click their card here,
+**Show as**, and choose the one that fits: the card shows them that way from
+that point in the story on. It follows the story as the scene does: another
+branch or another take of a passage keeps its own, and **Their portrait**
+puts the portrait back. In a private scene a look is chosen once the scene
+has a message of its own, and counts only until the scene ends.
+
+Pictures of other expressions can come with a character: a CHARX card's
+expression pictures (File → Import… asks whether to keep them, and gives
+their size), or a SillyTavern expression pack, a zip of pictures named by
+expression ("joy.png", "anger-2.png"), added with **SillyTavern cards → Add
+expression pictures from a zip…** on the Cast page. Each is labelled by its
+name.
 
 Someone the story has here who has no card (named in the opening or by a
 passage, never given one) is listed under **Also here, with no card yet**,

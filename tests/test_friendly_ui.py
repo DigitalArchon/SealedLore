@@ -715,3 +715,95 @@ def test_the_people_page_makes_a_card_for_someone_with_none(app, window, monkeyp
     # The card opens on the Cast page once the job is in (`_after_job`).
     wait_until(app, lambda: window.right_tabs.currentWidget() is window.cast_page)
     assert "Suzuka Nakamoto" in [c.name for c in window.session.supporting]
+
+
+# --- looks: a character shown with the picture that fits ----------------------------
+
+
+def _picture(colour: int) -> bytes:
+    from PySide6.QtGui import QImage
+
+    from sealedlore.gui.image_codec import encoded
+
+    image = QImage(30, 40, QImage.Format_RGB32)
+    image.fill(colour)
+    return encoded(image, "PNG")
+
+
+def test_show_as_puts_a_character_in_another_look(app, window):
+    session = window.session
+    for name, colour in (("portrait", 0x335577), ("armour", 0x775533)):
+        session.pictures.write(f"images/refs/{name}.png", _picture(colour))
+    serrik = next(c for c in session.cast if c.id == "char-serrik")
+    serrik.reference_images = [
+        ImageRef(id="p", file="images/refs/portrait.png", caption="portrait"),
+        ImageRef(id="a", file="images/refs/armour.png", look="combat armour", expression="angry"),
+    ]
+    window._build_people()
+    settle(app)
+    card = window.people_page.cards["char-serrik"]
+    assert card.person.picture == "images/refs/portrait.png"
+    looks = card.look_actions()
+    assert [(words, shown) for words, shown, _act in looks] == [
+        ("Their portrait", True),
+        ("combat armour · angry", False),
+    ]
+    looks[1][2]()
+    settle(app)
+    assert session.looks_now() == {"char-serrik": "a"}
+    card = window.people_page.cards["char-serrik"]
+    assert card.person.picture == "images/refs/armour.png"
+    # Their portrait again is no choice at all.
+    card.look_actions()[0][2]()
+    settle(app)
+    assert session.looks_now() == {}
+    # Someone with one picture has nothing to choose among.
+    assert window.people_page.cards["char-maela"].look_actions() == []
+
+
+def test_a_character_s_pictures_are_labelled_on_the_cast_page(app, window, monkeypatch):
+    from PySide6.QtWidgets import QDialog
+
+    from sealedlore.gui.picture_labels import PictureLabelsDialog
+
+    session = window.session
+    session.pictures.write("images/refs/portrait.png", _picture(0x335577))
+    serrik = next(c for c in session.cast if c.id == "char-serrik")
+    serrik.reference_images = [ImageRef(id="p", file="images/refs/portrait.png")]
+    window.right_tabs.setCurrentWidget(window.cast_page)
+    window.cast_panel.select_character("char-maela")
+    window.cast_panel.select_character("char-serrik")
+    settle(app)
+
+    def labelled(dialog: PictureLabelsDialog) -> int:
+        dialog.look.setCurrentText("normal  clothes ")
+        dialog.expression.setCurrentText("neutral")
+        return QDialog.Accepted
+
+    monkeypatch.setattr(PictureLabelsDialog, "exec", labelled)
+    assert window.cast_panel.portrait.labels_button.isVisible()
+    window.cast_panel.portrait.labels_button.click()
+    portrait = serrik.reference_images[0]
+    assert (portrait.look, portrait.expression) == ("normal clothes", "neutral")
+    assert "normal clothes · neutral" in window.cast_panel.portrait.caption.text()
+
+
+def test_a_sillytavern_expression_pack_joins_a_character(app, window, monkeypatch, tmp_path):
+    import zipfile
+
+    session = window.session
+    pack = tmp_path / "maela.zip"
+    with zipfile.ZipFile(pack, "w") as archive:
+        archive.writestr("joy.png", _picture(0x55AA55))
+        archive.writestr("anger-2.png", _picture(0xAA5555))
+    monkeypatch.setattr(
+        "sealedlore.gui.window_tavern.QFileDialog.getOpenFileName",
+        lambda *args, **kwargs: (str(pack), ""),
+    )
+    window.cast_panel.expressions_requested.emit("char-maela")
+    maela = next(c for c in session.cast if c.id == "char-maela")
+    assert [ref.expression for ref in maela.reference_images] == ["joy", "anger"]
+    assert all(session.pictures.read(ref.file) for ref in maela.reference_images)
+    reloaded = load_story_bundle(session.story.id, root=window.root)
+    again = next(c for c in reloaded.cast if c.id == "char-maela")
+    assert [ref.expression for ref in again.reference_images] == ["joy", "anger"]
