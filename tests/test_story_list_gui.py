@@ -82,6 +82,27 @@ def wait_search(app, panel: StoryListPanel, seconds: float = 10) -> None:
 # --- the rows ------------------------------------------------------------------------
 
 
+def test_a_date_is_in_english_whatever_the_systems_date_language():
+    """Qt sets the C library's locale from the system's; the lab's CachyOS
+    (LC_TIME=hu_HU) read "Played 4 márc 2026" in an English window."""
+    import locale
+
+    from sealedlore.gui.start_page import when_played
+
+    before = locale.setlocale(locale.LC_TIME)
+    try:
+        for name in ("hu_HU.UTF-8", "de_DE.UTF-8", "fr_FR.UTF-8", "C"):
+            try:
+                locale.setlocale(locale.LC_TIME, name)
+            except locale.Error:
+                continue
+            assert when_played("2026-03-04T10:00:00+00:00") == "4 Mar 2026", name
+            assert when_played("2026-12-31T23:00:00+00:00") == "31 Dec 2026", name
+    finally:
+        locale.setlocale(locale.LC_TIME, before)
+    assert when_played("not a date") == ""
+
+
 def test_a_row_says_its_kind_when_it_was_started_and_when_it_was_last_played(app, tmp_path):
     first = message("n1", "One.", "2026-02-03T10:00:00+00:00")
     last = message("n2", "Two.", "2026-03-04T10:00:00+00:00", parent="n1")

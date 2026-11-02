@@ -135,13 +135,19 @@ def samples(folder: Path | None = None) -> list[Sample]:
     return found
 
 
+# The window's words are English, so its months are too: strftime's %b
+# follows the C library's locale, which Qt sets from the system's, and a
+# Hungarian date setting read "Played 4 márc 2026" (the lab's CachyOS).
+MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
 def when_played(stamp: str) -> str:
     """'17 Oct 2026' from a story's ISO `updated_at`, or ''."""
     try:
         moment = datetime.fromisoformat(stamp)
     except ValueError:
         return ""
-    return f"{moment.day} {moment:%b %Y}"
+    return f"{moment.day} {MONTHS[moment.month - 1]} {moment.year}"
 
 
 # Read once a process: the start page and File → New… both show them.
