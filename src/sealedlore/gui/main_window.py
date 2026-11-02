@@ -131,6 +131,7 @@ from sealedlore.models.authoring import SettingsChange, SettingsReview
 from sealedlore.models.character import Character
 from sealedlore.models.config import model_label, on_nanogpt, split_model
 from sealedlore.models.node import DIRECTOR_SPEAKER_ID, Node
+from sealedlore.models.prompt_edit import PROMPT_SET_FORMAT
 from sealedlore.models.route import ROUTE_ROLES, ModelRoute
 from sealedlore.models.scene import SceneState
 from sealedlore.models.story import Story
@@ -154,6 +155,7 @@ from sealedlore.storage.archive import (
 )
 from sealedlore.storage.images import is_video_file, reference_files, without_videos
 from sealedlore.storage.paths import data_home, samples_dir, story_dir
+from sealedlore.storage.prompt_sets import PROMPT_SET_SUFFIX
 from sealedlore.storage.repository import (
     StoryBundle,
     copy_story,
@@ -669,7 +671,7 @@ class MainWindow(
         self.prompts_action.setStatusTip(
             "See and change every instruction SealedLore sends to its models"
         )
-        self.prompts_action.triggered.connect(self.open_prompt_editor)
+        self.prompts_action.triggered.connect(lambda: self.open_prompt_editor())
         file_menu.addAction(self.prompts_action)
 
         file_menu.addSeparator()
@@ -1122,17 +1124,20 @@ class MainWindow(
         self._import_plot_file(path)
 
     def import_file(self) -> None:
-        """A new story from a scenario, a story backup or a plot file."""
+        """A new story from a scenario, a story backup or a plot file; or a
+        prompt set, into the prompt editor."""
         if self._busy or not self._private_allows_close():
             return
         self._import_path(
             "Import",
             # Every kind, shown together by default: split by kind, a plot
             # file once needed "All files" to be seen at all.
-            f"SealedLore files (*{SCENARIO_SUFFIX} *{ARCHIVE_SUFFIX} *{PLOT_SUFFIX});;"
+            f"SealedLore files (*{SCENARIO_SUFFIX} *{ARCHIVE_SUFFIX} *{PLOT_SUFFIX} "
+            f"*{PROMPT_SET_SUFFIX});;"
             f"Scenarios (*{SCENARIO_SUFFIX});;"
             f"Story backups (*{ARCHIVE_SUFFIX});;"
             f"Plot files (*{PLOT_SUFFIX});;"
+            f"Prompt sets (*{PROMPT_SET_SUFFIX});;"
             "All files (*)",
         )
 
@@ -1158,10 +1163,14 @@ class MainWindow(
         path, _ = QFileDialog.getOpenFileName(self, title, str(Path.home()), filters)
         if not path:
             return
+        kind = None if Path(path).suffix.lower() == PLOT_SUFFIX else file_format(Path(path))
         if Path(path).suffix.lower() == PLOT_SUFFIX:
             self._import_plot_file(Path(path))
-        elif file_format(Path(path)) == ARCHIVE_FORMAT:
+        elif kind == ARCHIVE_FORMAT:
             self._import_archive(Path(path))
+        elif kind == PROMPT_SET_FORMAT:
+            # Not a story: the prompts, into the editor, kept on its Save.
+            self.open_prompt_editor(import_path=Path(path))
         else:
             # Anything else gets the scenario reader's plain-words error.
             self._import_scenario(Path(path))
@@ -4557,12 +4566,17 @@ class MainWindow(
             self.stories.refresh(selected_id=story.id if story is not None else None)
             self._update_controls()
 
-    def open_prompt_editor(self) -> None:
-        """File → Prompts (advanced)…: the texts for this story and for every story."""
+    def open_prompt_editor(self, import_path: Path | None = None) -> None:
+        """File → Prompts (advanced)…: the texts for this story and for every
+        story. `import_path`: a prompt set from File → Import…, taken in as
+        the editor's Import… takes one."""
         if self._busy or self._settings_paused():
             return
         story = self.session.story if self.session else None
         dialog = PromptEditorDialog(self.config, story, root=self.root, parent=self)
+        if import_path is not None and not dialog.import_set(import_path):
+            dialog.deleteLater()
+            return
         if dialog.exec() != PromptEditorDialog.Accepted:
             return
         dialog.apply_to(self.config, story)

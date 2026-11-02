@@ -246,6 +246,9 @@ Have fun!
   on from where it stops (**Continue**), or rewrite any earlier message as a
   named branch; a diagram shows them all.
 - **Drafting**: a whole story drafted from a premise.
+- **Every prompt yours to change**: File → Prompts (advanced)… shows every
+  instruction SealedLore sends to a model, editable for one story or for every
+  story, and exports or imports them as a prompt set to share.
 - **Costs**: per passage, per session and per story.
 - **Routes**: on NanoGPT, choose which host serves each model (the fastest,
   the cheapest, or one you pick), and see whether the choice was followed.

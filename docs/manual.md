@@ -994,6 +994,14 @@ finds a text by its name, what it does, or its words.
   what won't reach the model without it.
 - **Reset to default** puts one text back, **Reset all…** every text edited
   in the scope you are looking at. The Default tab shows the original.
+- **Export…** saves the edits in force for the scope you are looking at as a
+  prompt set (a `.sealedlore-prompts.json` file), to share or to keep a way of
+  playing beside another; for one story that is its own edits and those for
+  every story it uses. **Import…** takes a set in, added to the edits there or
+  in place of them, and nothing is kept until Save. **File → Import…** takes a
+  prompt set too, and opens it here. A set from another version of SealedLore
+  says how many of its texts this version doesn't have (kept, never sent) and
+  marks ⚠ those whose default has changed since it was written.
 - When a later version of SealedLore improves a default you have edited, your
   edit stays and is marked ⚠ so you can compare.
 

@@ -5,6 +5,10 @@ for one story or for every story, with a warning and an easy way back. The
 texts and their defaults are in engine/prompt_texts.py; which edit is in
 force is engine/prompt_edits.py. This dialog edits copies of both layers and
 hands them back only on Save.
+
+A scope's edits can be exported as a prompt set (storage/prompt_sets.py) and
+imported into a story or into every story, to share them or to keep one way
+of playing beside another.
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -46,6 +51,12 @@ from sealedlore.gui.sizing import size_to_screen
 from sealedlore.models.config import Config
 from sealedlore.models.prompt_edit import PromptEdit
 from sealedlore.models.story import Story
+from sealedlore.storage.prompt_sets import (
+    PROMPT_SET_SUFFIX,
+    PromptSetError,
+    read_prompt_set,
+    write_prompt_set,
+)
 from sealedlore.storage.repository import stories_with_prompt_edits
 
 WARNING = (
@@ -159,12 +170,22 @@ class PromptEditorDialog(QDialog):
         self.counts.setObjectName("hintLabel")
         self.counts.setWordWrap(True)
         self.copy_button = QPushButton("Copy from another story…")
+        self.export_button = QPushButton("Export…")
+        self.export_button.setToolTip(
+            "Save the edits in force here as a prompt set, to share or to keep"
+        )
+        self.import_button = QPushButton("Import…")
+        self.import_button.setToolTip(
+            "Take the edits of a prompt set: in place of the ones here, or added to them"
+        )
         self.reset_all_button = QPushButton("Reset all…")
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         bottom = QHBoxLayout()
         bottom.addWidget(self.copy_button)
+        bottom.addWidget(self.export_button)
+        bottom.addWidget(self.import_button)
         bottom.addWidget(self.reset_all_button)
         bottom.addWidget(self.counts, 1)
         bottom.addWidget(buttons)
@@ -183,6 +204,8 @@ class PromptEditorDialog(QDialog):
         self.reset_button.clicked.connect(self._reset_one)
         self.reset_all_button.clicked.connect(self._reset_all)
         self.copy_button.clicked.connect(self._copy_from_story)
+        self.export_button.clicked.connect(self._export)
+        self.import_button.clicked.connect(self._import)
         self._scope_changed()
         first = self.tree.topLevelItem(0)
         if first is not None and first.childCount():
@@ -400,6 +423,123 @@ class PromptEditorDialog(QDialog):
             f"Copied {len(edits)} edits from {title}: they replace this story's own edits of "
             "the same texts. Save to keep them."
         )
+
+    # --- prompt sets -------------------------------------------------------------
+
+    def exported_edits(self) -> dict[str, PromptEdit]:
+        """What Export saves: the edits in force for the scope shown. For one
+        story that is its own over those for every story, since together they
+        are what it sends."""
+        if self.scope_name == "story":
+            return {**self.edits["app"], **self.edits["story"]}
+        return dict(self.edits["app"])
+
+    def _export(self) -> None:
+        edits = self.exported_edits()
+        where = "this story" if self.scope_name == "story" else "every story"
+        if not edits:
+            QMessageBox.information(
+                self, "Export prompts", f"No text is edited for {where}: there is nothing to save."
+            )
+            return
+        name = self.story.title if self.scope_name == "story" and self.story else "SealedLore"
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export prompts",
+            str(Path.home() / f"{name} prompts{PROMPT_SET_SUFFIX}"),
+            f"Prompt sets (*{PROMPT_SET_SUFFIX})",
+        )
+        if not path:
+            return
+        if not path.endswith(PROMPT_SET_SUFFIX):
+            path = str(Path(path).with_suffix("")) + PROMPT_SET_SUFFIX
+        try:
+            write_prompt_set(Path(path), edits)
+        except OSError as exc:
+            QMessageBox.warning(self, "Export prompts", f"Couldn't write {path}: {exc}")
+            return
+        self.scope_note.setText(f"Saved {len(edits)} edited texts to {Path(path).name}.")
+
+    def _import(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import prompts",
+            str(Path.home()),
+            f"Prompt sets (*{PROMPT_SET_SUFFIX});;All files (*)",
+        )
+        if path:
+            self.import_set(Path(path))
+
+    def import_set(self, path: Path, how: str | None = None) -> bool:
+        """Take a prompt set's edits into the scope shown: "replace" its own,
+        or "add" to them (the set's win where both edit a text). `how` None
+        asks. Nothing is kept until Save, as with any edit here."""
+        try:
+            incoming = read_prompt_set(path)
+        except PromptSetError as exc:
+            QMessageBox.warning(self, "Import prompts", str(exc))
+            return False
+        edits = incoming.edits
+        if not edits:
+            QMessageBox.information(
+                self, "Import prompts", f"{path.name} has no edited texts in it."
+            )
+            return False
+        if how is None:
+            how = self._ask_how(path, edits)
+            if how is None:
+                return False
+        if how == "replace":
+            self.here.clear()
+        self.here.update(copied(edits))
+        self._refresh_marks()
+        self._show(self.tree.currentItem())
+        self.scope_note.setText(
+            f"Imported {len(edits)} edited texts from {path.name}"
+            + (", in place of the edits here" if how == "replace" else "")
+            + ". Save to keep them."
+        )
+        return True
+
+    @staticmethod
+    def import_notes(path: Path, edits: dict[str, PromptEdit]) -> list[str]:
+        """What a set holds, said before it is taken: texts this version
+        doesn't have, and texts whose default has changed since."""
+        notes = [f"{path.name} edits {len(edits)} texts."]
+        unknown = unknown_keys(edits)
+        if unknown:
+            notes.append(
+                f"{len(unknown)} of them are texts this version doesn't have: they are "
+                "kept, and never sent."
+            )
+        changed = [key for key, edit in edits.items() if default_changed(key, edit)]
+        if changed:
+            notes.append(
+                f"SealedLore's default has changed since {len(changed)} of them were "
+                f"written: they are marked {CHANGED} in the list."
+            )
+        return notes
+
+    def _ask_how(self, path: Path, edits: dict[str, PromptEdit]) -> str | None:
+        where = "this story" if self.scope_name == "story" else "every story"
+        box = QMessageBox(self)
+        box.setWindowTitle("Import prompts")
+        box.setText(f"Import these edits for {where}?")
+        box.setInformativeText(" ".join(self.import_notes(path, edits)))
+        add = box.addButton("Add to the edits here", QMessageBox.AcceptRole)
+        replace = None
+        if self.here:
+            replace = box.addButton(
+                f"Replace the {len(self.here)} edits here", QMessageBox.DestructiveRole
+            )
+        box.addButton(QMessageBox.Cancel)
+        box.setDefaultButton(add)
+        box.exec()
+        if box.clickedButton() is add:
+            return "add"
+        if replace is not None and box.clickedButton() is replace:
+            return "replace"
+        return None
 
     # --- the result ------------------------------------------------------------
 
