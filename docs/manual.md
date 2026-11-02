@@ -1191,6 +1191,20 @@ branch or another take of a passage keeps its own, and **Their portrait**
 puts the portrait back. In a private scene a look is chosen once the scene
 has a message of its own, and counts only until the scene ends.
 
+**Chosen as the story goes.** After each passage, the scene model chooses
+which picture each character in it is shown with: their look lasts until the
+story changes it (they put armour on, are hurt), and their expression or pose
+follows the moment. It runs only for characters with more than one picture,
+so a story that doesn't use looks makes no extra call; Settings → Models →
+**Choose characters' looks after every passage** turns it off. The status bar
+says when someone's look changed, and **Show as** puts anyone back as you
+like. When none of their pictures fits well, it shows the nearest, and their
+card's menu offers to draw the look that would ("Draw them as combat armour ·
+grinning…"). In a private scene
+the choice is made by the private model, or by Settings → Private → **Model
+for looks** (a small one, such as TEE/glm-5.3-flash, is quicker) when the
+scene could move to it.
+
 **Drawing new looks.** **Change this picture…** on a character's picture
 starts from its Look and Expression or pose: change either, and the new
 picture is drawn from this one with that change (so it is the same face) and

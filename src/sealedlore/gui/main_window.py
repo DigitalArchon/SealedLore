@@ -911,6 +911,11 @@ class MainWindow(
         page.play_requested.connect(self._play_as)
         page.look_requested.connect(self._show_look)
         page.variant_requested.connect(self._on_card_picture)
+        page.wanted_requested.connect(
+            lambda card_id, ref_id, wanted: self._on_card_picture(
+                card_id, ref_id, "edit", wanted=wanted
+            )
+        )
         page.draw_all_requested.connect(lambda: self.draw_card_pictures())
         page.background_requested.connect(lambda: self.generate_image(background=True))
         page.background_file_requested.connect(self.choose_background)
@@ -955,6 +960,7 @@ class MainWindow(
                 background=bool(session.story.background_image),
                 unnamed=unnamed,
                 looks=session.looks_now(),
+                wanted=session.looks_wanted_now(),
             )
         )
 

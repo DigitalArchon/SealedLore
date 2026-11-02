@@ -34,6 +34,7 @@ LORE = "Lore"
 PRIVATE = "Private scenes"
 CHAT = "Simple chat"
 PICTURES = "Pictures"
+LOOKS = "Looks"
 VIDEO = "Video"
 AUTHORING = "Drafting and review"
 
@@ -49,6 +50,7 @@ GROUPS = (
     PRIVATE,
     CHAT,
     PICTURES,
+    LOOKS,
     VIDEO,
     AUTHORING,
 )
@@ -2750,6 +2752,33 @@ _text(
     "pose: the Expression or pose the new picture is labelled with.",
     "Change their expression or pose to: {expression}.",
     (("expression", "The expression or pose the new picture is labelled with"),),
+)
+
+# Looks (engine/look_pick.py): after a passage, which of their pictures each
+# character in it is shown with. On the scene model (in a private scene, the
+# private model). Measured on Doomsville passages with labelled looks
+# (SealedLoreDocs design/images.md, "Looks"): see there before changing it.
+_text(
+    "looks.pick.system",
+    LOOKS,
+    "Choosing looks after a passage",
+    "Which of their pictures each character is shown with after a passage: the request's "
+    "instructions. The people, their pictures by label, the author's turn and the passage "
+    "follow.",
+    "You choose how each person below is shown beside the story, from their own pictures, "
+    "each named by a handle and described by labels: a look that lasts (clothes, armour, an "
+    "injury) and the moment's expression or pose.\n\n"
+    "For each person, choose the one picture that best fits them at the end of the latest "
+    "passage:\n"
+    "- Their look lasts: keep the look they are shown with now unless the passage or the "
+    "author's turn changes it (they change clothes, put armour on, are hurt).\n"
+    "- Their expression or pose is the moment's: take it from what they are doing and "
+    "feeling at the end of the passage. When it shows nothing of them, keep what they have.\n"
+    "- Choose only among their own pictures. When none fits well, choose the nearest, and "
+    'say in "missing" the look and expression that would fit, as "look · expression"; '
+    "otherwise leave it empty.\n\n"
+    "Answer with JSON only, one entry for every person listed:\n"
+    '{"looks": [{"name": "their name as listed", "picture": "L1", "missing": ""}]}',
 )
 
 # Draw a new background… (Media): the direction the story's prompt writer is

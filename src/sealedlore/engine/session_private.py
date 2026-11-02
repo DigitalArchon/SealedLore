@@ -548,6 +548,9 @@ class PrivateRuntime:
         yield self._passage_done()
         self._check_tee(self.last_result.node if self.last_result else None)
         self.save()
+        # The one read a scene keeps: its looks, chosen on a private model
+        # (session_looks.py), the scene's own messages only.
+        yield from self.update_looks_after_turn()
 
     @staticmethod
     def _passage_done():

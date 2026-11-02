@@ -137,11 +137,14 @@ class PictureVariantDialog(QDialog):
         catalog: ImageCatalog | None,
         browse: Callable[[str], str | None] | None,
         parent: QWidget | None = None,
+        wanted: str = "",
     ) -> None:
         """`subject`: what it is of; a card with its picture as `source`
         stands for `VariantSubject.of_card`. Only a card's picture is drawn
         again here (a picture of the story is drawn again in the picture
-        dialog, with its references)."""
+        dialog, with its references). `wanted`: another look's labels to
+        start from, "look · expression" (one alone is the expression), as a
+        choice of looks found missing."""
         super().__init__(parent)
         if not isinstance(subject, VariantSubject):
             assert source is not None
@@ -224,10 +227,14 @@ class PictureVariantDialog(QDialog):
         self.expression: QComboBox | None = None
         if self.labelled:
             looks, expressions = labels_in_use(subject.card.reference_images)
-            self.look = self._labels_box(looks, COMMON_LOOKS, subject.source.look)
-            self.expression = self._labels_box(
-                expressions, COMMON_EXPRESSIONS, subject.source.expression
-            )
+            look, expression = subject.source.look, subject.source.expression
+            parts = [part.strip() for part in wanted.split("·") if part.strip()]
+            if len(parts) >= 2:
+                look, expression = parts[0], parts[1]
+            elif parts:
+                expression = parts[0]
+            self.look = self._labels_box(looks, COMMON_LOOKS, look)
+            self.expression = self._labels_box(expressions, COMMON_EXPRESSIONS, expression)
         self.prompt = GrowingText(lines=6, most=30, fill=True)
         self.prompt.setPlaceholderText("This text is sent exactly as it is here.")
         self.prompt.textChanged.connect(self._on_prompt_edited)

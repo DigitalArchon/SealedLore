@@ -122,3 +122,25 @@ def test_the_people_page_draws_from_the_picture_shown_now(app, window, monkeypat
     actions["A set of expressions…"]()
     assert asked == [("char-serrik", "a")]
     assert "Draw another look…" in actions
+
+
+def test_a_look_found_missing_is_offered_to_draw(app, window, monkeypatch):
+    from PySide6.QtWidgets import QDialog
+
+    window.config.image_endpoint.base_url = "https://nano-gpt.com/api/v1"
+    window.session.full_path()[-1].meta.looks_wanted = {"char-serrik": "combat armour · grinning"}
+    window._build_people()
+    actions = dict(window.people_page.cards["char-serrik"].menu_actions())
+    assert "Draw them as combat armour · grinning…" in actions
+    seen: list[tuple[str, str]] = []
+
+    def rejected(dialog) -> int:
+        seen.append((dialog.look.currentText(), dialog.expression.currentText()))
+        return QDialog.Rejected
+
+    monkeypatch.setattr(PictureVariantDialog, "exec", rejected)
+    monkeypatch.setattr(window, "_card_pictures_refused", lambda session: False)
+    # No listing fetched: tests never reach the network.
+    monkeypatch.setattr(window.image_catalog, "ensure", lambda *args, **kwargs: None)
+    actions["Draw them as combat armour · grinning…"]()
+    assert seen == [("combat armour", "grinning")]

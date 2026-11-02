@@ -769,6 +769,10 @@ class Config(BaseModel):
     # panel shows the change with an Undo. A hand-kept roster was right three
     # times in 299 logged turns. "manual" leaves it to the Scene panel.
     scene_reads: SceneLedger = "every_turn"
+    # After each passage, which of their labelled pictures each character in
+    # it is shown with (engine/look_pick.py), on the scene model. Only for
+    # someone with more than one picture: a story without looks pays nothing.
+    look_picks: SceneLedger = "every_turn"
     # The model for that read: an easy task, made on every turn, so a small
     # fast one is right. Blank means the story's summarisation model.
     scene_model: str | None = None
@@ -853,6 +857,10 @@ class Config(BaseModel):
     # The last choice beside the Private button: keep the scene's messages on
     # disk, or in memory only until the app closes.
     private_keep: PrivateKeep = "memory"
+    # In a private scene, the model that chooses looks after a passage, on the
+    # scene's own private endpoint; blank is the scene's own model. Only one
+    # the scene could move to is used (providers/tee.py `move_refusal`).
+    private_look_model: str = ""
     # Check a TEE model's attestation when a scene begins, and each reply's
     # signature against it.
     private_verify_tee: bool = True

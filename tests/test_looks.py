@@ -159,3 +159,121 @@ def test_a_scene_picture_offers_each_character_as_they_look_now(tmp_path: Path, 
     assert serrik[0].ref_id == "g"
     assert serrik[0].caption == "as they look now: combat armour · angry"
     assert [use.caption for use in serrik[1:]] == ["portrait", "combat armour"]
+
+
+# --- chosen after a passage ---------------------------------------------------------------
+
+import json  # noqa: E402
+
+from sealedlore.engine.look_pick import (  # noqa: E402
+    build_pick_messages,
+    look_subjects,
+    parse_pick,
+)
+
+
+def pick_reply(**chosen: str) -> str:
+    return json.dumps(
+        {
+            "looks": [
+                {"name": name, "picture": handle, "missing": ""} for name, handle in chosen.items()
+            ]
+        }
+    )
+
+
+def test_a_pick_concerns_those_here_or_named_with_more_than_one_picture():
+    serrik = with_pictures(Character(id="char-serrik", name="Serrik Vaun"))
+    maela = with_pictures(Character(id="char-maela", name="Maela Orr"))
+    idris = Character(id="char-idris", name="Captain Idris")  # one picture at most
+    subjects = look_subjects(
+        [serrik, maela, idris], {"char-serrik": "a"}, {"char-serrik"}, "Maela laughs."
+    )
+    assert [s.name for s in subjects] == ["Serrik Vaun", "Maela Orr"]
+    assert subjects[0].now == "L2" and subjects[1].now == "L4"
+    assert [o.handle for o in subjects[1].options] == ["L4", "L5", "L6"]
+    away = look_subjects([maela], {}, {"char-serrik"}, "Nobody comes.")
+    assert away == []
+    messages = build_pick_messages(subjects, author_turn="I wave.", passage="Maela laughs.")
+    text = messages[1].parts[0].text
+    assert "Serrik Vaun (shown now as L2)\n- L1: their portrait\n- L2: combat armour" in text
+
+
+def test_a_pick_is_held_to_each_character_s_own_pictures():
+    serrik = with_pictures(Character(id="char-serrik", name="Serrik Vaun"))
+    maela = with_pictures(Character(id="char-maela", name="Maela Orr"))
+    subjects = look_subjects([serrik, maela], {}, {"char-serrik", "char-maela"}, "")
+    reply = json.dumps(
+        {
+            "looks": [
+                {"name": "serrik vaun", "picture": "l3", "missing": "combat armour · laughing"},
+                {"name": "Maela Orr", "picture": "L2", "missing": "none"},  # Serrik's
+                {"name": "Somebody Else", "picture": "L1"},
+            ]
+        }
+    )
+    picks = parse_pick(reply, subjects)
+    assert [(p.character_id, p.ref_id, p.missing) for p in picks] == [
+        ("char-serrik", "g", "combat armour · laughing")
+    ]
+    with pytest.raises(ValueError):
+        parse_pick("no idea", subjects)
+
+
+def test_after_a_passage_each_one_here_is_shown_as_the_pick_says(tmp_path: Path, story, cast):
+    session = make_session(
+        tmp_path,
+        story,
+        cast,
+        ["Serrik's jaw tightens; he draws his sword.", pick_reply(**{"Serrik Vaun": "L3"})],
+    )
+    with_pictures(session.cast[0])
+    notices = [e.text for e in session.send(turn()) if hasattr(e, "text")]
+    passage = session.full_path()[-1]
+    assert passage.meta.looks == {"char-serrik": "g"}
+    assert "Looks: Serrik Vaun: combat armour · angry" in notices
+    sent = session.provider.requests[-1]
+    assert sent.model == session.scene_model
+    assert "THE LATEST PASSAGE:\n\nSerrik's jaw tightens" in sent.messages[1].parts[-1].text
+    log = (tmp_path / "stories" / story.id / "api_log.jsonl").read_text()
+    assert '"look_request"' in log and '"look_response"' in log
+
+
+def test_no_pick_is_made_for_a_story_without_looks(tmp_path: Path, story, cast):
+    session = make_session(tmp_path, story, cast, ["The door gives."])
+    list(session.send(turn()))
+    assert len(session.provider.requests) == 1  # the passage alone
+    session.config.look_picks = "manual"
+    with_pictures(session.cast[0])
+    session.provider.responses.append("It holds.")
+    list(session.regenerate())
+    assert len(session.provider.requests) == 2
+
+
+def test_a_failed_pick_leaves_them_as_they_were(tmp_path: Path, story, cast):
+    session = make_session(tmp_path, story, cast, ["The door gives.", "no json here"])
+    with_pictures(session.cast[0])
+    notices = [e.text for e in session.send(turn()) if hasattr(e, "text")]
+    assert any("Couldn't choose the looks" in n for n in notices)
+    assert session.looks_now() == {}
+
+
+def test_in_a_private_scene_the_looks_are_chosen_on_a_private_model_only(tmp_path: Path):
+    session, main, held = build_private(tmp_path)
+    play(session, private_turn(held, "I walk into town."))
+    character = next(c for c in session.cast if c.id == held)
+    with_pictures(character)
+    private = enter_private(session)
+    sent_to_main = len(main.requests)
+    private.responses = ["She laughs, low.", pick_reply(**{character.name: "L2"})]
+    play(session, private_turn(held, "I tell her the joke."))
+    assert len(main.requests) == sent_to_main
+    assert private.requests[-1].model == "local/model"
+    assert session.full_path()[-1].meta.looks == {held: "a"}
+    # Settings' private model for looks, only when the scene could move to it:
+    # a TEE scene's looks never go to a model that isn't.
+    span = session.open_span.model_copy(update={"model": "TEE/kimi-k3"})
+    session.config.private_look_model = "zai/glm-5.3"
+    assert session._private_look_model(span) == "TEE/kimi-k3"
+    session.config.private_look_model = "TEE/glm-5.3-flash"
+    assert session._private_look_model(span) == "TEE/glm-5.3-flash"

@@ -786,6 +786,14 @@ class SettingsDialog(QDialog):
             "Off, the roster is kept by hand as before."
         )
         form.addRow(self.keep_scene)
+        self.pick_looks = QCheckBox("Choose characters' looks after every passage")
+        self.pick_looks.setChecked(self.config.look_picks == "every_turn")
+        self.pick_looks.setToolTip(
+            "After each passage, the scene model chooses which of their labelled pictures each "
+            "character in it is shown with (the People page). Only for someone with more than "
+            "one picture, so a story without looks makes no call."
+        )
+        form.addRow(self.pick_looks)
         # A new setup starts with the recommended models for the small calls
         # (models/config.py); one already saved keeps what it has, blanks too.
         fresh = recommended_models(self._default_endpoint().base_url) if provider is None else {}
@@ -1396,12 +1404,21 @@ class SettingsDialog(QDialog):
         form.addRow("API key", self.private_key)
         form.addRow(self._key_note())
         form.addRow("Model", self.private_model)
+        self.private_look_model = ModelField(self.config.private_look_model, browse)
+        self.private_look_model.setPlaceholderText("the scene's own model")
+        self.private_look_model.setToolTip(
+            "In a private scene, the model that chooses characters' looks after each passage, "
+            "on the same private endpoint: a small one is quicker (TEE/glm-5.3-flash). Used only "
+            "when the scene could move to it (an encrypted scene to encrypted models, a TEE "
+            "scene to TEE ones); else the scene's own model chooses."
+        )
         # Before choosing it: does this model's enclave attest? (The author:
         # rather than start a scene and have it refused.)
         self.private_attest = AttestationButton(self._private_test_settings)
         self.private_model.textChanged.connect(self.private_attest.model_changed)
         self.private_attest.model_changed(self.private_model.text())
         form.addRow("", self.private_attest)
+        form.addRow("Model for looks", self.private_look_model)
         form.addRow("Context budget", budget_row)
         form.addRow("", self.detect_note)
         form.addRow(self.private_tee)
@@ -1869,6 +1886,8 @@ class SettingsDialog(QDialog):
         self.config.phone.start_on_launch = self.phone_on_launch.isChecked()
         self.config.phone.notify_connect = self.phone_notify.isChecked()
         self.config.scene_reads = "every_turn" if self.keep_scene.isChecked() else "manual"
+        self.config.look_picks = "every_turn" if self.pick_looks.isChecked() else "manual"
+        self.config.private_look_model = self.private_look_model.text().strip()
         self.config.scene_model = self._role_model(self.scene_model) or None
         self.config.plot_reads = self.plot_reads.isChecked()
         self.config.plot_model = self._role_model(self.plot_model) or None

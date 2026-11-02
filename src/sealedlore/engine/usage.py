@@ -30,6 +30,7 @@ KIND_LABELS: dict[str, str] = {
     "merge_response": "Chapter merges",
     "characters_response": "Character scans",
     "scene_response": "Scene reads",
+    "look_response": "Looks",
     "lore_pick_response": "Lore picks",
     "lore_decision_response": "Lore picks (Jev)",
     # The plot's calls: missing here, a story's total left out every one of them.

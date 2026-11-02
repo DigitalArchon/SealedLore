@@ -2073,6 +2073,8 @@ class StorySession(
         if span is not None:
             self._check_tee(passage)
             self.save()
+            if not self.last_result or not self.last_result.stopped_early:
+                yield from self.update_looks_after_turn(self._prepare_look_read(passage))
             return
         result = self.last_result
         if result is None or result.node is None or result.stopped_early:

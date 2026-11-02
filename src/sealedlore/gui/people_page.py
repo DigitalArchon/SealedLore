@@ -103,6 +103,8 @@ class Person:
     # and which is shown now.
     looks: tuple[tuple[str, str], ...] = ()
     shown: str = ""
+    # The look and expression the latest choice found no picture for.
+    wanted: str = ""
 
 
 @dataclass
@@ -143,6 +145,7 @@ def _person(
     held_id: str | None,
     note: str = "",
     looks: Mapping[str, str] | None = None,
+    wanted: Mapping[str, str] | None = None,
 ) -> Person:
     shown = shown_picture(character, looks or {})
     refs = character.reference_images
@@ -161,6 +164,7 @@ def _person(
         if len(refs) > 1
         else (),
         shown=shown.id if shown is not None else "",
+        wanted=(wanted or {}).get(character.id, ""),
     )
 
 
@@ -177,6 +181,7 @@ def people_view(
     background: bool = False,
     unnamed: Sequence[tuple[str, str]] = (),
     looks: Mapping[str, str] | None = None,
+    wanted: Mapping[str, str] | None = None,
 ) -> PeopleView:
     """Who is where, from the scene card. `cast` and `supporting` are the
     cards the author may see (the plot's hidden ones already left out).
@@ -197,13 +202,13 @@ def people_view(
     )
     for character in cast:
         if character.id in present:
-            view.here.append(_person(character, held_id, looks=looks))
+            view.here.append(_person(character, held_id, looks=looks, wanted=wanted))
         else:
             note = notes.get(character.id, "")
             view.away.append(_person(character, held_id, note, looks))
     for character in supporting:
         if any(same_person(name, character) for name in scene.present_others):
-            view.here.append(_person(character, held_id, looks=looks))
+            view.here.append(_person(character, held_id, looks=looks, wanted=wanted))
         else:
             view.others.append(_person(character, held_id, looks=looks))
     view.also_here = [
@@ -250,6 +255,8 @@ class PersonCard(QFrame):
     look_requested = Signal(str, str)
     # (card id, picture id, what): "edit" or "set" of the picture shown.
     variant_requested = Signal(str, str, str)
+    # (card id, picture id, "look · expression"): draw the look found missing.
+    wanted_requested = Signal(str, str, str)
 
     def __init__(self, person: Person, *, max_height: int, can_draw: bool, can_play: bool) -> None:
         super().__init__()
@@ -366,6 +373,15 @@ class PersonCard(QFrame):
         if self._can_draw:
             label = "Draw a new portrait…" if person.picture else "Draw a portrait…"
             actions.append((label, lambda: self.draw_requested.emit(person.card_id)))
+            if person.shown and person.wanted:
+                actions.append(
+                    (
+                        f"Draw them as {person.wanted}…",
+                        lambda: self.wanted_requested.emit(
+                            person.card_id, person.shown, person.wanted
+                        ),
+                    )
+                )
             if person.shown:
                 # From the picture they are shown with now: its face, its look.
                 for words, what in ((ANOTHER_LOOK, "edit"), (SET_LABEL, "set")):
@@ -424,6 +440,7 @@ class PeoplePage(QScrollArea):
     play_requested = Signal(str)
     look_requested = Signal(str, str)
     variant_requested = Signal(str, str, str)
+    wanted_requested = Signal(str, str, str)
     draw_all_requested = Signal()
     background_requested = Signal()
     background_file_requested = Signal()
@@ -643,6 +660,7 @@ class PeoplePage(QScrollArea):
             card.play_requested.connect(self.play_requested)
             card.look_requested.connect(self.look_requested)
             card.variant_requested.connect(self.variant_requested)
+            card.wanted_requested.connect(self.wanted_requested)
             self.cards[person.card_id] = card
             grid.addWidget(card, index // columns, index % columns, Qt.AlignTop)
         for column in range(columns):

@@ -374,11 +374,13 @@ class PlotRuntime:
         castle, Oct 15 2026). A scripted provider has no sibling, and its
         replies are taken in order as before.
 
-        The chronicle read alone waits for the scene read to land or fail:
-        its "the scene is still there" veto reads the card the passage left.
-        Coming back first (often the shorter reply), it found the card from
-        before the passage and refused a move away (the review of Oct 20
-        2026). Nothing waits on its answer, so holding it costs nothing.
+        The chronicle read waits for the scene read to land or fail: its "the
+        scene is still there" veto reads the card the passage left. Coming
+        back first (often the shorter reply), it found the card from before
+        the passage and refused a move away (the review of Oct 20 2026).
+        The look pick (session_looks.py) waits too, so a look chosen is
+        never shown before the scene the passage left. Nothing waits on
+        their answers, so holding them costs nothing.
         """
         if self.story.chat:
             # A simple chat has no scene and no plot: nothing to read.
@@ -388,12 +390,19 @@ class PlotRuntime:
         if scene is not None:
             reads.append((scene, self.update_scene_after_turn))
         chronicle = self._prepare_chronicle_read()
-        # The chronicle read's index, when it must wait for the scene read's.
-        after_scene = len(reads) if chronicle is not None and scene is not None else None
+        # The reads that must wait for the scene read's (it is always first).
+        after_scene: set[int] = set()
         if chronicle is not None:
+            if scene is not None:
+                after_scene.add(len(reads))
             reads.append((chronicle, self.update_chronicle_after_turn))
         elif self.story.plot is not None:
             yield from self._settle_without_read()
+        looks = self._prepare_look_read()
+        if looks is not None:
+            if scene is not None:
+                after_scene.add(len(reads))
+            reads.append((looks, self.update_looks_after_turn))
         make_sibling = getattr(self.provider, "sibling", None)
         if len(reads) < 2 or not callable(make_sibling):
             for pending, finish in reads:
@@ -425,7 +434,7 @@ class PlotRuntime:
             yield SessionNotice(_reading_words([reads[i] for i in waiting]), waiting_since=since)
             while waiting:
                 for i in list(waiting):
-                    if i == after_scene and 0 in waiting:
+                    if i in after_scene and 0 in waiting:
                         continue  # the scene read (always first) hasn't landed
                     threads[i].join(timeout=0.05)
                     if threads[i].is_alive():
@@ -1411,6 +1420,7 @@ class PlotRuntime:
 _READ_WORDS = {
     "update_scene_after_turn": "the scene",
     "update_chronicle_after_turn": "the clock and facts",
+    "update_looks_after_turn": "the looks",
 }
 
 

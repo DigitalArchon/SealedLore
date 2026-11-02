@@ -466,7 +466,7 @@ class ImagesWindow:
         self._start_card_pictures(requests)
         return bool(requests)
 
-    def _on_card_picture(self, card_id: str, ref_id: str, what: str) -> None:
+    def _on_card_picture(self, card_id: str, ref_id: str, what: str, *, wanted: str = "") -> None:
         """A picture asked for on a card (the Cast or Lore page, the People
         page): "new", "again" or "edit" of picture `ref_id`, "set" (a set of
         expressions drawn from it), or "scene"."""
@@ -518,6 +518,7 @@ class ImagesWindow:
             catalog=self.image_catalog,
             browse=self._browse_pictures,
             parent=self._dialog_parent(),
+            wanted=wanted,
         )
         accepted = dialog.exec()
         request = dialog.request() if accepted else None

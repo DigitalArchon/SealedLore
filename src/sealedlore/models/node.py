@@ -92,6 +92,10 @@ class NodeMeta(BaseModel):
     # (character id → picture id), kept the same way as `scene`: the
     # nearest above counts (engine/looks.py). None: unchanged here.
     looks: dict[str, str] | None = None
+    # When the look chosen after this passage was only the nearest: the look
+    # and expression that would have fitted, per character ("armour · angry"),
+    # for the People page to offer to draw.
+    looks_wanted: dict[str, str] = Field(default_factory=dict)
     # On a passage, for a lorebook too big to send whole: the entries the lore
     # model picked for the passage after it (`Config.lore_selector` "picker"),
     # read in the background. None = not picked; [] = picked, and none needed.
