@@ -1226,6 +1226,10 @@ was there and how they looked then, so scrolling back shows it too. Both
 take room (the second slows scrolling a little on a long story), and both
 show on a paired phone as well.
 
+To see it working, play Doomsville with both turned on: John and Jane come
+happy, sad, angry and afraid, in combat armour and in indoor clothes, and the
+people they meet have a few looks of their own.
+
 Pictures of other expressions can come with a character: a CHARX card's
 expression pictures (File → Import… asks whether to keep them, and gives
 their size), or a SillyTavern expression pack, a zip of pictures named by

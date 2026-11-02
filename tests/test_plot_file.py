@@ -15,7 +15,7 @@ from sealedlore.engine.plot_file import (
     read_plot_document,
     render_plot_markdown,
 )
-from sealedlore.engine.plot_md import parse_plot_markdown
+from sealedlore.engine.plot_md import parse_plot_markdown, picture_line
 from sealedlore.models.plot_file import (
     AssignmentDoc,
     CharacterDoc,
@@ -93,19 +93,76 @@ def test_pictures_are_read_written_and_handed_to_whoever_imports():
     ]
     jane = next(c for c in parsed.scenario.cast if c.name == "Jane Moss")
     assert parsed.pictures[0].owner_id == jane.id
+    # A character's picture carries its look and expression after the caption.
+    assert (parsed.pictures[0].look, parsed.pictures[0].expression) == ("army coat", "watchful")
+    assert all(not (p.look or p.expression) for p in parsed.pictures[1:])
     assert jane.reference_images == []  # until the files are read
     assert jane.summary.startswith("A thirty-year-old")  # the lines around it still read
 
     document = read_plot_document(text).document
-    assert [(p.file, p.caption) for p in document.characters[0].pictures] == [
-        ("pictures/jane-moss.png", "in her army coat, rifle slung")
+    assert [(p.file, p.caption, p.look, p.expression) for p in document.characters[0].pictures] == [
+        ("pictures/jane-moss.png", "in her army coat, rifle slung", "army coat", "watchful")
     ]
     assert len(document.places[0].pictures) == 2
     assert document.background == "pictures/hellsville-gate.png"
-    again = parse_plot_markdown(render_plot_markdown(document).text)
+    rendered = render_plot_markdown(document).text
+    assert (
+        "- picture: pictures/jane-moss.png | in her army coat, rifle slung"
+        " | look: army coat | expression: watchful\n"
+    ) in rendered
+    again = parse_plot_markdown(rendered)
     assert [(p.owner_name, p.source, p.caption) for p in again.pictures] == [
         row[1:] for row in found
     ]
+    assert (again.pictures[0].look, again.pictures[0].expression) == ("army coat", "watchful")
+
+
+@pytest.mark.parametrize(
+    ("value", "read"),
+    [
+        ("pictures/a.png", ("pictures/a.png", "", "", "")),
+        ("pictures/a.png | front view", ("pictures/a.png", "front view", "", "")),
+        # Labels in either order, the key in any case, the value's spaces tidied.
+        (
+            "pictures/a.png | Expression:  in a   fighting stance | LOOK: armour",
+            ("pictures/a.png", "", "armour", "in a fighting stance"),
+        ),
+        # A caption keeps its own | and colons: only a label is a label.
+        (
+            "pictures/a.png | east | west: the gate | look: armour",
+            ("pictures/a.png", "east | west: the gate", "armour", ""),
+        ),
+        ("pictures/a.png | look:", ("pictures/a.png", "", "", "")),
+    ],
+)
+def test_a_picture_line_reads_its_caption_and_labels(value: str, read: tuple):
+    line = picture_line(value)
+    assert (line.source, line.caption, line.look, line.expression) == read
+
+
+def test_picture_labels_are_a_characters_and_said_once():
+    """A label twice is noted and the first kept; a place's picture has no
+    look, so its labels are noted and left off: parsing never guesses."""
+    text = (
+        "# World\n\nA town.\n\n# Characters\n\n## Jane\n- role: player\n"
+        "- picture: pictures/jane.png | look: coat | look: armour | expression: angry\n\n"
+        "A medic.\n\n# Places\n\n## Hellsville\n"
+        "- picture: pictures/town.png | the gate | look: winter\n\nA town.\n"
+    )
+    parsed = parse_plot_markdown(text)
+    assert parsed.ok
+    jane, town = parsed.pictures
+    assert (jane.look, jane.expression) == ("coat", "angry")
+    assert (town.caption, town.look, town.expression) == ("the gate", "", "")
+    notes = [(p.line, p.message) for p in parsed.problems]
+    assert (9, "The picture line names its look twice; the first is kept.") in notes
+    assert any(line == 16 and "Only a character's pictures" in m for line, m in notes)
+    # The editor keeps what is written and says what it couldn't keep.
+    read = read_plot_document(text)
+    assert [(p.look, p.expression) for p in read.document.characters[0].pictures] == [
+        ("coat", "angry")
+    ]
+    assert any("naming its look twice" in p.message for p in read.problems)
 
 
 def test_a_background_must_be_a_picture_inside_the_files_own_folder():

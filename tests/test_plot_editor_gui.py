@@ -246,9 +246,11 @@ def test_the_editor_shows_adds_and_removes_an_items_pictures(app, tmp_path: Path
 
     editor._select((CHARACTER, 0, -1))
     strip = editor.pages.currentWidget().pictures
+    # A character's picture is named by its labels, its caption in the tip.
     assert [strip.list.item(i).text() for i in range(strip.list.count())] == [
-        "in her army coat, rifle slung"
+        "army coat · watchful"
     ]
+    assert "in her army coat, rifle slung" in strip.list.item(0).toolTip()
     assert not strip.list.item(0).icon().isNull()
     assert not editor.modified
 
@@ -275,6 +277,43 @@ def test_the_editor_shows_adds_and_removes_an_items_pictures(app, tmp_path: Path
     assert strip.list.item(0).text().endswith("(missing)")
     assert editor.save()
     assert f"- picture: {added}" in path.read_text(encoding="utf-8")
+    editor.close()
+
+
+def test_a_characters_pictures_are_labelled_in_the_editor(app, tmp_path: Path, monkeypatch):
+    """Labels… (the story's own dialog) on a character's picture; a place's
+    has only its caption."""
+    from sealedlore.gui import plot_pictures
+    from sealedlore.gui.picture_labels import LABELS_LABEL
+
+    path = copied_plot(tmp_path / "story")
+    editor = PlotEditorWindow()
+    assert editor.open_path(path)
+    editor._select((CHARACTER, 0, -1))
+    strip = editor.pages.currentWidget().pictures
+    assert strip.caption_button.text() == LABELS_LABEL
+
+    def labelled(_parent, ref, others):
+        assert (ref.look, ref.expression) == ("army coat", "watchful") and others == []
+        ref.look, ref.expression = "combat armour", "angry"
+        return True
+
+    monkeypatch.setattr(plot_pictures, "edit_labels", labelled)
+    strip.list.setCurrentRow(0)
+    strip.caption_button.click()
+    jane = editor.document.characters[0]
+    assert (jane.pictures[0].look, jane.pictures[0].expression) == ("combat armour", "angry")
+    assert strip.list.item(0).text() == "combat armour · angry" and editor.modified
+    assert editor.save()
+    assert (
+        "- picture: pictures/jane-moss.png | in her army coat, rifle slung"
+        " | look: combat armour | expression: angry\n"
+    ) in path.read_text(encoding="utf-8")
+
+    from sealedlore.engine.plot_file import PLACE
+
+    editor._select((PLACE, 0, -1))
+    assert editor.pages.currentWidget().pictures.caption_button.text() == "Caption…"
     editor.close()
 
 
@@ -363,6 +402,9 @@ def test_importing_a_plot_brings_its_pictures_onto_the_cards(app, tmp_path: Path
     town = next(entry for entry in scenario.lore if entry.title == "Hellsville")
     truck = next(entry for entry in scenario.lore if entry.title == "Jane's truck")
     assert [ref.caption for ref in jane.reference_images] == ["in her army coat, rifle slung"]
+    assert [(ref.look, ref.expression) for ref in jane.reference_images] == [
+        ("army coat", "watchful")
+    ]
     assert len(town.reference_images) == 2 and truck.reference_images == []
     files = [ref.file for ref in (*jane.reference_images, *town.reference_images)]
     assert all(file.startswith("images/refs/") for file in files)

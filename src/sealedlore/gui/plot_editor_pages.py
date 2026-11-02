@@ -373,7 +373,7 @@ class OpeningPage(Page):
 class CharacterPage(Page):
     def __init__(self, folder: Folder | None = None, save_first: SaveFirst | None = None) -> None:
         super().__init__()
-        self.pictures = PlotPictureStrip(folder, save_first, crop="portrait")
+        self.pictures = PlotPictureStrip(folder, save_first, crop="portrait", labels=True)
         self.name = QLineEdit()
         self.role = QComboBox()
         for role, label in ROLE_LABELS.items():

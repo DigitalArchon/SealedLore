@@ -7,7 +7,9 @@ together. Adding a picture copies it there as any added picture is copied
 (hidden data removed, scaled if large); the original is never touched.
 
 The strip edits an item's list in place, as the story's own strip does
-(`ref_images.RefImageStrip`), and says when it has changed.
+(`ref_images.RefImageStrip`), and says when it has changed. A character's
+pictures carry labels too (`| look: armour | expression: angry`, for looks:
+engine/looks.py), edited with the caption in the story's own dialog.
 """
 
 from __future__ import annotations
@@ -36,9 +38,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.looks import look_words
 from sealedlore.gui.crop_dialog import cropped_picture
+from sealedlore.gui.picture_labels import LABELS_LABEL, LABELS_TIP, edit_labels
 from sealedlore.gui.ref_images import PICTURE_FILTER, THUMB, inside, picture_bytes, thumbnail
 from sealedlore.ids import new_id
+from sealedlore.models.image import ImageRef
 from sealedlore.models.plot_file import PictureDoc
 
 PICTURES_DIR = "pictures"
@@ -96,6 +101,17 @@ def copy_pictures(pictures: Iterable[PictureDoc], old: Path, new: Path) -> list[
     return failed
 
 
+def _as_ref(picture: PictureDoc) -> ImageRef:
+    """A picture of the file as the story's labels dialog reads one."""
+    return ImageRef(
+        id=picture.file,
+        file=picture.file,
+        caption=picture.caption,
+        look=picture.look,
+        expression=picture.expression,
+    )
+
+
 def _weak(method):
     """A callable that returns the method, or None once its owner has gone."""
     if method is None:
@@ -104,17 +120,25 @@ def _weak(method):
 
 
 class PlotPictureStrip(QWidget):
-    """Thumbnails of one item's pictures, with add, caption and remove."""
+    """Thumbnails of one item's pictures, with add, caption (or labels) and
+    remove."""
 
     changed = Signal()
 
     def __init__(
-        self, folder: Folder | None = None, save_first: SaveFirst | None = None, crop: str = "free"
+        self,
+        folder: Folder | None = None,
+        save_first: SaveFirst | None = None,
+        crop: str = "free",
+        *,
+        labels: bool = False,
     ) -> None:
         """`crop`: the shape a picture added from disk is first offered at
-        (engine/picture_shapes.py)."""
+        (engine/picture_shapes.py). `labels`: a character's, whose pictures
+        carry a look and an expression beside the caption."""
         super().__init__()
         self._crop = crop
+        self._labels = labels
         # Weakly: both are usually methods of the window this strip sits in,
         # and a widget holding its own window makes a cycle whose collection
         # has crashed PySide before (gui/attest_check.py).
@@ -144,8 +168,10 @@ class PlotPictureStrip(QWidget):
             "plot file, and put on this card when the file is imported"
         )
         self.add_button.clicked.connect(self._add)
-        self.caption_button = QPushButton("Caption…")
-        self.caption_button.setToolTip("What the picture shows: 'front view', 'the north gate'")
+        self.caption_button = QPushButton(LABELS_LABEL if labels else "Caption…")
+        self.caption_button.setToolTip(
+            LABELS_TIP if labels else "What the picture shows: 'front view', 'the north gate'"
+        )
         self.caption_button.clicked.connect(lambda: self._edit_caption(self.list.currentItem()))
         self.remove_button = QPushButton("Remove")
         self.remove_button.setToolTip("Take it off this item. Its file stays in the folder.")
@@ -178,11 +204,18 @@ class PlotPictureStrip(QWidget):
             path = inside(folder, picture.file) if folder is not None else None
             missing = path is None or not path.is_file()
             label = picture.caption or Path(picture.file).name
+            if self._labels and (picture.look.strip() or picture.expression.strip()):
+                label = look_words(_as_ref(picture))
             item = QListWidgetItem(f"{label} (missing)" if missing else label)
             item.setData(Qt.UserRole, index)
-            item.setToolTip(
-                f"{picture.file}: no such file beside the plot file" if missing else picture.file
+            tip = (
+                picture.file
+                if not missing
+                else f"{picture.file}: no such file beside the plot file"
             )
+            if picture.caption and label != picture.caption:
+                tip += f"\n{picture.caption}"
+            item.setToolTip(tip)
             if not missing:
                 item.setIcon(QIcon(thumbnail(path)))
             self.list.addItem(item)
@@ -254,6 +287,9 @@ class PlotPictureStrip(QWidget):
         picture = self._picture(item)
         if picture is None:
             return
+        if self._labels:
+            self._edit_labels(picture)
+            return
         text, ok = QInputDialog.getText(
             self, "Caption", "What this picture shows:", text=picture.caption
         )
@@ -261,6 +297,17 @@ class PlotPictureStrip(QWidget):
             picture.caption = text.strip()
             self.set_pictures(self._pictures, self._owner)
             self.changed.emit()
+
+    def _edit_labels(self, picture: PictureDoc) -> None:
+        """The caption, look and expression, in the story's own dialog, with
+        the labels the item's other pictures use offered first."""
+        others = [_as_ref(p) for p in self._pictures or [] if p is not picture]
+        ref = _as_ref(picture)
+        if not edit_labels(self, ref, others):
+            return
+        picture.caption, picture.look, picture.expression = ref.caption, ref.look, ref.expression
+        self.set_pictures(self._pictures, self._owner)
+        self.changed.emit()
 
     def _remove(self) -> None:
         picture = self._picture(self.list.currentItem())

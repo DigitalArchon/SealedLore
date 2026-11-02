@@ -138,13 +138,60 @@ class PlotPicture:
     source: str
     caption: str
     line: int
+    # A character's picture's labels (engine/looks.py): the look that lasts
+    # and the moment's expression or pose.
+    look: str = ""
+    expression: str = ""
+
+
+# The labels a picture line may carry after its caption, each after its own
+# `|`: `- picture: pictures/john-angry.jpg | look: winter coat | expression: angry`.
+PICTURE_LABELS = ("look", "expression")
+_PICTURE_LABEL = re.compile(r"^\s*(look|expression)\s*:(.*)$", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class PictureLine:
+    """A `- picture:` line read: the file, its caption and its labels."""
+
+    source: str
+    caption: str
+    look: str = ""
+    expression: str = ""
+    # Labels named a second time on the line; the first stands.
+    repeated: tuple[str, ...] = ()
+
+
+def picture_line(value: str) -> PictureLine:
+    """`pictures/john.png | front view | look: armour | expression: angry`.
+    Shared by the importer and the editor's reader, so the two read a line
+    the same way. Any part after the file that isn't a label is the caption,
+    as it always was (a caption may hold a `|` of its own)."""
+    source, _, rest = value.partition("|")
+    caption: list[str] = []
+    labels: dict[str, str] = {}
+    repeated: list[str] = []
+    for part in rest.split("|") if rest else []:
+        match = _PICTURE_LABEL.match(part)
+        if match is None:
+            caption.append(part)
+        elif (key := match.group(1).lower()) in labels:
+            repeated.append(key)
+        else:
+            labels[key] = " ".join(match.group(2).split())
+    return PictureLine(
+        source.strip().replace("\\", "/"),
+        "|".join(caption).strip(),
+        labels.get("look", ""),
+        labels.get("expression", ""),
+        tuple(repeated),
+    )
 
 
 def picture_parts(value: str) -> tuple[str, str]:
-    """`pictures/john.png | front view` as (path, caption). Shared by the
-    importer and the editor's reader, so the two read a line the same way."""
-    source, _, caption = value.partition("|")
-    return source.strip().replace("\\", "/"), caption.strip()
+    """`pictures/john.png | front view` as (path, caption)."""
+    line = picture_line(value)
+    return line.source, line.caption
 
 
 def picture_problem(source: str) -> str | None:
@@ -483,12 +530,24 @@ class _Parser:
     def keep_pictures(self, found: _Fields, kind: str, owner_id: str, name: str) -> None:
         """Note an item's picture lines for whoever imports the file."""
         for line, value in found.pictures:
-            source, caption = picture_parts(value)
-            problem = picture_problem(source)
+            read = picture_line(value)
+            problem = picture_problem(read.source)
             if problem:
                 self.error(line, problem)
                 continue
-            self.pictures.append(PlotPicture(kind, owner_id, name, source, caption, line))
+            look, expression = read.look, read.expression
+            for label in read.repeated:
+                self.note(line, f"The picture line names its {label} twice; the first is kept.")
+            if (look or expression) and kind != "character":
+                self.note(
+                    line,
+                    "Only a character's pictures have a look and an expression; "
+                    f"left off {name}'s picture.",
+                )
+                look = expression = ""
+            self.pictures.append(
+                PlotPicture(kind, owner_id, name, read.source, read.caption, line, look, expression)
+            )
 
     # --- values -----------------------------------------------------------------
 

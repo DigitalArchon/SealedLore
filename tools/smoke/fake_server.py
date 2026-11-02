@@ -41,6 +41,23 @@ def text_of(messages) -> str:
     return "\n".join(out)
 
 
+def looks_for(text: str) -> list[dict]:
+    """The look pick (engine/look_pick.py): everyone in their second picture,
+    so a walk sees a look change."""
+    block = text.split("THE PEOPLE AND THEIR PICTURES:", 1)[-1]
+    block = block.split("THE AUTHOR'S TURN:", 1)[0].split("THE LATEST PASSAGE:", 1)[0]
+    rows = []
+    for person in block.strip().split("\n\n"):
+        lines = person.strip().splitlines()
+        if not lines:
+            continue
+        name = lines[0].split(" (shown now as", 1)[0].strip()
+        handles = [line[2:].split(":", 1)[0].strip() for line in lines[1:] if line.startswith("- ")]
+        if name and handles:
+            rows.append({"name": name, "picture": handles[min(1, len(handles) - 1)], "missing": ""})
+    return rows
+
+
 def reply_for(body) -> str:
     text = text_of(body.get("messages", []))
     if '"scene_closed"' in text:
@@ -69,6 +86,8 @@ def reply_for(body) -> str:
         )
     if '"directions"' in text:
         return json.dumps({"directions": []})
+    if '{"looks": [{"name"' in text:
+        return json.dumps({"looks": looks_for(text)})
     if '"pick"' in text:
         return json.dumps({"pick": []})
     if "JSON array" in text or "JSON list" in text:

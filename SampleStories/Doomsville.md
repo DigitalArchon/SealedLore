@@ -34,7 +34,13 @@ Canadian winter.
 ## John
 - role: player
 - choose: start
-- picture: pictures/john.jpg | portrait
+- picture: pictures/john.jpg | portrait | look: winter coat | expression: neutral
+- picture: pictures/john-happy.jpg | look: winter coat | expression: happy
+- picture: pictures/john-sad.jpg | look: winter coat | expression: sad
+- picture: pictures/john-angry.jpg | look: winter coat | expression: angry
+- picture: pictures/john-afraid.jpg | look: winter coat | expression: afraid
+- picture: pictures/john-armour.jpg | look: combat armour | expression: neutral
+- picture: pictures/john-indoors.jpg | look: indoor clothes | expression: neutral
 
 A 30-year-old male survivor, ex-military, still very capable physically (strength
 and hand-to-hand combat in particular). Stoic on the outside, dead on the inside.
@@ -42,7 +48,13 @@ and hand-to-hand combat in particular). Stoic on the outside, dead on the inside
 ## Jane
 - role: player
 - choose: start
-- picture: pictures/jane.jpg | portrait
+- picture: pictures/jane.jpg | portrait | look: winter coat | expression: neutral
+- picture: pictures/jane-happy.jpg | look: winter coat | expression: happy
+- picture: pictures/jane-sad.jpg | look: winter coat | expression: sad
+- picture: pictures/jane-angry.jpg | look: winter coat | expression: angry
+- picture: pictures/jane-afraid.jpg | look: winter coat | expression: afraid
+- picture: pictures/jane-armour.jpg | look: combat armour | expression: neutral
+- picture: pictures/jane-indoors.jpg | look: indoor clothes | expression: neutral
 
 A 30-year-old female survivor, ex-military, still very capable physically
 (endurance and speed; strong for her build). Stoic on the outside, dead on the
@@ -51,7 +63,8 @@ inside.
 ## Ben
 - role: player
 - hidden: yes
-- picture: pictures/ben.jpg | portrait
+- picture: pictures/ben.jpg | portrait | look: fur coat | expression: grim
+- picture: pictures/ben-happy.jpg | look: fur coat | expression: happy
 
 A 50-year-old reclusive hermit who lives alone in the Hidden Caves. Bitter,
 angry and resentful, but also highly resourceful and well supplied. Once met,
@@ -60,7 +73,8 @@ the author may take him up as a second character.
 ## Evan Stevens
 - role: storyteller
 - hidden: yes
-- picture: pictures/evan.jpg | portrait
+- picture: pictures/evan.jpg | portrait | look: winter coat | expression: grinning
+- picture: pictures/evan-angry.jpg | look: winter coat | expression: angry
 
 A 22-year-old bandit whose only interests are having the fanciest guns he can get
 and how many people he can shoot with them.
@@ -68,14 +82,18 @@ and how many people he can shoot with them.
 ## Marcus Webb
 - role: storyteller
 - hidden: yes
-- picture: pictures/marcus.jpg | portrait
+- picture: pictures/marcus.jpg | portrait | look: winter coat | expression: neutral
+- picture: pictures/marcus-angry.jpg | look: winter coat | expression: angry
+- picture: pictures/marcus-happy.jpg | look: winter coat | expression: happy
 
 28, a former engineer, now the leader of Hellsville.
 
 ## Elena Ruiz
 - role: storyteller
 - hidden: yes
-- picture: pictures/elena.jpg | portrait
+- picture: pictures/elena.jpg | portrait | look: apron | expression: neutral
+- picture: pictures/elena-happy.jpg | look: apron | expression: happy
+- picture: pictures/elena-sad.jpg | look: apron | expression: sad
 
 25, a former doctor in Hellsville, still doing her best to treat the injured and
 keep her community going.

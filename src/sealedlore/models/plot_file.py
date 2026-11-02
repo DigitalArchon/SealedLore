@@ -45,6 +45,9 @@ class PictureDoc(BaseModel):
     # Relative to the plot file's folder, with forward slashes.
     file: str = ""
     caption: str = ""
+    # A character's picture's labels (engine/looks.py), blank for none.
+    look: str = ""
+    expression: str = ""
 
 
 class CharacterDoc(BaseModel):

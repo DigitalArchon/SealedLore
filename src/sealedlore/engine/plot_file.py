@@ -26,6 +26,7 @@ from sealedlore.engine.plot_md import (
     _ROLES,
     _SECTIONS,
     _VARIANT_FIELDS,
+    PICTURE_LABELS,
     PlotProblem,
     _Block,
     _Fields,
@@ -36,6 +37,7 @@ from sealedlore.engine.plot_md import (
     _slug,
     fact_parts,
     parse_plot_markdown,
+    picture_line,
     picture_parts,
     read_clause,
     split_clauses,
@@ -151,14 +153,18 @@ class _Writer:
         self.field(key, "yes" if value else "no")
 
     def pictures(self, pictures: Sequence[PictureDoc]) -> None:
-        """A line for each picture, in order: `- picture: file | caption`."""
+        """A line for each picture, in order: `- picture: file | caption`,
+        then its labels, `| look: armour | expression: angry`."""
         for picture in pictures:
             file = picture.file.strip()
             if not file:
                 continue
             # One line: a caption's own line break would start a new setting.
-            caption = " ".join(picture.caption.replace("|", "/").split())
-            self.field("picture", f"{file} | {caption}" if caption else file)
+            parts = [file, " ".join(picture.caption.replace("|", "/").split())]
+            for key in PICTURE_LABELS:
+                if value := " ".join(getattr(picture, key).replace("|", "/").split()):
+                    parts.append(f"{key}: {value}")
+            self.field("picture", " | ".join(part for part in parts if part))
 
     def prose(self, text: str) -> None:
         if not text.strip():
@@ -377,11 +383,22 @@ class _Reader:
         has nothing to keep."""
         pictures = []
         for line, value in found.pictures:
-            file, caption = picture_parts(value)
-            if file:
-                pictures.append(PictureDoc(file=file, caption=caption))
-            else:
+            read = picture_line(value)
+            if not read.source:
                 self.problem(line, f"“{owner}” has a picture line with no file; left out.")
+                continue
+            for label in read.repeated:
+                self.problem(
+                    line, f"“{owner}” has a picture naming its {label} twice; the first is kept."
+                )
+            pictures.append(
+                PictureDoc(
+                    file=read.source,
+                    caption=read.caption,
+                    look=read.look,
+                    expression=read.expression,
+                )
+            )
         return pictures
 
     def _character(self, block: _Block) -> CharacterDoc:

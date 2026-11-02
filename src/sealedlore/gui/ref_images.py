@@ -268,7 +268,13 @@ def load_plot_pictures(parsed: ParsedPlotFile, folder: Path) -> list[PlotProblem
             )
             continue
         ref_id = new_id()
-        ref = ImageRef(id=ref_id, file=f"{REFS_DIR}/{ref_id}{suffix}", caption=picture.caption)
+        ref = ImageRef(
+            id=ref_id,
+            file=f"{REFS_DIR}/{ref_id}{suffix}",
+            caption=picture.caption,
+            look=picture.look,
+            expression=picture.expression,
+        )
         owner.reference_images.append(ref)
         scenario.reference_files[ref.file] = base64.b64encode(data).decode("ascii")
     return problems

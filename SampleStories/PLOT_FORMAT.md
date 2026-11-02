@@ -84,7 +84,7 @@ These settings go straight after the heading:
 - voice: Clipped, few words.
 - summary: One line; otherwise the first sentence of the description is used.
 - hidden: yes           # kept out of the story until an event brings them in
-- picture: pictures/john.png | front view   # a reference picture (see Pictures); one line each
+- picture: pictures/john.png | front view | look: winter coat   # a reference picture, one line each; labels optional (see Pictures)
 The description.
 ```
 
@@ -148,12 +148,20 @@ on a line of its own among the item's settings:
 - role: player
 - picture: pictures/john-front.png | front view, in his winter coat
 - picture: pictures/john-side.png
+- picture: pictures/john-angry.png | look: winter coat | expression: angry
+- picture: pictures/john-armour.png | look: combat armour | expression: neutral
 ```
 
 - The path is written from the plot file's own folder, with forward slashes.
   It must stay inside that folder: a path that is absolute, or that climbs
   out with `..`, stops the import.
 - After `|` comes the caption: what the picture shows. It is optional.
+- A character's picture may also carry two labels, each after a `|` of its
+  own: `look:`, what lasts until the story changes it (clothes, armour,
+  injured), and `expression:`, the moment's expression or pose (angry, happy,
+  in a fighting stance). With a few pictures labelled like this, the story
+  shows each character in the one that suits the scene as it goes (Looks, in
+  the manual). Places and lore entries have no labels.
 - PNG, JPEG, WebP, BMP and GIF are read.
 - An item may have as many `picture:` lines as you like.
 - `background:` at the top of the file names a picture the same way, shown

@@ -74,7 +74,7 @@ take in where she is: leave her next action entirely to the author.
 - aliases: Moss, Jane
 - voice: Direct and a little dry. She jokes when she is frightened. She asks questions before she asks for help.
 - summary: A thirty-year-old ex-army medic, quick and restless, stranded on the wrong side of the river.
-- picture: pictures/jane-moss.png | in her army coat, rifle slung
+- picture: pictures/jane-moss.png | in her army coat, rifle slung | look: army coat | expression: watchful
 
 Jane served as an army medic before the dead rose. She is fast, fiercely
 practical and bad at waiting. Her injuries at the start of the story — two
