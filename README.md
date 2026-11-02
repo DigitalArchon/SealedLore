@@ -249,6 +249,9 @@ Have fun!
 - **Every prompt yours to change**: File → Prompts (advanced)… shows every
   instruction SealedLore sends to a model, editable for one story or for every
   story, and exports or imports them as a prompt set to share.
+- **SillyTavern cards and lorebooks**: start a story from a character card
+  (PNG, JSON or CHARX, as Chub and JanitorAI share them), bring a card into a
+  story, and export characters and lore for SillyTavern.
 - **Costs**: per passage, per session and per story.
 - **Routes**: on NanoGPT, choose which host serves each model (the fastest,
   the cheapest, or one you pick), and see whether the choice was followed.

@@ -54,7 +54,8 @@ def file_format(path: Path) -> str | None:
     """
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        # Not text (a picture, a zip): not one of ours.
         return None
     value = data.get("format") if isinstance(data, dict) else None
     return value if isinstance(value, str) else None

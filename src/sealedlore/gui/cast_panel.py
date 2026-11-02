@@ -26,12 +26,14 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QMessageBox,
     QPushButton,
     QSizePolicy,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -43,6 +45,7 @@ from sealedlore.gui.lore_cast_dialog import FILL_LABEL
 from sealedlore.gui.portrait_view import PortraitView
 from sealedlore.gui.ref_images import CardIcons, RefImageStrip, StoryPictures
 from sealedlore.gui.sizing import GrowingText
+from sealedlore.gui.tavern_dialog import CARD_EXPORT_LABEL, CARD_IMPORT_LABEL, TAVERN_LABEL
 from sealedlore.models.character import Character
 from sealedlore.models.supporting import CharacterSuggestion
 
@@ -80,6 +83,10 @@ class CastPanel(QWidget):
     portrait_added = Signal(str)
     # Cards for a published world's people, written by a model.
     lore_fill_requested = Signal()
+    # SillyTavern character cards (storage/tavern_cards.py): one read into
+    # this story, or (character id) one written out.
+    card_import_requested = Signal()
+    card_export_requested = Signal(str)
 
     def __init__(self, pictures: StoryPictures | None = None) -> None:
         super().__init__()
@@ -119,6 +126,25 @@ class CastPanel(QWidget):
             "its characters, and you change or remove any of them"
         )
         self.fill_button.clicked.connect(self.lore_fill_requested)
+        self.tavern_button = QToolButton()
+        self.tavern_button.setText(TAVERN_LABEL)
+        self.tavern_button.setToolTip(
+            "Character cards as SillyTavern, Chub and JanitorAI share them: bring one into "
+            "this story, or save a character as one"
+        )
+        self.tavern_button.setPopupMode(QToolButton.InstantPopup)
+        tavern_menu = QMenu(self.tavern_button)
+        tavern_menu.addAction(CARD_IMPORT_LABEL).triggered.connect(
+            lambda _checked=False: self.card_import_requested.emit()
+        )
+        self.card_export_action = tavern_menu.addAction(CARD_EXPORT_LABEL)
+        self.card_export_action.triggered.connect(self._export_card)
+        self.tavern_button.setMenu(tavern_menu)
+        fill_row = QHBoxLayout()
+        fill_row.setContentsMargins(0, 0, 0, 0)
+        fill_row.addWidget(self.fill_button)
+        fill_row.addWidget(self.tavern_button)
+        fill_row.addStretch(1)
 
         top = QWidget()
         top_layout = QVBoxLayout(top)
@@ -126,7 +152,7 @@ class CastPanel(QWidget):
         top_layout.setSpacing(6)
         top_layout.addWidget(self.list, 1)
         top_layout.addLayout(buttons)
-        top_layout.addWidget(self.fill_button, 0, Qt.AlignLeft)
+        top_layout.addLayout(fill_row)
         self.suggestions_box = self._build_suggestions()
         top_layout.addWidget(self.suggestions_box)
 
@@ -660,6 +686,10 @@ class CastPanel(QWidget):
     def add_character(self) -> None:
         """Add, from elsewhere (the People page's Add a character…)."""
         self._add_character()
+
+    def _export_card(self) -> None:
+        if self._current is not None:
+            self.card_export_requested.emit(self._current.id)
 
     def _add_character(self) -> None:
         character = Character(name="New character")

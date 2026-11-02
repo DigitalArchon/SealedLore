@@ -17,10 +17,12 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QMessageBox,
     QPushButton,
     QSpinBox,
     QSplitter,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -30,6 +32,11 @@ from sealedlore.gui.fields import FormScroll, set_field_text
 from sealedlore.gui.portrait_view import PortraitView
 from sealedlore.gui.ref_images import CardIcons, RefImageStrip, StoryPictures
 from sealedlore.gui.sizing import GrowingText
+from sealedlore.gui.tavern_dialog import (
+    LOREBOOK_EXPORT_LABEL,
+    LOREBOOK_IMPORT_LABEL,
+    LOREBOOK_LABEL,
+)
 from sealedlore.models.lore import LoreEntry
 
 # The pictures beside the titles in the list.
@@ -39,6 +46,10 @@ LIST_ICON = 28
 class LorePanel(QWidget):
     changed = Signal()
     reembed_requested = Signal()
+    # A SillyTavern lorebook (storage/tavern_lore.py) read into this story's
+    # lore, or the lore written out as one.
+    lorebook_import_requested = Signal()
+    lorebook_export_requested = Signal()
     # (entry id, picture id or "", what): a picture drawn for the entry:
     # "new", or "again" or "edit" of that picture (as on the Cast page).
     picture_requested = Signal(str, str, str)
@@ -65,10 +76,27 @@ class LorePanel(QWidget):
         self.remove_button = QPushButton("Remove")
         self.remove_button.clicked.connect(self._remove_entry)
 
+        self.tavern_button = QToolButton()
+        self.tavern_button.setText(LOREBOOK_LABEL)
+        self.tavern_button.setToolTip(
+            "Lorebooks as SillyTavern and Chub share them: bring one into this story's lore, "
+            "or save the lore as one"
+        )
+        self.tavern_button.setPopupMode(QToolButton.InstantPopup)
+        tavern_menu = QMenu(self.tavern_button)
+        tavern_menu.addAction(LOREBOOK_IMPORT_LABEL).triggered.connect(
+            lambda _checked=False: self.lorebook_import_requested.emit()
+        )
+        tavern_menu.addAction(LOREBOOK_EXPORT_LABEL).triggered.connect(
+            lambda _checked=False: self.lorebook_export_requested.emit()
+        )
+        self.tavern_button.setMenu(tavern_menu)
+
         buttons = QHBoxLayout()
         buttons.setContentsMargins(0, 0, 0, 0)
         buttons.addWidget(add_button)
         buttons.addWidget(self.remove_button)
+        buttons.addWidget(self.tavern_button)
 
         top = QWidget()
         top_layout = QVBoxLayout(top)

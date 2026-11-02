@@ -3379,6 +3379,25 @@ class StorySession(
         self.save()
         return card, suggestion is not None
 
+    def add_card(self, card: Character, *, to_cast: bool, lore: Sequence[LoreEntry] = ()) -> None:
+        """A card brought in from outside (a SillyTavern character card), on
+        the cast or among the supporting characters, with any lore it brings.
+        On the cast, anyone the rosters already name by it is the card's from
+        now on, as when a supporting character joins the cast."""
+        (self.cast if to_cast else self.supporting).append(card)
+        if to_cast:
+            for scene in self._all_scenes():
+                move_into_cast(scene, card)
+        self.bundle.lore.extend(lore)
+        self.story.updated_at = utc_now_iso()
+        self.save()
+
+    def add_lore(self, entries: Sequence[LoreEntry]) -> None:
+        """Lore brought in from outside (a SillyTavern lorebook), after the rest."""
+        self.bundle.lore.extend(entries)
+        self.story.updated_at = utc_now_iso()
+        self.save()
+
     def dismiss_suggestion(self, suggestion_id: str) -> None:
         suggestion = self._suggestion(suggestion_id)
         self.character_suggestions.remove(suggestion)

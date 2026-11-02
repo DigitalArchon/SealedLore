@@ -122,6 +122,7 @@ from sealedlore.gui.window_images import ImagesWindow
 from sealedlore.gui.window_layout import LayoutWindow, StoriesDock
 from sealedlore.gui.window_phone import PhoneWindow
 from sealedlore.gui.window_private import PrivateWindow
+from sealedlore.gui.window_tavern import TavernWindow
 from sealedlore.gui.window_text import TextSizeWindow
 from sealedlore.gui.window_videos import VideosWindow
 from sealedlore.gui.worker import GenerationWorker
@@ -176,6 +177,7 @@ from sealedlore.storage.scenario import (
     scenario_from_bundle,
     write_scenario,
 )
+from sealedlore.storage.tavern_cards import tavern_kind
 from sealedlore.threads import BackgroundThread
 from sealedlore.tree import path_to
 
@@ -240,6 +242,7 @@ MANUAL_URL = "https://github.com/DigitalArchon/SealedLore/blob/master/docs/manua
 
 class MainWindow(
     CastWindow,
+    TavernWindow,
     ChatWindow,
     FindWindow,
     ImagesWindow,
@@ -535,6 +538,7 @@ class MainWindow(
             )
         ]
         self._init_cast()
+        self._init_tavern()
         self._init_images()
         self._init_phone()
         self._init_videos()
@@ -761,6 +765,18 @@ class MainWindow(
             lambda: self.export_markdown(chapter_only=True)
         )
         self.export_menu.addAction(self.chapter_markdown_action)
+        self.export_menu.addSeparator()
+        self.card_export_action = QAction("SillyTavern &card…", self)
+        self.card_export_action.setStatusTip(
+            "A character as a SillyTavern card, with their portrait: for SillyTavern, Chub "
+            "and the rest"
+        )
+        self.card_export_action.triggered.connect(lambda: self.export_card())
+        self.export_menu.addAction(self.card_export_action)
+        self.lorebook_export_action = QAction("SillyTavern &lorebook…", self)
+        self.lorebook_export_action.setStatusTip("The story's lore as a SillyTavern lorebook")
+        self.lorebook_export_action.triggered.connect(self.export_lorebook)
+        self.export_menu.addAction(self.lorebook_export_action)
         self.usage_action = QAction("&Usage and cost…", self)
         self.usage_action.triggered.connect(self.show_usage)
         story_menu.addAction(self.usage_action)
@@ -1124,20 +1140,22 @@ class MainWindow(
         self._import_plot_file(path)
 
     def import_file(self) -> None:
-        """A new story from a scenario, a story backup or a plot file; or a
-        prompt set, into the prompt editor."""
+        """A new story from a scenario, a story backup, a plot file or a
+        SillyTavern character card; a SillyTavern lorebook into the open
+        story's lore; or a prompt set, into the prompt editor."""
         if self._busy or not self._private_allows_close():
             return
         self._import_path(
             "Import",
             # Every kind, shown together by default: split by kind, a plot
             # file once needed "All files" to be seen at all.
-            f"SealedLore files (*{SCENARIO_SUFFIX} *{ARCHIVE_SUFFIX} *{PLOT_SUFFIX} "
-            f"*{PROMPT_SET_SUFFIX});;"
+            f"SealedLore files and SillyTavern cards (*{SCENARIO_SUFFIX} *{ARCHIVE_SUFFIX} "
+            f"*{PLOT_SUFFIX} *{PROMPT_SET_SUFFIX} *.png *.json *.charx);;"
             f"Scenarios (*{SCENARIO_SUFFIX});;"
             f"Story backups (*{ARCHIVE_SUFFIX});;"
             f"Plot files (*{PLOT_SUFFIX});;"
             f"Prompt sets (*{PROMPT_SET_SUFFIX});;"
+            "SillyTavern cards and lorebooks (*.png *.json *.charx);;"
             "All files (*)",
         )
 
@@ -1163,17 +1181,37 @@ class MainWindow(
         path, _ = QFileDialog.getOpenFileName(self, title, str(Path.home()), filters)
         if not path:
             return
-        kind = None if Path(path).suffix.lower() == PLOT_SUFFIX else file_format(Path(path))
-        if Path(path).suffix.lower() == PLOT_SUFFIX:
+        suffix = Path(path).suffix.lower()
+        # A picture or a zip is never one of SealedLore's own files.
+        kind = None if suffix in (PLOT_SUFFIX, ".png", ".charx") else file_format(Path(path))
+        if suffix == PLOT_SUFFIX:
             self._import_plot_file(Path(path))
+        elif suffix in (".png", ".charx"):
+            self._import_card(Path(path))
         elif kind == ARCHIVE_FORMAT:
             self._import_archive(Path(path))
         elif kind == PROMPT_SET_FORMAT:
             # Not a story: the prompts, into the editor, kept on its Save.
             self.open_prompt_editor(import_path=Path(path))
+        elif tavern_kind(Path(path)) == "card":
+            self._import_card(Path(path))
+        elif tavern_kind(Path(path)) == "lorebook":
+            self._import_lorebook_file(Path(path))
         else:
             # Anything else gets the scenario reader's plain-words error.
             self._import_scenario(Path(path))
+
+    def _import_lorebook_file(self, path: Path) -> None:
+        """File → Import… of a SillyTavern lorebook: lore for the open story;
+        it makes no story of its own."""
+        if self.session is None or self.in_chat:
+            self._warn_plain(
+                "A lorebook is lore for a story",
+                f"{path.name} is a SillyTavern lorebook. Open the story it is for, then "
+                "import it again (or from the Lore page).",
+            )
+            return
+        self.import_lorebook(path)
 
     def _import_scenario(self, path: Path) -> None:
         try:

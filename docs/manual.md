@@ -18,6 +18,7 @@ part of the window, and what each feature does. The README's
 - [Models](#models)
 - [When a model misbehaves](#when-a-model-misbehaves)
 - [Setting up a story](#setting-up-a-story)
+- [SillyTavern cards and lorebooks](#sillytavern-cards-and-lorebooks)
 - [Drafting a story, and reviewing its settings](#drafting-a-story-and-reviewing-its-settings)
 - [Changing the prompts (advanced)](#changing-the-prompts-advanced)
 - [Perspective and supporting characters](#perspective-and-supporting-characters)
@@ -90,6 +91,9 @@ part of the window, and what each feature does. The README's
   or in memory only, handed back as a summary you approve.
 - **Drafting and review**: a whole story from a premise; a settings review
   that proposes typed changes you tick.
+- **SillyTavern cards and lorebooks**: a story from a character card (PNG,
+  JSON or CHARX, as Chub and JanitorAI share them), a card into a story, and
+  characters and lore exported for SillyTavern.
 - **From your phone**: play the stories you share from a phone's Tor
   Browser, anywhere, through SealedLore's own tor; paired by scanning a code,
   with nothing to set up on your router. Text stories and chats, on Linux.
@@ -897,6 +901,57 @@ is told as fact after the other. **Help → Writing a plot that plays well**
 [`SampleStories/WRITING_PLOTS.md`](../SampleStories/WRITING_PLOTS.md): what
 each part of a plot is read by, and how to word it, with good and bad
 examples in the style of the samples.
+
+## SillyTavern cards and lorebooks
+
+SealedLore reads and writes the character cards and lorebooks SillyTavern
+uses, which is also how Chub, JanitorAI and most card sites share them.
+
+**A new story from a card.** File → Import… takes a card: a PNG with the card
+inside it, a JSON file, or a CHARX. It asks:
+
+- whether the card is **one character** the storyteller plays, or **a world,
+  or a narrator for several people** (its description then becomes the
+  story's world, with no card of its own; **Fill with lore characters…** on
+  the Cast page can write cards for the people in it);
+- **who you play**: SealedLore needs a character for you where SillyTavern
+  has your persona. Every `{{user}}` on the card becomes their name, and
+  every `{{char}}` the card's;
+- which **greeting** opens the story, or none, and you write the first turn.
+
+The card's description and personality become the character's card, its
+example messages their voice, its scenario the story's world, its lorebook
+the story's lore, and its picture their portrait (a world's picture goes
+behind the story). Setup opens next, to set the style before the story
+begins. What the card holds that SealedLore has no place for is listed: its
+own system prompt (SealedLore's storyteller rules stand, though a tick adds
+it to Style → Other notes), its tags, macros other than `{{char}}` and
+`{{user}}`, the other greetings, and lorebook settings (below).
+
+**A card into a story.** On the Cast page, **SillyTavern cards → Import a
+character card…** adds the card's character to the open story, on the cast
+or as a supporting character, with its lorebook if you like. Its `{{user}}`
+becomes the name of the character you are playing.
+
+**A character out.** **SillyTavern cards → Export this character as a card…**
+(or Story → Export → SillyTavern card…) saves a character as a card: a PNG
+with their portrait when they have one, else JSON, with the story's lore as
+its lorebook if you say so. The card's description carries the character's
+card, voice and skills; SealedLore's own fields ride along inside it, so a
+card exported from SealedLore comes back whole.
+
+**Lorebooks.** On the Lore page, **SillyTavern lorebook → Import a lorebook…**
+adds a lorebook's entries to the story's lore (a card's own lorebook can be
+imported the same way), and **SillyTavern lorebook → Export the lore as a
+lorebook…** (or Story → Export → SillyTavern lorebook…) saves the story's
+lore as one. File → Import… of a lorebook adds it to the story that is open.
+An entry's keywords, content, whether it is constant (always on) and whether
+it is on come across. What SealedLore's lore has nothing like is left out
+and listed: second keywords and their logic, keywords written as regular
+expressions, a chance below 100%, sticky, cooldown and delay, inclusion
+groups, a place in the prompt such as the Author's Note or a depth,
+recursion settings and character filters. Characters and lore the plot
+hasn't brought in yet are exported only with spoilers shown.
 
 ## Drafting a story, and reviewing its settings
 

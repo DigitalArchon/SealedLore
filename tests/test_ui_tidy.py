@@ -423,6 +423,8 @@ def test_the_menus_are_grouped(app, window: MainWindow, monkeypatch):
         "Story backup…",
         "Markdown (this branch)…",
         "Current chapter as Markdown…",
+        "SillyTavern card…",
+        "SillyTavern lorebook…",
     ]
     assert "Export" in _items(story) and not any("background" in i for i in _items(story))
     assert {"Show dice rolls", "Background picture…", "Clear background"} <= set(

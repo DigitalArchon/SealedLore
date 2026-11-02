@@ -117,6 +117,9 @@ class ChatWindow:
         self.chapter_markdown_action.setText(
             "Current &part as Markdown…" if chat else "Current &chapter as Markdown…"
         )
+        # A chat has no cast and no lore to give SillyTavern.
+        self.card_export_action.setVisible(not chat)
+        self.lorebook_export_action.setVisible(not chat)
         for page in (
             self.people_page,
             self.scene_panel,
