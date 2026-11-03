@@ -599,8 +599,14 @@ class PictureVariantDialog(QDialog):
         self.sends.setText(self._sends_words(takes))
         ready = self._worker is None and bool(model) and bool(self.prompt.toPlainText().strip())
         if self.edit:
+            # Something to change: words, labels, the prompt by hand, or only
+            # another style or framing (the lab walk found Draw off for those).
             ready = ready and bool(
-                self.change.text().strip() or self._label_change() or self._hand_edited
+                self.change.text().strip()
+                or self._label_change()
+                or self._hand_edited
+                or self.restyle_words()
+                or self.chosen_framing()
             )
         self.draw_button.setEnabled(ready and not cannot)
 

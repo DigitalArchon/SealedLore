@@ -86,6 +86,15 @@ def reply_for(body) -> str:
         )
     if '"directions"' in text:
         return json.dumps({"directions": []})
+    if '{"references": [' in text and '"prompt"' in text:
+        # A picture's prompt writer (engine/image_prompt.py): none of the
+        # pictures offered, a prompt of its own.
+        return json.dumps(
+            {"references": [], "prompt": f"A farmhouse porch at dusk, snow on the rail. ({TAG})"}
+        )
+    if 'Reply with JSON only: {"prompt"' in text:
+        # A video's prompt writer (engine/video_prompt.py).
+        return json.dumps({"prompt": f"Snow drifts past the porch light. ({TAG})"})
     if '{"looks": [{"name"' in text:
         return json.dumps({"looks": looks_for(text)})
     if '"pick"' in text:

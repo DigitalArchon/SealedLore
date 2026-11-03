@@ -288,7 +288,14 @@ def test_change_this_picture_redraws_it_in_a_style_or_shows_more_of_them(app, wi
     dialog.model.setText(KLEIN.id)
     assert dialog.style.value()[0] == "keep" and dialog.chosen_framing() == ""
     assert "change nothing else" in dialog.prompt.toPlainText()  # an edit, as before
+    assert not dialog.draw_button.isEnabled()  # nothing asked for yet
+    # Another framing alone, or another style alone, is enough to draw.
+    dialog.framing.setCurrentIndex(dialog.framing.findData("torso"))
+    assert dialog.draw_button.isEnabled()
+    dialog.framing.setCurrentIndex(0)
+    assert not dialog.draw_button.isEnabled()
     dialog.style.combo.setCurrentIndex(dialog.style.combo.findData("watercolour"))
+    assert dialog.draw_button.isEnabled()
     dialog.framing.setCurrentIndex(dialog.framing.findData("full"))
     prompt = dialog.prompt.toPlainText()
     watercolour = DEFAULT_TEXTS["pictures.styles.watercolour"]
