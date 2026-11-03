@@ -1622,8 +1622,11 @@ class MainWindow(
             ),
         )
         self._setup_dialog = dialog
+        style_picture: tuple[str, tuple[bytes, str] | None] = ("keep", None)
         try:
             accepted = dialog.exec() == SetupDialog.Accepted
+            if accepted and not self.session.story.chat:
+                style_picture = dialog.picture_style.picture_choice()
         finally:
             self._setup_dialog = None
             self.return_cast_panel()
@@ -1635,6 +1638,7 @@ class MainWindow(
             self._refresh_people()
         if not accepted:
             return False
+        self._apply_style_picture(style_picture)
         self.session.forget_review_undo()
         self.session.story.updated_at = utc_now_iso()
         # Not begun: the scene it will begin in is Setup's, now, not only at Start.
@@ -1661,6 +1665,15 @@ class MainWindow(
         if self.session.nodes and _how_it_starts(self.session.story) != start_before:
             self._offer_new_playthrough()
         return True
+
+    def _apply_style_picture(self, choice: tuple[str, tuple[bytes, str] | None]) -> None:
+        """A style picture chosen with the style (gui/picture_style.py): kept
+        with the story, or let go."""
+        what, picture = choice
+        if what == "set" and picture is not None:
+            self.session.set_style_picture(*picture)
+        elif what == "clear":
+            self.session.clear_style_picture()
 
     def _offer_new_playthrough(self) -> None:
         answer = QMessageBox.question(

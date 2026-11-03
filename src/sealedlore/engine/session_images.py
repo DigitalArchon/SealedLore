@@ -25,7 +25,7 @@ from sealedlore.engine.image_prompt import (
 from sealedlore.engine.image_variants import ImageFamily, family_of, fitting_model
 from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.looks import looks_at
-from sealedlore.engine.picture_styles import picture_words
+from sealedlore.engine.picture_styles import STYLE_REF_ID, picture_words
 from sealedlore.engine.places import newest_picture, place_for, place_title
 from sealedlore.engine.portraits import edit_prompt, restyle_prompt, with_lead
 from sealedlore.engine.prompt import assemble_chat, assemble_question
@@ -189,9 +189,16 @@ class ImageRuntime:
         story model); a private scene's own model writes regardless. `style`:
         a style chosen for this picture alone (engine/picture_styles.py),
         else the story's; its line is put first in the prompt (`with_lead`:
-        writers drop or shorten it).
+        writers drop or shorten it). In the story's own style, the picture
+        it was taken from goes last among the references, named in that
+        line (`style_reference`): the writer has one fewer to choose.
         """
         self._tee_guard()
+        style_use = self.style_reference(style) if max_refs > 0 else None
+        if fixed is not None:
+            fixed = [use for use in fixed if use.ref_id != STYLE_REF_ID]
+        if style_use is not None:
+            max_refs -= 1
         # In a private scene the private model writes the prompt, from the
         # scene; the author is warned that the picture itself is not private.
         choices = self.image_ref_choices(anchor_id)
@@ -221,11 +228,16 @@ class ImageRuntime:
             question, direction=direction, anchor_id=anchor_id, model=model, kind="image_prompt"
         )
         draft = parse_image_prompt(text, fixed_choices or choices, max_refs=max_refs)
-        prompt = with_lead(draft.prompt, words, "")
-        if fixed is not None:
-            # The author's choice stands whatever the writer listed.
-            return ImagePromptDraft(prompt=prompt, references=list(fixed), dropped=[])
-        return ImagePromptDraft(prompt=prompt, references=draft.references, dropped=draft.dropped)
+        # The author's choice of references stands whatever the writer listed.
+        references = list(fixed) if fixed is not None else list(draft.references)
+        lead = words
+        if style_use is not None:
+            references.append(style_use)
+            number = str(len(references))
+            lead = f"{self.texts.fill('pictures.style.reference', number=number)} {words}"
+        prompt = with_lead(draft.prompt, lead, "", core=words)
+        dropped = [] if fixed is not None else draft.dropped
+        return ImagePromptDraft(prompt=prompt, references=references, dropped=dropped)
 
     def _ask_prompt_writer(
         self,
@@ -453,10 +465,12 @@ class ImageRuntime:
         model: str,
         info: ImageModelInfo | None,
         size: str,
+        style_reference: RefUse | None = None,
     ) -> ImageRequest:
         """Edit… on a picture of the story: the picture itself goes with the
         prompt (exactly as approved), and the new one goes after the same
-        passage, the old one kept."""
+        passage, the old one kept. `style_reference`: the story's style
+        picture, as image 2 (a restyle in the story's own style)."""
         use = RefUse(
             owner_kind="picture",
             owner_id=image.id,
@@ -464,24 +478,32 @@ class ImageRuntime:
             ref_id=image.id,
             file=image.file,
         )
-        model, info = self.fitting_image_model(model, 1, info)
+        uses = (use,) if style_reference is None else (use, style_reference)
+        model, info = self.fitting_image_model(model, len(uses), info)
         return ImageRequest(
             story_id=self.story.id,
             model=model,
             prompt=prompt,
             size=size,
             n=1,
-            references=(use,),
+            references=uses,
             anchor_node_id=image.anchor_node_id,
             listed_price=info.price(size) if info is not None else None,
         )
 
     def background_edit_request(
-        self, prompt: str, *, model: str, info: ImageModelInfo | None, size: str
+        self,
+        prompt: str,
+        *,
+        model: str,
+        info: ImageModelInfo | None,
+        size: str,
+        style_reference: RefUse | None = None,
     ) -> ImageRequest:
         """Edit… on the background: the background itself goes with the
         prompt, and the new picture becomes the background once drawn (the
-        old one stays in Media when it was drawn here)."""
+        old one stays in Media when it was drawn here). `style_reference`:
+        the story's style picture, as image 2."""
         relative = self.story.background_image or ""
         use = RefUse(
             owner_kind="story",
@@ -490,25 +512,31 @@ class ImageRuntime:
             ref_id="background",
             file=relative,
         )
-        model, info = self.fitting_image_model(model, 1, info)
+        uses = (use,) if style_reference is None else (use, style_reference)
+        model, info = self.fitting_image_model(model, len(uses), info)
         return ImageRequest(
             story_id=self.story.id,
             model=model,
             prompt=prompt,
             size=size,
             n=1,
-            references=(use,),
+            references=uses,
             anchor_node_id=None,
             listed_price=info.price(size) if info is not None else None,
             background=True,
         )
 
-    def picture_edit_prompt(self, change: str, *, keep: str, style: str = "") -> str:
+    def picture_edit_prompt(
+        self, change: str, *, keep: str, style: str = "", reference: int = 0
+    ) -> str:
         """The prompt for an edit: the change, then what it keeps (a story
         picture its scene, the background its place); with `style` (its
-        words), the picture redrawn in it (`restyle_prompt`)."""
+        words), the picture redrawn in it (`restyle_prompt`), and the style's
+        own picture as image `reference` when it goes too."""
         if style.strip():
-            return restyle_prompt(style, keep=keep, change=change, texts=self.texts)
+            return restyle_prompt(
+                style, keep=keep, change=change, texts=self.texts, reference=reference
+            )
         return edit_prompt(change, keep=keep, texts=self.texts)
 
     # --- the background ----------------------------------------------------------

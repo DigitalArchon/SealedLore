@@ -475,9 +475,14 @@ class ImagesWindow:
         )
         holder.append(dialog)
         accepted = dialog.exec()
-        chosen = dialog.chosen_model() if accepted else ""
-        style = dialog.chosen_style() if accepted else None
-        requests = dialog.requests() if accepted else []
+        requests = []
+        if accepted:
+            chosen = dialog.chosen_model()
+            # The style and its picture are the story's from now on, as the
+            # dialog says; kept before the requests, which send the picture.
+            session.set_picture_style(*dialog.chosen_style())
+            self._apply_style_picture(dialog.style.picture_choice())
+            requests = dialog.requests()
         dialog.deleteLater()  # read; held the story otherwise
         self._drain_side_costs()
         if not accepted:
@@ -485,9 +490,6 @@ class ImagesWindow:
         if chosen != self.config.portrait_model:
             self.config.portrait_model = chosen
             save_config(self.config, root=self.root)
-        if style is not None:
-            # The story's from now on, as the dialog says.
-            session.set_picture_style(*style)
         self._start_card_pictures(requests)
         return bool(requests)
 

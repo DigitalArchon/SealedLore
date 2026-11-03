@@ -162,6 +162,12 @@ def test_a_written_prompt_starts_with_its_style_line_and_says_no_writing():
     )
     assert with_lead(copied, lead, NO_WRITING) == copied
     assert with_lead("  ", lead, NO_WRITING) == ""  # a lore entry with nothing to see
+    # With the style picture's sentence first: a prompt that copied the style
+    # line itself gets only the sentence, not the style twice.
+    sentence = DEFAULT_TEXTS["pictures.style.reference"].replace("{number}", "1")
+    copied = f"{lead}. A tall woman. {NO_WRITING}"
+    both = with_lead(copied, f"{sentence} {lead}", NO_WRITING, core=lead)
+    assert both == f"{sentence} {copied}"
 
 
 def test_the_writer_is_given_the_style_its_note_and_the_framing(tmp_path: Path):
@@ -371,3 +377,81 @@ def test_a_picture_s_style_is_described_in_words_and_its_bytes_never_logged(tmp_
 
     with pytest.raises(ValueError):
         session2.describe_picture_style(png(), "image/png", model="m")
+
+
+def test_the_style_picture_goes_with_pictures_in_the_story_s_own_style(tmp_path: Path):
+    """From a picture…'s picture, sent as a style reference: it held a sketch's
+    sepia where the words alone added colour (the author asked for it)."""
+    from sealedlore.engine.picture_styles import STYLE_REF_ID, style_picture_applies
+
+    reply = json.dumps({"portraits": [{"name": "John", "prompt": "A tired man."}]})
+    scene = json.dumps({"references": ["R1"], "prompt": "The man in image 1 by a fire."})
+    session, provider = doomsville(tmp_path, [reply, scene, scene, scene])
+    story = session.story
+    john = next(c for c in session.cast if c.name == "John")
+    session.pictures.write("images/refs/john.png", png())
+    john.reference_images = [ImageRef(id="john", file="images/refs/john.png")]
+    story.picture_style, story.image_style = "", "woodcut, bold black lines"
+    assert not style_picture_applies(story)  # no picture yet
+    session.set_style_picture(png(), ".png")
+    assert story.style_picture.startswith("images/refs/") and style_picture_applies(story)
+    # Only in the story's own style as it stands.
+    assert not style_picture_applies(story, ("anime", ""))
+    assert not style_picture_applies(story, ("", "other words"))
+    use = session.style_reference()
+    assert use is not None and use.ref_id == STYLE_REF_ID
+
+    # A portrait from words: its line names the picture, which goes as image 1.
+    prompts, _ = session.write_card_prompts([john])
+    reference = DEFAULT_TEXTS["pictures.style.reference"].replace("{number}", "1")
+    assert prompts[john.id].startswith(f"{reference} woodcut, bold black lines, head and")
+    klein = ImageModelInfo(id="k", name="K", resolutions=("1024x1024",), max_inputs=10)
+    request = session.card_request(
+        john, prompts[john.id], model="k", info=klein, first=True, style_reference=use
+    )
+    assert [r.ref_id for r in request.references] == [STYLE_REF_ID]
+    # A model that takes no picture isn't sent it.
+    blind = ImageModelInfo(id="b", name="B", resolutions=("1024x1024",), max_inputs=0)
+    words_only = session.card_request(
+        john, "x", model="b", info=blind, first=True, style_reference=use
+    )
+    assert words_only.references == ()
+
+    # A picture of the story: the writer has one fewer, the picture goes last.
+    draft = session.write_image_prompt("", max_refs=3)
+    assert [r.ref_id for r in draft.references] == ["john", STYLE_REF_ID]
+    two = DEFAULT_TEXTS["pictures.style.reference"].replace("{number}", "2")
+    assert draft.prompt.startswith(f"{two} woodcut, bold black lines. The man in image 1")
+    # Written again around the author's choice, it isn't listed twice.
+    again = session.write_image_prompt("", max_refs=3, fixed=draft.references)
+    assert [r.ref_id for r in again.references] == ["john", STYLE_REF_ID]
+    # In another style for this picture alone, it stays home.
+    other = session.write_image_prompt("", max_refs=3, style=("anime", ""))
+    assert STYLE_REF_ID not in [r.ref_id for r in other.references]
+
+    # A restyle in the story's own style: the picture as image 2.
+    prompt = session.card_restyle_prompt(john, "woodcut", reference=2)
+    assert prompt.startswith("Redraw image 1 entirely in the art style of image 2")
+    edit = session.card_request(
+        john,
+        prompt,
+        model="k",
+        info=klein,
+        first=False,
+        source=john.reference_images[0],
+        style_reference=use,
+    )
+    assert [r.ref_id for r in edit.references] == ["john", STYLE_REF_ID]
+
+    # It goes with scenario files and Restart.
+    from sealedlore.storage.images import reference_files
+
+    files = reference_files(session.bundle, tmp_path)
+    assert story.style_picture in files
+    scenario = scenario_from_bundle(session.bundle, files)
+    assert scenario.style_picture == story.style_picture
+    again_bundle = bundle_from_scenario(scenario)
+    assert again_bundle.story.style_picture == story.style_picture
+    assert story.style_picture in again_bundle.pending_files
+    session.clear_style_picture()
+    assert story.style_picture == "" and session.style_reference() is None

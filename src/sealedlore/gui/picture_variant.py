@@ -255,7 +255,16 @@ class PictureVariantDialog(QDialog):
         self.style: PictureStyleField | None = None
         self.framing: QComboBox | None = None
         if edit:
-            self.style = PictureStyleField(KEEP, "", texts=session.texts, keep=True)
+            story = session.story
+            # Your own words… starts with the story's, so its own style (and its
+            # picture) is one choice away.
+            self.style = PictureStyleField(
+                KEEP,
+                "" if story.picture_style else story.image_style,
+                texts=session.texts,
+                keep=True,
+                picture=bool(story.style_picture),
+            )
             self.style.changed.connect(self._compose)
         if self.labelled:
             self.framing = QComboBox()
@@ -401,6 +410,13 @@ class PictureVariantDialog(QDialog):
         texts = self.session.texts
         return style_words(chosen, own, texts) or texts["pictures.style.default"].rstrip(".")
 
+    def style_reference(self):
+        """The story's style picture, when redrawn in the story's own style
+        with it (`style_reference`; With its picture)."""
+        if self.style is None or not self.restyle_words() or not self.style.picture_wanted():
+            return None
+        return self.session.style_reference(self.style.value())
+
     def _first_model(self) -> str:
         """Drawing again: the picture's own model, else the portrait model.
         Editing: the picture's own model if it can be given a picture, else
@@ -436,7 +452,10 @@ class PictureVariantDialog(QDialog):
             change = " ".join(part for part in parts if part)
             self._set_prompt(
                 self.session.picture_edit_prompt(
-                    change, keep=self.subject.keep, style=self.restyle_words()
+                    change,
+                    keep=self.subject.keep,
+                    style=self.restyle_words(),
+                    reference=2 if self.style_reference() is not None else 0,
                 )
             )
         else:
@@ -611,13 +630,19 @@ class PictureVariantDialog(QDialog):
         # The version the dialog priced and named (what goes with it decides).
         prompt, model, info = self.prompt.toPlainText(), self.sent_model(), self.model_info()
         restyled = self.restyle_words()
+        style_use = self.style_reference() if self.edit else None
         if self.subject.image is not None:
             return self.session.picture_edit_request(
-                self.subject.image, prompt, model=model, info=info, size=self.size()
+                self.subject.image,
+                prompt,
+                model=model,
+                info=info,
+                size=self.size(),
+                style_reference=style_use,
             )
         if self.subject.background:
             return self.session.background_edit_request(
-                prompt, model=model, info=info, size=self.size()
+                prompt, model=model, info=info, size=self.size(), style_reference=style_use
             )
         caption = " ".join(self.change.text().split()) if self.edit else AGAIN_CAPTION
         takes = info.max_inputs if info is not None else len(self._from)
@@ -638,6 +663,7 @@ class PictureVariantDialog(QDialog):
             expression=expression,
             framing=self.chosen_framing(),
             style=style_key(*self.style.value()) if self.style is not None and restyled else "",
+            style_reference=style_use,
         )
 
     def reject(self) -> None:

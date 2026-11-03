@@ -177,9 +177,13 @@ class PortraitsDialog(QDialog):
             "prompt for each: read them, change any you like and untick anything you'd "
             "rather not draw. Nothing is drawn until you press Draw. Each picture goes "
             "first among its card's pictures, shown large on the Cast or Lore page, and "
-            f"is kept in Media with its prompt and cost. {WORDS_ONLY}"
+            "is kept in Media with its prompt and cost."
         )
         intro.setWordWrap(True)
+        # What goes with each prompt: the words, or the style's picture too.
+        self.sends = QLabel(WORDS_ONLY)
+        self.sends.setObjectName("sentWithPrompt")
+        self.sends.setWordWrap(True)
         self.model = ModelField(
             family_id(session.config.portrait_model, catalog.models if catalog is not None else []),
             browse,
@@ -195,6 +199,7 @@ class PortraitsDialog(QDialog):
             story.image_style,
             texts=session.texts,
             from_picture=describe if describe is not None else None,
+            picture=bool(story.style_picture),
         )
         self.style_note = QLabel(
             "Every picture of this story is drawn in it: a style chosen here becomes the "
@@ -261,6 +266,7 @@ class PortraitsDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.addWidget(intro)
+        layout.addWidget(self.sends)
         layout.addLayout(form)
         layout.addWidget(scroll, 1)
         layout.addWidget(self.busy)
@@ -279,6 +285,8 @@ class PortraitsDialog(QDialog):
         self._restyle_timer.timeout.connect(self._restyle)
         self.style.combo.currentIndexChanged.connect(lambda _i: self._restyle())
         self.style.own.textEdited.connect(lambda _t: self._restyle_timer.start())
+        self.style.with_picture.toggled.connect(lambda _on: self._restyle())
+        self.style.taken.connect(self._restyle)
         self.framing.currentIndexChanged.connect(lambda _i: self._restyle())
         self.model.textChanged.connect(self._sync)
         if catalog is not None:
@@ -299,11 +307,12 @@ class PortraitsDialog(QDialog):
         characters = [row.card for row in rows if isinstance(row.card, Character)]
         lore = [row.card for row in rows if isinstance(row.card, LoreEntry)]
         style, framing = self.chosen_style(), self.chosen_framing()
+        with_picture = self.style.picture_wanted()
         self._prompts, self._problem, self._failure = {}, None, None
 
         def job():
             self._prompts, self._problem = self.session.write_card_prompts(
-                characters, lore, framing=framing, style=style
+                characters, lore, framing=framing, style=style, style_picture=with_picture
             )
             return
             yield  # a generator, so GenerationWorker can run it
@@ -375,9 +384,20 @@ class PortraitsDialog(QDialog):
         each = info.price(card_size(first, info, framing)) if info and first else None
         known = recommended_model("portrait_model", model)
         price = f"about ${each:.3f} a picture" if each is not None else "price not listed"
-        self.model_note.setText(
-            f"{model or 'No model'}: {price}." + (f" {known.note}" if known is not None else "")
-        )
+        note = f"{model or 'No model'}: {price}." + (f" {known.note}" if known else "")
+        if self.style.picture_wanted():
+            self.sends.setText(
+                "Sent with the prompt: the picture the story's style was taken from, as image "
+                "1, so each follows its style."
+            )
+            if info is not None and not info.accepts_images:
+                note += (
+                    " It can't be given a picture: the prompts name an image 1 it won't get. "
+                    "Choose a model that takes pictures, or untick With its picture."
+                )
+        else:
+            self.sends.setText(WORDS_ONLY)
+        self.model_note.setText(note)
         self.busy.setVisible(self.writing())
         count = len(wanted)
         if self.writing():
@@ -407,10 +427,13 @@ class PortraitsDialog(QDialog):
 
     def requests(self) -> list[ImageRequest]:
         """One request a ticked card, each prompt exactly as it stands; a
-        portrait's size and label by the framing chosen."""
+        portrait's size and label by the framing chosen. With its picture,
+        the style's picture goes as image 1: read once the window has kept
+        the style and its picture for the story (`draw_card_pictures`)."""
         model, info = self.chosen_model(), self.model_info()
         framing = self.chosen_framing()
         style = style_key(*self.chosen_style())
+        style_use = self.session.style_reference() if self.style.picture_wanted() else None
         return [
             self.session.card_request(
                 row.card,
@@ -420,6 +443,7 @@ class PortraitsDialog(QDialog):
                 first=True,
                 framing=framing if isinstance(row.card, Character) else "",
                 style=style,
+                style_reference=style_use,
             )
             for row in self.rows
             if row.wanted()

@@ -21,7 +21,13 @@ import threading
 from collections.abc import Sequence
 
 from sealedlore.engine.images import ImageRequest
-from sealedlore.engine.picture_styles import style_note, style_words
+from sealedlore.engine.picture_styles import (
+    STYLE_OWNER,
+    STYLE_REF_ID,
+    style_note,
+    style_picture_applies,
+    style_words,
+)
 from sealedlore.engine.picture_use import from_picture_direction, keep_picture
 from sealedlore.engine.portraits import (
     DEFAULT_FRAMING,
@@ -33,6 +39,7 @@ from sealedlore.engine.portraits import (
     edit_prompt,
     fallback_prompt,
     parse_portrait_prompts,
+    portrait_lead,
     portrait_style,
     restyle_prompt,
     where_it_begins,
@@ -92,6 +99,7 @@ class PortraitRuntime:
         model: str | None = None,
         framing: str = DEFAULT_FRAMING,
         style: tuple[str, str] | None = None,
+        style_picture: bool | None = None,
     ) -> tuple[dict[str, str], str | None]:
         """A prompt for each card, by id ("" for a lore entry with nothing
         to see), and what went wrong if the writer didn't answer for all of
@@ -101,11 +109,16 @@ class PortraitRuntime:
         story's picture style, or `style` (a ready-made style's id, the
         author's own words: one chosen in the portraits dialog, not yet the
         story's); the portraits show `framing` of each character
-        (engine/portraits.py FRAMINGS)."""
+        (engine/portraits.py FRAMINGS). `style_picture`: whether the style's
+        own picture goes with them, as image 1 (None: as the story has it,
+        `style_picture_applies`); their opening line then names it."""
         self._refuse_in_private("Writing picture prompts")
         texts = self.texts
         story = self.story
         chosen, own = style if style is not None else (story.picture_style, story.image_style)
+        if style_picture is None:
+            style_picture = self.style_reference((chosen, own)) is not None
+        reference = 1 if style_picture else 0
         note = style_note(chosen, texts)
         style = style_words(chosen, own, texts)
         allowed_people, allowed_lore = self.picture_cards()
@@ -187,8 +200,11 @@ class PortraitRuntime:
         no_writing = texts["portraits.no_writing"]
         for card_id, prompt in prompts.items():
             lore_entry = card_id in lore_ids
-            lead = portrait_style(style, texts, lore=lore_entry, framing=framing)
-            prompts[card_id] = with_lead(prompt, lead, no_writing)
+            lead = portrait_lead(
+                style, texts, lore=lore_entry, framing=framing, reference=reference
+            )
+            core = portrait_style(style, texts, lore=lore_entry, framing=framing)
+            prompts[card_id] = with_lead(prompt, lead, no_writing, core=core)
         problem = problems[0] if problems else None
         missing = [c for c in (*characters, *lore) if c.id not in prompts]
         if missing and problem is None:
@@ -196,7 +212,7 @@ class PortraitRuntime:
             problem = "The prompt writer left out " + ", ".join(names)
         for card in missing:
             prompts[card.id] = fallback_prompt(
-                card, image_style=style, texts=texts, framing=framing
+                card, image_style=style, texts=texts, framing=framing, reference=reference
             )
         if problem:
             problem += ": their prompts are built from their cards."
@@ -218,6 +234,7 @@ class PortraitRuntime:
         framing: str = "",
         style: str = "",
         replaces: str = "",
+        style_reference: RefUse | None = None,
     ) -> ImageRequest:
         """The request for one picture of a card, its prompt exactly as
         approved. `first`: it becomes the card's first picture (a new
@@ -230,7 +247,9 @@ class PortraitRuntime:
         head-and-shoulders portrait's size, unlabelled. `style`: the style
         it is drawn in (engine/picture_styles.style_key), an edit's its
         source's when blank. `replaces`: the picture on the card it takes the
-        place of (a restyle)."""
+        place of (a restyle). `style_reference`: the picture the story's own
+        style was taken from (`style_reference()`), sent after the rest, as
+        the prompt names it; left out for a model that takes no picture."""
         person = isinstance(card, Character)
         references = tuple(references)
         if source is not None and not framing:
@@ -239,6 +258,8 @@ class PortraitRuntime:
         if source is not None and not style:
             style = source.style
         sending = 1 if source is not None else len(references)
+        if style_reference is not None:
+            sending += 1
         # The model's text or edit version, for what goes with the prompt.
         model, info = self.fitting_image_model(model, sending, info)
         size = card_size(card, info, framing or DEFAULT_FRAMING)
@@ -253,6 +274,8 @@ class PortraitRuntime:
                     caption=source.caption,
                 ),
             )
+        if style_reference is not None and (info is None or info.accepts_images):
+            references = (*references, style_reference)
         return ImageRequest(
             story_id=self.story.id,
             model=model,
@@ -312,6 +335,41 @@ class PortraitRuntime:
             raise ValueError("the model described no style")
         return words
 
+    def style_reference(self, style: tuple[str, str] | None = None) -> RefUse | None:
+        """The picture the story's own style was taken from, as a reference,
+        when it goes with a picture in `style` (None: the story's;
+        `style_picture_applies`) and is still there."""
+        story = self.story
+        if not style_picture_applies(story, style):
+            return None
+        if self.pictures.read(story.style_picture) is None:
+            return None
+        return RefUse(
+            owner_kind="story",
+            owner_id=story.id,
+            owner_name=STYLE_OWNER,
+            ref_id=STYLE_REF_ID,
+            file=story.style_picture,
+            caption="its style",
+        )
+
+    def set_style_picture(self, data: bytes, suffix: str) -> None:
+        """The picture the story's own style was taken from (From a
+        picture…), kept with the story (hidden data already removed); saved."""
+        self._refuse_in_private("Changing the picture style")
+        relative = f"{REFS_DIR}/{STYLE_REF_ID}-{new_id()}{suffix}"
+        self.pictures.write(relative, data)
+        self.story.style_picture = relative
+        self.forget_review_undo()
+        self.save()
+
+    def clear_style_picture(self) -> None:
+        """No picture with the story's style any more (its file stays)."""
+        if self.story.style_picture:
+            self.story.style_picture = ""
+            self.forget_review_undo()
+            self.save()
+
     def set_picture_style(self, picture_style: str, image_style: str) -> None:
         """The story's picture style (engine/picture_styles.py), as chosen in
         the portraits dialog; saved."""
@@ -323,10 +381,15 @@ class PortraitRuntime:
         self.forget_review_undo()
         self.save()
 
-    def card_restyle_prompt(self, card: Card, style: str, change: str = "") -> str:
-        """The prompt for a card's picture redrawn in `style` (its words)."""
+    def card_restyle_prompt(
+        self, card: Card, style: str, change: str = "", *, reference: int = 0
+    ) -> str:
+        """The prompt for a card's picture redrawn in `style` (its words);
+        `reference`, the style picture's number when it goes too."""
         keep = "person" if isinstance(card, Character) else "thing"
-        return restyle_prompt(style, keep=keep, change=change, texts=self.texts)
+        return restyle_prompt(
+            style, keep=keep, change=change, texts=self.texts, reference=reference
+        )
 
     def card_edit_prompt(self, card: Card, change: str) -> str:
         """The prompt for an edit of a card's picture."""

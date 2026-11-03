@@ -100,6 +100,22 @@ def style_note(picture_style: str, texts: PromptTexts = DEFAULT_TEXTS) -> str:
 
 # The default's key: realistic throughout.
 REALISTIC = "realistic"
+# The style picture as a reference (`Story.style_picture`): its id among a
+# request's references, and whose it is said to be.
+STYLE_REF_ID = "style-picture"
+STYLE_OWNER = "The story's style"
+
+
+def style_picture_applies(story, style: tuple[str, str] | None = None) -> bool:
+    """Whether the picture the story's own style was taken from goes with a
+    picture in `style` (None: the story's): only for that style, its own
+    words as they stand, never a ready-made one."""
+    if not story.style_picture or story.picture_style or not story.image_style.strip():
+        return False
+    if style is None:
+        return True
+    chosen, own = style
+    return not chosen and " ".join(own.split()) == " ".join(story.image_style.split())
 
 
 def style_key(picture_style: str, image_style: str) -> str:

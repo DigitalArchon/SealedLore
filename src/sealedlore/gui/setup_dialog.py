@@ -113,7 +113,7 @@ class SetupDialog(QDialog):
         parent: QWidget | None = None,
         characters: QWidget | None = None,
         models: ModelChoices | None = None,
-        describe_style: Callable[[], str | None] | None = None,
+        describe_style: Callable[[], tuple[str, bytes, str] | None] | None = None,
     ) -> None:
         """`cast`: the story's own list, read again whenever the Starting
         scene tab is shown, since `characters` (the Cast page, lent) may
@@ -436,6 +436,7 @@ class SetupDialog(QDialog):
             self.story.image_style,
             texts=self.texts,
             from_picture=self._describe_style,
+            picture=bool(self.story.style_picture),
         )
         form.addRow("Picture style", self.picture_style)
         form.addRow(

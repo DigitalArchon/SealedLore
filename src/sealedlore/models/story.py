@@ -195,6 +195,10 @@ class Story(BaseModel):
     # whoever writes an image prompt. Never reaches the storyteller.
     picture_style: str = ""
     image_style: str = ""
+    # The picture the author's own style was taken from (From a picture…),
+    # relative to the story folder: sent with each new picture drawn in that
+    # style as a style reference (engine/picture_styles.py). Blank: none.
+    style_picture: str = ""
     # A picture shown behind the transcript, relative to the story folder.
     background_image: str | None = None
     # The picture drawn for this story the background is a copy of

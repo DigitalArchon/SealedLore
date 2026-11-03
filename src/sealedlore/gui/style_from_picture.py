@@ -6,7 +6,10 @@ The picture is chosen (cropped first, as every picture from disk is), the
 author is asked before it is sent, and a model that sees pictures (the
 prompt writer's) describes its style in words (`describe_picture_style`).
 The words become the story's own style in the field, to read and change
-before anything is saved; nothing else uses the picture.
+before anything is saved, and the picture is kept with them once saved
+(`Story.style_picture`): sent with each new picture in that style as a
+style reference (With its picture), which held a sketch's sepia where the
+words alone added colour.
 """
 
 from __future__ import annotations
@@ -31,10 +34,11 @@ _MIME = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".web
 
 def describe_style(
     parent: QWidget | None, session, models: Mapping[str, object] | None = None
-) -> str | None:
-    """The words for a picture's style, or None (cancelled, refused or
-    failed, said). `models`: the endpoint's listing, to know whether the
-    prompt writer sees pictures before anything is sent."""
+) -> tuple[str, bytes, str] | None:
+    """The words for a picture's style, with the picture (its bytes, hidden
+    data removed, and extension), or None (cancelled, refused or failed,
+    said). `models`: the endpoint's listing, to know whether the prompt
+    writer sees pictures before anything is sent."""
     if session is None:
         return None
     chosen, _ = QFileDialog.getOpenFileName(
@@ -65,7 +69,8 @@ def describe_style(
         TITLE,
         f"Send this picture to {model} to describe its style in words? It is sent as it is, "
         "its hidden data removed. The words become this story's picture style, for you to "
-        "read and change before you save.",
+        "read and change before you save; the picture is kept with them, to go with each "
+        "new picture as a style reference (With its picture).",
         QMessageBox.Yes | QMessageBox.Cancel,
         QMessageBox.Yes,
     )
@@ -104,4 +109,5 @@ def describe_style(
     if "error" in result:
         QMessageBox.warning(parent, TITLE, f"The style couldn't be described: {result['error']}")
         return None
-    return result.get("words")
+    words = result.get("words")
+    return (words, data, suffix) if words else None

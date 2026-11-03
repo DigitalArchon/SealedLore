@@ -82,7 +82,12 @@ class RestyleDialog(QDialog):
             "with: the pictures not drawn in the style chosen."
         )
         intro.setWordWrap(True)
-        self.style = PictureStyleField(story.picture_style, story.image_style, texts=session.texts)
+        self.style = PictureStyleField(
+            story.picture_style,
+            story.image_style,
+            texts=session.texts,
+            picture=bool(story.style_picture),
+        )
         self.style.changed.connect(self._restyle)
 
         self.rows: list[_Row] = []
@@ -166,13 +171,23 @@ class RestyleDialog(QDialog):
             "."
         )
 
+    def style_reference(self):
+        """The story's style picture, when redrawn in the story's own style
+        with it (With its picture): sent as image 2."""
+        if not self.style.picture_wanted():
+            return None
+        return self.session.style_reference(self.style.value())
+
     def _restyle(self) -> None:
         """Every prompt not changed by hand, in the style chosen now."""
         words = self.chosen_words()
+        reference = 2 if self.style_reference() is not None else 0
         for row in self.rows:
             if not row.edited:
                 row.prompt.blockSignals(True)
-                row.prompt.setPlainText(self.session.card_restyle_prompt(row.card, words))
+                row.prompt.setPlainText(
+                    self.session.card_restyle_prompt(row.card, words, reference=reference)
+                )
                 row.prompt.blockSignals(False)
         self._sync()
 
@@ -240,6 +255,7 @@ class RestyleDialog(QDialog):
         taking the picture's place on its card."""
         model, info = self.sent_model(), self.model_info()
         key = self.chosen_key()
+        style_use = self.style_reference()
         return [
             self.session.card_request(
                 row.card,
@@ -254,6 +270,7 @@ class RestyleDialog(QDialog):
                 framing=row.ref.framing,
                 style=key,
                 replaces=row.ref.id,
+                style_reference=style_use,
             )
             for row in self.chosen()
         ]

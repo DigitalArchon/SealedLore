@@ -67,6 +67,8 @@ class Scenario(BaseModel):
     # `picture_style` is a ready-made style's id (engine/picture_styles.py).
     picture_style: str = ""
     image_style: str = ""
+    # The picture its own style was taken from, among `reference_files`.
+    style_picture: str = ""
     reference_files: dict[str, str] = Field(default_factory=dict)
     # The picture behind the transcript, its file among `reference_files`
     # (a plot file's `background:`, a sample's: the author, Oct 2026).

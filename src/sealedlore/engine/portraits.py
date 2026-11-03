@@ -117,6 +117,22 @@ def portrait_style(
     return f"{style}, {texts[f'portraits.shot.{framing}']}"
 
 
+def portrait_lead(
+    image_style: str,
+    texts: PromptTexts = DEFAULT_TEXTS,
+    *,
+    lore: bool = False,
+    framing: str = DEFAULT_FRAMING,
+    reference: int = 0,
+) -> str:
+    """The line a card's prompt opens with: `portrait_style`, after the
+    style picture's sentence when it goes as image `reference` (0: none)."""
+    lead = portrait_style(image_style, texts, lore=lore, framing=framing)
+    if reference:
+        return f"{texts.fill('pictures.style.reference', number=str(reference))} {lead}"
+    return lead
+
+
 def where_it_begins(story: Story) -> str:
     """The starting scene and the opening, briefly: the season and the
     weather are often said only there (Doomsville's winter is: drawn from
@@ -200,15 +216,23 @@ def fallback_prompt(
     image_style: str,
     texts: PromptTexts = DEFAULT_TEXTS,
     framing: str = DEFAULT_FRAMING,
+    reference: int = 0,
 ) -> str:
-    """A prompt from the card alone, for the author to edit."""
+    """A prompt from the card alone, for the author to edit; `reference`, the
+    style picture's number when it goes with it (`portrait_lead`)."""
     if isinstance(card, LoreEntry):
         looks = looks_of(card.content, None) or card.title
     else:
         looks = looks_of(card.summary, card.full_description) or "A person."
     return texts.fill(
         "portraits.fallback",
-        style=portrait_style(image_style, texts, lore=isinstance(card, LoreEntry), framing=framing),
+        style=portrait_lead(
+            image_style,
+            texts,
+            lore=isinstance(card, LoreEntry),
+            framing=framing,
+            reference=reference,
+        ),
         looks=looks if looks.endswith((".", "…", "!", "?")) else looks + ".",
         no_writing=texts["portraits.no_writing"],
     )
@@ -218,7 +242,7 @@ def _words(text: str) -> list[str]:
     return re.findall(r"[a-z0-9]+", text.lower())
 
 
-def with_lead(prompt: str, lead: str, no_writing: str) -> str:
+def with_lead(prompt: str, lead: str, no_writing: str, *, core: str = "") -> str:
     """A written prompt with its style line first (`lead`, `portrait_style`)
     and ending saying no writing. Told to copy the style, the writer (GLM
     5.3, Nov 3 2026) left it out or shortened it in 16 prompts of 31 ("Anime
@@ -226,13 +250,21 @@ def with_lead(prompt: str, lead: str, no_writing: str) -> str:
     style; so the line is put first here, and the writer writes what
     follows. A prompt already opening with the whole line (its words, any
     case or punctuation) is left as it is. Blank stays blank (a lore entry
-    with nothing to see)."""
+    with nothing to see). `core`: the style's own line, when `lead` is it
+    after the style picture's sentence: a prompt that opens with the core
+    (the writer copied it) has only the sentence put in front, not the
+    style twice."""
     text = " ".join(prompt.split())
     if not text:
         return text
-    lead_words = _words(lead)
-    if lead_words and _words(text)[: len(lead_words)] != lead_words:
-        text = f"{lead.rstrip('.')}. {text}"
+    lead_words, start = _words(lead), _words(text)
+    core_words = _words(core)
+    if lead_words and start[: len(lead_words)] != lead_words:
+        if core_words and start[: len(core_words)] == core_words and lead.endswith(core):
+            sentence = lead[: len(lead) - len(core)].strip()
+            text = f"{sentence} {text}"
+        else:
+            text = f"{lead.rstrip('.')}. {text}"
     if no_writing and no_writing.lower() not in text.lower():
         text = f"{text} {no_writing}"
     return text
@@ -283,17 +315,28 @@ def edit_prompt(change: str, *, keep: str, texts: PromptTexts = DEFAULT_TEXTS) -
 
 
 def restyle_prompt(
-    style: str, *, keep: str, change: str = "", texts: PromptTexts = DEFAULT_TEXTS
+    style: str,
+    *,
+    keep: str,
+    change: str = "",
+    texts: PromptTexts = DEFAULT_TEXTS,
+    reference: int = 0,
 ) -> str:
     """The prompt that redraws a picture in `style` (its words), with any
-    other `change`, keeping what `keep` (one of EDIT_KEEPS) says."""
+    other `change`, keeping what `keep` (one of EDIT_KEEPS) says; with the
+    style's own picture as image `reference` when it goes too (0: none)."""
     assert keep in EDIT_KEEPS, keep
     words = " ".join(style.split()).rstrip(".")
     change = " ".join(change.split())
     if change and not change.endswith((".", "!", "?")):
         change += "."
+    opening = (
+        texts.fill("pictures.restyle.reference", number=str(reference), style=words)
+        if reference
+        else texts.fill("pictures.restyle", style=words)
+    )
     parts = [
-        texts.fill("pictures.restyle", style=words),
+        opening,
         change,
         texts[f"pictures.restyle.{keep}"],
         texts["portraits.no_writing"],

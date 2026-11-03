@@ -1727,7 +1727,13 @@ story's once you press **Draw**:
   you choose: the image prompt writer, which must be a model that can see
   pictures (Claude Sonnet 4.6, Kimi K3 or GLM 5.3 Flash, for instance),
   describes it in words, which you can read and change before you save. You
-  are asked before the picture is sent.
+  are asked before the picture is sent. The picture is kept with the words:
+  with **With its picture** ticked, it goes with each new picture drawn in
+  that style (portraits, pictures of the story, pictures redrawn in it) as a
+  reference for its look, which follows it more closely than the words alone,
+  on models that can be given a picture. Each dialog's **Sent with the
+  prompt** line says so. It goes only with the story's own style: choose
+  another, or untick the box, and it is left at home.
 
 Doomsville is gritty and realistic. A plot file names its style on a
 `picture style:` line (see the plot format guide).

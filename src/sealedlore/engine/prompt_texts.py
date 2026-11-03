@@ -2936,6 +2936,34 @@ _text(
     "alone.",
 )
 
+# The picture a story's own style was taken from, sent as a style reference
+# (the author, Nov 3 2026, after it held a sketch's sepia where the words
+# alone added colour): the words still follow it.
+_text(
+    "pictures.style.reference",
+    PICTURES,
+    "Picture style: the style's picture",
+    "Put first in a picture's prompt when the picture the story's own style was taken from "
+    "goes with it.",
+    "In the art style of image {number}: take only its medium, line, colour, light and "
+    "texture, none of its people, places or things.",
+    (("number", "The style picture's number among the pictures sent"),),
+)
+
+_text(
+    "pictures.restyle.reference",
+    PICTURES,
+    "Card pictures: another style, from its picture",
+    "Opens the prompt of a picture redrawn in the story's own style when the picture that "
+    "style was taken from goes with it; what else to change and what to keep follow it.",
+    "Redraw image 1 entirely in the art style of image {number}: its medium, line, colour, "
+    "light and texture, none of its people, places or things. In words: {style}.",
+    (
+        ("number", "The style picture's number among the pictures sent"),
+        ("style", "The style's words"),
+    ),
+)
+
 _text(
     "pictures.restyle",
     PICTURES,

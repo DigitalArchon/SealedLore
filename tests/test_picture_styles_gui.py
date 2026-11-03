@@ -170,6 +170,11 @@ def test_a_style_chosen_in_the_dialog_becomes_the_story_s_when_drawn(
             def chosen_style(self):
                 return ("watercolour", "")
 
+            class style:  # noqa: N801 - the dialog's field, as the window reads it
+                @staticmethod
+                def picture_choice():
+                    return ("keep", None)
+
             def requests(self):
                 return []
 
@@ -352,9 +357,20 @@ def test_a_story_s_style_can_be_taken_from_a_picture(app, window, monkeypatch, t
 
     from sealedlore.gui import style_from_picture
 
-    field = PictureStyleField("", "", from_picture=lambda: "woodcut, bold black lines")
+    field = PictureStyleField("", "", from_picture=lambda: ("woodcut, bold lines", PNG, ".png"))
+    taken: list[bool] = []
+    field.taken.connect(lambda: taken.append(True))
     field.from_picture.click()
-    assert field.value() == ("", "woodcut, bold black lines") and not field.own.isHidden()
+    assert field.value() == ("", "woodcut, bold lines") and not field.own.isHidden()
+    # The picture goes with its words, until they are left for another style.
+    assert taken == [True] and field.picture_wanted()
+    assert field.picture_choice() == ("set", (PNG, ".png"))
+    field.with_picture.setChecked(False)
+    assert field.picture_choice() == ("keep", None)  # never kept: nothing to let go
+    kept = PictureStyleField("", "woodcut", picture=True)
+    assert kept.picture_choice() == ("keep", None)
+    kept.combo.setCurrentIndex(kept.combo.findData("anime"))
+    assert kept.picture_choice() == ("clear", None)
 
     session = window.session
     session.provider = MockChatProvider(["Woodblock print, flat muted colours."])
@@ -363,8 +379,8 @@ def test_a_story_s_style_can_be_taken_from_a_picture(app, window, monkeypatch, t
     monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(picture), ""))
     monkeypatch.setattr(style_from_picture, "cropped_picture", lambda *a, **k: (PNG, ".png"))
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
-    words = style_from_picture.describe_style(window, session, {})
-    assert words == "Woodblock print, flat muted colours"
+    found = style_from_picture.describe_style(window, session, {})
+    assert found == ("Woodblock print, flat muted colours", PNG, ".png")
     assert session.provider.requests[-1].messages[0].parts[0].image.startswith("data:image/png")
 
     # A prompt writer known not to see pictures is said, and nothing is sent.
@@ -379,3 +395,43 @@ def test_a_story_s_style_can_be_taken_from_a_picture(app, window, monkeypatch, t
         is None
     )
     assert "can't see pictures" in said[0] and len(session.provider.requests) == sent
+
+
+def test_the_style_picture_goes_with_portraits_and_restyles_when_ticked(app, window):
+    from sealedlore.engine.picture_styles import STYLE_REF_ID
+    from sealedlore.gui.restyle_dialog import RestyleDialog
+
+    session = window.session
+    card = session.cast[0]
+    session.story.picture_style, session.story.image_style = "", "woodcut, bold black lines"
+    # Setup's choice, as the window keeps it.
+    window._apply_style_picture(("set", (PNG, ".png")))
+    assert session.style_reference() is not None
+
+    reply = json.dumps({"portraits": [{"name": card.name, "prompt": "A tired man."}]})
+    session.provider = MockChatProvider([reply, reply])
+    dialog = PortraitsDialog(session, [card], catalog=_Catalog(), browse=None)
+    wait_for(app, lambda: not dialog.writing())
+    assert dialog.style.picture_wanted() and "as image 1" in dialog.sends.text()
+    reference = DEFAULT_TEXTS["pictures.style.reference"].replace("{number}", "1")
+    assert dialog.rows[0].prompt.toPlainText().startswith(reference)
+    requests = dialog.requests()
+    assert [r.ref_id for r in requests[0].references] == [STYLE_REF_ID]
+    # Unticked, the prompts are written again without it and it stays home.
+    dialog.style.with_picture.setChecked(False)
+    wait_for(app, lambda: not dialog.writing())
+    assert not dialog.rows[0].prompt.toPlainText().startswith(reference)
+    assert dialog.requests()[0].references == ()
+    assert dialog.style.picture_choice() == ("clear", None)
+    dialog.reject()
+
+    restyle = RestyleDialog(session, [card], catalog=_Catalog(), browse=None)
+    prompt = restyle.rows[0].prompt.toPlainText()
+    assert prompt.startswith("Redraw image 1 entirely in the art style of image 2")
+    assert [r.ref_id for r in restyle.requests()[0].references] == ["p", STYLE_REF_ID]
+    restyle.style.with_picture.setChecked(False)
+    assert restyle.rows[0].prompt.toPlainText().startswith("Redraw this picture entirely")
+    restyle.reject()
+
+    window._apply_style_picture(("clear", None))
+    assert session.story.style_picture == ""
