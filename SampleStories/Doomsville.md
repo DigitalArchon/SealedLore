@@ -92,9 +92,9 @@ and how many people he can shoot with them.
 ## Elena Ruiz
 - role: storyteller
 - hidden: yes
-- picture: pictures/elena.jpg | portrait | look: apron | expression: neutral
-- picture: pictures/elena-happy.jpg | look: apron | expression: happy
-- picture: pictures/elena-sad.jpg | look: apron | expression: sad
+- picture: pictures/elena.jpg | portrait | look: work clothes | expression: neutral
+- picture: pictures/elena-happy.jpg | look: work clothes | expression: happy
+- picture: pictures/elena-sad.jpg | look: work clothes | expression: sad
 
 25, a former doctor in Hellsville, still doing her best to treat the injured and
 keep her community going.
