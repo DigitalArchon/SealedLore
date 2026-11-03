@@ -42,6 +42,8 @@ from sealedlore.gui.picture_use import CHARACTER, PLACE, UsePictureDialog
 from sealedlore.gui.picture_variant import PictureVariantDialog, VariantSubject
 from sealedlore.gui.portraits_dialog import PortraitsDialog
 from sealedlore.gui.ref_images import PICTURE_FILTER, pixmap_of
+from sealedlore.gui.restyle_dialog import ask_restyle
+from sealedlore.gui.style_from_picture import describe_style
 from sealedlore.gui.transcript import FailedPictureItem, PendingPicture
 from sealedlore.gui.winprivacy import exclude_from_capture
 from sealedlore.models.character import Character
@@ -98,6 +100,15 @@ class ImagesWindow:
         )
         self.portraits_action.triggered.connect(lambda: self.draw_card_pictures())
         story_menu.addAction(self.portraits_action)
+        # Pictures redrawn in a style, keeping what each shows (the author,
+        # Nov 3 2026: imported pictures quickly made to suit the style).
+        self.restyle_action = QAction("Restyle pictures…", self)
+        self.restyle_action.setStatusTip(
+            "The cards' pictures redrawn in a style, keeping what each shows; you see every "
+            "prompt first"
+        )
+        self.restyle_action.triggered.connect(lambda: self.restyle_pictures())
+        story_menu.addAction(self.restyle_action)
         # The place the scene is at, as a picture of the place itself (the
         # author, Oct 24 2026); also a button above the story.
         self.place_action = QAction("Picture of this p&lace…", self)
@@ -193,6 +204,13 @@ class ImagesWindow:
             and not self.session.story.chat
             and not self.session.in_private
             and any(self.session.picture_cards())
+        )
+        self.restyle_action.setEnabled(
+            has_story
+            and not busy
+            and not self.session.story.chat
+            and not self.session.in_private
+            and any(c.reference_images for cards in self.session.picture_cards() for c in cards)
         )
         self.background_action.setEnabled(has_story and not busy)
         self.clear_background_action.setEnabled(
@@ -445,6 +463,7 @@ class ImagesWindow:
         characters, lore = list(characters or []), list(lore or [])
         if not characters and not lore:
             return False
+        holder: list = []
         dialog = PortraitsDialog(
             session,
             characters,
@@ -452,7 +471,9 @@ class ImagesWindow:
             catalog=self.image_catalog,
             browse=self._browse_pictures,
             parent=self._dialog_parent(),
+            describe=lambda: describe_style(holder[0], session, self.catalog.models),
         )
+        holder.append(dialog)
         accepted = dialog.exec()
         chosen = dialog.chosen_model() if accepted else ""
         style = dialog.chosen_style() if accepted else None
@@ -467,6 +488,31 @@ class ImagesWindow:
         if style is not None:
             # The story's from now on, as the dialog says.
             session.set_picture_style(*style)
+        self._start_card_pictures(requests)
+        return bool(requests)
+
+    def restyle_pictures(self, cards: list | None = None) -> bool:
+        """Cards' pictures redrawn in a style (gui/restyle_dialog.py): by
+        default every card the models may see that has a picture. True when
+        drawing began."""
+        session = self.session
+        if session is None or self._card_pictures_refused(session):
+            return False
+        if cards is None:
+            characters, lore = session.picture_cards()
+            cards = [*characters, *lore]
+        cards = [card for card in cards if card.reference_images]
+        if not cards:
+            self.statusBar().showMessage("No pictures to restyle yet.", 6000)
+            return False
+        requests = ask_restyle(
+            self._dialog_parent(),
+            session,
+            cards,
+            catalog=self.image_catalog,
+            browse=self._browse_pictures,
+        )
+        self._drain_side_costs()
         self._start_card_pictures(requests)
         return bool(requests)
 

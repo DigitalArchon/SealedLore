@@ -87,6 +87,10 @@ LISTING = {
     ]
 }
 
+# A story picture's prompt opens with the story's style line (here the
+# default: realistic, as its portraits are).
+DEFAULT_STYLE = "Photorealistic photograph, natural light, sharp focus. "
+
 
 def image_client(handler) -> ImageClient:
     return ImageClient(
@@ -381,7 +385,8 @@ def test_the_writer_rides_the_story_prompt_and_offers_only_visible_pictures(
     assert offered[0].present
 
     draft = session.write_image_prompt("Serrik, brooding")
-    assert draft.prompt == "A duellist, image 1."
+    # After the story's style line (the default's: realistic throughout).
+    assert draft.prompt == DEFAULT_STYLE + "A duellist, image 1."
     assert [use.owner_name for use in draft.references] == ["Serrik Vaun"]
     tail = session.provider.requests[-1].messages[-1].text
     assert "# IMAGE PROMPT" in tail
@@ -421,7 +426,7 @@ def test_rewriting_around_the_authors_pictures_keeps_their_order(
     session = make_session(tmp_path, saved, ['{"references": [], "prompt": "Redone."}'])
     fixed = [serrik_ref()]
     draft = session.write_image_prompt("", fixed=fixed)
-    assert draft.prompt == "Redone."
+    assert draft.prompt == DEFAULT_STYLE + "Redone."
     assert draft.references == fixed
 
 

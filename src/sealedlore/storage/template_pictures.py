@@ -121,6 +121,7 @@ def keep_pictures(
                     "look": ref.look,
                     "expression": ref.expression,
                     "framing": ref.framing,
+                    "style": ref.style,
                 }
             )
         cards[character.name] = {
@@ -199,6 +200,7 @@ def apply_kept(
             ref.look = str(row.get("look") or "")
             ref.expression = str(row.get("expression") or "")
             ref.framing = str(row.get("framing") or "")
+            ref.style = str(row.get("style") or "")
             pictures.append(ref)
         # The template's own that weren't kept stay, after: it is as it was.
         pictures += [ref for ref in character.reference_images if ref in own.values()]

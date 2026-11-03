@@ -113,6 +113,7 @@ class SetupDialog(QDialog):
         parent: QWidget | None = None,
         characters: QWidget | None = None,
         models: ModelChoices | None = None,
+        describe_style: Callable[[], str | None] | None = None,
     ) -> None:
         """`cast`: the story's own list, read again whenever the Starting
         scene tab is shown, since `characters` (the Cast page, lent) may
@@ -120,6 +121,8 @@ class SetupDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Story setup")
         self.texts = texts
+        # Words for a picture's style (gui/style_from_picture.py), the window's.
+        self._describe_style = describe_style
         self.setMinimumSize(640, 560)
         size_to_screen(self, 0.62 if characters is not None else 0.5, 0.82)
         self.story = story
@@ -429,7 +432,10 @@ class SetupDialog(QDialog):
             )
         )
         self.picture_style = PictureStyleField(
-            self.story.picture_style, self.story.image_style, texts=self.texts
+            self.story.picture_style,
+            self.story.image_style,
+            texts=self.texts,
+            from_picture=self._describe_style,
         )
         form.addRow("Picture style", self.picture_style)
         form.addRow(

@@ -620,6 +620,8 @@ class CastBoard(QWidget):
     spoilers_toggled = Signal(bool)
     # Keep everyone's pictures for new stories from the story's template.
     keep_requested = Signal()
+    # (card id, "" for everyone shown): pictures redrawn in a style.
+    restyle_requested = Signal(str)
 
     def __init__(self, pictures: StoryPictures, parent=None) -> None:
         super().__init__(parent)
@@ -676,6 +678,13 @@ class CastBoard(QWidget):
         self.files_button.clicked.connect(
             lambda: self._current and self.files_requested.emit(self._current, "", "")
         )
+        self.restyle_button = QPushButton("Restyle…")
+        self.restyle_button.setToolTip(
+            "Their pictures redrawn in a style (the story's, or another), keeping what each shows"
+        )
+        self.restyle_button.clicked.connect(
+            lambda: self.restyle_requested.emit(self._current or "")
+        )
         self.fill_button = QPushButton()
         self.fill_button.setObjectName("sendButton")
         self.fill_button.clicked.connect(self._fill)
@@ -699,7 +708,14 @@ class CastBoard(QWidget):
         header.add_group([self.title])
         header.add_group([self.spoilers])
         header.add_group([QLabel("Size"), self.size_choice])
-        header.add_group([self.add_look_button, self.add_expression_button, self.files_button])
+        header.add_group(
+            [
+                self.add_look_button,
+                self.add_expression_button,
+                self.files_button,
+                self.restyle_button,
+            ]
+        )
         header.add_group([self.fill_button])
         header.add_group([self.keep_button, self.back_button], right=True)
 
@@ -921,6 +937,9 @@ class CastBoard(QWidget):
         for widget in (self.add_look_button, self.add_expression_button, self.files_button):
             widget.setVisible(editing)
             widget.setEnabled(editing and self._can_change)
+        # One character's pictures, or everyone's from the overview.
+        self.restyle_button.setEnabled(self._can_change)
+        self.restyle_button.setText("Restyle…" if editing else "Restyle everyone…")
         if card is None:
             self.title.setText(EVERYONE)
             total = sum(len(c.reference_images) for c in self._cards)

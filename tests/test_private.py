@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from sealedlore.engine.picture_styles import picture_words
 from sealedlore.engine.plot_md import parse_plot_markdown
 from sealedlore.engine.private_prompt import (
     SECTION_PRIVATE_RULES,
@@ -363,7 +364,9 @@ def test_a_picture_in_a_private_scene_is_prompted_by_the_private_model(tmp_path:
     before = len(main.payloads)
     private.responses = ['{"references": [], "prompt": "Two figures by a rain-streaked window."}']
     draft = session.write_image_prompt("")
-    assert draft.prompt == "Two figures by a rain-streaked window."
+    # After the story's style line.
+    assert draft.prompt.endswith(". Two figures by a rain-streaked window.")
+    assert draft.prompt.startswith(picture_words(session.story, session.texts)[0])
     assert len(main.payloads) == before
     assert MARKER in json.dumps(private.payloads[-1])
     # Memory only: the writer's call is logged without what it said.

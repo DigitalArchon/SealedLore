@@ -2480,11 +2480,23 @@ _text(
     (("style", "the story's picture style"),),
 )
 
+# The author (Nov 3 2026): "Default style should be the same throughout the
+# story": a story with no style chosen has its pictures realistic, as its
+# portraits are. Only a simple chat leaves the style to the writer.
+_text(
+    "pictures.style.default",
+    PICTURES,
+    "Picture prompt: the default style",
+    "The style a picture or video of a story is drawn in when the story has none chosen "
+    "(Setup → About → Picture style): realistic, as its portraits are.",
+    "Photorealistic photograph, natural light, sharp focus",
+)
+
 _text(
     "pictures.style.free",
     PICTURES,
     "Picture prompt: no style set",
-    "In the picture prompt request, when the story sets no picture style.",
+    "In the picture prompt request of a simple chat, which has no picture style.",
     "- Style: choose one that suits the story (say, cinematic concept art or a "
     "painted illustration) and name it in the prompt.",
 )
@@ -2897,6 +2909,93 @@ _text(
     "armour, injured): the Look the new picture is labelled with.",
     "Change their clothes or state to: {look}.",
     (("look", "The look the new picture is labelled with"),),
+)
+
+# A picture redrawn in another style, or showing more or less of them (the
+# author, Nov 3 2026: imported pictures "quickly modify them to suit the
+# style"; a full-body version of a portrait). Both are edits of the picture:
+# the person is kept by `pictures.edit.person`.
+# Not an edit's "change nothing else": live (FLUX.3 Klein, Nov 3 2026) that
+# kept John a photograph under "anime", "glamorous" and "3D animated", while
+# comic and watercolour came through. What is kept is said here instead.
+# A story's style from a picture (the author, Nov 3 2026: "base the style off
+# the import"): a model that sees pictures says it in words, which become the
+# story's own style. Live (Sonnet 4.6) on a woodblock print and a pencil and
+# ink-wash sketch, its line drew John and Jane recognisably in each; sending
+# the picture itself as a style reference held the palette closer (the sketch
+# stayed sepia), and is not built: SealedLoreDocs design/images.md.
+_text(
+    "pictures.style.from_picture",
+    PICTURES,
+    "Picture style: from a picture",
+    "Sent with a picture to a model that sees pictures (Setup → About → Picture style → From "
+    "a picture…): its reply becomes the story's own style.",
+    "Describe this picture's visual style for an image model, so that it can draw other "
+    "subjects in the same style: one line of 20 to 40 words naming its medium, line, colour, "
+    "light and texture. Say nothing of what or who the picture shows. Reply with the line "
+    "alone.",
+)
+
+_text(
+    "pictures.restyle",
+    PICTURES,
+    "Card pictures: another style",
+    "Opens the prompt of a picture redrawn in another style (Change this picture…, Restyle "
+    "pictures…); what else to change and what to keep follow it.",
+    "Redraw this picture entirely in this style: {style}.",
+    (("style", "The style's words"),),
+)
+
+_text(
+    "pictures.restyle.person",
+    PICTURES,
+    "Card pictures: what a restyle keeps (a character)",
+    "Follows `pictures.restyle` for a character's picture.",
+    "Keep the same person, with what is around them, in the same pose, clothes and framing "
+    "unless the change says otherwise; change only how it is all drawn.",
+)
+
+_text(
+    "pictures.restyle.thing",
+    PICTURES,
+    "Card pictures: what a restyle keeps (lore)",
+    "Follows `pictures.restyle` for a lore entry's picture or the background.",
+    "Keep the same place or thing, its layout and the viewpoint; change only how it is drawn.",
+)
+
+_text(
+    "pictures.restyle.scene",
+    PICTURES,
+    "Card pictures: what a restyle keeps (a picture of the story)",
+    "Follows `pictures.restyle` for a picture of the story.",
+    "Keep the same scene: the same people with the same faces and clothes, the same place "
+    "and composition; change only how it is drawn.",
+)
+
+_text(
+    "pictures.reframe.head",
+    PICTURES,
+    "Card pictures: closer, head and shoulders",
+    "The change asked for when a picture of someone is to show only their head and shoulders.",
+    "Show them closer: head and shoulders only.",
+)
+
+_text(
+    "pictures.reframe.torso",
+    PICTURES,
+    "Card pictures: the upper body",
+    "The change asked for when a picture of someone is to show them from the waist up.",
+    "Show them from the waist up, with their hands and what they hold, the picture "
+    "widened around them as it would go on.",
+)
+
+_text(
+    "pictures.reframe.full",
+    PICTURES,
+    "Card pictures: the whole figure",
+    "The change asked for when a picture of someone is to show their whole figure.",
+    "Show their whole figure from head to feet, standing, footwear included, the picture "
+    "widened around them as it would go on.",
 )
 
 _text(

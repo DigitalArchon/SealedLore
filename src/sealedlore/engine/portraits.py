@@ -282,6 +282,31 @@ def edit_prompt(change: str, *, keep: str, texts: PromptTexts = DEFAULT_TEXTS) -
     )
 
 
+def restyle_prompt(
+    style: str, *, keep: str, change: str = "", texts: PromptTexts = DEFAULT_TEXTS
+) -> str:
+    """The prompt that redraws a picture in `style` (its words), with any
+    other `change`, keeping what `keep` (one of EDIT_KEEPS) says."""
+    assert keep in EDIT_KEEPS, keep
+    words = " ".join(style.split()).rstrip(".")
+    change = " ".join(change.split())
+    if change and not change.endswith((".", "!", "?")):
+        change += "."
+    parts = [
+        texts.fill("pictures.restyle", style=words),
+        change,
+        texts[f"pictures.restyle.{keep}"],
+        texts["portraits.no_writing"],
+    ]
+    return " ".join(part for part in parts if part)
+
+
+def reframe_change(framing: str, texts: PromptTexts = DEFAULT_TEXTS) -> str:
+    """The change that shows `framing` (one of FRAMINGS) of someone."""
+    assert framing in FRAMINGS, framing
+    return texts[f"pictures.reframe.{framing}"]
+
+
 def size_like(model: ImageModelInfo | None, width: int, height: int) -> str:
     """The size the model lists nearest a picture's own shape (`width` by
     `height` pixels), the larger on a tie: an edit keeps the picture's shape.

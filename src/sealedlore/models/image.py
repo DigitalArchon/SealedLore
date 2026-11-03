@@ -46,6 +46,10 @@ class ImageRef(BaseModel):
     # How much of a character it shows, when drawn as a portrait here
     # (engine/portraits.py FRAMINGS: "head", "torso", "full"). Blank: not said.
     framing: str = ""
+    # The style it was drawn in here (engine/picture_styles.style_key: a
+    # ready-made style's id, one's own words, or "realistic"); blank for a
+    # picture brought in, or drawn before styles were kept.
+    style: str = ""
 
 
 class RefUse(BaseModel):
@@ -87,6 +91,10 @@ class GeneratedImage(BaseModel):
     card_look: str = ""
     card_expression: str = ""
     card_framing: str = ""
+    # The style it was drawn in, and the picture on the card it takes the
+    # place of (a restyle): that one moves to the end, unlabelled.
+    card_style: str = ""
+    card_replaces: str = ""
     # Drawn to be the story's background (Media → the background → Draw a
     # new background… or Edit…): put behind the story once drawn, once
     # (`Story.backgrounds_taken`).

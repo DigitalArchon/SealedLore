@@ -55,6 +55,7 @@ class CastBoardWindow:
         )
         board.spoilers_toggled.connect(self._board_spoilers)
         board.keep_requested.connect(self._board_keep)
+        board.restyle_requested.connect(self._board_restyle)
         self.image_jobs.changed.connect(self._refresh_board)
         # A new look's first picture failed: the rest of its row is let go
         # (once the failure is out of the pending list).
@@ -171,6 +172,19 @@ class CastBoardWindow:
             hidden=session.hidden_ids(),
             spoilers=self.config.show_plot_spoilers,
         )
+
+    def _board_restyle(self, card_id: str) -> None:
+        """Restyle… on the board: the character shown, or everyone shown."""
+        board, session = self.cast_board, self.session
+        if session is None:
+            return
+        if card_id:
+            card = session.card(card_id)
+            cards = [card] if card is not None else []
+        else:
+            cards = list(board._cards)
+        if self.restyle_pictures(cards):
+            self._refresh_board()
 
     def _board_keep(self) -> None:
         """Every character's pictures, labels and sheets kept for new stories

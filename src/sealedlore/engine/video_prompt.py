@@ -47,9 +47,11 @@ def build_video_question(
     anchor_is_leaf: bool = True,
     chat: bool = False,
     texts: PromptTexts = DEFAULT_TEXTS,
+    style_note: str = "",
 ) -> str:
     """The request for a video prompt, in place of an author's question.
-    `audio`: None when the model has no say about sound."""
+    `audio`: None when the model has no say about sound. `style_note`: the
+    style's note to the writer, if any (engine/picture_styles.py)."""
     asked = "asked" if direction.strip() else "unasked"
     if chat:
         subject = texts[f"video.subject.chat_{asked}"]
@@ -76,6 +78,8 @@ def build_video_question(
         if style.strip()
         else texts["video.style.free"]
     )
+    if style.strip() and style_note:
+        parts.append(f"- {style_note}")
     if direction.strip():
         parts += ["", "# THE AUTHOR ASKS FOR", direction.strip()]
     parts += ["", texts["video.reply"]]

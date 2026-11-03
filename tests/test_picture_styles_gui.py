@@ -185,3 +185,197 @@ def test_a_style_chosen_in_the_dialog_becomes_the_story_s_when_drawn(
         assert load_story_bundle(story.id, root=tmp_path).story.picture_style == "watercolour"
     finally:
         window.close()
+
+
+# --- step 2: a picture's own style, restyling, reframing, a style from a picture --------
+
+
+@pytest.fixture
+def window(app, tmp_path: Path, story, cast):
+    from sealedlore.models.image import ImageRef
+    from tests.conftest import make_exchange
+
+    bundle = StoryBundle(story=story, cast=cast, nodes=make_exchange(2))
+    bundle.story.active_leaf_id = "a1"
+    save_story_bundle(bundle, root=tmp_path)
+    window = MainWindow(root=tmp_path, use_mock=True)
+    window.open_story(story.id)
+    session = window.session
+    refs = []
+    for ref_id, look, expression, style in (
+        ("p", "normal clothes", "neutral", ""),
+        ("h", "normal clothes", "happy", "anime"),
+        ("a", "combat armour", "neutral", ""),
+    ):
+        session.pictures.write(f"images/refs/{ref_id}.png", PNG)
+        refs.append(
+            ImageRef(
+                id=ref_id,
+                file=f"images/refs/{ref_id}.png",
+                look=look,
+                expression=expression,
+                style=style,
+            )
+        )
+    session.cast[0].reference_images = refs
+    yield window
+    window.close()
+
+
+def _png() -> bytes:
+    import struct
+    import zlib
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+        )
+
+    raw = b"\0\x80\x80\x80" * 2
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 2, 8, 2, 0, 0, 0))
+        + chunk(b"IDAT", zlib.compress(raw))
+        + chunk(b"IEND", b"")
+    )
+
+
+PNG = _png()
+
+
+def test_a_picture_of_the_story_may_have_its_own_style(app, window):
+    from sealedlore.gui.image_dialog import ImageDialog
+
+    session = window.session
+    session.story.picture_style = "gritty"
+    first = '{"references": [], "prompt": "Two figures by a fire."}'
+    again = '{"references": [], "prompt": "Two figures laughing by a fire."}'
+    session.provider = MockChatProvider([first, again])
+    dialog = ImageDialog(session, parent=window)
+    assert dialog.style.value() == ("gritty", "")
+    assert "Gritty and realistic" in dialog.style_note.text()
+    dialog._write()
+    wait_for(app, lambda: dialog._worker is None)
+    gritty = DEFAULT_TEXTS["pictures.styles.gritty"]
+    assert dialog.prompt.toPlainText() == f"{gritty}. Two figures by a fire."
+    # Another style for this picture: written again, untouched as it was.
+    dialog.style.combo.setCurrentIndex(dialog.style.combo.findData("anime"))
+    wait_for(app, lambda: dialog._worker is None)
+    anime = DEFAULT_TEXTS["pictures.styles.anime"]
+    assert dialog.prompt.toPlainText() == f"{anime}. Two figures laughing by a fire."
+    # Changed by hand, only its style line is swapped.
+    dialog.prompt.setPlainText(f"{anime}. My own scene.")
+    dialog.style.combo.setCurrentIndex(dialog.style.combo.findData("comic"))
+    comic = DEFAULT_TEXTS["pictures.styles.comic"]
+    assert dialog.prompt.toPlainText() == f"{comic}. My own scene."
+    assert session.story.picture_style == "gritty"  # the story's is unchanged
+    dialog.reject()
+
+
+def test_change_this_picture_redraws_it_in_a_style_or_shows_more_of_them(app, window):
+    from sealedlore.gui.picture_variant import PictureVariantDialog
+
+    session = window.session
+    card = session.cast[0]
+    dialog = PictureVariantDialog(
+        session, card, card.reference_images[0], edit=True, catalog=_Catalog(), browse=None
+    )
+    dialog.model.setText(KLEIN.id)
+    assert dialog.style.value()[0] == "keep" and dialog.chosen_framing() == ""
+    assert "change nothing else" in dialog.prompt.toPlainText()  # an edit, as before
+    dialog.style.combo.setCurrentIndex(dialog.style.combo.findData("watercolour"))
+    dialog.framing.setCurrentIndex(dialog.framing.findData("full"))
+    prompt = dialog.prompt.toPlainText()
+    watercolour = DEFAULT_TEXTS["pictures.styles.watercolour"]
+    assert prompt.startswith(f"Redraw this picture entirely in this style: {watercolour}.")
+    assert DEFAULT_TEXTS["pictures.reframe.full"] in prompt
+    request = dialog.request()
+    assert (request.card_framing, request.card_style, request.size) == (
+        "full",
+        "watercolour",
+        "1536x1536",
+    )
+    assert request.card_look == "normal clothes"  # its labels kept
+    dialog.reject()
+
+
+def test_restyle_pictures_ticks_those_not_in_the_style_and_each_takes_its_place(
+    app, window, monkeypatch
+):
+    from sealedlore.gui.restyle_dialog import RestyleDialog
+
+    session = window.session
+    card = session.cast[0]
+    session.story.picture_style = "anime"
+    dialog = RestyleDialog(session, [card], catalog=_Catalog(), browse=None)
+    # The one already drawn in anime is left out to begin with.
+    assert [row.tick.isChecked() for row in dialog.rows] == [True, False, True]
+    anime = DEFAULT_TEXTS["pictures.styles.anime"]
+    assert all(anime in row.prompt.toPlainText() for row in dialog.rows)
+    requests = dialog.requests()
+    assert [r.card_replaces for r in requests] == ["p", "a"]
+    assert {r.card_style for r in requests} == {"anime"}
+    assert [(r.card_look, r.card_expression) for r in requests] == [
+        ("normal clothes", "neutral"),
+        ("combat armour", "neutral"),
+    ]
+    # Another style rewrites every prompt not changed by hand.
+    dialog.rows[0].prompt.setPlainText("My own words.")
+    dialog.style.combo.setCurrentIndex(dialog.style.combo.findData("comic"))
+    comic = DEFAULT_TEXTS["pictures.styles.comic"]
+    assert dialog.rows[0].prompt.toPlainText() == "My own words."
+    assert comic in dialog.rows[2].prompt.toPlainText()
+    dialog.reject()
+    # With no listing yet it opens all the same, with no price.
+    unlisted = RestyleDialog(session, [card], catalog=None, browse=None)
+    assert "price isn't listed" in unlisted.note.text()
+    unlisted.reject()
+    # The window's Story → Restyle pictures… and the board's Restyle….
+    asked: list = []
+    monkeypatch.setattr(
+        window_images,
+        "ask_restyle",
+        lambda parent, session, cards, **kw: asked.append([c.id for c in cards]) or [],
+    )
+    # No image endpoint here: the check would say so in a message box.
+    monkeypatch.setattr(window, "_card_pictures_refused", lambda _session: False)
+    window._update_image_controls()
+    window.restyle_action.trigger()
+    window.show_cast_board(True)
+    window.cast_board.show_character(card.id)
+    window.cast_board.restyle_button.click()
+    assert asked == [[card.id], [card.id]]
+
+
+def test_a_story_s_style_can_be_taken_from_a_picture(app, window, monkeypatch, tmp_path: Path):
+    from PySide6.QtWidgets import QFileDialog, QMessageBox
+
+    from sealedlore.gui import style_from_picture
+
+    field = PictureStyleField("", "", from_picture=lambda: "woodcut, bold black lines")
+    field.from_picture.click()
+    assert field.value() == ("", "woodcut, bold black lines") and not field.own.isHidden()
+
+    session = window.session
+    session.provider = MockChatProvider(["Woodblock print, flat muted colours."])
+    picture = tmp_path / "style.png"
+    picture.write_bytes(PNG)
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(picture), ""))
+    monkeypatch.setattr(style_from_picture, "cropped_picture", lambda *a, **k: (PNG, ".png"))
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    words = style_from_picture.describe_style(window, session, {})
+    assert words == "Woodblock print, flat muted colours"
+    assert session.provider.requests[-1].messages[0].parts[0].image.startswith("data:image/png")
+
+    # A prompt writer known not to see pictures is said, and nothing is sent.
+    class Blind:
+        vision = False
+
+    said: list[str] = []
+    monkeypatch.setattr(QMessageBox, "information", lambda _p, _t, text: said.append(text))
+    sent = len(session.provider.requests)
+    assert (
+        style_from_picture.describe_style(window, session, {session.image_prompt_model: Blind()})
+        is None
+    )
+    assert "can't see pictures" in said[0] and len(session.provider.requests) == sent

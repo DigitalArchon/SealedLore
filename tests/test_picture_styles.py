@@ -13,9 +13,12 @@ from sealedlore.engine.images import run_image_request
 from sealedlore.engine.picture_styles import (
     BY_ID,
     DEFAULT_LABEL,
+    REALISTIC,
     STYLES,
+    picture_words,
     read_style,
     story_style,
+    style_key,
     style_label,
     style_note,
     style_words,
@@ -23,11 +26,18 @@ from sealedlore.engine.picture_styles import (
 )
 from sealedlore.engine.plot_file import read_plot_document, render_plot_markdown
 from sealedlore.engine.plot_md import parse_plot_markdown
-from sealedlore.engine.portraits import FRAMINGS, portrait_style, with_lead
+from sealedlore.engine.portraits import (
+    FRAMINGS,
+    portrait_style,
+    reframe_change,
+    restyle_prompt,
+    with_lead,
+)
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, TEXTS, PromptTexts
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter
 from sealedlore.models.config import Config
+from sealedlore.models.image import ImageRef
 from sealedlore.providers.images import ImageModelInfo, ImageReply
 from sealedlore.providers.mock import MockChatProvider
 from sealedlore.storage.repository import save_story_bundle
@@ -229,3 +239,135 @@ def test_a_picture_of_the_story_is_written_in_the_story_s_style(tmp_path: Path):
     session, _provider = doomsville(tmp_path, ["x"])
     assert story_style(session.story).startswith("Gritty, photorealistic")
     assert BY_ID["gritty"].label == "Gritty and realistic"
+
+
+def test_a_story_s_default_style_is_realistic_throughout_and_a_picture_may_have_its_own(
+    tmp_path: Path,
+):
+    """The author: "Default style should be the same throughout the story, but
+    the person can always choose to change for things like a picture of the
+    story". A simple chat has no style: its writer chooses."""
+    session, _provider = doomsville(tmp_path, ["x"])
+    default = DEFAULT_TEXTS["pictures.style.default"].rstrip(".")
+    session.story.picture_style = ""
+    assert picture_words(session.story) == (default, "")
+    session.story.picture_style = "gritty"
+    assert picture_words(session.story)[0].startswith("Gritty, photorealistic")
+    # One picture in another style, its note too.
+    words, note = picture_words(session.story, style=("anime", ""))
+    assert words.startswith("Anime style") and note == DEFAULT_TEXTS["pictures.styles.anime.note"]
+    assert picture_words(session.story, style=("", "ink wash")) == ("ink wash", "")
+    assert picture_words(session.story, style=("", ""))[0] == default
+    session.story.mode = "chat"
+    session.story.picture_style = ""
+    assert picture_words(session.story) == ("", "")
+
+
+def test_a_picture_of_the_story_opens_with_its_style_the_story_s_or_its_own(tmp_path: Path):
+    reply = json.dumps({"references": [], "prompt": "Two figures by a fire."})
+    session, provider = doomsville(tmp_path, [reply, reply, json.dumps({"prompt": "He turns."})])
+    gritty = style_words("gritty", "", DEFAULT_TEXTS)
+    assert session.write_image_prompt("").prompt == f"{gritty}. Two figures by a fire."
+    draft = session.write_image_prompt("", style=("anime", ""))
+    anime = style_words("anime", "", DEFAULT_TEXTS)
+    assert draft.prompt == f"{anime}. Two figures by a fire."
+    asked = provider.requests[-1].messages[-1].text
+    assert f"- Style: {anime}." in asked and DEFAULT_TEXTS["pictures.styles.anime.note"] in asked
+    video = session.write_video_prompt("", duration="5", audio=False, style=("comic", ""))
+    assert video == f"{style_words('comic', '', DEFAULT_TEXTS)}. He turns."
+
+
+def test_restyle_and_reframe_prompts_keep_what_the_picture_shows():
+    anime = style_words("anime", "", DEFAULT_TEXTS)
+    prompt = restyle_prompt(anime, keep="person", change="Make them smile")
+    assert prompt.startswith(
+        f"Redraw this picture entirely in this style: {anime}. Make them smile."
+    )
+    assert DEFAULT_TEXTS["pictures.restyle.person"] in prompt and prompt.endswith(NO_WRITING)
+    # Not an edit's "change nothing else", which kept John a photograph.
+    assert "change nothing else" not in prompt
+    for keep in ("thing", "scene"):
+        assert DEFAULT_TEXTS[f"pictures.restyle.{keep}"] in restyle_prompt(anime, keep=keep)
+    assert reframe_change("full") == DEFAULT_TEXTS["pictures.reframe.full"]
+    assert "waist up" in reframe_change("torso")
+    assert style_key("anime", "x") == "anime"
+    assert style_key("", " ink  wash ") == "ink wash"
+    assert style_key("", "") == REALISTIC
+
+
+def test_a_restyled_picture_takes_the_old_one_s_place_and_the_old_one_is_kept_unlabelled(
+    tmp_path: Path,
+):
+    session, _provider = doomsville(tmp_path, ["x"])
+    john = next(c for c in session.cast if c.name == "John")
+    for ref_id, look in (("portrait", "winter coat"), ("armour", "combat armour"), ("u", "")):
+        session.pictures.write(f"images/refs/{ref_id}.png", png())
+        john.reference_images.append(
+            ImageRef(id=ref_id, file=f"images/refs/{ref_id}.png", look=look, expression="neutral")
+        )
+    portrait, armour = john.reference_images[0], john.reference_images[1]
+    count = len(john.reference_images)
+    klein = ImageModelInfo(id="k", name="Klein", resolutions=("1024x1024",), max_inputs=10)
+
+    class Images:
+        api = "nanogpt"
+
+        def generate(self, payload):
+            return ImageReply(images=[png()], raw={}, cost=0.01)
+
+    requests = [
+        session.card_request(
+            john,
+            session.card_restyle_prompt(john, "Anime style"),
+            model="k",
+            info=klein,
+            first=False,
+            source=ref,
+            look=ref.look,
+            expression=ref.expression,
+            framing=ref.framing,
+            style="anime",
+            replaces=ref.id,
+        )
+        for ref in (portrait, armour)
+    ]
+    assert all(r.card_replaces and r.card_style == "anime" for r in requests)
+    at = john.reference_images.index(armour)
+    for request in requests:
+        session.pictures.add_images(run_image_request(Images(), request, store=session.pictures))
+    session.take_card_pictures()
+    pictures = john.reference_images
+    assert len(pictures) == count + 2
+    # The new ones in the old ones' places, labelled as they were, in the style.
+    assert pictures[0].style == "anime" and pictures[0].id != portrait.id
+    assert pictures[at].style == "anime" and pictures[at].look == "combat armour"
+    # The old ones at the end, unlabelled: the board's tray.
+    assert pictures[-2:] == [portrait, armour]
+    assert (portrait.look, portrait.expression, armour.look) == ("", "", "")
+    # An edit of a restyled picture keeps its style.
+    edit = session.card_request(
+        john, "Angry.", model="k", info=klein, first=False, source=pictures[0]
+    )
+    assert edit.card_style == "anime"
+
+
+def test_a_picture_s_style_is_described_in_words_and_its_bytes_never_logged(tmp_path: Path):
+    words = '"Japanese woodblock print, bold ink outlines, flat muted colours."'
+    session, provider = doomsville(tmp_path, [words])
+    found = session.describe_picture_style(png(), "image/png", model="seeing/model")
+    assert found == "Japanese woodblock print, bold ink outlines, flat muted colours"
+    sent = provider.requests[-1]
+    part = sent.messages[0].parts[0]
+    assert part.text == DEFAULT_TEXTS["pictures.style.from_picture"]
+    assert part.image.startswith("data:image/png;base64,") and sent.model == "seeing/model"
+    from sealedlore.storage.repository import read_api_log
+
+    log = read_api_log(session.story.id, root=tmp_path)
+    kinds = [entry["kind"] for entry in log]
+    assert "style_from_picture_request" in kinds and "style_from_picture_response" in kinds
+    assert "base64," not in json.dumps(log)
+    session2, _ = doomsville(tmp_path / "b", ["   "])
+    import pytest
+
+    with pytest.raises(ValueError):
+        session2.describe_picture_style(png(), "image/png", model="m")

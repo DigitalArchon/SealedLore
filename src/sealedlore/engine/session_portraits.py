@@ -16,6 +16,7 @@ of them. Never in a private scene or a simple chat (a chat has no cards).
 
 from __future__ import annotations
 
+import base64
 import threading
 from collections.abc import Sequence
 
@@ -33,17 +34,23 @@ from sealedlore.engine.portraits import (
     fallback_prompt,
     parse_portrait_prompts,
     portrait_style,
+    restyle_prompt,
     where_it_begins,
     with_lead,
 )
 from sealedlore.ids import new_id
+from sealedlore.messages import ContentPart, PromptMessage
 from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef, RefUse
 from sealedlore.models.lore import LoreEntry
 from sealedlore.providers.base import ChatProvider, ChatRequest
 from sealedlore.providers.images import ImageModelInfo
+from sealedlore.providers.wire import without_pictures
 from sealedlore.storage.images import REFS_DIR
 from sealedlore.threads import BackgroundThread
+
+# Room for a style's words from a model that may reason first.
+STYLE_MAX_TOKENS = 1500
 
 # The caption a drawn portrait is given on its card.
 PORTRAIT_CAPTION = "portrait"
@@ -209,6 +216,8 @@ class PortraitRuntime:
         look: str = "",
         expression: str = "",
         framing: str = "",
+        style: str = "",
+        replaces: str = "",
     ) -> ImageRequest:
         """The request for one picture of a card, its prompt exactly as
         approved. `first`: it becomes the card's first picture (a new
@@ -218,12 +227,17 @@ class PortraitRuntime:
         labels on the card (engine/looks.py). `framing`: how much of a
         character it shows (engine/portraits.py FRAMINGS), which sets its
         size; blank, the source's when it is an edit, else a
-        head-and-shoulders portrait's size, unlabelled."""
+        head-and-shoulders portrait's size, unlabelled. `style`: the style
+        it is drawn in (engine/picture_styles.style_key), an edit's its
+        source's when blank. `replaces`: the picture on the card it takes the
+        place of (a restyle)."""
         person = isinstance(card, Character)
         references = tuple(references)
         if source is not None and not framing:
             # An edit shows as much of them as the picture it changes.
             framing = source.framing
+        if source is not None and not style:
+            style = source.style
         sending = 1 if source is not None else len(references)
         # The model's text or edit version, for what goes with the prompt.
         model, info = self.fitting_image_model(model, sending, info)
@@ -256,7 +270,47 @@ class PortraitRuntime:
             card_look=look if person else "",
             card_expression=expression if person else "",
             card_framing=framing if person else "",
+            card_style=style,
+            card_replaces=replaces,
         )
+
+    def describe_picture_style(self, data: bytes, mime: str, *, model: str | None = None) -> str:
+        """A picture's visual style in words, for the story's own style
+        (`pictures.style.from_picture`), by `model` (the prompt writer's by
+        default), which must see pictures. Logged without the picture's
+        bytes. Raises ProviderError, or ValueError for an empty reply."""
+        self._refuse_in_private("Describing a picture's style")
+        model = model or self.image_prompt_model
+        url = f"data:{mime};base64," + base64.b64encode(data).decode("ascii")
+        request = ChatRequest(
+            model=model,
+            extra_body=self.route_for("image_prompt", model),
+            messages=[
+                PromptMessage(
+                    role="user",
+                    parts=(ContentPart(text=self.texts["pictures.style.from_picture"], image=url),),
+                )
+            ],
+            params=self.side_params(model, max_tokens=STYLE_MAX_TOKENS, temperature=0.3),
+        )
+        log_ref = self._log(
+            "style_from_picture_request",
+            {"payload": without_pictures(self.provider.build_payload(request))},
+        )
+        try:
+            text, completed = self.provider.complete(request)
+        except Exception as exc:
+            self._log("style_from_picture_error", {"request_log_ref": log_ref, "error": str(exc)})
+            raise
+        self._log(
+            "style_from_picture_response",
+            {"request_log_ref": log_ref, "text": text, "usage": completed.raw_usage},
+        )
+        self.unreported_usage.append(self.priced(completed.usage, model))
+        words = " ".join((text or "").split()).strip().strip('"“”').rstrip(".")
+        if not words:
+            raise ValueError("the model described no style")
+        return words
 
     def set_picture_style(self, picture_style: str, image_style: str) -> None:
         """The story's picture style (engine/picture_styles.py), as chosen in
@@ -268,6 +322,11 @@ class PortraitRuntime:
         story.picture_style, story.image_style = picture_style, image_style
         self.forget_review_undo()
         self.save()
+
+    def card_restyle_prompt(self, card: Card, style: str, change: str = "") -> str:
+        """The prompt for a card's picture redrawn in `style` (its words)."""
+        keep = "person" if isinstance(card, Character) else "thing"
+        return restyle_prompt(style, keep=keep, change=change, texts=self.texts)
 
     def card_edit_prompt(self, card: Card, change: str) -> str:
         """The prompt for an edit of a card's picture."""
@@ -347,13 +406,27 @@ class PortraitRuntime:
                     look=image.card_look,
                     expression=image.card_expression,
                     framing=image.card_framing,
+                    style=image.card_style,
                 )
-                if image.card_first:
-                    card.reference_images.insert(0, ref)
+                pictures = card.reference_images
+                old = next((r for r in pictures if r.id == image.card_replaces), None)
+                if old is not None:
+                    # A restyle takes the old one's place, labels and all; the
+                    # old one stays at the end, unlabelled (the cast board's
+                    # tray), to keep or remove.
+                    at = pictures.index(old)
+                    pictures.remove(old)
+                    pictures.insert(at, ref)
+                    old.look, old.expression = "", ""
+                    pictures.append(old)
+                    if at == 0 and isinstance(card, Character):
+                        self.portraits_taken.append(card.id)
+                elif image.card_first:
+                    pictures.insert(0, ref)
                     if isinstance(card, Character):
                         self.portraits_taken.append(card.id)
                 else:
-                    card.reference_images.append(ref)
+                    pictures.append(ref)
                 names.append(card.name if isinstance(card, Character) else card.title)
             self.story.card_pictures_taken.append(image.id)
             taken.add(image.id)

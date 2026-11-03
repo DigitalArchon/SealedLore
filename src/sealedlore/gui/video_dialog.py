@@ -45,11 +45,18 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.picture_styles import DEFAULT_LABEL, picture_words, style_label
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.video_price import VideoQuote, pictures_worth, quote_video
 from sealedlore.engine.videos import VideoRequest
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.model_picker import ModelField, _Row
+from sealedlore.gui.picture_style import (
+    DEFAULT_TIP,
+    WRITER_CHOOSES,
+    WRITER_CHOOSES_TIP,
+    PictureStyleField,
+)
 from sealedlore.gui.ref_images import PICTURE_FILTER, store_reference, thumbnail_of
 from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.gui.video_jobs import VideoCatalog
@@ -100,6 +107,9 @@ class VideoDialog(QDialog):
         self._thread: QThread | None = None
         self._closing = False
         self._written: str | None = None
+        # The style line the prompt was written with, and the one being.
+        self._written_lead = ""
+        self._writing_lead = ""
         self._failure: str | None = None
         # WaveSpeed's own quote, for the settings it was asked about.
         self._remote_quote: tuple[str, float | None, str] | None = None
@@ -193,6 +203,25 @@ class VideoDialog(QDialog):
         elif self.session.tee_chat:
             self.writer.setText(self.session.model)
             self.writer.setReadOnly(True)
+        # The style, the story's unless changed for this video alone.
+        story = self.session.story
+        self.style = PictureStyleField(
+            story.picture_style,
+            story.image_style,
+            texts=self.session.texts,
+            default=(WRITER_CHOOSES, WRITER_CHOOSES_TIP)
+            if story.chat
+            else (DEFAULT_LABEL, DEFAULT_TIP),
+        )
+        self.style.changed.connect(self._on_style_changed)
+        self.style_note = QLabel(
+            "For this video only."
+            if story.chat
+            else "For this video only: the story's own is "
+            f"{style_label(story.picture_style, story.image_style)} (Story → Setup… → About)."
+        )
+        self.style_note.setObjectName("hintLabel")
+        self.style_note.setWordWrap(True)
         self.busy = QProgressBar()
         self.busy.setRange(0, 0)
         self.busy.setMaximumHeight(6)
@@ -234,6 +263,8 @@ class VideoDialog(QDialog):
         form.addRow("Frames", self.frames_host)
         form.addRow("", self.frames_note)
         form.addRow("Direction", direction_row)
+        form.addRow("Style", self.style)
+        form.addRow("", self.style_note)
         form.addRow("Prompt written by", self.writer)
         form.addRow("", self.busy)
         form.addRow("", self.status)
@@ -525,6 +556,8 @@ class VideoDialog(QDialog):
         start, end = self.frame(self.start_choice), self.frame(self.end_choice)
         model = self.writer_model()
         duration = settings.get("duration") or settings.get("seconds")
+        style = self.style.value()
+        self._writing_lead = picture_words(session.story, session.texts, style)[0]
         self._written, self._failure = None, None
 
         def job():
@@ -536,6 +569,7 @@ class VideoDialog(QDialog):
                 start=start,
                 end=end,
                 model=model,
+                style=style,
             )
             return
             yield
@@ -570,10 +604,27 @@ class VideoDialog(QDialog):
             self._show_status("Stopped before a prompt was written.")
             return
         self.prompt.setPlainText(self._written)
+        self._written_lead = self._writing_lead
         self._show_status(
             "Check the prompt and the settings, change anything, then Generate. If you change "
             "the length, sound or frames, Write prompt again: the prompt is written for them."
         )
+
+    def _on_style_changed(self) -> None:
+        """Another style for this video: the prompt's style line swapped when
+        it still opens with the one it was written in; Write prompt again
+        writes the rest for it (as for its length, sound or frames)."""
+        text = self.prompt.toPlainText()
+        if not text.strip() or self._worker is not None:
+            return
+        session = self.session
+        words = picture_words(session.story, session.texts, self.style.value())[0]
+        old = self._written_lead
+        if old and text.startswith(f"{old}. "):
+            rest = text[len(old) + 2 :]
+            self.prompt.setPlainText(f"{words}. {rest}" if words else rest)
+            self._written_lead = words
+        self._show_status("Write prompt again to have the whole prompt written for the style.")
 
     def _set_running(self, running: bool) -> None:
         self.busy.setVisible(running)

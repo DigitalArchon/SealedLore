@@ -103,6 +103,7 @@ from sealedlore.gui.start_page import NewDialog, StartChooser
 from sealedlore.gui.status import NoticeStatusBar, StatusStrip, WaitCounter
 from sealedlore.gui.stories import StoryListPanel
 from sealedlore.gui.story_map import StoryMap
+from sealedlore.gui.style_from_picture import describe_style
 from sealedlore.gui.style_panel import StylePanel
 from sealedlore.gui.summaries_panel import SummariesPanel
 from sealedlore.gui.tab_rows import TabRows
@@ -1615,6 +1616,9 @@ class MainWindow(
                 self._route_endpoint_of,
                 self._hosts_of,
                 self._qualify_recommended,
+            ),
+            describe_style=lambda: describe_style(
+                self._setup_dialog, self.session, self.catalog.models
             ),
         )
         self._setup_dialog = dialog
@@ -4822,6 +4826,7 @@ class MainWindow(
             self.last_review_action,
             self.undo_review_action,
             self.portraits_action,
+            self.restyle_action,
         ):
             action.setVisible(not self.in_chat)
         if self.in_chat:

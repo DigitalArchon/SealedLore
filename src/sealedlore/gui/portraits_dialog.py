@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.image_variants import family_id, picture_support
 from sealedlore.engine.images import ImageRequest
+from sealedlore.engine.picture_styles import style_key
 from sealedlore.engine.portraits import (
     DEFAULT_FRAMING,
     FRAMING_LABELS,
@@ -152,7 +153,9 @@ class PortraitsDialog(QDialog):
         catalog: ImageCatalog | None,
         browse: Callable[[str], str | None] | None,
         parent: QWidget | None = None,
+        describe: Callable[[], str | None] | None = None,
     ) -> None:
+        """`describe`: the words for a picture's style (From a picture…)."""
         super().__init__(parent)
         self.setWindowTitle("Pictures for the cards" if lore else "Portraits")
         self.setMinimumWidth(620)
@@ -187,7 +190,12 @@ class PortraitsDialog(QDialog):
         self.model_note.setObjectName("hintLabel")
         self.model_note.setWordWrap(True)
         story = session.story
-        self.style = PictureStyleField(story.picture_style, story.image_style, texts=session.texts)
+        self.style = PictureStyleField(
+            story.picture_style,
+            story.image_style,
+            texts=session.texts,
+            from_picture=describe if describe is not None else None,
+        )
         self.style_note = QLabel(
             "Every picture of this story is drawn in it: a style chosen here becomes the "
             "story's (Story → Setup… → About)."
@@ -402,6 +410,7 @@ class PortraitsDialog(QDialog):
         portrait's size and label by the framing chosen."""
         model, info = self.chosen_model(), self.model_info()
         framing = self.chosen_framing()
+        style = style_key(*self.chosen_style())
         return [
             self.session.card_request(
                 row.card,
@@ -410,6 +419,7 @@ class PortraitsDialog(QDialog):
                 info=info,
                 first=True,
                 framing=framing if isinstance(row.card, Character) else "",
+                style=style,
             )
             for row in self.rows
             if row.wanted()

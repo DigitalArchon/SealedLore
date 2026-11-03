@@ -122,7 +122,10 @@ def test_the_writer_fills_the_prompt_and_its_pictures(app, window: MainWindow):
     dialog.direction.setPlainText("Serrik, waiting")
     dialog._write()
     wait_for(app, lambda: dialog._worker is None)
-    assert dialog.prompt.toPlainText() == "The man in image 1 waits by the door."
+    assert dialog.prompt.toPlainText() == (
+        "Photorealistic photograph, natural light, sharp focus. "
+        "The man in image 1 waits by the door."
+    )
     assert [use.owner_name for use in dialog._refs] == ["Serrik Vaun"]
     assert not dialog.warning.isVisible()
 
@@ -130,7 +133,10 @@ def test_the_writer_fills_the_prompt_and_its_pictures(app, window: MainWindow):
     dialog.refs.setCurrentRow(0)
     dialog._remove_ref()
     assert "image 1" in dialog.warning.text()
-    assert dialog.prompt.toPlainText() == "The man in image 1 waits by the door."
+    assert dialog.prompt.toPlainText() == (
+        "Photorealistic photograph, natural light, sharp focus. "
+        "The man in image 1 waits by the door."
+    )
 
 
 def test_a_story_can_add_a_picture_from_disk(app, window: MainWindow, tmp_path, monkeypatch):

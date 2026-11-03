@@ -63,6 +63,10 @@ class ImageRequest:
     card_expression: str = ""
     # How much of the character a portrait shows (engine/portraits.py FRAMINGS).
     card_framing: str = ""
+    # The style it is drawn in (engine/picture_styles.style_key), and a
+    # picture on the card it takes the place of (a restyle).
+    card_style: str = ""
+    card_replaces: str = ""
     # Drawn to be the story's background (`GeneratedImage.background`).
     background: bool = False
 
@@ -164,6 +168,8 @@ def run_image_request(
                 card_look=request.card_look,
                 card_expression=request.card_expression,
                 card_framing=request.card_framing,
+                card_style=request.card_style,
+                card_replaces=request.card_replaces,
                 background=request.background,
             )
         )

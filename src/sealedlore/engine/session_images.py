@@ -25,9 +25,9 @@ from sealedlore.engine.image_prompt import (
 from sealedlore.engine.image_variants import ImageFamily, family_of, fitting_model
 from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.looks import looks_at
-from sealedlore.engine.picture_styles import story_style, style_note
+from sealedlore.engine.picture_styles import picture_words
 from sealedlore.engine.places import newest_picture, place_for, place_title
-from sealedlore.engine.portraits import edit_prompt
+from sealedlore.engine.portraits import edit_prompt, restyle_prompt, with_lead
 from sealedlore.engine.prompt import assemble_chat, assemble_question
 from sealedlore.engine.scene_state import log_on_path, scene_at
 from sealedlore.engine.video_prompt import (
@@ -179,13 +179,17 @@ class ImageRuntime:
         max_refs: int = DEFAULT_MAX_REFS,
         fixed: Sequence[RefUse] | None = None,
         model: str | None = None,
+        style: tuple[str, str] | None = None,
     ) -> ImagePromptDraft:
         """Ask for an image prompt. Raises ProviderError or ValueError.
 
         `fixed` is the author's own choice of references, in order, when they
         ask for the prompt to be written again around it. `model` is the
         writer the author picked in the dialog (None: the setting, else the
-        story model); a private scene's own model writes regardless.
+        story model); a private scene's own model writes regardless. `style`:
+        a style chosen for this picture alone (engine/picture_styles.py),
+        else the story's; its line is put first in the prompt (`with_lead`:
+        writers drop or shorten it).
         """
         self._tee_guard()
         # In a private scene the private model writes the prompt, from the
@@ -200,11 +204,12 @@ class ImageRuntime:
             ]
         held = self._character(self.story.held_character_id)
         chat = self.story.chat
+        words, note = picture_words(self.story, self.texts, style)
         question = build_image_question(
             direction=direction,
             held_name=held.name if held is not None else None,
-            style=story_style(self.story, self.texts),
-            style_note=style_note(self.story.picture_style, self.texts),
+            style=words,
+            style_note=note,
             choices=choices,
             max_refs=max_refs,
             fixed=fixed_choices,
@@ -216,10 +221,11 @@ class ImageRuntime:
             question, direction=direction, anchor_id=anchor_id, model=model, kind="image_prompt"
         )
         draft = parse_image_prompt(text, fixed_choices or choices, max_refs=max_refs)
+        prompt = with_lead(draft.prompt, words, "")
         if fixed is not None:
             # The author's choice stands whatever the writer listed.
-            return ImagePromptDraft(prompt=draft.prompt, references=list(fixed), dropped=[])
-        return draft
+            return ImagePromptDraft(prompt=prompt, references=list(fixed), dropped=[])
+        return ImagePromptDraft(prompt=prompt, references=draft.references, dropped=draft.dropped)
 
     def _ask_prompt_writer(
         self,
@@ -324,19 +330,23 @@ class ImageRuntime:
         start: RefUse | None = None,
         end: RefUse | None = None,
         model: str | None = None,
+        style: tuple[str, str] | None = None,
     ) -> str:
         """Ask for a video prompt: one continuous shot of `duration` seconds,
         with sound or not (`audio`, None when the model has no say), from a
         start frame and to an end frame when there are. Raises
         ProviderError or ValueError. Written by the same prompt writer as a
         picture's (`model`, else the setting, else the story model); a
-        private scene's own model writes regardless."""
+        private scene's own model writes regardless. `style`: one chosen
+        for this video alone, else the story's (as `write_image_prompt`)."""
         self._tee_guard()
         held = self._character(self.story.held_character_id)
+        words, note = picture_words(self.story, self.texts, style)
         question = build_video_question(
             direction=direction,
             held_name=held.name if held is not None else None,
-            style=story_style(self.story, self.texts),
+            style=words,
+            style_note=note,
             seconds=seconds_words(duration),
             audio=audio,
             start=start,
@@ -348,7 +358,7 @@ class ImageRuntime:
         text = self._ask_prompt_writer(
             question, direction=direction, anchor_id=anchor_id, model=model, kind="video_prompt"
         )
-        return parse_video_prompt(text)
+        return with_lead(parse_video_prompt(text), words, "")
 
     def video_frame_choices(self, anchor_id: str | None = None) -> list[RefUse]:
         """Pictures a video may start or end on: the story's reference
@@ -493,9 +503,12 @@ class ImageRuntime:
             background=True,
         )
 
-    def picture_edit_prompt(self, change: str, *, keep: str) -> str:
+    def picture_edit_prompt(self, change: str, *, keep: str, style: str = "") -> str:
         """The prompt for an edit: the change, then what it keeps (a story
-        picture its scene, the background its place)."""
+        picture its scene, the background its place); with `style` (its
+        words), the picture redrawn in it (`restyle_prompt`)."""
+        if style.strip():
+            return restyle_prompt(style, keep=keep, change=change, texts=self.texts)
         return edit_prompt(change, keep=keep, texts=self.texts)
 
     # --- the background ----------------------------------------------------------

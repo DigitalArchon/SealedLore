@@ -50,6 +50,7 @@ from sealedlore.engine.image_variants import (
     version_words,
 )
 from sealedlore.engine.images import ImageRequest
+from sealedlore.engine.picture_styles import DEFAULT_LABEL, picture_words, style_label
 from sealedlore.engine.places import PLACE_CAPTION, PLACE_CAPTION_AGAIN, place_size, place_title
 from sealedlore.engine.portraits import picture_size, portrait_size
 from sealedlore.engine.session import StorySession
@@ -59,6 +60,12 @@ from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.image_picker import ImagePickerDialog, pick_image_model
 from sealedlore.gui.model_picker import ModelField
+from sealedlore.gui.picture_style import (
+    DEFAULT_TIP,
+    WRITER_CHOOSES,
+    WRITER_CHOOSES_TIP,
+    PictureStyleField,
+)
 from sealedlore.gui.picture_words import WORDS_ONLY
 from sealedlore.gui.ref_images import (
     PICTURE_FILTER,
@@ -157,6 +164,12 @@ class ImageDialog(QDialog):
         self._closing = False
         self._draft: ImagePromptDraft | None = None
         self._failure: str | None = None
+        # The prompt as the writer last gave it, the style line it was given,
+        # and a style chosen while it was being written.
+        self._written_prompt: str | None = None
+        self._written_lead = ""
+        self._writing_lead = ""
+        self._again = False
         self._catalog = catalog
         # The catalog's listing when there is one: during a memory-only chat
         # a fresh one is held there, not in the config.
@@ -277,6 +290,26 @@ class ImageDialog(QDialog):
             self.writer.setReadOnly(True)
         self.writer.textChanged.connect(lambda _text: self._show_writer())
         self._show_writer()
+        # The style, the story's unless changed for this picture alone (the
+        # author, Nov 3 2026: "a glamorous or anime style picture of a scene").
+        story = self.session.story
+        self.style = PictureStyleField(
+            story.picture_style,
+            story.image_style,
+            texts=self.session.texts,
+            default=(WRITER_CHOOSES, WRITER_CHOOSES_TIP)
+            if story.chat
+            else (DEFAULT_LABEL, DEFAULT_TIP),
+        )
+        self.style.changed.connect(self._on_style_changed)
+        self.style_note = QLabel(
+            "For this picture only."
+            if story.chat
+            else "For this picture only: the story's own is "
+            f"{style_label(story.picture_style, story.image_style)} (Story → Setup… → About)."
+        )
+        self.style_note.setObjectName("hintLabel")
+        self.style_note.setWordWrap(True)
         self.busy = QProgressBar()
         self.busy.setRange(0, 0)
         self.busy.setMaximumHeight(6)
@@ -389,6 +422,8 @@ class ImageDialog(QDialog):
             )
             form.addRow("Place", self.place_name)
         form.addRow("Direction", direction_row)
+        form.addRow("Style", self.style)
+        form.addRow("", self.style_note)
         form.addRow("Prompt written by", self.writer)
         form.addRow("", self.busy)
         form.addRow("", self.status)
@@ -687,11 +722,18 @@ class ImageDialog(QDialog):
         session = self.session
         anchor = self.anchor_id
         model = self.writer_model()
+        style = self.style.value()
+        self._writing_lead = picture_words(session.story, session.texts, style)[0]
         self._draft, self._failure = None, None
 
         def job():
             self._draft = session.write_image_prompt(
-                direction, anchor_id=anchor, max_refs=max_refs, fixed=fixed, model=model
+                direction,
+                anchor_id=anchor,
+                max_refs=max_refs,
+                fixed=fixed,
+                model=model,
+                style=style,
             )
             return
             yield
@@ -726,6 +768,12 @@ class ImageDialog(QDialog):
             self._show_status("Stopped before a prompt was written.")
             return
         self.prompt.setPlainText(draft.prompt)
+        self._written_prompt, self._written_lead = draft.prompt, self._writing_lead
+        if self._again:
+            # A style chosen while this was written: written again in it.
+            self._again = False
+            self._write()
+            return
         self._refs_edited = False
         self._set_refs(list(draft.references))
         self._written_with = [use.ref_id for use in draft.references]
@@ -735,6 +783,35 @@ class ImageDialog(QDialog):
                 f" (Left out references it named that weren't offered: {', '.join(draft.dropped)}.)"
             )
         self._show_status(note)
+
+    def _on_style_changed(self) -> None:
+        """Another style for this picture: a prompt the writer gave and nobody
+        changed is written again in it; one the author changed has its style
+        line swapped when it still opens with the old one, else is left as
+        they wrote it."""
+        if self._worker is not None:
+            self._again = True
+            return
+        text = self.prompt.toPlainText()
+        if not text.strip():
+            return  # Write prompt will use it
+        if text == self._written_prompt:
+            self._write()
+            return
+        session = self.session
+        words = picture_words(session.story, session.texts, self.style.value())[0]
+        old = self._written_lead
+        if old and text.startswith(f"{old}. "):
+            rest = text[len(old) + 2 :]
+            self.prompt.setPlainText(f"{words}. {rest}" if words else rest)
+            self._written_lead = words
+            self._show_status(
+                "Its style line is changed. Write prompt writes the rest for the style too."
+            )
+        else:
+            self._show_status(
+                "The prompt is as you wrote it: change its style there, or press Write prompt."
+            )
 
     def _set_running(self, running: bool) -> None:
         self.busy.setVisible(running)

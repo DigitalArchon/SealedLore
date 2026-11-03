@@ -17,6 +17,12 @@ An edit of a character's picture is also how another look is drawn
 (engine/looks.py): its Look and Expression or pose start as the picture's
 own, a changed one becomes the change asked for (`look_change`), and the
 new picture is labelled with them.
+
+An edit can also redraw the picture in another style (`restyle_prompt`, its
+own prompt: an edit's "change nothing else" kept John a photograph under
+"anime") and show more or less of a character (`reframe_change`, labelled
+with its framing); the author, Nov 3 2026: imported pictures "quickly
+modify them to suit the style", and a full-body version of a portrait.
 """
 
 from __future__ import annotations
@@ -46,9 +52,19 @@ from sealedlore.engine.image_variants import (
 )
 from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.looks import COMMON_EXPRESSIONS, COMMON_LOOKS, labels_in_use, look_change
-from sealedlore.engine.portraits import Card, card_size, size_like
+from sealedlore.engine.picture_styles import style_key, style_label, style_words
+from sealedlore.engine.portraits import (
+    DEFAULT_FRAMING,
+    FRAMING_LABELS,
+    FRAMINGS,
+    Card,
+    card_size,
+    reframe_change,
+    size_like,
+)
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.model_picker import ModelField
+from sealedlore.gui.picture_style import KEEP, PictureStyleField
 from sealedlore.gui.picture_words import WORDS_ONLY
 from sealedlore.gui.portraits_dialog import card_name
 from sealedlore.gui.ref_images import image_of, thumbnail_of
@@ -235,6 +251,19 @@ class PictureVariantDialog(QDialog):
                 expression = parts[0]
             self.look = self._labels_box(looks, COMMON_LOOKS, look)
             self.expression = self._labels_box(expressions, COMMON_EXPRESSIONS, expression)
+        # Another style, and for a character's picture, another framing.
+        self.style: PictureStyleField | None = None
+        self.framing: QComboBox | None = None
+        if edit:
+            self.style = PictureStyleField(KEEP, "", texts=session.texts, keep=True)
+            self.style.changed.connect(self._compose)
+        if self.labelled:
+            self.framing = QComboBox()
+            self.framing.addItem("Keep its framing", "")
+            for framing in FRAMINGS:
+                self.framing.addItem(FRAMING_LABELS[framing], framing)
+            self.framing.setToolTip("How much of them the new picture shows")
+            self.framing.currentIndexChanged.connect(self._compose)
         self.prompt = GrowingText(lines=6, most=30, fill=True)
         self.prompt.setPlaceholderText("This text is sent exactly as it is here.")
         self.prompt.textChanged.connect(self._on_prompt_edited)
@@ -268,6 +297,18 @@ class PictureVariantDialog(QDialog):
                 )
             else:
                 form.addRow("", self._hint("The new picture is labelled with them."))
+        if self.framing is not None:
+            form.addRow("Framing", self.framing)
+        if self.style is not None:
+            story = session.story
+            form.addRow("Style", self.style)
+            form.addRow(
+                "",
+                self._hint(
+                    "Redraw it in another style, keeping what it shows. The story's own is "
+                    f"{style_label(story.picture_style, story.image_style)}."
+                ),
+            )
         if edit:
             form.addRow("What else to change" if self.labelled else "What to change", self.change)
         form.addRow("Prompt", self.prompt)
@@ -342,6 +383,24 @@ class PictureVariantDialog(QDialog):
             texts=self.session.texts,
         )
 
+    def chosen_framing(self) -> str:
+        """The framing asked for when it differs from the picture's own, else
+        "" (kept)."""
+        chosen = self.framing.currentData() if self.framing is not None else ""
+        own = self.subject.source.framing if self.subject.source is not None else ""
+        return chosen if chosen and chosen != own else ""
+
+    def restyle_words(self) -> str:
+        """The words of the style it is redrawn in, "" when kept: the default
+        is realistic, a chat's too."""
+        if self.style is None:
+            return ""
+        chosen, own = self.style.value()
+        if chosen == KEEP:
+            return ""
+        texts = self.session.texts
+        return style_words(chosen, own, texts) or texts["pictures.style.default"].rstrip(".")
+
     def _first_model(self) -> str:
         """Drawing again: the picture's own model, else the portrait model.
         Editing: the picture's own model if it can be given a picture, else
@@ -371,8 +430,15 @@ class PictureVariantDialog(QDialog):
         if not hasattr(self, "prompt"):
             return  # the labels are filled before the prompt exists
         if self.edit and not self._hand_edited:
-            change = " ".join(part for part in (self._label_change(), self.change.text()) if part)
-            self._set_prompt(self.session.picture_edit_prompt(change, keep=self.subject.keep))
+            framing = self.chosen_framing()
+            reframe = reframe_change(framing, self.session.texts) if framing else ""
+            parts = (self._label_change(), reframe, self.change.text())
+            change = " ".join(part for part in parts if part)
+            self._set_prompt(
+                self.session.picture_edit_prompt(
+                    change, keep=self.subject.keep, style=self.restyle_words()
+                )
+            )
         else:
             self._sync()
 
@@ -454,7 +520,8 @@ class PictureVariantDialog(QDialog):
         the size the model lists nearest the picture's own shape."""
         info = self.model_info()
         if self.card is not None:
-            return card_size(self.card, info)
+            own = self.source.framing if self.source is not None else ""
+            return card_size(self.card, info, self.chosen_framing() or own or DEFAULT_FRAMING)
         return size_like(info, *self._shape)
 
     def _sync(self, *_args) -> None:
@@ -543,6 +610,7 @@ class PictureVariantDialog(QDialog):
         """The approved request: the prompt exactly as it stands."""
         # The version the dialog priced and named (what goes with it decides).
         prompt, model, info = self.prompt.toPlainText(), self.sent_model(), self.model_info()
+        restyled = self.restyle_words()
         if self.subject.image is not None:
             return self.session.picture_edit_request(
                 self.subject.image, prompt, model=model, info=info, size=self.size()
@@ -568,6 +636,8 @@ class PictureVariantDialog(QDialog):
             references=self._from[:takes],
             look=look,
             expression=expression,
+            framing=self.chosen_framing(),
+            style=style_key(*self.style.value()) if self.style is not None and restyled else "",
         )
 
     def reject(self) -> None:

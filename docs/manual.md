@@ -1716,19 +1716,29 @@ About → Picture style**, on the first step of **Write a story from scratch**,
 or at the top of the portraits dialog, where a style you choose becomes the
 story's once you press **Draw**:
 
-- **Realistic (the default)**: portraits and lore pictures as realistic
-  photographs; a picture of the story in whatever style its prompt writer
-  thinks suits it.
+- **Realistic (the default)**: every picture realistic, like a photograph.
 - **Gritty and realistic**, **Clean and polished sci-fi**, **Glamorous**,
   **Anime**, **Painted fantasy**, **Comic book**, **Storybook watercolour** or
   **3D animated**: each style's words go first in every picture's prompt
   (hover over a style to read them). You can change them under **File →
   Prompts (advanced)…**, with each style's name in the list.
 - **Your own words…**: describe the look yourself ("painterly science-fiction
-  concept art").
+  concept art"). **From a picture…** beside it takes the style of a picture
+  you choose: the image prompt writer, which must be a model that can see
+  pictures (Claude Sonnet 4.6, Kimi K3 or GLM 5.3 Flash, for instance),
+  describes it in words, which you can read and change before you save. You
+  are asked before the picture is sent.
 
 Doomsville is gritty and realistic. A plot file names its style on a
 `picture style:` line (see the plot format guide).
+
+A picture or a video of the story can be in another style than the story's:
+the **Style** row in the picture and video dialogs starts with the story's,
+and a change there is for that one alone (a glamorous or an anime picture of
+a scene). A prompt already written is written again in the new style, or, if
+you have changed it yourself, only its opening style line is swapped. A simple
+chat has no style of its own: its pictures are in whatever style suits what
+you ask for, unless you choose one.
 
 The portraits dialog also asks how much of each character to show
 (**Framing**): **Head and shoulders** (the default), **Upper body** (from the
@@ -1737,6 +1747,22 @@ figure, head to feet). A full-length portrait is drawn tall where the model can
 draw tall pictures, else as a larger square, so the face keeps its detail
 (FLUX.3 Klein draws squares). Changing the style or the framing writes the
 prompts again, except any you have changed yourself.
+
+### Pictures in another style, or showing more of someone
+
+**Change this picture…** has a **Style** row (Keep its style, or any style)
+and, for a character, a **Framing** row: redraw the picture in the story's
+style or another, keeping what it shows (the same person, pose, clothes and
+framing), or show them from the waist up or as a whole figure. The new picture
+keeps the old one's labels and is labelled with its framing.
+
+**Story → Restyle pictures…**, or **Restyle…** on the cast board (everyone's
+from the overview), redraws many pictures at once: pictures you imported
+from a character card, say, to suit the story's style. Every picture is
+listed with its prompt, ticked to begin with if it isn't in the style chosen,
+and nothing is drawn until **Draw**. Each redrawn picture takes the old one's
+place on its card, with its labels; the old one stays at the end of the card's
+pictures, unlabelled (in the cast board's tray), for you to keep or remove.
 
 ### Pictures of places
 

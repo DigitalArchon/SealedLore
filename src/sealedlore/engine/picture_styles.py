@@ -6,10 +6,15 @@ aesthetic/attractive characters, or anime style, etc.").
 Pure. A ready-made style is `Story.picture_style` (its id) and its words
 are a prompt text (`pictures.styles.<id>`), so they can be edited like any
 other; the author's own words are `Story.image_style`, as before. Neither
-set is the default: portraits and lore pictures in the realistic style
-they always had (`portraits.style`, `portraits.style.lore`), and a picture
-of the story in whatever style its prompt writer chooses
-(`pictures.style.free`).
+set is the default, realistic throughout (the author: "Default style should
+be the same throughout the story"): portraits and lore pictures in the
+style they always had (`portraits.style`, `portraits.style.lore`), pictures
+and videos of the story in `pictures.style.default`. A simple chat has no
+style, and its writer chooses (`pictures.style.free`).
+
+A picture or video of the story may be drawn in another style than the
+story's (the author: "if they for example want a glamorous or anime style
+picture of a scene"): `picture_words` takes the dialog's choice.
 
 The style reaches whoever writes a picture's prompt (a card's picture, a
 picture or video of the story); never the storyteller.
@@ -70,6 +75,20 @@ def story_style(story, texts: PromptTexts = DEFAULT_TEXTS) -> str:
     return style_words(story.picture_style, story.image_style, texts)
 
 
+def picture_words(
+    story, texts: PromptTexts = DEFAULT_TEXTS, style: tuple[str, str] | None = None
+) -> tuple[str, str]:
+    """(the words, the note to the writer) a picture or video of the story is
+    written in: `style` (a ready-made style's id, the author's own words:
+    chosen for this picture alone), else the story's, else the default for a
+    story ("" for a simple chat: its writer chooses)."""
+    chosen, own = style if style is not None else (story.picture_style, story.image_style)
+    words = style_words(chosen, own, texts)
+    if not words and not story.chat:
+        words = " ".join(texts["pictures.style.default"].split()).rstrip(".")
+    return words, style_note(chosen, texts)
+
+
 def style_note(picture_style: str, texts: PromptTexts = DEFAULT_TEXTS) -> str:
     """What whoever writes a prompt is told besides, for a ready-made style
     that has a note (its words alone lost to the description after them);
@@ -77,6 +96,18 @@ def style_note(picture_style: str, texts: PromptTexts = DEFAULT_TEXTS) -> str:
     style = BY_ID.get(picture_style)
     key = style.note_key if style is not None else None
     return " ".join(texts[key].split()) if key is not None else ""
+
+
+# The default's key: realistic throughout.
+REALISTIC = "realistic"
+
+
+def style_key(picture_style: str, image_style: str) -> str:
+    """What a picture drawn in a style is tagged with (`ImageRef.style`): a
+    ready-made style's id, the author's own words, or REALISTIC."""
+    if picture_style in BY_ID:
+        return picture_style
+    return " ".join(image_style.split()) or REALISTIC
 
 
 def style_label(picture_style: str, image_style: str) -> str:

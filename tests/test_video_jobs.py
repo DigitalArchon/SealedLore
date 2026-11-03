@@ -300,7 +300,10 @@ def test_the_writer_rides_the_story_and_is_logged_as_a_video_prompt(
     saved.cast[0].reference_images.append(ImageRef(id="ref-1", file="images/refs/serrik.png"))
     session = make_session(tmp_path, saved, ['{"prompt": "He turns; the camera holds."}'])
     prompt = session.write_video_prompt("", duration="5", audio=False, start=start_frame())
-    assert prompt == "He turns; the camera holds."
+    # After the story's style line (the default's: realistic throughout).
+    assert prompt == (
+        "Photorealistic photograph, natural light, sharp focus. He turns; the camera holds."
+    )
     tail = session.provider.requests[-1].messages[-1].text
     assert "# VIDEO PROMPT" in tail and "5 seconds" in tail and "no sound" in tail
     kinds = [entry["kind"] for entry in read_api_log(saved.story.id, root=tmp_path)]
