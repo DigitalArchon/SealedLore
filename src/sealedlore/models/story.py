@@ -189,8 +189,11 @@ class Story(BaseModel):
     # its window (engine/chronicle.schedule). Shared by every branch; a
     # restart is a new story and draws again.
     plot_schedule: dict[str, int] = Field(default_factory=dict)
-    # How pictures of this story should look ("painterly sci-fi concept art"),
-    # given to whoever writes an image prompt. Never reaches the storyteller.
+    # How pictures of this story should look: a ready-made style's id
+    # (engine/picture_styles.py, "gritty", "anime"), else the author's own
+    # words ("painterly sci-fi concept art"), else the defaults. Given to
+    # whoever writes an image prompt. Never reaches the storyteller.
+    picture_style: str = ""
     image_style: str = ""
     # A picture shown behind the transcript, relative to the story folder.
     background_image: str | None = None

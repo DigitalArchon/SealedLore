@@ -1708,6 +1708,36 @@ beside it lists the models measured for portraits, with what each is good at:
 - **Seedream 5.0 Flash** (about $0.027): very finished, with up to ten
   reference pictures, between FLUX.3 Klein and Seedream 5.0 Pro in price.
 
+### A story's picture style, and how much a portrait shows
+
+Every picture of a story is drawn in one style: its portraits, its lore and
+places, and pictures and videos of the story. Choose it in **Story → Setup… →
+About → Picture style**, on the first step of **Write a story from scratch**,
+or at the top of the portraits dialog, where a style you choose becomes the
+story's once you press **Draw**:
+
+- **Realistic (the default)**: portraits and lore pictures as realistic
+  photographs; a picture of the story in whatever style its prompt writer
+  thinks suits it.
+- **Gritty and realistic**, **Clean and polished sci-fi**, **Glamorous**,
+  **Anime**, **Painted fantasy**, **Comic book**, **Storybook watercolour** or
+  **3D animated**: each style's words go first in every picture's prompt
+  (hover over a style to read them). You can change them under **File →
+  Prompts (advanced)…**, with each style's name in the list.
+- **Your own words…**: describe the look yourself ("painterly science-fiction
+  concept art").
+
+Doomsville is gritty and realistic. A plot file names its style on a
+`picture style:` line (see the plot format guide).
+
+The portraits dialog also asks how much of each character to show
+(**Framing**): **Head and shoulders** (the default), **Upper body** (from the
+waist up, with their hands and what they hold) or **Full body** (the whole
+figure, head to feet). A full-length portrait is drawn tall where the model can
+draw tall pictures, else as a larger square, so the face keeps its detail
+(FLUX.3 Klein draws squares). Changing the style or the framing writes the
+prompts again, except any you have changed yourself.
+
 ### Pictures of places
 
 A story can keep a picture of each place it goes to: the place itself, as it

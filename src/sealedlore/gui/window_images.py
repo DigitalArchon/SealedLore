@@ -455,6 +455,7 @@ class ImagesWindow:
         )
         accepted = dialog.exec()
         chosen = dialog.chosen_model() if accepted else ""
+        style = dialog.chosen_style() if accepted else None
         requests = dialog.requests() if accepted else []
         dialog.deleteLater()  # read; held the story otherwise
         self._drain_side_costs()
@@ -463,6 +464,9 @@ class ImagesWindow:
         if chosen != self.config.portrait_model:
             self.config.portrait_model = chosen
             save_config(self.config, root=self.root)
+        if style is not None:
+            # The story's from now on, as the dialog says.
+            session.set_picture_style(*style)
         self._start_card_pictures(requests)
         return bool(requests)
 

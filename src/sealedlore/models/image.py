@@ -43,6 +43,9 @@ class ImageRef(BaseModel):
     # combat stance"). Blank: not said.
     look: str = ""
     expression: str = ""
+    # How much of a character it shows, when drawn as a portrait here
+    # (engine/portraits.py FRAMINGS: "head", "torso", "full"). Blank: not said.
+    framing: str = ""
 
 
 class RefUse(BaseModel):
@@ -80,9 +83,10 @@ class GeneratedImage(BaseModel):
     card_id: str | None = None
     card_first: bool = False
     card_caption: str = ""
-    # Its labels there, a character's (engine/looks.py).
+    # Its labels there, a character's (engine/looks.py), and its framing.
     card_look: str = ""
     card_expression: str = ""
+    card_framing: str = ""
     # Drawn to be the story's background (Media → the background → Draw a
     # new background… or Edit…): put behind the story once drawn, once
     # (`Story.backgrounds_taken`).

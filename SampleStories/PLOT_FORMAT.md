@@ -50,6 +50,7 @@ agency: contested            <!-- fiat | plausible | contested | dice -->
 world activity: normal       <!-- quiet | normal | eventful -->
 perspective: whole story     <!-- whole story | with character -->
 length: adaptive             <!-- adaptive | brief | standard | descriptive | literary (never custom) -->
+picture style: gritty and realistic   <!-- how its pictures look: see below -->
 background: pictures/farm.jpg   <!-- the picture behind the story (see Pictures) -->
 ---
 ```
@@ -57,8 +58,12 @@ background: pictures/farm.jpg   <!-- the picture behind the story (see Pictures)
 (The notes after each value are comments, as anywhere in the file: a `#`
 there would be read as part of the value.)
 
-A key the importer doesn't know is noted and ignored, so there is no
-front-matter key for the picture style: set that in the app.
+`picture style` is one of the app's styles by name (gritty and realistic,
+clean and polished sci-fi, glamorous, anime, painted fantasy, comic book,
+storybook watercolour, 3D animated) or your own words ("painterly
+science-fiction concept art"). Left out, portraits are realistic photographs.
+
+A key the importer doesn't know is noted and ignored.
 
 ## World and Opening
 

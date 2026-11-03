@@ -2587,13 +2587,15 @@ _text(
     "each lore entry's picture, from their cards and the setting, for the author to approve "
     "before anything is drawn. The parts for characters and lore follow it.",
     "You write prompts for an image model that draws pictures for a story, so the author "
-    "can see its people, places and things. Every picture is in this style: {style}. Every "
-    "phrase must be something the camera can see: no names, roles, history, dates or story "
+    "can see its people, places and things. Every picture is in this style: {style}. That "
+    "line is put at the start of every prompt for you: write what follows it, beginning with "
+    "the person or thing, in words that suit the style. Every phrase must be something the "
+    "camera can see: no names, roles, history, dates or story "
     'facts (not "a bandit", not "four years after the end of the world", but "frost '
     'on a stubbled jaw", "a snowbound road behind"). An image model can only ignore such '
     "words or write them on the picture. End each prompt with: {no_writing}",
     (
-        ("style", "The story's picture style, or the portrait default"),
+        ("style", "The story's picture style, or the default, with the portraits' shot"),
         ("no_writing", "Portraits: no writing"),
     ),
 )
@@ -2603,12 +2605,68 @@ _text(
     PICTURES,
     "Card pictures: the characters",
     "Added to the writer's instructions when it is given characters.",
-    "For each character, write one prompt of {words} words for a head-and-shoulders "
-    "portrait: apparent age, build, face, skin, hair, eyes, expression, what they wear and "
-    "carry, and a little of their world behind them, out of focus. Keep to their card; "
-    "where it says nothing of their looks, choose plain details that fit who they are and "
-    "the setting, and keep the characters distinct from one another.",
-    (("words", "How long each prompt is"),),
+    "For each character, write one prompt of {words} words for {framing}: apparent age, "
+    "build, face, skin, hair, eyes, expression, what they wear and carry, and a little of "
+    "their world behind them, out of focus. Keep to their card; where it says nothing of "
+    "their looks, choose plain details that fit who they are and the setting, and keep the "
+    "characters distinct from one another.",
+    (
+        ("words", "How long each prompt is"),
+        ("framing", "Card pictures: how much of them is shown (a framing's text)"),
+    ),
+)
+
+# How much of a character a portrait shows (the author, Nov 3 2026: head and
+# shoulders the default, upper body and full body as well). The writer is
+# asked for one (`framing`) and the prompt's style line names its shot
+# (`shot`), so a prompt says it even when the writer leaves it out.
+_text(
+    "portraits.framing.head",
+    PICTURES,
+    "Card pictures: head and shoulders (what the writer is asked for)",
+    "In the writer's instructions for characters, when the portraits are head and shoulders.",
+    "a head-and-shoulders portrait",
+)
+
+_text(
+    "portraits.framing.torso",
+    PICTURES,
+    "Card pictures: upper body (what the writer is asked for)",
+    "In the writer's instructions for characters, when the portraits show the upper body.",
+    "an upper-body portrait from the waist up, their hands and what they hold in view",
+)
+
+_text(
+    "portraits.framing.full",
+    PICTURES,
+    "Card pictures: full body (what the writer is asked for)",
+    "In the writer's instructions for characters, when the portraits show the whole figure.",
+    "a full-length portrait of the whole figure from head to feet, footwear included, "
+    "standing on the ground",
+)
+
+_text(
+    "portraits.shot.head",
+    PICTURES,
+    "Card pictures: head and shoulders (the shot)",
+    "Added to the style a head-and-shoulders portrait is drawn in.",
+    "head and shoulders",
+)
+
+_text(
+    "portraits.shot.torso",
+    PICTURES,
+    "Card pictures: upper body (the shot)",
+    "Added to the style an upper-body portrait is drawn in.",
+    "upper body, from the waist up",
+)
+
+_text(
+    "portraits.shot.full",
+    PICTURES,
+    "Card pictures: full body (the shot)",
+    "Added to the style a full-length portrait is drawn in.",
+    "full body, the whole figure from head to feet",
 )
 
 _text(
@@ -2634,12 +2692,17 @@ _text(
     '"prompt": "the prompt, or empty"}]}. Leave out a list you were given nothing for.',
 )
 
+# The shot left for `portraits.shot.*` (Nov 3 2026), which follows it:
+# "Photorealistic portrait photograph, natural light, sharp focus, head and
+# shoulders" where it used to read "…photograph, head and shoulders, natural
+# light…".
 _text(
     "portraits.style",
     PICTURES,
     "Portraits: the style when the story has none",
-    "The picture style a portrait is drawn in when the story's own (Setup → Pictures) is blank.",
-    "Photorealistic portrait photograph, head and shoulders, natural light, sharp focus",
+    "The picture style a portrait is drawn in when the story has none chosen (Setup → About "
+    "→ Picture style). The shot (head and shoulders, upper body, full body) is added after it.",
+    "Photorealistic portrait photograph, natural light, sharp focus",
 )
 
 # A lore entry's picture is a place or a thing: given the portrait's style
@@ -2649,9 +2712,101 @@ _text(
     "portraits.style.lore",
     PICTURES,
     "Portraits: the style of a lore picture when the story has none",
-    "The picture style a lore entry's picture is drawn in when the story's own (Setup → "
-    "Pictures) is blank.",
+    "The picture style a lore entry's picture is drawn in when the story has none chosen "
+    "(Setup → About → Picture style).",
     "Photorealistic, natural light, sharp focus",
+)
+
+# The ready-made picture styles (engine/picture_styles.py; the author, Nov 3
+# 2026). Words a camera or a brush can show, no artist or studio named: an
+# image model may copy a name onto the picture. Their first live check is in
+# SealedLoreDocs design/images.md ("Picture styles").
+for _key, _label, _words in (
+    (
+        "gritty",
+        "Gritty and realistic",
+        "Gritty, photorealistic photograph: hard natural light, real skin with pores, lines "
+        "and blemishes, weathered faces, worn and dirty clothes, muted desaturated colours, "
+        "the look of a documentary photograph",
+    ),
+    (
+        "polished",
+        "Clean and polished sci-fi",
+        "Clean, polished science-fiction concept art: a sleek high-end digital render, smooth "
+        "immaculate surfaces, crisp rim lighting, cool blue and teal tones with bright "
+        "accents, fine detail",
+    ),
+    (
+        "glamorous",
+        "Glamorous",
+        "Glamorous and highly polished: strikingly attractive people with refined features, "
+        "flawless skin and styled hair, flattering soft light, rich colours, the look of a "
+        "high-fashion magazine photograph",
+    ),
+    (
+        "anime",
+        "Anime",
+        "Anime style, like a frame from a modern anime series: clean thin line art, flat "
+        "cel-shaded colours, simplified faces with large expressive eyes, vivid colours, a "
+        "detailed painted background",
+    ),
+    (
+        "painted",
+        "Painted fantasy",
+        "Painted fantasy illustration: visible brushwork, rich colours, dramatic light, the "
+        "look of an epic fantasy book cover",
+    ),
+    (
+        "comic",
+        "Comic book",
+        "Comic-book art: bold inked outlines, flat colours with hard-edged shadows, halftone "
+        "dots, strong graphic shapes",
+    ),
+    (
+        "watercolour",
+        "Storybook watercolour",
+        "Storybook watercolour: soft washes of colour, light pencil lines, white paper "
+        "showing through, warm and gentle",
+    ),
+    (
+        "animated",
+        "3D animated",
+        "3D animated film look: stylised, appealing characters with soft rounded features, "
+        "smooth rendered surfaces, warm cinematic lighting",
+    ),
+):
+    _text(
+        f"pictures.styles.{_key}",
+        PICTURES,
+        f"Picture style: {_label}",
+        "The words every picture of a story is drawn in when this style is chosen (Setup → "
+        "About → Picture style): its portraits, lore pictures, and pictures and videos of the "
+        "story.",
+        _words,
+    )
+
+# What whoever writes a picture's prompt is told besides, for a style whose
+# words alone lost to the description after them: live (FLUX.3 Klein, Nov 3
+# 2026) "flawless skin" drew Doomsville's wind-chapped, scarred survivors as
+# they were, and "anime" with their pores and stubble came out half real.
+_text(
+    "pictures.styles.glamorous.note",
+    PICTURES,
+    "Picture style: Glamorous (to the prompt writer)",
+    "Told to whoever writes a picture's prompt when the story's style is Glamorous.",
+    "Describe everyone as strikingly attractive: refined, good-looking features, smooth "
+    "clear skin, well-kept styled hair, clothes that flatter them. Keep who they are (age, "
+    "build, colouring, what they wear), but leave out dirt, wear and blemishes.",
+)
+
+_text(
+    "pictures.styles.anime.note",
+    PICTURES,
+    "Picture style: Anime (to the prompt writer)",
+    "Told to whoever writes a picture's prompt when the story's style is Anime.",
+    "Describe people as an anime draws them: the shape and colour of their hair, their eye "
+    "colour, a clear expression, their clothes and what they hold. Leave out skin texture, "
+    "pores and stubble.",
 )
 
 _text(

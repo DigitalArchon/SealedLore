@@ -77,9 +77,12 @@ def build_image_question(
     anchor_is_leaf: bool = True,
     chat: bool = False,
     texts: PromptTexts = DEFAULT_TEXTS,
+    style_note: str = "",
 ) -> str:
     """The request for an image prompt, in place of an author's question.
-    In a simple chat (`chat`) it speaks of the conversation, not a story."""
+    In a simple chat (`chat`) it speaks of the conversation, not a story.
+    `style_note`: the story's style's note to the writer, if any
+    (engine/picture_styles.py)."""
     asked = "asked" if direction.strip() else "unasked"
     if chat:
         subject = texts[f"pictures.subject.chat_{asked}"]
@@ -100,6 +103,8 @@ def build_image_question(
         if style.strip()
         else texts["pictures.style.free"]
     )
+    if style.strip() and style_note:
+        parts.append(f"- {style_note}")
     if fixed is not None:
         if fixed:
             parts += [

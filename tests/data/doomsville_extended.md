@@ -6,6 +6,7 @@ agency: fiat
 world activity: normal
 perspective: whole story
 length: descriptive
+picture style: muted painterly concept art, cold winter light
 background: pictures/hellsville-gate.png
 ---
 

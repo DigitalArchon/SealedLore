@@ -12,6 +12,7 @@ may change every prompt before anything is drawn.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 
 from sealedlore.engine.jsonreply import extract_json
@@ -42,6 +43,19 @@ LORE_CHARS = 900
 PORTRAIT_RATIO = 3 / 4
 PORTRAIT_TALLEST = 1536
 PORTRAIT_SIDE = 1024
+# A full-length portrait's: the tall size nearest 2:3, at most this high (a
+# whole figure wants the height); a model with no tall size gets the largest
+# square up to FULL_SIDE, so a face a sixth of the picture high still has
+# pixels (FLUX.3 Klein lists squares alone).
+FULL_RATIO = 2 / 3
+FULL_TALLEST = 2560
+FULL_SIDE = 1536
+
+# How much of a character a portrait shows (the author, Nov 3 2026): head
+# and shoulders by default, the upper body, or the whole figure.
+FRAMINGS = ("head", "torso", "full")
+DEFAULT_FRAMING = "head"
+FRAMING_LABELS = {"head": "Head and shoulders", "torso": "Upper body", "full": "Full body"}
 
 Card = Character | LoreEntry
 
@@ -83,13 +97,24 @@ def picture_size(model: ImageModelInfo | None, *, landscape: bool = False) -> st
 
 
 def portrait_style(
-    image_style: str, texts: PromptTexts = DEFAULT_TEXTS, *, lore: bool = False
+    image_style: str,
+    texts: PromptTexts = DEFAULT_TEXTS,
+    *,
+    lore: bool = False,
+    framing: str = DEFAULT_FRAMING,
 ) -> str:
-    """The story's picture style, or the default for portraits, or for a lore
+    """The style a card's picture is drawn in: `image_style` (the story's,
+    engine/picture_styles.py) or the default for portraits, or for a lore
     entry's picture (a place or a thing: told "portrait photograph, head and
-    shoulders", the writer was asked to draw Hellsville so)."""
+    shoulders", the writer was asked to draw Hellsville so). A portrait's
+    has its shot after it (`framing`, one of FRAMINGS), so the prompt says
+    how much of them to show whoever wrote it."""
     default = texts["portraits.style.lore" if lore else "portraits.style"]
-    return " ".join(image_style.split()).rstrip(".") or default
+    style = " ".join(image_style.split()).rstrip(".") or default.rstrip(".")
+    if lore:
+        return style
+    assert framing in FRAMINGS, framing
+    return f"{style}, {texts[f'portraits.shot.{framing}']}"
 
 
 def where_it_begins(story: Story) -> str:
@@ -125,21 +150,34 @@ def build_portrait_messages(
     begins: str = "",
     lore: Sequence[LoreEntry] = (),
     texts: PromptTexts = DEFAULT_TEXTS,
+    framing: str = DEFAULT_FRAMING,
+    note: str = "",
 ) -> list[PromptMessage]:
     """The writer's request: its instructions, the setting, where the story
-    begins (`where_it_begins`), and each card."""
+    begins (`where_it_begins`), and each card. `image_style`: the story's
+    (engine/picture_styles.py, "" for the default), and `note` its style's
+    note to the writer, if any; `framing`: how much of each character the
+    portraits show."""
     parts = [
         texts.fill(
             "portraits.system",
             # A call is characters or lore entries, never both (`write_card_prompts`).
-            style=portrait_style(image_style, texts, lore=not characters),
+            style=portrait_style(image_style, texts, lore=not characters, framing=framing),
             no_writing=texts["portraits.no_writing"],
         )
     ]
     if characters:
-        parts.append(texts.fill("portraits.characters", words=PORTRAIT_WORDS))
+        parts.append(
+            texts.fill(
+                "portraits.characters",
+                words=PORTRAIT_WORDS,
+                framing=texts[f"portraits.framing.{framing}"],
+            )
+        )
     if lore:
         parts.append(texts.fill("portraits.lore", words=PORTRAIT_WORDS))
+    if note:
+        parts.append(note)
     parts.append(texts["portraits.reply"])
     world = " ".join((world_bible or "").split())[:SETTING_CHARS] or title
     user = "THE SETTING:\n" + world + "\n\n"
@@ -156,7 +194,13 @@ def build_portrait_messages(
     ]
 
 
-def fallback_prompt(card: Card, *, image_style: str, texts: PromptTexts = DEFAULT_TEXTS) -> str:
+def fallback_prompt(
+    card: Card,
+    *,
+    image_style: str,
+    texts: PromptTexts = DEFAULT_TEXTS,
+    framing: str = DEFAULT_FRAMING,
+) -> str:
     """A prompt from the card alone, for the author to edit."""
     if isinstance(card, LoreEntry):
         looks = looks_of(card.content, None) or card.title
@@ -164,10 +208,34 @@ def fallback_prompt(card: Card, *, image_style: str, texts: PromptTexts = DEFAUL
         looks = looks_of(card.summary, card.full_description) or "A person."
     return texts.fill(
         "portraits.fallback",
-        style=portrait_style(image_style, texts, lore=isinstance(card, LoreEntry)),
+        style=portrait_style(image_style, texts, lore=isinstance(card, LoreEntry), framing=framing),
         looks=looks if looks.endswith((".", "…", "!", "?")) else looks + ".",
         no_writing=texts["portraits.no_writing"],
     )
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+", text.lower())
+
+
+def with_lead(prompt: str, lead: str, no_writing: str) -> str:
+    """A written prompt with its style line first (`lead`, `portrait_style`)
+    and ending saying no writing. Told to copy the style, the writer (GLM
+    5.3, Nov 3 2026) left it out or shortened it in 16 prompts of 31 ("Anime
+    style portrait", the cel shading gone), and those drew in no chosen
+    style; so the line is put first here, and the writer writes what
+    follows. A prompt already opening with the whole line (its words, any
+    case or punctuation) is left as it is. Blank stays blank (a lore entry
+    with nothing to see)."""
+    text = " ".join(prompt.split())
+    if not text:
+        return text
+    lead_words = _words(lead)
+    if lead_words and _words(text)[: len(lead_words)] != lead_words:
+        text = f"{lead.rstrip('.')}. {text}"
+    if no_writing and no_writing.lower() not in text.lower():
+        text = f"{text} {no_writing}"
+    return text
 
 
 def parse_portrait_prompts(
@@ -259,10 +327,35 @@ def portrait_size(model: ImageModelInfo | None) -> str:
     return "1024x1536"
 
 
-def card_size(card: Card, model: ImageModelInfo | None) -> str:
-    """A portrait's tall size, or a lore picture's landscape, else the
-    largest square up to PLACE_SIDE (engine/places.py: FLUX.3 Klein lists
-    squares alone, and a lore picture used to take its first, smallest size)."""
+def full_length_size(model: ImageModelInfo | None) -> str:
+    """A full-length portrait's: the tall size the model lists nearest 2:3,
+    up to FULL_TALLEST high, the larger on a tie; else the largest square up
+    to FULL_SIDE; else a portrait's."""
+    tall: list[tuple[float, int, str]] = []
+    square: list[tuple[int, str]] = []
+    for size in model.resolutions if model is not None else ():
+        parts = size.replace("*", "x").split("x")
+        if len(parts) != 2 or not (parts[0].isdigit() and parts[1].isdigit()):
+            continue
+        width, height = int(parts[0]), int(parts[1])
+        if width < height <= FULL_TALLEST:
+            tall.append((abs(width / height - FULL_RATIO), -width * height, size))
+        elif width == height <= FULL_SIDE:
+            square.append((width, size))
+    if tall:
+        return min(tall)[2]
+    if square:
+        return max(square)[1]
+    return portrait_size(model)
+
+
+def card_size(card: Card, model: ImageModelInfo | None, framing: str = DEFAULT_FRAMING) -> str:
+    """A portrait's tall size (`full_length_size` for the whole figure), or
+    a lore picture's landscape, else the largest square up to PLACE_SIDE
+    (engine/places.py: FLUX.3 Klein lists squares alone, and a lore picture
+    used to take its first, smallest size)."""
     if isinstance(card, LoreEntry):
         return place_size(model)
+    if framing == "full":
+        return full_length_size(model)
     return portrait_size(model)

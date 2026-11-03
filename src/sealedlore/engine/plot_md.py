@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Literal, get_args
 
+from sealedlore.engine.picture_styles import read_style
 from sealedlore.engine.validators import name_forms
 from sealedlore.models.character import Character
 from sealedlore.models.lore import LoreEntry
@@ -1197,6 +1198,10 @@ class _Parser:
         activity = self.literal(front, "world_activity", get_args(WorldActivity))
         if activity:
             scenario.world_activity = activity  # type: ignore[assignment]
+        if "picture_style" in front:
+            # A ready-made style by its name ("gritty and realistic"), else
+            # the author's own words (engine/picture_styles.py).
+            scenario.picture_style, scenario.image_style = read_style(front["picture_style"][1])
         if "background" in front:
             line, value = front["background"]
             source, _caption = picture_parts(value)
@@ -1216,6 +1221,7 @@ class _Parser:
                 "world_activity",
                 "perspective",
                 "length",
+                "picture_style",
                 "background",
             ):
                 self.note(line, f"`{key}` isn't a setting this format reads.")

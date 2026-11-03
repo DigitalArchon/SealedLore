@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.response_style import PRESET_ORDER, PRESETS
+from sealedlore.gui.picture_style import PictureStyleField
 from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.models.story import DEFAULT_RESPONSE_STYLE, Story
 from sealedlore.storage.repository import StoryBundle
@@ -187,6 +188,16 @@ class NewStoryGuide(QDialog):
                 "sometimes can go in Lore later."
             ),
         )
+        # Here, before the characters: their portraits are drawn in it.
+        self.picture_style = PictureStyleField()
+        form.addRow("Picture style", self.picture_style)
+        form.addRow(
+            "",
+            _hint(
+                "How its portraits and other pictures look. It can change any time in "
+                "Story → Setup…."
+            ),
+        )
         return page
 
     def _characters_page(self) -> QWidget:
@@ -325,6 +336,7 @@ class NewStoryGuide(QDialog):
         window behind the guide."""
         story = Story(title=self.title.text().strip())
         story.world_bible = self.world.toPlainText().strip() or None
+        story.picture_style, story.image_style = self.picture_style.value()
         self.made = self._host.guide_make_story(StoryBundle(story=story))
         return self.made
 
@@ -375,6 +387,7 @@ class NewStoryGuide(QDialog):
             return
         story.title = self.title.text().strip() or story.title
         story.world_bible = self.world.toPlainText().strip() or None
+        story.picture_style, story.image_style = self.picture_style.value()
         story.style.person = self.person.currentData()
         story.style.tense = self.tense.currentData()
         story.style.response_style = self.length.currentData()

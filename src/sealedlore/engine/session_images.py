@@ -25,6 +25,7 @@ from sealedlore.engine.image_prompt import (
 from sealedlore.engine.image_variants import ImageFamily, family_of, fitting_model
 from sealedlore.engine.images import ImageRequest
 from sealedlore.engine.looks import looks_at
+from sealedlore.engine.picture_styles import story_style, style_note
 from sealedlore.engine.places import newest_picture, place_for, place_title
 from sealedlore.engine.portraits import edit_prompt
 from sealedlore.engine.prompt import assemble_chat, assemble_question
@@ -202,7 +203,8 @@ class ImageRuntime:
         question = build_image_question(
             direction=direction,
             held_name=held.name if held is not None else None,
-            style=self.story.image_style,
+            style=story_style(self.story, self.texts),
+            style_note=style_note(self.story.picture_style, self.texts),
             choices=choices,
             max_refs=max_refs,
             fixed=fixed_choices,
@@ -334,7 +336,7 @@ class ImageRuntime:
         question = build_video_question(
             direction=direction,
             held_name=held.name if held is not None else None,
-            style=self.story.image_style,
+            style=story_style(self.story, self.texts),
             seconds=seconds_words(duration),
             audio=audio,
             start=start,

@@ -44,6 +44,7 @@ from sealedlore.gui.composer import (
 )
 from sealedlore.gui.fields import line_edit, set_field_text
 from sealedlore.gui.model_picker import BrowseRoute, ModelField, Qualify, RouteEndpoint
+from sealedlore.gui.picture_style import PictureStyleField
 from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.gui.start_presence import StartPresence
 from sealedlore.gui.style_panel import StylePanel
@@ -427,13 +428,15 @@ class SetupDialog(QDialog):
                 "someone arriving, an earlier choice catching up."
             )
         )
-        self.image_style = line_edit(self.story.image_style)
-        self.image_style.setPlaceholderText("e.g. painterly science-fiction concept art")
-        form.addRow("Picture style", self.image_style)
+        self.picture_style = PictureStyleField(
+            self.story.picture_style, self.story.image_style, texts=self.texts
+        )
+        form.addRow("Picture style", self.picture_style)
         form.addRow(
             _hint(
-                "How generated pictures of this story should look. Given to whoever writes "
-                "an image prompt; never to the storyteller."
+                "How every picture of this story looks: its portraits, its lore and places, and "
+                "pictures of the story. Given to whoever writes a picture's prompt; never to "
+                "the storyteller."
             )
         )
         return widget
@@ -673,7 +676,7 @@ class SetupDialog(QDialog):
         story.defaults.agency_mode = self.agency.currentData()
         story.defaults.world_activity = self.world_activity.currentData()
         story.style = self.style
-        story.image_style = self.image_style.text().strip()
+        story.picture_style, story.image_style = self.picture_style.value()
         story.private_prompt.mode = self.private_mode.currentData()
         story.private_prompt.notes = self.private_notes.toPlainText().strip()
         story.private_prompt.custom = self.private_custom.toPlainText().strip()

@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.picture_styles import read_style, write_style
 from sealedlore.engine.response_style import PRESETS
 from sealedlore.gui.composer import (
     AGENCY_LABELS,
@@ -42,6 +43,7 @@ from sealedlore.gui.composer import (
     WORLD_ACTIVITY_TIPS,
 )
 from sealedlore.gui.fields import set_field_text
+from sealedlore.gui.picture_style import PictureStyleField
 from sealedlore.gui.plot_pictures import Folder, PlotPictureStrip, SaveFirst
 from sealedlore.gui.sizing import GrowingText
 from sealedlore.gui.style_panel import PERSPECTIVE_SUMMARIES
@@ -236,6 +238,8 @@ class StoryPage(Page):
         for style, preset in PRESETS.items():
             if style != "custom":
                 self.length.addItem(preset.label, style)
+        self.picture_style = PictureStyleField()
+        self.picture_style.setToolTip("How the story's portraits and other pictures look")
         self.background = QLineEdit()
         self.background.setPlaceholderText("pictures/background.jpg")
         self.background.setToolTip(
@@ -255,6 +259,7 @@ class StoryPage(Page):
         form.addRow("World", self.world_activity)
         form.addRow("Perspective", self.perspective)
         form.addRow("Length", self.length)
+        form.addRow("Picture style", self.picture_style)
         form.addRow("Background", self.background)
         form.addRow(
             hint("Each is a setting the story starts with; the author can change it in the app.")
@@ -272,6 +277,7 @@ class StoryPage(Page):
             self.background,
             self.notes,
         )
+        self.picture_style.changed.connect(self._on_change)
 
     def _fill(self) -> None:
         document: PlotDocument = self.item
@@ -287,6 +293,7 @@ class StoryPage(Page):
             (self.length, document.length),
         ):
             combo.setCurrentIndex(max(combo.findData(value), 0) if value else 0)
+        self.picture_style.set_value(*read_style(document.picture_style))
         set_field_text(self.background, document.background)
         self.notes.setPlainText(document.notes)
 
@@ -301,6 +308,7 @@ class StoryPage(Page):
         document.world_activity = self.world_activity.currentData()
         document.perspective = self.perspective.currentData()
         document.length = self.length.currentData()
+        document.picture_style = write_style(*self.picture_style.value())
         document.background = self.background.text().strip()
         document.notes = self.notes.toPlainText()
         self._name_changed(old, document.title)

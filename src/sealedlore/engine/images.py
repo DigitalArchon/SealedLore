@@ -61,6 +61,8 @@ class ImageRequest:
     # A character's picture's labels once on their card (engine/looks.py).
     card_look: str = ""
     card_expression: str = ""
+    # How much of the character a portrait shows (engine/portraits.py FRAMINGS).
+    card_framing: str = ""
     # Drawn to be the story's background (`GeneratedImage.background`).
     background: bool = False
 
@@ -161,6 +163,7 @@ def run_image_request(
                 card_caption=request.card_caption,
                 card_look=request.card_look,
                 card_expression=request.card_expression,
+                card_framing=request.card_framing,
                 background=request.background,
             )
         )

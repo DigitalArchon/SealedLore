@@ -78,6 +78,7 @@ _FRONT_KEYS = (
     "world_activity",
     "perspective",
     "length",
+    "picture_style",
     "background",
 )
 
@@ -238,6 +239,7 @@ def render_plot_markdown(document: PlotDocument) -> RenderedPlot:
         )
         if value
     )
+    front.append(("picture style", " ".join(document.picture_style.split())))
     front.append(("background", document.background.strip()))
     if any(value for _, value in front):
         writer.line("---")
@@ -574,6 +576,8 @@ class _Reader:
                     setattr(document, key, _key(value))
                 else:
                     self.problem(line, f"`{key}: {value}` isn't a choice the format has; left out.")
+        if "picture_style" in front:
+            document.picture_style = front["picture_style"][1]
         if "background" in front:
             document.background = picture_parts(front["background"][1])[0]
         for key, (line, value) in front.items():

@@ -161,16 +161,16 @@ class TavernCard:
         return value if isinstance(value, Mapping) else {}
 
     @property
-    def picture_labels(self) -> dict[str, tuple[str, str, str]]:
+    def picture_labels(self) -> dict[str, tuple[str, str, str, str]]:
         """A SealedLore card's own labels for its pictures, by asset name:
-        (look, expression, caption). Another app's card has none."""
+        (look, expression, caption, framing). Another app's card has none."""
         own = self.extensions.get("sealedlore")
         rows = own.get("pictures") if isinstance(own, Mapping) else None
-        labels: dict[str, tuple[str, str, str]] = {}
+        labels: dict[str, tuple[str, str, str, str]] = {}
         for row in rows if isinstance(rows, list) else ():
             if isinstance(row, Mapping) and isinstance(row.get("name"), str):
                 labels[row["name"]] = tuple(  # type: ignore[assignment]
-                    str(row.get(key) or "") for key in ("look", "expression", "caption")
+                    str(row.get(key) or "") for key in ("look", "expression", "caption", "framing")
                 )
         return labels
 
@@ -583,12 +583,12 @@ def expression_of(name: str) -> str:
 def expression_refs(
     expressions: Sequence[tuple[str, bytes]],
     keep: Callable[[bytes, str, str], ImageRef | None],
-    labels: Mapping[str, tuple[str, str, str]] | None = None,
+    labels: Mapping[str, tuple[str, str, str, str]] | None = None,
 ) -> tuple[list[ImageRef], int]:
     """Expression pictures as a character's pictures, labelled
     (`expression_of`, or a SealedLore card's own `labels` by name: look,
-    expression and caption): `keep(data, suffix, label)` stores one and
-    returns its ref. How many were in a format SealedLore doesn't keep."""
+    expression, caption and framing): `keep(data, suffix, label)` stores one
+    and returns its ref. How many were in a format SealedLore doesn't keep."""
     refs: list[ImageRef] = []
     skipped = 0
     for name, data in expressions:
@@ -596,10 +596,12 @@ def expression_refs(
         if suffix is None:
             skipped += 1
             continue
-        look, expression, caption = (labels or {}).get(name, ("", expression_of(name), ""))
+        look, expression, caption, framing = (labels or {}).get(
+            name, ("", expression_of(name), "", "")
+        )
         ref = keep(data, suffix, expression)
         if ref is not None:
-            ref.look = look
+            ref.look, ref.framing = look, framing
             if caption:
                 ref.caption = caption
             refs.append(ref)
@@ -636,7 +638,13 @@ def card_charx(v3: Mapping[str, Any], pictures: Sequence[tuple[ImageRef, bytes]]
         member = f"assets/{kind}/images/{index + 1}{suffix}"
         assets.append({"type": kind, "uri": f"embeded://{member}", "name": name, "ext": ext})
         rows.append(
-            {"name": name, "look": ref.look, "expression": ref.expression, "caption": ref.caption}
+            {
+                "name": name,
+                "look": ref.look,
+                "expression": ref.expression,
+                "caption": ref.caption,
+                "framing": ref.framing,
+            }
         )
         members.append((member, cleaned))
     data["assets"] = assets
@@ -706,8 +714,10 @@ def scenario_from_card(
         character = character_from_card(card, fill)
         portrait = _picture_ref(card, scenario, PORTRAIT_CAPTION)
         if portrait is not None:
-            look, expression, caption = card.picture_labels.get(ICON_NAME, ("", "", ""))
-            portrait.look, portrait.expression = look, expression
+            look, expression, caption, framing = card.picture_labels.get(
+                ICON_NAME, ("", "", "", "")
+            )
+            portrait.look, portrait.expression, portrait.framing = look, expression, framing
             portrait.caption = caption or portrait.caption
             character.reference_images.append(portrait)
         if card.expressions and expressions:

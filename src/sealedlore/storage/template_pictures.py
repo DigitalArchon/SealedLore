@@ -61,7 +61,7 @@ class Kept:
     kept_from: str
     kept_at: str
     # By the character's name: their pictures in order, each (sha256, caption,
-    # look, expression), and their sheet's own rows and columns.
+    # look, expression, framing), and their sheet's own rows and columns.
     cards: dict[str, dict] = field(default_factory=dict)
 
     @property
@@ -120,6 +120,7 @@ def keep_pictures(
                     "caption": ref.caption,
                     "look": ref.look,
                     "expression": ref.expression,
+                    "framing": ref.framing,
                 }
             )
         cards[character.name] = {
@@ -197,6 +198,7 @@ def apply_kept(
             ref.caption = str(row.get("caption") or "")
             ref.look = str(row.get("look") or "")
             ref.expression = str(row.get("expression") or "")
+            ref.framing = str(row.get("framing") or "")
             pictures.append(ref)
         # The template's own that weren't kept stay, after: it is as it was.
         pictures += [ref for ref in character.reference_images if ref in own.values()]

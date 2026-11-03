@@ -10,12 +10,16 @@ from pathlib import Path
 import pytest
 
 from sealedlore.engine.images import run_image_request
+from sealedlore.engine.picture_styles import story_style
 from sealedlore.engine.plot_md import parse_plot_markdown
 from sealedlore.engine.portraits import (
     build_portrait_messages,
+    card_size,
     fallback_prompt,
     parse_portrait_prompts,
     portrait_size,
+    portrait_style,
+    with_lead,
 )
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS
 from sealedlore.engine.session import StorySession
@@ -74,6 +78,13 @@ def reply(*pairs: tuple[str, str]) -> str:
     return json.dumps({"portraits": [{"name": n, "prompt": p} for n, p in pairs]})
 
 
+def written(session: StorySession, text: str, *, lore: bool = False) -> str:
+    """A writer's prompt as `write_card_prompts` leaves it: the story's style
+    line first, the no-writing sentence last (Doomsville's style is gritty)."""
+    lead = portrait_style(story_style(session.story, session.texts), session.texts, lore=lore)
+    return with_lead(text, lead, session.texts["portraits.no_writing"])
+
+
 def test_only_characters_the_models_may_see_are_offered_or_written_for(tmp_path: Path):
     """Doomsville's Ben, Evan, Marcus and Elena are hidden until the plot
     brings them in: a portrait of one would be the first a model heard of
@@ -100,9 +111,49 @@ def test_the_writer_is_asked_for_what_can_be_seen_and_never_a_name():
     assert DEFAULT_TEXTS["portraits.no_writing"] in system
     assert "## John" in user and "Four years after the dead rose." in user
     assert "WHERE THE STORY BEGINS" not in user  # none given
-    # The story's own style when it has one.
+    # The story's own style when it has one, with the portraits' shot after it.
     styled = build_portrait_messages([john], world_bible="", title="T", image_style="Oil paint.")
-    assert "this style: Oil paint." in styled[0].parts[0].text
+    assert "this style: Oil paint, head and shoulders." in styled[0].parts[0].text
+
+
+def test_a_portrait_shows_as_much_of_them_as_asked_and_says_so():
+    """Head and shoulders by default; the upper body or the whole figure when
+    asked (the author, Nov 3 2026). The writer is asked for it, and the style
+    line it copies names the shot, so a prompt says it either way."""
+    john = Character(name="John", summary="A 30-year-old ex-soldier.")
+    for framing, asked, shot in (
+        ("head", "for a head-and-shoulders portrait:", "head and shoulders"),
+        ("torso", "for an upper-body portrait from the waist up", "upper body, from the waist up"),
+        ("full", "for a full-length portrait of the whole figure", "full body, the whole figure"),
+    ):
+        system = (
+            build_portrait_messages(
+                [john], world_bible="", title="T", image_style="Anime illustration", framing=framing
+            )[0]
+            .parts[0]
+            .text
+        )
+        assert asked in system and f"this style: Anime illustration, {shot}" in system
+        fallback = fallback_prompt(john, image_style="", framing=framing)
+        assert fallback.startswith(DEFAULT_TEXTS["portraits.style"] + ", " + shot.split(",")[0])
+    # Lore pictures have no shot.
+    town = LoreEntry(title="Hellsville", content="A walled town.")
+    lore = build_portrait_messages([], world_bible="", title="T", image_style="", lore=[town])
+    assert "this style: Photorealistic, natural light, sharp focus." in lore[0].parts[0].text
+
+
+def test_a_full_length_portrait_is_tall_where_it_can_be_else_a_larger_square():
+    def size(*sizes: str) -> str:
+        info = ImageModelInfo(id="m", name="M", resolutions=sizes)
+        return card_size(Character(name="J"), info, "full")
+
+    assert size("1024x1024", "1024x1536", "768x1024") == "1024x1536"  # nearest 2:3
+    assert size("1664x2496", "2304x3072", "1920x1920") == "1664x2496"  # past 1536 high
+    # FLUX.3 Klein lists squares alone: the largest up to 1536, for the face's sake.
+    assert size("768x768", "1024x1024", "1536x1536", "2048x2048") == "1536x1536"
+    head = ImageModelInfo(id="m", name="M", resolutions=("1024x1024", "1536x1536"))
+    assert card_size(Character(name="J"), head) == "1024x1024"
+    assert card_size(Character(name="J"), head, "torso") == "1024x1024"
 
 
 def test_the_writer_is_told_where_the_story_begins(tmp_path: Path):
@@ -119,8 +170,10 @@ def test_a_reply_is_read_by_name_and_whoever_it_left_out_gets_a_prompt_from_the_
     session, _provider = session_on(tmp_path, [reply(("john", "  A tired   man. "), ("Zed", "?"))])
     john, jane = session.without_pictures()[0]
     prompts, problem = session.write_card_prompts([john, jane])
-    assert prompts[john.id] == "A tired man."  # by name, any case, spaces closed up
-    assert prompts[jane.id] == fallback_prompt(jane, image_style="")
+    # By name, any case, spaces closed up.
+    assert prompts[john.id] == written(session, "A tired man.")
+    assert prompts[john.id].startswith("Gritty, photorealistic photograph")
+    assert prompts[jane.id] == fallback_prompt(jane, image_style=story_style(session.story))
     assert "left out Jane" in problem
     assert prompts[jane.id].endswith(DEFAULT_TEXTS["portraits.no_writing"])
     # The fallback is the card's looks: the world bible's words aren't a picture.
@@ -154,8 +207,8 @@ def test_the_writer_is_asked_a_few_cards_at_a_time_and_a_bad_reply_costs_only_it
     first, second = (json.dumps(p["messages"][-1]) for p in provider.payloads)
     assert "John" in first and "Jane" not in first
     assert "Jane" in second and "John" not in second
-    assert prompts[john.id] == "A tired man."
-    assert prompts[jane.id] == fallback_prompt(jane, image_style="")
+    assert prompts[john.id] == written(session, "A tired man.")
+    assert prompts[jane.id] == fallback_prompt(jane, image_style=story_style(session.story))
     assert "couldn't be read" in problem
 
 
@@ -176,7 +229,10 @@ def test_with_a_sibling_two_calls_are_written_at_once(tmp_path: Path, monkeypatc
     asked = {n for p in (*provider.payloads, *other.payloads) for n in names if n in json.dumps(p)}
     assert asked == names
     assert problem is None
-    assert (prompts[john.id], prompts[jane.id]) == ("A tired man.", "A tired woman.")
+    assert (prompts[john.id], prompts[jane.id]) == (
+        written(session, "A tired man."),
+        written(session, "A tired woman."),
+    )
 
 
 def test_portraits_wait_for_a_private_scene_to_end(tmp_path: Path):
@@ -262,7 +318,8 @@ def test_lore_entries_are_written_for_too_and_one_with_nothing_to_see_gets_no_pr
     town = next(e for e in lore if e.title == "Hellsville")
     bite = next(e for e in lore if e.title == "The bite")
     prompts, problem = session.write_card_prompts(people[:1], [town, bite, caves])
-    assert prompts[town.id] == "A walled town in snow." and prompts[bite.id] == ""
+    assert prompts[town.id] == written(session, "A walled town in snow.", lore=True)
+    assert prompts[bite.id] == ""
     assert caves.id not in prompts
     assert problem is None
     system = provider.payloads[-1]["messages"][0]["content"]

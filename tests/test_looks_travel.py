@@ -29,6 +29,8 @@ LABELS = [
     ("armour", "combat armour", "neutral"),
     ("loose", "", ""),
 ]
+# How much of him each shows (engine/portraits.py FRAMINGS), where said.
+FRAMINGS = {"portrait": "head", "armour": "full"}
 
 
 def png(red: int) -> bytes:
@@ -59,7 +61,14 @@ def made(root: Path) -> StoryBundle:
         file = f"images/refs/{ref_id}.png"
         bundle.pending_files[file] = png(40 * number + 10)
         john.reference_images.append(
-            ImageRef(id=ref_id, file=file, caption=ref_id, look=look, expression=expression)
+            ImageRef(
+                id=ref_id,
+                file=file,
+                caption=ref_id,
+                look=look,
+                expression=expression,
+                framing=FRAMINGS.get(ref_id, ""),
+            )
         )
     save_story_bundle(bundle, root=root)
     return load_story_bundle("looks", root=root)
@@ -71,6 +80,9 @@ def check(bundle: StoryBundle, root: Path) -> None:
     john = next(c for c in bundle.cast if c.name == "John")
     assert [(r.caption, r.look, r.expression) for r in john.reference_images] == [
         (ref_id, look, expression) for ref_id, look, expression in LABELS
+    ]
+    assert [r.framing for r in john.reference_images] == [
+        FRAMINGS.get(ref_id, "") for ref_id, _look, _expression in LABELS
     ]
     for number, ref in enumerate(john.reference_images):
         assert story_path(bundle.story.id, ref.file, root).read_bytes() == png(40 * number + 10)
@@ -140,6 +152,7 @@ def test_a_charx_card_carries_every_picture_with_its_labels(tmp_path: Path):
         (look, expression) for _id, look, expression in LABELS
     ]
     assert [r.caption for r in character.reference_images][1:] == ["angry", "armour", "loose"]
+    assert [r.framing for r in character.reference_images] == ["head", "", "full", ""]
     assert character.sheet_looks == ["formal clothes"]
     assert character.sheet_expressions == ["neutral", "angry", "laughing"]
     for number, ref in enumerate(character.reference_images[1:], 1):
@@ -198,6 +211,7 @@ def test_pictures_kept_for_a_template_go_on_its_next_story(tmp_path: Path):
         ("x", "", ""),
     ]
     assert files[john.reference_images[1].file] == png(50)
+    assert [r.framing for r in john.reference_images] == ["head", "", "full", "", ""]
     assert john.sheet_looks == ["formal clothes"]
     # Another template's story takes nothing; forgotten, nothing is offered.
     assert read_kept("The Silverwood", root=root) is None

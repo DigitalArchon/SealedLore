@@ -64,6 +64,8 @@ class Scenario(BaseModel):
     # How pictures should look, and the reference pictures on cards and lore
     # (their `file`, relative to the story folder, to the file's bytes as
     # base64), so a shared scenario brings the author's ship with it.
+    # `picture_style` is a ready-made style's id (engine/picture_styles.py).
+    picture_style: str = ""
     image_style: str = ""
     reference_files: dict[str, str] = Field(default_factory=dict)
     # The picture behind the transcript, its file among `reference_files`

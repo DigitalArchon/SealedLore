@@ -7,15 +7,22 @@ the author sees every one, may change any of them and untick whatever they
 don't want drawn, and chooses the model with its price. Nothing is drawn
 until Draw: each ticked prompt is then sent exactly as it stands
 (`requests`), as an ordinary picture, in the background.
+
+The style (the story's, engine/picture_styles.py) and how much of each
+character a portrait shows (engine/portraits.py FRAMINGS) are chosen here
+too (the author, Nov 3 2026); a change writes the prompts again, all but
+those the author has changed by hand. A style changed here becomes the
+story's once Draw is pressed (`chosen_style`).
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 
-from PySide6.QtCore import QSize, Qt, QThread
+from PySide6.QtCore import QSize, Qt, QThread, QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -30,9 +37,16 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.image_variants import family_id, picture_support
 from sealedlore.engine.images import ImageRequest
-from sealedlore.engine.portraits import Card, card_size
+from sealedlore.engine.portraits import (
+    DEFAULT_FRAMING,
+    FRAMING_LABELS,
+    FRAMINGS,
+    Card,
+    card_size,
+)
 from sealedlore.gui.image_jobs import ImageCatalog
 from sealedlore.gui.model_picker import ModelField
+from sealedlore.gui.picture_style import PictureStyleField
 from sealedlore.gui.picture_words import WORDS_ONLY
 from sealedlore.gui.ref_images import thumbnail_of
 from sealedlore.gui.sizing import GrowingText, size_to_screen
@@ -44,6 +58,9 @@ from sealedlore.providers.images import ImageModelInfo
 
 THUMB_SIDE = 64
 WRITING = "Writing…"
+# Typing one's own style words waits this long before the prompts are
+# written again.
+RESTYLE_DELAY_MS = 900
 NOTHING_TO_SEE = "The writer found nothing here a picture could show; write a prompt to draw one."
 
 
@@ -87,6 +104,9 @@ class _Row(QFrame):
         self.tick.toggled.connect(lambda on: self.prompt.setEnabled(on and self.written))
         self.prompt.textChanged.connect(self._on_edited)
         self.written = False
+        # The author changed the prompt: a new style or framing leaves it be.
+        self.edited = False
+        self._filling = False
 
     def fill(self, prompt: str) -> None:
         self.written = True
@@ -95,10 +115,24 @@ class _Row(QFrame):
             # writes a prompt for it.
             self.tick.setChecked(False)
             self.prompt.setPlaceholderText(NOTHING_TO_SEE)
+        self._filling = True
         self.prompt.setPlainText(prompt)
+        self._filling = False
         self.prompt.setEnabled(self.tick.isChecked())
 
+    def rewrite(self) -> None:
+        """Its prompt is being written again."""
+        self.written = False
+        self._filling = True
+        self.prompt.setPlainText(WRITING)
+        self._filling = False
+        self.prompt.setEnabled(False)
+
     def _on_edited(self) -> None:
+        if self._filling:
+            return
+        if self.written:
+            self.edited = True
         if self.written and self.prompt.toPlainText().strip() and not self.tick.isEnabled():
             self.tick.setEnabled(True)
 
@@ -152,7 +186,23 @@ class PortraitsDialog(QDialog):
         self.model_note = QLabel()
         self.model_note.setObjectName("hintLabel")
         self.model_note.setWordWrap(True)
+        story = session.story
+        self.style = PictureStyleField(story.picture_style, story.image_style, texts=session.texts)
+        self.style_note = QLabel(
+            "Every picture of this story is drawn in it: a style chosen here becomes the "
+            "story's (Story → Setup… → About)."
+        )
+        self.style_note.setObjectName("hintLabel")
+        self.style_note.setWordWrap(True)
+        self.framing = QComboBox()
+        for framing in FRAMINGS:
+            self.framing.addItem(FRAMING_LABELS[framing], framing)
+        self.framing.setToolTip("How much of each character the portraits show")
         form = QFormLayout()
+        form.addRow("Style", self.style)
+        form.addRow(self.style_note)
+        if self._characters:
+            form.addRow("Framing", self.framing)
         form.addRow("Drawn by", self.model)
         form.addRow(self.model_note)
 
@@ -213,21 +263,40 @@ class PortraitsDialog(QDialog):
         # say it changed at once, and `_sync` reads the worker.
         self._thread: QThread | None = None
         self._worker: GenerationWorker | None = None
+        # A new style or framing asked for while the prompts were written.
+        self._again = False
+        self._restyle_timer = QTimer(self)
+        self._restyle_timer.setSingleShot(True)
+        self._restyle_timer.setInterval(RESTYLE_DELAY_MS)
+        self._restyle_timer.timeout.connect(self._restyle)
+        self.style.combo.currentIndexChanged.connect(lambda _i: self._restyle())
+        self.style.own.textEdited.connect(lambda _t: self._restyle_timer.start())
+        self.framing.currentIndexChanged.connect(lambda _i: self._restyle())
         self.model.textChanged.connect(self._sync)
         if catalog is not None:
             catalog.changed.connect(self._sync)
             catalog.ensure()
-        self._write()
+        self._write(self.rows)
         self._sync()
         size_to_screen(self, 0.5, 0.88, at_least=QSize(720, 760))
 
     # --- writing the prompts ---------------------------------------------------------
 
-    def _write(self) -> None:
-        characters, lore = self._characters, self._lore
+    def _write(self, rows: list[_Row]) -> None:
+        """The prompts for `rows` written, in the style and framing chosen
+        now (read here, on the GUI thread)."""
+        self._writing = rows
+        for row in rows:
+            row.rewrite()
+        characters = [row.card for row in rows if isinstance(row.card, Character)]
+        lore = [row.card for row in rows if isinstance(row.card, LoreEntry)]
+        style, framing = self.chosen_style(), self.chosen_framing()
+        self._prompts, self._problem, self._failure = {}, None, None
 
         def job():
-            self._prompts, self._problem = self.session.write_card_prompts(characters, lore)
+            self._prompts, self._problem = self.session.write_card_prompts(
+                characters, lore, framing=framing, style=style
+            )
             return
             yield  # a generator, so GenerationWorker can run it
 
@@ -250,10 +319,27 @@ class PortraitsDialog(QDialog):
         if self._closing:
             super().reject()
             return
-        for row in self.rows:
+        for row in self._writing:
             row.fill(self._prompts.get(row.card.id, ""))
+        self._writing = []
         if self._failure is not None:
             self._problem = f"The prompts couldn't be written: {self._failure}"
+        if self._again:
+            self._again = False
+            self._restyle()
+            return
+        self._sync()
+
+    def _restyle(self) -> None:
+        """A new style or framing: the prompts written again, all but those
+        the author changed, once any writing under way is done."""
+        self._restyle_timer.stop()
+        if self.writing():
+            self._again = True
+            return
+        rows = [row for row in self.rows if not row.edited]
+        if rows:
+            self._write(rows)
         self._sync()
 
     def writing(self) -> bool:
@@ -275,8 +361,10 @@ class PortraitsDialog(QDialog):
         model = self.model.text().strip()
         info = self.model_info()
         wanted = [row for row in self.rows if row.wanted()]
-        prices = [info.price(card_size(row.card, info)) for row in wanted] if info else []
-        each = info.price(card_size(self.rows[0].card, info)) if info and self.rows else None
+        framing = self.chosen_framing()
+        prices = [info.price(card_size(row.card, info, framing)) for row in wanted] if info else []
+        first = self.rows[0].card if self.rows else None
+        each = info.price(card_size(first, info, framing)) if info and first else None
         known = recommended_model("portrait_model", model)
         price = f"about ${each:.3f} a picture" if each is not None else "price not listed"
         self.model_note.setText(
@@ -301,12 +389,27 @@ class PortraitsDialog(QDialog):
     def chosen_model(self) -> str:
         return self.model.text().strip()
 
+    def chosen_style(self) -> tuple[str, str]:
+        """(a ready-made style's id, the author's own words), as the story
+        keeps them."""
+        return self.style.value()
+
+    def chosen_framing(self) -> str:
+        return self.framing.currentData() or DEFAULT_FRAMING
+
     def requests(self) -> list[ImageRequest]:
-        """One request a ticked card, each prompt exactly as it stands."""
+        """One request a ticked card, each prompt exactly as it stands; a
+        portrait's size and label by the framing chosen."""
         model, info = self.chosen_model(), self.model_info()
+        framing = self.chosen_framing()
         return [
             self.session.card_request(
-                row.card, row.prompt.toPlainText(), model=model, info=info, first=True
+                row.card,
+                row.prompt.toPlainText(),
+                model=model,
+                info=info,
+                first=True,
+                framing=framing if isinstance(row.card, Character) else "",
             )
             for row in self.rows
             if row.wanted()

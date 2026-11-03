@@ -20,8 +20,10 @@ import threading
 from collections.abc import Sequence
 
 from sealedlore.engine.images import ImageRequest
+from sealedlore.engine.picture_styles import style_note, style_words
 from sealedlore.engine.picture_use import from_picture_direction, keep_picture
 from sealedlore.engine.portraits import (
+    DEFAULT_FRAMING,
     PORTRAIT_BATCH,
     PORTRAIT_MAX_TOKENS,
     Card,
@@ -30,7 +32,9 @@ from sealedlore.engine.portraits import (
     edit_prompt,
     fallback_prompt,
     parse_portrait_prompts,
+    portrait_style,
     where_it_begins,
+    with_lead,
 )
 from sealedlore.ids import new_id
 from sealedlore.models.character import Character
@@ -79,15 +83,24 @@ class PortraitRuntime:
         lore: Sequence[LoreEntry] = (),
         *,
         model: str | None = None,
+        framing: str = DEFAULT_FRAMING,
+        style: tuple[str, str] | None = None,
     ) -> tuple[dict[str, str], str | None]:
         """A prompt for each card, by id ("" for a lore entry with nothing
         to see), and what went wrong if the writer didn't answer for all of
         them (their prompts are then built from their cards). A few cards a
         call (`PORTRAIT_BATCH`), on the prompt writer's model, two calls at a
-        time when the provider has a sibling (a Stop reaches both)."""
+        time when the provider has a sibling (a Stop reaches both). In the
+        story's picture style, or `style` (a ready-made style's id, the
+        author's own words: one chosen in the portraits dialog, not yet the
+        story's); the portraits show `framing` of each character
+        (engine/portraits.py FRAMINGS)."""
         self._refuse_in_private("Writing picture prompts")
         texts = self.texts
         story = self.story
+        chosen, own = style if style is not None else (story.picture_style, story.image_style)
+        note = style_note(chosen, texts)
+        style = style_words(chosen, own, texts)
         allowed_people, allowed_lore = self.picture_cards()
         people_ids = {c.id for c in allowed_people}
         lore_ids = {e.id for e in allowed_lore}
@@ -113,10 +126,12 @@ class PortraitRuntime:
                         people,
                         world_bible=story.world_bible or "",
                         title=story.title,
-                        image_style=story.image_style,
+                        image_style=style,
                         begins=where_it_begins(story),
                         lore=entries,
                         texts=texts,
+                        framing=framing,
+                        note=note,
                     ),
                     params=params,
                 )
@@ -162,13 +177,20 @@ class PortraitRuntime:
             lane(self.provider)
             if helper is not None:
                 helper.join()
+        no_writing = texts["portraits.no_writing"]
+        for card_id, prompt in prompts.items():
+            lore_entry = card_id in lore_ids
+            lead = portrait_style(style, texts, lore=lore_entry, framing=framing)
+            prompts[card_id] = with_lead(prompt, lead, no_writing)
         problem = problems[0] if problems else None
         missing = [c for c in (*characters, *lore) if c.id not in prompts]
         if missing and problem is None:
             names = [c.name if isinstance(c, Character) else c.title for c in missing]
             problem = "The prompt writer left out " + ", ".join(names)
         for card in missing:
-            prompts[card.id] = fallback_prompt(card, image_style=story.image_style, texts=texts)
+            prompts[card.id] = fallback_prompt(
+                card, image_style=style, texts=texts, framing=framing
+            )
         if problem:
             problem += ": their prompts are built from their cards."
         return prompts, problem
@@ -186,19 +208,26 @@ class PortraitRuntime:
         references: Sequence[RefUse] = (),
         look: str = "",
         expression: str = "",
+        framing: str = "",
     ) -> ImageRequest:
         """The request for one picture of a card, its prompt exactly as
         approved. `first`: it becomes the card's first picture (a new
         portrait); else it goes after the others. `source`: the picture
         an edit is of, sent with the prompt; else `references`, the pictures
         a picture drawn again was drawn from. `look` and `expression`: its
-        labels on the card (engine/looks.py)."""
+        labels on the card (engine/looks.py). `framing`: how much of a
+        character it shows (engine/portraits.py FRAMINGS), which sets its
+        size; blank, the source's when it is an edit, else a
+        head-and-shoulders portrait's size, unlabelled."""
         person = isinstance(card, Character)
         references = tuple(references)
+        if source is not None and not framing:
+            # An edit shows as much of them as the picture it changes.
+            framing = source.framing
         sending = 1 if source is not None else len(references)
         # The model's text or edit version, for what goes with the prompt.
         model, info = self.fitting_image_model(model, sending, info)
-        size = card_size(card, info)
+        size = card_size(card, info, framing or DEFAULT_FRAMING)
         if source is not None:
             references = (
                 RefUse(
@@ -226,7 +255,19 @@ class PortraitRuntime:
             card_caption=caption or (PORTRAIT_CAPTION if first and person else ""),
             card_look=look if person else "",
             card_expression=expression if person else "",
+            card_framing=framing if person else "",
         )
+
+    def set_picture_style(self, picture_style: str, image_style: str) -> None:
+        """The story's picture style (engine/picture_styles.py), as chosen in
+        the portraits dialog; saved."""
+        self._refuse_in_private("Changing the picture style")
+        story = self.story
+        if (story.picture_style, story.image_style) == (picture_style, image_style):
+            return
+        story.picture_style, story.image_style = picture_style, image_style
+        self.forget_review_undo()
+        self.save()
 
     def card_edit_prompt(self, card: Card, change: str) -> str:
         """The prompt for an edit of a card's picture."""
@@ -305,6 +346,7 @@ class PortraitRuntime:
                     drawn_as=image.id,
                     look=image.card_look,
                     expression=image.card_expression,
+                    framing=image.card_framing,
                 )
                 if image.card_first:
                     card.reference_images.insert(0, ref)

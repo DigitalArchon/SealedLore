@@ -143,6 +143,9 @@ class PlotDocument(BaseModel):
     world_activity: WorldActivity | None = None
     perspective: Perspective | None = None
     length: FileLength | None = None
+    # How its pictures look (`picture style:`): a ready-made style's name
+    # ("gritty and realistic") or the author's own words, as written.
+    picture_style: str = ""
     # The picture behind the transcript, a file beside the plot file
     # (`background:`, written as a picture line's path is).
     background: str = ""

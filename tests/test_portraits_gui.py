@@ -17,6 +17,7 @@ pytest.importorskip("PySide6")
 from PySide6.QtCore import QObject, Qt, Signal  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
+from sealedlore.engine.prompt_texts import DEFAULT_TEXTS  # noqa: E402
 from sealedlore.engine.session import StorySession  # noqa: E402
 from sealedlore.engine.tokens import TokenEstimator, fallback_counter  # noqa: E402
 from sealedlore.gui.cast_panel import CastPanel  # noqa: E402
@@ -89,8 +90,11 @@ def test_the_dialog_shows_every_prompt_and_draws_them_as_they_stand(
     assert not dialog.draw_button.isEnabled()  # nothing to approve yet
     wait_for(app, lambda: not dialog.writing())
     app.processEvents()
+    # Each as written, after the style line the program puts first.
+    lead = DEFAULT_TEXTS["portraits.style"] + ", head and shoulders. "
+    no_writing = " " + DEFAULT_TEXTS["portraits.no_writing"]
     assert [row.prompt.toPlainText() for row in dialog.rows] == [
-        f"A face for {i}." for i in range(len(cast))
+        f"{lead}A face for {i}.{no_writing}" for i in range(len(cast))
     ]
     assert dialog.draw_button.isEnabled()
     assert dialog.model.text() == Config().portrait_model == K3
@@ -289,7 +293,10 @@ def test_the_cards_dialog_writes_for_lore_too_and_leaves_out_what_has_nothing_to
     wait_for(app, lambda: not dialog.writing())
     app.processEvents()
     town_row, bite_row = dialog.rows
-    assert town_row.prompt.toPlainText() == "A walled town in snow."
+    assert town_row.prompt.toPlainText() == (
+        f"{DEFAULT_TEXTS['portraits.style.lore']}. A walled town in snow. "
+        + DEFAULT_TEXTS["portraits.no_writing"]
+    )
     assert not bite_row.tick.isChecked() and not bite_row.wanted()
     requests = dialog.requests()
     assert [r.card_id for r in requests] == [town.id] and requests[0].card_first

@@ -216,8 +216,10 @@ class TavernWindow:
             if suffix is not None:
                 ref = store_reference(picture, suffix, session.pictures, PORTRAIT_CAPTION)
                 # A SealedLore card's own labels for its portrait (a CHARX).
-                look, expression, caption = card.picture_labels.get(ICON_NAME, ("", "", ""))
-                ref.look, ref.expression = look, expression
+                look, expression, caption, framing = card.picture_labels.get(
+                    ICON_NAME, ("", "", "", "")
+                )
+                ref.look, ref.expression, ref.framing = look, expression, framing
                 ref.caption = caption or ref.caption
                 character.reference_images.append(ref)
             else:
