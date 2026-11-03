@@ -76,6 +76,10 @@ PICTURE_MIME = "application/x-sealedlore-picture"
 PEOPLE_ICON = QSize(40, 60)
 
 
+def _characters(count: int) -> str:
+    return f"{count} character{'' if count == 1 else 's'}"
+
+
 def cover(pixmap: QPixmap, width: int, height: int) -> QPixmap:
     """The picture filling `width` by `height`, cut from the top (a face is
     near the top of a portrait), centred across."""
@@ -861,7 +865,9 @@ class CastBoard(QWidget):
     def _fill_people(self) -> None:
         self.people.blockSignals(True)
         self.people.clear()
-        everyone = QListWidgetItem(f"{EVERYONE}\n{len(self._cards)} characters")
+        everyone = QListWidgetItem(
+            f"{EVERYONE}\n{len(self._cards)} character{'' if len(self._cards) == 1 else 's'}"
+        )
         everyone.setData(Qt.UserRole, None)
         self.people.addItem(everyone)
         for card in self._cards:
@@ -919,7 +925,7 @@ class CastBoard(QWidget):
             self.title.setText(EVERYONE)
             total = sum(len(c.reference_images) for c in self._cards)
             self.stats.setText(
-                f"{len(self._cards)} characters, {total} pictures. Click one to see their "
+                f"{_characters(len(self._cards))}, {total} pictures. Click one to see their "
                 "pictures as a sheet of looks and expressions."
             )
             self._sheet = None
