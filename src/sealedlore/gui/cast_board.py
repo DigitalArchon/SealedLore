@@ -259,8 +259,8 @@ class SheetDelegate(QStyledItemDelegate):
             painter.setPen(pen)
             painter.drawPath(path)
             words = rect.adjusted(8, 8, -8, -8)
-            if cell.drawing or gap is None or gap.source is None:
-                text = "Drawing…" if cell.drawing else "Draw the look's\nfirst picture first"
+            if cell.drawing or gap is None or (gap.source is None and not gap.after):
+                text = "Drawing…" if cell.drawing else "Give them a\npicture first"
                 painter.setPen(theme.colour("text_soft"))
                 painter.drawText(words, Qt.AlignCenter | Qt.TextWordWrap, text)
             else:
@@ -276,10 +276,14 @@ class SheetDelegate(QStyledItemDelegate):
                     "+",
                 )
                 painter.setFont(option.font)
+                label = cell.expression or cell.look or "draw"
+                if gap.source is None:
+                    # The rest of a new look's row: drawn from its first.
+                    label += f"\nafter the {gap.after or 'first'}"
                 painter.drawText(
                     QRectF(words.left(), middle + 2, words.width(), words.height() / 2 - 2),
                     Qt.AlignHCenter | Qt.AlignTop | Qt.TextWordWrap,
-                    cell.expression or cell.look or "draw",
+                    label,
                 )
                 painter.setFont(small)
             if wanted:
@@ -686,11 +690,7 @@ class CastBoard(QWidget):
 
         header = QHBoxLayout()
         header.setSpacing(8)
-        names = QVBoxLayout()
-        names.setSpacing(0)
-        names.addWidget(self.title)
-        names.addWidget(self.stats)
-        header.addLayout(names, 1)
+        header.addWidget(self.title, 1)
         header.addWidget(self.spoilers)
         header.addWidget(QLabel("Size"))
         header.addWidget(self.size_choice)
@@ -767,6 +767,9 @@ class CastBoard(QWidget):
         right = QVBoxLayout()
         right.setSpacing(8)
         right.addLayout(header)
+        # A line of its own: beside the buttons it was cut short.
+        self.stats.setWordWrap(True)
+        right.addWidget(self.stats)
         right.addWidget(self.asked)
         right.addWidget(self.pages, 1)
         layout = QHBoxLayout(self)
@@ -999,8 +1002,13 @@ class CastBoard(QWidget):
         gap = cell.gap
         if cell.drawing:
             return f"{cell.words()}: being drawn."
+        if gap is not None and gap.source is None and gap.after:
+            return (
+                f"{cell.words()}: none yet. Drawn from this look's {gap.after} picture once it is "
+                "in, so the row wears the same thing; choosing it chooses that one too."
+            )
         if gap is None or gap.source is None:
-            return f"{cell.words()}: draw this look's first picture first, so the rest match it."
+            return f"{cell.words()}: they have no picture to draw it from yet."
         words = f"{cell.words()}: none yet. Drawn from their {look_words(gap.source) or 'picture'}"
         if gap.wanted:
             words += f"; the story asked for it {gap.wanted} time{'' if gap.wanted == 1 else 's'}"
