@@ -67,6 +67,7 @@ NOT_BEGUN = (
 )
 CARD_TIP = "Click to open {name}'s profile. Right-click for more."
 SHOW_AS = "Show as"
+BOARD_MENU = "All their pictures, on the cast board"
 PORTRAIT_WORDS = "Their portrait"
 ANOTHER_LOOK = "Draw another look…"
 ALSO_HERE_HEADING = "Also here, with no card yet"
@@ -253,6 +254,8 @@ class PersonCard(QFrame):
     play_requested = Signal(str)
     # (card id, picture id): show them with that picture from here on.
     look_requested = Signal(str, str)
+    # Their pictures, on the cast board (gui/cast_board.py).
+    board_requested = Signal(str)
     # (card id, picture id, what): "edit" or "set" of the picture shown.
     variant_requested = Signal(str, str, str)
     # (card id, picture id, "look · expression"): draw the look found missing.
@@ -394,6 +397,7 @@ class PersonCard(QFrame):
                         )
                     )
         actions.append(("Choose a picture…", lambda: self.file_requested.emit(person.card_id)))
+        actions.append((BOARD_MENU, lambda: self.board_requested.emit(person.card_id)))
         if self._can_play and person.playable and not person.you:
             actions.append(
                 (f"Play as {person.name}", lambda: self.play_requested.emit(person.card_id))
@@ -439,6 +443,8 @@ class PeoplePage(QScrollArea):
     file_requested = Signal(str)
     play_requested = Signal(str)
     look_requested = Signal(str, str)
+    # Their pictures, on the cast board (gui/cast_board.py).
+    board_requested = Signal(str)
     variant_requested = Signal(str, str, str)
     wanted_requested = Signal(str, str, str)
     draw_all_requested = Signal()
@@ -659,6 +665,7 @@ class PeoplePage(QScrollArea):
             card.file_requested.connect(self.file_requested)
             card.play_requested.connect(self.play_requested)
             card.look_requested.connect(self.look_requested)
+            card.board_requested.connect(self.board_requested)
             card.variant_requested.connect(self.variant_requested)
             card.wanted_requested.connect(self.wanted_requested)
             self.cards[person.card_id] = card

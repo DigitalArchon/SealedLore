@@ -572,6 +572,7 @@ class ImagesWindow:
             self.statusBar().showMessage(f"Picture ready: {', '.join(names)}.", 8000)
             # A place's picture landed: behind the story, if the story is there.
             self._sync_place_picture()
+            self._refresh_board()
         try:
             changed = self.session.take_background_pictures()
         except (OSError, ValueError) as exc:

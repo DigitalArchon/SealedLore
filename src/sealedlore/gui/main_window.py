@@ -116,6 +116,7 @@ from sealedlore.gui.transcript import (
 )
 from sealedlore.gui.usage_dialog import UsageDialog
 from sealedlore.gui.welcome import setup_missing, welcome_html
+from sealedlore.gui.window_board import CastBoardWindow
 from sealedlore.gui.window_cast import CastWindow
 from sealedlore.gui.window_chat import ChatWindow
 from sealedlore.gui.window_find import FindWindow
@@ -244,6 +245,7 @@ MANUAL_URL = "https://github.com/DigitalArchon/SealedLore/blob/master/docs/manua
 
 class MainWindow(
     CastWindow,
+    CastBoardWindow,
     TavernWindow,
     LooksWindow,
     ChatWindow,
@@ -509,6 +511,9 @@ class MainWindow(
         self.cast_panel.scan_requested.connect(self.scan_for_characters)
         self.cast_panel.infer_requested.connect(self.infer_competence)
         self.cast_panel.picture_requested.connect(self._on_card_picture)
+        self.cast_panel.board_requested.connect(
+            lambda card_id: self.show_cast_board(True, card_id or None)
+        )
         self.scene_panel = ScenePanel()
         self.scene_panel.changed.connect(self._on_scene_changed)
         self.scene_panel.update_requested.connect(self.update_scene_from_story)
@@ -554,6 +559,7 @@ class MainWindow(
         self._init_tavern()
         self._init_looks()
         self._init_images()
+        self._init_board()
         self._init_phone()
         self._init_videos()
         self._init_private()
@@ -838,6 +844,7 @@ class MainWindow(
         self.dice_rolls_action.toggled.connect(self.set_show_dice_rolls)
         view_menu.addAction(self.dice_rolls_action)
         self._looks_actions(view_menu)
+        self._board_action(view_menu)
         self._text_size_actions(view_menu)
         self._background_actions(view_menu)
 
@@ -925,6 +932,7 @@ class MainWindow(
         page.file_requested.connect(self._choose_card_picture)
         page.play_requested.connect(self._play_as)
         page.look_requested.connect(self._show_look)
+        page.board_requested.connect(lambda card_id: self.show_cast_board(True, card_id))
         page.variant_requested.connect(self._on_card_picture)
         page.wanted_requested.connect(
             lambda card_id, ref_id, wanted: self._on_card_picture(
@@ -1086,6 +1094,9 @@ class MainWindow(
         # Typing in the find bar, Esc closes it, even while a passage streams.
         if self.find_open() and self.find_bar.isAncestorOf(self.focusWidget()):
             self.close_find()
+        elif self.board_shown():
+            # Before Stop: the board hides the story, so Esc there means "back".
+            self.show_cast_board(False)
         elif self._busy:
             self.stop_generation()
         elif self.map_shown():
@@ -1519,6 +1530,7 @@ class MainWindow(
 
     def _close_story(self) -> None:
         """Back to the no-story state the window starts in."""
+        self.show_cast_board(False)
         self.show_map(False)
         self.close_find()
         if self.session is not None:
@@ -1728,6 +1740,7 @@ class MainWindow(
         # next (the same one again comes back from disk, without it): asked.
         if self.session is not None and not self._private_allows_close():
             return
+        self.show_cast_board(False)
         self.show_map(False)
         try:
             session = StorySession.load(
@@ -3386,6 +3399,8 @@ class MainWindow(
         self.refresh_retrieval()
         # Card pictures that came back while the worker owned the story.
         self._take_card_pictures()
+        # The board's cards may be changed again.
+        self._refresh_board()
         if self._streaming_job:
             # The kept prompt is exactly what was sent, so show that.
             self.refresh_inspector()
@@ -4742,6 +4757,8 @@ class MainWindow(
             lock.set_locked(busy)
         self.find_action.setEnabled(has_story)
         self.find_button.setEnabled(has_story)
+        # A story's characters only: a chat has none (hidden, not greyed).
+        self.board_action.setVisible(has_story and not self.session.story.chat)
         if self.session is not None:
             # A story that has begun keeps its person and tense.
             self.style_panel.set_started(bool(self.session.nodes))

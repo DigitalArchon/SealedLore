@@ -1230,6 +1230,28 @@ To see it working, play Doomsville with both turned on: John and Jane come
 happy, sad, angry and afraid, in combat armour and in indoor clothes, and the
 people they meet have a few looks of their own.
 
+**The cast board.** With many pictures to keep, **Cast board…** at the top of
+the Cast page opens them in the whole window (so does View → Cast board…, and
+**All their pictures, on the cast board** on a card's menu on the People page).
+**Everyone** shows each character with all their pictures; click one for their
+sheet: their looks down the side, expressions across, each picture in its
+place, the one the story shows now marked. An empty place shows, faded, the
+picture it would be drawn from. Choose the ones you want (drag across them,
+Ctrl-click them, or click a row's or column's name) and draw them, or fill
+every gap at once: you see every prompt and the price first, and each is drawn
+from the nearest picture of them, so the face and clothes stay and only what
+differs changes. **Add a look…** adds a row (combat armour, formal clothes,
+injured): its first picture is drawn first, then the rest of the row from it,
+so they all wear the same thing. **Add an expression…** adds a column, for one
+character or for everyone. Right-click a row's or column's name to fill it,
+rename it (every picture in it is relabelled) or remove it while it is empty.
+A look the story asked for is marked on its place ("Asked for ×2"); one that
+fits no place is listed above the sheet, to draw as the story put it or to add
+to the sheet. Right-click a picture to see it whole, show them like that in
+the story, make it their portrait, change its labels, change it or draw it
+again; pictures not labelled yet wait under the sheet. **Back to the story**
+(or Esc) puts the window back as it was.
+
 Pictures of other expressions can come with a character: a CHARX card's
 expression pictures (File → Import… asks whether to keep them, and gives
 their size), or a SillyTavern expression pack, a zip of pictures named by

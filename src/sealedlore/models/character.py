@@ -43,6 +43,12 @@ class Character(BaseModel):
     portrait_path: str | None = None
     # Pictures sent with an image prompt so they look the same every time.
     reference_images: list[ImageRef] = Field(default_factory=list)
+    # Their pictures as a sheet on the cast board (engine/look_sheet.py): the
+    # looks the author has planned that no picture has yet, and the
+    # expressions across (none: the usual few). The board's alone; no model
+    # sees them.
+    sheet_looks: list[str] = Field(default_factory=list)
+    sheet_expressions: list[str] = Field(default_factory=list)
     origin: CharacterOrigin = "author"
     # The work a canonical character comes from ("Night of the Living Dead (1968)").
     # The model already knows them; the card only records what this story changed.

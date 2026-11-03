@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.engine.dice import TIER_ORDER
 from sealedlore.gui import theme
+from sealedlore.gui.cast_board import BOARD_LABEL
 from sealedlore.gui.fields import FormScroll, set_field_text
 from sealedlore.gui.lore_cast_dialog import FILL_LABEL
 from sealedlore.gui.portrait_view import PortraitView
@@ -56,6 +57,7 @@ from sealedlore.models.character import Character
 from sealedlore.models.supporting import CharacterSuggestion
 
 HEADER_ROLE = Qt.UserRole + 1
+BOARD_BUTTON = f"{BOARD_LABEL}…"
 MODEL_MARK = "  ✦"
 # The width of the card's left column: the portrait, its other pictures.
 PORTRAIT_COLUMN = 300
@@ -95,6 +97,8 @@ class CastPanel(QWidget):
     card_link_requested = Signal()
     # (character id) a SillyTavern expression pack for this character.
     expressions_requested = Signal(str)
+    # The cast board in the whole window, on this character ("": everyone).
+    board_requested = Signal(str)
     card_export_requested = Signal(str)
 
     def __init__(self, pictures: StoryPictures | None = None) -> None:
@@ -168,6 +172,18 @@ class CastPanel(QWidget):
         fill_row.addWidget(self.tavern_button)
         fill_row.addStretch(1)
 
+        # The page grown to the whole window: every picture of everyone, as
+        # sheets of looks and expressions (gui/cast_board.py).
+        self.board_button = QPushButton(BOARD_BUTTON)
+        self.board_button.setObjectName("sendButton")
+        self.board_button.setToolTip(
+            "Every character's pictures in the whole window: each as a sheet of looks and "
+            "expressions, with what is missing ready to draw"
+        )
+        self.board_button.clicked.connect(
+            lambda: self.board_requested.emit(self._current.id if self._current else "")
+        )
+
         top = QWidget()
         top_layout = QVBoxLayout(top)
         top_layout.setContentsMargins(0, 0, 0, 0)
@@ -201,6 +217,8 @@ class CastPanel(QWidget):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
+        # Above the divider: in the list's part it took the names' room.
+        layout.addWidget(self.board_button)
         layout.addWidget(splitter)
 
     def _build_editor(self) -> QWidget:

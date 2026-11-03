@@ -479,6 +479,31 @@ QDockWidget::title {
   background: transparent;
 }
 
+/* The cast board (gui/cast_board.py): every character's pictures. */
+#boardTitle {
+  color: @text_heading;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+#boardRowTitle {
+  color: @text_heading;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  border: none;
+  padding: 4px 2px;
+}
+
+#boardRowTitle:hover {
+  color: @text_bright;
+}
+
+#castSheet {
+  background: @window;
+  border: none;
+}
+
 #stageName {
   color: @text_bright;
   font-size: 13px;
