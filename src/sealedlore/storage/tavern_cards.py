@@ -124,6 +124,9 @@ _OWN = (
     "is_player_available",
     "author_only",
     "canon",
+    # Their sheet's own rows and columns (engine/look_sheet.py).
+    "sheet_looks",
+    "sheet_expressions",
 )
 
 
@@ -156,6 +159,20 @@ class TavernCard:
     def extensions(self) -> Mapping[str, Any]:
         value = self.fields.get("extensions")
         return value if isinstance(value, Mapping) else {}
+
+    @property
+    def picture_labels(self) -> dict[str, tuple[str, str, str]]:
+        """A SealedLore card's own labels for its pictures, by asset name:
+        (look, expression, caption). Another app's card has none."""
+        own = self.extensions.get("sealedlore")
+        rows = own.get("pictures") if isinstance(own, Mapping) else None
+        labels: dict[str, tuple[str, str, str]] = {}
+        for row in rows if isinstance(rows, list) else ():
+            if isinstance(row, Mapping) and isinstance(row.get("name"), str):
+                labels[row["name"]] = tuple(  # type: ignore[assignment]
+                    str(row.get(key) or "") for key in ("look", "expression", "caption")
+                )
+        return labels
 
     @property
     def book(self) -> Mapping[str, Any] | None:
@@ -564,11 +581,14 @@ def expression_of(name: str) -> str:
 
 
 def expression_refs(
-    expressions: Sequence[tuple[str, bytes]], keep: Callable[[bytes, str, str], ImageRef | None]
+    expressions: Sequence[tuple[str, bytes]],
+    keep: Callable[[bytes, str, str], ImageRef | None],
+    labels: Mapping[str, tuple[str, str, str]] | None = None,
 ) -> tuple[list[ImageRef], int]:
     """Expression pictures as a character's pictures, labelled
-    (`expression_of`): `keep(data, suffix, label)` stores one
-    and returns its ref. How many were in a format SealedLore doesn't keep."""
+    (`expression_of`, or a SealedLore card's own `labels` by name: look,
+    expression and caption): `keep(data, suffix, label)` stores one and
+    returns its ref. How many were in a format SealedLore doesn't keep."""
     refs: list[ImageRef] = []
     skipped = 0
     for name, data in expressions:
@@ -576,10 +596,62 @@ def expression_refs(
         if suffix is None:
             skipped += 1
             continue
-        ref = keep(data, suffix, expression_of(name))
+        look, expression, caption = (labels or {}).get(name, ("", expression_of(name), ""))
+        ref = keep(data, suffix, expression)
         if ref is not None:
+            ref.look = look
+            if caption:
+                ref.caption = caption
             refs.append(ref)
     return refs, skipped
+
+
+# The CHARX asset a SealedLore card's portrait is (`card_charx`).
+ICON_NAME = "main"
+
+
+def card_charx(v3: Mapping[str, Any], pictures: Sequence[tuple[ImageRef, bytes]]) -> bytes:
+    """A character as a CHARX (a zip of card.json and its pictures): the
+    first picture its icon, every other one an "emotion" asset named by its
+    expression ("angry", "angry-2" for another), as SillyTavern and RisuAI
+    read them. SealedLore's own labels (the look too) ride under
+    `extensions.sealedlore.pictures` by asset name, so they come back whole.
+    Each picture's hidden data is removed first."""
+    data = json.loads(json.dumps(v3["data"]))
+    assets: list[dict[str, Any]] = []
+    rows: list[dict[str, str]] = []
+    members: list[tuple[str, bytes]] = []
+    used: dict[str, int] = {}
+    for index, (ref, raw) in enumerate(pictures):
+        cleaned = stripped_or_same(raw)
+        suffix = picture_kind(cleaned) or ".png"
+        ext = suffix.lstrip(".")
+        if index == 0:
+            name, kind = ICON_NAME, "icon"
+        else:
+            base = re.sub(r"[^a-z0-9]+", "_", (ref.expression or ref.look or "picture").lower())
+            base = base.strip("_") or "picture"
+            used[base] = used.get(base, 0) + 1
+            name, kind = (base if used[base] == 1 else f"{base}-{used[base]}"), "emotion"
+        member = f"assets/{kind}/images/{index + 1}{suffix}"
+        assets.append({"type": kind, "uri": f"embeded://{member}", "name": name, "ext": ext})
+        rows.append(
+            {"name": name, "look": ref.look, "expression": ref.expression, "caption": ref.caption}
+        )
+        members.append((member, cleaned))
+    data["assets"] = assets
+    extensions = dict(data.get("extensions") or {})
+    own = dict(extensions.get("sealedlore") or {})
+    own["pictures"] = rows
+    extensions["sealedlore"] = own
+    data["extensions"] = extensions
+    card = {"spec": SPEC_V3, "spec_version": "3.0", "data": data}
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("card.json", json.dumps(card, ensure_ascii=False, indent=1))
+        for member, raw in members:
+            archive.writestr(member, raw, compress_type=zipfile.ZIP_STORED)
+    return buffer.getvalue()
 
 
 def scenario_from_card(
@@ -634,6 +706,9 @@ def scenario_from_card(
         character = character_from_card(card, fill)
         portrait = _picture_ref(card, scenario, PORTRAIT_CAPTION)
         if portrait is not None:
+            look, expression, caption = card.picture_labels.get(ICON_NAME, ("", "", ""))
+            portrait.look, portrait.expression = look, expression
+            portrait.caption = caption or portrait.caption
             character.reference_images.append(portrait)
         if card.expressions and expressions:
 
@@ -643,7 +718,7 @@ def scenario_from_card(
                 scenario.reference_files[ref.file] = base64.b64encode(data).decode("ascii")
                 return ref
 
-            refs, skipped = expression_refs(card.expressions, keep)
+            refs, skipped = expression_refs(card.expressions, keep, card.picture_labels)
             character.reference_images += refs
             if skipped:
                 notes.append(

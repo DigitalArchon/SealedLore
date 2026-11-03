@@ -153,6 +153,10 @@ class StorySetup(BaseModel):
     # The ones not picked, off the cast but kept, so a restart or a scenario
     # export can offer the choice again.
     set_aside: list[Character] = Field(default_factory=list)
+    # The plot file or scenario the story was made from, by its title
+    # ("Doomsville"): pictures the author kept for it are offered when a
+    # story starts from it again (storage/template_pictures.py).
+    template: str = ""
 
 
 class Story(BaseModel):

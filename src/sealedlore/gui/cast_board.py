@@ -14,13 +14,15 @@ character's sheet; drawing, saving and the story are the window's
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 
-from PySide6.QtCore import QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtCore import QByteArray, QMimeData, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QDrag, QFont, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QHBoxLayout,
     QInputDialog,
@@ -51,12 +53,15 @@ from sealedlore.engine.look_sheet import (
     split_wanted,
 )
 from sealedlore.engine.looks import COMMON_EXPRESSIONS, COMMON_LOOKS, look_words
+from sealedlore.engine.plot_md import PICTURE_SUFFIXES
 from sealedlore.gui import theme
 from sealedlore.gui.ref_images import StoryPictures, pixmap_of
 from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef
 
 BOARD_LABEL = "Cast board"
+SPOILERS_LABEL = "Show spoilers"
+KEEP_LABEL = "Keep for new stories…"
 EVERYONE = "Everyone"
 NO_LOOK = "No look named"
 NO_EXPRESSION = "No expression named"
@@ -65,6 +70,8 @@ CELL_WIDTHS = {"Small": 116, "Medium": 156, "Large": 216}
 ASPECT = 1.5
 ROW_HEADER = 150
 CELL_ROLE = Qt.UserRole + 1
+# A picture of a card, dragged within the board: its id.
+PICTURE_MIME = "application/x-sealedlore-picture"
 PEOPLE_ICON = QSize(40, 60)
 
 
@@ -297,14 +304,53 @@ class SheetDelegate(QStyledItemDelegate):
         painter.restore()
 
 
+def picture_files(mime: QMimeData) -> list[Path]:
+    """The pictures among files dragged from the desktop."""
+    paths = [Path(url.toLocalFile()) for url in mime.urls() if url.isLocalFile()]
+    return [path for path in paths if path.suffix.lower() in PICTURE_SUFFIXES and path.is_file()]
+
+
+def _picture_drag(source: QWidget, ref_id: str, pixmap: QPixmap | None) -> None:
+    """A picture of the card picked up: its id in a type of the app's own."""
+    mime = QMimeData()
+    mime.setData(PICTURE_MIME, QByteArray(ref_id.encode()))
+    drag = QDrag(source)
+    drag.setMimeData(mime)
+    if pixmap is not None and not pixmap.isNull():
+        drag.setPixmap(pixmap.scaledToWidth(72, Qt.SmoothTransformation))
+    drag.exec(Qt.MoveAction)
+
+
 class SheetTable(QTableWidget):
     """A character's sheet: looks down the side, expressions across; both
-    stay in view as the cells scroll. Drag or Ctrl-click to choose gaps."""
+    stay in view as the cells scroll. Drag across gaps, or Ctrl-click them,
+    to choose them; drag a picture to another place to relabel it, or drop
+    pictures from the desktop on a place to add them there. Enter sees a
+    picture whole or draws the chosen gaps, Delete removes a picture, F2 is
+    its labels, the menu key the menu."""
+
+    # (picture id, row, column): a picture of theirs dropped on a place.
+    picture_dropped = Signal(str, int, int)
+    # (files, row, column): pictures from the desktop dropped on a place.
+    files_dropped = Signal(list, int, int)
+    # (row, column): Enter.
+    activated = Signal(int, int)
+    # (picture id): Delete, F2.
+    remove_pressed = Signal(str)
+    labels_pressed = Signal(str)
 
     def __init__(self, thumbs: Thumbs, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("castSheet")
+        self._thumbs = thumbs
         self.setItemDelegate(SheetDelegate(thumbs, self))
+        # A picture drags itself (its cell's flags say so); a gap, pressed
+        # and dragged, chooses the gaps it crosses.
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.viewport().setAcceptDrops(True)
+        self.setDragDropMode(QAbstractItemView.DragDrop)
+        self.setDropIndicatorShown(False)
         self.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.setSelectionBehavior(QAbstractItemView.SelectItems)
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -330,6 +376,121 @@ class SheetTable(QTableWidget):
     def cell_at(self, row: int, column: int) -> Cell | None:
         item = self.item(row, column)
         return item.data(CELL_ROLE) if item is not None else None
+
+    # --- dragging ---------------------------------------------------------------------
+
+    def startDrag(self, _actions) -> None:  # noqa: N802 - Qt naming
+        index = self.currentIndex()
+        cell = self.cell_at(index.row(), index.column()) if index.isValid() else None
+        if cell is None or cell.ref is None:
+            return
+        rect = self.visualRect(index)
+        pixmap = self._thumbs.get(cell.ref.file, rect.width() - 10, rect.height() - 10)
+        _picture_drag(self, cell.ref.id, pixmap)
+
+    def _accepts(self, event) -> bool:
+        mime = event.mimeData()
+        index = self.indexAt(event.position().toPoint())
+        if not index.isValid():
+            return False
+        return mime.hasFormat(PICTURE_MIME) or bool(picture_files(mime))
+
+    def dragEnterEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        mime = event.mimeData()
+        if mime.hasFormat(PICTURE_MIME) or picture_files(mime):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        if self._accepts(event):
+            index = self.indexAt(event.position().toPoint())
+            self.setCurrentIndex(index)
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        """Handled here whole: the table's own drop would move its items."""
+        index = self.indexAt(event.position().toPoint())
+        mime = event.mimeData()
+        if not index.isValid():
+            event.ignore()
+            return
+        if mime.hasFormat(PICTURE_MIME):
+            ref_id = bytes(mime.data(PICTURE_MIME)).decode()
+            self.picture_dropped.emit(ref_id, index.row(), index.column())
+        elif files := picture_files(mime):
+            self.files_dropped.emit([str(path) for path in files], index.row(), index.column())
+        else:
+            event.ignore()
+            return
+        event.setDropAction(Qt.CopyAction if not mime.hasFormat(PICTURE_MIME) else Qt.MoveAction)
+        event.accept()
+
+    # --- keys -------------------------------------------------------------------------
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        index = self.currentIndex()
+        cell = self.cell_at(index.row(), index.column()) if index.isValid() else None
+        key = event.key()
+        if cell is not None and key in (Qt.Key_Return, Qt.Key_Enter):
+            self.activated.emit(index.row(), index.column())
+            return
+        if cell is not None and cell.ref is not None and key == Qt.Key_Delete:
+            self.remove_pressed.emit(cell.ref.id)
+            return
+        if cell is not None and cell.ref is not None and key == Qt.Key_F2:
+            self.labels_pressed.emit(cell.ref.id)
+            return
+        if key == Qt.Key_Menu or (key == Qt.Key_F10 and event.modifiers() & Qt.ShiftModifier):
+            if index.isValid():
+                self.customContextMenuRequested.emit(self.visualRect(index).center())
+            return
+        super().keyPressEvent(event)
+
+
+class Tray(QListWidget):
+    """Pictures not labelled yet: dragged onto a place, they take its labels;
+    a picture of the sheet dropped here loses its own."""
+
+    # (picture id): a picture of the sheet dropped here.
+    picture_dropped = Signal(str)
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("refImageList")
+        self.setViewMode(QListWidget.IconMode)
+        self.setFlow(QListWidget.LeftToRight)
+        self.setWrapping(False)
+        self.setMovement(QListWidget.Static)
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.viewport().setAcceptDrops(True)
+        self.setDragDropMode(QAbstractItemView.DragDrop)
+
+    def startDrag(self, _actions) -> None:  # noqa: N802 - Qt naming
+        item = self.currentItem()
+        if item is not None:
+            _picture_drag(self, item.data(Qt.UserRole), item.icon().pixmap(72, 108))
+
+    def dragEnterEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        if event.mimeData().hasFormat(PICTURE_MIME) and event.source() is not self:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        self.dragEnterEvent(event)
+
+    def dropEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        mime = event.mimeData()
+        if not mime.hasFormat(PICTURE_MIME) or event.source() is self:
+            event.ignore()
+            return
+        self.picture_dropped.emit(bytes(mime.data(PICTURE_MIME)).decode())
+        event.setDropAction(Qt.MoveAction)
+        event.accept()
 
 
 TILE_ROLE = Qt.UserRole + 2
@@ -444,6 +605,12 @@ class CastBoard(QWidget):
     sheet_changed = Signal(str)
     # (card id, look, expression): pictures from files, labelled so.
     files_requested = Signal(str, str, str)
+    # (card id, look, expression, files): pictures dropped from the desktop.
+    files_dropped = Signal(str, str, str, list)
+    # Show spoilers: the plot's hidden characters too (Config.show_plot_spoilers).
+    spoilers_toggled = Signal(bool)
+    # Keep everyone's pictures for new stories from the story's template.
+    keep_requested = Signal()
 
     def __init__(self, pictures: StoryPictures, parent=None) -> None:
         super().__init__(parent)
@@ -458,6 +625,7 @@ class CastBoard(QWidget):
         self._current: str | None = None
         self._sheet: Sheet | None = None
         self._fronts: dict[tuple[str, str, str], int] = {}
+        self._hidden: set[str] = set()
 
         self.people = QListWidget()
         self.people.setObjectName("boardPeople")
@@ -505,6 +673,16 @@ class CastBoard(QWidget):
         self.back_button = QPushButton("Back to the story")
         self.back_button.setToolTip("Esc")
         self.back_button.clicked.connect(self.back_requested)
+        self.spoilers = QCheckBox(SPOILERS_LABEL)
+        self.spoilers.setToolTip(
+            "Everyone, the characters the plot hasn't brought in yet too, as the Plot page's Show "
+            "plot shows them. No model hears of them before the plot brings them in; filling their "
+            "gaps sends an image model only their pictures and the change asked for."
+        )
+        self.spoilers.toggled.connect(self.spoilers_toggled)
+        self.keep_button = QPushButton(KEEP_LABEL)
+        self.keep_button.clicked.connect(self.keep_requested)
+        self.keep_button.hide()
 
         header = QHBoxLayout()
         header.setSpacing(8)
@@ -513,12 +691,14 @@ class CastBoard(QWidget):
         names.addWidget(self.title)
         names.addWidget(self.stats)
         header.addLayout(names, 1)
+        header.addWidget(self.spoilers)
         header.addWidget(QLabel("Size"))
         header.addWidget(self.size_choice)
         header.addWidget(self.add_look_button)
         header.addWidget(self.add_expression_button)
         header.addWidget(self.files_button)
         header.addWidget(self.fill_button)
+        header.addWidget(self.keep_button)
         header.addWidget(self.back_button)
 
         self.asked = QWidget()
@@ -532,21 +712,25 @@ class CastBoard(QWidget):
         self.sheet.customContextMenuRequested.connect(self._cell_menu)
         self.sheet.horizontalHeader().customContextMenuRequested.connect(self._column_menu)
         self.sheet.verticalHeader().customContextMenuRequested.connect(self._row_menu)
+        self.sheet.picture_dropped.connect(self._dropped_on_sheet)
+        self.sheet.files_dropped.connect(self._files_on_sheet)
+        self.sheet.activated.connect(self._activated)
+        self.sheet.remove_pressed.connect(lambda ref_id: self._ask("remove", ref_id))
+        self.sheet.labels_pressed.connect(lambda ref_id: self._ask("labels", ref_id))
         self.hint = QLabel(
-            "Drag across gaps, or Ctrl-click them, to choose which to draw; a header chooses "
-            "its whole row or column. Right-click a picture for what you can do with it."
+            "Drag across gaps, or Ctrl-click them, to choose which to draw; a header chooses its "
+            "whole row or column. Drag a picture to another place to relabel it, or drop "
+            "pictures from your computer on a place. Right-click a picture for more."
         )
         self.hint.setObjectName("hintLabel")
         self.hint.setWordWrap(True)
 
-        self.tray_title = QLabel("Not labelled yet: double-click one to say what it shows")
+        self.tray_title = QLabel(
+            "Not labelled yet: drag one to its place, or double-click it to say what it shows"
+        )
         self.tray_title.setObjectName("peopleSection")
-        self.tray = QListWidget()
-        self.tray.setObjectName("refImageList")
-        self.tray.setViewMode(QListWidget.IconMode)
-        self.tray.setFlow(QListWidget.LeftToRight)
-        self.tray.setWrapping(False)
-        self.tray.setMovement(QListWidget.Static)
+        self.tray = Tray()
+        self.tray.picture_dropped.connect(self._unlabel)
         self.tray.itemDoubleClicked.connect(
             lambda item: (
                 self._current
@@ -612,13 +796,22 @@ class CastBoard(QWidget):
         drawing: Mapping[tuple[str, str, str], int],
         begun: bool,
         can_change: bool,
+        hidden: Collection[str] = (),
+        spoilers: bool = False,
     ) -> None:
         """The characters the author may see, who is shown with which
         picture in the story now, the looks the story asked for, the cells
         being drawn ((card id, look key, expression key) → how many), whether
         the story has begun (Show as needs a message) and whether cards may
-        be changed now (not while the story's job runs)."""
+        be changed now (not while the story's job runs). `hidden`: the
+        plot's characters not brought in yet (among `cards` only with
+        `spoilers` on); Show spoilers is offered while there are any."""
         self._cards = list(cards)
+        self._hidden = set(hidden)
+        self.spoilers.blockSignals(True)
+        self.spoilers.setChecked(spoilers)
+        self.spoilers.blockSignals(False)
+        self.spoilers.setVisible(bool(self._hidden))
         self._shown = dict(shown)
         self._wanted = {key: dict(value) for key, value in wanted.items()}
         self._drawing = dict(drawing)
@@ -628,6 +821,17 @@ class CastBoard(QWidget):
             self._current = None
         self._fill_people()
         self._show()
+
+    def set_template(self, template: str, kept: int = 0) -> None:
+        """The template the story was made from ("" for none): its pictures
+        can be kept for the next story from it; `kept` were kept already."""
+        self.keep_button.setVisible(bool(template))
+        already = f" {kept} are kept for it now." if kept else ""
+        self.keep_button.setToolTip(
+            f"Keep everyone's pictures, labels and sheets for new stories from {template}: "
+            f"starting it again, you can add them or leave them out, and {template} itself "
+            f"stays as it is.{already}"
+        )
 
     def aim(self, card_id: str | None) -> None:
         """Whose sheet the next `set_cards` shows (None: everyone), without
@@ -665,6 +869,8 @@ class CastBoard(QWidget):
             words = f"{sheet.picture_count} picture{'' if sheet.picture_count == 1 else 's'}"
             if gaps:
                 words += f" · {gaps} gap{'' if gaps == 1 else 's'}"
+            if card.id in self._hidden:
+                words += "\nnot in the story yet"
             item = QListWidgetItem(f"{card.name}\n{words}")
             item.setData(Qt.UserRole, card.id)
             first = card.reference_images[0] if card.reference_images else None
@@ -765,6 +971,12 @@ class CastBoard(QWidget):
                 item = QTableWidgetItem()
                 item.setData(CELL_ROLE, cell)
                 item.setToolTip(self._tip(cell))
+                # A picture can be picked up; a gap, pressed and dragged,
+                # chooses the gaps it crosses instead.
+                flags = Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsDropEnabled
+                if cell.refs and self._can_change:
+                    flags |= Qt.ItemIsDragEnabled
+                item.setFlags(flags)
                 table.setItem(row, column, item)
         table.set_cell_size(self._width())
         self.stats.setText(self._stats(sheet))
@@ -877,23 +1089,42 @@ class CastBoard(QWidget):
                 cells.append(cell)
         return cells
 
+    def _being_drawn(self, gap: Gap) -> int:
+        return self._drawing.get((self._current, label_key(gap.look), label_key(gap.expression)), 0)
+
+    def _with_firsts(self, gaps: Sequence[Gap]) -> list[Gap]:
+        """`gaps` that can be drawn, each waiting one with its row's first
+        cell (added if it isn't there and isn't being drawn), in sheet order."""
+        if self._sheet is None:
+            return []
+        chosen = {(label_key(g.look), label_key(g.expression)) for g in gaps}
+        for gap in gaps:
+            first = self._sheet.first_of(gap)
+            if first is not None and not self._being_drawn(first):
+                chosen.add((label_key(first.look), label_key(first.expression)))
+        keep = []
+        for gap in self._sheet.fillable():
+            key = (label_key(gap.look), label_key(gap.expression))
+            if key not in chosen or self._being_drawn(gap):
+                continue
+            first = self._sheet.first_of(gap)
+            if first is not None and not (
+                (label_key(first.look), label_key(first.expression)) in chosen
+                or self._being_drawn(first)
+            ):
+                continue
+            keep.append(gap)
+        return keep
+
     def _selected_gaps(self) -> list[Gap]:
-        return [
-            cell.gap
-            for cell in self._selected_cells()
-            if cell.gap is not None and cell.gap.source is not None and not cell.drawing
-        ]
+        return self._with_firsts(
+            [cell.gap for cell in self._selected_cells() if cell.gap is not None]
+        )
 
     def _drawable(self) -> list[Gap]:
         if self._sheet is None or self._current is None:
             return []
-        return [
-            gap
-            for gap in self._sheet.drawable()
-            if not self._drawing.get(
-                (self._current, label_key(gap.look), label_key(gap.expression)), 0
-            )
-        ]
+        return self._with_firsts(self._sheet.fillable())
 
     def _sync_fill(self) -> None:
         if self._sheet is None:
@@ -921,8 +1152,63 @@ class CastBoard(QWidget):
             return
         if cell.ref is not None:
             self.picture_action.emit("whole", self._current, cell.ref.id)
-        elif cell.gap is not None and cell.gap.source is not None and not cell.drawing:
-            self.fill_requested.emit(self._current, [cell.gap])
+        elif cell.gap is not None and not cell.drawing:
+            gaps = self._with_firsts([cell.gap])
+            if gaps:
+                self.fill_requested.emit(self._current, gaps)
+
+    def _activated(self, row: int, column: int) -> None:
+        """Enter: a picture seen whole; on a gap, the chosen gaps drawn (this
+        one, when it isn't among them)."""
+        cell = self.sheet.cell_at(row, column)
+        if cell is None or self._current is None:
+            return
+        if cell.ref is not None:
+            self.picture_action.emit("whole", self._current, cell.ref.id)
+            return
+        chosen = self._selected_gaps()
+        if cell.gap is not None and any(g is cell.gap or g == cell.gap for g in chosen):
+            self.fill_requested.emit(self._current, chosen)
+        else:
+            self._double_clicked(row, column)
+
+    def _ask(self, what: str, ref_id: str) -> None:
+        if self._current is not None:
+            self.picture_action.emit(what, self._current, ref_id)
+
+    # --- dropped pictures ---------------------------------------------------------------
+
+    def _dropped_on_sheet(self, ref_id: str, row: int, column: int) -> None:
+        """A picture of theirs dropped on a place: labelled for it."""
+        card = self._card(self._current)
+        if card is None or self._sheet is None or not self._can_change:
+            return
+        ref = next((r for r in card.reference_images if r.id == ref_id), None)
+        if ref is None:
+            return
+        look, expression = self._sheet.looks[row], self._sheet.expressions[column]
+        if (label_key(ref.look), label_key(ref.expression)) == (
+            label_key(look),
+            label_key(expression),
+        ):
+            return
+        ref.look, ref.expression = look, expression
+        self._changed(card)
+
+    def _unlabel(self, ref_id: str) -> None:
+        """A picture of theirs dropped on the tray: its labels taken off."""
+        card = self._card(self._current)
+        ref = next((r for r in card.reference_images if r.id == ref_id), None) if card else None
+        if ref is None or not self._can_change or not (ref.look or ref.expression):
+            return
+        ref.look = ref.expression = ""
+        self._changed(card)
+
+    def _files_on_sheet(self, paths: list, row: int, column: int) -> None:
+        if self._current is None or self._sheet is None or not self._can_change:
+            return
+        look, expression = self._sheet.looks[row], self._sheet.expressions[column]
+        self.files_dropped.emit(self._current, look, expression, list(paths))
 
     # --- menus ----------------------------------------------------------------------------
 
@@ -999,10 +1285,9 @@ class CastBoard(QWidget):
         for r in rows:
             for c in columns:
                 cell = table.cell_at(r, c)
-                if cell is not None and cell.gap is not None and cell.gap.source is not None:
-                    if not cell.drawing:
-                        cells.append(cell.gap)
-        return cells
+                if cell is not None and cell.gap is not None:
+                    cells.append(cell.gap)
+        return self._with_firsts(cells)
 
     def _line_has_pictures(self, *, row: int | None = None, column: int | None = None) -> bool:
         table = self.sheet

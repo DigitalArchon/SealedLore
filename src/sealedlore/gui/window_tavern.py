@@ -38,11 +38,14 @@ from sealedlore.providers.card_links import (
     read_link,
 )
 from sealedlore.storage.image_meta import picture_kind, strip_metadata
+from sealedlore.storage.images import write_bytes_atomic
 from sealedlore.storage.scenario import bundle_from_scenario
 from sealedlore.storage.tavern_cards import (
+    ICON_NAME,
     PORTRAIT_CAPTION,
     CardError,
     TavernCard,
+    card_charx,
     card_data,
     character_from_card,
     expression_refs,
@@ -212,11 +215,15 @@ class TavernWindow:
             suffix = picture_kind(picture)
             if suffix is not None:
                 ref = store_reference(picture, suffix, session.pictures, PORTRAIT_CAPTION)
+                # A SealedLore card's own labels for its portrait (a CHARX).
+                look, expression, caption = card.picture_labels.get(ICON_NAME, ("", "", ""))
+                ref.look, ref.expression = look, expression
+                ref.caption = caption or ref.caption
                 character.reference_images.append(ref)
             else:
                 notes.append("Its picture is in a format SealedLore doesn't keep.")
         if card.expressions:
-            refs, skipped = self._keep_expressions(card.expressions)
+            refs, skipped = self._keep_expressions(card.expressions, card.picture_labels)
             character.reference_images += refs
             notes.append(
                 f"{len(refs)} expression picture{'s' if len(refs) != 1 else ''} came with the "
@@ -341,6 +348,10 @@ class TavernWindow:
             if png
             else "JSON card (*.json)"
         )
+        count = len(character.reference_images)
+        if png and count > 1:
+            # Every picture, labelled: a PNG card holds one.
+            kinds = f"CHARX card, with all {count} pictures (*.charx);;" + kinds
         chosen, kind = QFileDialog.getSaveFileName(
             self._dialog_parent(),
             "Export a character card",
@@ -350,10 +361,20 @@ class TavernWindow:
         if not chosen:
             return
         path = Path(chosen)
-        if path.suffix.lower() not in (".png", ".json"):
-            path = path.with_name(path.name + (".png" if kind.startswith("PNG") else ".json"))
+        if path.suffix.lower() not in (".png", ".json", ".charx"):
+            ending = (
+                ".charx"
+                if kind.startswith("CHARX")
+                else ".png"
+                if kind.startswith("PNG")
+                else ".json"
+            )
+            path = path.with_name(path.name + ending)
         if path.suffix.lower() == ".png" and png is None:
             path = path.with_suffix(".json")
+        if path.suffix.lower() == ".charx":
+            self._export_charx(path, character, lore if with_lore else ())
+            return
         first, third = card_data(
             character,
             story_title=session.story.title,
@@ -366,6 +387,24 @@ class TavernWindow:
             self._warn_plain("Could not export the card", f"{path}: {exc}")
             return
         self.statusBar().showMessage(f"Saved {character.name}'s card to {path.name}.", 8000)
+
+    def _export_charx(self, path: Path, character: Character, lore) -> None:
+        """A character with every picture, labelled, as a CHARX."""
+        session = self.session
+        pictures = []
+        for ref in character.reference_images:
+            data = session.pictures.read(ref.file)
+            if data:
+                pictures.append((ref, data))
+        _first, third = card_data(character, story_title=session.story.title, lore=lore)
+        try:
+            write_bytes_atomic(path, card_charx(third, pictures))
+        except (OSError, CardError) as exc:
+            self._warn_plain("Could not export the card", f"{path}: {exc}")
+            return
+        self.statusBar().showMessage(
+            f"Saved {character.name}'s card, with {len(pictures)} pictures, to {path.name}.", 8000
+        )
 
     def _portrait_png(self, character: Character) -> bytes | None:
         """The character's first picture as a PNG with nothing hidden in it,
@@ -629,8 +668,9 @@ class TavernWindow:
 
     # --- expression pictures (a card's own, or a SillyTavern pack) -------------------
 
-    def _keep_expressions(self, expressions) -> tuple[list, int]:
-        """Expression pictures stored with the open story, labelled; how many
+    def _keep_expressions(self, expressions, labels=None) -> tuple[list, int]:
+        """Expression pictures stored with the open story, labelled (by a
+        SealedLore card's own `labels`, else by their names); how many
         weren't a format SealedLore keeps."""
         session = self.session
         cleaned = clean_incoming({str(i): data for i, (_name, data) in enumerate(expressions)})
@@ -641,7 +681,7 @@ class TavernWindow:
             ref.expression = label
             return ref
 
-        return expression_refs(named, keep)
+        return expression_refs(named, keep, labels)
 
     def import_expressions(self, character_id: str) -> None:
         """A SillyTavern expression pack (a zip of pictures named by

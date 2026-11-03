@@ -59,6 +59,7 @@ def scenario_from_bundle(
     ]
     return Scenario(
         title=story.title,
+        template=setup.template,
         description=setup.description,
         world_bible=story.world_bible,
         opening_text=setup.opening_text,
@@ -142,6 +143,7 @@ def bundle_from_scenario(
             choose_one_of=[
                 character_id for character_id in scenario.choose_one_of if character_id in cast_ids
             ],
+            template=scenario.template or scenario.title,
         ),
         style=scenario.style.model_copy(deep=True),
         scene=starting.model_copy(deep=True),

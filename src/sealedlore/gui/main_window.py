@@ -181,6 +181,7 @@ from sealedlore.storage.scenario import (
     write_scenario,
 )
 from sealedlore.storage.tavern_cards import tavern_kind
+from sealedlore.storage.template_pictures import apply_kept, read_kept, template_of
 from sealedlore.threads import BackgroundThread
 from sealedlore.tree import path_to
 
@@ -1680,15 +1681,19 @@ class MainWindow(
             if self.session.config.images() is not None
             else ([], [])
         )
+        kept = read_kept(template_of(story), self.root) if template_of(story) else None
         dialog = StartDialog(
             story,
             self.session.cast,
             parent=self,
             without_pictures=offered,
+            kept=kept,
         )
         if dialog.exec() != StartDialog.Accepted:
             return
         held = dialog.held_character_id()
+        if kept is not None and dialog.kept_wanted():
+            self._add_kept_pictures(kept)
         # Before holding: pinning resets the roster the held character joins.
         if (pinned := dialog.pinned()) is not None:
             self.session.pin_at_start(*pinned)
@@ -1732,6 +1737,26 @@ class MainWindow(
             "Direction", story.setup.opening_text.strip(), kind_for(DIRECTOR_SPEAKER_ID)
         )
         self._start(lambda: self.session.begin(held))
+
+    def _add_kept_pictures(self, kept) -> None:
+        """The pictures the author kept for this story's template, on its
+        characters by name (storage/template_pictures.py)."""
+        session = self.session
+        characters = [*session.cast, *session.supporting, *session.story.setup.set_aside]
+        try:
+            added = apply_kept(
+                kept, characters, session.pictures.read, session.pictures.write, self.root
+            )
+        except OSError as exc:
+            self._warn_plain("Couldn't add the kept pictures", str(exc))
+            return
+        self._on_cast_changed()
+        self.cast_panel.refresh_pictures()
+        self.people_page.forget_pictures()
+        self._refresh_people()
+        self.statusBar().showMessage(
+            f"Added your {added} picture{'' if added == 1 else 's'} for {kept.template}.", 8000
+        )
 
     def open_story(self, story_id: str) -> None:
         if self._busy:

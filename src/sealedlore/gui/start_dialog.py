@@ -20,6 +20,7 @@ from sealedlore.gui.start_presence import StartPresence
 from sealedlore.models.character import Character
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.story import Story
+from sealedlore.storage.template_pictures import Kept
 
 
 def opening_note(story: Story) -> str:
@@ -44,6 +45,7 @@ class StartDialog(QDialog):
         parent: QWidget | None = None,
         *,
         without_pictures: tuple[Sequence[Character], Sequence[LoreEntry]] = ((), ()),
+        kept: Kept | None = None,
     ) -> None:
         """`without_pictures`: the characters and lore entries the models may
         see that have no picture yet; when there are any, a picture of each
@@ -97,6 +99,19 @@ class StartDialog(QDialog):
             layout.addWidget(self.pictures)
             self.play_as.currentIndexChanged.connect(self._sync_pictures)
             self._sync_pictures()
+        # Pictures the author kept for this template (the cast board's Keep
+        # for new stories…): the template as it is, or with them.
+        self.kept: QCheckBox | None = None
+        if kept is not None and kept.count:
+            self.kept = QCheckBox(
+                f"Add your {kept.count} pictures for {kept.template} (kept from “{kept.kept_from}”)"
+            )
+            self.kept.setChecked(True)
+            self.kept.setToolTip(
+                f"The pictures, labels and sheets you kept for {kept.template}, on its characters "
+                "by name. Untick for the pictures it comes with alone."
+            )
+            layout.addWidget(self.kept)
         note = QLabel(opening_note(story))
         note.setObjectName("hintLabel")
         note.setWordWrap(True)
@@ -152,3 +167,6 @@ class StartDialog(QDialog):
     def pinned(self) -> tuple[list[str], list[str]] | None:
         """(pinned present, pinned not present) at the start; None with no cast."""
         return self.presence.pinned() if self.presence is not None else None
+
+    def kept_wanted(self) -> bool:
+        return self.kept is not None and self.kept.isChecked()

@@ -67,6 +67,9 @@ class Gap:
     source: ImageRef | None
     # How often the story asked for it (engine/look_pick.py's "missing").
     wanted: int = 0
+    # The rest of a new look's row: the expression of the row's first cell,
+    # whose picture this one is drawn from once it is in.
+    after: str = ""
 
 
 @dataclass
@@ -89,13 +92,22 @@ class Sheet:
 
     def drawable(self) -> list[Gap]:
         """The gaps that can be drawn now, row by row."""
+        return [gap for gap in self.fillable() if gap.source is not None]
+
+    def fillable(self) -> list[Gap]:
+        """Every gap that can be drawn now or, the rest of a new look's row,
+        once its first picture is in; row by row."""
         return [
-            self.gaps[(label_key(look), label_key(expression))]
+            gap
             for look in self.looks
             for expression in self.expressions
             if (gap := self.gaps.get((label_key(look), label_key(expression)))) is not None
-            and gap.source is not None
+            and (gap.source is not None or gap.after)
         ]
+
+    def first_of(self, gap: Gap) -> Gap | None:
+        """The gap a waiting one waits for: its row's first cell."""
+        return self.gap(gap.look, gap.after) if gap.after else None
 
     @property
     def picture_count(self) -> int:
@@ -171,13 +183,16 @@ def sheet_for(character: Character, wanted: Mapping[str, int] | None = None) -> 
             key = (label_key(look), label_key(expression))
             if key in cells:
                 continue
+            after = ""
             if row:
                 source = _neutral_or_first(row)
             elif label_key(expression) == label_key(first_cell):
                 source = _start_of_new_look(labelled, portrait, expression)
             else:
                 source = None
-            gaps[key] = Gap(look, expression, source, wanted_cells.get(key, 0))
+                if _start_of_new_look(labelled, portrait, first_cell) is not None:
+                    after = first_cell
+            gaps[key] = Gap(look, expression, source, wanted_cells.get(key, 0), after)
     return Sheet(
         looks=looks,
         expressions=expressions,
@@ -217,9 +232,14 @@ def _start_of_new_look(
 
 def gap_change(gap: Gap, texts: PromptTexts = DEFAULT_TEXTS) -> str:
     """What a gap's edit asks for: only what differs from its source (an
-    unnamed look or expression is left as it is)."""
+    unnamed look or expression is left as it is). A waiting one is drawn
+    from its row's first picture, in its look already: only its expression."""
     source = gap.source
-    assert source is not None, "a gap with nothing to draw it from"
+    if source is None:
+        assert gap.after, "a gap with nothing to draw it from"
+        if label_key(gap.expression) == label_key(gap.after):
+            return ""
+        return look_change(expression=gap.expression, texts=texts)
     look = gap.look if gap.look and label_key(gap.look) != label_key(source.look) else ""
     expression = (
         gap.expression

@@ -14,15 +14,22 @@ from __future__ import annotations
 from collections import Counter
 from pathlib import Path
 
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
-from sealedlore.engine.look_sheet import label_key, wanted_along
+from sealedlore.engine.look_sheet import label_key, sheet_for, wanted_along
 from sealedlore.engine.looks import look_words
 from sealedlore.gui.cast_board import BOARD_LABEL, CastBoard
-from sealedlore.gui.fill_gaps import ask_fill_gaps
+from sealedlore.gui.fill_gaps import Waiting, ask_fill_gaps
 from sealedlore.gui.picture_labels import edit_labels
 from sealedlore.gui.ref_images import PICTURE_FILTER, store_reference
+from sealedlore.storage.template_pictures import (
+    forget_kept,
+    keep_pictures,
+    read_kept,
+    template_of,
+)
 
 BOARD_TIP = (
     "Every character's pictures in the whole window: each as a sheet of looks and "
@@ -41,9 +48,22 @@ class CastBoardWindow:
         board.asked_requested.connect(self._board_asked)
         board.sheet_changed.connect(self._board_changed)
         board.files_requested.connect(self._board_files)
+        board.files_dropped.connect(
+            lambda card_id, look, expression, paths: self._board_files(
+                card_id, look, expression, paths=paths
+            )
+        )
+        board.spoilers_toggled.connect(self._board_spoilers)
+        board.keep_requested.connect(self._board_keep)
         self.image_jobs.changed.connect(self._refresh_board)
+        # A new look's first picture failed: the rest of its row is let go
+        # (once the failure is out of the pending list).
+        self.image_jobs.failed.connect(lambda *_args: QTimer.singleShot(0, self._start_waiting))
         # What the board put away, each as it was, to bring back as it was.
         self._board_away: list[tuple[object, bool]] = []
+        # Gaps approved to be drawn from a new look's first picture once it
+        # is in: (story id, what was approved). For the run only.
+        self._board_waiting: list[tuple[str, Waiting]] = []
 
     def _board_action(self, view_menu) -> None:
         self.board_action = QAction(f"{BOARD_LABEL}…", self)
@@ -134,6 +154,13 @@ class CastBoardWindow:
             character_id: dict(counts)
             for character_id, counts in wanted_along(session._looks_path()).items()
         }
+        for story_id, waiting in self._board_waiting:
+            if story_id == session.story.id:
+                key = (waiting.card_id, label_key(waiting.look), label_key(waiting.expression))
+                drawing[key] += 1
+        template = template_of(session.story)
+        kept = read_kept(template, self.root) if template else None
+        self.cast_board.set_template(template, kept.count if kept else 0)
         self.cast_board.set_cards(
             self._board_cards(),
             shown=session.looks_now(),
@@ -141,7 +168,67 @@ class CastBoardWindow:
             drawing=dict(drawing),
             begun=bool(session.nodes),
             can_change=not self._busy,
+            hidden=session.hidden_ids(),
+            spoilers=self.config.show_plot_spoilers,
         )
+
+    def _board_keep(self) -> None:
+        """Every character's pictures, labels and sheets kept for new stories
+        from the story's template (storage/template_pictures.py)."""
+        session = self.session
+        template = template_of(session.story) if session is not None else ""
+        if not template:
+            return
+        characters = [*session.cast, *session.supporting, *session.story.setup.set_aside]
+        count = sum(len(c.reference_images) for c in characters)
+        kept = read_kept(template, self.root)
+        choice = self._keep_choice(template, count, kept)
+        if choice == "keep":
+            try:
+                kept = keep_pictures(
+                    template, session.story.title, characters, session.pictures.read, self.root
+                )
+            except OSError as exc:
+                self._warn_plain("Couldn't keep the pictures", str(exc))
+                return
+            self.statusBar().showMessage(
+                f"Kept {kept.count} pictures for new stories from {template}.", 8000
+            )
+        elif choice == "forget":
+            forget_kept(template, self.root)
+            self.statusBar().showMessage(f"The pictures kept for {template} are forgotten.", 8000)
+        self._refresh_board()
+
+    def _keep_choice(self, template: str, count: int, kept) -> str:
+        """Keep them ("keep"), forget the ones kept ("forget"), or ""."""
+        box = QMessageBox(self)
+        box.setWindowTitle(f"Keep these pictures for {template}")
+        box.setText(
+            f"Keep every character's pictures, with their labels and sheets ({count} pictures), "
+            f"for new stories from {template}?\n\nStarting {template} again, you can add them or "
+            f"leave them out. {template} itself stays as it is."
+            + (
+                f"\n\nKept for it now: {kept.count} pictures from “{kept.kept_from}”. These "
+                "replace them."
+                if kept
+                else ""
+            )
+        )
+        keep = box.addButton("Keep them", QMessageBox.AcceptRole)
+        forget = None
+        if kept:
+            forget = box.addButton("Forget the ones kept", QMessageBox.DestructiveRole)
+        box.addButton(QMessageBox.Cancel)
+        box.exec()
+        clicked = box.clickedButton()
+        box.deleteLater()
+        return "keep" if clicked is keep else "forget" if forget and clicked is forget else ""
+
+    def _board_spoilers(self, on: bool) -> None:
+        """Show spoilers on the board: the setting the Plot page's Show plot
+        sets, so every page shows the same people."""
+        self._on_spoilers_toggled(on)
+        self._refresh_board()
 
     # --- what the board asks for ---------------------------------------------------------------
 
@@ -214,7 +301,7 @@ class CastBoardWindow:
         card = self._board_card(card_id)
         if card is None or self._card_pictures_refused(session):
             return
-        requests = ask_fill_gaps(
+        requests, waiting = ask_fill_gaps(
             self._dialog_parent(),
             session,
             card,
@@ -223,9 +310,65 @@ class CastBoardWindow:
             browse=self._browse_pictures,
         )
         self._drain_side_costs()
+        self._board_waiting += [(session.story.id, item) for item in waiting]
         if requests:
             self._start_card_pictures(requests)
+        if requests or waiting:
             self._refresh_board()
+
+    def _start_waiting(self) -> None:
+        """Gaps waiting for a new look's first picture: drawn from it once it
+        is in, with the prompt approved; let go, and said, when it failed."""
+        session = self.session
+        if session is None or not self._board_waiting:
+            return
+        keep: list[tuple[str, Waiting]] = []
+        started, let_go = [], []
+        listing = self.image_catalog.models
+        for story_id, waiting in self._board_waiting:
+            card = self._board_card(waiting.card_id) if story_id == session.story.id else None
+            if card is None:
+                keep.append((story_id, waiting))
+                continue
+            gap = sheet_for(card).gap(waiting.look, waiting.expression)
+            if gap is None:
+                continue  # filled meanwhile
+            if gap.source is not None:
+                info = next((m for m in listing if m.id == waiting.model), None)
+                started.append(
+                    session.card_request(
+                        card,
+                        waiting.prompt,
+                        model=waiting.model,
+                        info=info,
+                        first=False,
+                        caption="",
+                        source=gap.source,
+                        look=waiting.look,
+                        expression=waiting.expression,
+                    )
+                )
+            elif self._look_being_drawn(card.id, waiting.look):
+                keep.append((story_id, waiting))
+            else:
+                let_go.append(waiting)
+        self._board_waiting = keep
+        if started and not self._card_pictures_refused(session):
+            self._start_card_pictures(started)
+        if let_go:
+            looks = sorted({w.look for w in let_go})
+            self.statusBar().showMessage(
+                f"The first picture of {', '.join(looks)} didn't come, so the rest of its row "
+                "wasn't drawn: fill it again from the cast board.",
+                12000,
+            )
+        self._refresh_board()
+
+    def _look_being_drawn(self, card_id: str, look: str) -> bool:
+        return any(
+            job.request.card_id == card_id and label_key(job.request.card_look) == label_key(look)
+            for job in self.image_jobs.pending(self.session.story.id)
+        )
 
     def _board_asked(self, card_id: str, words: str) -> None:
         """Draw a look as the story asked for it ("Draw them as …"), from the
@@ -236,18 +379,22 @@ class CastBoardWindow:
         shown = self.session.looks_now().get(card_id) or card.reference_images[0].id
         self._on_card_picture(card_id, shown, "edit", wanted=words)
 
-    def _board_files(self, card_id: str, look: str, expression: str) -> None:
+    def _board_files(
+        self, card_id: str, look: str, expression: str, *, paths: list | None = None
+    ) -> None:
         """Pictures from files onto their card, labelled for the cell they
-        were asked for in (none: unlabelled)."""
+        were asked for or dropped on (none: unlabelled); each offered for
+        cropping first, as every picture from disk is."""
         card = self._board_card(card_id)
         store = self.session.pictures if self.session is not None else None
         if card is None or store is None or self._board_refused():
             return
         from sealedlore.gui.crop_dialog import cropped_picture
 
-        paths, _ = QFileDialog.getOpenFileNames(
-            self, f"Pictures of {card.name}", str(Path.home()), PICTURE_FILTER
-        )
+        if paths is None:
+            paths, _ = QFileDialog.getOpenFileNames(
+                self, f"Pictures of {card.name}", str(Path.home()), PICTURE_FILTER
+            )
         added, problems = 0, []
         for number, path in enumerate(paths, 1):
             counter = f"{number} of {len(paths)}" if len(paths) > 1 else ""

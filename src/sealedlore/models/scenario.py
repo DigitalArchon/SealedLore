@@ -36,6 +36,10 @@ class Scenario(BaseModel):
     format: Literal["sealedlore-scenario"] = SCENARIO_FORMAT
     version: int = SCENARIO_VERSION
     title: str
+    # What the story it came from was made from ("Doomsville"), so a
+    # restart or a scenario file still counts as that template; "" for its
+    # own title.
+    template: str = ""
     description: str | None = None
     world_bible: str | None = None
     opening_text: str = ""
