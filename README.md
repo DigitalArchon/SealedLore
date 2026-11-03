@@ -37,6 +37,21 @@ fun to play. This app will remain focused on text based roleplay.
 
 ### New in version 2
 
+- **Characters with many faces, and a style for the story** (2.5.0b3). A
+  character's pictures can be labelled with the look they wear (a winter coat,
+  combat armour) and the expression of the moment, and the picture that fits
+  is chosen after each passage: on the People page, and if you like on a stage
+  under the story and beside each passage (View). **The cast board** (Cast
+  page → Cast board…) shows every character's pictures as a sheet of looks
+  and expressions across the whole window, the missing ones drawn in a few
+  clicks. Each story chooses a **picture style** (gritty and realistic, clean
+  and polished sci-fi, glamorous, anime, painted fantasy and more, your own
+  words, or the style of a picture you have), portraits can be head and
+  shoulders, upper body or full body, and **Restyle pictures…** redraws
+  imported pictures to match. Doomsville's John and Jane come in four
+  expressions and three looks. Also new since 2.5.0b2: **Continue** a passage
+  from where it stopped, prompt sets to share, and **SillyTavern** character
+  cards and lorebooks in and out, from a file or a link.
 - **Find any story, and give it its own models** (2.5.0b2). The Stories list says
   what kind each story is and when it was started and last played, sorts by
   last played or title, and searches the text of every story. **Story → Setup… →
@@ -229,6 +244,11 @@ Have fun!
 - **People by their faces**: beside the story, who is here now,
   the rest of the cast and the supporting characters, each with their
   portrait; someone the story brings in without a card gets one in a click.
+  Label a character's pictures by look and expression and the one that fits
+  is shown as the story goes; the cast board shows them all, gaps and all.
+- **A picture style for each story**, ready-made or your own words or taken
+  from a picture, with portraits head and shoulders, upper body or full body,
+  and pictures redrawn in another style while keeping what they show.
 - **The world and the cast**: a world bible, cast sheets with skills,
   supporting characters the story introduces, and a lorebook whose entries
   can wait, unseen by any model, until you mention them, so what hasn't
