@@ -56,6 +56,7 @@ from sealedlore.engine.looks import COMMON_EXPRESSIONS, COMMON_LOOKS, look_words
 from sealedlore.engine.plot_md import PICTURE_SUFFIXES
 from sealedlore.gui import theme
 from sealedlore.gui.ref_images import StoryPictures, pixmap_of
+from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef
 
@@ -688,18 +689,15 @@ class CastBoard(QWidget):
         self.keep_button.clicked.connect(self.keep_requested)
         self.keep_button.hide()
 
-        header = QHBoxLayout()
-        header.setSpacing(8)
-        header.addWidget(self.title, 1)
-        header.addWidget(self.spoilers)
-        header.addWidget(QLabel("Size"))
-        header.addWidget(self.size_choice)
-        header.addWidget(self.add_look_button)
-        header.addWidget(self.add_expression_button)
-        header.addWidget(self.files_button)
-        header.addWidget(self.fill_button)
-        header.addWidget(self.keep_button)
-        header.addWidget(self.back_button)
+        # A row that wraps: on a narrower window the buttons go onto a second
+        # line rather than squeeze their words (the lab's 1280px desktops).
+        header = WrapRow(group_spacing=12)
+        header.add_group([self.title])
+        header.add_group([self.spoilers])
+        header.add_group([QLabel("Size"), self.size_choice])
+        header.add_group([self.add_look_button, self.add_expression_button, self.files_button])
+        header.add_group([self.fill_button])
+        header.add_group([self.keep_button, self.back_button], right=True)
 
         self.asked = QWidget()
         self._asked_row = QHBoxLayout(self.asked)
