@@ -946,7 +946,7 @@ A character's card has four tabs:
   card's own system prompt and what comes after the chat (SillyTavern's
   post-history instructions). A story never sends these.
 - **About**: who made the card, its version, its tags, its maker's notes, its
-  own lorebook, and where it came from.
+  own lorebook, every other file on the card, and where it came from.
 
 ![A character's card in Your characters: Professor Adelaide Quill from Brasshaven, her portrait with the buttons that draw or change it, her name, aliases, summary, description and voice, and above them Chat with them…, Draft a story with them…, Add to the story, Export and More](screenshots/your-characters-card.webp)
 
@@ -954,11 +954,36 @@ Every field of a SillyTavern V3 card is kept, so a card imported and exported
 again comes back as it was. (The note SillyTavern puts at a depth in a chat
 becomes the end of the description.)
 
+**Every file on the card is kept too.** Besides the portrait and expression
+pictures, a card can carry a background, pictures its greetings show (RisuAI
+cards often have dozens), a second icon, sounds and fonts. They are kept with
+the character, listed under **Files on the card** on the About tab (a picture
+as a thumbnail), and go out with them in a CHARX export. **Save as…** saves
+one where you choose; **Add to their pictures** makes a copy of a picture one
+of the character's own, for portraits, looks and expressions. A file the card
+only links to (an address on the web) is kept as a link and never fetched.
+What SealedLore does with them:
+
+- the card's **background** goes behind a chat with them, or a story made
+  from their card;
+- the **pictures a greeting shows** (RisuAI's `{{img::name}}` and the like,
+  or a picture whose address is a file of the card's) appear under that
+  greeting, in a chat or as a story's opening, taken out of the text the
+  model reads;
+- sounds, videos and music a greeting plays stay with the card: SealedLore
+  doesn't play them in a chat.
+
+A picture in a form whose hidden data can't be removed (a GIF, say) is
+redrawn as it comes in, as any picture brought in is; anything else is kept
+as it came.
+
 **New character** starts one from a blank card. **Import** takes cards from
 files (several at once), a card by link, and a SillyTavern expression pack
 (a zip of pictures) for the character shown. **Export** saves a character as
-a PNG card with their portrait, a CHARX card with every picture, or a JSON
-card. **More** makes a new version of a character (a whole copy kept with
+a PNG card with their portrait, a CHARX card with every picture and every
+file the card came with (under its own type, name and place), or a JSON
+card (a PNG or JSON card keeps only the files that are links: the spec asks
+for a card's files to go in a CHARX). **More** makes a new version of a character (a whole copy kept with
 them, chosen above the card, to change as you like), renames a version,
 duplicates one as a character of their own, or deletes one: their card goes
 to the Trash as a CHARX file you can import again. **A story from their
@@ -985,7 +1010,9 @@ Before it starts you see, and can change, everything it is made of:
   checked, it waits in the box to type in instead, to send once it is).
 
 Their portrait goes with the chat as its own reference picture, so a picture
-of the chat draws them as they look.
+of the chat draws them as they look. The card's background goes behind the
+chat, and the pictures their greeting shows appear under it (see "Every file
+on the card is kept too" above).
 
 **Draft a story with them…** opens the premise dialog (see "Drafting a story,
 and reviewing its settings") with them in it: say what kind of story, in what
@@ -1034,7 +1061,8 @@ uses, which is also how Chub, JanitorAI and most card sites share them.
 **A card into Your characters.** File → Import… takes a card: a PNG with the
 card inside it, a JSON file, or a CHARX. File → Import from a link… takes its
 link instead (below). The card's character is kept in Your characters
-(above), with every field and picture the card has, and its page opens.
+(above), with every field, picture and file the card has, and its page
+opens; the message after it says what the card's files are.
 **A story from their card's own scenario…** (under More) there makes a new
 story from it, and asks:
 
@@ -1050,8 +1078,9 @@ story from it, and asks:
 The card's description and personality become the character's card, its
 example messages their voice, its scenario the story's world, its lorebook
 the story's lore, and its picture their portrait (a world's picture goes
-behind the story). Setup opens next, to set the style before the story
-begins. What the card holds that SealedLore has no place for is listed: its
+behind the story). The card's own background goes behind the story, and the
+pictures the opening greeting shows appear under the opening once the story
+begins. Setup opens next, to set the style before the story begins. What the card holds that SealedLore has no place for is listed: its
 own system prompt (SealedLore's storyteller rules stand, though a tick adds
 it to Style → Other notes), its tags, macros other than `{{char}}` and
 `{{user}}`, the other greetings, and lorebook settings (below).
@@ -1059,7 +1088,10 @@ it to Style → Other notes), its tags, macros other than `{{char}}` and
 **A card into a story.** On the Cast page, **SillyTavern cards → Import a
 character card…** adds the card's character to the open story, on the cast
 or as a supporting character, with its lorebook if you like. Its `{{user}}`
-becomes the name of the character you are playing.
+becomes the name of the character you are playing. A card with files of its
+own (a background, pictures its greetings show) is also kept whole in Your
+characters, and the story's character linked to it, as From Your
+characters… would; during a private scene that waits until the scene ends.
 
 **A character out.** **SillyTavern cards → Export this character as a card…**
 (or Story → Export → SillyTavern card…) saves a character as a card: a PNG
@@ -1067,7 +1099,9 @@ with their portrait when they have one, else JSON, with the story's lore as
 its lorebook if you say so. A character with more than one picture can be
 saved as a CHARX card with every picture in it: the portrait is its icon and
 the rest are expression pictures named by their expressions, as SillyTavern
-and RisuAI read them. The card's description carries the character's card,
+and RisuAI read them. (A story's character holds none of the card's other
+files: those stay with the card in Your characters, whose Export puts them
+back in.) The card's description carries the character's card,
 voice and skills; SealedLore's own fields ride along inside it (a picture's
 look as well as its expression, and their sheet on the cast board), so a
 card exported from SealedLore comes back whole.

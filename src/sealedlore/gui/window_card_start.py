@@ -13,10 +13,12 @@ from sealedlore.gui.card_chat_dialog import CardChatDialog
 from sealedlore.gui.collection_picker import CollectionPicker
 from sealedlore.ids import new_id
 from sealedlore.models.character import Character
-from sealedlore.models.image import ImageRef
+from sealedlore.models.image import GeneratedImage, ImageRef
 from sealedlore.models.story import Story
+from sealedlore.models.tavern import CardAsset
+from sealedlore.storage import card_files
 from sealedlore.storage.image_meta import picture_kind
-from sealedlore.storage.images import REFS_DIR
+from sealedlore.storage.images import IMAGES_DIR, REFS_DIR
 from sealedlore.storage.repository import StoryBundle, save_story_bundle
 
 
@@ -57,12 +59,25 @@ class CardStartWindow:
         story.setup.description = f"A chat with {card.name}, from Your characters."
         story.defaults.main_model = model
         story.defaults.main_route = route
-        nodes = card_chat.opening(setup.first, setup.greeting)
+        # The pictures the card's text shows go under it, taken out of what
+        # the model reads (engine/card_files.py).
+        assets = card.tavern.assets if card.tavern else []
+        first = card_files.greeting_pictures(setup.first, assets, card.reference_images)
+        greeting = None
+        if setup.greeting is not None:
+            greeting = card_files.greeting_pictures(setup.greeting, assets, card.reference_images)
+        nodes = card_chat.opening(first.text, greeting.text if greeting else None)
         if nodes:
             nodes[0].meta.scene = story.scene.model_copy(deep=True)
             story.active_leaf_id = nodes[-1].id
         bundle = StoryBundle(story=story, nodes=nodes)
         files = self._portrait_for_chat(card, story)
+        shown: list[GeneratedImage] = []
+        if nodes:
+            shown = self._card_pictures_for(card, first.pictures, nodes[0].id, files)
+            shown += self._card_pictures_for(card, greeting.pictures, nodes[-1].id, files)
+        background = (greeting.background if greeting else None) or card_files.background_of(assets)
+        self._card_background_for(background, story, files)
         self.show_collection(False)
         if keep == "memory":
             self.open_memory_chat(bundle, files=files)
@@ -73,6 +88,11 @@ class CardStartWindow:
             self.open_story(story.id)
         if self.session is None or self.session.story.id != story.id:
             return
+        if shown:
+            self.session.pictures.add_images(shown)
+            self._load_images()
+            self.reload_transcript()
+        setup.first = first.text
         if setup.greeting is None and setup.first:
             if self.session.tee_block:
                 # A TEE or encrypted model still being attested refuses
@@ -108,6 +128,51 @@ class CardStartWindow:
         ref = ImageRef(id=ref_id, file=f"{REFS_DIR}/{ref_id}{suffix}", caption=card.name)
         story.reference_images.append(ref)
         return {ref.file: data}
+
+    def _card_pictures_for(
+        self,
+        card: Character,
+        pictures: list,
+        anchor: str,
+        files: dict[str, bytes],
+    ) -> list[GeneratedImage]:
+        """The card's pictures a message shows, copied in beside it (into
+        `files`), as pictures of the chat under that message."""
+        records = []
+        for picture in pictures:
+            data = self._collection_store().read(picture.file)
+            if data is None:
+                continue
+            data = self._clean_picture(data)
+            suffix = picture_kind(data)
+            if suffix is None:
+                continue
+            record = GeneratedImage(
+                anchor_node_id=anchor,
+                file=f"{IMAGES_DIR}/{new_id()}{suffix}",
+                prompt="",
+                model="",
+                size="",
+                from_card=card.name,
+                card_file=picture.name if isinstance(picture, CardAsset) else picture.expression,
+            )
+            files[record.file] = data
+            records.append(record)
+        return records
+
+    def _card_background_for(
+        self, background: CardAsset | None, story: Story, files: dict[str, bytes]
+    ) -> None:
+        """The card's background behind the chat or story made from it."""
+        if background is None:
+            return
+        data = self._collection_store().read(background.file)
+        data = self._clean_picture(data) if data is not None else None
+        suffix = picture_kind(data) if data is not None else None
+        if data is None or suffix is None:
+            return
+        story.background_image = f"{IMAGES_DIR}/background{suffix}"
+        files[story.background_image] = data
 
     def draft_with_kept(self, card_id: str) -> None:
         """Draft a story with them…: a story drafted from a premise around them."""

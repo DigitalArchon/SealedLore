@@ -40,7 +40,8 @@ fun to play. This app will remain focused on text based roleplay.
 - **Your characters** (3.0.0b1). Every character you keep, in one place
   outside any story (File → Your characters…, or the start page). Import
   SillyTavern cards (PNG, CHARX or JSON files, or a link to Chub or
-  RisuRealm) with every field they have, or make your own; give them
+  RisuRealm) with every field and file they have (a background, the pictures
+  their greetings show, sounds), or make your own; give them
   pictures on the cast board's sheet of looks and expressions; keep versions
   of one. Put any of them into a story as you set it up or while you play
   (Cast page → From Your characters…). When a story changes them (a new
@@ -305,8 +306,8 @@ Have fun!
   have a story drafted around them from your premise.
 - **SillyTavern cards and lorebooks**: import character cards into Your
   characters (a PNG, JSON or CHARX file, or just its link on Chub or
-  RisuRealm), bring a card into a story, and export characters and lore for
-  SillyTavern.
+  RisuRealm) with every file they carry, bring a card into a story, and export
+  characters and lore for SillyTavern.
 - **Costs**: per passage, per session and per story.
 - **Routes**: on NanoGPT, choose which host serves each model (the fastest,
   the cheapest, or one you pick), and see whether the choice was followed.

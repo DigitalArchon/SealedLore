@@ -15,18 +15,23 @@ window keeps it.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from typing import TYPE_CHECKING
+
+from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QCheckBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListView,
     QListWidget,
     QListWidgetItem,
     QMessageBox,
     QPushButton,
     QSizePolicy,
+    QStyle,
     QVBoxLayout,
     QWidget,
 )
@@ -39,10 +44,16 @@ from sealedlore.gui.skills_table import SkillsTable
 from sealedlore.gui.start_page import when_played
 from sealedlore.models.character import Character
 from sealedlore.models.tavern import TavernFields
+from sealedlore.storage.collection import files_said
+
+if TYPE_CHECKING:
+    from sealedlore.gui.cast_board import Thumbs
 
 # The card's left column, the portrait and its other pictures, as the Cast
 # page has it; wider here, with the whole window to fill.
 PORTRAIT_COLUMN = 340
+# A card's other files on the About tab, as thumbnails.
+FILE_ICON = 72
 PORTRAIT_COLUMN_MIN = 200
 MACROS_HINT = (
     "Write {{char}} for their name and {{user}} for whoever they talk to: the names go in "
@@ -489,11 +500,16 @@ class AboutForm(QWidget):
     changed = Signal()
     # "import", "export" or "remove": the card's own lorebook.
     lorebook_requested = Signal(str)
+    # "save" or "picture", and which of the card's files (its place in
+    # `tavern.assets`): saved where the author says, or made one of their
+    # pictures.
+    file_requested = Signal(str, int)
 
-    def __init__(self) -> None:
+    def __init__(self, thumbs: Thumbs | None = None) -> None:
         super().__init__()
         self._character: Character | None = None
         self._loading = False
+        self._thumbs = thumbs
         self.creator = QLineEdit()
         self.version = QLineEdit()
         self.version.setPlaceholderText("The card's own version, as its maker numbered it")
@@ -522,6 +538,42 @@ class AboutForm(QWidget):
         book_layout.setContentsMargins(0, 0, 0, 0)
         book_layout.addWidget(self.book)
         book_layout.addLayout(book_buttons)
+        self.files_said = QLabel()
+        self.files_said.setWordWrap(True)
+        self.files = QListWidget()
+        self.files.setObjectName("cardFiles")
+        self.files.setViewMode(QListView.IconMode)
+        self.files.setMovement(QListView.Static)
+        self.files.setResizeMode(QListView.Adjust)
+        self.files.setWrapping(True)
+        self.files.setIconSize(QSize(FILE_ICON, FILE_ICON))
+        self.files.setGridSize(QSize(FILE_ICON + 28, FILE_ICON + 36))
+        self.files.setFixedHeight(2 * (FILE_ICON + 36) + 12)
+        self.files.setSelectionMode(QListWidget.SingleSelection)
+        self.files.itemSelectionChanged.connect(self._sync_file_buttons)
+        self.file_save = QPushButton("Save as…")
+        self.file_save.setToolTip("Save this file of the card's where you choose")
+        self.file_save.clicked.connect(lambda: self._file_action("save"))
+        self.file_picture = QPushButton("Add to their pictures")
+        self.file_picture.setToolTip(
+            "A copy among their pictures (Card and Pictures tabs), to use as any of theirs; "
+            "the card keeps its own"
+        )
+        self.file_picture.clicked.connect(lambda: self._file_action("picture"))
+        file_buttons = QHBoxLayout()
+        file_buttons.setContentsMargins(0, 0, 0, 0)
+        for button in (self.file_save, self.file_picture):
+            file_buttons.addWidget(button)
+        file_buttons.addStretch(1)
+        files_box = QWidget()
+        # As tall as it is: spare height in the page went to its label.
+        files_box.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        self.files_said.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        files_layout = QVBoxLayout(files_box)
+        files_layout.setContentsMargins(0, 0, 0, 0)
+        files_layout.addWidget(self.files_said)
+        files_layout.addWidget(self.files)
+        files_layout.addLayout(file_buttons)
         self.came_from = QLabel()
         self.came_from.setWordWrap(True)
         self.came_from.setTextFormat(Qt.PlainText)
@@ -535,6 +587,7 @@ class AboutForm(QWidget):
         form.addRow("Tags", self.tags)
         form.addRow("Maker's notes", self.creator_notes)
         form.addRow("Lorebook", book_box)
+        form.addRow("Files on the card", files_box)
         form.addRow("Came from", self.came_from)
         form.addRow("", self.dates)
         layout = QVBoxLayout(self)
@@ -554,6 +607,7 @@ class AboutForm(QWidget):
         self.creator_notes.setPlainText(tavern.creator_notes)
         self._loading = False
         self.show_book()
+        self.show_files()
         kept = character.collection
         self.came_from.setText((kept.came_from if kept else "") or "Made here")
         if kept is not None:
@@ -571,6 +625,68 @@ class AboutForm(QWidget):
         )
         self.book_export.setEnabled(bool(entries))
         self.book_remove.setEnabled(bool(entries))
+
+    def show_files(self) -> None:
+        """The card's other files (a background, pictures its greetings show,
+        sounds), each by its name, a picture as a thumbnail."""
+        character = self._character
+        assets = _tavern(character).assets if character is not None else []
+        self.files.clear()
+        self.files_said.setText(
+            files_said(assets)
+            if assets
+            else "None besides their pictures. A card's background, the pictures its "
+            "greetings show and its sounds are kept here, and go out with it as a CHARX."
+        )
+        style = self.style()
+        for index, asset in enumerate(assets):
+            item = QListWidgetItem(asset.name or asset.type)
+            where = asset.uri if not asset.held else f"{asset.ext.upper()} file"
+            item.setToolTip(f"{asset.name or '(no name)'} · {asset.type} · {where}")
+            item.setData(Qt.UserRole, index)
+            if not asset.held:
+                item.setIcon(style.standardIcon(QStyle.SP_DriveNetIcon))
+            elif not asset.picture:
+                item.setIcon(style.standardIcon(QStyle.SP_FileIcon))
+            self.files.addItem(item)
+        self.files.setVisible(bool(assets))
+        self.refresh_file_icons()
+        self._sync_file_buttons()
+
+    def refresh_file_icons(self) -> None:
+        """Thumbnails as they are read (a card may have hundreds)."""
+        character = self._character
+        if self._thumbs is None or character is None:
+            return
+        assets = _tavern(character).assets
+        for row in range(self.files.count()):
+            item = self.files.item(row)
+            index = item.data(Qt.UserRole)
+            asset = assets[index] if 0 <= index < len(assets) else None
+            if asset is None or not asset.held or not asset.picture:
+                continue
+            pixmap = self._thumbs.get(asset.file, FILE_ICON, FILE_ICON)
+            if pixmap is not None:
+                item.setIcon(QIcon(pixmap))
+
+    def _chosen_file(self) -> int | None:
+        item = self.files.currentItem()
+        return item.data(Qt.UserRole) if item is not None and item.isSelected() else None
+
+    def _sync_file_buttons(self) -> None:
+        character = self._character
+        index = self._chosen_file()
+        assets = _tavern(character).assets if character is not None else []
+        asset = assets[index] if index is not None and 0 <= index < len(assets) else None
+        self.file_save.setEnabled(asset is not None and asset.held)
+        self.file_picture.setEnabled(asset is not None and asset.held and asset.picture)
+        self.file_save.setVisible(bool(assets))
+        self.file_picture.setVisible(bool(assets))
+
+    def _file_action(self, action: str) -> None:
+        index = self._chosen_file()
+        if index is not None:
+            self.file_requested.emit(action, index)
 
     def _apply(self) -> None:
         character = self._character

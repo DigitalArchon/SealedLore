@@ -48,10 +48,12 @@ from sealedlore.gui.fill_gaps import ask_fill_gaps
 from sealedlore.gui.image_codec import encoded
 from sealedlore.gui.picture_labels import edit_labels
 from sealedlore.gui.ref_images import PICTURE_FILTER, clean_incoming, image_of, store_reference
+from sealedlore.ids import new_id
 from sealedlore.models.character import Character
+from sealedlore.models.image import ImageRef
 from sealedlore.storage import collection
-from sealedlore.storage.image_meta import strip_metadata
-from sealedlore.storage.images import write_bytes_atomic
+from sealedlore.storage.image_meta import picture_kind, strip_metadata
+from sealedlore.storage.images import REFS_DIR, write_bytes_atomic
 from sealedlore.storage.paths import COLLECTION_ID, collection_dir
 from sealedlore.storage.picture_store import PictureStore
 from sealedlore.storage.repository import read_api_log
@@ -116,6 +118,7 @@ class CollectionWindow:
             )
         )
         page.lorebook_requested.connect(self._collection_lorebook)
+        page.file_requested.connect(self._collection_file)
         page.character_shown.connect(lambda _card_id: self._refresh_collection_sheet())
         board = page.board
         board.picture_action.connect(self._collection_board_picture)
@@ -562,8 +565,12 @@ class CollectionWindow:
             data = store.read(ref.file)
             if data:
                 pictures.append((ref, data))
+        files = [
+            (asset, store.read(asset.file) if asset.held else None)
+            for asset in (card.tavern.assets if card.tavern else [])
+        ]
         _first, third = card_data(card, origin=MADE_HERE)
-        return card_charx(third, pictures)
+        return card_charx(third, pictures, files)
 
     def _kept_portrait_png(self, card: Character) -> bytes | None:
         if not card.reference_images:
@@ -699,6 +706,57 @@ class CollectionWindow:
         self._save_collection()
         self.collection_page.about_form.show_book()
         self._refresh_collection()
+
+    def _collection_file(self, what: str, index: int, card_id: str) -> None:
+        """One of a card's own files (About → Files on the card): saved
+        where the author says, or a copy made one of their pictures."""
+        card = self._kept_card(card_id)
+        assets = card.tavern.assets if card is not None and card.tavern else []
+        if not 0 <= index < len(assets) or not assets[index].held:
+            return
+        asset = assets[index]
+        store = self._collection_store()
+        data = store.read(asset.file)
+        if data is None:
+            self._warn_plain("The file is missing", f"{asset.name or asset.type}: {asset.file}")
+            return
+        if what == "save":
+            name = _safe(asset.name or asset.type)
+            if not name.lower().endswith(f".{asset.ext}"):
+                name = f"{name}.{asset.ext}"
+            chosen, _ = QFileDialog.getSaveFileName(
+                self._dialog_parent(), f"Save {asset.name or asset.type}", str(Path.home() / name)
+            )
+            if not chosen:
+                return
+            try:
+                write_bytes_atomic(Path(chosen), data)
+            except OSError as exc:
+                self._warn_plain("Couldn't save the file", str(exc))
+                return
+            self.statusBar().showMessage(f"Saved {Path(chosen).name}", 6000)
+            return
+        if what == "picture":
+            data = self._clean_picture(data)
+            suffix = picture_kind(data)
+            if suffix is None:
+                self._warn_plain(
+                    "Not a picture SealedLore keeps",
+                    f"{asset.name or asset.type} isn't a JPEG, PNG or WebP picture.",
+                )
+                return
+            ref_id = new_id()
+            ref = ImageRef(id=ref_id, file=f"{REFS_DIR}/{ref_id}{suffix}", caption=asset.name)
+            if asset.type == "emotion":
+                ref.expression = asset.name
+            store.write(ref.file, data)
+            card.reference_images.append(ref)
+            self._save_collection()
+            self._refresh_collection()
+            self.collection_page.refresh_pictures()
+            self.statusBar().showMessage(
+                f"{asset.name or 'The picture'} is one of {card.name}'s pictures now.", 8000
+            )
 
     def _collection_expressions(self, card_id: str) -> None:
         card = self._kept_card(card_id)

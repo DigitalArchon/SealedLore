@@ -808,6 +808,10 @@ class PictureView(QWidget):
 
 
 def picture_caption(image: GeneratedImage) -> str:
+    if image.from_card:
+        return "  ·  ".join(
+            part for part in (f"From {image.from_card}'s card", image.card_file) if part
+        )
     parts = ["Picture", image.model.rsplit("/", 1)[-1], image.size]
     if image.references:
         count = len(image.references)
@@ -845,6 +849,8 @@ class ImageMessageWidget(QFrame):
                 menu.addSeparator()
                 continue
             if chat and key in FOR_CARDS:
+                continue
+            if image.from_card and key in NOT_DRAWN:
                 continue
             action = menu.addAction(text)
             action.triggered.connect(
@@ -884,6 +890,8 @@ class ImageMessageWidget(QFrame):
 # What a picture offers only where there are cards: a chat has none, and
 # these did nothing there (the mode audit, Oct 29 2026).
 FOR_CARDS = frozenset({"character", "place", "frame"})
+# What a picture from a card's own files has nothing for: no prompt drew it.
+NOT_DRAWN = frozenset({"prompt", "again"})
 
 IMAGE_ACTIONS = (
     ("open", "Open full size"),

@@ -211,6 +211,7 @@ def reference_files(bundle, root: Path | None = None) -> dict[str, bytes]:
         files.append(bundle.story.background_image)
     if bundle.story.style_picture:
         files.append(bundle.story.style_picture)
+    files += [picture.file for picture in bundle.story.setup.opening_pictures]
     for relative in files:
         data = read_story_file(bundle.story.id, relative, root)
         if data is not None:

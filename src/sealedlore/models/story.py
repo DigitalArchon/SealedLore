@@ -124,6 +124,15 @@ StoryMode = Literal["story", "chat"]
 ChatKeep = Literal["disk", "memory"]
 
 
+class OpeningPicture(BaseModel):
+    """A picture an as-written opening shows: one of a character card's own
+    (storage/card_files.py), shown under the opening as the card had it."""
+
+    file: str
+    from_card: str = ""
+    card_file: str = ""
+
+
 class StorySetup(BaseModel):
     """How a playthrough begins — what a scenario file carries besides cast and lore.
 
@@ -139,6 +148,9 @@ class StorySetup(BaseModel):
     # text is the opening passage itself, and no call is made.
     opening_text: str = ""
     opening_mode: OpeningMode = "generate"
+    # Pictures an as-written opening shows (a card's greeting's): put under
+    # it when the story begins, copies of these files.
+    opening_pictures: list[OpeningPicture] = Field(default_factory=list)
     # Where a new playthrough starts. The live scene is `Story.scene`, which
     # moves on as the story does. Its cast roster is who the author pinned as
     # present; `absent_at_start` who they pinned as elsewhere. Every other
@@ -201,6 +213,9 @@ class Story(BaseModel):
     style_picture: str = ""
     # A picture shown behind the transcript, relative to the story folder.
     background_image: str | None = None
+    # The as-written opening whose card pictures went under it
+    # (`ImageRuntime.show_opening_pictures`): once each.
+    opening_pictures_at: str = ""
     # The picture drawn for this story the background is a copy of
     # (GeneratedImage id), if it is one: the Media tab shows the background
     # in its place, not twice, and Draw a new background… starts from it.

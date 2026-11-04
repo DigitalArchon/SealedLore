@@ -531,15 +531,24 @@ def test_a_charx_brings_its_expression_pictures_labelled(tmp_path: Path):
     card = read_card(charx_with_expressions(tmp_path, ["joy", "anger"], linked=1))
     assert [name for name, _data in card.expressions] == ["joy", "anger"]
     assert all(text_chunks(data) == {} for _name, data in card.expressions)
-    # One named by a link is never fetched, and that is said.
-    assert card.expression_notes and "a link" in card.expression_notes[0]
+    # One named by a link is never fetched: kept as the card's link, so the
+    # card goes out whole.
+    [far] = card.files
+    assert (far.type, far.name, far.uri, far.data) == (
+        "emotion",
+        "far0",
+        "https://example.com/0.png",
+        None,
+    )
 
 
-def test_expression_pictures_stop_at_the_limit_and_say_so(tmp_path: Path, monkeypatch):
+def test_expression_pictures_past_the_limit_stay_with_the_card(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(tavern_cards, "MAX_EXPRESSIONS", 2)
     card = read_card(charx_with_expressions(tmp_path, ["joy", "anger", "fear"]))
     assert len(card.expressions) == 2
-    assert "1 expression picture couldn't be read or went past" in card.expression_notes[0]
+    # The third is one of the card's files, held, to go out with it again.
+    [fear] = card.files
+    assert (fear.type, fear.name, fear.data is not None) == ("emotion", "fear", True)
 
 
 @pytest.mark.parametrize(

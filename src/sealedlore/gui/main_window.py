@@ -1869,7 +1869,8 @@ class MainWindow(
         self._staleness_dismissed = False
         self._resume_private()
         # Pictures drawn for its cards, or to be its background, while another
-        # story was open.
+        # story was open; a card's pictures its as-written opening shows.
+        self.session.show_opening_pictures()
         self.session.take_card_pictures()
         try:
             self.session.take_background_pictures()

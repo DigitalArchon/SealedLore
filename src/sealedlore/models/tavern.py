@@ -16,6 +16,36 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+class CardAsset(BaseModel):
+    """One of a card's files (the V3 spec's `assets`) other than the pictures
+    a character has here: a background, a picture its greetings show, a
+    sound, a font, a second icon, an expression past what is taken. Kept so
+    the card goes out again whole, as the spec asks.
+
+    `file` is where it is kept in Your characters' store (images/assets/…);
+    a file the card only links to (https://…, ccdefault:) has none, its
+    `uri` kept as written and never fetched. `path` is where the card held
+    it (its CHARX path), to write it back under the same."""
+
+    type: str = "other"
+    name: str = ""
+    ext: str = ""
+    file: str = ""
+    uri: str = ""
+    path: str = ""
+
+    @property
+    def held(self) -> bool:
+        return bool(self.file)
+
+    @property
+    def picture(self) -> bool:
+        return self.ext.lower() in PICTURE_EXTS
+
+
+PICTURE_EXTS = ("png", "jpg", "jpeg", "webp", "gif", "bmp", "avif")
+
+
 class TavernFields(BaseModel):
     scenario: str = ""
     # The greeting a chat opens with, and the others it may open with.
@@ -44,6 +74,9 @@ class TavernFields(BaseModel):
     # Other apps' settings on the card (`extensions`), as they came:
     # SillyTavern's talkativeness and favourite mark, Chub's, RisuAI's.
     extensions: dict[str, Any] = Field(default_factory=dict)
+    # Every other file the card had (CardAsset): kept in Your characters
+    # only. A story's copy of the character has none (story_copy).
+    assets: list[CardAsset] = Field(default_factory=list)
 
     @property
     def greetings(self) -> list[str]:

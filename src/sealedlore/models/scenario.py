@@ -23,6 +23,7 @@ from sealedlore.models.scene import SceneState
 from sealedlore.models.story import (
     DEFAULT_WORLD_ACTIVITY,
     OpeningMode,
+    OpeningPicture,
     StoryMode,
     StyleDirectives,
     WorldActivity,
@@ -44,6 +45,7 @@ class Scenario(BaseModel):
     world_bible: str | None = None
     opening_text: str = ""
     opening_mode: OpeningMode = "generate"
+    opening_pictures: list[OpeningPicture] = Field(default_factory=list)
     starting_scene: SceneState = Field(default_factory=SceneState)
     # Cast pinned elsewhere at the start (StorySetup.absent_at_start).
     absent_at_start: list[str] = Field(default_factory=list)

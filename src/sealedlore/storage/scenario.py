@@ -64,6 +64,7 @@ def scenario_from_bundle(
         world_bible=story.world_bible,
         opening_text=setup.opening_text,
         opening_mode=setup.opening_mode,
+        opening_pictures=[p.model_copy() for p in setup.opening_pictures],
         # A fresh card: who set it, what changed and where are this
         # playthrough's, and the ids they name don't exist in another one.
         starting_scene=starting.model_copy(
@@ -135,6 +136,11 @@ def bundle_from_scenario(
             description=scenario.description,
             opening_text=scenario.opening_text,
             opening_mode=scenario.opening_mode,
+            opening_pictures=[
+                p.model_copy()
+                for p in scenario.opening_pictures
+                if is_safe_relative(p.file) and p.file in scenario.reference_files
+            ],
             starting_scene=starting,
             absent_at_start=[
                 character_id

@@ -416,6 +416,7 @@ class CardLinkWindow:
         version = card_link.version_from_story(character, card, kept, name=name.strip())
         version.collection.came_from = f"the story {session.story.title}"
         store = self._collection_store()
+        collection.copy_files(version, store)
         for ref in character.reference_images:
             new = copy_picture(ref, session.pictures, store)
             if new is not None:

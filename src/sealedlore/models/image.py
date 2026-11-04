@@ -99,3 +99,8 @@ class GeneratedImage(BaseModel):
     # new background… or Edit…): put behind the story once drawn, once
     # (`Story.backgrounds_taken`).
     background: bool = False
+    # Not drawn: one of a character card's own pictures, shown with the
+    # greeting that shows it (engine/card_files.py). Whose card, and the
+    # file's name there; it has no prompt or model.
+    from_card: str = ""
+    card_file: str = ""

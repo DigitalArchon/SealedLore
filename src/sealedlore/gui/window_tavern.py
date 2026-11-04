@@ -206,6 +206,17 @@ class TavernWindow:
         """A card's character into the open story, the cast or the supporting
         characters, with its lorebook if wanted."""
         session = self.session
+        if card.files and session.in_private:
+            # Such a card is kept whole in Your characters as it joins, and
+            # nothing of the characters changes in a scene (_link_refused).
+            self._warn_plain(
+                "Import a character card",
+                f"{card.name}'s card has files a story doesn't hold (a background, pictures "
+                "its greetings show), so it is kept whole in Your characters as it joins the "
+                "story. That waits until the private scene ends; File → Import… keeps it in "
+                "Your characters now.",
+            )
+            return
         held = self._held()
         fill = macro_filler(card.name, held.name if held is not None else None)
         character = character_from_card(card, fill)
@@ -214,6 +225,9 @@ class TavernWindow:
         if where is None:
             return
         to_cast, with_lore = where
+        if card.files:
+            self._card_kept_into_story(card, to_cast, with_lore)
+            return
         notes: list[str] = []
         if card.picture is not None:
             picture = clean_incoming({"card": card.picture})["card"]
@@ -272,6 +286,24 @@ class TavernWindow:
             )
         else:
             self.statusBar().showMessage(f"{character.name} joined {where_words}.", 8000)
+
+    def _card_kept_into_story(self, card: TavernCard, to_cast: bool, with_lore: bool) -> None:
+        """A card with files a story doesn't hold (a background, pictures its
+        greetings show, sounds): kept whole in Your characters, and its
+        character into the story linked to it, as From Your characters… does,
+        so nothing on the card is lost."""
+        kept, notes = self._kept_from_card(card, f"the story {self.session.story.title}")
+        self._collection_session().cast.append(kept)
+        self._save_collection()
+        added = self._kept_into_story(kept, to_cast, with_lore)
+        self._after_cards_added([added], to_cast)
+        notes.insert(
+            0,
+            f"{kept.name} is kept in Your characters too, with everything on the card; this "
+            f"story's {added.name} is linked to it.",
+        )
+        where_words = "the cast" if to_cast else "the supporting characters"
+        self._say_left_out("Import a character card", f"{added.name} joined {where_words}.", notes)
 
     def _ask_where_card_goes(self, character: Character, lore: int) -> tuple[bool, bool] | None:
         """(to the cast, with the card's lore), or None for Cancel."""

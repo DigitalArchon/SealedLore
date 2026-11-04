@@ -35,6 +35,7 @@ from sealedlore.engine.video_prompt import (
     parse_video_prompt,
     seconds_words,
 )
+from sealedlore.ids import new_id
 from sealedlore.models.image import GeneratedImage, ImageRef, RefUse
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import Node
@@ -43,6 +44,7 @@ from sealedlore.providers.base import ChatRequest
 from sealedlore.providers.images import ImageClient, ImageModelInfo, parse_image_models
 from sealedlore.providers.tee import is_tee
 from sealedlore.providers.videos import VideoClient
+from sealedlore.storage.image_meta import picture_kind
 from sealedlore.storage.images import IMAGES_DIR, clean_story_images
 from sealedlore.tree import index_nodes, path_to
 
@@ -538,6 +540,48 @@ class ImageRuntime:
                 style, keep=keep, change=change, texts=self.texts, reference=reference
             )
         return edit_prompt(change, keep=keep, texts=self.texts)
+
+    # --- a card's pictures under the opening ---------------------------------------
+
+    def show_opening_pictures(self) -> bool:
+        """The pictures an as-written opening shows (a card's greeting's,
+        `StorySetup.opening_pictures`) put under it, once it is written: on
+        the GUI thread after the job that began the story, since images.json
+        has one writer. Copies, so a picture deleted from the story leaves
+        the setup's for a Restart. Once for each opening
+        (`Story.opening_pictures_at`). True when any went in."""
+        wanted = self.story.setup.opening_pictures
+        path = self.full_path()
+        first = path[0] if path else None
+        if (
+            not wanted
+            or first is None
+            or first.kind != "assistant"
+            or self.story.opening_pictures_at == first.id
+        ):
+            return False
+        records = []
+        for picture in wanted:
+            data = self.pictures.read(picture.file)
+            suffix = picture_kind(data) if data else None
+            if data is None or suffix is None:
+                continue
+            record = GeneratedImage(
+                anchor_node_id=first.id,
+                file=f"{IMAGES_DIR}/{new_id()}{suffix}",
+                prompt="",
+                model="",
+                size="",
+                from_card=picture.from_card,
+                card_file=picture.card_file,
+            )
+            self.pictures.write(record.file, data)
+            records.append(record)
+        self.story.opening_pictures_at = first.id
+        if records:
+            self.pictures.add_images(records)
+        self.save()
+        return bool(records)
 
     # --- the background ----------------------------------------------------------
 

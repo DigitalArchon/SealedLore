@@ -29,8 +29,9 @@ import re
 import zipfile
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, BinaryIO
+from urllib.parse import unquote_to_bytes
 
 from pydantic import ValidationError
 
@@ -40,11 +41,12 @@ from sealedlore.models.image import ImageRef
 from sealedlore.models.lore import LoreEntry
 from sealedlore.models.scenario import Scenario
 from sealedlore.models.scene import SceneState
-from sealedlore.models.story import StyleDirectives
-from sealedlore.models.tavern import TavernFields
+from sealedlore.models.story import OpeningPicture, StyleDirectives
+from sealedlore.models.tavern import CardAsset, TavernFields
 from sealedlore.storage.atomic import atomic_write_json
+from sealedlore.storage.card_files import background_of, greeting_pictures
 from sealedlore.storage.image_meta import picture_kind, stripped_or_same
-from sealedlore.storage.images import REFS_DIR, write_bytes_atomic
+from sealedlore.storage.images import IMAGES_DIR, REFS_DIR, write_bytes_atomic
 from sealedlore.storage.png_text import PngTextError, text_chunks, with_text
 from sealedlore.storage.tavern_lore import (
     LorebookError,
@@ -70,6 +72,10 @@ MAX_INFLATED = 32 * 1024 * 1024
 # rest are counted and said, not read.
 MAX_EXPRESSIONS = 120
 MAX_EXPRESSION_BYTES = 96 * 1024 * 1024
+# A card's other files (backgrounds, pictures its greetings show, sounds):
+# RisuAI's run to hundreds, and its CHARX files to tens of megabytes.
+MAX_FILES = 1000
+MAX_FILE_BYTES = 384 * 1024 * 1024
 SPEC_V2 = "chara_card_v2"
 SPEC_V3 = "chara_card_v3"
 PORTRAIT_CAPTION = "portrait"
@@ -136,6 +142,21 @@ class CardError(ValueError):
 
 
 @dataclass
+class CardFile:
+    """One of a card's files (a V3 `assets` entry) other than its main
+    picture and the expressions taken: its data when the card holds it
+    (stripped, where it is a picture or a video that can be), else the
+    card's own `uri` for it, a link never fetched."""
+
+    type: str
+    name: str
+    ext: str
+    path: str = ""
+    uri: str = ""
+    data: bytes | None = None
+
+
+@dataclass
 class TavernCard:
     """A card as read: its fields (V3's and V2's names; V1's put under them)
     and its picture, with its hidden data removed where that can be done."""
@@ -144,8 +165,10 @@ class TavernCard:
     picture: bytes | None = None
     spec: str = SPEC_V2
     # Its expression pictures as read (name, bytes), each stripped of hidden
-    # data; and what of them couldn't come (engine/looks.py labels them).
+    # data (engine/looks.py labels them); every other file it has (CardFile);
+    # and what of its files couldn't come, in words.
     expressions: list[tuple[str, bytes]] = field(default_factory=list)
+    files: list[CardFile] = field(default_factory=list)
     expression_notes: list[str] = field(default_factory=list)
 
     def text(self, key: str) -> str:
@@ -220,20 +243,21 @@ def looks_like_card(data: Any) -> bool:
     return card_fields(data) is not None
 
 
-def _card_of(data: Any, name: str, picture: bytes | None = None) -> TavernCard:
+def _card_of(
+    data: Any,
+    name: str,
+    picture: bytes | None = None,
+    member: Callable[[str], bytes | None] | None = None,
+) -> TavernCard:
+    """A card from its fields, its files read through `member` (a CHARX's
+    archive, a PNG's asset chunks; none for JSON, whose files can only be
+    data: URLs or links)."""
     found = card_fields(data)
     if found is None:
         raise CardError(f"{name} isn't a character card.")
     fields, spec = found
     card = TavernCard(fields=fields, picture=picture, spec=spec)
-    # Outside a CHARX an expression picture can only be named, never held.
-    assets = fields.get("assets")
-    named = sum(
-        1
-        for asset in (assets if isinstance(assets, list) else ())
-        if isinstance(asset, Mapping) and asset.get("type") == "emotion"
-    )
-    card.expression_notes = _expression_notes(0, named)
+    _read_assets(card, member or (lambda _path: None))
     return card
 
 
@@ -249,10 +273,22 @@ def _png_card(data: bytes, name: str) -> TavernCard:
         texts = text_chunks(data)
     except PngTextError as exc:
         raise CardError(f"{name}: {exc}.") from exc
+
+    def member(path: str) -> bytes | None:
+        # The spec's "chara-ext-asset_:{path}"; RisuAI has written it
+        # without the colon too.
+        for keyword in (f"chara-ext-asset_:{path}", f"chara-ext-asset_{path}"):
+            if keyword in texts:
+                try:
+                    return base64.b64decode(texts[keyword].strip(), validate=False)
+                except (binascii.Error, ValueError):
+                    return None
+        return None
+
     # V3 first, as SillyTavern reads it: a card written by both has both.
     for keyword in ("ccv3", "chara"):
         if keyword in texts:
-            return _card_of(_decoded(texts[keyword], name), name, stripped_or_same(data))
+            return _card_of(_decoded(texts[keyword], name), name, stripped_or_same(data), member)
     raise CardError(f"{name} is a picture with no character card in it.")
 
 
@@ -266,12 +302,14 @@ def _charx_card(source: BinaryIO, name: str) -> TavernCard:
                 parsed = json.loads(card.decode("utf-8-sig"))
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                 raise CardError(f"{name}'s card.json isn't valid JSON.") from exc
-            result = _card_of(parsed, name)
-            result.picture = _charx_icon(archive, result.fields, name)
-            result.expressions, result.expression_notes = _charx_expressions(
-                archive, result.fields, name
-            )
-            return result
+
+            def member(path: str) -> bytes | None:
+                try:
+                    return _member(archive, path, name)
+                except CardError:
+                    return None  # too large: said with the files not read
+
+            return _card_of(parsed, name, member=member)
     except zipfile.BadZipFile as exc:
         raise CardError(f"{name} isn't a CHARX file.") from exc
 
@@ -294,38 +332,112 @@ def _embedded(uri: str) -> str | None:
     return None
 
 
-def _charx_expressions(
-    archive: zipfile.ZipFile, fields: Mapping[str, Any], name: str
-) -> tuple[list[tuple[str, bytes]], list[str]]:
-    """The card's expression pictures (the spec's "emotion" assets) in the
-    archive, within MAX_EXPRESSIONS and MAX_EXPRESSION_BYTES; one named by a
-    link is never fetched."""
-    assets = fields.get("assets")
-    found: list[tuple[str, bytes]] = []
-    total = left = linked = 0
-    for asset in assets if isinstance(assets, list) else ():
-        if not isinstance(asset, Mapping) or asset.get("type") != "emotion":
-            continue
-        member = _embedded(str(asset.get("uri") or ""))
-        if member is None:
-            linked += 1
-            continue
+def _asset_source(
+    uri: str, member: Callable[[str], bytes | None]
+) -> tuple[str, bytes | None] | None:
+    """(where the card holds it, its data) for a file the card holds: a path
+    in the card ("embeded://", "__asset:") or a data: URL. None for a link
+    (https://…, ccdefault:), which is never fetched."""
+    path = _embedded(uri)
+    if path is not None:
+        return path, member(path)
+    if uri.startswith("data:"):
+        header, _comma, body = uri.partition(",")
         try:
-            info = archive.getinfo(member)
-        except KeyError:
-            left += 1
+            if ";base64" in header:
+                return "", base64.b64decode(body, validate=False)
+            return "", unquote_to_bytes(body)
+        except (binascii.Error, ValueError):
+            return "", None
+    return None
+
+
+def _extension(value: object, path: str = "", data: bytes | None = None) -> str:
+    """A file's extension as the spec writes it: lowercase, no dot."""
+    ext = str(value or "").strip().lower().lstrip(".")
+    if not re.fullmatch(r"[a-z0-9]{1,10}", ext) or ext == "unknown":
+        ext = PurePosixPath(path).suffix.lower().lstrip(".")
+    if data is not None and picture_kind(data):
+        ext = (picture_kind(data) or "").lstrip(".").replace("jpeg", "jpg")
+    return ext if re.fullmatch(r"[a-z0-9]{1,10}", ext) else "bin"
+
+
+def _read_assets(card: TavernCard, member: Callable[[str], bytes | None]) -> None:
+    """Every file the card's `assets` names, where SealedLore keeps it: the
+    main icon its picture (a PNG card's is the PNG itself), "emotion" files its
+    expressions (MAX_EXPRESSIONS, MAX_EXPRESSION_BYTES), everything else (and
+    expressions past those) its files, with their data where the card holds
+    it and as links where it doesn't (never fetched). The spec asks for every
+    file to be kept so the card can go out whole, and for the user to be told
+    of any that couldn't be."""
+    assets = card.fields.get("assets")
+    entries = [a for a in assets if isinstance(a, Mapping)] if isinstance(assets, list) else []
+    icons = [a for a in entries if a.get("type") == "icon"]
+    main = next((a for a in icons if a.get("name") == "main"), icons[0] if icons else None)
+    expression_bytes = file_bytes = unread = left = 0
+    linked_picture = False
+    for asset in entries:
+        kind = str(asset.get("type") or "").strip() or "other"
+        label = str(asset.get("name") or "").strip()
+        uri = str(asset.get("uri") or "").strip()
+        source = _asset_source(uri, member)
+        if asset is main:
+            if source is None:
+                # ccdefault: (a PNG card's own picture) or a link.
+                linked_picture = card.picture is None and uri != "ccdefault:"
+                continue
+            if card.picture is None:
+                if source[1]:
+                    card.picture = stripped_or_same(source[1])
+                else:
+                    unread += 1
             continue
-        if len(found) >= MAX_EXPRESSIONS or total + info.file_size > MAX_EXPRESSION_BYTES:
-            left += 1
+        path, data = source if source is not None else ("", None)
+        if source is not None and not data:
+            unread += 1
             continue
-        data = _member(archive, member, name)
-        if not data:
-            left += 1
+        if (
+            kind == "emotion"
+            and data
+            and len(card.expressions) < MAX_EXPRESSIONS
+            and expression_bytes + len(data) <= MAX_EXPRESSION_BYTES
+        ):
+            expression_bytes += len(data)
+            card.expressions.append((label or PurePosixPath(path).stem, stripped_or_same(data)))
             continue
-        total += len(data)
-        label = str(asset.get("name") or "").strip() or Path(member).stem
-        found.append((label, stripped_or_same(data)))
-    return found, _expression_notes(left, linked)
+        if data is not None:
+            if len(card.files) >= MAX_FILES or file_bytes + len(data) > MAX_FILE_BYTES:
+                left += 1
+                continue
+            file_bytes += len(data)
+            data = stripped_or_same(data)
+        card.files.append(
+            CardFile(
+                type=kind,
+                name=label,
+                ext=_extension(asset.get("ext"), path or uri, data),
+                path=path,
+                uri="" if source is not None else uri,
+                data=data,
+            )
+        )
+    card.expression_notes = []
+    if linked_picture:
+        card.expression_notes.append(
+            "Its picture is a link, not in the card: nothing is fetched for it."
+        )
+    if unread:
+        card.expression_notes.append(
+            f"{unread} of its files couldn't be read, or {'were' if unread > 1 else 'was'} "
+            f"larger than {MAX_INFLATED // (1024 * 1024)} MB: "
+            f"{'they' if unread > 1 else 'it'} won't go out with the card again."
+        )
+    if left:
+        card.expression_notes.append(
+            f"{left} of its files went past what SealedLore keeps of a card ({MAX_FILES} "
+            f"files, {MAX_FILE_BYTES // (1024 * 1024)} MB): "
+            f"{'they' if left > 1 else 'it'} won't go out with the card again."
+        )
 
 
 def _expression_notes(left: int, linked: int) -> list[str]:
@@ -377,20 +489,6 @@ def expressions_from_zip(path: Path) -> tuple[list[tuple[str, bytes]], list[str]
     except (OSError, zipfile.BadZipFile) as exc:
         raise CardError(f"{Path(path).name} isn't a zip of pictures: {exc}") from exc
     return found, _expression_notes(left, 0)
-
-
-def _charx_icon(archive: zipfile.ZipFile, fields: Mapping[str, Any], name: str) -> bytes | None:
-    """The card's main picture: its "icon" asset (the spec writes
-    "embeded://" for a file in the archive), else none."""
-    assets = fields.get("assets")
-    for asset in assets if isinstance(assets, list) else ():
-        if not isinstance(asset, Mapping) or asset.get("type") != "icon":
-            continue
-        member = _embedded(str(asset.get("uri") or ""))
-        if member is not None:
-            data = _member(archive, member, name)
-            return stripped_or_same(data) if data else None
-    return None
 
 
 def read_card(path: Path) -> TavernCard:
@@ -678,13 +776,19 @@ def expression_refs(
 ICON_NAME = "main"
 
 
-def card_charx(v3: Mapping[str, Any], pictures: Sequence[tuple[ImageRef, bytes]]) -> bytes:
+def card_charx(
+    v3: Mapping[str, Any],
+    pictures: Sequence[tuple[ImageRef, bytes]],
+    files: Sequence[tuple[CardAsset, bytes | None]] = (),
+) -> bytes:
     """A character as a CHARX (a zip of card.json and its pictures): the
     first picture its icon, every other one an "emotion" asset named by its
     expression ("angry", "angry-2" for another), as SillyTavern and RisuAI
     read them. SealedLore's own labels (the look too) ride under
     `extensions.sealedlore.pictures` by asset name, so they come back whole.
-    Each picture's hidden data is removed first."""
+    Each picture's hidden data is removed first. `files`: the card's other
+    files (CardAsset, with its bytes, None for a link), back under their own
+    type, name and path, so a card read in goes out whole."""
     data = json.loads(json.dumps(v3["data"]))
     assets: list[dict[str, Any]] = []
     rows: list[dict[str, str]] = []
@@ -713,6 +817,22 @@ def card_charx(v3: Mapping[str, Any], pictures: Sequence[tuple[ImageRef, bytes]]
             }
         )
         members.append((member, cleaned))
+    taken = {member for member, _raw in members} | {"card.json"}
+    for number, (asset, raw) in enumerate(files, start=1):
+        entry = {"type": asset.type, "name": asset.name, "ext": asset.ext}
+        if raw is None:
+            if not asset.uri:
+                continue  # its file was lost
+            assets.append({**entry, "uri": asset.uri})
+            continue
+        member = asset.path if _safe_member(asset.path) and asset.path not in taken else ""
+        if not member:
+            folder = "images" if asset.ext in ("png", "jpg", "jpeg", "webp", "gif") else "other"
+            stem = re.sub(r"[^A-Za-z0-9_-]+", "_", asset.name).strip("_") or "file"
+            member = f"assets/{asset.type}/{folder}/{number}_{stem}.{asset.ext or 'bin'}"
+        taken.add(member)
+        assets.append({**entry, "uri": f"embeded://{member}"})
+        members.append((member, stripped_or_same(raw)))
     data["assets"] = assets
     extensions = dict(data.get("extensions") or {})
     own = dict(extensions.get("sealedlore") or {})
@@ -726,6 +846,19 @@ def card_charx(v3: Mapping[str, Any], pictures: Sequence[tuple[ImageRef, bytes]]
         for member, raw in members:
             archive.writestr(member, raw, compress_type=zipfile.ZIP_STORED)
     return buffer.getvalue()
+
+
+def _plural(count: int, what: str) -> str:
+    return f"{count} {what}{'' if count == 1 else 's'}"
+
+
+def _safe_member(path: str) -> bool:
+    """A path a card's file may be written back under in a CHARX: relative,
+    ASCII, inside the archive, never card.json."""
+    if not path or not path.isascii() or "\\" in path or path == "card.json":
+        return False
+    parts = PurePosixPath(path).parts
+    return not PurePosixPath(path).is_absolute() and ".." not in parts and len(parts) >= 2
 
 
 def scenario_from_card(
@@ -821,9 +954,43 @@ def scenario_from_card(
     )
     scenario.suggested_character_id = you.id
 
+    # The card's other files: its background behind the story, and the
+    # pictures its greeting shows under the opening (storage/card_files.py).
+    held: dict[str, bytes] = {}
+    assets: list[CardAsset] = []
+    for found in card.files:
+        if found.data is not None:
+            asset = CardAsset(type=found.type, name=found.name, ext=found.ext, path=found.path)
+            asset.file = f"{IMAGES_DIR}/{new_id()}.{found.ext or 'bin'}"
+            held[asset.file] = found.data
+            assets.append(asset)
+    background = None
     greetings = [fill(text).strip() for text in card.greetings]
     if opening is not None and 0 <= opening < len(greetings):
-        scenario.opening_text = greetings[opening]
+        expressions_shown = [] if world else scenario.cast[0].reference_images
+        shown = greeting_pictures(greetings[opening], assets, expressions_shown)
+        scenario.opening_text = shown.text
+        background = shown.background
+        for picture in shown.pictures:
+            if isinstance(picture, CardAsset):
+                scenario.reference_files[picture.file] = base64.b64encode(
+                    held[picture.file]
+                ).decode("ascii")
+            scenario.opening_pictures.append(
+                OpeningPicture(
+                    file=picture.file,
+                    from_card=card.name,
+                    card_file=picture.name
+                    if isinstance(picture, CardAsset)
+                    else picture.expression,
+                )
+            )
+        if scenario.opening_pictures:
+            count = len(scenario.opening_pictures)
+            notes.append(
+                f"The {_plural(count, 'picture')} its greeting shows "
+                f"{'are' if count > 1 else 'is'} under the opening."
+            )
         scenario.opening_mode = "as_written"
         if len(greetings) > 1:
             others = len(greetings) - 1
@@ -833,6 +1000,16 @@ def scenario_from_card(
             )
     elif greetings:
         notes.append("The card's greetings were not used: you write the first turn.")
+
+    background = background or background_of(assets)
+    if background is not None and not scenario.background_image:
+        scenario.background_image = f"{IMAGES_DIR}/background.{background.ext}"
+        scenario.reference_files[scenario.background_image] = base64.b64encode(
+            held[background.file]
+        ).decode("ascii")
+        notes.append("The card's background is behind the story.")
+    if card.files:
+        notes.append("Its other files stay with the card in Your characters.")
 
     if card.instructions:
         if instructions:
@@ -951,8 +1128,16 @@ def card_data(
     for key in ("creation_date", "modification_date"):
         if getattr(tavern, key) is not None:
             v3_data[key] = getattr(tavern, key)
+    links = [
+        {"type": a.type, "uri": a.uri, "name": a.name, "ext": a.ext}
+        for a in tavern.assets
+        if not a.held and a.uri
+    ]
     if picture:
         v3_data["assets"] = [{"type": "icon", "uri": "ccdefault:", "name": "main", "ext": "png"}]
+        v3_data["assets"] += links
+    elif links:
+        v3_data["assets"] = links
     v3 = {"spec": SPEC_V3, "spec_version": "3.0", "data": v3_data}
     return v2, v3
 

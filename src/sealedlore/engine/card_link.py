@@ -144,6 +144,9 @@ def story_copy(card: Character, characters: Sequence[Character], user: str | Non
     copy.id = new_id()
     set_fields(copy, values)
     copy.tavern = filled_tavern(card.tavern, macro_filler(card.name, user or None))
+    # The card's other files stay in Your characters (they go out with the
+    # card there); the story has its pictures, copied in by the window.
+    copy.tavern.assets = []
     copy.collection = None
     copy.reference_images = []
     main = collection.main_of(card, characters)
@@ -604,6 +607,8 @@ def version_from_story(
     version.reference_images = []
     main = collection.main_of(card, characters)
     version.collection = CollectionInfo(family=main.id, version=name, came_from="a story")
+    # Its card's other files are still the card's: the window copies them
+    # into files of the version's own (`collection.copy_files`).
     return version
 
 

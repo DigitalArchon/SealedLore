@@ -634,6 +634,9 @@ class ImagesWindow:
         to be the background goes behind the story."""
         if self.session is None or self._busy:
             return  # the worker owns the story; taken when it is done
+        if self.session.show_opening_pictures():
+            self._load_images()
+            self._reload_unless_editing()
         names = self.session.take_card_pictures()
         if names:
             # The pictures only: the author may be typing on a card.

@@ -28,7 +28,7 @@ from sealedlore.models.character import Character
 from sealedlore.models.collection import CollectionInfo
 from sealedlore.models.image import ImageRef
 from sealedlore.models.story import Story
-from sealedlore.models.tavern import TavernFields
+from sealedlore.models.tavern import CardAsset, TavernFields
 from sealedlore.storage.image_meta import picture_kind
 from sealedlore.storage.images import REFS_DIR
 from sealedlore.storage.paths import COLLECTION_ID
@@ -151,7 +151,44 @@ def copied(
     copy.collection = CollectionInfo(family=family, version=version, came_from=came_from)
     if copy.tavern is None:
         copy.tavern = TavernFields()
+    copy_files(copy, store)
     return copy
+
+
+# A card's other files (models/tavern.py CardAsset), beside the pictures.
+FILES_DIR = "images/assets"
+
+
+def file_path(ext: str) -> str:
+    return f"{FILES_DIR}/{new_id()}.{ext or 'bin'}"
+
+
+def copy_files(
+    character: Character, store: PictureStore, source: PictureStore | None = None
+) -> None:
+    """The character's card files into files of their own in `store` (from
+    `source`, by default the same store), so either copy can lose one without
+    the other; one whose file was lost is dropped."""
+    if character.tavern is None:
+        return
+    kept = []
+    for asset in character.tavern.assets:
+        if asset.held:
+            data = (source or store).read(asset.file)
+            if data is None:
+                continue
+            asset.file = file_path(asset.ext)
+            store.write(asset.file, data)
+        kept.append(asset)
+    character.tavern.assets = kept
+
+
+def files_of(character: Character) -> list[str]:
+    """Every file the character keeps: their pictures and their card's files."""
+    files = [ref.file for ref in character.reference_images]
+    if character.tavern is not None:
+        files += [asset.file for asset in character.tavern.assets if asset.held]
+    return files
 
 
 def forget(bundle: StoryBundle, character: Character) -> list[str]:
@@ -169,8 +206,8 @@ def forget(bundle: StoryBundle, character: Character) -> list[str]:
         heir_info.family = heir_info.version = ""
         for other in family[2:]:
             info(other).family = heir.id
-    used = {ref.file for other in cast for ref in other.reference_images}
-    return [ref.file for ref in character.reference_images if ref.file not in used]
+    used = {file for other in cast for file in files_of(other)}
+    return [file for file in files_of(character) if file not in used]
 
 
 # --- finding them -------------------------------------------------------------------------
@@ -231,6 +268,43 @@ def unique_name(name: str, characters: Sequence[Character]) -> str:
 # --- a SillyTavern card read in -------------------------------------------------------------
 
 
+def files_said(assets: Sequence[CardAsset]) -> str:
+    """What a card's other files are, and what becomes of them, in a line."""
+    held = [a for a in assets if a.held]
+    links = len(assets) - len(held)
+    backgrounds = sum(1 for a in held if a.type == "background")
+    pictures = sum(1 for a in held if a.type != "background" and a.picture)
+    others = len(held) - backgrounds - pictures
+    parts = []
+    if backgrounds:
+        parts.append(_count(backgrounds, "background"))
+    if pictures:
+        parts.append(_count(pictures, "other picture"))
+    if others:
+        parts.append(_count(others, "other file") + " (sound, video, fonts…)")
+    words = ""
+    if parts:
+        words = (
+            f"Its {_listed(parts)} {'are' if len(held) > 1 else 'is'} kept with the card, and "
+            "go out with it in a CHARX export. A background goes behind a chat or a story made "
+            "from the card, and the pictures a greeting shows appear with that greeting."
+        )
+    if links:
+        words += (" " if words else "") + (
+            f"{_count(links, 'file')} {'are links' if links > 1 else 'is a link'}, not in the "
+            "card: kept as links, and nothing is fetched."
+        )
+    return words
+
+
+def _count(n: int, what: str) -> str:
+    return f"{n} {what}{'' if n == 1 else 's'}"
+
+
+def _listed(parts: Sequence[str]) -> str:
+    return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+
+
 def kept_from_card(
     card: TavernCard,
     store: PictureStore,
@@ -284,19 +358,23 @@ def kept_from_card(
                 "format SealedLore doesn't keep."
             )
     notes += card.expression_notes
-    assets = card.fields.get("assets")
-    others = [
-        asset
-        for asset in (assets if isinstance(assets, list) else ())
-        if isinstance(asset, Mapping) and asset.get("type") not in ("icon", "emotion")
-    ]
-    if others:
-        notes.append(
-            f"{len(others)} other picture{'s' if len(others) > 1 else ''} on the card "
-            "(a background, a picture its greetings show) "
-            f"{'were' if len(others) > 1 else 'was'} left out: SealedLore keeps a "
-            "character's own pictures."
-        )
+    assert character.tavern is not None
+    for found in card.files:
+        asset = CardAsset(type=found.type, name=found.name, ext=found.ext, path=found.path)
+        if found.data is None:
+            asset.uri = found.uri
+        else:
+            # A picture in a form that can't be stripped (a GIF) is redrawn
+            # by `clean`, as any picture brought in is; anything else (a
+            # sound, a font) is kept as it came, for the card's sake.
+            data = clean(found.data) if clean is not None else found.data
+            if picture_kind(data):
+                asset.ext = picture_kind(data).lstrip(".").replace("jpeg", "jpg")
+            asset.file = file_path(asset.ext)
+            store.write(asset.file, data)
+        character.tavern.assets.append(asset)
+    if card.files:
+        notes.append(files_said(character.tavern.assets))
     depth = card.extensions.get("depth_prompt")
     if isinstance(depth, Mapping) and str(depth.get("prompt") or "").strip():
         notes.append(

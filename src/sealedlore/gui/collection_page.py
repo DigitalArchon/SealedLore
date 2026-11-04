@@ -154,6 +154,8 @@ class CollectionPage(QWidget):
     picture_requested = Signal(str, str, str)
     # (what, character id): "import", "export" or "remove", its own lorebook.
     lorebook_requested = Signal(str, str)
+    # "save" or "picture", which of the card's files, and the character's id.
+    file_requested = Signal(str, int, str)
     # (character id, "" for everyone): another one shown; the window fills
     # the sheet of their pictures.
     character_shown = Signal(str)
@@ -355,8 +357,13 @@ class CollectionPage(QWidget):
             widget.hide()
         self.chat_form = ChatForm()
         self.chat_form.changed.connect(lambda: self._current and self.changed.emit(self._current))
-        self.about_form = AboutForm()
+        self.about_form = AboutForm(self._thumbs)
         self.about_form.changed.connect(self._about_changed)
+        self.about_form.file_requested.connect(
+            lambda what, index: (
+                self._current and self.file_requested.emit(what, index, self._current)
+            )
+        )
         self.about_form.lorebook_requested.connect(
             lambda what: self._current and self.lorebook_requested.emit(what, self._current)
         )
@@ -552,6 +559,7 @@ class CollectionPage(QWidget):
 
     def _thumbs_ready(self) -> None:
         self.overview.viewport().update()
+        self.about_form.refresh_file_icons()
 
     # --- one of them ----------------------------------------------------------------------
 
@@ -604,6 +612,9 @@ class CollectionPage(QWidget):
             )
         else:
             parts = [_plural(len(card.reference_images), "picture")]
+            files = len(card.tavern.assets) if card.tavern else 0
+            if files:
+                parts.append(_plural(files, "file") + " on the card")
             greetings = len(card.tavern.greetings) if card.tavern else 0
             if greetings:
                 parts.append(_plural(greetings, "greeting"))
