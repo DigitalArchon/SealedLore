@@ -11,11 +11,13 @@ keep them only in that story."
 
 from __future__ import annotations
 
+import difflib
+import re
 from collections.abc import Callable, Sequence
 from typing import Any
 
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -23,6 +25,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QPlainTextEdit,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -30,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.card_link import BOTH, CARD, PORTRAIT, STORY, Change, picture_words
+from sealedlore.gui import theme
 from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.models.collection import PictureMark
 
@@ -39,6 +43,39 @@ NONE = "(none)"
 
 # A picture shown by its mark ("story" or "card" side): the window reads it.
 Thumbnail = Callable[[str, str], QPixmap | None]
+
+
+def marked(text: str, other: str) -> list[tuple[str, bool]]:
+    """`text` in pieces, each said to be changed or not against `other`, by
+    whole words (and the spaces between them): a long description changed in
+    one sentence showed whole on both sides with nothing to say where."""
+    mine, theirs = re.findall(r"\S+|\s+", text), re.findall(r"\S+|\s+", other)
+    pieces: list[tuple[str, bool]] = []
+    matcher = difflib.SequenceMatcher(None, mine, theirs, autojunk=False)
+    for kind, start, end, _o_start, _o_end in matcher.get_opcodes():
+        if start == end:
+            continue
+        piece = "".join(mine[start:end])
+        changed = kind != "equal" and bool(piece.strip())
+        if pieces and pieces[-1][1] == changed:
+            pieces[-1] = (pieces[-1][0] + piece, changed)
+        else:
+            pieces.append((piece, changed))
+    return pieces
+
+
+def _mark(box: QPlainTextEdit, pieces: list[tuple[str, bool]]) -> None:
+    """The changed pieces of `box`'s text shown on the theme's accent."""
+    shade = QTextCharFormat()
+    shade.setBackground(theme.colour("accent", 70))
+    cursor = QTextCursor(box.document())
+    at = 0
+    for piece, changed in pieces:
+        if changed:
+            cursor.setPosition(at)
+            cursor.setPosition(at + len(piece), QTextCursor.KeepAnchor)
+            cursor.mergeCharFormat(shade)
+        at += len(piece)
 
 
 def _words(value: Any) -> str:
@@ -65,7 +102,13 @@ class _Side(QWidget):
         if change.field:
             text = GrowingText(lines=1, most=6)
             text.setReadOnly(True)
-            text.setPlainText(_words(value))
+            mine = _words(value)
+            other = _words(change.card if side == STORY else change.story)
+            text.setPlainText(mine)
+            if mine != NONE and other != NONE:
+                # The words the other side doesn't have, marked over the plain
+                # text (as HTML the box measured a line too many).
+                _mark(text, marked(mine, other))
             layout.addWidget(text)
             return
         sha = value if change.key == PORTRAIT else (value.sha256 if value else "")

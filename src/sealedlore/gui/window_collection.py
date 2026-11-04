@@ -194,6 +194,7 @@ class CollectionWindow:
                 self._collection.save = lambda: None  # never over a folder unread
             else:
                 self._settle_collection_files()
+                self._forget_unused_pictures()
         return self._collection
 
     def _settle_collection_files(self) -> None:
@@ -432,8 +433,27 @@ class CollectionWindow:
             return
         collection.touch(card)
         self._save_collection()
+        self._forget_unused_pictures()
         self.collection_page.refresh_pictures()
         self._refresh_collection_sheet()
+
+    def _forget_unused_pictures(self) -> None:
+        """A picture taken off a card here is gone from the disk too, once no
+        character of theirs has it (the review before 3.0.0b2: kept "for an
+        Undo of the card" that Your characters doesn't have, the folder only
+        grew). Only files the cards were seen to name before are removed: a
+        picture still landing was never one of them."""
+        session = self._collection
+        if session is None or self._collection_problem:
+            return
+        now = {ref.file for card in session.cast for ref in card.reference_images}
+        seen = getattr(self, "_collection_pictures_seen", None)
+        self._collection_pictures_seen = now
+        if seen is None:
+            return
+        for file in seen - now:
+            if file.startswith(f"{REFS_DIR}/"):
+                session.pictures.remove(file)
 
     def _added_to_collection(self, characters: list[Character], notes: list[str], lead: str):
         session = self._collection_session()

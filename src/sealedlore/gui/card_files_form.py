@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QEvent, QSize, Qt, Signal
-from PySide6.QtGui import QIcon, QKeySequence, QShortcut
+from PySide6.QtCore import QEvent, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QFont, QIcon, QKeySequence, QPainter, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
@@ -27,11 +27,11 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
-    QStyle,
     QVBoxLayout,
     QWidget,
 )
 
+from sealedlore.gui import theme
 from sealedlore.gui.fields import FormScroll, set_field_text
 from sealedlore.models.character import Character
 from sealedlore.models.tavern import CardAsset, TavernFields
@@ -56,6 +56,42 @@ TYPES = (
 # A link the author types in: never fetched, but held to the HTTPS rule all
 # the same (only the spec's own `ccdefault:` besides).
 LINK_PREFIXES = ("https://", "ccdefault:")
+
+
+_BADGES: dict[tuple[str, bool, str], QIcon] = {}
+
+
+def badge(text: str, *, accent: bool = False) -> QIcon:
+    """A file's kind, drawn in the theme's colours: its extension, or LINK.
+    The system's stock icons (a coloured globe, a blank page) clashed with
+    the dark themes and said nothing of what a file was."""
+    word = text.upper()[:4]
+    ground, edge, ink = (
+        theme.colour("button"),
+        theme.colour("accent" if accent else "button_border"),
+        theme.colour("accent" if accent else "text_soft"),
+    )
+    key = (word, accent, ground.name() + edge.name() + ink.name())
+    icon = _BADGES.get(key)
+    if icon is None:
+        pixmap = QPixmap(FILE_ICON, FILE_ICON)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        inset = FILE_ICON // 8
+        box = QRectF(inset, inset / 2, FILE_ICON - 2 * inset, FILE_ICON - inset)
+        painter.setPen(QPen(edge, 2))
+        painter.setBrush(ground)
+        painter.drawRoundedRect(box, 8, 8)
+        font = QFont(painter.font())
+        font.setBold(True)
+        font.setPixelSize(FILE_ICON // 5)
+        painter.setFont(font)
+        painter.setPen(ink)
+        painter.drawText(box, Qt.AlignCenter, word)
+        painter.end()
+        icon = _BADGES[key] = QIcon(pixmap)
+    return icon
 
 
 def link_problem(address: str) -> str:
@@ -231,11 +267,10 @@ class FilesForm(QWidget):
         if asset.held and asset.picture:
             tip += "\nClick to see it full size."
         item.setToolTip(tip)
-        style = self.style()
         if not asset.held:
-            item.setIcon(style.standardIcon(QStyle.SP_DriveNetIcon))
+            item.setIcon(badge("LINK", accent=True))
         elif not asset.picture:
-            item.setIcon(style.standardIcon(QStyle.SP_FileIcon))
+            item.setIcon(badge(asset.ext or "FILE"))
 
     def refresh_file_icons(self) -> None:
         """Thumbnails as they are read (a card may have hundreds)."""

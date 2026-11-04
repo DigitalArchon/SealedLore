@@ -141,3 +141,20 @@ def test_a_plot_hidden_character_is_offered_nowhere_before_they_come(app, window
     dialog = SetupDialog(session.story, session.cast, parent=window, hidden=frozenset({hidden.id}))
     assert hidden not in dialog.cast and session.cast[0] in dialog.cast
     dialog.close()
+
+
+# --- the review's last items (after 3.0.0b2) -------------------------------------------
+
+
+def test_the_changes_dialog_marks_the_words_that_differ():
+    from sealedlore.gui.card_changes import marked
+
+    pieces = marked(
+        "She trusts nobody, and keeps the farm.", "She trusts John slowly, and keeps the farm."
+    )
+    assert pieces == [
+        ("She trusts ", False),
+        ("nobody,", True),
+        (" and keeps the farm.", False),
+    ]
+    assert marked("Same words.", "Same words.") == [("Same words.", False)]

@@ -14,6 +14,7 @@ import pytest
 
 pytest.importorskip("PySide6")
 
+from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QInputDialog, QMessageBox  # noqa: E402
 
 from sealedlore.gui import window_collection  # noqa: E402
@@ -220,3 +221,52 @@ def test_a_lorebook_goes_out_and_comes_in_with_every_setting(
     entry = lore.book_entries(elena.tavern.character_book)[0]
     assert entry["extensions"]["group"] == "towns" and entry["insertion_order"] == 40
     assert page.lorebook_form.list.count() == 1
+
+
+def test_a_picture_taken_off_a_card_leaves_the_disk_too(app, window, yes):
+    elena, page = shown(window)
+    store = DiskPictures(COLLECTION_ID, window.root)
+    ref = elena.reference_images[0]
+    assert store.read(ref.file) is not None
+    window._collection_board_picture("remove", elena.id, ref.id)
+    assert ref not in elena.reference_images
+    assert store.read(ref.file) is None, "no character has it any more"
+
+
+def test_a_picture_another_character_still_has_stays(app, window, yes):
+    elena, page = shown(window)
+    store = DiskPictures(COLLECTION_ID, window.root)
+    window._duplicate_kept(elena.id)
+    copy = next(c for c in window._kept() if c is not elena)
+    shared = elena.reference_images[0]
+    copy.reference_images.append(shared.model_copy())  # as if both kept it
+    window._collection_pictures_changed(copy.id)
+    window._collection_board_picture("remove", elena.id, shared.id)
+    assert store.read(shared.file) is not None, "the copy still shows it"
+
+
+def test_the_files_tab_badges_each_file_by_its_kind(app, window):
+    from sealedlore.gui.card_files_form import badge
+
+    elena, page = shown(window)
+    form = page.files_form
+    by_name = {form.files.item(r).text(): form.files.item(r) for r in range(form.files.count())}
+    assert by_name["wind"].icon().cacheKey() == badge("mp3").cacheKey()
+    assert by_name["you"].icon().cacheKey() == badge("LINK", accent=True).cacheKey()
+    assert badge("mp3").cacheKey() != badge("LINK", accent=True).cacheKey()
+
+
+def test_the_list_fills_in_portraits_as_they_are_read(app, window):
+    import time
+
+    elena, page = shown(window)
+    page._fill()
+    item = next(
+        page.people.item(r)
+        for r in range(page.people.count())
+        if page.people.item(r).text().startswith("Elena")
+    )
+    end = time.monotonic() + 3
+    while not item.data(Qt.UserRole + 11) and time.monotonic() < end:
+        app.processEvents()
+    assert item.data(Qt.UserRole + 11), "read a few a tick, and shown once read"

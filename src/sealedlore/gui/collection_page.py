@@ -65,6 +65,8 @@ TABS = (
     ("Files", "Every other file on their card: a background, a greeting's pictures, sounds"),
     ("About", "The card itself: who made it, its version, tags and sources, other apps' settings"),
 )
+# On a name in the list: their portrait's file, and whether it is shown yet.
+PORTRAIT_ROLE = Qt.UserRole + 10
 # The list's column at 100% text.
 LEFT_WIDTH = 300
 # Character cards, by their files' endings (dropped on the page).
@@ -606,15 +608,14 @@ class CollectionPage(QWidget):
             item = QListWidgetItem(f"{main.name}\n{line}" if line else main.name)
             item.setData(Qt.UserRole, main.id)
             first = main.reference_images[0] if main.reference_images else None
-            if first is not None:
-                item.setIcon(
-                    QIcon(self._thumbs.now(first.file, PEOPLE_ICON.width(), PEOPLE_ICON.height()))
-                )
-            else:
-                item.setIcon(self._blank_icon)
+            # Read a few a tick (Thumbs), filled in as they come: read all at
+            # once, a large collection held the page before it showed.
+            item.setData(PORTRAIT_ROLE, first.file if first is not None else "")
+            item.setIcon(self._blank_icon)
             item.setToolTip(f"{main.name}\n{line}" if line else main.name)
             self.people.addItem(item)
         self.people.blockSignals(False)
+        self._people_icons()
         self._select_person()
         self.overview.clear()
         for main in shown:
@@ -671,6 +672,20 @@ class CollectionPage(QWidget):
     def _thumbs_ready(self) -> None:
         self.overview.viewport().update()
         self.files_form.refresh_file_icons()
+        self._people_icons()
+
+    def _people_icons(self) -> None:
+        """Each name's portrait, once it has been read."""
+        for row in range(self.people.count()):
+            item = self.people.item(row)
+            file = item.data(PORTRAIT_ROLE)
+            if not file or item.data(PORTRAIT_ROLE + 1):
+                continue
+            pixmap = self._thumbs.get(file, PEOPLE_ICON.width(), PEOPLE_ICON.height())
+            if pixmap is not None:
+                item.setData(PORTRAIT_ROLE + 1, True)
+                if not pixmap.isNull():
+                    item.setIcon(QIcon(pixmap))
 
     # --- one of them ----------------------------------------------------------------------
 
