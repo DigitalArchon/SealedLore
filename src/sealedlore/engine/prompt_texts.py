@@ -55,7 +55,14 @@ GROUPS = (
     AUTHORING,
 )
 
-_SLOT = re.compile(r"\{([a-z_]+)\}")
+# Never inside double braces: a card's `{{user}}` written into an edited text
+# is the card's macro, not the `{user}` slot.
+_SLOT = re.compile(r"(?<!\{)\{([a-z_]+)\}(?!\})")
+
+
+def slots_in(text: str) -> set[str]:
+    """The slots `text` names, as `fill` finds them."""
+    return set(_SLOT.findall(text))
 
 
 @dataclass(frozen=True)

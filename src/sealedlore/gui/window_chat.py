@@ -44,7 +44,7 @@ class ChatWindow:
         return SavedPrompts(self.config, lambda: save_config(self.config, root=self.root))
 
     def new_chat(self) -> None:
-        if self._busy or not self._private_allows_close():
+        if self._busy:
             return
         provider = self.config.active_provider()
         dialog = NewChatDialog(
@@ -57,7 +57,9 @@ class ChatWindow:
             hosts_of=self._hosts_of,
             saved=self.saved_prompts(),
         )
-        if dialog.exec() != NewChatDialog.Accepted:
+        # Asked once the chat is wanted, not before: a Cancel of the dialog had
+        # already cost a memory-only scene or chat.
+        if dialog.exec() != NewChatDialog.Accepted or not self._leave_for_new():
             return
         story = Story(
             title=dialog.title.text().strip(),
@@ -88,6 +90,10 @@ class ChatWindow:
         """A chat that is never written: its session is made here, from the
         bundle in memory, where every other story is loaded from disk.
         `files` and `log`: its pictures and log, from a backup."""
+        # As `open_story`: nothing of the window's full pages stays over it.
+        self.show_collection(False)
+        self.show_cast_board(False)
+        self.show_map(False)
         if self.session is not None:
             self.session.close(wait_seconds=0)
         self.session = StorySession(

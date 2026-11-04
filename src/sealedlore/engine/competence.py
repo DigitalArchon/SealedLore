@@ -36,6 +36,7 @@ def build_inference_messages(character: Character, world: str | None) -> list[Pr
     for label, value in (
         ("Summary", character.summary),
         ("Description", character.full_description),
+        ("Personality", character.personality),
         ("Competence notes", character.competence.notes),
         ("Voice", character.voice_notes),
     ):

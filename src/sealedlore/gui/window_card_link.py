@@ -13,6 +13,7 @@ own session (gui/window_collection.py), the one writer of their folder.
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QPixmap
@@ -58,6 +59,39 @@ def copy_picture(ref: ImageRef, source: PictureStore, target: PictureStore) -> I
     return copy
 
 
+@dataclass
+class Sides:
+    """A linked character's pictures and their card's, by their bytes."""
+
+    story_marks: list[PictureMark]
+    story_refs: dict[str, ImageRef]
+    card_marks: list[PictureMark]
+    card_refs: dict[str, ImageRef]
+    # A side with a picture whose file can't be read.
+    story_unknown: bool = False
+    card_unknown: bool = False
+
+    def changes(self, character: Character, card: Character) -> list:
+        return changes(
+            character,
+            card,
+            self.story_marks,
+            self.card_marks,
+            story_unknown=self.story_unknown,
+            card_unknown=self.card_unknown,
+        )
+
+    def in_step(self, character: Character, card: Character) -> None:
+        card_link.in_step(
+            character,
+            card,
+            self.story_marks,
+            self.card_marks,
+            story_unknown=self.story_unknown,
+            card_unknown=self.card_unknown,
+        )
+
+
 class CardLinkWindow:
     def _init_card_link(self) -> None:
         panel = self.cast_panel
@@ -77,15 +111,19 @@ class CardLinkWindow:
 
     def _marks(
         self, refs: list[ImageRef], store: PictureStore, owner: str
-    ) -> tuple[list[PictureMark], dict[str, ImageRef]]:
-        """Each picture's mark, in order, and the pictures by sha256."""
+    ) -> tuple[list[PictureMark], dict[str, ImageRef], bool]:
+        """Each picture's mark, in order, the pictures by sha256, and whether
+        any picture's file couldn't be read (which is then never said to
+        have been taken off: engine/card_link.py)."""
         marks: list[PictureMark] = []
         by_sha: dict[str, ImageRef] = {}
+        unknown = False
         for ref in refs:
             sha = self._shas.get((owner, ref.file))
             if sha is None:
                 data = store.read(ref.file)
                 if not data:
+                    unknown = True
                     continue
                 sha = hashlib.sha256(data).hexdigest()
                 self._shas[(owner, ref.file)] = sha
@@ -99,17 +137,13 @@ class CardLinkWindow:
             if sha not in by_sha:
                 marks.append(mark)
                 by_sha[sha] = ref
-        return marks, by_sha
+        return marks, by_sha, unknown
 
-    def _sides(self, character: Character, card: Character):
+    def _sides(self, character: Character, card: Character) -> Sides:
         session = self.session
-        story_marks, story_refs = self._marks(
-            character.reference_images, session.pictures, session.story.id
-        )
-        card_marks, card_refs = self._marks(
-            card.reference_images, self._collection_pictures(), COLLECTION_ID
-        )
-        return story_marks, story_refs, card_marks, card_refs
+        story = self._marks(character.reference_images, session.pictures, session.story.id)
+        theirs = self._marks(card.reference_images, self._collection_pictures(), COLLECTION_ID)
+        return Sides(*story[:2], *theirs[:2], story[2], theirs[2])
 
     # --- putting them into the story ------------------------------------------------------
 
@@ -154,8 +188,7 @@ class CardLinkWindow:
         """One of the author's characters as the open story's: a linked copy,
         their pictures copied in, their own lorebook as lore if wanted."""
         session = self.session
-        held = self._held()
-        user = held.name if held is not None else None
+        user = self._story_user()
         copy = card_link.story_copy(card, self._kept(), user)
         source = self._collection_pictures()
         marks = []
@@ -173,6 +206,33 @@ class CardLinkWindow:
         session.add_card(copy, to_cast=to_cast, lore=lore)
         return copy
 
+    def _story_user(self) -> str | None:
+        """Whom a card's `{{user}}` becomes in the open story: the character
+        played, else the one the story suggests (the guide and Setup come
+        before anyone is played), else nobody yet: then it is written out
+        when the story begins (`name_kept_users`)."""
+        held = self._held()
+        if held is not None:
+            return held.name
+        session = self.session
+        suggested = session.story.setup.suggested_character_id if session else None
+        card = session.card(suggested) if suggested else None
+        return card.name if isinstance(card, Character) else None
+
+    def name_kept_users(self) -> None:
+        """The story's characters from Your characters put in before anyone
+        was played: `{{user}}` written out as whom the author plays now."""
+        session, held = self.session, self._held()
+        if session is None or held is None:
+            return
+        named = [
+            character
+            for character in (*session.cast, *session.supporting)
+            if card_link.name_the_user(character, held.name)
+        ]
+        if named:
+            session.save()
+
     def _after_cards_added(self, added: list[Character], to_cast: bool) -> None:
         session = self.session
         session.forget_review_undo()
@@ -186,7 +246,12 @@ class CardLinkWindow:
         self.cast_panel.select_character(added[0].id)
         names = ", ".join(character.name for character in added)
         where = "the cast" if to_cast else "the supporting characters"
-        self.statusBar().showMessage(f"{names} joined {where}.", 8000)
+        later = (
+            " Their card's {{user}} becomes the name of whoever you play when the story begins."
+            if any(c.linked is not None and not c.linked.user for c in added)
+            else ""
+        )
+        self.statusBar().showMessage(f"{names} joined {where}.{later}", 12000)
 
     def _add_shown_to_story(self, card_id: str) -> None:
         """Your characters' page: the character shown into the open story."""
@@ -218,7 +283,7 @@ class CardLinkWindow:
                 KEEP_LABEL,
             )
             return
-        found = changes(character, card, *self._sides(character, card)[::2])
+        found = self._sides(character, card).changes(character, card)
         which = collection.version_name(card, self._kept()).lower()
         words = f"From Your characters: {card.name} ({which})."
         line = card_link.summary(found, link)
@@ -232,13 +297,30 @@ class CardLinkWindow:
         character = session.card(character_id) if session is not None else None
         if not isinstance(character, Character) or self._link_refused():
             return
+        # What the button offered may be out of date: the line is worked out
+        # again and acted on, but a card deleted meanwhile is never made
+        # again by a click that meant to open it.
+        offered = self.cast_panel.link_button.text()
+        self._sync_card_link()
+        now = self.cast_panel.link_button.text()
+        if now == KEEP_LABEL and offered != KEEP_LABEL:
+            self.statusBar().showMessage(
+                "Their card is no longer in Your characters: see the line above.", 8000
+            )
+            return
         link = character.linked
         card = self._kept_card(link.card_id) if link is not None else None
         if card is None:
             self.keep_in_collection(character)
             return
-        story_marks, story_refs, card_marks, card_refs = self._sides(character, card)
-        if not changes(character, card, story_marks, card_marks):
+        if now == CARD_LABEL:
+            if self._dialog_parent() is not self:
+                # The Cast page lent to Setup or the guide: the page would
+                # open behind the dialog.
+                self.statusBar().showMessage(
+                    "Their card is in File → Your characters…, once this is closed.", 8000
+                )
+                return
             self.show_collection(True, card.id)
             return
         self._review_card_changes(character, card)
@@ -247,9 +329,11 @@ class CardLinkWindow:
 
     def _review_card_changes(self, character: Character, card: Character) -> None:
         session = self.session
-        story_marks, story_refs, card_marks, card_refs = self._sides(character, card)
-        card_link.in_step(character, card, story_marks, card_marks)
-        found = changes(character, card, story_marks, card_marks)
+        sides = self._sides(character, card)
+        sides.in_step(character, card)
+        found = sides.changes(character, card)
+        story_marks, story_refs = sides.story_marks, sides.story_refs
+        card_refs = sides.card_refs
         sources = [(story_refs, session.pictures), (card_refs, self._collection_pictures())]
 
         def thumb(sha: str, side: str) -> QPixmap | None:
@@ -290,6 +374,7 @@ class CardLinkWindow:
             character.linked.kept_here = card_link.fingerprint(found)
             session.save()
         elif choice == TAKE and chosen:
+            old_name = character.name
             card_link.take_from_card(
                 character,
                 card,
@@ -298,6 +383,9 @@ class CardLinkWindow:
                 card_refs=card_refs,
                 copy=lambda ref: copy_picture(ref, collection_store, session.pictures),
             )
+            # A name taken in keeps their place on the rosters, as a rename
+            # on the Cast page does.
+            session.rename_on_rosters(character, old_name)
             session.forget_review_undo()
             session.save()
             self.refresh_panels()
@@ -360,7 +448,7 @@ class CardLinkWindow:
                 f"You already had a character named {kept.name}: both are kept.", 8000
             )
         self._collection_session().cast.append(kept)
-        story_marks, _refs = self._marks(
+        story_marks, _refs, _unknown = self._marks(
             character.reference_images, session.pictures, session.story.id
         )
         card_link.relink(character, kept, story_marks, main_id=kept.id)

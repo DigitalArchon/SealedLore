@@ -377,7 +377,13 @@ class SetupDialog(QDialog):
         layout.addWidget(self.chat_prompt, 1)
         if self._saved_prompts is not None:
             layout.addWidget(
-                SavedPromptsButton(self._saved_prompts, self.chat_prompt), 0, Qt.AlignLeft
+                SavedPromptsButton(
+                    self._saved_prompts,
+                    self.chat_prompt,
+                    in_memory=lambda: self.story.chat_keep == "memory",
+                ),
+                0,
+                Qt.AlignLeft,
             )
         layout.addWidget(
             _hint(

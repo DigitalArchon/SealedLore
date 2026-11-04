@@ -136,7 +136,9 @@ class NewChatDialog(QDialog):
         form.addRow("System prompt", self.prompt)
         self.saved_button = None
         if saved is not None:
-            self.saved_button = SavedPromptsButton(saved, self.prompt)
+            self.saved_button = SavedPromptsButton(
+                saved, self.prompt, in_memory=lambda: self.keep_choice() == "memory"
+            )
             form.addRow("", self.saved_button)
         form.addRow("", prompt_hint)
         form.addRow("Tail", self.tail)

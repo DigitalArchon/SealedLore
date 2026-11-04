@@ -448,10 +448,17 @@ class CollectionPage(QWidget):
 
     def refresh_pictures(self) -> None:
         """Pictures changed under the page (one drawn has landed): shown
-        anew, the fields left as they are."""
-        self._thumbs.forget()
+        anew, the fields left as they are. A picture's file never changes
+        under its name, so what was read stays read."""
         self.card_form.refresh_pictures()
         self._fill()
+
+    def forget_forms(self) -> None:
+        """The forms loaded afresh the next time a card shows: its fields
+        may have changed while the page was put away."""
+        self._loaded = None
+        for form in (self.card_form, self.chat_form, self.about_form):
+            form.load(None)
 
     def forget_pictures(self) -> None:
         self._thumbs.forget()

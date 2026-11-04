@@ -55,7 +55,7 @@ from sealedlore.providers.tee import is_private_mode, is_tee
 from sealedlore.storage import keychain
 from sealedlore.storage.archive import ArchiveError, import_archive, write_archive
 from sealedlore.storage.images import all_image_files, reference_files
-from sealedlore.storage.paths import config_file, stories_dir
+from sealedlore.storage.paths import config_file, is_safe_story_id, stories_dir
 from sealedlore.storage.repository import (
     StoryBundle,
     copy_story,
@@ -1052,6 +1052,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     chat.set_defaults(func=cmd_chat)
 
     args = parser.parse_args(argv)
+    if not is_safe_story_id(getattr(args, "story_id", None) or "_"):
+        # The author's own characters are kept in a folder laid out as a
+        # story's, under an id of their own: never a story to open, copy,
+        # export or delete from here (storage/collection.py).
+        print(f"{args.story_id!r} is not a story's id", file=sys.stderr)
+        return 1
     return int(args.func(args))
 
 

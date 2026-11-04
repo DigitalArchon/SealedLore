@@ -172,7 +172,13 @@ def put_in_characters(
             if isinstance(name, str) and isinstance(note, str) and note.strip():
                 notes[name.strip().casefold()] = note.strip()
     played = next((c for c in scenario.cast if c.id == scenario.suggested_character_id), None)
+    taken: set[str] = set()
     for card in characters:
+        if card.name.casefold() in taken:
+            # Two versions of one character: the draft knows one name.
+            warnings.append(f"only one {card.name} can be in the story: the first chosen is")
+            continue
+        taken.add(card.name.casefold())
         drafted, tier = None, scenario.cast
         for tier in (scenario.cast, scenario.supporting):
             drafted = next((c for c in tier if c.name.casefold() == card.name.casefold()), None)

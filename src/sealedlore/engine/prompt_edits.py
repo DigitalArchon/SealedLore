@@ -12,7 +12,7 @@ import hashlib
 from collections.abc import Iterable, Mapping
 from typing import Literal
 
-from sealedlore.engine.prompt_texts import TEXTS, PromptTexts
+from sealedlore.engine.prompt_texts import TEXTS, PromptTexts, slots_in
 from sealedlore.models.prompt_edit import PromptEdit
 
 Source = Literal["story", "app", "default"]
@@ -70,10 +70,8 @@ def missing_slots(key: str, text: str) -> list[str]:
     """Placeholders the default uses that `text` leaves out. Each carries
     something (a name, a list, the story's person): without it the model
     never gets it. Allowed, but the author should know."""
-    default = TEXTS[key].default
-    return [
-        slot for slot in TEXTS[key].slots if f"{{{slot}}}" in default and f"{{{slot}}}" not in text
-    ]
+    used, kept = slots_in(TEXTS[key].default), slots_in(text)
+    return [slot for slot in TEXTS[key].slots if slot in used and slot not in kept]
 
 
 def copied(

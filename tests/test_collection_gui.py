@@ -276,3 +276,73 @@ def test_their_folder_holds_no_story_and_stories_list_none_of_them(app, window, 
     assert window.stories.list.count() == 0
     marcus = collection.load_collection(window.root).cast[0]
     assert marcus.name == "Marcus" and marcus.collection is not None
+
+
+# --- what the review found (Nov 4 2026) ---------------------------------------------------
+
+
+def test_the_window_starts_whatever_is_in_their_folder(app, tmp_path: Path, monkeypatch):
+    root = tmp_path / "data"
+    folder = root / "characters"
+    folder.mkdir(parents=True)
+    (folder / "story.json").write_text('{"id": "your-characters", "title": "Your characters"}')
+    (folder / "cast.json").write_text('[{"name": ')  # cut off
+    window = MainWindow(root=root, use_mock=True)  # never read at start
+    assert window._collection is None
+    warned: list[str] = []
+    monkeypatch.setattr(window, "_warn_plain", lambda title, text: warned.append(text))
+    window.show_collection(True)
+    assert "couldn't be read" in window.collection_page.stats.text()
+    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("Marcus", True))
+    window.collection_page.new_button.click()
+    assert warned and (folder / "cast.json").read_text() == '[{"name": '  # never written over
+    window.close()
+
+
+def test_what_the_story_does_meanwhile_stays_under_the_page(app, window, story, cast):
+    save_story_bundle(StoryBundle(story=story, cast=list(cast)), root=window.root)
+    window.open_story(story.id)
+    window.show_collection(True)
+    # A job ending meanwhile refreshes the bars and banners: not over the page.
+    window.refresh_branch_bar()
+    window._sync_place_button()
+    window.refresh_summaries()
+    for widget in (window.branch_bar, window.place_button, window.staleness, window.over_budget):
+        assert widget.isHidden()
+    # Ctrl+Enter in a card's field never sends the story's unsent turn.
+    window.composer.input.setPlainText("Not yet.")
+    window.send_turn()
+    assert window.composer.input.toPlainText() == "Not yet." and not window._busy
+    window.open_find()
+    assert not window.find_open()
+    window.show_collection(False)
+    assert not window.composer.isHidden()
+
+
+def test_a_memory_chat_opened_from_the_page_closes_it(app, window):
+    from sealedlore.models.story import Story
+
+    window.show_collection(True)
+    window.open_memory_chat(
+        StoryBundle(story=Story(title="Quiet", mode="chat", chat_keep="memory"))
+    )
+    assert not window.collection_shown() and not window.composer.isHidden()
+    window._private_allows_close = lambda: True
+
+
+def test_the_page_shows_a_card_as_it_is_after_a_story_changed_it(
+    app, window, tmp_path: Path, monkeypatch
+):
+    elena = kept_elena(window, tmp_path, monkeypatch)
+    window.show_collection(False)
+    elena.personality = "changed elsewhere"  # as a story's Save to the card does
+    window.show_collection(True, elena.id)
+    assert window.collection_page.card_form.personality.toPlainText() == "changed elsewhere"
+
+
+def test_a_story_job_running_says_why_the_page_waits(app, window, tmp_path: Path, monkeypatch):
+    elena = kept_elena(window, tmp_path, monkeypatch)
+    window._busy = True
+    window.chat_with_kept(elena.id)
+    assert "current job" in window.statusBar().currentMessage()
+    window._busy = False

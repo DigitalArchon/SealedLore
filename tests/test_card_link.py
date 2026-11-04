@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from sealedlore.engine import card_link
 from sealedlore.engine.card_link import BOTH, CARD, STORY, changes, given, story_copy
+from sealedlore.models.character import Character
 from sealedlore.models.collection import PictureMark
 from sealedlore.models.image import ImageRef
 from sealedlore.storage import collection
@@ -162,3 +163,103 @@ def test_in_step_takes_what_both_sides_came_to():
     assert [(c.key, c.side) for c in changes(copy, card, [MARK_P], [MARK_P])] == [
         ("personality", CARD)
     ]
+
+
+# --- what the review found (Nov 4 2026) ---------------------------------------------------
+
+MARK_A = PictureMark(sha256="a", look="armour")
+
+
+def with_armour():
+    card = elena()
+    card.reference_images.append(ImageRef(id="a", file="images/refs/a.png", look="armour"))
+    copy = linked(card)
+    copy.linked.pictures = [MARK_P, MARK_A]
+    return card, copy
+
+
+def sides_after_in_step(copy, card, story, theirs):
+    card_link.in_step(copy, card, story, theirs)
+    return {c.key: c.side for c in changes(copy, card, story, theirs)}
+
+
+def test_a_picture_changed_on_one_side_stays_that_sides_change():
+    card, copy = with_armour()
+    # Taken off in the story: still the story's change after reconciling.
+    assert sides_after_in_step(copy, card, [MARK_P], [MARK_P, MARK_A]) == {"picture:a": STORY}
+    card, copy = with_armour()
+    assert sides_after_in_step(copy, card, [MARK_P, MARK_A], [MARK_P]) == {"picture:a": CARD}
+    card, copy = with_armour()
+    # The story makes the armour its portrait: the story's, and nothing re-sorted.
+    assert sides_after_in_step(copy, card, [MARK_A, MARK_P], [MARK_P, MARK_A]) == {
+        "portrait": STORY
+    }
+    assert [m.sha256 for m in copy.linked.pictures] == ["p", "a"]
+
+
+def test_a_picture_that_cant_be_read_is_never_said_taken_off():
+    card, copy = with_armour()
+    found = changes(copy, card, [MARK_P], [MARK_P, MARK_A], story_unknown=True)
+    assert found == []
+
+
+def test_names_go_back_however_the_card_spells_them():
+    card = elena()
+    card.full_description = "{{Char}} keeps the farmhouse. She trusts <USER> slowly."
+    copy = linked(card)
+    copy.full_description = "Elena keeps the farmhouse. She trusts John at last."
+    found = changes(copy, card, [MARK_P], [MARK_P])
+    card_link.save_to_card(copy, card, found, story_refs={}, card_refs={}, copy=lambda r: None)
+    assert card.full_description == "{{char}} keeps the farmhouse. She trusts {{user}} at last."
+
+
+def test_a_shorter_name_never_eats_a_longer_one():
+    raw = "{{char}} trusts {{user}}."
+    assert card_link.unfilled("Jane Moss trusts Jane.", raw, "Jane Moss", "Jane") == (
+        "{{char}} trusts {{user}}."
+    )
+    # The card names her outright: her name stays, only the other goes back.
+    assert card_link.unfilled(
+        "Jane Moss trusts Jane.", "Jane Moss trusts {{user}}.", "Jane Moss", "Jane"
+    ) == ("Jane Moss trusts {{user}}.")
+    assert card_link.unfilled("Dr. J. waits.", "{{char}} waits.", "Dr. J.", "") == "{{char}} waits."
+
+
+def test_a_voice_saved_back_takes_its_names_from_the_examples():
+    card = elena()
+    copy = linked(card)
+    copy.voice_notes = "John: Hello?\nElena: Hands up, stranger."
+    found = changes(copy, card, [MARK_P], [MARK_P])
+    card_link.save_to_card(copy, card, found, story_refs={}, card_refs={}, copy=lambda r: None)
+    assert card.voice_notes == "{{user}}: Hello?\n{{char}}: Hands up, stranger."
+    # Another story played as Tom gets Tom.
+    assert given(card, "Tom")["voice_notes"] == "Tom: Hello?\nElena: Hands up, stranger."
+
+
+def test_a_version_keeps_the_cards_own_text_where_the_story_changed_nothing():
+    card = elena()
+    copy = linked(card)
+    copy.personality = "harder now"
+    version = card_link.version_from_story(copy, card, [card], name="Later")
+    assert version.voice_notes is None  # still the examples', as the card has it
+    assert version.summary is None
+    assert version.full_description == card.full_description
+    assert version.personality == "harder now"
+    assert given(version, "Tom")["voice_notes"].startswith("Tom: Hello?")
+
+
+def test_a_card_kept_from_a_story_shows_no_change_nobody_made():
+    story_character = Character(name="Gus", full_description="Gus runs the bar. He hears all.")
+    kept = card_link.kept_from_story(story_character, "the story Doomsville")
+    card_link.relink(story_character, kept, [], main_id=kept.id)
+    assert changes(story_character, kept, [], []) == []
+
+
+def test_after_a_save_a_summary_the_story_never_touched_follows_its_description():
+    card = elena()
+    copy = linked(card)
+    copy.full_description = "Elena runs the clinic now. She trusts John slowly."
+    found = changes(copy, card, [MARK_P], [MARK_P])
+    card_link.save_to_card(copy, card, found, story_refs={}, card_refs={}, copy=lambda r: None)
+    assert copy.summary == "Elena runs the clinic now."
+    assert changes(copy, card, [MARK_P], [MARK_P]) == []

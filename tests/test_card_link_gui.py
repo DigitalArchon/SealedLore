@@ -70,6 +70,8 @@ def window(app, tmp_path: Path):
     window = MainWindow(root=root, use_mock=True)
     window.open_story("story-1")
     yield window
+    # A memory-only chat left open asks before it is lost: not at teardown.
+    window._private_allows_close = lambda: True
     window.close()
 
 
@@ -281,7 +283,6 @@ def test_a_memory_chat_with_them_writes_nothing(app, window, monkeypatch):
     window.chat_with_kept(elena.id)
     assert window.session.memory_only and len(window.session.full_path()) == 2
     assert sorted(p.name for p in (window.root / "stories").iterdir()) == before
-    monkeypatch.setattr(window, "_private_allows_close", lambda: True)
 
 
 def test_the_card_chat_dialog_follows_your_name_until_a_box_is_changed(app, window):
@@ -414,3 +415,142 @@ def wait_for(app, condition, timeout: float = 10.0) -> None:
             raise AssertionError("timed out")
         app.processEvents()
         time.sleep(0.005)
+
+
+# --- private, memory-only and TEE chats ------------------------------------------------------
+
+
+def test_a_tee_chat_still_attesting_keeps_their_card_in_the_box(app, window, monkeypatch):
+    """Nothing can be sent while its enclave is attested: their card waits
+    in the box to type in rather than being refused and lost."""
+    elena = window._kept()[0]
+    chat_dialog(monkeypatch, greeting=False)
+    after_open = window._after_open
+
+    def attesting() -> None:
+        after_open()
+        window.session.tee_block = "The enclave is still being attested."
+
+    monkeypatch.setattr(window, "_after_open", attesting)
+    sent: list = []
+    monkeypatch.setattr(window, "_submit_turn", lambda *a, **k: sent.append(a))
+    window.chat_with_kept(elena.id)
+    assert sent == [] and window.session.story.chat
+    assert window.composer.input.toPlainText().startswith("The character you play")
+
+
+def test_leaving_for_a_chat_with_them_is_asked_only_once_it_is_wanted(app, window, monkeypatch):
+    elena = window._kept()[0]
+    asked: list = []
+    monkeypatch.setattr(window, "_private_allows_close", lambda: asked.append(1) or False)
+    monkeypatch.setattr(CardChatDialog, "exec", lambda d: QDialog.Rejected)
+    window.chat_with_kept(elena.id)
+    assert asked == []  # cancelled: nothing asked, nothing lost
+    chat_dialog(monkeypatch)
+    window.chat_with_kept(elena.id)
+    assert asked == [1] and not window.session.story.chat  # asked, and refused
+
+
+def test_a_memory_chat_with_them_sent_and_answered_writes_nothing(app, window, monkeypatch):
+    elena = window._kept()[0]
+
+    def everything() -> dict[str, bytes]:
+        return {
+            str(path.relative_to(window.root)): path.read_bytes()
+            for path in sorted(window.root.rglob("*"))
+            if path.is_file()
+        }
+
+    before = everything()
+    chat_dialog(monkeypatch, greeting=False, keep="memory")
+    window.chat_with_kept(elena.id)
+    wait_for(app, lambda: not window._busy and len(window.session.full_path()) == 2)
+    assert window.session.memory_only
+    assert window.session.full_path()[0].meta.keep_full
+    assert everything() == before
+
+
+def test_a_memory_chats_prompt_is_kept_only_when_said(app, window, monkeypatch):
+    from PySide6.QtWidgets import QPlainTextEdit
+
+    box = QPlainTextEdit("A prompt said only in memory.")
+    button = SavedPromptsButton(window.saved_prompts(), box, in_memory=lambda: True)
+    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("Secret", True))
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.No)
+    button.keep_current()
+    assert window.config.chat_prompts == []
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    button.keep_current()
+    assert [p.name for p in window.config.chat_prompts] == ["Secret"]
+
+
+def test_a_deleted_card_is_never_made_again_by_a_click_meant_to_open_it(app, window, monkeypatch):
+    elena = added_elena(window, monkeypatch)
+    assert window.cast_panel.link_button.text() == window_card_link.CARD_LABEL
+    collection.forget(window._collection_session().bundle, window._kept_card(elena.linked.card_id))
+    window.cast_panel.link_button.click()
+    assert window._kept() == []  # not made again
+    assert window.cast_panel.link_button.text() == window_card_link.KEEP_LABEL
+
+
+def test_their_card_from_setup_doesnt_open_the_page_behind_it(app, window, monkeypatch):
+    added_elena(window, monkeypatch)
+    monkeypatch.setattr(window, "_dialog_parent", lambda: object())
+    window.cast_panel.link_button.click()
+    assert not window.collection_shown()
+
+
+def test_a_card_added_before_anyone_is_played_names_them_at_the_start(app, window, monkeypatch):
+    window.session.story.held_character_id = None
+    elena = added_elena(window, monkeypatch)
+    assert "{{user}}" in elena.full_description and elena.linked.user == ""
+    window.session.story.held_character_id = "john"
+    window.name_kept_users()
+    assert "She trusts John slowly." in elena.full_description
+    assert elena.linked.user == "John"
+    window._sync_card_link()
+    assert "In step with their card" in window.cast_panel.link_words.text()
+
+
+def test_the_story_suggests_whom_a_card_talks_to_before_anyone_plays(app, window, monkeypatch):
+    window.session.story.held_character_id = None
+    window.session.story.setup.suggested_character_id = "john"
+    elena = added_elena(window, monkeypatch)
+    assert "She trusts John slowly." in elena.full_description
+
+
+def test_a_name_taken_from_the_card_keeps_their_place_on_the_rosters(app, window, monkeypatch):
+    elena = added_elena(window, monkeypatch)
+    window.session.story.scene.present_character_ids.append(elena.id)
+    card = window._kept_card(elena.linked.card_id)
+    card.name = "Elena Ruiz"
+    answer_changes(monkeypatch, TAKE)
+    window.cast_panel.link_button.click()
+    assert elena.name == "Elena Ruiz"
+    assert elena.id in window.session.story.scene.present_character_ids
+
+
+def test_the_greeting_written_over_is_kept_as_the_name_is_typed(app, window):
+    elena = window._kept()[0]
+    dialog = CardChatDialog(elena, model="m")
+    dialog.greeting_text.setPlainText("Hello, stranger.")
+    dialog.about.setPlainText("A drifter.")
+    dialog.user.setText("Ann")
+    assert dialog.greeting_text.toPlainText() == "Hello, stranger."
+    # Another greeting chosen is that greeting.
+    dialog.greeting.setCurrentIndex(1)
+    assert dialog.greeting_text.toPlainText().startswith("The door is barred.")
+    dialog.deleteLater()
+
+
+def test_a_draft_can_go_back_to_nobody(app, window):
+    picker = CollectionPicker(
+        window._kept(),
+        window._collection_pictures,
+        title="t",
+        lead="l",
+        action="Choose",
+        placing=False,
+    )
+    assert picker.ok.isEnabled() and picker.chosen() == []
+    picker.deleteLater()

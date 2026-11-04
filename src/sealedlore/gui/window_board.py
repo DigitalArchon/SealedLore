@@ -102,9 +102,12 @@ class CastBoardWindow:
         away, self._board_away = self._board_away, []
         for widget, visible in away:
             widget.setVisible(visible)
-        # The banners as the story stands now (a job may have ended meanwhile).
+        # The banners, the branch bar and the place button as the story
+        # stands now (a job may have ended meanwhile).
         self.refresh_summaries()
         self._sync_held_away()
+        self.refresh_branch_bar()
+        self._sync_place_button()
         self._sync_stage()
         self._reshare_docks()
 
@@ -350,7 +353,9 @@ class CastBoardWindow:
         for story_id, waiting in self._board_waiting:
             session = sessions.get(story_id)
             card = session.card(waiting.card_id) if session is not None else None
-            if card is None:
+            if card is None or (session is self.session and self._busy):
+                # While the story's job runs its pictures aren't taken onto
+                # its cards yet: a row waiting there waits on.
                 keep.append((story_id, waiting))
                 continue
             gap = sheet_for(card).gap(waiting.look, waiting.expression)

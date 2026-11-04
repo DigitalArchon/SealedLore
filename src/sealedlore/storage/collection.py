@@ -284,6 +284,19 @@ def kept_from_card(
                 "format SealedLore doesn't keep."
             )
     notes += card.expression_notes
+    assets = card.fields.get("assets")
+    others = [
+        asset
+        for asset in (assets if isinstance(assets, list) else ())
+        if isinstance(asset, Mapping) and asset.get("type") not in ("icon", "emotion")
+    ]
+    if others:
+        notes.append(
+            f"{len(others)} other picture{'s' if len(others) > 1 else ''} on the card "
+            "(a background, a picture its greetings show) "
+            f"{'were' if len(others) > 1 else 'was'} left out: SealedLore keeps a "
+            "character's own pictures."
+        )
     depth = card.extensions.get("depth_prompt")
     if isinstance(depth, Mapping) and str(depth.get("prompt") or "").strip():
         notes.append(

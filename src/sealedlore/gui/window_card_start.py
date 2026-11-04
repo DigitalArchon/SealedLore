@@ -24,7 +24,7 @@ class CardStartWindow:
     def chat_with_kept(self, card_id: str) -> None:
         """Chat with them…: a simple chat started from their card."""
         card = self._kept_card(card_id)
-        if card is None or self._busy or not self._private_allows_close():
+        if card is None or self._story_job_says_wait():
             return
         provider = self.config.active_provider()
         dialog = CardChatDialog(
@@ -43,7 +43,9 @@ class CardStartWindow:
         setup, keep = dialog.setup(), dialog.keep_choice()
         model, route = dialog.model.text().strip(), dialog.route()
         dialog.deleteLater()
-        if not accepted:
+        # Asked once the chat is wanted: asked first, a Cancel of the dialog
+        # had already cost a memory-only scene or chat.
+        if not accepted or not self._leave_for_new():
             return
         story = Story(
             title=setup.title or card.name,
@@ -72,8 +74,26 @@ class CardStartWindow:
         if self.session is None or self.session.story.id != story.id:
             return
         if setup.greeting is None and setup.first:
+            if self.session.tee_block:
+                # A TEE or encrypted model still being attested refuses
+                # anything sent: their card waits in the box to type in.
+                self.composer.input.setPlainText(setup.first)
+                self.statusBar().showMessage(
+                    "Their card is in the box to type in: send it once the model is attested.",
+                    15000,
+                )
+                return
             # No greeting: their card goes as the first message, answered.
             self._submit_turn(setup.first, self._chat_turn(setup.first))
+
+    def _leave_for_new(self) -> bool:
+        """Before something new opens: a memory-only scene or chat asks, and
+        on Yes is left at once (else it asked again as the new one opened)."""
+        if not self._private_allows_close():
+            return False
+        if self.session is not None and self.session.memory_only:
+            self._close_story()
+        return True
 
     def _portrait_for_chat(self, card: Character, story: Story) -> dict[str, bytes]:
         """Their portrait as the chat's own reference picture, so a picture
@@ -92,8 +112,18 @@ class CardStartWindow:
     def draft_with_kept(self, card_id: str) -> None:
         """Draft a story with them…: a story drafted from a premise around them."""
         card = self._kept_card(card_id)
-        if card is not None:
+        if card is not None and not self._story_job_says_wait():
             self.new_story_from_premise(characters=[card])
+
+    def _story_job_says_wait(self) -> bool:
+        """What leaves the open story waits for its job, and says so: the
+        page stays usable while the story works."""
+        if self._busy:
+            self.statusBar().showMessage(
+                "Once the story's current job is done: it is still writing.", 6000
+            )
+            return True
+        return False
 
     def _choose_kept(self, chosen: list[Character]) -> list[Character] | None:
         """Characters from Your characters for a draft: those already chosen

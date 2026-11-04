@@ -82,7 +82,7 @@ class CardChatDialog(NewChatDialog):
 
         self.user.textChanged.connect(lambda _text: self._refill())
         self.about.textChanged.connect(self._refill)
-        self.greeting.currentIndexChanged.connect(lambda _index: self._refill_greeting())
+        self.greeting.currentIndexChanged.connect(lambda _index: self._choose_greeting())
         self._refill()
 
     def _put(self, box, text: str) -> None:
@@ -114,14 +114,19 @@ class CardChatDialog(NewChatDialog):
         self._refill_greeting()
 
     def _refill_greeting(self) -> None:
+        """The greeting chosen, the names in, unless the author has written
+        in it."""
         index = self.greeting.currentData()
         self.greeting_text.setVisible(index is not None)
         if index is None:
             return
         texts = card_chat.greetings(self.card, user=self._name())
-        # Another greeting chosen is that greeting, whatever was there.
-        self._given.pop(self.greeting_text, None)
         self._put(self.greeting_text, texts[index])
+
+    def _choose_greeting(self) -> None:
+        # Another greeting chosen is that greeting, whatever was written.
+        self._given.pop(self.greeting_text, None)
+        self._refill_greeting()
 
     def setup(self) -> ChatSetup:
         index = self.greeting.currentData()

@@ -306,6 +306,7 @@ def copy_story(story_id: str, *, title: str, root: Path | None = None) -> StoryB
     Node, summary and aside ids are scoped to their story's folder, so they
     carry over unchanged; only the story id and title are new.
     """
+    _a_story(story_id)
     bundle = load_story_bundle(story_id, root=root)
     now = utc_now_iso()
     bundle.story = bundle.story.model_copy(
@@ -321,7 +322,16 @@ def copy_story(story_id: str, *, title: str, root: Path | None = None) -> StoryB
 def delete_story(story_id: str, root: Path | None = None) -> None:
     """Remove a story's folder for good. The app prefers the desktop trash;
     this is for when there is none, and for the terminal."""
+    _a_story(story_id)
     shutil.rmtree(story_dir(story_id, root))
+
+
+def _a_story(story_id: str) -> None:
+    """A story's id, never the author's own characters' (whose folder is laid
+    out as a story's: storage/collection.py) or anything that could leave
+    the stories folder."""
+    if not is_safe_story_id(story_id):
+        raise ValueError(f"not a story's id: {story_id!r}")
 
 
 def stories_with_prompt_edits(

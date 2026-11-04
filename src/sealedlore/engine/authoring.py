@@ -518,7 +518,7 @@ def parse_generated(text: str) -> tuple[Scenario, list[str]]:
 
 
 def character_view(character: Character) -> dict[str, Any]:
-    return {
+    view = {
         "name": character.name,
         "aliases": character.aliases,
         "canon": character.canon,
@@ -530,6 +530,11 @@ def character_view(character: Character) -> dict[str, Any]:
         "playable": character.is_player_available,
         "author_only": character.author_only,
     }
+    if character.personality:
+        # A SillyTavern card's own field, told with the description: shown
+        # only where there is one, so no other story's review changes.
+        view["personality"] = character.personality
+    return view
 
 
 def _name_of(bundle: StoryBundle, character_id: str | None) -> str | None:

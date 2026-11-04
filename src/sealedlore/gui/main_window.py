@@ -1058,7 +1058,8 @@ class MainWindow(
         index = self.right_tabs.indexOf(self.inspector)
         self.right_tabs.setTabVisible(index, bool(on))
         if on and self.session is not None:
-            self.inspector_dock.show()
+            if not self._page_covers():
+                self.inspector_dock.show()
             self.right_tabs.setCurrentWidget(self.inspector)
         elif not on and self.right_tabs.currentWidget() is self.inspector:
             self._show_first_page()
@@ -1228,10 +1229,12 @@ class MainWindow(
         self._import_plot_file(path)
 
     def import_file(self) -> None:
-        """A new story from a scenario, a story backup, a plot file or a
-        SillyTavern character card; a SillyTavern lorebook into the open
-        story's lore; or a prompt set, into the prompt editor."""
-        if self._busy or not self._private_allows_close():
+        """A new story from a scenario, a story backup, a plot file; a
+        SillyTavern character card into Your characters; a SillyTavern
+        lorebook into the open story's lore; or a prompt set, into the prompt
+        editor. Only what opens another story asks about a memory-only scene
+        or chat (`_import_path`)."""
+        if self._busy:
             return
         self._import_path(
             "Import",
@@ -1272,6 +1275,15 @@ class MainWindow(
         suffix = Path(path).suffix.lower()
         # A picture or a zip is never one of SealedLore's own files.
         kind = None if suffix in (PLOT_SUFFIX, ".png", ".charx") else file_format(Path(path))
+        stays = (
+            suffix in (".png", ".charx")
+            or kind == PROMPT_SET_FORMAT
+            or (kind != ARCHIVE_FORMAT and tavern_kind(Path(path)) is not None)
+        )
+        # A card, a lorebook or a prompt set leaves the story open: only what
+        # opens another asks about a memory-only scene or chat.
+        if not stays and not self._private_allows_close():
+            return
         if suffix == PLOT_SUFFIX:
             self._import_plot_file(Path(path))
         elif suffix in (".png", ".charx"):
@@ -1741,6 +1753,8 @@ class MainWindow(
         if self.session.set_aside_unchosen(held):
             self.refresh_panels()
         self._on_held_changed(held or "")
+        # Characters from Your characters put in before anyone was played.
+        self.name_kept_users()
         if dialog.pictures_wanted():
             # Before the opening: drawn in the background while it runs. Of
             # the cards still in the story: whoever wasn't picked of a "play
@@ -1929,7 +1943,7 @@ class MainWindow(
 
         stale = [summary for summary in split.summaries if summary.stale]
         rebuilding = self.session.rebuilding_ids()
-        if stale and not self._staleness_dismissed:
+        if stale and not self._staleness_dismissed and not self._page_covers():
             self.staleness.show_stale(
                 stale,
                 positions=self._chapter_numbers(stale),
@@ -1961,7 +1975,7 @@ class MainWindow(
             if self.session is not None and not self.config.auto_archive and not self._busy
             else None
         )
-        if prompt is None:
+        if prompt is None or self._page_covers():
             self.over_budget.hide()
             return
         self.over_budget.show_over(
@@ -2202,6 +2216,12 @@ class MainWindow(
         if not self._busy:
             self.reload_transcript()
 
+    def _page_covers(self) -> bool:
+        """Your characters or the cast board has the whole window: the story's
+        own bars and banners wait under it, worked out again from the story
+        when it closes (window_collection.py, window_board.py)."""
+        return self.collection_shown() or self.board_shown()
+
     def refresh_branch_bar(self) -> None:
         if self.session is None:
             self.branch_bar.set_branches([])
@@ -2215,7 +2235,7 @@ class MainWindow(
         # Only once there is more than one line to read (Oct 18 2026): "Branch:
         # Main, the only one" and a diagram of one lane said nothing to a new
         # player. ⋯ → New branch from here… makes the second.
-        self.branch_bar.setVisible(len(listed) > 1 or bool(pending))
+        self.branch_bar.setVisible((len(listed) > 1 or bool(pending)) and not self._page_covers())
 
     def _branch_openings(self) -> dict[str | None, str]:
         """How each branch begins: its first message's opening words."""
@@ -2277,6 +2297,8 @@ class MainWindow(
         on = bool(on and self.session is not None and not self.session.in_private)
         if not on and self.collection_shown():
             return  # the page has the window; the map isn't there to leave
+        if on:
+            self.show_collection(False)
         leaving = not on and self.map_shown()
         self.centre_stack.setCurrentWidget(self.story_map if on else self.transcript)
         self.composer.setVisible(not on)
@@ -2700,6 +2722,9 @@ class MainWindow(
 
     def send_turn(self) -> None:
         if self.session is None or (self._busy and not self._can_queue()):
+            return
+        if self._page_covers():
+            # Ctrl+Enter typed in a card's field: the story's box isn't there.
             return
         text = self.composer.text()
         if not text or not self._tee_allows_send():
@@ -3699,8 +3724,10 @@ class MainWindow(
 
     def new_story_from_premise(self, characters: list | None = None) -> None:
         """`characters`: the author's own (Your characters) to build the story
-        around (gui/window_card_start.py)."""
-        if self._busy or self._needs_provider() or not self._private_allows_close():
+        around (gui/window_card_start.py). A memory-only scene or chat is
+        asked about as the draft opens (`open_story`): asked first, a Cancel
+        of the dialog had already cost it."""
+        if self._busy or self._needs_provider():
             return
         provider_config = self.config.active_provider()
         chat_model = provider_config.model if provider_config and provider_config.model else ""
@@ -4394,7 +4421,7 @@ class MainWindow(
     def _sync_held_away(self) -> None:
         held = self._held_away()
         session = self.session
-        if held is None or session is None:
+        if held is None or session is None or self._page_covers():
             self.held_away.hide()
             return
         if self._held_away_left == (session.story.active_leaf_id, held.id):
@@ -4986,6 +5013,10 @@ class MainWindow(
         hosts_catalog().wait()
         # The phones are told it stopped, nothing listens any more, tor ends.
         self.stop_phone_access()
+        # Under a full page the composer and the docks are put away: their
+        # sizes are remembered as the story has them.
+        self.show_collection(False)
+        self.show_cast_board(False)
         if self.session is not None:
             self.session.close()
             self.session.save()

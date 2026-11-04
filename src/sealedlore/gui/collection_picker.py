@@ -51,6 +51,7 @@ class CollectionPicker(QDialog):
         self.setWindowTitle(title)
         size_to_screen(self, 0.35, 0.7, at_least=QSize(560, 600))
         self._characters = list(characters)
+        self._placing = placing
         self._thumbs = Thumbs(pictures, lambda: None)
         heading = QLabel(lead)
         heading.setWordWrap(True)
@@ -145,7 +146,8 @@ class CollectionPicker(QDialog):
 
     def _sync(self) -> None:
         chosen = self.chosen()
-        self.ok.setEnabled(bool(chosen))
+        # Putting nobody into a story is nothing; choosing nobody is a choice.
+        self.ok.setEnabled(bool(chosen) or not self._placing)
         books = any(card.tavern and card.tavern.book_entries for card in chosen)
         self.with_lore.setEnabled(books)
 

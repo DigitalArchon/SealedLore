@@ -196,6 +196,14 @@ class GenerateDialog(QDialog):
         return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
 
     def _show_characters(self) -> None:
+        self.setWindowTitle(
+            f"A story with {self._names()}" if self.characters else "New story from a premise"
+        )
+        self.premise.setPlaceholderText(
+            WITH_CHARACTERS_EXAMPLE.format(name=self.characters[0].name)
+            if self.characters
+            else PREMISE_EXAMPLE
+        )
         self.with_label.setText(
             f"{self._names()}, as their card{'s have' if len(self.characters) > 1 else ' has'} "
             "them. Say in the premise what kind of story, in what world, and whom you play."

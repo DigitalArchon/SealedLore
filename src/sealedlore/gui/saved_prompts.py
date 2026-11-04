@@ -51,10 +51,18 @@ class SavedPromptsButton(QToolButton):
     """Beside a system prompt: a saved one put in its place, this one kept,
     or one forgotten."""
 
-    def __init__(self, saved: SavedPrompts, target: QPlainTextEdit) -> None:
+    def __init__(
+        self,
+        saved: SavedPrompts,
+        target: QPlainTextEdit,
+        in_memory: Callable[[], bool] | None = None,
+    ) -> None:
+        """`in_memory`: whether the chat the prompt is for is kept in memory
+        only, when keeping its prompt in the settings is asked first."""
         super().__init__()
         self._saved = saved
         self._target = target
+        self._in_memory = in_memory or (lambda: False)
         self.setText(SAVED_LABEL)
         self.setToolTip("System prompts you keep for chats: put one here, or keep this one")
         self.setPopupMode(QToolButton.InstantPopup)
@@ -98,6 +106,17 @@ class SavedPromptsButton(QToolButton):
             self, KEEP_PROMPT_LABEL, "A name for this system prompt:", text=_suggested_name(text)
         )
         if not ok or not name.strip():
+            return
+        if self._in_memory() and (
+            QMessageBox.question(
+                self,
+                KEEP_PROMPT_LABEL,
+                "This chat is kept in memory only, and nothing of it is written to disk. "
+                "Saving its system prompt keeps it in SealedLore's settings on this computer. "
+                "Save it anyway?",
+            )
+            != QMessageBox.Yes
+        ):
             return
         taken = any(p.name.casefold() == name.strip().casefold() for p in self._saved.prompts)
         if taken and (

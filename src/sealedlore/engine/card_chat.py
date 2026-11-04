@@ -13,6 +13,8 @@ first message is sent and the model answers it.
 
 from __future__ import annotations
 
+import re
+
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.models.character import Character
 from sealedlore.models.node import CHAT_USER_ID, NARRATOR_SPEAKER_ID, Node
@@ -42,15 +44,17 @@ def character_text(
     parts = [texts["chat.card.info"], f"# {card.name}"]
     if card.aliases:
         parts.append("Also called: " + ", ".join(fill(alias) for alias in card.aliases))
+    examples = example_dialogue(fill(tavern.mes_example))
+    voice = fill(card.voice_notes or "").strip()
     for label, text in (
         ("", card.full_description or card.summary or ""),
         ("Personality: ", card.personality or ""),
-        ("Voice: ", card.voice_notes or ""),
+        # Their examples follow: a voice that is the examples is said once.
+        ("Voice: ", "" if voice == examples else voice),
         ("Scenario: ", tavern.scenario),
     ):
         if text.strip():
             parts.append(label + fill(text).strip())
-    examples = example_dialogue(fill(tavern.mes_example))
     if examples:
         parts.append(f"# How {card.name} talks\n\n{examples}")
     who = texts.fill("chat.card.user", user=user)
@@ -60,15 +64,22 @@ def character_text(
     return "\n\n".join(parts)
 
 
+# What a card's own prompt writes for the prompt it replaces (the V2 spec).
+_ORIGINAL = re.compile(r"\{\{\s*original\s*\}\}", re.I)
+
+
 def system_prompt(card: Character, *, user: str, texts: PromptTexts = DEFAULT_TEXTS) -> str:
-    """The card's own system prompt, else `chat.card.system`, names in."""
+    """The card's own system prompt, else `chat.card.system`, names in; a
+    `{{original}}` in the card's is the plain one, as SillyTavern reads it."""
+    plain = texts.fill("chat.card.system", name=card.name, user=user or DEFAULT_USER)
     own = filled(card, _tavern(card).system_prompt, user).strip()
-    return own or texts.fill("chat.card.system", name=card.name, user=user or DEFAULT_USER)
+    return _ORIGINAL.sub(lambda _m: plain, own).strip() or plain
 
 
 def tail(card: Character, *, user: str) -> str:
-    """The card's post-history instructions: a chat's tail is the same thing."""
-    return filled(card, _tavern(card).post_history_instructions, user).strip()
+    """The card's post-history instructions: a chat's tail is the same thing.
+    Its `{{original}}` stands for none: a chat has no tail of its own."""
+    return _ORIGINAL.sub("", filled(card, _tavern(card).post_history_instructions, user)).strip()
 
 
 def greetings(card: Character, *, user: str) -> list[str]:

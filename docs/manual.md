@@ -945,21 +945,23 @@ card's own scenario…** (also under More) makes a new story from the card as a
 SillyTavern card does (below).
 
 Pictures drawn here are paid for as a story's are, and what they have cost so
-far is said under the character's name.
+far is said under the character's name. While a story's private scene is open
+they wait, as the story's cards' pictures do.
 
 **Chat with them…** starts a simple chat (see "Simple chat") from their card.
 Before it starts you see, and can change, everything it is made of:
 
 - who you are (the card's `{{user}}`) and, if you like, a few words about you;
-- the **system prompt**: the card's own if it has one, else a plain one
-  telling the model to write only their replies; **Saved prompts** puts one
-  of yours in its place;
+- the **system prompt**: the card's own if it has one (where it writes
+  `{{original}}`, the plain one goes), else a plain one telling the model to
+  write only their replies; **Saved prompts** puts one of yours in its place;
 - the **tail**: the card's post-history instructions;
 - the **first message**: their card (description, personality, scenario, how
   they talk, and who you are), kept in full however long the chat grows;
 - **their greeting**, the first reply, as the card wrote it (any of its
   greetings, changed if you like), or none, and then the first message is
-  sent and the model answers it.
+  sent and the model answers it (on a TEE or encrypted model still being
+  checked, it waits in the box to type in instead, to send once it is).
 
 Their portrait goes with the chat as its own reference picture, so a picture
 of the chat draws them as they look.
@@ -980,7 +982,8 @@ your characters into the open story, on the cast or as supporting
 characters, with their pictures and, if you like, their own lorebook as the
 story's lore. **Add to the story** on their page does the same for the one
 shown. `{{char}}` and `{{user}}` become their name and the name of the
-character you are playing.
+character you are playing (before anyone is played, the one the story
+suggests you play, else whoever you choose when it begins).
 
 A character from Your characters says so on the Cast page, with what has
 changed since they joined: in this story (a new picture, a changed
@@ -2094,7 +2097,9 @@ story is (Settings → Context), with a plain summariser.
   Setup…** afterwards; a change costs one cache miss. **Saved prompts**
   beside it keeps the ones you like (**Save this prompt…**, with a name of
   your own) and puts one back in a click, in New simple chat, in Chat with
-  them… (Your characters) and in Setup. Beside it, the **Tail**
+  them… (Your characters) and in Setup. Saving the prompt of a chat kept in
+  memory only asks first: the saved prompts are kept in SealedLore's settings
+  on this computer. Beside the system prompt, the **Tail**
   (also set at the start) is fixed text sent after your message at the end
   of every request (a style reminder, a standing rule). It is never saved
   into the conversation.

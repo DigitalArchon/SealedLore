@@ -39,7 +39,7 @@ class FindWindow:
         view_menu.addAction(self.find_action)
 
     def open_find(self) -> None:
-        if self.session is None:
+        if self.session is None or self._page_covers():
             return
         if self.map_shown():
             self.show_map(False)

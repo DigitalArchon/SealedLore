@@ -99,8 +99,10 @@ def _safe(name: str) -> str:
 
 class CollectionWindow:
     def _init_collection(self) -> None:
-        # Opened the first time it is needed (`_collection_session`).
+        # Opened the first time it is needed (`_collection_session`); why
+        # their folder couldn't be read, when it couldn't.
         self._collection: StorySession | None = None
+        self._collection_problem = ""
         self.collection_page = CollectionPage(self._collection_pictures)
         self.centre_stack.addWidget(self.collection_page)
         page = self.collection_page
@@ -145,8 +147,19 @@ class CollectionWindow:
 
     def _collection_session(self) -> StorySession:
         if self._collection is None:
+            try:
+                bundle = collection.load_collection(self.root)
+            except (OSError, ValueError) as exc:
+                # Nothing read, nothing written over: the folder stays as it
+                # is for the author to look into, and the page says why.
+                bundle = collection.new_collection()
+                self._collection_problem = (
+                    f"Your characters couldn't be read ({str(exc).splitlines()[0][:200]}), so "
+                    f"nothing is kept or changed there until they can be: "
+                    f"{collection_dir(self.root)}"
+                )
             self._collection = StorySession(
-                collection.load_collection(self.root),
+                bundle,
                 self.config,
                 # A client of its own: a Stop in the story never reaches a
                 # prompt being written for one of these, nor the other way.
@@ -155,22 +168,37 @@ class CollectionWindow:
                 estimator=self.estimator,
                 learn_corrections=not self.use_mock,
             )
+            if self._collection_problem:
+                self._collection.save = lambda: None  # never over a folder unread
         return self._collection
 
-    def _collection_pictures(self) -> PictureStore:
-        return self._collection_session().pictures
+    def _collection_pictures(self) -> PictureStore | None:
+        """Their pictures' store, once their session is open: the page's
+        widgets ask as they are built, and the window starts without reading
+        the folder at all."""
+        return self._collection.pictures if self._collection is not None else None
 
     def _save_collection(self) -> None:
         self._collection_save.stop()
+        if self._collection_problem:
+            self._warn_plain("Your characters weren't kept", self._collection_problem)
+            return
         if self._collection is not None:
             try:
                 self._collection.save()
             except OSError as exc:
                 self._warn_plain("Couldn't keep your characters", str(exc))
 
+    def _flush_collection(self) -> None:
+        """An edit still waiting to be kept, kept now. Nothing else is
+        written: everything but a field's edit is kept as it is made, and an
+        untouched folder stays untouched."""
+        if self._collection_save.isActive():
+            self._save_collection()
+
     def _close_collection(self) -> None:
         """When the window closes: kept, and its client let go."""
-        self._save_collection()
+        self._flush_collection()
         if self._collection is not None:
             self._collection.close(wait_seconds=0)
             close = getattr(self._collection.provider, "close", None)
@@ -212,34 +240,45 @@ class CollectionWindow:
                 for widget, _visible in self._collection_away:
                     widget.setVisible(False)
                 self.centre_stack.setCurrentWidget(page)
-                page.forget_pictures()
+                # The card may have changed since (a story saved to it).
+                page.forget_forms()
             self._hide_banners()
             if self.session is None:
                 page.set_back_words("Close")
             else:
                 page.set_back_words("Back to the chat" if self.in_chat else "Back to the story")
-            page.set_story_open(self.session is not None and not self.in_chat)
+            # Not while a private scene is open: the story is paused.
+            page.set_story_open(
+                self.session is not None and not self.in_chat and not self.session.in_private
+            )
             page.set_characters(self._kept())
             if card_id is not None:
                 page.show_character(card_id)
             self._refresh_collection_sheet()
             self._collection_spent()
+            if self._collection_problem:
+                page.set_stats(self._collection_problem)
             page.setFocus()
             return
         if not self.collection_shown():
             return
-        self._save_collection()
+        self._flush_collection()
         away, self._collection_away = self._collection_away, []
         self.centre_stack.setCurrentWidget(self.transcript)
         for widget, visible in away:
             widget.setVisible(visible)
+        # The list as chosen meanwhile (View → Stories list), not as it was.
+        self._sync_stories_list()
         if self.session is None:
             # The start page as it is now (a story made meanwhile is on it).
             self.reload_transcript()
             return
         self.refresh_summaries()
         self._sync_held_away()
+        self.refresh_branch_bar()
+        self._sync_place_button()
         self._sync_stage()
+        self._sync_card_link()
         self._reshare_docks()
 
     def _refresh_collection(self) -> None:
@@ -567,7 +606,7 @@ class CollectionWindow:
         one (gui/tavern_dialog.py): its scenario the world, a greeting the
         opening. The card goes as a CHARX would, every picture with it."""
         card = self._kept_card(card_id)
-        if card is None or self._busy or not self._private_allows_close():
+        if card is None or self._story_job_says_wait():
             return
         try:
             tavern = tavern_from_file(io.BytesIO(self._charx_of(card)), f"{card.name}.charx")

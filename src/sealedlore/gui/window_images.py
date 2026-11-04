@@ -147,7 +147,7 @@ class ImagesWindow:
         """The button and the Story menu's entry: shown for a story at a
         place, worded for whether the place has a picture."""
         wanted = self._place_wanted()
-        self.place_button.setVisible(wanted)
+        self.place_button.setVisible(wanted and not self._page_covers())
         self.place_action.setVisible(wanted)
         if not wanted:
             return
@@ -418,7 +418,9 @@ class ImagesWindow:
                 "Pictures can be drawn once the story's current job is done.", 6000
             )
             return True
-        if session.in_private:
+        if session.in_private or (self.session is not None and self.session.in_private):
+            # Your characters' too: while a scene is open nothing else is
+            # called (the author's rule for private scenes).
             self.statusBar().showMessage("Pictures wait until the private scene ends.", 6000)
             return True
         if session.config.images() is None:

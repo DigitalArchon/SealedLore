@@ -157,6 +157,31 @@ def story_copy(card: Character, characters: Sequence[Character], user: str | Non
     return copy
 
 
+# A story's field given from another of the card's when the card leaves it
+# blank (`given`): what to look in for the card's own `{{char}}` and `{{user}}`.
+DERIVED = ("summary", "voice_notes")
+
+
+def _derived_from(card: Character, key: str) -> str:
+    if key == "summary":
+        return card.full_description or card.personality or ""
+    if key == "voice_notes":
+        return card.tavern.mes_example if card.tavern else ""
+    return ""
+
+
+def _mine(character: Character, card: Character, theirs: Mapping[str, Any]) -> dict[str, Any]:
+    """The story's fields, as compared with what the card gives: a field the
+    card leaves blank, and so derives, is no change where the story has
+    none either (a card kept from a story with no summary)."""
+    mine = fields_of(character)
+    raw = fields_of(card)
+    for key in DERIVED:
+        if not mine[key] and not raw[key]:
+            mine[key] = theirs[key]
+    return mine
+
+
 def picture_mark(ref: ImageRef, data: bytes) -> PictureMark:
     return PictureMark(
         sha256=hashlib.sha256(data).hexdigest(),
@@ -213,15 +238,21 @@ def changes(
     card: Character,
     story_marks: Sequence[PictureMark],
     card_marks: Sequence[PictureMark],
+    *,
+    story_unknown: bool = False,
+    card_unknown: bool = False,
 ) -> list[Change]:
     """Every difference between a linked character in a story and their card
     now, with the side it was made on. `story_marks` and `card_marks`: each
-    side's pictures, in order."""
+    side's pictures, in order. `story_unknown`, `card_unknown`: a side has a
+    picture whose file can't be read, so a picture missing from its marks
+    may be that one: never said to be taken off there."""
     link = character.linked
     if link is None:
         return []
     base = link.fields
-    mine, theirs = fields_of(character), given(card, link.user)
+    theirs = given(card, link.user)
+    mine = _mine(character, card, theirs)
     found: list[Change] = []
     for key in LINKED_FIELDS:
         story, now = mine[key], theirs[key]
@@ -233,6 +264,10 @@ def changes(
     c_marks = {mark.sha256: mark for mark in card_marks}
     for sha in dict.fromkeys([*s_marks, *b_marks, *c_marks]):
         story_has, card_has = sha in s_marks, sha in c_marks
+        if sha in b_marks and (
+            (story_unknown and not story_has) or (card_unknown and not card_has)
+        ):
+            continue  # perhaps the picture whose file can't be read
         side = _side(story_has, sha in b_marks, card_has)
         mark = s_marks.get(sha) or c_marks.get(sha) or b_marks.get(sha)
         if side:
@@ -295,52 +330,120 @@ def in_step(
     card: Character,
     story_marks: Sequence[PictureMark],
     card_marks: Sequence[PictureMark],
+    *,
+    story_unknown: bool = False,
+    card_unknown: bool = False,
 ) -> None:
     """What both sides came to by themselves becomes what the story was
-    given: a field changed to the same thing on each side is no change."""
+    given: a field changed to the same thing on each side is no change, a
+    picture both took off or both have is in step, and the portrait both
+    show first is. A picture only one side changed keeps its mark, so the
+    change stays that side's."""
     link = character.linked
     if link is None:
         return
-    mine, theirs = fields_of(character), given(card, link.user)
+    theirs = given(card, link.user)
+    mine = _mine(character, card, theirs)
     for key in LINKED_FIELDS:
         if mine[key] == theirs[key]:
             link.fields[key] = mine[key]
     s_marks = {mark.sha256: mark for mark in story_marks}
     c_marks = {mark.sha256: mark for mark in card_marks}
-    kept = [mark for mark in link.pictures if (mark.sha256 in s_marks) == (mark.sha256 in c_marks)]
+    kept = []
+    for mark in link.pictures:
+        both_lack = mark.sha256 not in s_marks and mark.sha256 not in c_marks
+        if both_lack and not (story_unknown or card_unknown):
+            continue  # taken off on both sides
+        kept.append(mark)
     known = {mark.sha256 for mark in kept}
     for sha, mark in s_marks.items():
         if sha in c_marks and sha not in known:
-            kept.append(mark)
+            kept.append(mark)  # given on both sides since
     for index, mark in enumerate(kept):
-        if mark.sha256 in s_marks and _labels(s_marks[mark.sha256]) == _labels(
-            c_marks.get(mark.sha256)
-        ):
-            kept[index] = s_marks[mark.sha256]
-    order = [mark.sha256 for mark in story_marks]
-    kept.sort(key=lambda mark: order.index(mark.sha256) if mark.sha256 in order else len(order))
+        sha = mark.sha256
+        if sha in s_marks and sha in c_marks and _labels(s_marks[sha]) == _labels(c_marks[sha]):
+            kept[index] = s_marks[sha]
+    story_first = story_marks[0].sha256 if story_marks else ""
+    card_first = card_marks[0].sha256 if card_marks else ""
+    if story_first and story_first == card_first:
+        first = next((mark for mark in kept if mark.sha256 == story_first), None)
+        if first is not None:
+            kept.remove(first)
+            kept.insert(0, first)
     link.pictures = kept
 
 
 # --- the names, written back as the card has them ---------------------------------------
 
 
+# The macros a card writes for the names, every way `macro_filler` reads them.
+_CHAR_MACRO = re.compile(r"\{\{\s*char\s*\}\}|<BOT>", re.I)
+_USER_MACRO = re.compile(r"\{\{\s*user\s*\}\}|<USER>", re.I)
+
+
 def unfilled(value: Any, raw: Any, name: str, user: str) -> Any:
     """A story's text going back to a card that writes `{{char}}` or
-    `{{user}}` in this field: the names put back as the card writes them."""
+    `{{user}}` (or `{{Char}}`, `<BOT>`…) in `raw`, the card's own text it
+    came from: the names put back as macros where the card wrote them, the
+    longer name first, so "Jane" never eats "Jane Moss", and a name the card
+    doesn't write as a macro is kept as written."""
     if isinstance(value, str) and isinstance(raw, str):
-        if user and "{{user}}" in raw:
-            value = re.sub(rf"\b{re.escape(user)}\b", "{{user}}", value)
-        if name and "{{char}}" in raw:
-            value = re.sub(rf"\b{re.escape(name)}\b", "{{char}}", value)
+        names = []
+        if name:
+            names.append((name, "{{char}}", bool(_CHAR_MACRO.search(raw))))
+        if user and user != name:
+            names.append((user, "{{user}}", bool(_USER_MACRO.search(raw))))
+        held: dict[str, str] = {}
+        for index, (who, macro, put_back) in enumerate(sorted(names, key=lambda n: -len(n[0]))):
+            stand_in = f"\x00{index}\x00"
+            value = re.sub(
+                rf"(?<!\w){re.escape(who)}(?!\w)", macro if put_back else stand_in, value
+            )
+            if not put_back:
+                held[stand_in] = who
+        for stand_in, who in held.items():
+            value = value.replace(stand_in, who)
         return value
     if isinstance(value, dict) and isinstance(raw, dict):
         return {key: unfilled(item, raw.get(key), name, user) for key, item in value.items()}
+    if isinstance(value, list) and isinstance(raw, list):
+        joined = "\n".join(str(item) for item in raw)
+        return [unfilled(item, joined, name, user) for item in value]
     return value
 
 
+def _with_user(value: Any, user: str) -> Any:
+    if isinstance(value, str):
+        return _USER_MACRO.sub(lambda _m: user, value)
+    if isinstance(value, list):
+        return [_with_user(item, user) for item in value]
+    if isinstance(value, dict):
+        return {key: _with_user(item, user) for key, item in value.items()}
+    return value
+
+
+def name_the_user(character: Character, user: str) -> bool:
+    """A character put into a story before anyone was played: their card's
+    `{{user}}` written out as whom the author plays now, in the story's fields
+    and in what the story was given alike (so it is no change). Whether
+    anything changed."""
+    link = character.linked
+    if link is None or link.user or not user or user == character.name:
+        return False
+    set_fields(character, _with_user(fields_of(character), user))
+    link.fields = _with_user(link.fields, user)
+    if character.tavern is not None:
+        character.tavern = TavernFields.model_validate(
+            _with_user(character.tavern.model_dump(), user)
+        )
+    link.user = user
+    return True
+
+
 def _back(card: Character, key: str, value: Any, user: str) -> None:
-    raw = fields_of(card)[key]
+    """A story's value of `key` onto the card, names back as the card has
+    them; a field the card left blank looks to the text it was given from."""
+    raw = fields_of(card)[key] or _derived_from(card, key)
     set_fields(card, {key: unfilled(value, raw, card.name, user)})
 
 
@@ -391,6 +494,7 @@ def save_to_card(
     if link is None:
         return
     story_order = list(story_refs)
+    before = given(card, link.user)
     for change in chosen:
         if change.field:
             _back(card, change.key, change.story, link.user)
@@ -416,6 +520,22 @@ def save_to_card(
             mark = _mark_of(link, change.story)
             if mark is not None:
                 _set_mark(link, mark, change.story, first=True)
+    _follow_derived(character, card, before)
+
+
+def _follow_derived(character: Character, card: Character, before: Mapping[str, Any]) -> None:
+    """A summary (or voice) the card derives from what was just saved to it,
+    and the story never changed, follows in the story too: else the save
+    itself read as a change on the card."""
+    link = character.linked
+    after = given(card, link.user)
+    mine = fields_of(character)
+    raw = fields_of(card)
+    for key in DERIVED:
+        untouched = mine[key] == link.fields.get(key, before[key]) == before[key]
+        if not raw[key] and untouched and after[key] != before[key]:
+            set_fields(character, {key: after[key]})
+            link.fields[key] = after[key]
 
 
 def take_from_card(
@@ -474,8 +594,13 @@ def version_from_story(
     user = link.user if link is not None else ""
     version = card.model_copy(deep=True)
     version.id = new_id()
-    for key, value in fields_of(character).items():
-        _back(version, key, value, user)
+    # The card's own text wherever the story has what the card gives it
+    # (a blank voice stays blank, its examples its own); the story's,
+    # names back as macros, where it changed.
+    theirs = given(card, user)
+    for key, value in _mine(character, card, theirs).items():
+        if value != theirs[key]:
+            _back(version, key, value, user)
     version.reference_images = []
     main = collection.main_of(card, characters)
     version.collection = CollectionInfo(family=main.id, version=name, came_from="a story")

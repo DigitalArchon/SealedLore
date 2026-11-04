@@ -235,11 +235,49 @@ def test_leaving_the_story_mid_memory_scene_asks_first(app, window: MainWindow, 
         return QMessageBox.Cancel
 
     monkeypatch.setattr(QMessageBox, "question", cancel)
+    # Import… asks once the file is known to open another story: a scenario.
+    from sealedlore.models.scenario import Scenario
+    from sealedlore.storage.scenario import SCENARIO_SUFFIX, write_scenario
+
+    scenario = window.root / f"other{SCENARIO_SUFFIX}"
+    write_scenario(scenario, Scenario(title="Another story"))
+    monkeypatch.setattr(
+        "sealedlore.gui.main_window.QFileDialog.getOpenFileName",
+        lambda *a, **k: (str(scenario), ""),
+    )
     window.new_story()
     window.import_file()
     window.duplicate_entire_story(window.session.story.id)
     assert len(asked) == 3 and all("Private scene" in title for title in asked)
     assert window.session.in_private
+
+
+def test_a_card_imported_mid_memory_scene_leaves_the_scene_be(
+    app, window: MainWindow, monkeypatch, tmp_path
+):
+    """A card goes into Your characters and the story stays open: nothing
+    about the scene is asked, and nothing of it is lost."""
+    from tests.test_tavern import png_card, v2
+
+    window.composer.private_toggle.click()
+    send(app, window, f"{MARKER} whispered")
+    card = png_card(tmp_path, {"chara": v2()})
+    monkeypatch.setattr(
+        "sealedlore.gui.main_window.QFileDialog.getOpenFileName", lambda *a, **k: (str(card), "")
+    )
+    asked: list = []
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: asked.append(a) or 0)
+    monkeypatch.setattr(QMessageBox, "exec", lambda box: QMessageBox.Ok)
+    window.import_file()
+    assert asked == [] and window.session.in_private
+    assert [c.name for c in window._kept()] == ["Elena"]
+    # Pictures for her wait for the scene, as the story's cards' do.
+    assert window._card_pictures_refused(window._collection_session())
+    window.show_collection(True, window._kept()[0].id)
+    page = window.collection_page
+    assert page.chat_button.isVisibleTo(page)  # her card is shown
+    assert not page.add_button.isVisibleTo(page)  # but the story is paused
+    window.show_collection(False)
 
 
 def test_a_story_opens_speaking_as_the_character_played(app, window: MainWindow):
