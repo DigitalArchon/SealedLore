@@ -49,10 +49,12 @@ from sealedlore.gui.tavern_dialog import (
     EXPRESSIONS_LABEL,
     TAVERN_LABEL,
 )
+from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.models.character import Character
 from sealedlore.models.supporting import CharacterSuggestion
 
 HEADER_ROLE = Qt.UserRole + 1
+COLLECTION_ADD_LABEL = "From Your characters…"
 BOARD_BUTTON = f"{BOARD_LABEL}…"
 MODEL_MARK = "  ✦"
 # The width of the card's left column: the portrait, its other pictures.
@@ -94,6 +96,12 @@ class CastPanel(QWidget):
     # The cast board in the whole window, on this character ("": everyone).
     board_requested = Signal(str)
     card_export_requested = Signal(str)
+    # From the author's own characters (gui/window_card_link.py): add some,
+    # and a character's line about their card (its button, by character id).
+    collection_add_requested = Signal()
+    link_requested = Signal(str)
+    # Another character is shown ("" for none).
+    current_changed = Signal(str)
 
     def __init__(self, pictures: StoryPictures | None = None) -> None:
         super().__init__()
@@ -160,11 +168,19 @@ class CastPanel(QWidget):
             )
         )
         self.tavern_button.setMenu(tavern_menu)
-        fill_row = QHBoxLayout()
-        fill_row.setContentsMargins(0, 0, 0, 0)
-        fill_row.addWidget(self.fill_button)
-        fill_row.addWidget(self.tavern_button)
-        fill_row.addStretch(1)
+        # The author's own characters, kept outside any story.
+        self.collection_button = QPushButton(COLLECTION_ADD_LABEL)
+        self.collection_button.setToolTip(
+            "Characters you keep in Your characters (File → Your characters…): each comes "
+            "with their pictures, and what this story changes of them can go back to their card"
+        )
+        self.collection_button.clicked.connect(self.collection_add_requested)
+        # One line while the panel has the room, wrapping when it is narrow:
+        # a line of its own took the list's room for names.
+        fill_row = WrapRow(spacing=6, group_spacing=6)
+        fill_row.add_group([self.collection_button])
+        fill_row.add_group([self.fill_button])
+        fill_row.add_group([self.tavern_button])
 
         # The page grown to the whole window: every picture of everyone, as
         # sheets of looks and expressions (gui/cast_board.py).
@@ -349,6 +365,24 @@ class CastPanel(QWidget):
         self.empty_hint.setObjectName("hintLabel")
         self.empty_hint.setWordWrap(True)
         form.insertRow(0, self.empty_hint)
+        # Where the character came from among the author's own, and what
+        # changed (gui/window_card_link.py fills it).
+        self.link_words = QLabel()
+        self.link_words.setObjectName("hintLabel")
+        self.link_words.setWordWrap(True)
+        self.link_words.setTextFormat(Qt.PlainText)
+        self.link_button = QPushButton()
+        self.link_button.clicked.connect(
+            lambda: self._current and self.link_requested.emit(self._current.id)
+        )
+        self.link_box = QWidget()
+        link_layout = QVBoxLayout(self.link_box)
+        link_layout.setContentsMargins(0, 0, 0, 4)
+        link_layout.setSpacing(4)
+        link_layout.addWidget(self.link_words)
+        link_layout.addWidget(self.link_button, 0, Qt.AlignLeft)
+        self.link_box.hide()
+        form.insertRow(1, self.link_box)
 
         scroll = FormScroll(form_host)
         self._form_host = form_host
@@ -667,8 +701,22 @@ class CastPanel(QWidget):
         )
         self._load_editor()
 
+    @property
+    def current(self) -> Character | None:
+        return self._current
+
+    def set_link(self, words: str, button: str) -> None:
+        """The line about the shown character's card ("" hides it) and what
+        its button does."""
+        self.link_words.setText(words)
+        self.link_words.setVisible(bool(words))
+        self.link_button.setText(button)
+        self.link_button.setVisible(bool(button))
+        self.link_box.setVisible(bool(words or button) and self._current is not None)
+
     def _load_editor(self) -> None:
         character = self._current
+        self.current_changed.emit(character.id if character is not None else "")
         enabled = character is not None
         self._form_host.setEnabled(enabled)
         self.remove_button.setEnabled(enabled)

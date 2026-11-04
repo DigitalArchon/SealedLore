@@ -574,6 +574,14 @@ class PhoneAccess(BaseModel):
     service_id: str = ""
 
 
+class SavedPrompt(BaseModel):
+    """A system prompt the author keeps for simple chats, by a name of their
+    own (gui/saved_prompts.py)."""
+
+    name: str
+    text: str
+
+
 class Config(BaseModel):
     @field_validator("text_scale")
     @classmethod
@@ -752,6 +760,9 @@ class Config(BaseModel):
     # private scene, an OOC note) is open. Put away by default (Oct 18 2026):
     # eight controls before the first turn confused a new player.
     composer_more: bool = False
+    # System prompts kept for simple chats, to choose from where one is
+    # written (New simple chat, Chat with them…, Setup).
+    chat_prompts: list[SavedPrompt] = Field(default_factory=list)
     # Whether the Inspector shows the Prompt page (View → Prompt page): what
     # the storyteller was sent, for checking the model's work. Off by default.
     prompt_page: bool = False

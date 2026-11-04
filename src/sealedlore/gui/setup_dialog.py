@@ -45,6 +45,7 @@ from sealedlore.gui.composer import (
 from sealedlore.gui.fields import line_edit, set_field_text
 from sealedlore.gui.model_picker import BrowseRoute, ModelField, Qualify, RouteEndpoint
 from sealedlore.gui.picture_style import PictureStyleField
+from sealedlore.gui.saved_prompts import SavedPrompts, SavedPromptsButton
 from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.gui.start_presence import StartPresence
 from sealedlore.gui.style_panel import StylePanel
@@ -114,10 +115,13 @@ class SetupDialog(QDialog):
         characters: QWidget | None = None,
         models: ModelChoices | None = None,
         describe_style: Callable[[], tuple[str, bytes, str] | None] | None = None,
+        saved_prompts: SavedPrompts | None = None,
     ) -> None:
         """`cast`: the story's own list, read again whenever the Starting
         scene tab is shown, since `characters` (the Cast page, lent) may
-        have changed it. `models`: for the Models tab, shown with it."""
+        have changed it. `models`: for the Models tab, shown with it.
+        `saved_prompts`: the system prompts kept for chats."""
+        self._saved_prompts = saved_prompts
         super().__init__(parent)
         self.setWindowTitle("Story setup")
         self.texts = texts
@@ -371,6 +375,10 @@ class SetupDialog(QDialog):
         self.chat_prompt = QPlainTextEdit(self.story.chat_prompt)
         self.chat_prompt.setPlaceholderText("e.g. You are a helpful assistant. Answer concisely.")
         layout.addWidget(self.chat_prompt, 1)
+        if self._saved_prompts is not None:
+            layout.addWidget(
+                SavedPromptsButton(self._saved_prompts, self.chat_prompt), 0, Qt.AlignLeft
+            )
         layout.addWidget(
             _hint(
                 "Sent at the top of every request, exactly as written, and cached: a change "

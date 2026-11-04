@@ -131,7 +131,7 @@ def test_file_import_keeps_a_card_and_a_story_is_made_from_it_there(
     monkeypatch.setattr(CardImportDialog, "exec", accepted)
     set_up: list[bool] = []
     monkeypatch.setattr(window, "open_setup", lambda: set_up.append(True) or False)
-    window.collection_page.story_button.click()
+    window.collection_page.story_action.trigger()
 
     session = window.session
     assert session is not None and session.story.title == "Elena"

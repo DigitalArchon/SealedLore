@@ -7,7 +7,7 @@ in Setup for the author to read, and then offers to start it.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import (
@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHBoxLayout,
     QLabel,
     QPlainTextEdit,
     QProgressBar,
@@ -29,6 +30,7 @@ from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.gui.model_picker import Browse, ModelField
 from sealedlore.gui.sizing import size_to_screen
 from sealedlore.gui.worker import GenerationWorker
+from sealedlore.models.character import Character
 from sealedlore.models.generation import ReasoningConfig
 from sealedlore.providers.base import ChatProvider
 
@@ -36,6 +38,10 @@ PREMISE_EXAMPLE = (
     "e.g. Four years after the dead rose. I play Jane, an ex-army medic who walks "
     "out of the snow into a small town that doesn't trust strangers. "
     "Bleak, tense, with room for dark humour."
+)
+WITH_CHARACTERS_EXAMPLE = (
+    "e.g. {name} as a smuggler in a steampunk port city; I play their new partner. "
+    "Slow-burn, wry, with a heist going wrong."
 )
 
 
@@ -51,11 +57,19 @@ class GenerateDialog(QDialog):
         parent: QWidget | None = None,
         route_for: Callable[[str], dict] | None = None,
         reasoning_for: Callable[[str], ReasoningConfig] | None = None,
+        characters: Sequence[Character] = (),
+        choose: Callable[[list[Character]], list[Character] | None] | None = None,
     ) -> None:
         """`route_for`: the authoring route for the model drafting;
-        `reasoning_for`: what the author's reasoning level asks of it."""
+        `reasoning_for`: what the author's reasoning level asks of it.
+        `characters`: the author's own (Your characters) the story is built
+        around; `choose` lets them be chosen again (None: cancelled)."""
         super().__init__(parent)
-        self.setWindowTitle("New story from a premise")
+        self.characters = list(characters)
+        self._choose = choose
+        self.setWindowTitle(
+            f"A story with {self._names()}" if self.characters else "New story from a premise"
+        )
         self._route_for = route_for or (lambda _model: {})
         self._reasoning_for = reasoning_for or (lambda _model: ReasoningConfig())
         # The author's edits for every story: a draft has no story of its own yet.
@@ -73,8 +87,19 @@ class GenerateDialog(QDialog):
         self._closing = False
 
         self.premise = QPlainTextEdit()
-        self.premise.setPlaceholderText(PREMISE_EXAMPLE)
+        self.premise.setPlaceholderText(
+            WITH_CHARACTERS_EXAMPLE.format(name=self.characters[0].name)
+            if self.characters
+            else PREMISE_EXAMPLE
+        )
         self.premise.setMinimumHeight(180)
+        # Whom the story is built around, from Your characters.
+        self.with_label = QLabel()
+        self.with_label.setWordWrap(True)
+        self.choose_button = QPushButton("Choose…")
+        self.choose_button.setToolTip("Characters from Your characters to build the story around")
+        self.choose_button.clicked.connect(self._choose_characters)
+        self.choose_button.setVisible(choose is not None)
 
         self.model = ModelField(model, browse)
         self.model.setPlaceholderText(default_model or "the story's model")
@@ -135,6 +160,12 @@ class GenerateDialog(QDialog):
         voice_hint.setWordWrap(True)
 
         form = QFormLayout()
+        if self.characters or choose is not None:
+            with_row = QHBoxLayout()
+            with_row.addWidget(self.with_label, 1)
+            with_row.addWidget(self.choose_button)
+            form.addRow("Built around", with_row)
+            self._show_characters()
         form.addRow("Person", self.person)
         form.addRow("Tense", self.tense)
         form.addRow("", voice_hint)
@@ -160,6 +191,24 @@ class GenerateDialog(QDialog):
     def model_text(self) -> str:
         return self.model.text().strip()
 
+    def _names(self) -> str:
+        names = [character.name for character in self.characters]
+        return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+    def _show_characters(self) -> None:
+        self.with_label.setText(
+            f"{self._names()}, as their card{'s have' if len(self.characters) > 1 else ' has'} "
+            "them. Say in the premise what kind of story, in what world, and whom you play."
+            if self.characters
+            else "Nobody yet: Choose… to build the story around characters of your own."
+        )
+
+    def _choose_characters(self) -> None:
+        chosen = self._choose(list(self.characters)) if self._choose is not None else None
+        if chosen is not None:
+            self.characters = chosen
+            self._show_characters()
+
     def _generate(self) -> None:
         premise = self.premise.toPlainText()
         if not premise.strip():
@@ -175,6 +224,7 @@ class GenerateDialog(QDialog):
             texts=self.texts,
             route=self._route_for(model),
             reasoning=self._reasoning_for(model),
+            characters=self.characters,
         )
         self._received = 0
         self._failure = None
@@ -200,6 +250,7 @@ class GenerateDialog(QDialog):
         self.person.setEnabled(not running)
         self.tense.setEnabled(not running)
         self.model.setReadOnly(running)
+        self.choose_button.setEnabled(not running)
         self.generate_button.setEnabled(not running)
 
     def _show_progress(self, text: str) -> None:

@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 
 from sealedlore.gui.attest_check import AttestationButton
 from sealedlore.gui.model_picker import Browse, BrowseRoute, ModelField
+from sealedlore.gui.saved_prompts import SavedPrompts, SavedPromptsButton
 from sealedlore.gui.sizing import GrowingText, size_to_screen
 from sealedlore.models.config import Config, ProviderConfig, split_model
 from sealedlore.providers.tee import is_private_mode, is_tee
@@ -69,18 +70,20 @@ class NewChatDialog(QDialog):
         config: Config | None = None,
         browse_route: BrowseRoute | None = None,
         hosts_of: Callable[[str], tuple[str, ...] | None] | None = None,
+        saved: SavedPrompts | None = None,
     ) -> None:
         """`endpoint`: the default endpoint; `config`, when given, resolves
         a model naming another endpoint ("Anthropic::claude-opus-5-5",
         models/config.py). `browse_route` and `hosts_of`: the chat's route,
         beside its model (on NanoGPT); it is the chat's own, never saved in
-        the settings."""
+        the settings. `saved`: the system prompts the author keeps
+        (gui/saved_prompts.py)."""
         super().__init__(parent)
         self.setWindowTitle("New simple chat")
         self.setMinimumWidth(560)
         size_to_screen(self, 0.42, 0.75)
         self._config = config
-        intro = QLabel(
+        self.intro = intro = QLabel(
             "A plain conversation with the model: your system prompt and your messages, "
             "none of the storytelling around them. Branches, pictures and summaries of a "
             "long chat still work."
@@ -126,10 +129,15 @@ class NewChatDialog(QDialog):
         self.attest = AttestationButton(self._attest_settings)
 
         form = QFormLayout()
+        self.form = form
         form.addRow("Title", self.title)
         form.addRow("Model", self.model)
         form.addRow("", self.attest)
         form.addRow("System prompt", self.prompt)
+        self.saved_button = None
+        if saved is not None:
+            self.saved_button = SavedPromptsButton(saved, self.prompt)
+            form.addRow("", self.saved_button)
         form.addRow("", prompt_hint)
         form.addRow("Tail", self.tail)
         form.addRow("", tail_hint)

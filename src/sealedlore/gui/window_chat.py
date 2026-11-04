@@ -16,11 +16,12 @@ from PySide6.QtWidgets import QMessageBox
 from sealedlore.engine.prompt import TurnRequest
 from sealedlore.engine.session import StorySession
 from sealedlore.gui.new_chat_dialog import NewChatDialog
+from sealedlore.gui.saved_prompts import SavedPrompts
 from sealedlore.models.node import CHAT_USER_ID
 from sealedlore.models.story import Story
 from sealedlore.providers.base import ChatProvider, ProviderError
 from sealedlore.providers.tee import is_private_mode, move_refusal
-from sealedlore.storage.repository import StoryBundle, save_story_bundle
+from sealedlore.storage.repository import StoryBundle, save_config, save_story_bundle
 
 MEMORY_TITLE = "(in memory only)"
 
@@ -38,6 +39,10 @@ class ChatWindow:
 
     # --- starting one ------------------------------------------------------------
 
+    def saved_prompts(self) -> SavedPrompts:
+        """The system prompts the author keeps for chats (gui/saved_prompts.py)."""
+        return SavedPrompts(self.config, lambda: save_config(self.config, root=self.root))
+
     def new_chat(self) -> None:
         if self._busy or not self._private_allows_close():
             return
@@ -50,6 +55,7 @@ class ChatWindow:
             config=None if self.use_mock else self.config,
             browse_route=self._browse_models_and_route,
             hosts_of=self._hosts_of,
+            saved=self.saved_prompts(),
         )
         if dialog.exec() != NewChatDialog.Accepted:
             return

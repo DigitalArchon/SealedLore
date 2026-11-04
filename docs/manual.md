@@ -940,12 +940,67 @@ a PNG card with their portrait, a CHARX card with every picture, or a JSON
 card. **More** makes a new version of a character (a whole copy kept with
 them, chosen above the card, to change as you like), renames a version,
 duplicates one as a character of their own, or deletes one: their card goes
-to the Trash as a CHARX file you can import again.
+to the Trash as a CHARX file you can import again. **A story from their
+card's own scenario…** (also under More) makes a new story from the card as a
+SillyTavern card does (below).
 
 Pictures drawn here are paid for as a story's are, and what they have cost so
-far is said under the character's name. **Make a story from the card…**
-makes a new story from the character's card, as a SillyTavern card does
-(below).
+far is said under the character's name.
+
+**Chat with them…** starts a simple chat (see "Simple chat") from their card.
+Before it starts you see, and can change, everything it is made of:
+
+- who you are (the card's `{{user}}`) and, if you like, a few words about you;
+- the **system prompt**: the card's own if it has one, else a plain one
+  telling the model to write only their replies; **Saved prompts** puts one
+  of yours in its place;
+- the **tail**: the card's post-history instructions;
+- the **first message**: their card (description, personality, scenario, how
+  they talk, and who you are), kept in full however long the chat grows;
+- **their greeting**, the first reply, as the card wrote it (any of its
+  greetings, changed if you like), or none, and then the first message is
+  sent and the model answers it.
+
+Their portrait goes with the chat as its own reference picture, so a picture
+of the chat draws them as they look.
+
+**Draft a story with them…** opens the premise dialog (see "Drafting a story,
+and reviewing its settings") with them in it: say what kind of story, in what
+world, and whom you play. The model drafts the world, the other characters,
+the lore and the opening around them, and their card stands as it is: what
+the story changes of them (their role in this world, what has happened to
+them) is added to their description as a change of this story's, which their
+card can take or not (below). **Choose…** beside them builds the story around
+others too, and **Draft a story from an idea** offers the same once you keep
+any characters.
+
+**Into a story.** On the Cast page, **From Your characters…** (also in the
+new story guide's characters step and Setup's Characters tab) puts any of
+your characters into the open story, on the cast or as supporting
+characters, with their pictures and, if you like, their own lorebook as the
+story's lore. **Add to the story** on their page does the same for the one
+shown. `{{char}}` and `{{user}}` become their name and the name of the
+character you are playing.
+
+A character from Your characters says so on the Cast page, with what has
+changed since they joined: in this story (a new picture, a changed
+description), on their card, or both. **Changes…** shows each change side by
+side, ticked, and offers:
+
+- **Save the ticked to the card**: their card takes them, `{{char}}` and
+  `{{user}}` put back where the card writes them, so every story they join
+  from now on has them;
+- **Save as a new version…**: the character as this story has them becomes a
+  new version of their card, kept beside it, and this story's character is
+  that version from now on;
+- **Keep them in this story only**: the card stays as it is, and the Cast page
+  says so quietly until there are other changes;
+- **Take the ticked into this story**: changes made to their card since.
+
+A character the story made, or brought in some other way, has **Keep in Your
+characters…**: a copy goes into Your characters, linked to the story's as if
+it had come from there. **Their card…** opens Your characters on a character
+whose story copy is in step with their card.
 
 ## SillyTavern cards and lorebooks
 
@@ -956,8 +1011,8 @@ uses, which is also how Chub, JanitorAI and most card sites share them.
 card inside it, a JSON file, or a CHARX. File → Import from a link… takes its
 link instead (below). The card's character is kept in Your characters
 (above), with every field and picture the card has, and its page opens.
-**Make a story from the card…** there makes a new story from it, and
-asks:
+**A story from their card's own scenario…** (under More) there makes a new
+story from it, and asks:
 
 - whether the card is **one character** the storyteller plays, or **a world,
   or a narrator for several people** (its description then becomes the
@@ -2036,7 +2091,10 @@ story is (Settings → Context), with a plain summariser.
   summary. Your first message starts kept. Story so far says when kept
   messages take more than a fifth of the budget.
 - The system prompt is set when you start the chat and under **Story →
-  Setup…** afterwards; a change costs one cache miss. Beside it, the **Tail**
+  Setup…** afterwards; a change costs one cache miss. **Saved prompts**
+  beside it keeps the ones you like (**Save this prompt…**, with a name of
+  your own) and puts one back in a click, in New simple chat, in Chat with
+  them… (Your characters) and in Setup. Beside it, the **Tail**
   (also set at the start) is fixed text sent after your message at the end
   of every request (a style reminder, a standing rule). It is never saved
   into the conversation.

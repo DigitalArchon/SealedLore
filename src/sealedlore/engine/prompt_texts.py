@@ -2192,6 +2192,40 @@ no headings, about {words} words. Reply with the account only.
 )
 
 
+# A chat started from one of Your characters (engine/card_chat.py, the author,
+# Nov 4 2026): their card is its first message, their own system prompt (or
+# this) its system prompt. Not measured.
+_text(
+    "chat.card.system",
+    CHAT,
+    "A chat with a character: the system prompt",
+    "The system prompt of a chat started from one of Your characters when their card has "
+    "none of its own. Shown, and yours to change, before the chat starts.",
+    "You are {name}, in a conversation with {user}. Write only {name}'s replies: what they "
+    "say and do, in their own voice, as the first message describes them. Never write "
+    "{user}'s words, actions or thoughts.",
+    (("name", "the character's name"), ("user", "who you are in the chat")),
+)
+
+_text(
+    "chat.card.info",
+    CHAT,
+    "A chat with a character: the first message",
+    "How the first message of a chat started from one of Your characters begins; their card "
+    "follows it. Shown, and yours to change, before the chat starts.",
+    "The character you play in this conversation, as their card has them:",
+)
+
+_text(
+    "chat.card.user",
+    CHAT,
+    "A chat with a character: who they talk to",
+    "After the character's card in the first message: who the author is in the chat.",
+    "You are talking with {user}.",
+    (("user", "who you are in the chat"),),
+)
+
+
 # --- Private scenes ------------------------------------------------------
 
 
@@ -3602,6 +3636,28 @@ where each <character> is:
         ("style_guide", "The style fields"),
         ("character_shape", "A character, as JSON"),
     ),
+)
+
+# A story drafted around characters from Your characters (the author, Nov 4
+# 2026): their cards stand, and what the story changes of them is said apart
+# (engine/drafting.py). Not measured.
+_text(
+    "authoring.draft.characters",
+    AUTHORING,
+    "Drafting: the author's own characters",
+    "After the premise, when the story is drafted around characters from Your characters.",
+    """\
+The author wants the story built around characters of their own, each with a
+card that stands as it is. Put each in "cast" under exactly the name given
+below, with "playable" and "author_only" as the premise suggests, and write
+nothing else for them: their summary, description, voice and skills are
+their card's. Where this story places one of them differently from their
+card (another world or time, a role in it, what has happened to them), say
+so in their own "in_this_story": one to three sentences. A card's scenario
+is a suggestion only: the premise decides.
+
+{characters}""",
+    (("characters", "each character's card, under their name"),),
 )
 
 # A person or tense the author chose comes before the draft, so the opening

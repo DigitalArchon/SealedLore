@@ -26,7 +26,10 @@ from sealedlore.engine.looks import look_words
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.usage import usage_report
 from sealedlore.gui.collection_page import (
+    ADD_TO_STORY,
+    CHAT,
     DELETE,
+    DRAFT,
     DUPLICATE,
     EXPORT_CHARX,
     EXPORT_JSON,
@@ -215,6 +218,7 @@ class CollectionWindow:
                 page.set_back_words("Close")
             else:
                 page.set_back_words("Back to the chat" if self.in_chat else "Back to the story")
+            page.set_story_open(self.session is not None and not self.in_chat)
             page.set_characters(self._kept())
             if card_id is not None:
                 page.show_character(card_id)
@@ -316,6 +320,9 @@ class CollectionWindow:
             RENAME_VERSION: lambda: self._rename_version(card_id),
             DELETE: lambda: self._delete_kept(card_id),
             STORY_FROM_CARD: lambda: self._story_from_kept(card_id),
+            ADD_TO_STORY: lambda: self._add_shown_to_story(card_id),
+            CHAT: lambda: self.chat_with_kept(card_id),
+            DRAFT: lambda: self.draft_with_kept(card_id),
         }
         action = actions.get(what)
         if action is not None:

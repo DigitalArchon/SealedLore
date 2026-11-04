@@ -66,6 +66,12 @@ NEW, IMPORT, LINK, EXPRESSIONS = "new", "import", "link", "expressions"
 EXPORT_PNG, EXPORT_CHARX, EXPORT_JSON = "export_png", "export_charx", "export_json"
 DUPLICATE, VERSION, RENAME_VERSION, DELETE = "duplicate", "version", "rename_version", "delete"
 STORY_FROM_CARD = "story_from_card"
+ADD_TO_STORY = "add_to_story"
+CHAT, DRAFT = "chat", "draft"
+CHAT_LABEL = "Chat with them…"
+DRAFT_LABEL = "Draft a story with them…"
+ADD_LABEL = "Add to the story"
+SCENARIO_STORY_LABEL = "A story from their card's own scenario…"
 
 
 def _plural(count: int, word: str) -> str:
@@ -163,6 +169,8 @@ class CollectionPage(QWidget):
         # never under the author's typing (a picture landing, the list redone).
         self._loaded: Character | None = None
         self._extra = ""
+        # A story is open beside the page (Add to the story is offered).
+        self._story_open = False
 
         # --- the list of them, on the left ---
         self.search = QLineEdit()
@@ -235,14 +243,26 @@ class CollectionPage(QWidget):
             "and any you made from it"
         )
         self.version.currentIndexChanged.connect(self._on_version)
-        self.story_button = QPushButton("Make a story from the card…")
-        self.story_button.setToolTip(
-            "A new story from this card as a SillyTavern card makes one: its scenario as the "
-            "world, a greeting as the opening, and you as the other character"
+        self.chat_button = QPushButton(CHAT_LABEL)
+        self.chat_button.setObjectName("sendButton")
+        self.chat_button.setToolTip(
+            "A simple chat with them: their card as its first message, their own system "
+            "prompt, and a greeting of theirs to open it, each yours to change first"
         )
-        self.story_button.clicked.connect(
-            lambda: self.action_requested.emit(STORY_FROM_CARD, self._current or "")
+        self.chat_button.clicked.connect(lambda: self._act(CHAT))
+        self.draft_button = QPushButton(DRAFT_LABEL)
+        self.draft_button.setToolTip(
+            "Say what story you want with them, in what world: the model drafts its world, "
+            "the other characters, lore and opening around their card"
         )
+        self.draft_button.clicked.connect(lambda: self._act(DRAFT))
+        self.add_button = QPushButton(ADD_LABEL)
+        self.add_button.setToolTip(
+            "Into the story that is open, with their pictures: what the story changes of them "
+            "can come back to this card"
+        )
+        self.add_button.clicked.connect(lambda: self._act(ADD_TO_STORY))
+        self.add_button.hide()
         self.export_button = QToolButton()
         self.export_button.setText("Export")
         self.export_button.setPopupMode(QToolButton.InstantPopup)
@@ -258,6 +278,13 @@ class CollectionPage(QWidget):
         self.more_button.setText("More")
         self.more_button.setPopupMode(QToolButton.InstantPopup)
         more_menu = QMenu(self.more_button)
+        self.story_action = more_menu.addAction(SCENARIO_STORY_LABEL)
+        self.story_action.setToolTip(
+            "A new story from this card as a SillyTavern card makes one: its scenario as the "
+            "world, a greeting as the opening, and you as the other character"
+        )
+        self.story_action.triggered.connect(lambda: self._act(STORY_FROM_CARD))
+        more_menu.addSeparator()
         more_menu.addAction("New version of this character…").triggered.connect(
             lambda: self._act(VERSION)
         )
@@ -276,7 +303,8 @@ class CollectionPage(QWidget):
         header = WrapRow(group_spacing=12)
         header.add_group([self.title])
         header.add_group([self.version])
-        header.add_group([self.story_button, self.export_button, self.more_button])
+        header.add_group([self.chat_button, self.draft_button, self.add_button])
+        header.add_group([self.export_button, self.more_button])
         header.add_group([self.back_button], right=True)
         self.stats = QLabel()
         self.stats.setObjectName("hintLabel")
@@ -386,6 +414,11 @@ class CollectionPage(QWidget):
         self.tag.setCurrentText(chosen if chosen in tags else ALL_TAGS)
         self.tag.blockSignals(False)
         self.tag.setVisible(bool(tags))
+
+    def set_story_open(self, story_open: bool) -> None:
+        self._story_open = story_open
+        card = self._card(self._current)
+        self.add_button.setVisible(card is not None and story_open)
 
     def set_back_words(self, words: str) -> None:
         self.back_button.setText(words)
@@ -520,8 +553,9 @@ class CollectionPage(QWidget):
         if card is not self._loaded:
             self._loaded = card
             self.character_shown.emit(card.id if card is not None else "")
-        for widget in (self.story_button, self.export_button, self.more_button):
+        for widget in (self.chat_button, self.draft_button, self.export_button, self.more_button):
             widget.setVisible(card is not None)
+        self.add_button.setVisible(card is not None and self._story_open)
         self.expressions_action.setEnabled(card is not None)
         if card is None:
             self.title.setText(PAGE_LABEL)

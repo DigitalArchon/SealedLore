@@ -271,7 +271,10 @@ Have fun!
   story, and exports or imports them as a prompt set to share.
 - **Your characters**: every character you keep, outside any story, with
   every field of a SillyTavern V3 card and their pictures as a sheet of looks
-  and expressions; versions of one, and a story made from any of their cards.
+  and expressions. Put them into any story, and what a story changes of them
+  (a new picture, a changed description) goes back to their card, becomes a
+  new version of it, or stays in that story; start a simple chat with one, or
+  have a story drafted around them from your premise.
 - **SillyTavern cards and lorebooks**: import character cards into Your
   characters (a PNG, JSON or CHARX file, or just its link on Chub or
   RisuRealm), bring a card into a story, and export characters and lore for

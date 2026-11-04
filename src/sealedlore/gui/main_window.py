@@ -118,6 +118,8 @@ from sealedlore.gui.transcript import (
 from sealedlore.gui.usage_dialog import UsageDialog
 from sealedlore.gui.welcome import setup_missing, welcome_html
 from sealedlore.gui.window_board import CastBoardWindow
+from sealedlore.gui.window_card_link import CardLinkWindow
+from sealedlore.gui.window_card_start import CardStartWindow
 from sealedlore.gui.window_cast import CastWindow
 from sealedlore.gui.window_chat import ChatWindow
 from sealedlore.gui.window_collection import CollectionWindow
@@ -250,6 +252,8 @@ class MainWindow(
     CastWindow,
     CastBoardWindow,
     CollectionWindow,
+    CardLinkWindow,
+    CardStartWindow,
     TavernWindow,
     LooksWindow,
     ChatWindow,
@@ -565,6 +569,7 @@ class MainWindow(
         self._init_images()
         self._init_board()
         self._init_collection()
+        self._init_card_link()
         self._init_phone()
         self._init_videos()
         self._init_private()
@@ -1632,6 +1637,7 @@ class MainWindow(
             describe_style=lambda: describe_style(
                 self._setup_dialog, self.session, self.catalog.models
             ),
+            saved_prompts=self.saved_prompts(),
         )
         self._setup_dialog = dialog
         style_picture: tuple[str, tuple[bytes, str] | None] = ("keep", None)
@@ -3691,7 +3697,9 @@ class MainWindow(
             self.config.authoring_model = chosen
             save_config(self.config, root=self.root)
 
-    def new_story_from_premise(self) -> None:
+    def new_story_from_premise(self, characters: list | None = None) -> None:
+        """`characters`: the author's own (Your characters) to build the story
+        around (gui/window_card_start.py)."""
         if self._busy or self._needs_provider() or not self._private_allows_close():
             return
         provider_config = self.config.active_provider()
@@ -3705,13 +3713,21 @@ class MainWindow(
             parent=self,
             route_for=lambda model: config_route(self.config, "authoring", model),
             reasoning_for=lambda model: config_reasoning(self.config, "side", model),
+            characters=characters or (),
+            # Any of the author's own may go in, once they keep some.
+            choose=self._choose_kept if characters or self._kept() else None,
         )
         accepted = dialog.exec() == GenerateDialog.Accepted
         self._remember_authoring_model(dialog.model_text())
         if not accepted or dialog.draft is None:
             return
         try:
-            bundle, warnings = dialog.draft.build(root=self.root)
+            if getattr(dialog.draft, "characters", None):
+                bundle, warnings = dialog.draft.build(
+                    root=self.root, kept=self._kept(), read=self._collection_pictures().read
+                )
+            else:
+                bundle, warnings = dialog.draft.build(root=self.root)
         except ValueError as exc:
             self._warn_plain("Could not use the draft", str(exc))
             return

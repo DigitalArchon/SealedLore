@@ -11,7 +11,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from sealedlore.ids import new_id
-from sealedlore.models.collection import CollectionInfo
+from sealedlore.models.collection import CardLink, CollectionInfo
 from sealedlore.models.image import ImageRef
 from sealedlore.models.tavern import TavernFields
 
@@ -67,3 +67,6 @@ class Character(BaseModel):
     # Kept in the author's own characters (storage/collection.py), with which
     # version of its character it is; None in a story.
     collection: CollectionInfo | None = None
+    # In a story, brought in from the author's own characters: which card,
+    # and what the story was given from it (engine/card_link.py).
+    linked: CardLink | None = None

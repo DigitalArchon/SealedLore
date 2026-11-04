@@ -238,17 +238,45 @@ def review_system(detached: bool = False, texts: PromptTexts = DEFAULT_TEXTS) ->
     return system + (texts["authoring.review.detached"] if detached else "")
 
 
+def render_own_characters(characters: Sequence[Character]) -> str:
+    """The author's own characters (Your characters) for the drafter, each
+    under their name, `{{user}}` read as the author's character."""
+    from sealedlore.storage.tavern_cards import macro_filler
+
+    blocks = []
+    for card in characters:
+        fill = macro_filler(card.name, "the author's character")
+        scenario = card.tavern.scenario if card.tavern else ""
+        lines = [f"## {card.name}"]
+        for label, text in (
+            ("Summary", card.summary or ""),
+            ("Description", card.full_description or ""),
+            ("Personality", card.personality or ""),
+            ("Their card's own scenario", scenario),
+        ):
+            if text.strip():
+                lines.append(f"{label}: {fill(text).strip()}")
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
+
+
 def build_generation_messages(
     premise: str,
     *,
     person: NarrativePerson | None = None,
     tense: NarrativeTense | None = None,
     texts: PromptTexts = DEFAULT_TEXTS,
+    characters: Sequence[Character] = (),
 ) -> list[PromptMessage]:
     """The draft call. A person or tense the author chose comes before the
     draft, so the opening is written in it (the author, Sept 2026: a
-    second-person story drafted with a third-person opening)."""
+    second-person story drafted with a third-person opening). `characters`:
+    the author's own, the story built around them (engine/drafting.py)."""
     user = "The author's premise:\n\n" + premise.strip()
+    if characters:
+        user += "\n\n" + texts.fill(
+            "authoring.draft.characters", characters=render_own_characters(characters)
+        )
     if person or tense:
         who = {"first": "I", "second": "you"}.get(person or "")
         user += "\n\n" + texts.fill(
