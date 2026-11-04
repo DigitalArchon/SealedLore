@@ -15,7 +15,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
     QFormLayout,
@@ -27,6 +28,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSizePolicy,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -38,7 +40,8 @@ from sealedlore.models.character import Character
 from sealedlore.models.tavern import TavernFields
 from sealedlore.storage import tavern_lore as lore
 
-LIST_ROWS = 8
+# As many as fit beside the entry being edited at 1080p; more scroll.
+LIST_ROWS = 12
 INTRO = (
     "Their own lore, offered to a story's lore when they join one, and part of their card "
     "when it is exported. A story uses an entry's keywords, its text and whether it is "
@@ -80,9 +83,16 @@ class LorebookForm(QWidget):
         )
         self.book_rest.edited.connect(self._book_rest_edited)
 
+        self.find = QLineEdit()
+        self.find.setPlaceholderText("Find an entry by its name, keywords or text")
+        self.find.setClearButtonEnabled(True)
+        self.find.textChanged.connect(self._filter)
         self.list = QListWidget()
         self.list.setObjectName("cardBook")
         self.list.currentRowChanged.connect(self._chosen)
+        remove_key = QShortcut(QKeySequence(QKeySequence.Delete), self.list)
+        remove_key.setContext(Qt.WidgetShortcut)
+        remove_key.activated.connect(self._remove)
         self.add_button = QPushButton("Add an entry")
         self.add_button.clicked.connect(self._add)
         self.copy_button = QPushButton("Copy")
@@ -105,6 +115,14 @@ class LorebookForm(QWidget):
         self.content = GrowingText(lines=4, most=24)
         self.content.setPlaceholderText("What the storyteller is told.")
         self.content.textChanged.connect(lambda: self._entry_edited("content"))
+        self.order = QSpinBox()
+        self.order.setRange(-100000, 100000)
+        self.order.setMaximumWidth(120)
+        self.order.setToolTip(
+            "SillyTavern's insertion order: of the entries it sends, a higher number goes "
+            "nearer the end of the prompt"
+        )
+        self.order.valueChanged.connect(lambda _value: self._entry_edited("order"))
         self.enabled = QCheckBox("On")
         self.enabled.setToolTip("Switched off, the entry is kept but never sent")
         self.constant = QCheckBox("Always sent")
@@ -140,6 +158,7 @@ class LorebookForm(QWidget):
         entry_form.addRow("Keywords", self.keys)
         entry_form.addRow("Text", self.content)
         entry_form.addRow("", switches)
+        entry_form.addRow("Order", self.order)
         entry_form.addRow("Second keywords", self.secondary)
         entry_form.addRow("", self.selective)
         entry_form.addRow("", self.entry_rest)
@@ -169,6 +188,7 @@ class LorebookForm(QWidget):
         entries_layout.setContentsMargins(0, 0, 0, 0)
         entries_layout.setSpacing(4)
         entries_layout.addWidget(self.empty)
+        entries_layout.addWidget(self.find)
         entries_layout.addWidget(self.list)
         entries_layout.addLayout(entry_buttons)
         entries_layout.addWidget(self.entry_box)
@@ -177,11 +197,11 @@ class LorebookForm(QWidget):
         form = QFormLayout(content)
         form.setContentsMargins(0, 10, 8, 0)
         form.addRow(intro)
-        form.addRow("Entries", entries)
+        form.addRow("", book_buttons)
         form.addRow("Book's name", self.book_name)
         form.addRow("Description", self.book_description)
         form.addRow("", self.book_rest)
-        form.addRow("", book_buttons)
+        form.addRow("Entries", entries)
         self._book_rows = (self.book_name, self.book_description, self.book_rest)
         self._form = form
         layout = QVBoxLayout(self)
@@ -239,6 +259,7 @@ class LorebookForm(QWidget):
             self.list.addItem(item)
         shown = bool(self._entries)
         self.list.setVisible(shown)
+        self.find.setVisible(len(self._entries) > LIST_ROWS or bool(self.find.text()))
         if shown:
             rows = min(len(self._entries), LIST_ROWS)
             frame = 2 * self.list.frameWidth()
@@ -247,7 +268,17 @@ class LorebookForm(QWidget):
         if row >= 0:
             self.list.setCurrentRow(row)
         self.list.blockSignals(False)
-        self._chosen(row)
+        self._filter(self.find.text())
+        self._chosen(self.list.currentRow())
+
+    def _filter(self, words: str) -> None:
+        """Only the entries with every word in their name, keywords or text."""
+        wanted = words.casefold().split()
+        for row, raw in enumerate(self._entries):
+            text = " ".join(
+                [lore.entry_title(raw), *lore.entry_keys(raw), str(raw.get("content") or "")]
+            ).casefold()
+            self.list.setRowHidden(row, not all(word in text for word in wanted))
 
     def _book_edited(self) -> None:
         book = self._book
@@ -284,6 +315,8 @@ class LorebookForm(QWidget):
         self.constant.setChecked(bool(raw.get("constant")))
         self.use_regex.setChecked(bool(raw.get("use_regex")))
         self.case_sensitive.setChecked(lore.entry_case_sensitive(raw))
+        order = lore.entry_get(raw, "insertion_order")
+        self.order.setValue(order if isinstance(order, int) else 100)
         set_field_text(self.secondary, _keys_text(lore.entry_keys(raw, "secondary_keys")))
         self.selective.setChecked(bool(raw.get("selective")))
         self.entry_rest.set_value(lore.entry_rest(raw))
@@ -311,6 +344,8 @@ class LorebookForm(QWidget):
             lore.entry_set(raw, "secondary_keys", _keys_of(self.secondary.text()))
         elif what == "selective":
             raw["selective"] = self.selective.isChecked()
+        elif what == "order":
+            lore.entry_set(raw, "insertion_order", self.order.value())
         item = self.list.currentItem()
         if item is not None:
             item.setText(self._line(raw))
@@ -338,17 +373,22 @@ class LorebookForm(QWidget):
         raw, book = self._current(), self._book
         if raw is None or book is None:
             return
-        lore.copy_entry(book, raw)
-        self.load(self._character, row=len(lore.book_entries(book)) - 1)
+        new = lore.copy_entry(book, raw)
+        rows = lore.book_entries(book)
+        self.load(self._character, row=next(i for i, e in enumerate(rows) if e is new))
         self.changed.emit()
 
     def _remove(self) -> None:
         raw, book = self._current(), self._book
-        if raw is None or book is None:
+        if raw is None or book is None or not self.remove_button.isEnabled():
             return
         if str(raw.get("content") or "").strip():
             answer = QMessageBox.question(
-                self, "Remove this entry?", f"Take “{self._line(raw)}” out of their lorebook?"
+                self,
+                "Remove this entry?",
+                f"Take “{self._line(raw)}” out of their lorebook?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
             )
             if answer != QMessageBox.Yes:
                 return

@@ -144,3 +144,20 @@ def greeting_pictures(
     text = re.sub(r"[ \t]+\n", "\n", text)
     found.text = re.sub(r"\n{3,}", "\n\n", text).strip()
     return found
+
+
+def renamed_in(text: str, old: str, new: str) -> tuple[str, int]:
+    """`text` with RisuAI's macros that name the file `old` (any case, with or
+    without its extension) naming `new` instead, and how many did: a file
+    renamed on the card is still shown by the greetings that showed it."""
+    count = 0
+
+    def swap(match: re.Match[str]) -> str:
+        nonlocal count
+        name = match.group(2)
+        if _key(name) == _key(old) or _stem(name) == _key(old):
+            count += 1
+            return "{{" + match.group(1) + "::" + new + "}}"
+        return match.group(0)
+
+    return _MACRO.sub(swap, text), count

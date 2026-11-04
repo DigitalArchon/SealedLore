@@ -52,12 +52,12 @@ def test_a_spec_entry_is_edited_under_its_own_names():
     rest = lore.entry_rest(raw)
     assert rest == {
         "id": 0,
-        "insertion_order": 50,
         "position": "after_char",
         "extensions": {"depth": 2, "probability": 70},
     }
     lore.set_entry_rest(raw, {**rest, "insertion_order": 10, "priority": 3})
-    assert raw["insertion_order"] == 10 and raw["priority"] == 3
+    assert raw["priority"] == 3
+    assert raw["insertion_order"] == 50, "the order has a field of its own, not the JSON"
     assert raw["content"] == "The farmhouse has a red door.", "fields of its own untouched"
 
 
@@ -274,3 +274,12 @@ def test_a_cards_entry_marked_as_patterns_keeps_its_plain_keywords():
         ["pack"],
     ]
     assert read.left_out["regex"] == 1, "only the entry that had patterns says so"
+
+
+def test_a_copy_lands_right_after_its_original():
+    book = lore.new_book()
+    first, second = lore.add_entry(book), lore.add_entry(book)
+    lore.set_entry_title(first, "First")
+    lore.set_entry_title(second, "Second")
+    lore.copy_entry(book, first)
+    assert [lore.entry_title(e) for e in lore.book_entries(book)] == ["First", "First", "Second"]

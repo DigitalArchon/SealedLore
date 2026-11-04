@@ -55,15 +55,23 @@ class JsonField(QWidget):
         self._loading = True
         self.text.setPlainText(as_text(value))
         self._loading = False
-        self.problem.hide()
+        self._fixed()
 
     def _toggle(self, on: bool) -> None:
-        self.button.setText(f"{'▾' if on else '▸'}  {self._title}")
+        # Folded, a draft that isn't applied still says so on its heading.
+        mark = "  (⚠ not applied)" if self.broken() else ""
+        self.button.setText(f"{'▾' if on else '▸'}  {self._title}{mark}")
         self.text.setVisible(on)
-        self.problem.setVisible(on and bool(self.problem.text()) and self._broken())
+        self.problem.setVisible(on and self.broken())
 
-    def _broken(self) -> bool:
+    def broken(self) -> bool:
+        """The text as it stands isn't applied (it doesn't read as an object)."""
         return self.problem.property("broken") is True
+
+    def _fixed(self) -> None:
+        self.problem.setProperty("broken", False)
+        self.problem.setText("")
+        self._toggle(self.button.isChecked())
 
     def _edited(self) -> None:
         if self._loading:
@@ -80,11 +88,10 @@ class JsonField(QWidget):
         if not isinstance(value, dict):
             self._say("This must be an object, between { and }: kept as it last was.")
             return
-        self.problem.setProperty("broken", False)
-        self.problem.hide()
+        self._fixed()
         self.edited.emit(value)
 
     def _say(self, words: str) -> None:
         self.problem.setText(words)
         self.problem.setProperty("broken", True)
-        self.problem.setVisible(self.button.isChecked())
+        self._toggle(self.button.isChecked())

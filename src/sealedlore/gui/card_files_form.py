@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import QEvent, QSize, Qt, Signal
+from PySide6.QtGui import QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
@@ -24,6 +24,8 @@ from PySide6.QtWidgets import (
     QListView,
     QListWidget,
     QListWidgetItem,
+    QMenu,
+    QMessageBox,
     QPushButton,
     QStyle,
     QVBoxLayout,
@@ -33,6 +35,7 @@ from PySide6.QtWidgets import (
 from sealedlore.gui.fields import FormScroll, set_field_text
 from sealedlore.models.character import Character
 from sealedlore.models.tavern import CardAsset, TavernFields
+from sealedlore.storage.card_files import renamed_in
 from sealedlore.storage.collection import files_said
 
 if TYPE_CHECKING:
@@ -77,12 +80,17 @@ class FilesForm(QWidget):
     # "save", "picture" (a copy among their pictures), "add" (files from
     # disk), "link", "remove", "renamed" (its file renamed to match).
     file_requested = Signal(str, int)
+    # Files dropped from the desktop (their paths), to add.
+    files_dropped = Signal(list)
+    # A rename changed the greetings too (For chats shows them).
+    greetings_changed = Signal()
 
     def __init__(self, thumbs: Thumbs | None = None) -> None:
         super().__init__()
         self._character: Character | None = None
         self._loading = False
         self._thumbs = thumbs
+        self._name_before = ""
         self.said = QLabel()
         self.said.setWordWrap(True)
         self.files = QListWidget()
@@ -93,12 +101,20 @@ class FilesForm(QWidget):
         self.files.setWrapping(True)
         self.files.setIconSize(QSize(FILE_ICON, FILE_ICON))
         self.files.setGridSize(QSize(FILE_ICON + 28, FILE_ICON + 36))
-        self.files.setFixedHeight(2 * (FILE_ICON + 36) + 12)
         self.files.setSelectionMode(QListWidget.SingleSelection)
         self.files.itemSelectionChanged.connect(self._chosen)
-        # A click on a picture shows it full size, and leaves it chosen for
-        # the buttons below.
-        self.files.itemClicked.connect(self._clicked)
+        # Double-click (or Enter) shows a picture full size, as everywhere a
+        # picture is listed; a click chooses a file to rename or save.
+        self.files.itemActivated.connect(self._activated)
+        self.files.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.files.customContextMenuRequested.connect(self._menu)
+        remove_key = QShortcut(QKeySequence(QKeySequence.Delete), self.files)
+        remove_key.setContext(Qt.WidgetShortcut)
+        remove_key.activated.connect(lambda: self._action("remove"))
+        # Files dragged in from the desktop are added, as Add files… does.
+        self.files.setAcceptDrops(True)
+        self.files.viewport().setAcceptDrops(True)
+        self.files.viewport().installEventFilter(self)
 
         self.add_button = QPushButton("Add files…")
         self.add_button.setToolTip("Files from this computer onto their card")
@@ -140,6 +156,8 @@ class FilesForm(QWidget):
             self.type.setItemData(self.type.count() - 1, tip, Qt.ToolTipRole)
         self.type.setToolTip("What kind of file the card says it is; any other may be typed")
         self.type.currentTextChanged.connect(self._retyped)
+        self.type_said = QLabel()
+        self.type_said.setObjectName("hintLabel")
         self.kept = QLabel()
         self.kept.setObjectName("hintLabel")
         self.link = QLineEdit()
@@ -152,6 +170,7 @@ class FilesForm(QWidget):
         editor.setContentsMargins(0, 6, 0, 0)
         editor.addRow("Name", self.name)
         editor.addRow("Kind", self.type)
+        editor.addRow("", self.type_said)
         editor.addRow("Kept", self.kept)
         editor.addRow("Link", self.link)
         editor.addRow("", self.link_said)
@@ -186,10 +205,11 @@ class FilesForm(QWidget):
         self.files.blockSignals(True)
         self.files.clear()
         self.said.setText(
-            files_said(assets)
+            files_said(assets) + " Double-click a picture to see it full size."
             if assets
             else "No files besides their pictures. A card's background, the pictures its "
-            "greetings show and its sounds are kept here, and go out with it as a CHARX."
+            "greetings show and its sounds are kept here, and go out with it as a CHARX. "
+            "Add files…, or drop them here."
         )
         for index, asset in enumerate(assets):
             item = QListWidgetItem(asset.name or asset.type)
@@ -200,7 +220,8 @@ class FilesForm(QWidget):
             self.files.setCurrentRow(chosen)
             self.files.item(chosen).setSelected(True)
         self.files.blockSignals(False)
-        self.files.setVisible(bool(assets))
+        # Shown empty too: files are dropped on it.
+        self._fit_list()
         self.refresh_file_icons()
         self._chosen()
 
@@ -253,6 +274,8 @@ class FilesForm(QWidget):
         self.type.setCurrentText(asset.type)
         set_field_text(self.link, asset.uri)
         self._loading = False
+        self._said_kind(asset.type)
+        self._name_before = asset.name
         self.kept.setText(
             f"A {asset.ext.upper() or 'file'} kept with the card" if asset.held else ""
         )
@@ -260,11 +283,61 @@ class FilesForm(QWidget):
         self._editor.setRowVisible(self.link, not asset.held)
         self._editor.setRowVisible(self.link_said, False)
 
-    def _clicked(self, item: QListWidgetItem) -> None:
+    def _activated(self, item: QListWidgetItem) -> None:
         index = item.data(Qt.UserRole)
         assets = self._assets
         if 0 <= index < len(assets) and assets[index].held and assets[index].picture:
             self.file_requested.emit("whole", index)
+
+    def _menu(self, point) -> None:
+        item = self.files.itemAt(point)
+        if item is None:
+            return
+        self.files.setCurrentItem(item)
+        item.setSelected(True)
+        asset = self._chosen_asset()
+        if asset is None:
+            return
+        menu = QMenu(self)
+        whole = menu.addAction("See it full size")
+        whole.setEnabled(asset.held and asset.picture)
+        whole.triggered.connect(lambda: self._activated(item))
+        for button in (self.save_button, self.picture_button, self.remove_button):
+            action = menu.addAction(button.text())
+            action.setEnabled(button.isEnabled())
+            action.triggered.connect(button.click)
+        menu.exec(self.files.viewport().mapToGlobal(point))
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt naming
+        kind = event.type()
+        if watched is self.files.viewport() and kind in (
+            QEvent.DragEnter,
+            QEvent.DragMove,
+            QEvent.Drop,
+        ):
+            paths = [url.toLocalFile() for url in event.mimeData().urls() if url.isLocalFile()]
+            if not paths or self._character is None:
+                return False
+            event.acceptProposedAction()
+            if kind == QEvent.Drop:
+                self.files_dropped.emit(paths)
+            return True
+        return super().eventFilter(watched, event)
+
+    def _fit_list(self) -> None:
+        """As tall as its files need, one row to five, at the width it has."""
+        count = self.files.count()
+        across = max(1, self.files.viewport().width() // (FILE_ICON + 28))
+        rows = min(max(1, -(-count // across)), 5)
+        self.files.setFixedHeight(rows * (FILE_ICON + 36) + 12)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        super().resizeEvent(event)
+        self._fit_list()
+
+    def _said_kind(self, kind: str) -> None:
+        said = dict(TYPES).get(kind.strip(), "A kind of the card's own: kept as it is")
+        self.type_said.setText(said)
 
     def _action(self, action: str) -> None:
         index = self.chosen_index()
@@ -288,10 +361,44 @@ class FilesForm(QWidget):
 
     def _rename_finished(self) -> None:
         index = self.chosen_index()
-        if index is not None and self._assets[index].held:
+        if index is None:
+            return
+        asset = self._assets[index]
+        old, self._name_before = self._name_before, asset.name
+        if old and asset.name and old != asset.name:
+            self._rename_in_greetings(old, asset.name)
+        if asset.held:
             self.file_requested.emit("renamed", index)
 
+    def _rename_in_greetings(self, old: str, new: str) -> None:
+        """Greetings show a file by its name: offered the new one too."""
+        tavern = _tavern(self._character)
+        groups = (
+            [tavern.first_mes],
+            tavern.alternate_greetings,
+            tavern.group_only_greetings,
+        )
+        count = sum(renamed_in(text, old, new)[1] for group in groups for text in group)
+        if not count:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Rename it in the greetings too?",
+            f"{count} place{'s' if count != 1 else ''} in their greetings show “{old}”. Show "
+            f"“{new}” there instead? Otherwise they show nothing.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        tavern.first_mes = renamed_in(tavern.first_mes, old, new)[0]
+        for group in (tavern.alternate_greetings, tavern.group_only_greetings):
+            group[:] = [renamed_in(text, old, new)[0] for text in group]
+        self.changed.emit()
+        self.greetings_changed.emit()
+
     def _retyped(self, text: str) -> None:
+        self._said_kind(text)
         asset = self._chosen_asset()
         if self._loading or asset is None:
             return

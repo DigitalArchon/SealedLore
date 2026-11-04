@@ -19,7 +19,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QMimeData, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QDrag, QFont, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtGui import (
+    QColor,
+    QDrag,
+    QFont,
+    QIcon,
+    QKeySequence,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QPixmap,
+    QShortcut,
+)
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -744,15 +755,30 @@ class CastBoard(QWidget):
         self.hint.setWordWrap(True)
 
         self.tray_title = QLabel(
-            "Not labelled yet: drag one to its place, or double-click it to say what it shows"
+            "Not labelled yet: drag one to its place; double-click to see it, right-click for more"
         )
         self.tray_title.setObjectName("peopleSection")
         self.tray = Tray()
         self.tray.picture_dropped.connect(self._unlabel)
-        self.tray.itemDoubleClicked.connect(
+        # As on the sheet: double-click (or Enter) shows it whole.
+        self.tray.itemActivated.connect(
             lambda item: (
                 self._current
-                and self.picture_action.emit("labels", self._current, item.data(Qt.UserRole))
+                and self.picture_action.emit("whole", self._current, item.data(Qt.UserRole))
+            )
+        )
+        self.tray.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tray.customContextMenuRequested.connect(self._tray_menu)
+        tray_remove = QShortcut(QKeySequence(QKeySequence.Delete), self.tray)
+        tray_remove.setContext(Qt.WidgetShortcut)
+        tray_remove.activated.connect(
+            lambda: (
+                self._current
+                and self.tray.currentItem() is not None
+                and self._can_change
+                and self.picture_action.emit(
+                    "remove", self._current, self.tray.currentItem().data(Qt.UserRole)
+                )
             )
         )
 
@@ -1168,8 +1194,16 @@ class CastBoard(QWidget):
             self.fill_button.setText(f"Draw {len(chosen)} chosen…")
         elif every:
             self.fill_button.setText(f"Fill every gap ({len(every)})…")
+        elif self._sheet.gaps and not self._sheet.cells:
+            self.fill_button.setText("No picture to draw from yet")
         else:
             self.fill_button.setText("No gaps to fill")
+        self.fill_button.setToolTip(
+            "Every picture here is drawn from one of theirs: give them a portrait first "
+            "(Draw a portrait… on their card), or drop a picture on a place"
+            if self._sheet.gaps and not self._sheet.cells and not (chosen or every)
+            else ""
+        )
         self.fill_button.setEnabled(bool(chosen or every))
 
     def _fill(self) -> None:
@@ -1242,6 +1276,26 @@ class CastBoard(QWidget):
         self.files_dropped.emit(self._current, look, expression, list(paths))
 
     # --- menus ----------------------------------------------------------------------------
+
+    def _tray_menu(self, position) -> None:
+        """A picture not labelled yet: what the sheet's pictures offer."""
+        item = self.tray.itemAt(position)
+        card_id = self._current
+        if item is None or card_id is None:
+            return
+        ref_id = item.data(Qt.UserRole)
+        emit = self.picture_action.emit
+        menu = QMenu(self)
+        menu.addAction("See it whole").triggered.connect(lambda: emit("whole", card_id, ref_id))
+        for words, what in (
+            ("Make it their portrait", "portrait"),
+            ("Labels…", "labels"),
+            ("Remove…", "remove"),
+        ):
+            action = menu.addAction(words)
+            action.setEnabled(self._can_change)
+            action.triggered.connect(lambda _on=False, what=what: emit(what, card_id, ref_id))
+        menu.exec(self.tray.viewport().mapToGlobal(position))
 
     def _cell_menu(self, position) -> None:
         index = self.sheet.indexAt(position)

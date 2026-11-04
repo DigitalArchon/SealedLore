@@ -24,7 +24,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QSize, Qt, Signal
-from PySide6.QtGui import QIcon, QImage, QImageReader, QPixmap
+from PySide6.QtGui import QIcon, QImage, QImageReader, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QMessageBox,
     QPushButton,
     QVBoxLayout,
@@ -296,6 +297,9 @@ def thumbnail_of(data: bytes | None, side: int = THUMB) -> QPixmap:
     return _scaled(pixmap_of(data), side)
 
 
+WHOLE_TIP = "\nDouble-click to see it full size; right-click for more."
+
+
 class RefImageStrip(QWidget):
     """Thumbnails of one owner's reference pictures, with add, caption and remove."""
 
@@ -335,8 +339,15 @@ class RefImageStrip(QWidget):
         self.list.setGridSize(QSize(THUMB + 24, THUMB + 28))
         self.list.setWordWrap(False)
         self.list.setTextElideMode(Qt.ElideRight)
-        self.list.itemDoubleClicked.connect(self._edit_caption)
+        # Double-click (or Enter) shows a picture whole, as everywhere a
+        # picture is listed; a click chooses it for the buttons below.
+        self.list.itemActivated.connect(self._show_whole)
         self.list.currentItemChanged.connect(self._sync_buttons)
+        self.list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.list.customContextMenuRequested.connect(self._menu)
+        remove_key = QShortcut(QKeySequence(QKeySequence.Delete), self.list)
+        remove_key.setContext(Qt.WidgetShortcut)
+        remove_key.activated.connect(self._remove)
 
         self.add_button = QPushButton("Add…")
         self.add_button.setToolTip(
@@ -427,10 +438,10 @@ class RefImageStrip(QWidget):
                     )
                     if part
                 )
-                item.setToolTip(tip or f"Picture {number}")
+                item.setToolTip((tip or f"Picture {number}") + WHOLE_TIP)
             else:
                 item = QListWidgetItem(ref.caption or "(no caption)")
-                item.setToolTip(ref.caption or ref.file)
+                item.setToolTip((ref.caption or "(no caption)") + WHOLE_TIP)
             item.setData(Qt.UserRole, ref.id)
             if store is not None:
                 item.setIcon(QIcon(thumbnail_of(store.read(ref.file))))
@@ -558,9 +569,46 @@ class RefImageStrip(QWidget):
         self.changed.emit()
         return True
 
+    def _show_whole(self, item: QListWidgetItem | None) -> None:
+        ref, store = self._ref(item), self._pictures()
+        if ref is None or store is None:
+            return
+        from sealedlore.gui.image_dialog import show_whole
+
+        show_whole(self, ref.caption or look_words(ref) or "Picture", store.read(ref.file))
+
+    def _menu(self, point) -> None:
+        item = self.list.itemAt(point)
+        if self._ref(item) is None:
+            return
+        self.list.setCurrentItem(item)
+        menu = QMenu(self)
+        menu.addAction("See it full size").triggered.connect(lambda: self._show_whole(item))
+        for button in (
+            self.caption_button,
+            self.portrait_button,
+            self.again_button,
+            self.edit_button,
+            self.remove_button,
+        ):
+            if not button.isHidden():
+                action = menu.addAction(button.text())
+                action.setEnabled(button.isEnabled())
+                action.triggered.connect(button.click)
+        menu.exec(self.list.viewport().mapToGlobal(point))
+
     def _remove(self) -> None:
         ref = self._ref(self.list.currentItem())
-        if ref is None or self._refs is None:
+        if ref is None or self._refs is None or not self.remove_button.isEnabled():
+            return
+        answer = QMessageBox.question(
+            self,
+            "Remove this picture?",
+            "Take this picture off?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
             return
         # The file stays: a generated image's record may name it, and an
         # Undo of the card would want it back. It is small.

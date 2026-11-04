@@ -1028,6 +1028,20 @@ class ImageViewer(QDialog):
         save_picture_as(self, self._data, self._name)
 
 
+def show_whole(parent: QWidget, title: str, data: bytes | None) -> None:
+    """A picture full size, fitted to a window of its own (deleted on close,
+    with its picture)."""
+    if not data:
+        return
+    dialog = QDialog(parent)
+    dialog.setAttribute(Qt.WA_DeleteOnClose)
+    dialog.setWindowTitle(title)
+    layout = QVBoxLayout(dialog)
+    layout.addWidget(FitPicture(pixmap_of(data)))
+    size_to_screen(dialog, 0.6, 0.8)
+    dialog.exec()
+
+
 def named_for(name: str, data: bytes) -> str:
     """A file name with the extension its bytes call for: a GIF from someone
     else's scenario is kept as PNG, under the name it came with."""

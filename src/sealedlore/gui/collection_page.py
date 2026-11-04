@@ -17,8 +17,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from PySide6.QtCore import QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QIcon, QPainter, QPainterPath, QPen
+from PySide6.QtCore import QEvent, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QIcon, QKeySequence, QPainter, QPainterPath, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -65,6 +65,8 @@ TABS = (
     ("Files", "Every other file on their card: a background, a greeting's pictures, sounds"),
     ("About", "The card itself: who made it, its version, tags and sources, other apps' settings"),
 )
+# Character cards, by their files' endings (dropped on the page).
+CARD_SUFFIXES = (".png", ".json", ".charx")
 # The actions the page asks the window for (`action_requested`).
 NEW, IMPORT, LINK, EXPRESSIONS = "new", "import", "link", "expressions"
 EXPORT_PNG, EXPORT_CHARX, EXPORT_JSON = "export_png", "export_charx", "export_json"
@@ -160,6 +162,10 @@ class CollectionPage(QWidget):
     lorebook_requested = Signal(str, str)
     # "save" or "picture", which of the card's files, and the character's id.
     file_requested = Signal(str, int, str)
+    # (paths, character id): files dropped on their Files tab, to add.
+    files_dropped = Signal(list, str)
+    # (paths): character cards dropped on the list or the overview, to keep.
+    cards_dropped = Signal(list)
     # (character id, "" for everyone): another one shown; the window fills
     # the sheet of their pictures.
     character_shown = Signal(str)
@@ -167,6 +173,8 @@ class CollectionPage(QWidget):
     def __init__(self, pictures: StoryPictures, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("collectionPage")
+        # Esc in a field gives the page the focus first (main_window._on_escape).
+        self.setFocusPolicy(Qt.ClickFocus)
         self._pictures = pictures
         self._thumbs = Thumbs(pictures, self._thumbs_ready)
         self._characters: list[Character] = []
@@ -193,7 +201,18 @@ class CollectionPage(QWidget):
         self.people.setObjectName("boardPeople")
         self.people.setIconSize(PEOPLE_ICON)
         self.people.setSpacing(2)
+        # A long line of tags is cut short, never a sideways scrollbar.
+        self.people.setWordWrap(False)
+        self.people.setTextElideMode(Qt.ElideRight)
+        self.people.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        # Rows with no portrait keep their names in line with the rest.
+        blank = QPixmap(PEOPLE_ICON)
+        blank.fill(Qt.transparent)
+        self._blank_icon = QIcon(blank)
         self.people.currentItemChanged.connect(self._on_person)
+        delete_key = QShortcut(QKeySequence(QKeySequence.Delete), self.people)
+        delete_key.setContext(Qt.WidgetShortcut)
+        delete_key.activated.connect(lambda: self._act(DELETE))
         self.new_button = QPushButton("New character")
         self.new_button.setObjectName("sendButton")
         self.new_button.setToolTip("A character of your own, from a blank card")
@@ -216,6 +235,7 @@ class CollectionPage(QWidget):
         self.expressions_action.triggered.connect(
             lambda: self.action_requested.emit(EXPRESSIONS, self._current or "")
         )
+        import_menu.setToolTipsVisible(True)
         self.import_button.setMenu(import_menu)
         self.import_button.setToolTip(
             "SillyTavern character cards (PNG, CHARX or JSON), as SillyTavern, Chub and "
@@ -280,6 +300,7 @@ class CollectionPage(QWidget):
         self.charx_action = export_menu.addAction("As a CHARX card, with every picture and file…")
         self.charx_action.triggered.connect(lambda: self._act(EXPORT_CHARX))
         export_menu.addAction("As a JSON card…").triggered.connect(lambda: self._act(EXPORT_JSON))
+        export_menu.setToolTipsVisible(True)
         self.export_button.setMenu(export_menu)
         self.export_button.setToolTip("This character as a SillyTavern card")
         self.more_button = QToolButton()
@@ -304,13 +325,15 @@ class CollectionPage(QWidget):
         more_menu.addSeparator()
         self.delete_action = more_menu.addAction("Delete…")
         self.delete_action.triggered.connect(lambda: self._act(DELETE))
+        more_menu.setToolTipsVisible(True)
         self.more_button.setMenu(more_menu)
         self.back_button = QPushButton("Back to the story")
         self.back_button.setToolTip("Esc")
         self.back_button.clicked.connect(self.back_requested)
         header = WrapRow(group_spacing=12)
         header.add_group([self.title])
-        header.add_group([self.version])
+        self.version_label = QLabel("Version")
+        header.add_group([self.version_label, self.version])
         header.add_group([self.chat_button, self.draft_button, self.add_button])
         header.add_group([self.export_button, self.more_button])
         header.add_group([self.back_button], right=True)
@@ -335,8 +358,9 @@ class CollectionPage(QWidget):
         self.overview.itemActivated.connect(self._tile_chosen)
         self.overview.itemClicked.connect(self._tile_chosen)
         self.empty = QLabel(
-            "No characters yet. Make one with New character, or import SillyTavern cards: "
-            "PNG, CHARX or JSON files, or a link to a card on Chub or RisuRealm."
+            "No characters yet.\n\nMake one with New character (below, left), or Import "
+            "SillyTavern cards: PNG, CHARX or JSON files, or a link to a card on Chub or "
+            "RisuRealm. Card files can be dropped here too."
         )
         self.empty.setObjectName("hintLabel")
         self.empty.setWordWrap(True)
@@ -349,6 +373,7 @@ class CollectionPage(QWidget):
 
         self.card_form = CharacterForm(pictures)
         self.card_form.changed.connect(self._card_changed)
+        self.card_form.name.editingFinished.connect(self._name_finished)
         self.card_form.pictures_changed.connect(
             lambda: self._current and self.pictures_changed.emit(self._current)
         )
@@ -362,7 +387,7 @@ class CollectionPage(QWidget):
         for widget in (self.board.people, self.board.back_button, self.board.title):
             widget.hide()
         self.chat_form = ChatForm()
-        self.chat_form.changed.connect(lambda: self._current and self.changed.emit(self._current))
+        self.chat_form.changed.connect(self._counted_changed)
         self.lorebook_form = LorebookForm()
         self.lorebook_form.changed.connect(self._counted_changed)
         self.lorebook_form.lorebook_requested.connect(
@@ -370,6 +395,12 @@ class CollectionPage(QWidget):
         )
         self.files_form = FilesForm(self._thumbs)
         self.files_form.changed.connect(self._counted_changed)
+        self.files_form.files_dropped.connect(
+            lambda paths: self._current and self.files_dropped.emit(paths, self._current)
+        )
+        self.files_form.greetings_changed.connect(
+            lambda: self.chat_form.load(self._card(self._current))
+        )
         self.files_form.file_requested.connect(
             lambda what, index: (
                 self._current and self.file_requested.emit(what, index, self._current)
@@ -397,6 +428,9 @@ class CollectionPage(QWidget):
         layout.setSpacing(12)
         layout.addWidget(left)
         layout.addLayout(right, 1)
+        for target in (self.people.viewport(), self.overview.viewport(), self.empty):
+            target.setAcceptDrops(True)
+            target.installEventFilter(self)
         self._show()
 
     def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt naming
@@ -540,7 +574,7 @@ class CollectionPage(QWidget):
         family = collection.family_of(main, self._characters)
         parts = []
         if len(family) > 1:
-            parts.append(_plural(len(family) - 1, "version"))
+            parts.append(_plural(len(family), "version"))
         tags = main.tavern.tags if main.tavern else []
         if tags:
             parts.append(", ".join(tags[:3]))
@@ -552,6 +586,7 @@ class CollectionPage(QWidget):
         self.people.clear()
         everyone = QListWidgetItem(f"{EVERYONE}\n{_plural(len(shown), 'character')}")
         everyone.setData(Qt.UserRole, None)
+        everyone.setIcon(self._blank_icon)
         self.people.addItem(everyone)
         for main in shown:
             line = self._line(main)
@@ -562,6 +597,9 @@ class CollectionPage(QWidget):
                 item.setIcon(
                     QIcon(self._thumbs.now(first.file, PEOPLE_ICON.width(), PEOPLE_ICON.height()))
                 )
+            else:
+                item.setIcon(self._blank_icon)
+            item.setToolTip(f"{main.name}\n{line}" if line else main.name)
             self.people.addItem(item)
         self.people.blockSignals(False)
         self._select_person()
@@ -595,6 +633,28 @@ class CollectionPage(QWidget):
     def _tile_chosen(self, item: QListWidgetItem) -> None:
         self.show_character(item.data(Qt.UserRole))
 
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt naming
+        """Character cards dropped on the list or the overview are kept, as
+        Import does (SillyTavern takes cards so)."""
+        kind = event.type()
+        if kind in (QEvent.DragEnter, QEvent.DragMove, QEvent.Drop) and watched in (
+            self.people.viewport(),
+            self.overview.viewport(),
+            self.empty,
+        ):
+            paths = [
+                url.toLocalFile()
+                for url in event.mimeData().urls()
+                if url.isLocalFile() and url.toLocalFile().lower().endswith(CARD_SUFFIXES)
+            ]
+            if not paths:
+                return False
+            event.acceptProposedAction()
+            if kind == QEvent.Drop:
+                self.cards_dropped.emit(paths)
+            return True
+        return super().eventFilter(watched, event)
+
     def _thumbs_ready(self) -> None:
         self.overview.viewport().update()
         self.files_form.refresh_file_icons()
@@ -613,6 +673,7 @@ class CollectionPage(QWidget):
         if card is None:
             self.title.setText(PAGE_LABEL)
             self.version.hide()
+            self.version_label.hide()
             self.pages.setCurrentIndex(0)
             for form in (self.card_form, self.chat_form, self.about_form):
                 form.load(None)
@@ -627,9 +688,20 @@ class CollectionPage(QWidget):
         self.version.setCurrentIndex(max(0, self.version.findData(card.id)))
         self.version.blockSignals(False)
         self.version.setVisible(len(family) > 1)
+        self.version_label.setVisible(len(family) > 1)
         main = family[0] is card
         self.rename_action.setEnabled(not main)
+        self.rename_action.setToolTip(
+            "What this version is called"
+            if not main
+            else "The main card has no version name: choose a version above to rename it"
+        )
         self.png_action.setEnabled(bool(card.reference_images))
+        self.png_action.setToolTip(
+            "Their portrait with the card inside it, as SillyTavern shares cards"
+            if card.reference_images
+            else "A PNG card is their portrait: give them one first (Card tab)"
+        )
         if self.card_form.character is not card:
             for form in self._forms():
                 form.load(card)
@@ -640,11 +712,14 @@ class CollectionPage(QWidget):
         card = self._card(self._current)
         if card is None:
             count = len(collection.mains(self._characters))
+            shown = len(self._shown_mains())
+            kept = (
+                _plural(count, "character")
+                if shown == count
+                else f"{shown} of {_plural(count, 'character')} shown"
+            )
             words = (
-                f"{_plural(count, 'character')}, kept for any story or chat. Click one to see "
-                "their card."
-                if count
-                else ""
+                f"{kept}, kept for any story or chat. Click one to see their card." if count else ""
             )
         else:
             parts = [_plural(len(card.reference_images), "picture")]
@@ -680,6 +755,17 @@ class CollectionPage(QWidget):
             item.setText(f"{card.name}\n{line}" if line else card.name)
         self.changed.emit(card.id)
 
+    def _name_finished(self) -> None:
+        """A name typed in full: kept in place in a list sorted by name, and
+        a field left blank shows the name the card keeps."""
+        card = self._card(self._current)
+        if card is None:
+            return
+        if not self.card_form.name.text().strip():
+            self.card_form.name.setText(card.name)
+        if self.sort.currentIndex() == 0:
+            self._fill()
+
     def _counted_changed(self) -> None:
         """A change the line over the tabs counts (lore entries, files)."""
         if self._current is not None:
@@ -688,5 +774,7 @@ class CollectionPage(QWidget):
 
     def _about_changed(self) -> None:
         if self._current is not None:
+            # The list and the tiles show the tags, and filter by them.
             self._fill_tags()
+            self._fill()
             self.changed.emit(self._current)

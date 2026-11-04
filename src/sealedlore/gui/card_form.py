@@ -19,6 +19,7 @@ window keeps it.
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
     QFormLayout,
@@ -290,6 +291,8 @@ class CharacterForm(QWidget):
             "Remove the portrait?",
             f"Take this portrait off {character.name}'s card? Their next picture becomes "
             "the portrait.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
         )
         if answer == QMessageBox.Yes:
             self.others.remove_ref(shown)
@@ -307,14 +310,19 @@ class CharacterForm(QWidget):
 
 class GreetingsList(QWidget):
     """A card's alternate greetings: each listed by its first words, the one
-    chosen written out below to change."""
+    chosen written out below to change. `first` is the number the first one
+    is called by (2 for the other greetings: Chat with them… calls the first
+    message Greeting 1); `to_first` offers making one the first message."""
 
     changed = Signal()
+    # (row): the greeting chosen, to be the first message instead.
+    made_first = Signal(int)
 
-    def __init__(self) -> None:
+    def __init__(self, *, first: int = 1, to_first: bool = False) -> None:
         super().__init__()
         self._greetings: list[str] = []
         self._loading = False
+        self._first = first
         self.list = QListWidget()
         self.list.setObjectName("greetingsList")
         self.list.setMaximumHeight(140)
@@ -326,10 +334,27 @@ class GreetingsList(QWidget):
         add.clicked.connect(self._add)
         self.remove_button = QPushButton("Remove")
         self.remove_button.clicked.connect(self._remove)
+        self.up_button = QPushButton("Move up")
+        self.up_button.clicked.connect(lambda: self._move(-1))
+        self.down_button = QPushButton("Move down")
+        self.down_button.clicked.connect(lambda: self._move(1))
+        self.first_button = QPushButton("Make it the first message")
+        self.first_button.setToolTip("It and the first message change places")
+        self.first_button.clicked.connect(lambda: self.made_first.emit(self.list.currentRow()))
+        self.first_button.setVisible(to_first)
+        remove_key = QShortcut(QKeySequence(QKeySequence.Delete), self.list)
+        remove_key.setContext(Qt.WidgetShortcut)
+        remove_key.activated.connect(self._remove)
         buttons = QHBoxLayout()
         buttons.setContentsMargins(0, 0, 0, 0)
-        buttons.addWidget(add)
-        buttons.addWidget(self.remove_button)
+        for button in (
+            add,
+            self.remove_button,
+            self.up_button,
+            self.down_button,
+            self.first_button,
+        ):
+            buttons.addWidget(button)
         buttons.addStretch(1)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -351,7 +376,7 @@ class GreetingsList(QWidget):
     def _fill(self, row: int | None = None) -> None:
         self.list.blockSignals(True)
         self.list.clear()
-        for number, text in enumerate(self._greetings, 1):
+        for number, text in enumerate(self._greetings, self._first):
             self.list.addItem(QListWidgetItem(self._line(number, text)))
         if row is not None and 0 <= row < self.list.count():
             self.list.setCurrentRow(row)
@@ -368,8 +393,12 @@ class GreetingsList(QWidget):
         else:
             self.text.setPlainText("")
         # Nothing to write in until one is chosen or added.
-        self.text.setVisible(0 <= row < len(self._greetings))
-        self.remove_button.setEnabled(0 <= row < len(self._greetings))
+        chosen = 0 <= row < len(self._greetings)
+        self.text.setVisible(chosen)
+        self.remove_button.setEnabled(chosen)
+        self.up_button.setEnabled(chosen and row > 0)
+        self.down_button.setEnabled(chosen and row < len(self._greetings) - 1)
+        self.first_button.setEnabled(chosen)
         self._loading = False
 
     def _edited(self) -> None:
@@ -379,7 +408,7 @@ class GreetingsList(QWidget):
         self._greetings[row] = self.text.toPlainText()
         item = self.list.item(row)
         if item is not None:
-            item.setText(self._line(row + 1, self._greetings[row]))
+            item.setText(self._line(row + self._first, self._greetings[row]))
         self.changed.emit()
 
     def _add(self) -> None:
@@ -389,10 +418,31 @@ class GreetingsList(QWidget):
         self.text.setFocus()
         self.changed.emit()
 
+    def _move(self, step: int) -> None:
+        row = self.list.currentRow()
+        to = row + step
+        if not (0 <= row < len(self._greetings) and 0 <= to < len(self._greetings)):
+            return
+        greetings = self._greetings
+        greetings[row], greetings[to] = greetings[to], greetings[row]
+        self._fill(to)
+        self._chosen(to)
+        self.changed.emit()
+
     def _remove(self) -> None:
         row = self.list.currentRow()
-        if not 0 <= row < len(self._greetings):
+        if not 0 <= row < len(self._greetings) or not self.remove_button.isEnabled():
             return
+        if self._greetings[row].strip():
+            answer = QMessageBox.question(
+                self,
+                "Remove this greeting?",
+                f"Take greeting {row + self._first} off their card?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                return
         self._greetings.pop(row)
         self._fill(min(row, len(self._greetings) - 1))
         self._chosen(min(row, len(self._greetings) - 1))
@@ -414,8 +464,9 @@ class ChatForm(QWidget):
         )
         self.first_mes = GrowingText(lines=4, most=20)
         self.first_mes.setPlaceholderText("Their first message in a chat: how it opens.")
-        self.greetings = GreetingsList()
+        self.greetings = GreetingsList(first=2, to_first=True)
         self.greetings.changed.connect(self._apply)
+        self.greetings.made_first.connect(self._swap_first)
         # SillyTavern's group chats only: never used here, kept for the card.
         self.group_greetings = GreetingsList()
         self.group_greetings.changed.connect(self._apply)
@@ -492,6 +543,20 @@ class ChatForm(QWidget):
         tavern.post_history_instructions = self.post_history.toPlainText()
         self.changed.emit()
 
+    def _swap_first(self, row: int) -> None:
+        """Greeting `row` and the first message change places."""
+        tavern = _tavern(self._character)
+        others = tavern.alternate_greetings
+        if not 0 <= row < len(others):
+            return
+        tavern.first_mes, others[row] = others[row], tavern.first_mes
+        self._loading = True
+        self.first_mes.setPlainText(tavern.first_mes)
+        self._loading = False
+        self.greetings.set_greetings(others)
+        self.greetings.list.setCurrentRow(row)
+        self.changed.emit()
+
 
 class AboutForm(QWidget):
     """The card itself (see the module)."""
@@ -538,7 +603,7 @@ class AboutForm(QWidget):
         form = QFormLayout(content)
         form.setContentsMargins(0, 10, 8, 0)
         form.addRow("Made by", self.creator)
-        form.addRow("Card version", self.version)
+        form.addRow("Maker's version", self.version)
         form.addRow("Tags", self.tags)
         form.addRow("Maker's notes", self.creator_notes)
         form.addRow("Sources", self.source)

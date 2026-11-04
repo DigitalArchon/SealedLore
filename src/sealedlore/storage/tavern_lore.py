@@ -526,6 +526,8 @@ EDITED = (
     "use_regex",
     "case_sensitive",
     "caseSensitive",
+    "insertion_order",
+    "order",
 )
 BOOK_EDITED = ("name", "description", "entries")
 
@@ -626,12 +628,17 @@ def remove_entry(book: dict[str, Any], raw: Mapping[str, Any]) -> None:
 
 
 def copy_entry(book: dict[str, Any], raw: Mapping[str, Any]) -> dict[str, Any]:
-    """Another entry like `raw`, under a number of its own, after the others."""
+    """Another entry like `raw`, under a number of its own, right after it
+    (in SillyTavern's own shape, after the others: its order is its own)."""
     new = add_entry(book)
     number = {key: new[key] for key in ("uid", "id", "displayIndex") if key in new}
     new.clear()
     new.update(json.loads(json.dumps(raw)))
     new.update(number)
+    entries = book.get("entries")
+    if isinstance(entries, list) and any(entry is raw for entry in entries):
+        del entries[next(i for i, e in enumerate(entries) if e is new)]
+        entries.insert(next(i for i, e in enumerate(entries) if e is raw) + 1, new)
     return new
 
 

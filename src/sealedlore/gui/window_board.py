@@ -309,6 +309,8 @@ class CastBoardWindow:
                 "Remove this picture?",
                 f"Take this picture off {card.name}'s card? Pictures drawn for the story stay "
                 "in Media.",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
             )
             if answer == QMessageBox.Yes and ref in card.reference_images:
                 card.reference_images.remove(ref)

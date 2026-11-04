@@ -22,8 +22,10 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QInputDialog,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
+    QPlainTextEdit,
     QProgressDialog,
     QSplitter,
     QToolButton,
@@ -1109,8 +1111,15 @@ class MainWindow(
         if self.find_open() and self.find_bar.isAncestorOf(self.focusWidget()):
             self.close_find()
         elif self.collection_shown():
-            # As the board: the page hides the story, so Esc there means "back".
-            self.show_collection(False)
+            # As the board: the page hides the story, so Esc there means "back";
+            # but typing in one of its fields, Esc first leaves the field.
+            focus = self.focusWidget()
+            if isinstance(focus, QLineEdit | QPlainTextEdit) and self.collection_page.isAncestorOf(
+                focus
+            ):
+                self.collection_page.setFocus()
+            else:
+                self.show_collection(False)
         elif self.board_shown():
             # Before Stop: the board hides the story, so Esc there means "back".
             self.show_cast_board(False)

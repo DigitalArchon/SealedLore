@@ -16,11 +16,9 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
-    QDialog,
     QFileDialog,
     QMessageBox,
     QToolButton,
-    QVBoxLayout,
 )
 
 from sealedlore.engine.picture_shapes import BACKGROUND
@@ -29,11 +27,11 @@ from sealedlore.engine.places import newest_picture
 from sealedlore.gui.crop_dialog import cropped_picture
 from sealedlore.gui.expression_set import ask_expression_set
 from sealedlore.gui.image_dialog import (
-    FitPicture,
     ImageDialog,
     ImageViewer,
     named_for,
     save_picture_as,
+    show_whole,
 )
 from sealedlore.gui.image_jobs import FailedPicture, ImageCatalog, ImageJobs
 from sealedlore.gui.image_picker import pick_image_model
@@ -41,7 +39,7 @@ from sealedlore.gui.images_panel import ImagesPanel
 from sealedlore.gui.picture_use import CHARACTER, PLACE, UsePictureDialog
 from sealedlore.gui.picture_variant import PictureVariantDialog, VariantSubject
 from sealedlore.gui.portraits_dialog import PortraitsDialog
-from sealedlore.gui.ref_images import PICTURE_FILTER, pixmap_of
+from sealedlore.gui.ref_images import PICTURE_FILTER
 from sealedlore.gui.restyle_dialog import ask_restyle
 from sealedlore.gui.style_from_picture import describe_style
 from sealedlore.gui.transcript import FailedPictureItem, PendingPicture
@@ -1112,15 +1110,7 @@ class ImagesWindow:
         self._refresh_image_views()
 
     def _show_whole(self, title: str, data: bytes | None) -> None:
-        if not data:
-            return
-        dialog = QDialog(self)
-        dialog.setAttribute(Qt.WA_DeleteOnClose)
-        dialog.setWindowTitle(title)
-        layout = QVBoxLayout(dialog)
-        layout.addWidget(FitPicture(pixmap_of(data)))
-        dialog.resize(1000, 760)
-        dialog.exec()
+        show_whole(self, title, data)
 
     def _added_picture_action(self, action: str, ref_id: str) -> None:
         """A picture added from disk to no card, in Media: see it whole or save it."""

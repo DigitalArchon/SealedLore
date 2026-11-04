@@ -214,7 +214,7 @@ def test_a_charx_with_every_file_is_offered_whatever_the_pictures(app, window):
     )
 
 
-def test_a_click_on_a_picture_on_the_card_shows_it_full_size(app, window, monkeypatch):
+def test_a_picture_on_the_card_opens_full_size(app, window, monkeypatch):
     elena = window._kept()[0]
     window.show_collection(True, elena.id)
     about = window.collection_page.files_form
@@ -227,8 +227,11 @@ def test_a_click_on_a_picture_on_the_card_shows_it_full_size(app, window, monkey
             for r in range(about.files.count())
             if about.files.item(r).text() == name
         )
-        about.files.itemClicked.emit(item)
+        # Double-click or Enter: a click only chooses it.
+        about.files.itemActivated.emit(item)
 
+    about.files.itemClicked.emit(about.files.item(1))
+    assert shown == []
     click("Farmhouse")
     assert shown == [(f"{elena.name} · Farmhouse", FARMHOUSE)]
     click("wind")  # a sound: chosen, nothing to show

@@ -63,11 +63,19 @@ def test_the_lorebook_tab_adds_changes_and_removes_entries(app, window, yes):
     assert raw["secondary_keys"] == ["winter"]
     assert form.list.item(1).text() == "The creek · always sent"
     # The rest of the entry, as JSON: applied while it reads as an object.
+    form.order.setValue(5)
+    assert raw["insertion_order"] == 5
     form.entry_rest.button.click()
-    form.entry_rest.text.setPlainText('{"insertion_order": 5, "extensions": {"depth": 2}}')
-    assert raw["insertion_order"] == 5 and raw["extensions"] == {"depth": 2}
-    form.entry_rest.text.setPlainText('{"insertion_order": ')
-    assert raw["insertion_order"] == 5 and not form.entry_rest.problem.isHidden()
+    form.entry_rest.text.setPlainText('{"extensions": {"depth": 2}}')
+    assert raw["extensions"] == {"depth": 2}
+    form.entry_rest.text.setPlainText('{"extensions": ')
+    assert raw["extensions"] == {"depth": 2} and not form.entry_rest.problem.isHidden()
+    assert "not applied" in form.entry_rest.button.text()
+    # A long book is found by its words.
+    form.find.setText("cold")
+    hidden = [form.list.isRowHidden(row) for row in range(form.list.count())]
+    assert hidden == [True, False]
+    form.find.clear()
     form.book_name.setText("Elena's lore")
     form.copy_button.click()
     assert form.list.count() == 3

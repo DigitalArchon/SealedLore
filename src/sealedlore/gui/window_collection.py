@@ -125,6 +125,10 @@ class CollectionWindow:
         page = self.collection_page
         page.back_requested.connect(lambda: self.show_collection(False))
         page.action_requested.connect(self._collection_action)
+        page.cards_dropped.connect(self._import_to_collection)
+        page.files_dropped.connect(
+            lambda paths, card_id: self._add_card_files(self._kept_card(card_id), paths)
+        )
         page.changed.connect(self._collection_changed)
         page.pictures_changed.connect(self._collection_pictures_changed)
         page.picture_requested.connect(
@@ -222,7 +226,11 @@ class CollectionWindow:
     def _save_collection(self) -> None:
         self._collection_save.stop()
         if self._collection_problem:
-            self._warn_plain("Your characters weren't kept", self._collection_problem)
+            # Said once a run, not at every pause in typing; the page's line
+            # over the tabs says it until the folder can be read.
+            if not getattr(self, "_collection_problem_said", False):
+                self._collection_problem_said = True
+                self._warn_plain("Your characters weren't kept", self._collection_problem)
             return
         if self._collection is not None:
             try:
@@ -429,6 +437,10 @@ class CollectionWindow:
 
     def _added_to_collection(self, characters: list[Character], notes: list[str], lead: str):
         session = self._collection_session()
+        if self._collection_problem and characters:
+            # Nothing is kept: never say it was.
+            self._warn_plain("Not kept", self._collection_problem)
+            return
         session.cast.extend(characters)
         self._save_collection()
         if not characters:
@@ -466,10 +478,12 @@ class CollectionWindow:
         character, notes = self._kept_from_card(card, came_from)
         self._added_to_collection([character], notes, f"{character.name} is kept in {PAGE_LABEL}.")
 
-    def _import_to_collection(self) -> None:
-        paths, _ = QFileDialog.getOpenFileNames(
-            self._dialog_parent(), "Import character cards", str(Path.home()), CARD_FILTER
-        )
+    def _import_to_collection(self, paths: list[str] | None = None) -> None:
+        """Cards chosen in a file dialog, or dropped on the page."""
+        if paths is None:
+            paths, _ = QFileDialog.getOpenFileNames(
+                self._dialog_parent(), "Import character cards", str(Path.home()), CARD_FILTER
+            )
         added: list[Character] = []
         notes: list[str] = []
         for path in map(Path, paths):
@@ -581,7 +595,11 @@ class CollectionWindow:
         for file in collection.forget(self._collection_session().bundle, card):
             store.remove(file)
         self._save_collection()
-        self.collection_page.show_character(family[1].id if main and len(family) > 1 else None)
+        # A main card's heir, or a version's main card: never back to everyone.
+        if main:
+            self.collection_page.show_character(family[1].id if len(family) > 1 else None)
+        else:
+            self.collection_page.show_character(family[0].id)
         self._refresh_collection()
         self.statusBar().showMessage(
             f"Deleted {what}" + (" (their card is in the Trash)" if trashed else ""), 8000
@@ -673,6 +691,8 @@ class CollectionWindow:
                 self._dialog_parent(),
                 "Remove the lorebook",
                 f"Take {card.name}'s own lorebook ({tavern.book_entries} entries) off their card?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
             )
             if answer != QMessageBox.Yes:
                 return
@@ -729,6 +749,8 @@ class CollectionWindow:
                     "Replace the lorebook?",
                     f"{card.name} has a lorebook of {tavern.book_entries} entries. Replace it "
                     f"with the {count} from {path.name}?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No,
                 )
                 != QMessageBox.Yes
             ):
@@ -824,13 +846,18 @@ class CollectionWindow:
         self.collection_page.show_files(chosen)
         self._refresh_collection()
 
-    def _add_card_files(self, card: Character) -> None:
-        """Files from disk onto their card: a picture stripped of its hidden
-        data as any picture coming in is (re-encoded where it can't be), a
-        video stripped too, anything else kept as it is."""
-        chosen, _ = QFileDialog.getOpenFileNames(
-            self._dialog_parent(), f"Files for {card.name}'s card", str(Path.home())
-        )
+    def _add_card_files(self, card: Character | None, chosen: list[str] | None = None) -> None:
+        """Files from disk onto their card (chosen, or dropped on the Files
+        tab): a picture stripped of its hidden data as any picture coming in
+        is (re-encoded where it can't be), a video stripped too, anything
+        else kept as it is."""
+        if card is None:
+            return
+        if chosen is None:
+            chosen, _ = QFileDialog.getOpenFileNames(
+                self._dialog_parent(), f"Files for {card.name}'s card", str(Path.home())
+            )
+        chosen = [name for name in chosen if Path(name).is_file()]
         if not chosen:
             return
         store = self._collection_store()
@@ -885,6 +912,8 @@ class CollectionWindow:
             "Remove this file?",
             f"Take {name} off {card.name}'s card?"
             + (" The file kept for it is deleted." if asset.held else ""),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
         )
         if answer != QMessageBox.Yes or card.tavern is None or asset not in card.tavern.assets:
             return
@@ -955,7 +984,11 @@ class CollectionWindow:
             self._collection_pictures_changed(card_id)
         elif what == "remove":
             answer = QMessageBox.question(
-                self, "Remove this picture?", f"Take this picture off {card.name}'s card?"
+                self,
+                "Remove this picture?",
+                f"Take this picture off {card.name}'s card?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
             )
             if answer == QMessageBox.Yes and ref in card.reference_images:
                 card.reference_images.remove(ref)

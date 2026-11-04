@@ -153,6 +153,9 @@ def sheet_for(character: Character, wanted: Mapping[str, int] | None = None) -> 
         + list(character.sheet_looks)
         + [""] * any(not r.look.strip() for r in labelled)
     )
+    # Nothing labelled yet: one row all the same, a place to drop a picture
+    # on (it was a sheet of headers alone, with nowhere to put anything).
+    looks = looks or [""]
     expressions = _ordered(
         [*(character.sheet_expressions or DEFAULT_EXPRESSIONS)]
         + [r.expression for r in labelled if r.expression.strip()]

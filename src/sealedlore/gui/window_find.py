@@ -39,6 +39,11 @@ class FindWindow:
         view_menu.addAction(self.find_action)
 
     def open_find(self) -> None:
+        if self.collection_shown():
+            # Your characters has its own search: Ctrl+F goes there.
+            self.collection_page.search.setFocus()
+            self.collection_page.search.selectAll()
+            return
         if self.session is None or self._page_covers():
             return
         if self.map_shown():

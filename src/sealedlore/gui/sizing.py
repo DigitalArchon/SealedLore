@@ -78,6 +78,9 @@ class GrowingText(QPlainTextEdit):
         self, text: str = "", *, lines: int = 3, most: int = 16, fill: bool = False
     ) -> None:
         super().__init__(text)
+        # Tab goes on to the next field, as in every other box of a form; a
+        # tab character in a card or a message is never what was meant.
+        self.setTabChangesFocus(True)
         self._lines = max(1, lines)
         self._most = max(self._lines, most)
         self._measuring = False

@@ -159,8 +159,8 @@ def test_a_version_is_its_own_card_and_outlives_its_main(app, window, tmp_path: 
         "Main card",
         "After the war",
     ]
-    # Listed once, with how many versions.
-    assert page.people.count() == 2 and "1 version" in page.people.item(1).text()
+    # Listed once, with how many versions (the main card counts as one).
+    assert page.people.count() == 2 and "2 versions" in page.people.item(1).text()
     version.personality = "harder now"
     assert elena.personality == ELENA["personality"]
     assert version.reference_images[0].file != elena.reference_images[0].file
