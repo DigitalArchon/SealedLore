@@ -42,7 +42,7 @@ from sealedlore.gui.picture_words import (
     USE_PLACE_LABEL,
 )
 from sealedlore.gui.ref_images import thumbnail_of
-from sealedlore.gui.transcript import FOR_CARDS, IMAGE_ACTIONS, picture_caption
+from sealedlore.gui.transcript import FOR_CARDS, IMAGE_ACTIONS, NOT_DRAWN, picture_caption
 from sealedlore.gui.video_view import VIDEO_ACTIONS, video_caption
 from sealedlore.models.character import Character
 from sealedlore.models.image import GeneratedImage, ImageRef
@@ -245,6 +245,8 @@ class ImagesPanel(QWidget):
             item = QListWidgetItem(text + ("\n(not on this branch)" if elsewhere else ""))
             item.setData(Qt.UserRole, image.id)
             item.setData(Qt.UserRole + 1, "image")
+            # One of a card's own pictures: no prompt drew it.
+            item.setData(Qt.UserRole + 2, bool(image.from_card))
             item.setToolTip(image.prompt)
             if store is not None:
                 item.setIcon(self._icon(store.read(image.file), image.file, GALLERY_THUMB))
@@ -394,6 +396,8 @@ class ImagesPanel(QWidget):
                 menu.addSeparator()
                 continue
             if self._chat and key in FOR_CARDS:
+                continue
+            if item.data(Qt.UserRole + 2) and key in NOT_DRAWN:
                 continue
             action = menu.addAction(text)
             action.triggered.connect(
