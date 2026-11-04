@@ -110,6 +110,10 @@ class LorebookForm(QWidget):
         self.constant = QCheckBox("Always sent")
         self.constant.setToolTip("Sent whatever is mentioned, keywords or not")
         self.use_regex = QCheckBox("Keywords are regular expressions")
+        self.use_regex.setToolTip(
+            "A keyword written /like this/ is a pattern whatever this says. SillyTavern ticks "
+            "it on every entry of a card it makes; a plain word finds the same either way."
+        )
         self.case_sensitive = QCheckBox("Keywords match only in the same case")
         for box in (self.enabled, self.constant, self.use_regex, self.case_sensitive):
             box.toggled.connect(lambda _on, box=box: self._entry_edited(box))
@@ -279,7 +283,7 @@ class LorebookForm(QWidget):
         self.enabled.setChecked(lore.entry_enabled(raw))
         self.constant.setChecked(bool(raw.get("constant")))
         self.use_regex.setChecked(bool(raw.get("use_regex")))
-        self.case_sensitive.setChecked(bool(lore.entry_get(raw, "case_sensitive")))
+        self.case_sensitive.setChecked(lore.entry_case_sensitive(raw))
         set_field_text(self.secondary, _keys_text(lore.entry_keys(raw, "secondary_keys")))
         self.selective.setChecked(bool(raw.get("selective")))
         self.entry_rest.set_value(lore.entry_rest(raw))
@@ -302,7 +306,7 @@ class LorebookForm(QWidget):
         elif what is self.use_regex:
             raw["use_regex"] = self.use_regex.isChecked()
         elif what is self.case_sensitive:
-            lore.entry_set(raw, "case_sensitive", self.case_sensitive.isChecked())
+            lore.set_entry_case_sensitive(raw, self.case_sensitive.isChecked())
         elif what == "secondary":
             lore.entry_set(raw, "secondary_keys", _keys_of(self.secondary.text()))
         elif what == "selective":

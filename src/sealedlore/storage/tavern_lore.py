@@ -30,6 +30,10 @@ from sealedlore.storage.atomic import atomic_write_json
 MAX_BYTES = 32 * 1024 * 1024
 # A key written /like this/i is a regular expression in SillyTavern.
 _REGEX_KEY = re.compile(r"^/.+/[a-z]*$", re.S)
+# The signs that make a key a pattern rather than words, where an entry says
+# its keys are patterns (`use_regex`). A dot is left out: "Mr. Smith" finds
+# the same either way.
+_PATTERN_SIGNS = re.compile(r"[\\^$|?*+()\[\]{}]")
 
 
 class LorebookError(ValueError):
@@ -113,9 +117,19 @@ def lore_from_book(
             result.left_out["empty"] += 1
             continue
         primary = _keys(raw.get("key", raw.get("keys")))
-        regex = bool(raw.get("use_regex")) or any(_REGEX_KEY.match(key) for key in primary)
-        keywords = [] if raw.get("use_regex") else [k for k in primary if not _REGEX_KEY.match(k)]
-        if regex:
+        # A pattern can't be a keyword: one written /like this/ (SillyTavern's
+        # way), or one using a pattern's signs in an entry whose keys are
+        # patterns. A plain word finds the same either way, and SillyTavern
+        # marks every entry of a card it writes so ("ST keys are always
+        # regex", its source): read as no keywords, an entry of a card made
+        # there reached a story with none.
+        patterns = bool(raw.get("use_regex"))
+        keywords = [
+            key
+            for key in primary
+            if not _REGEX_KEY.match(key) and not (patterns and _PATTERN_SIGNS.search(key))
+        ]
+        if len(keywords) < len(primary):
             result.left_out["regex"] += 1
         secondary = _keys(raw.get("keysecondary", raw.get("secondary_keys")))
         if secondary and raw.get("selective", True):
@@ -251,6 +265,235 @@ def character_book_from_lore(entries: Sequence[LoreEntry], name: str = "") -> di
     }
 
 
+# --- SillyTavern's own conversions, exactly -------------------------------------------------
+#
+# Between a card's lorebook (the spec's shape) and SillyTavern's lorebook file,
+# as SillyTavern itself converts them (its source, release branch, read Nov 4
+# 2026: public/scripts/world-info.js `convertCharacterBook`, used when it
+# imports a card's book, and src/endpoints/characters.js
+# `convertWorldInfoToCharacterBook`, used when it writes one into a card). So
+# a book exported from a card here, or a lorebook file put on a card, keeps
+# every setting either way, where reading it down to SealedLore's lore lost
+# them (the author, Nov 2026: "make that exact too").
+
+# SillyTavern's new entry (`newWorldInfoEntryTemplate`).
+_WORLD_TEMPLATE: dict[str, Any] = {
+    "key": [],
+    "keysecondary": [],
+    "comment": "",
+    "content": "",
+    "constant": False,
+    "vectorized": False,
+    "selective": True,
+    "selectiveLogic": 0,
+    "addMemo": False,
+    "order": 100,
+    "position": 0,
+    "disable": False,
+    "ignoreBudget": False,
+    "excludeRecursion": False,
+    "preventRecursion": False,
+    "matchPersonaDescription": False,
+    "matchCharacterDescription": False,
+    "matchCharacterPersonality": False,
+    "matchCharacterDepthPrompt": False,
+    "matchScenario": False,
+    "matchCreatorNotes": False,
+    "delayUntilRecursion": 0,
+    "probability": 100,
+    "useProbability": True,
+    "depth": 4,
+    "outletName": "",
+    "group": "",
+    "groupOverride": False,
+    "groupWeight": 100,
+    "scanDepth": None,
+    "caseSensitive": None,
+    "matchWholeWords": None,
+    "useGroupScoring": None,
+    "automationId": "",
+    "role": 0,
+    "sticky": None,
+    "cooldown": None,
+    "delay": None,
+    "triggers": [],
+}
+# JavaScript's undefined: a field left out of the JSON it writes.
+_ABSENT = object()
+
+
+def _or(value: Any, default: Any) -> Any:
+    """JavaScript's `value ?? default`."""
+    return default if value is None or value is _ABSENT else value
+
+
+def _written(fields: Mapping[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in fields.items() if value is not _ABSENT}
+
+
+def world_from_book(book: Mapping[str, Any]) -> dict[str, Any]:
+    """A card's lorebook as SillyTavern's lorebook file, as SillyTavern makes
+    one from a card (`convertCharacterBook`), with the card's book itself
+    beside the entries (`originalData`), as SillyTavern keeps it. A book in
+    SillyTavern's own shape already is one, and goes as it is."""
+    if isinstance(book.get("entries"), Mapping):
+        return json.loads(json.dumps(book))
+    original = json.loads(json.dumps(book))
+    entries: dict[str, Any] = {}
+    listed = original.get("entries") if isinstance(original.get("entries"), list) else []
+    for index, raw in enumerate(listed):
+        if not isinstance(raw, dict):
+            continue
+        # SillyTavern numbers an entry that has none in place, so the card's
+        # book kept beside the entries carries the number too.
+        raw.setdefault("id", index)
+        ext = raw.get("extensions") if isinstance(raw.get("extensions"), Mapping) else {}
+        uid = raw["id"]
+
+        def x(name: str, default: Any, ext: Mapping[str, Any] = ext) -> Any:
+            return _or(ext.get(name), default)
+
+        entries[str(uid)] = _written(
+            {
+                **_WORLD_TEMPLATE,
+                "uid": uid,
+                "key": raw.get("keys", _ABSENT),
+                "keysecondary": raw.get("secondary_keys") or [],
+                "comment": raw.get("comment") or "",
+                "content": raw.get("content", _ABSENT),
+                "constant": raw.get("constant") or False,
+                "selective": raw.get("selective") or False,
+                "order": raw.get("insertion_order", _ABSENT),
+                "position": x("position", 0 if raw.get("position") == "before_char" else 1),
+                "excludeRecursion": x("exclude_recursion", False),
+                "preventRecursion": x("prevent_recursion", False),
+                "delayUntilRecursion": x("delay_until_recursion", False),
+                "disable": not raw.get("enabled"),
+                "addMemo": bool(raw.get("comment")),
+                "displayIndex": x("display_index", index),
+                "probability": x("probability", 100),
+                "useProbability": x("useProbability", True),
+                "depth": x("depth", 4),
+                "selectiveLogic": x("selectiveLogic", 0),
+                "outletName": x("outlet_name", ""),
+                "group": x("group", ""),
+                "groupOverride": x("group_override", False),
+                "groupWeight": x("group_weight", 100),
+                "scanDepth": x("scan_depth", None),
+                "caseSensitive": x("case_sensitive", None),
+                "matchWholeWords": x("match_whole_words", None),
+                "useGroupScoring": x("use_group_scoring", None),
+                "automationId": x("automation_id", ""),
+                "role": x("role", 0),
+                "vectorized": x("vectorized", False),
+                "sticky": x("sticky", None),
+                "cooldown": x("cooldown", None),
+                "delay": x("delay", None),
+                "matchPersonaDescription": x("match_persona_description", False),
+                "matchCharacterDescription": x("match_character_description", False),
+                "matchCharacterPersonality": x("match_character_personality", False),
+                "matchCharacterDepthPrompt": x("match_character_depth_prompt", False),
+                "matchScenario": x("match_scenario", False),
+                "matchCreatorNotes": x("match_creator_notes", False),
+                "extensions": json.loads(json.dumps(ext)),
+                "triggers": ext.get("triggers") or [],
+                "ignoreBudget": x("ignore_budget", False),
+            }
+        )
+    return {"entries": entries, "originalData": original}
+
+
+def _js_order(entries: Mapping[str, Any]) -> list[Any]:
+    """An object's values in JavaScript's order: whole-number keys first,
+    ascending, then the rest as written."""
+    numbered = sorted((key for key in entries if str(key).isdigit()), key=int)
+    return [entries[key] for key in [*numbered, *(k for k in entries if not str(k).isdigit())]]
+
+
+def book_from_world(world: Mapping[str, Any], name: str = "") -> dict[str, Any]:
+    """SillyTavern's lorebook file as a card's own lorebook, as SillyTavern
+    writes one into a card (`convertWorldInfoToCharacterBook`). A card's book
+    already is one, and goes as it is."""
+    entries = world.get("entries")
+    if isinstance(entries, list):
+        return json.loads(json.dumps(world))
+    result: dict[str, Any] = {"entries": [], "name": name}
+    for entry in _js_order(entries) if isinstance(entries, Mapping) else []:
+        if not isinstance(entry, Mapping):
+            continue
+
+        def e(name: str, entry: Mapping[str, Any] = entry) -> Any:
+            return entry.get(name, _ABSENT)
+
+        own = entry.get("extensions") if isinstance(entry.get("extensions"), Mapping) else {}
+        result["entries"].append(
+            _written(
+                {
+                    "id": e("uid"),
+                    "keys": e("key"),
+                    "secondary_keys": e("keysecondary"),
+                    "comment": e("comment"),
+                    "content": e("content"),
+                    "constant": e("constant"),
+                    "selective": e("selective"),
+                    "insertion_order": e("order"),
+                    "enabled": not entry.get("disable"),
+                    "position": "before_char" if entry.get("position") == 0 else "after_char",
+                    # "ST keys are always regex": a plain one finds the same.
+                    "use_regex": True,
+                    "extensions": _written(
+                        {
+                            **json.loads(json.dumps(own)),
+                            "position": e("position"),
+                            "exclude_recursion": e("excludeRecursion"),
+                            "display_index": e("displayIndex"),
+                            "probability": _or(e("probability"), None),
+                            "useProbability": _or(e("useProbability"), False),
+                            "depth": _or(e("depth"), 4),
+                            "selectiveLogic": _or(e("selectiveLogic"), 0),
+                            "outlet_name": _or(e("outletName"), ""),
+                            "group": _or(e("group"), ""),
+                            "group_override": _or(e("groupOverride"), False),
+                            "group_weight": _or(e("groupWeight"), None),
+                            "prevent_recursion": _or(e("preventRecursion"), False),
+                            "delay_until_recursion": _or(e("delayUntilRecursion"), False),
+                            "scan_depth": _or(e("scanDepth"), None),
+                            "match_whole_words": _or(e("matchWholeWords"), None),
+                            "use_group_scoring": _or(e("useGroupScoring"), False),
+                            "case_sensitive": _or(e("caseSensitive"), None),
+                            "automation_id": _or(e("automationId"), ""),
+                            "role": _or(e("role"), 0),
+                            "vectorized": _or(e("vectorized"), False),
+                            "sticky": _or(e("sticky"), None),
+                            "cooldown": _or(e("cooldown"), None),
+                            "delay": _or(e("delay"), None),
+                            "match_persona_description": _or(e("matchPersonaDescription"), False),
+                            "match_character_description": _or(
+                                e("matchCharacterDescription"), False
+                            ),
+                            "match_character_personality": _or(
+                                e("matchCharacterPersonality"), False
+                            ),
+                            "match_character_depth_prompt": _or(
+                                e("matchCharacterDepthPrompt"), False
+                            ),
+                            "match_scenario": _or(e("matchScenario"), False),
+                            "match_creator_notes": _or(e("matchCreatorNotes"), False),
+                            "triggers": _or(e("triggers"), []),
+                            "ignore_budget": _or(e("ignoreBudget"), False),
+                        }
+                    ),
+                }
+            )
+        )
+    return result
+
+
+def write_world(path: Path, book: Mapping[str, Any]) -> None:
+    """A card's lorebook as SillyTavern's lorebook file, every setting kept."""
+    atomic_write_json(path, world_from_book(book))
+
+
 # --- a card's own lorebook, edited in place -------------------------------------------------
 #
 # Your characters keep a card's lorebook as it came (TavernFields.character_book):
@@ -314,6 +557,21 @@ def set_entry_title(raw: dict[str, Any], title: str) -> None:
 
 def entry_keys(raw: Mapping[str, Any], field_name: str = "keys") -> list[str]:
     return _keys(entry_get(raw, field_name))
+
+
+def entry_case_sensitive(raw: Mapping[str, Any]) -> bool:
+    """The spec's own field, or SillyTavern's (in the entry's extensions,
+    which is the one it reads)."""
+    ext = raw.get("extensions")
+    in_ext = ext.get("case_sensitive") if isinstance(ext, Mapping) else None
+    return bool(entry_get(raw, "case_sensitive") or in_ext)
+
+
+def set_entry_case_sensitive(raw: dict[str, Any], on: bool) -> None:
+    entry_set(raw, "case_sensitive", on)
+    ext = raw.get("extensions")
+    if isinstance(ext, dict) and "case_sensitive" in ext:
+        ext["case_sensitive"] = on
 
 
 def entry_enabled(raw: Mapping[str, Any]) -> bool:

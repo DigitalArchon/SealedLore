@@ -171,3 +171,106 @@ def test_a_card_read_back_has_its_edits(tmp_path: Path):
     assert [(e.title, e.keywords, e.content) for e in lore.lore_from_book(book).entries] == [
         ("The creek", ["creek"], "Cold all year.")
     ]
+
+
+# --- SillyTavern's own conversions ---------------------------------------------------------
+
+# A card's entry as SillyTavern writes one (its convertWorldInfoToCharacterBook).
+ST_CARD_BOOK = {
+    "name": "Doomsville",
+    "entries": [
+        {
+            "id": 7,
+            "keys": ["Hellsville", "the town"],
+            "secondary_keys": ["wall"],
+            "comment": "Hellsville",
+            "content": "Hellsville is walled.",
+            "constant": False,
+            "selective": True,
+            "insertion_order": 40,
+            "enabled": False,
+            "position": "after_char",
+            "use_regex": True,
+            "extensions": {
+                "position": 4,
+                "depth": 2,
+                "probability": 70,
+                "useProbability": True,
+                "group": "towns",
+                "selectiveLogic": 3,
+                "display_index": 5,
+                "case_sensitive": None,
+                "sticky": 2,
+            },
+        }
+    ],
+}
+
+
+def test_a_cards_book_becomes_sillytaverns_file_as_sillytavern_makes_it():
+    world = lore.world_from_book(ST_CARD_BOOK)
+    entry = world["entries"]["7"]
+    assert (entry["uid"], entry["key"], entry["keysecondary"], entry["comment"]) == (
+        7,
+        ["Hellsville", "the town"],
+        ["wall"],
+        "Hellsville",
+    )
+    assert (entry["order"], entry["disable"], entry["position"], entry["depth"]) == (
+        40,
+        True,
+        4,
+        2,
+    )
+    assert (entry["probability"], entry["group"], entry["selectiveLogic"]) == (70, "towns", 3)
+    assert (entry["displayIndex"], entry["sticky"], entry["addMemo"]) == (5, 2, True)
+    assert entry["extensions"] == ST_CARD_BOOK["entries"][0]["extensions"]
+    assert entry["vectorized"] is False and entry["groupWeight"] == 100, "the rest as its template"
+    assert world["originalData"] == ST_CARD_BOOK, "the card's book beside, as SillyTavern keeps it"
+
+
+def test_sillytaverns_file_goes_on_a_card_as_sillytavern_puts_it_and_back():
+    world = lore.world_from_book(ST_CARD_BOOK)
+    book = lore.book_from_world(world, name="Doomsville")
+    entry = book["entries"][0]
+    assert book["name"] == "Doomsville"
+    assert (entry["id"], entry["keys"], entry["insertion_order"], entry["enabled"]) == (
+        7,
+        ["Hellsville", "the town"],
+        40,
+        False,
+    )
+    assert entry["position"] == "after_char" and entry["use_regex"] is True
+    ext = entry["extensions"]
+    assert (ext["position"], ext["depth"], ext["probability"], ext["group"]) == (4, 2, 70, "towns")
+    assert (ext["selectiveLogic"], ext["display_index"], ext["sticky"]) == (3, 5, 2)
+    # Round and round, it settles: nothing is lost or invented a second time.
+    again = lore.book_from_world(lore.world_from_book(book), name="Doomsville")
+    assert again == book
+
+
+def test_a_book_in_either_shape_passes_through_the_other_way_as_it_is():
+    assert lore.book_from_world(ST_CARD_BOOK) == ST_CARD_BOOK
+    assert lore.world_from_book(WORLD_BOOK) == WORLD_BOOK
+
+
+def test_entries_numbered_by_javascripts_order():
+    world = {"entries": {"10": {"uid": 10, "content": "b"}, "2": {"uid": 2, "content": "a"}}}
+    assert [e["content"] for e in lore.book_from_world(world)["entries"]] == ["a", "b"]
+
+
+def test_a_cards_entry_marked_as_patterns_keeps_its_plain_keywords():
+    """SillyTavern marks every entry of a card it writes as patterns; read as
+    no keywords, such an entry reached a story with none."""
+    book = {
+        "entries": [
+            {"keys": ["Hellsville", "the town", "Mr. Smith"], "content": "x", "use_regex": True},
+            {"keys": ["wolf(ves)?", "/howl/i", "pack"], "content": "y", "use_regex": True},
+        ]
+    }
+    read = lore.lore_from_book(book)
+    assert [entry.keywords for entry in read.entries] == [
+        ["Hellsville", "the town", "Mr. Smith"],
+        ["pack"],
+    ]
+    assert read.left_out["regex"] == 1, "only the entry that had patterns says so"

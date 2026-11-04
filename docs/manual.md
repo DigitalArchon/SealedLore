@@ -955,9 +955,12 @@ to or taken off:
   settings) is under **Everything else on this entry (JSON)**, and the book's
   own settings likewise. A story uses an entry's keywords, its text and its
   switches; the rest goes out with the card for SillyTavern and other apps.
-  **Import a lorebook…** puts another in its place (a card's own is kept as it
-  came, every setting of it), **Export…** saves the entries as a SillyTavern
-  lorebook file, and **Remove the lorebook** takes it off.
+  **Import a lorebook…** puts another in its place, and **Export…** saves it as
+  a SillyTavern lorebook file; both keep every setting, converting as
+  SillyTavern itself does between a card's lorebook and its lorebook files.
+  **Remove the lorebook** takes it off. (SillyTavern marks every entry of a
+  card it makes as regular expressions; a plain keyword is still a keyword
+  in a story here.)
 - **Files**: every other file on the card (below).
 - **About**: who made the card, its version, its tags, its maker's notes, its
   sources, and where it came from; and, each under a heading that opens it,

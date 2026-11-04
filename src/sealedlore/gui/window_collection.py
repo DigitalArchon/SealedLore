@@ -14,7 +14,6 @@ their folder's own log, said on the page.
 
 from __future__ import annotations
 
-import copy
 import io
 import re
 from pathlib import Path
@@ -74,11 +73,10 @@ from sealedlore.storage.tavern_cards import (
 )
 from sealedlore.storage.tavern_lore import (
     LorebookError,
-    character_book_from_lore,
+    book_from_world,
     entries_of,
-    lore_from_book,
     read_lorebook,
-    write_lorebook,
+    write_world,
 )
 
 COLLECTION_TIP = (
@@ -680,7 +678,8 @@ class CollectionWindow:
                 return
             tavern.character_book = None
         elif what == "export":
-            entries = lore_from_book(tavern.character_book or {}).entries
+            book = tavern.character_book or {}
+            count = len(entries_of(book))
             chosen, _ = QFileDialog.getSaveFileName(
                 self._dialog_parent(),
                 f"Export {card.name}'s lorebook",
@@ -693,11 +692,12 @@ class CollectionWindow:
             if path.suffix.lower() != ".json":
                 path = path.with_name(path.name + ".json")
             try:
-                write_lorebook(path, entries)
+                # Every setting kept, as SillyTavern makes the file from a card.
+                write_world(path, book)
             except OSError as exc:
                 self._warn_plain("Could not export the lorebook", f"{path}: {exc}")
                 return
-            self.statusBar().showMessage(f"Saved {len(entries)} entries to {path.name}.", 8000)
+            self.statusBar().showMessage(f"Saved {count} entries to {path.name}.", 8000)
             return
         else:
             chosen, _ = QFileDialog.getOpenFileName(
@@ -718,12 +718,11 @@ class CollectionWindow:
             if book is None:
                 self._warn_plain("Could not read the lorebook", f"{path.name} has no lorebook.")
                 return
-            imported = lore_from_book(book)
-            # A card's own (the spec's shape) is kept as it came, every setting
-            # of it to edit on the Lorebook tab; SillyTavern's lorebook file
-            # (its own shape, never a card's) becomes one as SealedLore reads it.
-            whole = isinstance(book.get("entries"), list)
-            count = len(entries_of(book)) if whole else len(imported.entries)
+            # Kept whole, every setting of it to edit on the Lorebook tab: a
+            # card's own as it came, SillyTavern's lorebook file as SillyTavern
+            # itself puts one on a card.
+            whole = book_from_world(book, name=path.stem)
+            count = len(entries_of(whole))
             if tavern.character_book and (
                 QMessageBox.question(
                     self._dialog_parent(),
@@ -734,16 +733,10 @@ class CollectionWindow:
                 != QMessageBox.Yes
             ):
                 return
-            if whole:
-                tavern.character_book = copy.deepcopy(dict(book))
-            else:
-                tavern.character_book = character_book_from_lore(imported.entries, name=card.name)
-            if not whole and imported.notes():
-                self._say_left_out(
-                    "A lorebook for a character",
-                    f"{len(imported.entries)} entries are {card.name}'s own lorebook now.",
-                    [f"Left out {note}." for note in imported.notes()],
-                )
+            tavern.character_book = whole
+            self.statusBar().showMessage(
+                f"{count} entries are {card.name}'s own lorebook now.", 8000
+            )
         collection.touch(card)
         self._save_collection()
         self.collection_page.show_book()

@@ -183,3 +183,32 @@ def test_an_export_carries_every_change(app, window, yes):
     assert card.fields["source"] == ["https://example.com/elena"]
     assert any(f.name == "The farmhouse" for f in card.files)
     assert Path(window.root).exists()
+
+
+def test_a_lorebook_goes_out_and_comes_in_with_every_setting(
+    app, window, tmp_path, monkeypatch, yes
+):
+    import json
+
+    from tests.test_card_editing import ST_CARD_BOOK
+
+    elena, page = shown(window)
+    elena.tavern.character_book = json.loads(json.dumps(ST_CARD_BOOK))
+    page.show_book()
+    out = tmp_path / "elena lorebook.json"
+    monkeypatch.setattr(
+        window_collection.QFileDialog, "getSaveFileName", lambda *a, **k: (str(out), "")
+    )
+    page.lorebook_form.export_button.click()
+    world = json.loads(out.read_text())
+    assert world["originalData"] == ST_CARD_BOOK
+    assert world["entries"]["7"]["probability"] == 70 and world["entries"]["7"]["depth"] == 2
+    # Back in, onto the card, as SillyTavern would put it there.
+    elena.tavern.character_book = None
+    monkeypatch.setattr(
+        window_collection.QFileDialog, "getOpenFileName", lambda *a, **k: (str(out), "")
+    )
+    page.lorebook_form.import_button.click()
+    entry = lore.book_entries(elena.tavern.character_book)[0]
+    assert entry["extensions"]["group"] == "towns" and entry["insertion_order"] == 40
+    assert page.lorebook_form.list.count() == 1
