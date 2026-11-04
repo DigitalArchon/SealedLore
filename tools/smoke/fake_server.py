@@ -6,6 +6,7 @@ Logs one line per request to stdout so a test can see what was called.
 
 import base64
 import json
+import re
 import struct
 import sys
 import zlib
@@ -58,6 +59,31 @@ def looks_for(text: str) -> list[dict]:
     return rows
 
 
+def draft_for(text: str) -> dict:
+    """A story drafted from a premise (engine/authoring.py): a small setup,
+    with the author's own characters (each under a "## Name" heading in the
+    request) in its cast, each with what this story changes of them."""
+    own = [name.strip() for name in re.findall(r"^## (.+)$", text, re.M)]
+    cast = [{"name": "Wren", "summary": "A courier who carries medicine.", "playable": True}]
+    cast += [
+        {"name": name, "playable": False, "in_this_story": f"{name} runs the clinic. ({TAG})"}
+        for name in own
+    ]
+    return {
+        "title": f"A drafted story ({TAG})",
+        "description": "Medicine through the snow.",
+        "world": "A frozen county, four winters after the end of the world.",
+        "cast": cast,
+        "supporting": [],
+        "lore": [],
+        "play_as": "Wren",
+        "opening": "Snow at the clinic door, and a knock.",
+        "starting_scene": {"location": "The clinic", "present": [c["name"] for c in cast]},
+        "style": {},
+        "agency_mode": "contested",
+    }
+
+
 def reply_for(body) -> str:
     text = text_of(body.get("messages", []))
     if '"scene_closed"' in text:
@@ -86,6 +112,8 @@ def reply_for(body) -> str:
         )
     if '"directions"' in text:
         return json.dumps({"directions": []})
+    if '"play_as": "a cast member\'s name"' in text:
+        return json.dumps(draft_for(text))
     if '{"references": [' in text and '"prompt"' in text:
         # A picture's prompt writer (engine/image_prompt.py): none of the
         # pictures offered, a prompt of its own.
