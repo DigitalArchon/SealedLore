@@ -79,9 +79,18 @@ class DiskPictures:
 
     def remove(self, relative: str) -> None:
         try:
-            story_path(self.story_id, relative, self.root).unlink(missing_ok=True)
+            path = story_path(self.story_id, relative, self.root)
+            path.unlink(missing_ok=True)
         except (OSError, ValueError):
-            pass
+            return
+        if len(PurePosixPath(relative).parts) > 3:
+            # A folder of one owner's files (a character's card files,
+            # storage/collection.py) goes with its last file; the images
+            # folder's own folders stay, empty or not.
+            try:
+                path.parent.rmdir()
+            except OSError:
+                pass  # not empty yet
 
     def images(self) -> list[GeneratedImage]:
         # Read each time: a job may have added one since.

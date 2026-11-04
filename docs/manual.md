@@ -946,7 +946,8 @@ A character's card has four tabs:
   card's own system prompt and what comes after the chat (SillyTavern's
   post-history instructions). A story never sends these.
 - **About**: who made the card, its version, its tags, its maker's notes, its
-  own lorebook, every other file on the card, and where it came from.
+  own lorebook (each entry listed, and the one chosen shown with its keywords
+  and text), every other file on the card, and where it came from.
 
 ![A character's card in Your characters: Professor Adelaide Quill from Brasshaven, her portrait with the buttons that draw or change it, her name, aliases, summary, description and voice, and above them Chat with them…, Draft a story with them…, Add to the story, Export and More](screenshots/your-characters-card.webp)
 
@@ -958,7 +959,9 @@ becomes the end of the description.)
 pictures, a card can carry a background, pictures its greetings show (RisuAI
 cards often have dozens), a second icon, sounds and fonts. They are kept with
 the character, listed under **Files on the card** on the About tab (a picture
-as a thumbnail), and go out with them in a CHARX export. **Save as…** saves
+as a thumbnail; click it to see it full size), and go out with them in a
+CHARX export. Each character's files are in a folder of their own, under the
+names the card gave them. **Save as…** saves
 one where you choose; **Add to their pictures** makes a copy of a picture one
 of the character's own, for portraits, looks and expressions. A file the card
 only links to (an address on the web) is kept as a link and never fetched.

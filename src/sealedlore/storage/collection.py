@@ -155,32 +155,81 @@ def copied(
     return copy
 
 
-# A card's other files (models/tavern.py CardAsset), beside the pictures.
+# A card's other files (models/tavern.py CardAsset), beside the pictures:
+# each character's in a folder of their own, named by their id (it stays
+# right when they are renamed), each under the name the card gave it (the
+# author, Nov 4 2026: one folder for every character's files gets messy).
 FILES_DIR = "images/assets"
+# Names Windows won't give a file, whatever its extension.
+_RESERVED = {"con", "prn", "aux", "nul"} | {f"{p}{n}" for p in ("com", "lpt") for n in range(10)}
 
 
-def file_path(ext: str) -> str:
-    return f"{FILES_DIR}/{new_id()}.{ext or 'bin'}"
+def files_folder(character: Character) -> str:
+    return f"{FILES_DIR}/{character.id}"
+
+
+def file_path(character: Character, asset: CardAsset, taken: set[str]) -> str:
+    """A new place for one of `character`'s files: in their folder, under the
+    card's name for it made safe for any file system, numbered when `taken`
+    (casefolded paths, added to) already has it."""
+    stem = re.sub(r"[^\w\- ]+", "_", asset.name).strip(" _-")[:80].strip() or "file"
+    if stem.casefold() in _RESERVED:
+        stem = f"_{stem}"
+    ext = re.sub(r"[^A-Za-z0-9]+", "", asset.ext)[:10] or "bin"
+    folder = files_folder(character)
+    path, number = f"{folder}/{stem}.{ext}", 2
+    while path.casefold() in taken:
+        path, number = f"{folder}/{stem}-{number}.{ext}", number + 1
+    taken.add(path.casefold())
+    return path
 
 
 def copy_files(
     character: Character, store: PictureStore, source: PictureStore | None = None
 ) -> None:
     """The character's card files into files of their own in `store` (from
-    `source`, by default the same store), so either copy can lose one without
-    the other; one whose file was lost is dropped."""
+    `source`, by default the same store), in their own folder, so either copy
+    can lose one without the other; one whose file was lost is dropped."""
     if character.tavern is None:
         return
     kept = []
+    taken: set[str] = set()
     for asset in character.tavern.assets:
         if asset.held:
             data = (source or store).read(asset.file)
             if data is None:
                 continue
-            asset.file = file_path(asset.ext)
+            asset.file = file_path(character, asset, taken)
             store.write(asset.file, data)
         kept.append(asset)
     character.tavern.assets = kept
+
+
+def settle_files(characters: Sequence[Character], store: PictureStore) -> list[str]:
+    """Card files kept before each character had a folder (3.0.0b1 kept them
+    all in one) moved into their own character's: each written in its new
+    place and its record pointed there. The old files no one names any more
+    are returned, for the window to remove once the new records are saved,
+    so nothing is lost if it stops in between. A file that can't be read
+    stays where it is."""
+    moved: list[str] = []
+    for character in characters:
+        if character.tavern is None:
+            continue
+        folder = files_folder(character) + "/"
+        held = [asset for asset in character.tavern.assets if asset.held]
+        taken = {asset.file.casefold() for asset in held if asset.file.startswith(folder)}
+        for asset in held:
+            if asset.file.startswith(folder):
+                continue
+            data = store.read(asset.file)
+            if data is None:
+                continue
+            old, asset.file = asset.file, file_path(character, asset, taken)
+            store.write(asset.file, data)
+            moved.append(old)
+    used = {file for character in characters for file in files_of(character)}
+    return [file for file in dict.fromkeys(moved) if file not in used]
 
 
 def files_of(character: Character) -> list[str]:
@@ -359,6 +408,7 @@ def kept_from_card(
             )
     notes += card.expression_notes
     assert character.tavern is not None
+    taken: set[str] = set()
     for found in card.files:
         asset = CardAsset(type=found.type, name=found.name, ext=found.ext, path=found.path)
         if found.data is None:
@@ -370,7 +420,7 @@ def kept_from_card(
             data = clean(found.data) if clean is not None else found.data
             if picture_kind(data):
                 asset.ext = picture_kind(data).lstrip(".").replace("jpeg", "jpg")
-            asset.file = file_path(asset.ext)
+            asset.file = file_path(character, asset, taken)
             store.write(asset.file, data)
         character.tavern.assets.append(asset)
     if card.files:

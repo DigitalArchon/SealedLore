@@ -200,3 +200,94 @@ def test_an_imported_card_says_what_its_files_are(app, window, tmp_path, monkeyp
     page = window.collection_page
     assert page.about_form.files.count() == 6
     assert page.about_form.files.item(0).data(Qt.UserRole) == 0
+
+
+def test_a_charx_with_every_file_is_offered_whatever_the_pictures(app, window):
+    # The author: one portrait and eighteen files, and no CHARX on offer.
+    elena = window._kept()[0]
+    window.show_collection(True, elena.id)
+    assert window.collection_page.charx_action.isEnabled()
+    files = sum(1 for a in elena.tavern.assets if a.held)
+    pictures = len(elena.reference_images)
+    assert window_collection._everything(elena) == (
+        f"{pictures} picture{'s' if pictures != 1 else ''} and {files} files"
+    )
+
+
+def test_a_click_on_a_picture_on_the_card_shows_it_full_size(app, window, monkeypatch):
+    elena = window._kept()[0]
+    window.show_collection(True, elena.id)
+    about = window.collection_page.about_form
+    shown: list[tuple[str, bytes]] = []
+    monkeypatch.setattr(window, "_show_whole", lambda title, data: shown.append((title, data)))
+
+    def click(name: str) -> None:
+        item = next(
+            about.files.item(r)
+            for r in range(about.files.count())
+            if about.files.item(r).text() == name
+        )
+        about.files.itemClicked.emit(item)
+
+    click("Farmhouse")
+    assert shown == [(f"{elena.name} · Farmhouse", FARMHOUSE)]
+    click("wind")  # a sound: chosen, nothing to show
+    click("you")  # a link: nothing here to show
+    assert len(shown) == 1
+
+
+def test_the_card_lorebook_entries_can_be_read(app, window):
+    elena = window._kept()[0]
+    elena.tavern.character_book = {
+        "entries": [
+            {
+                "keys": ["farmhouse", "farm"],
+                "content": "The farmhouse has a red door.",
+                "comment": "The farmhouse",
+            },
+            {
+                "keys": [],
+                "content": "Nobody goes out after dark.",
+                "constant": True,
+                "name": "Curfew",
+                "enabled": False,
+            },
+        ]
+    }
+    window.show_collection(True, elena.id)
+    about = window.collection_page.about_form
+    about.load(elena)
+    rows = [about.book_list.item(r).text() for r in range(about.book_list.count())]
+    assert rows == ["The farmhouse", "Curfew · always sent · switched off"]
+    assert not about.book_list.isHidden() and not about.book_text.isHidden()
+    text = about.book_text.toPlainText()
+    assert "Keywords: farmhouse, farm" in text and "a red door" in text
+    about.book_list.setCurrentRow(1)
+    assert "always sent" in about.book_text.toPlainText()
+    assert "after dark" in about.book_text.toPlainText()
+    elena.tavern.character_book = None
+    about.show_book()
+    assert about.book_list.isHidden() and about.book_list.count() == 0
+
+
+def test_opening_your_characters_moves_files_kept_in_one_folder(app, window):
+    root = window.root
+    assert window._collection is None, "nothing opened them yet"
+    bundle = collection.load_collection(root)
+    elena = bundle.cast[0]
+    pictures = DiskPictures(COLLECTION_ID, root)
+    flat = []
+    for number, asset in enumerate(a for a in elena.tavern.assets if a.held):
+        data = pictures.read(asset.file)
+        pictures.remove(asset.file)
+        asset.file = f"{collection.FILES_DIR}/old{number}.{asset.ext}"
+        pictures.write(asset.file, data)
+        flat.append(asset.file)
+    save_story_bundle(bundle, root=root)
+    window._collection_session()
+    again = collection.load_collection(root).cast[0]
+    folder = f"{collection.FILES_DIR}/{elena.id}/"
+    assert all(a.file.startswith(folder) for a in again.tavern.assets if a.held)
+    assert all(pictures.read(file) is None for file in flat), "the old files went"
+    farm = next(a for a in again.tavern.assets if a.name == "Farmhouse")
+    assert pictures.read(farm.file) == FARMHOUSE

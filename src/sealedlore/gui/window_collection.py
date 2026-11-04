@@ -81,6 +81,18 @@ COLLECTION_TIP = (
     "give them pictures"
 )
 CARD_FILTER = "Character cards (*.png *.json *.charx);;All files (*)"
+
+
+def _everything(card: Character) -> str:
+    """What a CHARX of them carries, counted: "2 pictures and 18 files"."""
+    pictures = len(card.reference_images)
+    files = sum(1 for asset in (card.tavern.assets if card.tavern else []) if asset.held)
+    parts = [f"{pictures} picture{'' if pictures == 1 else 's'}"]
+    if files:
+        parts.append(f"{files} file{'' if files == 1 else 's'}")
+    return " and ".join(parts)
+
+
 # A card written from here says where it came from when it says nothing itself.
 MADE_HERE = "the author's own characters"
 # Field edits are kept this long after the last keystroke.
@@ -173,7 +185,24 @@ class CollectionWindow:
             )
             if self._collection_problem:
                 self._collection.save = lambda: None  # never over a folder unread
+            else:
+                self._settle_collection_files()
         return self._collection
+
+    def _settle_collection_files(self) -> None:
+        """Card files kept before each character had a folder of their own,
+        moved into it once: the new places saved first, the old files
+        removed only then."""
+        session = self._collection
+        old = collection.settle_files(session.cast, session.pictures)
+        if not old:
+            return
+        try:
+            session.save()
+        except OSError:
+            return  # the old records stand on disk, and so do their files
+        for file in old:
+            session.pictures.remove(file)
 
     def _collection_pictures(self) -> PictureStore | None:
         """Their pictures' store, once their session is open: the page's
@@ -586,7 +615,7 @@ class CollectionWindow:
             return
         filters = {
             "png": "PNG card, with the portrait (*.png)",
-            "charx": f"CHARX card, with all {len(card.reference_images)} pictures (*.charx)",
+            "charx": f"CHARX card, with {_everything(card)} (*.charx)",
             "json": "JSON card (*.json)",
         }
         chosen, _ = QFileDialog.getSaveFileName(
@@ -708,8 +737,9 @@ class CollectionWindow:
         self._refresh_collection()
 
     def _collection_file(self, what: str, index: int, card_id: str) -> None:
-        """One of a card's own files (About → Files on the card): saved
-        where the author says, or a copy made one of their pictures."""
+        """One of a card's own files (About → Files on the card): seen full
+        size, saved where the author says, or a copy made one of their
+        pictures."""
         card = self._kept_card(card_id)
         assets = card.tavern.assets if card is not None and card.tavern else []
         if not 0 <= index < len(assets) or not assets[index].held:
@@ -719,6 +749,9 @@ class CollectionWindow:
         data = store.read(asset.file)
         if data is None:
             self._warn_plain("The file is missing", f"{asset.name or asset.type}: {asset.file}")
+            return
+        if what == "whole":
+            self._show_whole(f"{card.name} · {asset.name or asset.type}", data)
             return
         if what == "save":
             name = _safe(asset.name or asset.type)

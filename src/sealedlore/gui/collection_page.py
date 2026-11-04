@@ -271,7 +271,9 @@ class CollectionPage(QWidget):
         export_menu = QMenu(self.export_button)
         self.png_action = export_menu.addAction("As a PNG card, with the portrait…")
         self.png_action.triggered.connect(lambda: self._act(EXPORT_PNG))
-        self.charx_action = export_menu.addAction("As a CHARX card, with every picture…")
+        # Always offered: the only card that keeps every picture and every
+        # file of theirs (a card's own files count, not only pictures).
+        self.charx_action = export_menu.addAction("As a CHARX card, with every picture and file…")
         self.charx_action.triggered.connect(lambda: self._act(EXPORT_CHARX))
         export_menu.addAction("As a JSON card…").triggered.connect(lambda: self._act(EXPORT_JSON))
         self.export_button.setMenu(export_menu)
@@ -592,7 +594,6 @@ class CollectionPage(QWidget):
         main = family[0] is card
         self.rename_action.setEnabled(not main)
         self.png_action.setEnabled(bool(card.reference_images))
-        self.charx_action.setEnabled(len(card.reference_images) > 1)
         if self.card_form.character is not card:
             self.card_form.load(card)
             self.chat_form.load(card)

@@ -240,6 +240,58 @@ def test_a_copy_and_a_version_have_files_of_their_own(tmp_path: Path):
     assert mine <= set(gone) and not theirs & set(gone)
 
 
+def test_each_characters_files_are_in_a_folder_of_their_own_under_the_cards_names(
+    tmp_path: Path,
+):
+    root, elena, _notes = kept_elena(tmp_path)
+    folder = f"{collection.FILES_DIR}/{elena.id}/"
+    files = {a.name: a.file for a in elena.tavern.assets if a.held}
+    assert all(file.startswith(folder) for file in files.values())
+    assert files["Farmhouse"] == f"{folder}Farmhouse.png"
+    assert files["wind"] == f"{folder}wind.mp3"
+    copy = collection.copied(elena, store(root))
+    assert all(
+        a.file.startswith(f"{collection.FILES_DIR}/{copy.id}/")
+        for a in copy.tavern.assets
+        if a.held
+    )
+
+
+def test_files_kept_in_one_folder_before_move_into_their_characters(tmp_path: Path):
+    """3.0.0b1 kept every character's files in images/assets itself."""
+    root, elena, _notes = kept_elena(tmp_path)
+    pictures = store(root)
+    held = [a for a in elena.tavern.assets if a.held]
+    for number, asset in enumerate(held):
+        data = pictures.read(asset.file)
+        pictures.remove(asset.file)
+        asset.file = f"{collection.FILES_DIR}/old{number}.{asset.ext}"
+        pictures.write(asset.file, data)
+    old = [a.file for a in held]
+    lost = held[-1]
+    pictures.remove(lost.file)  # one that can't be read stays where it is
+    gone = collection.settle_files([elena], pictures)
+    assert gone == old[:-1]
+    folder = f"{collection.FILES_DIR}/{elena.id}/"
+    assert all(a.file.startswith(folder) for a in held[:-1]) and lost.file == old[-1]
+    farm = next(a for a in held if a.name == "Farmhouse")
+    assert pictures.read(farm.file) == FARMHOUSE
+    # The old ones are still there until the window has saved the new places.
+    assert pictures.read(old[0]) is not None
+    assert collection.settle_files([elena], pictures) == []
+
+
+def test_a_characters_folder_goes_with_its_last_file(tmp_path: Path):
+    root, elena, _notes = kept_elena(tmp_path)
+    folder = root / "characters" / collection.FILES_DIR / elena.id
+    assert folder.is_dir()
+    for asset in elena.tavern.assets:
+        if asset.held:
+            store(root).remove(asset.file)
+    assert not folder.exists()
+    assert folder.parent.is_dir(), "images/assets itself stays"
+
+
 def test_a_storys_copy_holds_none_of_the_cards_files(tmp_path: Path):
     _root, elena, _notes = kept_elena(tmp_path)
     copy = card_link.story_copy(elena, [elena], "John")

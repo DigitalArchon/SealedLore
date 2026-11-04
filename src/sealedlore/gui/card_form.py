@@ -43,8 +43,10 @@ from sealedlore.gui.sizing import GrowingText
 from sealedlore.gui.skills_table import SkillsTable
 from sealedlore.gui.start_page import when_played
 from sealedlore.models.character import Character
+from sealedlore.models.lore import LoreEntry
 from sealedlore.models.tavern import TavernFields
 from sealedlore.storage.collection import files_said
+from sealedlore.storage.tavern_lore import lore_from_book
 
 if TYPE_CHECKING:
     from sealedlore.gui.cast_board import Thumbs
@@ -500,9 +502,9 @@ class AboutForm(QWidget):
     changed = Signal()
     # "import", "export" or "remove": the card's own lorebook.
     lorebook_requested = Signal(str)
-    # "save" or "picture", and which of the card's files (its place in
-    # `tavern.assets`): saved where the author says, or made one of their
-    # pictures.
+    # "save", "picture" or "whole", and which of the card's files (its place
+    # in `tavern.assets`): saved where the author says, made one of their
+    # pictures, or a picture seen full size.
     file_requested = Signal(str, int)
 
     def __init__(self, thumbs: Thumbs | None = None) -> None:
@@ -533,10 +535,24 @@ class AboutForm(QWidget):
         for button in (self.book_import, self.book_export, self.book_remove):
             book_buttons.addWidget(button)
         book_buttons.addStretch(1)
+        # Its entries, read as a story will take them (storage/tavern_lore.py),
+        # and the chosen one's keywords and text: the count alone said there
+        # was lore and showed none of it (the author, Nov 4 2026).
+        self._book: list[LoreEntry] = []
+        self.book_list = QListWidget()
+        self.book_list.setObjectName("cardBook")
+        self.book_list.currentRowChanged.connect(self._show_entry)
+        self.book_text = GrowingText(lines=3, most=16)
+        self.book_text.setReadOnly(True)
         book_box = QWidget()
+        # As tall as it is, as the files below: spare height went to the label.
+        book_box.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        self.book.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         book_layout = QVBoxLayout(book_box)
         book_layout.setContentsMargins(0, 0, 0, 0)
         book_layout.addWidget(self.book)
+        book_layout.addWidget(self.book_list)
+        book_layout.addWidget(self.book_text)
         book_layout.addLayout(book_buttons)
         self.files_said = QLabel()
         self.files_said.setWordWrap(True)
@@ -551,6 +567,9 @@ class AboutForm(QWidget):
         self.files.setFixedHeight(2 * (FILE_ICON + 36) + 12)
         self.files.setSelectionMode(QListWidget.SingleSelection)
         self.files.itemSelectionChanged.connect(self._sync_file_buttons)
+        # A click on a picture shows it full size, and leaves it chosen for
+        # the buttons below.
+        self.files.itemClicked.connect(self._file_clicked)
         self.file_save = QPushButton("Save as…")
         self.file_save.setToolTip("Save this file of the card's where you choose")
         self.file_save.clicked.connect(lambda: self._file_action("save"))
@@ -625,6 +644,36 @@ class AboutForm(QWidget):
         )
         self.book_export.setEnabled(bool(entries))
         self.book_remove.setEnabled(bool(entries))
+        book = _tavern(character).character_book if character is not None else None
+        self._book = lore_from_book(book).entries if book else []
+        self.book_list.clear()
+        for entry in self._book:
+            marks = (["always sent"] if entry.always_on else []) + (
+                ["switched off"] if not entry.enabled else []
+            )
+            item = QListWidgetItem(" · ".join([entry.title, *marks]))
+            item.setToolTip(", ".join(entry.keywords) or "No keywords")
+            self.book_list.addItem(item)
+        shown = bool(self._book)
+        self.book_list.setVisible(shown)
+        self.book_text.setVisible(shown)
+        if shown:
+            rows = min(len(self._book), 6)
+            frame = 2 * self.book_list.frameWidth()
+            self.book_list.setFixedHeight(rows * self.book_list.sizeHintForRow(0) + frame + 4)
+            self.book_list.setCurrentRow(0)
+        else:
+            self.book_text.clear()
+
+    def _show_entry(self, row: int) -> None:
+        entry = self._book[row] if 0 <= row < len(self._book) else None
+        if entry is None:
+            self.book_text.clear()
+            return
+        keywords = ", ".join(entry.keywords) or "none (sent only when chosen as relevant)"
+        if entry.always_on:
+            keywords = "always sent"
+        self.book_text.setPlainText(f"Keywords: {keywords}\n\n{entry.content}")
 
     def show_files(self) -> None:
         """The card's other files (a background, pictures its greetings show,
@@ -642,7 +691,10 @@ class AboutForm(QWidget):
         for index, asset in enumerate(assets):
             item = QListWidgetItem(asset.name or asset.type)
             where = asset.uri if not asset.held else f"{asset.ext.upper()} file"
-            item.setToolTip(f"{asset.name or '(no name)'} · {asset.type} · {where}")
+            tip = f"{asset.name or '(no name)'} · {asset.type} · {where}"
+            if asset.held and asset.picture:
+                tip += "\nClick to see it full size."
+            item.setToolTip(tip)
             item.setData(Qt.UserRole, index)
             if not asset.held:
                 item.setIcon(style.standardIcon(QStyle.SP_DriveNetIcon))
@@ -668,6 +720,13 @@ class AboutForm(QWidget):
             pixmap = self._thumbs.get(asset.file, FILE_ICON, FILE_ICON)
             if pixmap is not None:
                 item.setIcon(QIcon(pixmap))
+
+    def _file_clicked(self, item: QListWidgetItem) -> None:
+        character = self._character
+        assets = _tavern(character).assets if character is not None else []
+        index = item.data(Qt.UserRole)
+        if 0 <= index < len(assets) and assets[index].held and assets[index].picture:
+            self.file_requested.emit("whole", index)
 
     def _chosen_file(self) -> int | None:
         item = self.files.currentItem()
