@@ -8,6 +8,7 @@ local server (§7).
 
 from __future__ import annotations
 
+from ipaddress import ip_address, ip_network
 from typing import Any, Literal
 from urllib.parse import urlparse
 
@@ -279,16 +280,48 @@ LoreSelector = Literal["picker", "jev", "similarity"]
 # How much the world designer puts in each region of open country
 # (engine/regions.py OPEN_COUNTRY): Settings → Models → Open country.
 
-LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+# Where plain http may go (the author, Nov 4 2026: a local server on another
+# machine at home, Ollama or LM Studio, must work): this computer, the
+# private networks, link-local addresses and mDNS's .local names. Never
+# .onion going out: the phones' onion is inbound only.
+_LOCAL_NETWORKS = tuple(
+    ip_network(network)
+    for network in (
+        "127.0.0.0/8",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "169.254.0.0/16",
+        "::1/128",
+        "fc00::/7",
+        "fe80::/10",
+    )
+)
+
+
+def is_local_host(host: str) -> bool:
+    """`host` is this computer or on the local network (by its address, or a
+    .local or .localhost name: nothing is looked up)."""
+    host = host.strip().lower().rstrip(".")
+    if host == "localhost" or host.endswith((".localhost", ".local")):
+        return True
+    try:
+        address = ip_address(host.split("%", 1)[0])
+    except ValueError:
+        return False
+    mapped = getattr(address, "ipv4_mapped", None)
+    if mapped is not None:
+        address = mapped
+    return any(address in network for network in _LOCAL_NETWORKS)
 
 
 def require_https(url: str) -> str:
-    """`url` when it is https, or http to this computer; refused in words a
-    person can act on otherwise."""
+    """`url` when it is https, or http to this computer or the local network;
+    refused in words a person can act on otherwise."""
     parsed = urlparse(url)
     if parsed.scheme == "https":
         return url
-    if parsed.scheme == "http" and (parsed.hostname or "") in LOOPBACK_HOSTS:
+    if parsed.scheme == "http" and is_local_host(parsed.hostname or ""):
         return url
     if not url.strip():
         raise ValueError("needs an address (https://…)")
@@ -296,7 +329,7 @@ def require_https(url: str) -> str:
         raise ValueError(f"{url!r} needs to begin with https://")
     raise ValueError(
         f"must use https: {url!r} isn't (plain http is allowed only for a server on this "
-        "computer: localhost)"
+        "computer or your local network)"
     )
 
 

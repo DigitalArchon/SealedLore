@@ -2447,8 +2447,10 @@ sealedlore chat <story-id>
 ## Where your data goes
 
 Nothing leaves your machine except what the features below send, and every
-endpoint must be `https://` (plain `http://` is accepted only for
-`localhost`). The one exception the other way is phone access, which answers
+endpoint must be `https://` (plain `http://` is accepted only for a server
+on this computer or your local network: `localhost`, a private address such
+as `192.168.1.10`, or a `.local` name; a proxy is never used for these). The
+one exception the other way is phone access, which answers
 phones over plain `http://` on its onion address, where tor encrypts the
 whole way (see [Playing from your phone](#playing-from-your-phone)). There is
 no telemetry, no update check and no crash reporting.

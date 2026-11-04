@@ -426,7 +426,8 @@ Windows offers weaker privacy on the machine itself (see
    and an API key. Any endpoint that speaks the OpenAI `/chat/completions`
    protocol works; the defaults assume [NanoGPT](https://nano-gpt.com)
    (`https://nano-gpt.com/api/v1`), and [OpenRouter](https://openrouter.ai)
-   (`https://openrouter.ai/api/v1`) or a local server on `localhost` work the
+   (`https://openrouter.ai/api/v1`) or a local server (on this computer or
+   another on your local network, over plain `http://` if it likes) work the
    same way. Anthropic's own API works directly too, with an Anthropic key
    and `https://api.anthropic.com` as the base URL (Settings → Endpoints →
    Speaks reads it from the address). Several endpoints can be set up at

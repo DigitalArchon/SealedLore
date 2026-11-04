@@ -12,7 +12,7 @@ from html import escape
 
 from sealedlore.gui import theme
 from sealedlore.models.config import Config
-from sealedlore.providers.http import is_loopback
+from sealedlore.providers.http import is_local
 
 NANO_GPT_URL = "https://nano-gpt.com/"
 # The developer's referral link, offered second and said to be one.
@@ -29,7 +29,7 @@ def setup_missing(config: Config) -> list[str]:
     base_url = provider.base_url.strip()
     if not base_url:
         missing.append("an endpoint")
-    if not provider.api_key.strip() and not (base_url and is_loopback(base_url)):
+    if not provider.api_key.strip() and not (base_url and is_local(base_url)):
         missing.append("an API key")
     if not provider.model.strip():
         missing.append("a story model")

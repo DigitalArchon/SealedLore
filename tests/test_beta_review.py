@@ -41,12 +41,34 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"x" * 16
 # --- what leaves the machine ---------------------------------------------------
 
 
-def test_https_or_loopback_http_and_nothing_else():
+def test_https_or_http_on_the_local_network_and_nothing_else():
+    """Plain http goes to this computer and the local network only (the
+    author, Nov 4 2026: a local server on another machine at home)."""
     assert is_secure("https://nano-gpt.com/api/v1")
     assert is_secure("http://localhost:11434/v1")
     assert is_secure("http://127.0.0.1:8080/v1")
-    assert not is_secure("http://nano-gpt.com/api/v1")
-    assert not is_secure("http://192.168.1.10:11434/v1")
+    for local in (
+        "http://192.168.1.10:11434/v1",
+        "http://10.0.0.5/v1",
+        "http://172.20.1.2:1234/v1",
+        "http://169.254.10.1/v1",
+        "http://[fd12::3]:8080/v1",
+        "http://studio.local:1234/v1",
+    ):
+        assert is_secure(local), local
+    for public in (
+        "http://nano-gpt.com/api/v1",
+        "http://172.32.0.1/v1",
+        "http://8.8.8.8/v1",
+        "http://100.64.0.1/v1",
+    ):
+        assert not is_secure(public), public
+
+
+def test_a_server_on_the_local_network_is_never_reached_through_a_proxy(monkeypatch):
+    monkeypatch.setenv("HTTP_PROXY", "http://proxy.test:3128")
+    assert make_client("http://192.168.1.10:11434/v1")._trust_env is False
+    assert make_client("https://nano-gpt.com/api/v1")._trust_env is True
 
 
 def test_a_local_server_is_never_reached_through_a_proxy(monkeypatch):
