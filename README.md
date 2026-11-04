@@ -75,6 +75,12 @@ fun to play. This app will remain focused on text based roleplay.
   passage from where it stopped, share your prompt edits as a prompt set, and
   bring **SillyTavern** character cards and lorebooks in and out, from a file
   or a link.
+- **Every part of a character can be changed** (3.0.0b2). In Your
+  characters, a card's lorebook can be edited entry by entry, its files added,
+  renamed, retyped or taken off, and every other field it carries changed,
+  down to other apps' settings. Export it as changed, for others to use, or
+  change a copy and keep the original. A lorebook goes out and comes in as
+  SillyTavern itself converts one, every setting kept.
 
 ### New in version 2
 
