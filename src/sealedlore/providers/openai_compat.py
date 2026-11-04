@@ -9,7 +9,10 @@ The HTTP machinery (one client, cancel, retries, siblings) is
 
 from __future__ import annotations
 
+import codecs
+import hashlib
 import json
+import re
 from collections.abc import Iterator
 from typing import Any
 
@@ -38,6 +41,21 @@ from sealedlore.providers.wire import build_chat_payload, cache_headers
 
 SSE_DATA_PREFIX = "data:"
 SSE_DONE = "[DONE]"
+
+
+def _lines(response: httpx.Response, body: Any) -> Iterator[str]:
+    """The stream's lines, as `iter_lines` gives them, each byte also fed to
+    `body` (a hash) as it arrives, decoded of any transfer encoding."""
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    pending = ""
+    for chunk in response.iter_bytes():
+        body.update(chunk)
+        pending += decoder.decode(chunk)
+        *complete, pending = re.split(r"\r\n|\r|\n", pending)
+        yield from complete
+    pending += decoder.decode(b"", final=True)
+    if pending:
+        yield pending
 
 
 def with_reported_cost(usage: dict[str, Any], pricing: dict[str, Any]) -> dict[str, Any]:
@@ -147,14 +165,24 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
             if response.status_code >= 400:
                 raise self._http_error(url, response)
             self._accept(response)
+            # A TEE reply's receipt names the hash of the exact bytes the
+            # stream carried (providers/tee.py): hashed as they come, to the
+            # end, and the receipt's id and route kept.
+            body = hashlib.sha256()
+            receipt_id = response.headers.get("x-receipt-id") or response.headers.get(
+                "x-tee-signature-id"
+            )
+            tee_route = response.headers.get("x-tee-verification-route")
 
-            for line in response.iter_lines():
-                if not line or not line.startswith(SSE_DATA_PREFIX):
+            for line in _lines(response, body):
+                if saw_done or not line or not line.startswith(SSE_DATA_PREFIX):
                     continue
                 data = line[len(SSE_DATA_PREFIX) :].strip()
                 if data == SSE_DONE:
+                    # Read on (nothing after it is taken), so the hash covers
+                    # every byte the stream carried.
                     saw_done = True
-                    break
+                    continue
 
                 try:
                     chunk = json.loads(data)
@@ -211,6 +239,9 @@ class OpenAICompatibleProvider(StreamingHttpProvider):
             finish_reason=finish_reason,
             raw_usage=usage_raw,
             response_id=response_id,
+            receipt_id=receipt_id,
+            body_hash="sha256:" + body.hexdigest(),
+            tee_route=tee_route,
             sealed=self.sealed_replies,
             reasoning_tokens=max(_reasoning_tokens(usage_raw), reasoning_chars // 4),
         )

@@ -666,8 +666,8 @@ class _FakeTee:
     def close(self):
         pass
 
-    def verify_reply(self, _response_id):
-        return True
+    def check_reply(self, _response_id, **_record):
+        return "verified"
 
 
 def test_the_authors_messages_say_how_they_were_sent(app, window, monkeypatch):
@@ -680,7 +680,7 @@ def test_the_authors_messages_say_how_they_were_sent(app, window, monkeypatch):
     window.reload_transcript()
     mine, reply = session.path()
     assert "sent to the attested TEE" in window.transcript.message_widget(mine.id).header.text()
-    assert "TEE signed" in window.transcript.message_widget(reply.id).header.text()
+    assert "TEE verified" in window.transcript.message_widget(reply.id).header.text()
     assert "signed" not in window.transcript.message_widget(mine.id).header.text()
 
 

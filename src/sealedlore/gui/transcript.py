@@ -1170,25 +1170,35 @@ def _line_top(label: QLabel, position: int) -> int:
     return label.contentsRect().top() + int(top + (line.y() if line.isValid() else 0))
 
 
-# The reply's mark ("signed", not "verified": the attested key signed a record
-# NanoGPT keeps for this reply's id; the reply's text is not compared to it,
-# the manual, "Private scenes") and the author's message's (how it was sent).
+# The reply's mark (providers/tee.py `check_reply`: "verified" when the
+# attested key's record is for the exact bytes received, "signed" when they
+# couldn't be compared; the manual, "Private scenes") and the author's
+# message's (how it was sent).
 TEE_MARKS = {
-    "verified": "  ·  TEE signed",
-    "failed": "  ·  TEE ⚠ signature mismatch",
+    "verified": "  ·  TEE verified",
+    "signed": "  ·  TEE signed",
+    "failed": "  ·  TEE ⚠ check failed",
     "unchecked": "  ·  TEE signature unavailable",
     "encrypted": "  ·  end-to-end encrypted",
     "attested": "  ·  sent to the attested TEE",
 }
 TEE_MARK_TIPS = {
     "verified": (
-        "TEE signed: the enclave's attested key signed the record NanoGPT keeps for "
-        "this reply's id. That proves the key was in the attested enclave, not that this "
-        "text is what was signed: the record hashes the request and reply as NanoGPT's "
-        "gateway saw them, which the app can't reproduce. The text passed that gateway "
-        "in the clear."
+        "TEE verified: the attested enclave's key signed this reply's record, and the "
+        "record is for the exact text this app received. Where the gateway keeps a "
+        "signed receipt, it was read too: it names the same reply and says the model "
+        "it came from was verified. The text passed NanoGPT's gateway in the clear."
     ),
-    "failed": ("The record NanoGPT returned for this reply was not signed by the attested key."),
+    "signed": (
+        "TEE signed: the attested enclave's key signed this reply's record, but the "
+        "reply's text can't be compared with it (NanoGPT rebuilds this model's replies). "
+        "The text passed NanoGPT's gateway in the clear."
+    ),
+    "failed": (
+        "This reply doesn't match its record: not signed by the attested key, not the "
+        "text that was signed, or its receipt doesn't hold (another key, another reply, "
+        "or a model that wasn't verified)."
+    ),
     "unchecked": "This model's provider keeps no signature for its replies.",
     "encrypted": (
         "End-to-end encrypted: sealed on this machine to the attested enclave's key, and "
@@ -1662,9 +1672,7 @@ class TranscriptView(QScrollArea):
         elif node.meta.private_span or self._tee_look:
             if node.meta.private_span:
                 label += "  ·  private"
-            # "signed", not "verified": the attested key signed a record for this
-            # reply's id; the reply's content is not compared to it (the manual,
-            # "Private scenes").
+            # How the reply's check went (TEE_MARKS), or how the message went.
             label += TEE_MARKS.get(node.meta.tee or "", "")
         widget = self.add_message(
             label,

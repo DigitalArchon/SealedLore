@@ -2181,8 +2181,9 @@ class StorySession(
                 span=span,
                 extend=extend,
             )
-        # A TEE reply's signature is fetched under this (session_private).
+        # A TEE reply's record is fetched under these (session_private).
         self._last_response_id = completed.response_id if completed is not None else None
+        self._last_completed = completed
         # An end-to-end encrypted reply: opened with the attested enclave's key.
         self._last_sealed = completed is not None and completed.sealed
         if self.story.chat and span is None and self.last_result is not None:

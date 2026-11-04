@@ -287,18 +287,22 @@ def test_a_story_opens_speaking_as_the_character_played(app, window: MainWindow)
     assert window.composer.speaker.currentData() == "char-serrik"
 
 
-def test_a_tee_reply_is_marked_signed_never_verified(app, window: MainWindow):
+def test_a_tee_reply_is_marked_by_what_its_check_proved(app, window: MainWindow):
+    # "verified" only where the record was for the exact text received;
+    # "signed" where it couldn't be compared (providers/tee.py check_reply).
     window.composer.private_toggle.click()
     send(app, window, f"I whisper {MARKER}.")
     leaf = window.session.full_path()[-1]
-    leaf.meta.tee = "verified"
-    window.reload_transcript()
-    headers = [
-        w.header.text()
-        for w in window.transcript.findChildren(type(window.transcript.add_message("x", "y", "z")))
-    ]
-    assert any("TEE signed" in header for header in headers)
-    assert not any("verified" in header.lower() for header in headers)
+    for mark, words in (("verified", "TEE verified"), ("signed", "TEE signed")):
+        leaf.meta.tee = mark
+        window.reload_transcript()
+        headers = [
+            w.header.text()
+            for w in window.transcript.findChildren(
+                type(window.transcript.add_message("x", "y", "z"))
+            )
+        ]
+        assert any(words in header for header in headers), mark
 
 
 def test_a_scene_says_what_it_pauses_until_told_not_to(app, window: MainWindow, monkeypatch):

@@ -572,9 +572,11 @@ class PrivateRuntime:
         # refuses otherwise): marked too, or it looked less protected than the
         # reply (the author, Sept 2026). Not "signed": that is the reply's.
         self._mark_sent(node, "attested")
-        response_id = getattr(self, "_last_response_id", None)
+        completed = getattr(self, "_last_completed", None)
         try:
-            node.meta.tee = "verified" if self.private_tee.verify_reply(response_id) else "failed"
+            node.meta.tee = self.private_tee.check_reply(
+                getattr(self, "_last_response_id", None), **_reply_record(completed)
+            )
         except Exception:  # an unreachable check is not a failed one
             node.meta.tee = "unchecked"
 
@@ -643,8 +645,9 @@ class PrivateRuntime:
             # The summary is the one reply that goes back into the story: was
             # it signed by the enclave that was attested?
             try:
-                verified = self.private_tee.verify_reply(completed.response_id)
-                span.summary_tee = "verified" if verified else "failed"
+                span.summary_tee = self.private_tee.check_reply(
+                    completed.response_id, **_reply_record(completed)
+                )
             except Exception:  # an unreachable check is not a failed one
                 span.summary_tee = "unchecked"
         return text
@@ -829,3 +832,15 @@ class PrivateRuntime:
                 ],
             }
         )
+
+
+def _reply_record(completed: Any) -> dict[str, Any]:
+    """What a TEE reply's check needs of its stream (providers/tee.py
+    `verify_reply`): its receipt id, the hash of its bytes, nano-gpt's route."""
+    if completed is None:
+        return {}
+    return {
+        "receipt_id": getattr(completed, "receipt_id", None),
+        "body_hash": getattr(completed, "body_hash", None),
+        "route": getattr(completed, "tee_route", None),
+    }

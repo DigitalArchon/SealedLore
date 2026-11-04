@@ -264,9 +264,9 @@ class FakeTee:
         self.signed = signed
         self.asked: list[str | None] = []
 
-    def verify_reply(self, response_id):
+    def check_reply(self, response_id, **_record):
         self.asked.append(response_id)
-        return self.signed
+        return "verified" if self.signed else "failed"
 
 
 def test_a_tee_chats_replies_are_marked_by_their_signature(tmp_path):

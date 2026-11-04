@@ -2053,9 +2053,18 @@ instance checked the same way. Anything forged, revoked, for another nonce,
 or a model that offers no attestation is **refused**, and nothing is sent to
 it. What couldn't be checked (no GPU evidence offered, Intel's or NVIDIA's
 service out of reach, a rating below up to date) is shown as **partial**,
-with the reason on the model button. Each reply's signature record must be
-signed by the attested key; the transcript marks such replies "TEE signed",
-or "TEE signature unavailable" when the provider signs none. Your own
+with the reason on the model button.
+
+After each reply the app fetches the record NanoGPT keeps for it, signed by
+the attested key. The record holds a hash of the reply as the enclave's
+gateway sent it, which for most models is the exact text the app received:
+such a reply is marked "TEE verified". Where the gateway also keeps a signed
+receipt (NanoGPT's TEE models served through RedPill), that is checked too:
+signed by a key the gateway publishes beside the attested one, for the same
+reply, and saying the model it came from was verified. A reply whose text
+can't be compared (NanoGPT rebuilds some models' replies) is marked "TEE
+signed"; one that doesn't match its record, "TEE ⚠ check failed"; and "TEE
+signature unavailable" when the provider keeps no record for it. Your own
 messages are marked with how they were sent: "sent to the attested TEE", or
 "end-to-end encrypted" on a `private/` model.
 
@@ -2072,10 +2081,11 @@ runs that same check before you choose the model. It reports whether the
 model attests in full, partially (and why), or is refused, so you know it
 works before a scene or chat depends on it. The details are in its tooltip.
 
-What it doesn't prove: which software the enclave runs, or that a reply's
-content is what was signed (NanoGPT hashes the request as its gateway
-received it, which the app cannot reproduce). And the text still passes
-NanoGPT's gateway in the clear; for that, use a `private/` model (below). Everything else the
+What it doesn't prove: which software the enclave runs, or what was sent
+(the record hashes the request as NanoGPT forwarded it, which the app can't
+reproduce). Through NanoGPT the quote binds the key that signs the records,
+not the receipt's key, which is only published beside it. And the text still
+passes NanoGPT's gateway in the clear; for that, use a `private/` model (below). Everything else the
 app does with the story is paused while the scene is open, including the
 scene and plot reads, so the scene card and the plot are frozen until it ends.
 Ending the scene asks the private model for a summary; you approve, edit or

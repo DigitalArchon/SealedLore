@@ -718,7 +718,10 @@ class PrivateWindow:
                 self._offer_no_summary()
             return
         notes = {
-            "failed": "This summary's signature record was not signed by the attested key.",
+            "failed": (
+                "This summary doesn't match its record: not signed by the attested key, or "
+                "not the text that was signed."
+            ),
             "unchecked": "This summary's signature couldn't be checked.",
         }
         dialog = PrivateSummaryDialog(

@@ -50,6 +50,12 @@ class StreamCompleted:
     # Decrypted from an end-to-end encrypted reply (providers/private_mode.py):
     # only the attested enclave's key could have sealed it.
     sealed: bool = False
+    # A TEE reply's own record (providers/tee.py): the receipt id nano-gpt's
+    # headers name, the hash of the exact bytes the stream carried
+    # ("sha256:…"), and the route nano-gpt asks its checks to name, if any.
+    receipt_id: str | None = None
+    body_hash: str | None = None
+    tee_route: str | None = None
     # How much the reply reasoned: the reported count, or the streamed
     # reasoning text at ~4 characters a token, whichever is larger. The count
     # alone lies: Sonnet 4.6 streamed its thinking while NanoGPT reported 0.
