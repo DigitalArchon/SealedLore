@@ -178,9 +178,20 @@ def render_cast_sheet(character: Character, *, include_full_description: bool) -
     competence = render_competence_line(character)
     if competence:
         lines.append(f"  {competence}")
-    if include_full_description and character.full_description:
-        lines.append(f"  {character.full_description.strip()}")
+    description = full_description_text(character)
+    if include_full_description and description:
+        lines.append(f"  {description}")
     return "\n".join(lines)
+
+
+def full_description_text(character: Character) -> str:
+    """The description, and a SillyTavern card's personality after it, as a
+    card's import wrote them into one text before a character kept its
+    personality apart (the same words, so no prompt changed)."""
+    parts = [(character.full_description or "").strip()]
+    if character.personality and character.personality.strip():
+        parts.append(f"Personality: {character.personality.strip()}")
+    return "\n\n".join(part for part in parts if part)
 
 
 def render_cast_block(

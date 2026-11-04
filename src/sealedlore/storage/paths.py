@@ -120,12 +120,26 @@ def stories_dir(root: Path | None = None) -> Path:
     return (root or data_home()) / "stories"
 
 
+# The author's own characters (storage/collection.py) are kept in a folder laid
+# out as a story's, beside the stories rather than among them, so no list of
+# stories ever shows it: its id names that folder and is never a story's.
+COLLECTION_ID = "your-characters"
+
+
+def collection_dir(root: Path | None = None) -> Path:
+    return (root or data_home()) / "characters"
+
+
 def is_safe_story_id(story_id: str) -> bool:
-    """One plain path component: nothing that could leave the stories folder."""
-    return bool(_SAFE_STORY_ID.fullmatch(story_id))
+    """One plain path component: nothing that could leave the stories folder,
+    and never the author's own characters' id (an archive naming it is given
+    a fresh one, as one whose id is taken)."""
+    return story_id != COLLECTION_ID and bool(_SAFE_STORY_ID.fullmatch(story_id))
 
 
 def story_dir(story_id: str, root: Path | None = None) -> Path:
+    if story_id == COLLECTION_ID:
+        return collection_dir(root)
     if not is_safe_story_id(story_id):
         raise ValueError(f"not a valid story id: {story_id!r}")
     return stories_dir(root) / story_id

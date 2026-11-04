@@ -120,6 +120,7 @@ from sealedlore.gui.welcome import setup_missing, welcome_html
 from sealedlore.gui.window_board import CastBoardWindow
 from sealedlore.gui.window_cast import CastWindow
 from sealedlore.gui.window_chat import ChatWindow
+from sealedlore.gui.window_collection import CollectionWindow
 from sealedlore.gui.window_find import FindWindow
 from sealedlore.gui.window_images import ImagesWindow
 from sealedlore.gui.window_layout import LayoutWindow, StoriesDock
@@ -248,6 +249,7 @@ MANUAL_URL = "https://github.com/DigitalArchon/SealedLore/blob/master/docs/manua
 class MainWindow(
     CastWindow,
     CastBoardWindow,
+    CollectionWindow,
     TavernWindow,
     LooksWindow,
     ChatWindow,
@@ -562,6 +564,7 @@ class MainWindow(
         self._init_looks()
         self._init_images()
         self._init_board()
+        self._init_collection()
         self._init_phone()
         self._init_videos()
         self._init_private()
@@ -676,6 +679,9 @@ class MainWindow(
         )
         link_action.triggered.connect(lambda _checked=False: self.import_from_link())
         file_menu.addAction(link_action)
+        # The author's own characters, kept for any story or chat
+        # (gui/window_collection.py).
+        self._collection_menu_action(file_menu)
         # Leaving a story used to take opening another or making a new one.
         # Shown only while one is open (`_update_controls`).
         self.close_story_action = QAction("&Close story", self)
@@ -1096,6 +1102,9 @@ class MainWindow(
         # Typing in the find bar, Esc closes it, even while a passage streams.
         if self.find_open() and self.find_bar.isAncestorOf(self.focusWidget()):
             self.close_find()
+        elif self.collection_shown():
+            # As the board: the page hides the story, so Esc there means "back".
+            self.show_collection(False)
         elif self.board_shown():
             # Before Stop: the board hides the story, so Esc there means "back".
             self.show_cast_board(False)
@@ -1200,6 +1209,8 @@ class MainWindow(
             self.import_file()
         elif kind == start_page.LINK:
             self.import_from_link()
+        elif kind == start_page.COLLECTION:
+            self.show_collection(True)
         elif kind == start_page.SAMPLE:
             self.import_sample(Path(str(value)))
 
@@ -1532,6 +1543,7 @@ class MainWindow(
 
     def _close_story(self) -> None:
         """Back to the no-story state the window starts in."""
+        self.show_collection(False)
         self.show_cast_board(False)
         self.show_map(False)
         self.close_find()
@@ -1666,14 +1678,17 @@ class MainWindow(
             self._offer_new_playthrough()
         return True
 
-    def _apply_style_picture(self, choice: tuple[str, tuple[bytes, str] | None]) -> None:
+    def _apply_style_picture(
+        self, choice: tuple[str, tuple[bytes, str] | None], session=None
+    ) -> None:
         """A style picture chosen with the style (gui/picture_style.py): kept
-        with the story, or let go."""
+        with the story (or the author's own characters), or let go."""
+        session = session or self.session
         what, picture = choice
         if what == "set" and picture is not None:
-            self.session.set_style_picture(*picture)
+            session.set_style_picture(*picture)
         elif what == "clear":
-            self.session.clear_style_picture()
+            session.clear_style_picture()
 
     def _offer_new_playthrough(self) -> None:
         answer = QMessageBox.question(
@@ -1782,6 +1797,7 @@ class MainWindow(
         # next (the same one again comes back from disk, without it): asked.
         if self.session is not None and not self._private_allows_close():
             return
+        self.show_collection(False)
         self.show_cast_board(False)
         self.show_map(False)
         try:
@@ -2036,6 +2052,10 @@ class MainWindow(
         above the transcript are put away: greyed, they only looked usable.
         None: a story is open, and they are back."""
         open_story = start is None
+        if self.collection_shown():
+            # Your characters fill the window: what goes back when they close
+            # is decided then (`show_collection`).
+            return
         # The branch bar is the branches' to show (`refresh_branch_bar`).
         for widget in (self.stories_button, self.view_toggle, self.find_button):
             widget.setVisible(open_story)
@@ -2249,6 +2269,8 @@ class MainWindow(
     def show_map(self, on: bool) -> None:
         """Every branch on one diagram, in the transcript's place."""
         on = bool(on and self.session is not None and not self.session.in_private)
+        if not on and self.collection_shown():
+            return  # the page has the window; the map isn't there to leave
         leaving = not on and self.map_shown()
         self.centre_stack.setCurrentWidget(self.story_map if on else self.transcript)
         self.composer.setVisible(not on)
@@ -4714,6 +4736,7 @@ class MainWindow(
                     f"API keys are in config.json for now: {keychain.last_problem}.", 20000
                 )
             self._discard_provider()
+            self._renew_collection_provider()
             if self.session is not None:
                 # Undo restores the story's settings wholesale; after a save
                 # here it would take these edits with it.
@@ -4950,6 +4973,7 @@ class MainWindow(
         if self.session is not None:
             self.session.close()
             self.session.save()
+        self._close_collection()
         self._discard_provider()
         self._remember_layout()
         save_config(self.config, root=self.root)

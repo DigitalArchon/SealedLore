@@ -18,10 +18,8 @@ from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
-    QComboBox,
     QFormLayout,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -31,14 +29,11 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSplitter,
-    QTableWidget,
-    QTableWidgetItem,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
-from sealedlore.engine.dice import TIER_ORDER
 from sealedlore.gui import theme
 from sealedlore.gui.cast_board import BOARD_LABEL
 from sealedlore.gui.fields import FormScroll, set_field_text
@@ -46,6 +41,7 @@ from sealedlore.gui.lore_cast_dialog import FILL_LABEL
 from sealedlore.gui.portrait_view import PortraitView
 from sealedlore.gui.ref_images import CardIcons, RefImageStrip, StoryPictures
 from sealedlore.gui.sizing import GrowingText
+from sealedlore.gui.skills_table import SkillsTable
 from sealedlore.gui.tavern_dialog import (
     CARD_EXPORT_LABEL,
     CARD_IMPORT_LABEL,
@@ -64,8 +60,6 @@ PORTRAIT_COLUMN = 300
 PORTRAIT_COLUMN_MIN = 160
 # The portraits beside the names in the list.
 LIST_ICON = 28
-# Past this many skills the table scrolls rather than pushing the form down.
-SKILL_ROWS_VISIBLE = 8
 # The list of names, until the author drags the divider under it: as tall as
 # its rows, at least LIST_ROWS_MIN of them and at most LIST_ROWS_MAX, and never
 # more than LIST_SHARE_MAX of the page (the sheet under it is the long part).
@@ -229,6 +223,11 @@ class CastPanel(QWidget):
         self.summary.setPlaceholderText("One or two lines. Always included in the prompt.")
         self.full_description = GrowingText(lines=4, most=18)
         self.full_description.setPlaceholderText("Longer sheet. Included when the budget allows.")
+        # A SillyTavern card's own field, told with the description.
+        self.personality = GrowingText(lines=1, most=6)
+        self.personality.setPlaceholderText(
+            "Optional: a few words, as a SillyTavern card has them. Told with the description."
+        )
         self.voice_notes = GrowingText(lines=2, most=8)
         self.voice_notes.setPlaceholderText("Speech patterns, verbal tics, register.")
         self.competence = GrowingText(lines=2, most=8)
@@ -247,16 +246,8 @@ class CastPanel(QWidget):
             "never to write their speech, thoughts or decisions."
         )
 
-        self.skills = QTableWidget(0, 2)
-        self.skills.setHorizontalHeaderLabels(["Skill", "Tier"])
-        self.skills.verticalHeader().setVisible(False)
-        self.skills.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.skills.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        # Rows as tall as the tier combos in them, and a table as tall as its
-        # rows (see _fit_skills_table): left to the form, it was squeezed to
-        # one row and every skill after the first needed the scroll wheel.
-        self.skills.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        self.skills.itemChanged.connect(self._apply_edits)
+        self.skills = SkillsTable()
+        self.skills.edited.connect(self._apply_edits)
         add_skill = QPushButton("Add")
         add_skill.clicked.connect(self._add_skill)
         self.remove_skill = QPushButton("Remove")
@@ -305,6 +296,7 @@ class CastPanel(QWidget):
         for widget in (
             self.summary,
             self.full_description,
+            self.personality,
             self.voice_notes,
             self.competence,
         ):
@@ -340,6 +332,7 @@ class CastPanel(QWidget):
         form.addRow(self.origin_note)
         form.addRow("Summary", self.summary)
         form.addRow("Description", self.full_description)
+        form.addRow("Personality", self.personality)
         form.addRow("Voice", self.voice_notes)
         form.addRow("Competence", self.competence)
         form.addRow("Skills", skills_box)
@@ -695,6 +688,7 @@ class CastPanel(QWidget):
         set_field_text(self.aliases, ", ".join(character.aliases))
         self.summary.setPlainText(character.summary or "")
         self.full_description.setPlainText(character.full_description or "")
+        self.personality.setPlainText(character.personality or "")
         self.voice_notes.setPlainText(character.voice_notes or "")
         self.competence.setPlainText(character.competence.notes)
         self.player_available.setChecked(character.is_player_available)
@@ -719,6 +713,7 @@ class CastPanel(QWidget):
         ]
         character.summary = self.summary.toPlainText().strip() or None
         character.full_description = self.full_description.toPlainText().strip() or None
+        character.personality = self.personality.toPlainText().strip() or None
         character.voice_notes = self.voice_notes.toPlainText().strip() or None
         character.competence.notes = self.competence.toPlainText().strip()
         character.is_player_available = self.player_available.isChecked()
@@ -766,66 +761,19 @@ class CastPanel(QWidget):
 
     # --- skills (§4.1) ----------------------------------------------------
 
-    def _tier_combo(self, tier: str) -> QComboBox:
-        combo = QComboBox()
-        for value in TIER_ORDER:
-            combo.addItem(value, value)
-        combo.setCurrentIndex(max(combo.findData(tier), 0))
-        combo.currentIndexChanged.connect(self._apply_edits)
-        return combo
-
     def _show_skills(self, character: Character) -> None:
-        self.skills.blockSignals(True)
-        self.skills.setRowCount(0)
-        for domain, tier in character.competence.tiers.items():
-            self._append_skill_row(domain, tier)
-        self.skills.blockSignals(False)
-        self._fit_skills_table()
-
-    def _append_skill_row(self, domain: str, tier: str) -> None:
-        row = self.skills.rowCount()
-        self.skills.insertRow(row)
-        self.skills.setItem(row, 0, QTableWidgetItem(domain))
-        self.skills.setCellWidget(row, 1, self._tier_combo(tier))
-        self._fit_skills_table()
-
-    def _fit_skills_table(self) -> None:
-        """Show every skill without scrolling, up to SKILL_ROWS_VISIBLE of them."""
-        table = self.skills
-        table.resizeRowsToContents()
-        rows = [table.rowHeight(row) for row in range(table.rowCount())]
-        empty_row = table.verticalHeader().defaultSectionSize()
-        body = sum(rows[:SKILL_ROWS_VISIBLE]) if rows else empty_row
-        header = table.horizontalHeader().sizeHint().height()
-        table.setFixedHeight(header + body + 2 * table.frameWidth())
+        self.skills.show_tiers(character.competence.tiers)
 
     def _skills_from_table(self) -> dict:
-        tiers = {}
-        for row in range(self.skills.rowCount()):
-            item = self.skills.item(row, 0)
-            combo = self.skills.cellWidget(row, 1)
-            domain = item.text().strip().lower() if item else ""
-            if domain and isinstance(combo, QComboBox):
-                tiers[domain] = combo.currentData()
-        return tiers
+        return self.skills.tiers()
 
     def _add_skill(self) -> None:
-        if self._current is None:
-            return
-        self.skills.blockSignals(True)
-        self._append_skill_row("", "competent")
-        self.skills.blockSignals(False)
-        row = self.skills.rowCount() - 1
-        self.skills.setCurrentCell(row, 0)
-        self.skills.editItem(self.skills.item(row, 0))
+        if self._current is not None:
+            self.skills.add_skill()
 
     def _remove_skill(self) -> None:
-        row = self.skills.currentRow()
-        if row < 0:
-            return
-        self.skills.removeRow(row)
-        self._fit_skills_table()
-        self._apply_edits()
+        if self.skills.remove_skill():
+            self._apply_edits()
 
     def show_suggested_skills(self, character_id: str, tiers: dict) -> None:
         """Put accepted suggestions in the table, where they can still be edited."""

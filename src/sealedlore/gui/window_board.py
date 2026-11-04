@@ -83,6 +83,7 @@ class CastBoardWindow:
             return
         if on:
             if not self.board_shown():
+                self.show_collection(False)
                 self.close_find()
                 self.show_map(False)
                 self._board_away = [(w, w.isVisible()) for w in self._board_hides()]
@@ -332,15 +333,23 @@ class CastBoardWindow:
 
     def _start_waiting(self) -> None:
         """Gaps waiting for a new look's first picture: drawn from it once it
-        is in, with the prompt approved; let go, and said, when it failed."""
-        session = self.session
-        if session is None or not self._board_waiting:
+        is in, with the prompt approved; let go, and said, when it failed.
+        The open story's, and the author's own characters'
+        (gui/window_collection.py)."""
+        if not self._board_waiting:
             return
+        sessions = {}
+        if self.session is not None:
+            sessions[self.session.story.id] = self.session
+        if self._collection is not None:
+            sessions[self._collection.story.id] = self._collection
         keep: list[tuple[str, Waiting]] = []
-        started, let_go = [], []
+        started: dict[str, list] = {}
+        let_go = []
         listing = self.image_catalog.models
         for story_id, waiting in self._board_waiting:
-            card = self._board_card(waiting.card_id) if story_id == session.story.id else None
+            session = sessions.get(story_id)
+            card = session.card(waiting.card_id) if session is not None else None
             if card is None:
                 keep.append((story_id, waiting))
                 continue
@@ -349,7 +358,7 @@ class CastBoardWindow:
                 continue  # filled meanwhile
             if gap.source is not None:
                 info = next((m for m in listing if m.id == waiting.model), None)
-                started.append(
+                started.setdefault(story_id, []).append(
                     session.card_request(
                         card,
                         waiting.prompt,
@@ -362,26 +371,30 @@ class CastBoardWindow:
                         expression=waiting.expression,
                     )
                 )
-            elif self._look_being_drawn(card.id, waiting.look):
+            elif self._look_being_drawn(card.id, waiting.look, story_id):
                 keep.append((story_id, waiting))
             else:
                 let_go.append(waiting)
         self._board_waiting = keep
-        if started and not self._card_pictures_refused(session):
-            self._start_card_pictures(started)
+        for story_id, requests in started.items():
+            session = sessions[story_id]
+            if not self._card_pictures_refused(session):
+                self._start_card_pictures(requests, session)
         if let_go:
             looks = sorted({w.look for w in let_go})
             self.statusBar().showMessage(
                 f"The first picture of {', '.join(looks)} didn't come, so the rest of its row "
-                "wasn't drawn: fill it again from the cast board.",
+                "wasn't drawn: fill it again from its sheet.",
                 12000,
             )
         self._refresh_board()
+        self._refresh_collection()
 
-    def _look_being_drawn(self, card_id: str, look: str) -> bool:
+    def _look_being_drawn(self, card_id: str, look: str, story_id: str | None = None) -> bool:
+        story_id = story_id or self.session.story.id
         return any(
             job.request.card_id == card_id and label_key(job.request.card_look) == label_key(look)
-            for job in self.image_jobs.pending(self.session.story.id)
+            for job in self.image_jobs.pending(story_id)
         )
 
     def _board_asked(self, card_id: str, words: str) -> None:

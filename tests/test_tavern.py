@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from sealedlore.engine.rules import render_cast_sheet
 from sealedlore.models.character import Character, Competence
 from sealedlore.models.lore import LoreEntry
 from sealedlore.storage import tavern_cards
@@ -230,11 +231,71 @@ def test_a_card_becomes_a_cast_card(tmp_path: Path):
     assert character.name == "Elena"
     assert character.summary == "Elena keeps the farmhouse north of Hellsville."
     assert "She trusts John slowly." in character.full_description
-    assert "Personality: wary, dry, loyal once won" in character.full_description
     assert "Elena never says her surname." in character.full_description
+    # Its own field, told to the storyteller after the description as the
+    # import once wrote it into the description.
+    assert character.personality == "wary, dry, loyal once won"
+    sheet = render_cast_sheet(character, include_full_description=True)
+    assert sheet.endswith("Elena never says her surname.\n\nPersonality: wary, dry, loyal once won")
     assert character.voice_notes == (
         "John: Hello?\nElena: Hands where I can see them.\n\nElena: Cellar's full of the dead."
     )
+    # The rest of the card rides along, the names in.
+    tavern = character.tavern
+    assert (
+        tavern.first_mes
+        == '{{char}} lowers the rifle an inch. "Who sent you, {{user}}?"'.replace(
+            "{{char}}", "Elena"
+        ).replace("{{user}}", "John")
+    )
+    assert tavern.greetings[1] == "The door is barred. Elena speaks through it."
+    assert tavern.system_prompt == "You are Elena. Never break character."
+    assert (tavern.creator, tavern.character_version, tavern.tags) == ("someone", "1", ["survival"])
+    assert tavern.book_entries == 1
+    # The note at a depth is the description's, never kept twice.
+    assert "depth_prompt" not in tavern.extensions
+
+
+def test_kept_apart_from_a_story_the_examples_are_not_the_voice(tmp_path: Path):
+    card = read_card(png_card(tmp_path, {"chara": v2()}))
+    character = character_from_card(card, lambda text: text, for_story=False)
+
+    assert character.voice_notes is None
+    assert character.tavern.mes_example == ELENA["mes_example"]
+    assert "{{char}} keeps the farmhouse" in character.full_description
+
+
+def test_a_cards_own_fields_go_back_out_as_they_came(tmp_path: Path):
+    card = read_card(png_card(tmp_path, {"chara": v2()}))
+    character = character_from_card(card, lambda text: text, for_story=False)
+    first, third = card_data(character)
+    data = third["data"]
+
+    for key in (
+        "personality",
+        "scenario",
+        "first_mes",
+        "mes_example",
+        "system_prompt",
+        "creator_notes",
+        "creator",
+        "character_version",
+        "tags",
+        "alternate_greetings",
+        "character_book",
+    ):
+        assert data[key] == ELENA[key], key
+    # The description took the note SillyTavern would have put at a depth.
+    assert data["description"] == ELENA["description"] + "\n\n{{char}} never says her surname."
+    assert first["data"]["personality"] == ELENA["personality"]
+
+
+def test_a_story_cards_voice_from_its_examples_is_not_written_twice(tmp_path: Path):
+    card = read_card(png_card(tmp_path, {"chara": v2()}))
+    character = character_from_card(card, macro_filler("Elena", "John"))
+    _first, third = card_data(character)
+    assert "Voice:" not in third["data"]["description"]
+    assert third["data"]["mes_example"].startswith("<START>\nJohn: Hello?")
 
 
 def test_a_new_story_from_a_card(tmp_path: Path):
@@ -312,7 +373,12 @@ def test_a_character_goes_out_and_comes_back_whole(tmp_path: Path):
     back = character_from_card(card, macro_filler(card.name, None))
 
     assert card.spec == "chara_card_v3"
-    assert back.model_dump(exclude={"id"}) == character.model_dump(exclude={"id"})
+    assert back.model_dump(exclude={"id", "tavern"}) == character.model_dump(
+        exclude={"id", "tavern"}
+    )
+    # What the card said of where it came from, and its lorebook, ride along.
+    assert back.tavern.creator_notes == "Exported from SealedLore, from the story Doomsville."
+    assert back.tavern.book_entries == 1
     # Something any reader can use, too.
     description = card.text("description")
     assert "Voice: Slow, kind, never swears." in description

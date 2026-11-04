@@ -52,6 +52,7 @@ from sealedlore.models.lore import LoreEntry
 from sealedlore.models.node import Usage
 from sealedlore.providers.images import IMAGE_TIMEOUT_SECONDS
 from sealedlore.storage.image_meta import picture_kind
+from sealedlore.storage.paths import COLLECTION_ID
 from sealedlore.storage.picture_store import PictureStore, file_name
 from sealedlore.storage.repository import save_config
 
@@ -407,10 +408,12 @@ class ImagesWindow:
     # --- pictures for the cards ------------------------------------------------
 
     def _card_pictures_refused(self, session) -> bool:
-        """Why pictures for the cards can't be asked for now, said; or False."""
+        """Why pictures for the cards can't be asked for now, said; or False.
+        The author's own characters (gui/window_collection.py) are their own
+        session: the story's job doesn't hold them."""
         if session is None or session.story.chat:
             return True
-        if self._busy:
+        if self._busy and session is self.session:
             self.statusBar().showMessage(
                 "Pictures can be drawn once the story's current job is done.", 6000
             )
@@ -426,16 +429,21 @@ class ImagesWindow:
     def _browse_pictures(self, current: str) -> str | None:
         return pick_image_model(self.image_catalog, current, self)
 
-    def _drain_side_costs(self) -> None:
-        """A prompt writer's call, paid whether or not anything is drawn."""
-        session = self.session
+    def _drain_side_costs(self, session=None) -> None:
+        """A prompt writer's call, paid whether or not anything is drawn: the
+        story's, or the author's own characters' (their page says it)."""
+        session = session or self.session
+        if session is not self.session:
+            session.unreported_usage.clear()
+            self._collection_spent()
+            return
         for usage in session.unreported_usage:
             self.status_strip.add_cost(usage)
         session.unreported_usage.clear()
         self._refresh_story_cost()
 
-    def _start_card_pictures(self, requests: list) -> None:
-        session = self.session
+    def _start_card_pictures(self, requests: list, session=None) -> None:
+        session = session or self.session
         for request in requests:
             client = session.image_client()
             if client is None:
@@ -447,13 +455,19 @@ class ImagesWindow:
             "goes on its card when done.",
             8000,
         )
-        self._refresh_image_views()
+        if session is self.session:
+            self._refresh_image_views()
+        else:
+            self._refresh_collection()
 
-    def draw_card_pictures(self, characters: list | None = None, lore: list | None = None) -> bool:
+    def draw_card_pictures(
+        self, characters: list | None = None, lore: list | None = None, session=None
+    ) -> bool:
         """Offer a picture of each card (`characters` and `lore`; by default
         those with none, else every card the models may see): every prompt
-        is shown before anything is drawn. True when drawing began."""
-        session = self.session
+        is shown before anything is drawn. True when drawing began.
+        `session`: the story's by default, else the author's own characters'."""
+        session = session or self.session
         if self._card_pictures_refused(session):
             return False
         if characters is None and lore is None:
@@ -481,23 +495,23 @@ class ImagesWindow:
             # The style and its picture are the story's from now on, as the
             # dialog says; kept before the requests, which send the picture.
             session.set_picture_style(*dialog.chosen_style())
-            self._apply_style_picture(dialog.style.picture_choice())
+            self._apply_style_picture(dialog.style.picture_choice(), session)
             requests = dialog.requests()
         dialog.deleteLater()  # read; held the story otherwise
-        self._drain_side_costs()
+        self._drain_side_costs(session)
         if not accepted:
             return False
         if chosen != self.config.portrait_model:
             self.config.portrait_model = chosen
             save_config(self.config, root=self.root)
-        self._start_card_pictures(requests)
+        self._start_card_pictures(requests, session)
         return bool(requests)
 
-    def restyle_pictures(self, cards: list | None = None) -> bool:
+    def restyle_pictures(self, cards: list | None = None, session=None) -> bool:
         """Cards' pictures redrawn in a style (gui/restyle_dialog.py): by
         default every card the models may see that has a picture. True when
         drawing began."""
-        session = self.session
+        session = session or self.session
         if session is None or self._card_pictures_refused(session):
             return False
         if cards is None:
@@ -514,15 +528,18 @@ class ImagesWindow:
             catalog=self.image_catalog,
             browse=self._browse_pictures,
         )
-        self._drain_side_costs()
-        self._start_card_pictures(requests)
+        self._drain_side_costs(session)
+        self._start_card_pictures(requests, session)
         return bool(requests)
 
-    def _on_card_picture(self, card_id: str, ref_id: str, what: str, *, wanted: str = "") -> None:
+    def _on_card_picture(
+        self, card_id: str, ref_id: str, what: str, *, wanted: str = "", session=None
+    ) -> None:
         """A picture asked for on a card (the Cast or Lore page, the People
-        page): "new", "again" or "edit" of picture `ref_id`, "set" (a set of
-        expressions drawn from it), or "scene"."""
-        session = self.session
+        page, or the author's own characters with their `session`): "new",
+        "again" or "edit" of picture `ref_id`, "set" (a set of expressions
+        drawn from it), or "scene"."""
+        session = session or self.session
         if self._card_pictures_refused(session):
             return
         card = session.card(card_id)
@@ -541,7 +558,9 @@ class ImagesWindow:
             return
         if what == "new":
             person = any(c.id == card_id for c in characters)
-            self.draw_card_pictures([card] if person else [], [] if person else [card])
+            self.draw_card_pictures(
+                [card] if person else [], [] if person else [card], session=session
+            )
             return
         if what == "scene":
             self.generate_image(card=card)
@@ -558,9 +577,9 @@ class ImagesWindow:
                 catalog=self.image_catalog,
                 browse=self._browse_pictures,
             )
-            self._drain_side_costs()
+            self._drain_side_costs(session)
             if requests:
-                self._start_card_pictures(requests)
+                self._start_card_pictures(requests, session)
             return
         dialog = PictureVariantDialog(
             session,
@@ -575,9 +594,9 @@ class ImagesWindow:
         accepted = dialog.exec()
         request = dialog.request() if accepted else None
         dialog.deleteLater()  # read; held the story otherwise
-        self._drain_side_costs()
+        self._drain_side_costs(session)
         if request is not None:
-            self._start_card_pictures([request])
+            self._start_card_pictures([request], session)
 
     def _card_picture_action(self, action: str, card_id: str, ref_id: str) -> None:
         """A card's picture in the Media tab: see it whole, go to its card,
@@ -649,6 +668,9 @@ class ImagesWindow:
         except OSError as exc:
             self._warn_plain("Couldn't keep the picture", str(exc))
             return
+        if story_id == COLLECTION_ID:
+            self._collection_pictures_landed()
+            return
         open_story = self.session is not None and self.session.story.id == story_id
         if open_story:
             # Pictures are spend in this session too, not only in the story total.
@@ -681,6 +703,8 @@ class ImagesWindow:
         if self.session is not None and self.session.story.id == story_id:
             self._refresh_story_cost()
             self._refresh_image_views()
+        elif story_id == COLLECTION_ID:
+            self._refresh_collection()
         if not message:
             self.statusBar().showMessage("Stopped waiting for the picture.", 8000)
             return

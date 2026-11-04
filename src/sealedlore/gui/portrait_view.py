@@ -114,9 +114,12 @@ class PortraitView(QWidget):
     labels_requested = Signal()
     set_requested = Signal()
 
-    def __init__(self, *, person: bool = True) -> None:
+    def __init__(self, *, person: bool = True, scene: bool = True) -> None:
+        """`scene`: In a scene… is offered (a story's; the author's own
+        characters have no scene to picture them in)."""
         super().__init__()
         self._person = person
+        self._scene = scene
         self._noun = "portrait" if person else "picture"
         self.picture = _Picture()
         self.picture.clicked.connect(self._show_whole)
@@ -162,7 +165,7 @@ class PortraitView(QWidget):
         self.from_words.setObjectName("hintLabel")
         self.sends_picture = QLabel(SENDS_PICTURE)
         self.sends_picture.setObjectName("hintLabel")
-        self.scene_button.setVisible(person)
+        self.scene_button.setVisible(person and scene)
         self.add_button = self._button(
             "Choose a file…",
             f"A picture from your computer as the {self._noun}",
@@ -243,7 +246,7 @@ class PortraitView(QWidget):
         self.labels_button.setVisible(on and has and self._person)
         self.sends_picture.setVisible(on and has)
         # Their portrait is what keeps the face: with none, Draw a portrait first.
-        self.scene_button.setVisible(on and has and self._person)
+        self.scene_button.setVisible(on and has and self._person and self._scene)
         self.set_button.setVisible(on and has and self._person)
 
     def _show_whole(self) -> None:

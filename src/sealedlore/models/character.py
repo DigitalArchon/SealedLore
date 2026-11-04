@@ -11,7 +11,9 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from sealedlore.ids import new_id
+from sealedlore.models.collection import CollectionInfo
 from sealedlore.models.image import ImageRef
+from sealedlore.models.tavern import TavernFields
 
 CompetenceTier = Literal["none", "poor", "competent", "skilled", "expert", "legendary"]
 # Who wrote the card: the author, or the model from what the story established.
@@ -29,6 +31,9 @@ class Character(BaseModel):
     aliases: list[str] = Field(default_factory=list)
     summary: str | None = None
     full_description: str | None = None
+    # A SillyTavern card's own personality field: told with the description
+    # (engine/rules.py), as "Personality: …" after it.
+    personality: str | None = None
     voice_notes: str | None = None
     competence: Competence = Field(default_factory=Competence)
     # Who voices this character, and what the storyteller is told about them.
@@ -56,3 +61,9 @@ class Character(BaseModel):
     # In a story with a plot: kept from every model and the author's panels
     # until an event brings it in (models/plot.py).
     plot_hidden: bool = False
+    # A SillyTavern card's fields a story has no place for (models/tavern.py):
+    # None for a character never on a card.
+    tavern: TavernFields | None = None
+    # Kept in the author's own characters (storage/collection.py), with which
+    # version of its character it is; None in a story.
+    collection: CollectionInfo | None = None

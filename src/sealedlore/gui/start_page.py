@@ -42,6 +42,7 @@ from sealedlore.storage.paths import sample_stories
 # "open", the plot file for "sample", else None.
 OPEN, PREMISE, BLANK, CHAT, IMPORT, SAMPLE = "open", "premise", "blank", "chat", "import", "sample"
 LINK = "link"
+COLLECTION = "collection"
 # The ways to start one's own, in the order shown, with what each says.
 OWN: tuple[tuple[str, str, str], ...] = (
     (
@@ -65,13 +66,13 @@ OWN: tuple[tuple[str, str, str], ...] = (
         IMPORT,
         "Import a file",
         "A story backup, a scenario someone shared with you, a plot file (.md), or a "
-        "SillyTavern character card.",
+        "SillyTavern character card (it goes into Your characters).",
     ),
     (
-        LINK,
-        "Start from a character card",
-        "Paste the link to a SillyTavern card on Chub or RisuRealm, or to a card's file: "
-        "its character becomes a new story.",
+        COLLECTION,
+        "Your characters",
+        "Characters you keep for any story or chat: SillyTavern cards imported from files or "
+        "links (Chub, RisuRealm), or your own, with their pictures.",
     ),
 )
 SAMPLES_HEADING = "Play a sample story"

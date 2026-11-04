@@ -32,7 +32,7 @@ TITLE = "Title"
 SNIPPET_REACH = 60
 # Models write curly quotes and long dashes; nobody types them in a search box.
 _TYPED_AS = str.maketrans({"’": "'", "‘": "'", "“": '"', "”": '"', "—": "-", "–": "-"})
-_CARD_FIELDS = ("name", "summary", "full_description", "voice_notes", "canon")
+_CARD_FIELDS = ("name", "summary", "full_description", "personality", "voice_notes", "canon")
 
 
 @dataclass(frozen=True)

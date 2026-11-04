@@ -132,7 +132,9 @@ def test_filling_gaps_asks_for_only_what_differs_from_their_picture(app, window,
     # From the board: the dialog's requests are started as card pictures.
     started: list = []
     monkeypatch.setattr(window, "_card_pictures_refused", lambda session: False)
-    monkeypatch.setattr(window, "_start_card_pictures", started.extend)
+    monkeypatch.setattr(
+        window, "_start_card_pictures", lambda requests, session=None: started.extend(requests)
+    )
     monkeypatch.setattr(
         "sealedlore.gui.window_board.ask_fill_gaps", lambda *a, **k: (["request"], [])
     )
@@ -275,7 +277,9 @@ def test_a_new_looks_whole_row_is_approved_at_once_and_drawn_from_its_first(
 
     started: list = []
     monkeypatch.setattr(window, "_card_pictures_refused", lambda session: False)
-    monkeypatch.setattr(window, "_start_card_pictures", started.extend)
+    monkeypatch.setattr(
+        window, "_start_card_pictures", lambda requests, session=None: started.extend(requests)
+    )
     monkeypatch.setattr(
         "sealedlore.gui.window_board.ask_fill_gaps", lambda *a, **k: (["first"], waiting)
     )

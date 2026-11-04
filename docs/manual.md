@@ -902,14 +902,61 @@ is told as fact after the other. **Help → Writing a plot that plays well**
 each part of a plot is read by, and how to word it, with good and bad
 examples in the style of the samples.
 
+## Your characters
+
+Characters you keep for any story or chat, outside every story: File → Your
+characters…, or **Your characters** on the start page. The page takes the
+whole window, as the cast board does; **Back to the story** (or Esc) brings
+the story back as it was, its job still running if one was.
+
+On the left is every character, with a search over their whole card, a tag
+to list them by, and an order (by name, changed last, added last);
+**Everyone** shows all their portraits together. A character's card has four
+tabs:
+
+- **Card**: the character as a story has them: name, aliases, summary,
+  description, personality, voice, competence and skills, with their portrait
+  and other pictures. Write `{{char}}` for their name and `{{user}}` for
+  whoever they talk to, as SillyTavern cards do: the names go in when they
+  join a story.
+- **Pictures**: their pictures as the cast board's sheet of looks and
+  expressions, with the gaps ready to draw, pictures from your computer
+  dropped on a place, and Restyle.
+- **For chats**: what a SillyTavern card has for a one-to-one chat: the
+  scenario, the first message and the other greetings, example messages, the
+  card's own system prompt and what comes after the chat (SillyTavern's
+  post-history instructions). A story never sends these.
+- **About**: who made the card, its version, its tags, its maker's notes, its
+  own lorebook, and where it came from.
+
+Every field of a SillyTavern V3 card is kept, so a card imported and exported
+again comes back as it was. (The note SillyTavern puts at a depth in a chat
+becomes the end of the description.)
+
+**New character** starts one from a blank card. **Import** takes cards from
+files (several at once), a card by link, and a SillyTavern expression pack
+(a zip of pictures) for the character shown. **Export** saves a character as
+a PNG card with their portrait, a CHARX card with every picture, or a JSON
+card. **More** makes a new version of a character (a whole copy kept with
+them, chosen above the card, to change as you like), renames a version,
+duplicates one as a character of their own, or deletes one: their card goes
+to the Trash as a CHARX file you can import again.
+
+Pictures drawn here are paid for as a story's are, and what they have cost so
+far is said under the character's name. **Make a story from the card…**
+makes a new story from the character's card, as a SillyTavern card does
+(below).
+
 ## SillyTavern cards and lorebooks
 
 SealedLore reads and writes the character cards and lorebooks SillyTavern
 uses, which is also how Chub, JanitorAI and most card sites share them.
 
-**A new story from a card.** File → Import… takes a card: a PNG with the card
-inside it, a JSON file, or a CHARX. File → Import from a link… (or **Start from
-a character card** on the start page) takes its link instead (below). It
+**A card into Your characters.** File → Import… takes a card: a PNG with the
+card inside it, a JSON file, or a CHARX. File → Import from a link… takes its
+link instead (below). The card's character is kept in Your characters
+(above), with every field and picture the card has, and its page opens.
+**Make a story from the card…** there makes a new story from it, and
 asks:
 
 - whether the card is **one character** the storyteller plays, or **a world,
@@ -960,7 +1007,8 @@ recursion settings and character filters. Characters and lore the plot
 hasn't brought in yet are exported only with spoilers shown.
 
 **By link.** Instead of downloading a card first, paste its link: File →
-Import from a link… for a new story, **SillyTavern cards → Import a card from
+Import from a link… (or Import on Your characters' page) to keep it in Your
+characters, **SillyTavern cards → Import a card from
 a link…** on the Cast page for the open story, and **SillyTavern lorebook →
 Import a lorebook from a link…** on the Lore page. It takes:
 

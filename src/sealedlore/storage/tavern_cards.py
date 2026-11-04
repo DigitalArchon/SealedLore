@@ -41,6 +41,7 @@ from sealedlore.models.lore import LoreEntry
 from sealedlore.models.scenario import Scenario
 from sealedlore.models.scene import SceneState
 from sealedlore.models.story import StyleDirectives
+from sealedlore.models.tavern import TavernFields
 from sealedlore.storage.atomic import atomic_write_json
 from sealedlore.storage.image_meta import picture_kind, stripped_or_same
 from sealedlore.storage.images import REFS_DIR, write_bytes_atomic
@@ -510,26 +511,78 @@ def example_dialogue(text: str) -> str:
     return "\n\n".join(part.strip() for part in parts if part.strip())
 
 
-def character_from_card(card: TavernCard, fill: Callable[[str], str]) -> Character:
-    """The card's character as a cast card. A card SealedLore wrote brings
-    its own fields back as they were."""
+def _number(value: object) -> int | None:
+    """A V3 date (seconds since 1970); None for anything else a card holds."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return int(value)
+
+
+def tavern_fields(card: TavernCard, fill: Callable[[str], str]) -> TavernFields:
+    """What the card holds that a story's card has no place for, its text
+    with the names in as `fill` puts them. The note SillyTavern puts at a
+    depth in the chat is the description's (`character_from_card`), and
+    SealedLore's own fields are the character's: neither is kept twice."""
+    fields = card.fields
+
+    def strings(key: str) -> list[str]:
+        value = fields.get(key)
+        return [text for text in value if isinstance(text, str)] if isinstance(value, list) else []
+
+    def texts(key: str) -> list[str]:
+        return [fill(text) for text in strings(key)]
+
+    multilingual = fields.get("creator_notes_multilingual")
+    book = fields.get("character_book")
+    return TavernFields(
+        scenario=fill(card.text("scenario")),
+        first_mes=fill(card.text("first_mes")),
+        alternate_greetings=texts("alternate_greetings"),
+        group_only_greetings=texts("group_only_greetings"),
+        mes_example=fill(card.text("mes_example")),
+        system_prompt=fill(card.text("system_prompt")),
+        post_history_instructions=fill(card.text("post_history_instructions")),
+        creator_notes=fill(card.text("creator_notes")),
+        creator_notes_multilingual=dict(multilingual) if isinstance(multilingual, Mapping) else {},
+        creator=card.text("creator"),
+        character_version=card.text("character_version"),
+        tags=strings("tags"),
+        source=strings("source"),
+        creation_date=_number(fields.get("creation_date")),
+        modification_date=_number(fields.get("modification_date")),
+        character_book=dict(book) if isinstance(book, Mapping) else None,
+        extensions={
+            key: value
+            for key, value in card.extensions.items()
+            if key not in ("sealedlore", "depth_prompt")
+        },
+    )
+
+
+def character_from_card(
+    card: TavernCard, fill: Callable[[str], str], *, for_story: bool = True
+) -> Character:
+    """The card's character as a cast card, with the rest of the card on it
+    (`tavern_fields`). A card SealedLore wrote brings its own fields back as
+    they were. `for_story`: the example messages are its voice, as a story's
+    storyteller reads them; kept in the author's own characters
+    (storage/collection.py) they stay where the card has them, and a story
+    takes its voice from them when the character joins it."""
     name = fill(card.name).strip() or "Unnamed"
     description = fill(card.text("description")).strip()
     personality = fill(card.text("personality")).strip()
     depth = card.extensions.get("depth_prompt")
     note = fill(str(depth.get("prompt") or "")).strip() if isinstance(depth, Mapping) else ""
     nickname = fill(card.text("nickname")).strip()
+    examples = example_dialogue(fill(card.text("mes_example"))) if for_story else ""
     character = Character(
         name=name,
         aliases=[nickname] if nickname and nickname != name else [],
         summary=first_sentence(description or personality) or None,
-        full_description="\n\n".join(
-            part
-            for part in (description, f"Personality: {personality}" if personality else "", note)
-            if part
-        )
-        or None,
-        voice_notes=example_dialogue(fill(card.text("mes_example"))) or None,
+        full_description="\n\n".join(part for part in (description, note) if part) or None,
+        personality=personality or None,
+        voice_notes=examples or None,
+        tavern=tavern_fields(card, fill),
     )
     own = card.extensions.get("sealedlore")
     if isinstance(own, Mapping):
@@ -537,13 +590,26 @@ def character_from_card(card: TavernCard, fill: Callable[[str], str]) -> Charact
             return Character.model_validate(
                 {
                     **character.model_dump(),
-                    **{key: own[key] for key in _OWN if key in own},
+                    **{key: _filled(own[key], fill) for key in _OWN if key in own},
                     "id": character.id,
                 }
             )
         except ValidationError:
             pass  # someone else's edit broke it: the card's own fields stand
     return character
+
+
+def _filled(value: Any, fill: Callable[[str], str]) -> Any:
+    """A SealedLore card's own field with the names in: one written from the
+    author's own characters keeps `{{char}}` and `{{user}}` as they are there
+    (storage/collection.py)."""
+    if isinstance(value, str):
+        return fill(value)
+    if isinstance(value, list):
+        return [_filled(item, fill) for item in value]
+    if isinstance(value, Mapping):
+        return {key: _filled(item, fill) for key, item in value.items()}
+    return value
 
 
 @dataclass
@@ -788,6 +854,7 @@ def scenario_from_card(
             scenario.world_bible or "",
             scenario.opening_text,
             *(c.full_description or "" for c in scenario.cast),
+            *(c.personality or "" for c in scenario.cast),
             *(c.voice_notes or "" for c in scenario.cast),
             *(entry.content for entry in scenario.lore),
         ]
@@ -820,45 +887,56 @@ def card_data(
     story_title: str = "",
     lore: Sequence[LoreEntry] = (),
     picture: bool = False,
+    origin: str = "",
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """A character as a card: (V2, V3). Its description carries what the
     cast sheet says (the card, the voice, the skills); SealedLore's own
-    fields ride under `extensions.sealedlore`. `lore` becomes the card's own
-    lorebook; `picture` says the card's PNG is its picture (V3's asset)."""
+    fields ride under `extensions.sealedlore`, and the rest of a card it
+    came from (`Character.tavern`) goes back where the card had it. `lore`
+    becomes the card's own lorebook (else the card's own book, if it had
+    one); `picture` says the card's PNG is its picture (V3's asset).
+    `origin`: where it was exported from, in the card's notes when it has
+    none of its own ("a story", or the story's title, by default)."""
+    tavern = character.tavern or TavernFields()
+    voice = (character.voice_notes or "").strip()
+    if voice and voice == example_dialogue(tavern.mes_example):
+        voice = ""  # read from the card's own examples, which go back as they were
     description = "\n\n".join(
         part
         for part in (
             (character.full_description or character.summary or "").strip(),
-            f"Voice: {character.voice_notes.strip()}" if character.voice_notes else "",
+            f"Voice: {voice}" if voice else "",
             _skills(character),
         )
         if part
     )
-    origin = f"the story {story_title}" if story_title else "a story"
+    origin = origin or (f"the story {story_title}" if story_title else "a story")
     own = character.model_dump(include=set(_OWN))
     data: dict[str, Any] = {
         "name": character.name,
         "description": description,
-        "personality": "",
-        "scenario": "",
-        "first_mes": "",
-        "mes_example": "",
-        "creator_notes": f"Exported from SealedLore, from {origin}.",
-        "system_prompt": "",
-        "post_history_instructions": "",
-        "alternate_greetings": [],
-        "tags": [],
-        "creator": "",
-        "character_version": "",
-        "extensions": {"sealedlore": own},
+        "personality": (character.personality or "").strip(),
+        "scenario": tavern.scenario,
+        "first_mes": tavern.first_mes,
+        "mes_example": tavern.mes_example,
+        "creator_notes": tavern.creator_notes or f"Exported from SealedLore, from {origin}.",
+        "system_prompt": tavern.system_prompt,
+        "post_history_instructions": tavern.post_history_instructions,
+        "alternate_greetings": list(tavern.alternate_greetings),
+        "tags": list(tavern.tags),
+        "creator": tavern.creator,
+        "character_version": tavern.character_version,
+        "extensions": {**tavern.extensions, "sealedlore": own},
     }
     if lore:
         data["character_book"] = character_book_from_lore(lore, name=story_title)
+    elif tavern.character_book:
+        data["character_book"] = tavern.character_book
     v2 = {
         # V1's fields at the top too, as SillyTavern writes them, for readers
         # that know no other.
         **{key: data[key] for key in _V1},
-        "tags": [],
+        "tags": list(tavern.tags),
         "spec": SPEC_V2,
         "spec_version": "2.0",
         "data": data,
@@ -866,10 +944,13 @@ def card_data(
     v3_data = {
         **data,
         "nickname": character.aliases[0] if character.aliases else "",
-        "group_only_greetings": [],
-        "creator_notes_multilingual": {},
-        "source": [],
+        "group_only_greetings": list(tavern.group_only_greetings),
+        "creator_notes_multilingual": dict(tavern.creator_notes_multilingual),
+        "source": list(tavern.source),
     }
+    for key in ("creation_date", "modification_date"):
+        if getattr(tavern, key) is not None:
+            v3_data[key] = getattr(tavern, key)
     if picture:
         v3_data["assets"] = [{"type": "icon", "uri": "ccdefault:", "name": "main", "ext": "png"}]
     v3 = {"spec": SPEC_V3, "spec_version": "3.0", "data": v3_data}

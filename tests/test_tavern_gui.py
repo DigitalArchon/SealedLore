@@ -106,31 +106,44 @@ def test_the_dialog_asks_who_you_play_before_it_makes_anything(app, tmp_path: Pa
 # --- a new story from a card -------------------------------------------------------
 
 
-def test_file_import_makes_a_story_from_a_card(app, tmp_path: Path, monkeypatch):
+def test_file_import_keeps_a_card_and_a_story_is_made_from_it_there(
+    app, tmp_path: Path, monkeypatch
+):
+    """A card read in is kept in Your characters (the author, Nov 4 2026: it
+    used to become a story at once); its page makes the story it would have."""
     path = png_card(tmp_path, {"chara": v2()})
     window = window_on(tmp_path)
     choose_file(monkeypatch, path)
+    said = no_boxes(monkeypatch)
+
+    window.import_file()
+
+    assert window.session is None and window.collection_shown()
+    elena = window.collection_page.current_character()
+    assert elena.name == "Elena" and elena.collection.came_from == "card.png"
+    assert elena.full_description.startswith("{{char}} keeps")  # names go in later
+    assert elena.tavern.first_mes == ELENA["first_mes"]
 
     def accepted(dialog) -> int:
         dialog.player.setText("John")
         return QDialog.Accepted
 
     monkeypatch.setattr(CardImportDialog, "exec", accepted)
-    said = no_boxes(monkeypatch)
     set_up: list[bool] = []
     monkeypatch.setattr(window, "open_setup", lambda: set_up.append(True) or False)
-
-    window.import_file()
+    window.collection_page.story_button.click()
 
     session = window.session
     assert session is not None and session.story.title == "Elena"
+    assert not window.collection_shown()
     assert [c.name for c in session.cast] == ["Elena", "John"]
+    assert "She trusts John slowly." in session.cast[0].full_description
     assert session.story.setup.opening_text.startswith("Elena lowers the rifle")
     assert [entry.title for entry in session.bundle.lore] == ["Hellsville"]
     portrait = session.cast[0].reference_images[0]
     assert text_chunks(session.pictures.read(portrait.file)) == {}
     assert set_up == [True]
-    assert said and "1 other greeting" in said[0]
+    assert any("1 other greeting" in words for words in said)
     window.close()
 
 
@@ -317,26 +330,21 @@ def test_the_link_dialog_says_what_can_t_be_fetched_before_sending(app):
     dialog.deleteLater()
 
 
-def test_a_card_by_link_makes_a_story(app, tmp_path: Path, monkeypatch):
+def test_a_card_by_link_is_kept_in_your_characters(app, tmp_path: Path, monkeypatch):
     window = window_on(tmp_path)
-    paste_link(monkeypatch, "https://chub.ai/characters/someone/elena-1234")
+    link = "https://chub.ai/characters/someone/elena-1234"
+    paste_link(monkeypatch, link)
     asked = answered_with(monkeypatch, a_card(picture=tiny_png()))
-
-    def accepted(dialog) -> int:
-        dialog.player.setText("John")
-        return QDialog.Accepted
-
-    monkeypatch.setattr(CardImportDialog, "exec", accepted)
     no_boxes(monkeypatch)
-    monkeypatch.setattr(window, "open_setup", lambda: False)
 
     window.import_from_link()
-    wait_for(app, lambda: window.session is not None)
+    wait_for(app, lambda: window._collection is not None and window._collection.cast)
 
-    assert asked == ["https://chub.ai/characters/someone/elena-1234"]
-    assert [c.name for c in window.session.cast] == ["Elena", "John"]
-    portrait = window.session.cast[0].reference_images[0]
-    assert window.session.pictures.read(portrait.file)
+    assert asked == [link] and window.session is None
+    elena = window._collection.cast[0]
+    assert elena.name == "Elena" and elena.collection.came_from == link
+    assert window._collection.pictures.read(elena.reference_images[0].file)
+    assert window.collection_shown()
     assert window._link_fetch is None and window._link_progress is None
     window.close()
 
@@ -420,17 +428,11 @@ def test_stop_drops_what_the_link_brings_later(app, tmp_path: Path, monkeypatch)
     window.close()
 
 
-def test_the_start_page_starts_from_a_card_s_link(app, tmp_path: Path, monkeypatch):
+def test_the_start_page_opens_your_characters(app, tmp_path: Path):
     window = window_on(tmp_path)
-    shown: list[str] = []
-
-    def rejected(dialog: LinkDialog) -> int:
-        shown.append(dialog.windowTitle())
-        return QDialog.Rejected
-
-    monkeypatch.setattr(LinkDialog, "exec", rejected)
-    window.start_page.cards["link"].activated.emit()
-    assert shown == ["Import from a link"] and window._link_fetch is None
+    window.start_page.cards["collection"].activated.emit()
+    assert window.collection_shown()
+    assert window.collection_page.back_button.text() == "Close"
     window.close()
 
 
@@ -459,14 +461,8 @@ def test_a_large_card_is_downloaded_only_on_a_yes(app, tmp_path: Path, monkeypat
     assert "This card's file is 82 MB." in said[0] and "Download 82 MB" in said[0]
 
     monkeypatch.setattr(window, "_download_large_card", lambda size: True)
-
-    def accepted(dialog) -> int:
-        dialog.player.setText("John")
-        return QDialog.Accepted
-
-    monkeypatch.setattr(CardImportDialog, "exec", accepted)
-    monkeypatch.setattr(window, "open_setup", lambda: False)
+    no_boxes(monkeypatch)
     window.import_from_link()
-    wait_for(app, lambda: window.session is not None)
+    wait_for(app, lambda: window._collection is not None and window._collection.cast)
     assert calls == [False, False, True]
     window.close()

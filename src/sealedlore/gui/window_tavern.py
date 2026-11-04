@@ -131,6 +131,8 @@ class TavernWindow:
         self.lore_panel.lorebook_export_requested.connect(self.export_lorebook)
         self._link_fetch: _LinkFetch | None = None
         self._link_where = "story"
+        # The link the last fetch was of: where a card read from it came from.
+        self._link_source = ""
         self._link_progress: QProgressDialog | None = None
 
     def _say_left_out(self, title: str, lead: str, notes: list[str]) -> None:
@@ -150,12 +152,15 @@ class TavernWindow:
                 self._warn_plain("Could not read the card", str(exc))
             return None
 
-    # --- a new story from a card (File → Import…) ------------------------------
+    # --- a card into Your characters (File → Import…), a new story from one ------
 
     def _import_card(self, path: Path) -> None:
+        """A card read in is kept among the author's own characters
+        (gui/window_collection.py), whose page then offers a story or more
+        (the author, Nov 4 2026: a card used to become a story at once)."""
         card = self._read_card(path)
         if card is not None:
-            self._story_from_card(card)
+            self._card_into_collection(card, path.name)
 
     def _story_from_card(self, card: TavernCard) -> None:
         dialog = CardImportDialog(card, self._dialog_parent())
@@ -509,20 +514,26 @@ class TavernWindow:
     # --- by link (File → Import from a link…, the Cast and Lore pages) ----------
 
     def import_from_link(self, where: str = "story") -> None:
-        """A card or a lorebook by link. `where`: "story" (File: a card makes a
-        new story, a lorebook goes into the open one), "cast" or "lore" (the
-        pages' menus: into the open story)."""
-        if self._busy or self._link_fetch is not None:
+        """A card or a lorebook by link. `where`: "story" (File: a card is kept
+        in Your characters, a lorebook goes into the open story), "collection"
+        (Your characters' page), "cast" or "lore" (the pages' menus: into the
+        open story)."""
+        if self._link_fetch is not None:
             return
-        if where != "story" and (self.session is None or self.in_chat):
+        if where != "collection" and self._busy:
             return
-        if where == "story" and not self._private_allows_close():
+        if where in ("cast", "lore") and (self.session is None or self.in_chat):
             return
         title, lead = {
             "story": (
                 "Import from a link",
-                "A SillyTavern character card makes a new story; a lorebook goes into the "
-                "open story's lore. Paste the link to its page or its file:",
+                "A SillyTavern character card is kept in Your characters; a lorebook goes "
+                "into the open story's lore. Paste the link to its page or its file:",
+            ),
+            "collection": (
+                "Import a card from a link",
+                "The card's character is kept in Your characters. Paste the link to the "
+                "card's page or its file:",
             ),
             "cast": (
                 "Import a card from a link",
@@ -549,6 +560,7 @@ class TavernWindow:
             self._warn_plain(LINK_FAILED, str(exc))
             return
         fetch = _LinkFetch(link, self, large_ok=large_ok)
+        self._link_source = link
         fetch.fetched.connect(self._on_link_fetched)
         fetch.failed.connect(self._on_link_failed)
         fetch.large.connect(self._on_link_large)
@@ -633,16 +645,22 @@ class TavernWindow:
             return
         finally:
             result.close()
-        if self._busy:
+        if self._busy and where != "collection":
             return
         if isinstance(found, TavernCard):
             self._card_from_link(found, where)
+        elif where == "collection":
+            self._warn_plain(
+                "A lorebook, not a character",
+                "That link is a SillyTavern lorebook. A character's own lorebook is imported "
+                "from a file on their About tab; a story's, from its Lore page.",
+            )
         else:
             self._lorebook_from_link(found, result.name)
 
     def _card_from_link(self, card: TavernCard, where: str) -> None:
-        if where == "story":
-            self._story_from_card(card)
+        if where in ("story", "collection"):
+            self._card_into_collection(card, self._link_source)
         elif self.session is None or self.in_chat:
             return
         elif where == "cast":
