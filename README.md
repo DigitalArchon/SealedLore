@@ -52,23 +52,31 @@ fun to play. This app will remain focused on text based roleplay.
   system prompts (**Saved prompts**). A SillyTavern card imported from File
   now goes into Your characters.
 
+![Your characters: thirty characters from the five sample stories, each with their portrait and the story they came from, and down the left a search, tags and the list of them, with New character and Import](docs/screenshots/your-characters.webp)
+
+- **Characters with many faces** (3.0.0b1). A character's pictures can be
+  labelled with the look they wear (a winter coat, combat armour) and the
+  expression of the moment, and the picture that fits is chosen after each
+  passage: on the People page, and if you like on a stage under the story and
+  beside each passage (View). **The cast board** (Cast page → Cast board…)
+  shows every character's pictures as a sheet of looks and expressions across
+  the whole window, the missing ones drawn in a few clicks. Doomsville's John
+  and Jane come in four expressions and three looks.
+
+![The cast board in Doomsville: John's sheet, his winter coat, combat armour and indoor clothes down the side and expressions across, two gaps chosen in the armour row, one the story asked for, and the other characters in the list on the left](docs/screenshots/cast-board.webp)
+
+- **A picture style for each story** (3.0.0b1). Gritty and realistic, clean
+  and polished sci-fi, glamorous, anime, painted fantasy and more, your own
+  words, or the style of a picture you have. Portraits can be head and
+  shoulders, upper body or full body, and **Restyle pictures…** redraws
+  imported pictures to match.
+- **Continue, prompt sets and SillyTavern cards** (3.0.0b1). **Continue** a
+  passage from where it stopped, share your prompt edits as a prompt set, and
+  bring **SillyTavern** character cards and lorebooks in and out, from a file
+  or a link.
+
 ### New in version 2
 
-- **Characters with many faces, and a style for the story** (2.5.0b3). A
-  character's pictures can be labelled with the look they wear (a winter coat,
-  combat armour) and the expression of the moment, and the picture that fits
-  is chosen after each passage: on the People page, and if you like on a stage
-  under the story and beside each passage (View). **The cast board** (Cast
-  page → Cast board…) shows every character's pictures as a sheet of looks
-  and expressions across the whole window, the missing ones drawn in a few
-  clicks. Each story chooses a **picture style** (gritty and realistic, clean
-  and polished sci-fi, glamorous, anime, painted fantasy and more, your own
-  words, or the style of a picture you have), portraits can be head and
-  shoulders, upper body or full body, and **Restyle pictures…** redraws
-  imported pictures to match. Doomsville's John and Jane come in four
-  expressions and three looks. Also new since 2.5.0b2: **Continue** a passage
-  from where it stopped, prompt sets to share, and **SillyTavern** character
-  cards and lorebooks in and out, from a file or a link.
 - **Find any story, and give it its own models** (2.5.0b2). The Stories list says
   what kind each story is and when it was started and last played, sorts by
   last played or title, and searches the text of every story. **Story → Setup… →
@@ -242,6 +250,8 @@ OpenRouter, WaveSpeed, or anything OpenAI-compatible).
 
 You can also have a basic chat without the storytelling features, but still
 with summarising, end-to-end encrypted models, image generation, and so on.
+Start one from any of your characters, their card as its first message, and
+keep the system prompts you like to pick again.
 
 ### API usage fees
 
@@ -282,7 +292,8 @@ Have fun!
 - **Takes and branches**: regenerate any passage in place, carry the latest
   on from where it stops (**Continue**), or rewrite any earlier message as a
   named branch; a diagram shows them all.
-- **Drafting**: a whole story drafted from a premise.
+- **Drafting**: a whole story drafted from a premise, around characters of
+  your own if you like.
 - **Every prompt yours to change**: File → Prompts (advanced)… shows every
   instruction SealedLore sends to a model, editable for one story or for every
   story, and exports or imports them as a prompt set to share.

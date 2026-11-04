@@ -18,6 +18,7 @@ part of the window, and what each feature does. The README's
 - [Models](#models)
 - [When a model misbehaves](#when-a-model-misbehaves)
 - [Setting up a story](#setting-up-a-story)
+- [Your characters](#your-characters)
 - [SillyTavern cards and lorebooks](#sillytavern-cards-and-lorebooks)
 - [Drafting a story, and reviewing its settings](#drafting-a-story-and-reviewing-its-settings)
 - [Changing the prompts (advanced)](#changing-the-prompts-advanced)
@@ -32,6 +33,8 @@ part of the window, and what each feature does. The README's
 - [Pictures](#pictures)
   - [Pictures of your own](#pictures-of-your-own)
   - [Pictures for the cards](#pictures-for-the-cards)
+  - [A story's picture style, and how much a portrait shows](#a-storys-picture-style-and-how-much-a-portrait-shows)
+  - [Pictures in another style, or showing more of someone](#pictures-in-another-style-or-showing-more-of-someone)
   - [Pictures of places](#pictures-of-places)
   - [A picture kept as a card's own](#a-picture-kept-as-a-cards-own)
 - [Videos](#videos)
@@ -49,10 +52,17 @@ part of the window, and what each feature does. The README's
   at any time; the model never writes your character, and nobody walks into a
   scene by shortcut. Speaking as a character, as narration or as direction;
   OOC notes; questions to the model out of character.
+- **Your characters**: every character you keep, outside any story, with
+  every field of a SillyTavern V3 card and their pictures; put into any story,
+  with what the story changes of them saved to their card, as a new version,
+  or in that story only; a simple chat started from one, or a story drafted
+  around them.
 - **Faces and places**: a portrait for every character and a picture for
   every lore entry, drawn from their cards; the People page shows who is here
-  by their faces; a picture of each place the story goes to stands behind the
-  story while it is there.
+  by their faces; pictures labelled by look and expression, the one that fits
+  shown as the story goes, and the cast board showing them all with the gaps
+  to fill; a picture of each place the story goes to stands behind the story
+  while it is there.
 - **Sample stories**: Doomsville and four other worlds, each with a plot, a
   background and a picture of everyone and of every place, all on the start
   page.
@@ -62,8 +72,9 @@ part of the window, and what each feature does. The README's
 - **The scene keeps itself**: after each passage a small model reads who came
   and went, where the scene moved and whether it is private; the Scene tab
   follows, with Undo. Recent scenes and who was in them stay with the story.
-- **Simple chat**: a plain conversation with your own system prompt, with
-  branches, pictures and summaries, kept on disk or in memory only; a part
+- **Simple chat**: a plain conversation with your own system prompt (or a
+  saved one, or one of your characters' cards), with branches, pictures and
+  summaries, kept on disk or in memory only; a part
   of it can be held in private on another model, and on a TEE model all of
   it is attested (end-to-end encrypted on a `private/` model).
 - **Plots**: a Markdown plot file with facts, places and events; a director
@@ -80,20 +91,24 @@ part of the window, and what each feature does. The README's
   continue the latest one from where it stops, rewrite any earlier message as
   a named branch, take a turn back into the composer; every take is kept.
 - **Pictures**: a prompt written from the story on the story's cached prefix,
-  approved before anything is sent, with the cast's reference pictures. Every
-  picture and video in one place, the Media page. An image model is chosen
-  once: its editing version is sent whenever a picture goes with the prompt.
+  approved before anything is sent, with the cast's reference pictures. A
+  picture style for each story, ready-made, in your own words or taken from a
+  picture, and pictures redrawn in another style. Every picture and video in
+  one place, the Media page. An image model is chosen once: its editing
+  version is sent whenever a picture goes with the prompt.
 - **Videos**: a few seconds of the story, from a prompt written for video,
   optionally starting or ending on a picture; its price shown and accepted
   before it is sent, on a key of its own; played in place.
 - **Private scenes**: a span of the story played on a local or TEE model
   alone, end-to-end encrypted on NanoGPT's `private/` models, kept on disk
   or in memory only, handed back as a summary you approve.
-- **Drafting and review**: a whole story from a premise; a settings review
-  that proposes typed changes you tick.
-- **SillyTavern cards and lorebooks**: a story from a character card (a PNG,
-  JSON or CHARX file, or a link to one on Chub or RisuRealm), a card into a
-  story, and characters and lore exported for SillyTavern.
+- **Drafting and review**: a whole story from a premise, around characters of
+  your own if you like; a settings review that proposes typed changes you
+  tick.
+- **SillyTavern cards and lorebooks**: character cards kept in Your
+  characters (a PNG, JSON or CHARX file, or a link to one on Chub or
+  RisuRealm), a story from a card's own scenario, a card into a story, and
+  characters and lore exported for SillyTavern.
 - **From your phone**: play the stories you share from a phone's Tor
   Browser, anywhere, through SealedLore's own tor; paired by scanning a code,
   with nothing to set up on your router. Text stories and chats, on Linux.
@@ -909,10 +924,14 @@ characters…, or **Your characters** on the start page. The page takes the
 whole window, as the cast board does; **Back to the story** (or Esc) brings
 the story back as it was, its job still running if one was.
 
-On the left is every character, with a search over their whole card, a tag
-to list them by, and an order (by name, changed last, added last);
-**Everyone** shows all their portraits together. A character's card has four
-tabs:
+On the left is every character, with a search over what their card says of
+them (names, descriptions, personality, scenario, maker, notes and tags), a
+tag to list them by, and an order (by name, changed last, added last);
+**Everyone** shows all their portraits together.
+
+![Your characters: thirty characters from the five sample stories, each with their portrait and the story they came from, and down the left a search, tags and the list of them, with New character and Import](screenshots/your-characters.webp)
+
+A character's card has four tabs:
 
 - **Card**: the character as a story has them: name, aliases, summary,
   description, personality, voice, competence and skills, with their portrait
@@ -928,6 +947,8 @@ tabs:
   post-history instructions). A story never sends these.
 - **About**: who made the card, its version, its tags, its maker's notes, its
   own lorebook, and where it came from.
+
+![A character's card in Your characters: Professor Adelaide Quill from Brasshaven, her portrait with the buttons that draw or change it, her name, aliases, summary, description and voice, and above them Chat with them…, Draft a story with them…, Add to the story, Export and More](screenshots/your-characters-card.webp)
 
 Every field of a SillyTavern V3 card is kept, so a card imported and exported
 again comes back as it was. (The note SillyTavern puts at a depth in a chat
