@@ -35,6 +35,23 @@ were too experimental and not progressing quickly enough to a playable state.
 I plan to release that as an entirely separate game later when it is actually
 fun to play. This app will remain focused on text based roleplay.
 
+### New in version 3
+
+- **Your characters** (3.0.0b1). Every character you keep, in one place
+  outside any story (File → Your characters…, or the start page). Import
+  SillyTavern cards (PNG, CHARX or JSON files, or a link to Chub or
+  RisuRealm) with every field they have, or make your own; give them
+  pictures on the cast board's sheet of looks and expressions; keep versions
+  of one. Put any of them into a story as you set it up or while you play
+  (Cast page → From Your characters…). When a story changes them (a new
+  picture, a changed description), the Cast page says so, and **Changes…**
+  saves the change to their card, makes a new version of it, or keeps it in
+  that story only. **Chat with them…** starts a simple chat from their card
+  and a greeting of theirs, and **Draft a story with them…** has a story
+  drafted around them from your premise. Simple chats keep your favourite
+  system prompts (**Saved prompts**). A SillyTavern card imported from File
+  now goes into Your characters.
+
 ### New in version 2
 
 - **Characters with many faces, and a style for the story** (2.5.0b3). A
