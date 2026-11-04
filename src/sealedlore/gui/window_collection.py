@@ -14,6 +14,7 @@ their folder's own log, said on the page.
 
 from __future__ import annotations
 
+import copy
 import io
 import re
 from pathlib import Path
@@ -25,6 +26,7 @@ from sealedlore.engine.look_sheet import label_key
 from sealedlore.engine.looks import look_words
 from sealedlore.engine.session import StorySession
 from sealedlore.engine.usage import usage_report
+from sealedlore.gui.card_files_form import TYPES, link_problem
 from sealedlore.gui.collection_page import (
     ADD_TO_STORY,
     CHAT,
@@ -51,13 +53,15 @@ from sealedlore.gui.ref_images import PICTURE_FILTER, clean_incoming, image_of, 
 from sealedlore.ids import new_id
 from sealedlore.models.character import Character
 from sealedlore.models.image import ImageRef
+from sealedlore.models.tavern import CardAsset
 from sealedlore.storage import collection
-from sealedlore.storage.image_meta import picture_kind, strip_metadata
+from sealedlore.storage.image_meta import picture_kind, strip_metadata, stripped_or_same
 from sealedlore.storage.images import REFS_DIR, write_bytes_atomic
 from sealedlore.storage.paths import COLLECTION_ID, collection_dir
 from sealedlore.storage.picture_store import PictureStore
 from sealedlore.storage.repository import read_api_log
 from sealedlore.storage.tavern_cards import (
+    MAX_FILE_BYTES,
     CardError,
     TavernCard,
     card_charx,
@@ -71,6 +75,7 @@ from sealedlore.storage.tavern_cards import (
 from sealedlore.storage.tavern_lore import (
     LorebookError,
     character_book_from_lore,
+    entries_of,
     lore_from_book,
     read_lorebook,
     write_lorebook,
@@ -714,18 +719,26 @@ class CollectionWindow:
                 self._warn_plain("Could not read the lorebook", f"{path.name} has no lorebook.")
                 return
             imported = lore_from_book(book)
+            # A card's own (the spec's shape) is kept as it came, every setting
+            # of it to edit on the Lorebook tab; SillyTavern's lorebook file
+            # (its own shape, never a card's) becomes one as SealedLore reads it.
+            whole = isinstance(book.get("entries"), list)
+            count = len(entries_of(book)) if whole else len(imported.entries)
             if tavern.character_book and (
                 QMessageBox.question(
                     self._dialog_parent(),
                     "Replace the lorebook?",
                     f"{card.name} has a lorebook of {tavern.book_entries} entries. Replace it "
-                    f"with the {len(imported.entries)} from {path.name}?",
+                    f"with the {count} from {path.name}?",
                 )
                 != QMessageBox.Yes
             ):
                 return
-            tavern.character_book = character_book_from_lore(imported.entries, name=card.name)
-            if imported.notes():
+            if whole:
+                tavern.character_book = copy.deepcopy(dict(book))
+            else:
+                tavern.character_book = character_book_from_lore(imported.entries, name=card.name)
+            if not whole and imported.notes():
                 self._say_left_out(
                     "A lorebook for a character",
                     f"{len(imported.entries)} entries are {card.name}'s own lorebook now.",
@@ -733,16 +746,37 @@ class CollectionWindow:
                 )
         collection.touch(card)
         self._save_collection()
-        self.collection_page.about_form.show_book()
+        self.collection_page.show_book()
         self._refresh_collection()
 
     def _collection_file(self, what: str, index: int, card_id: str) -> None:
-        """One of a card's own files (About → Files on the card): seen full
-        size, saved where the author says, or a copy made one of their
-        pictures."""
+        """One of a card's own files (the Files tab): seen full size, saved
+        where the author says, a copy made one of their pictures, renamed,
+        or taken off; or new ones added (`index` -1)."""
         card = self._kept_card(card_id)
-        assets = card.tavern.assets if card is not None and card.tavern else []
-        if not 0 <= index < len(assets) or not assets[index].held:
+        if card is None:
+            return
+        if what == "add":
+            self._add_card_files(card)
+            return
+        if what == "link":
+            self._add_card_link(card)
+            return
+        assets = card.tavern.assets if card.tavern else []
+        if not 0 <= index < len(assets):
+            return
+        if what == "remove":
+            self._remove_card_file(card, assets[index])
+            return
+        if what == "renamed":
+            store = self._collection_store()
+            old = collection.rename_file(card, assets[index], store)
+            if old is not None:
+                collection.touch(card)
+                self._save_collection()
+                store.remove(old)
+            return
+        if not assets[index].held:
             return
         asset = assets[index]
         store = self._collection_store()
@@ -790,6 +824,83 @@ class CollectionWindow:
             self.statusBar().showMessage(
                 f"{asset.name or 'The picture'} is one of {card.name}'s pictures now.", 8000
             )
+
+    def _files_changed(self, card: Character, chosen: int | None = None) -> None:
+        collection.touch(card)
+        self._save_collection()
+        self.collection_page.show_files(chosen)
+        self._refresh_collection()
+
+    def _add_card_files(self, card: Character) -> None:
+        """Files from disk onto their card: a picture stripped of its hidden
+        data as any picture coming in is (re-encoded where it can't be), a
+        video stripped too, anything else kept as it is."""
+        chosen, _ = QFileDialog.getOpenFileNames(
+            self._dialog_parent(), f"Files for {card.name}'s card", str(Path.home())
+        )
+        if not chosen:
+            return
+        store = self._collection_store()
+        refused: list[str] = []
+        for name in chosen:
+            path = Path(name)
+            try:
+                if path.stat().st_size > MAX_FILE_BYTES:
+                    refused.append(f"{path.name}: larger than a card's file may be.")
+                    continue
+                data = path.read_bytes()
+            except OSError as exc:
+                refused.append(f"{path.name}: {exc}")
+                continue
+            ext = path.suffix.lstrip(".")
+            if picture_kind(data):
+                data = self._clean_picture(data)
+                ext = (picture_kind(data) or f".{ext}").lstrip(".").replace("jpeg", "jpg")
+            else:
+                data = stripped_or_same(data)
+            collection.add_file(card, store, path.stem, ext, data, TYPES[0][0])
+        added = len(chosen) - len(refused)
+        if added:
+            self._files_changed(card, len(card.tavern.assets) - 1)
+            self.statusBar().showMessage(
+                f"Added {added} file{'s' if added != 1 else ''} to {card.name}'s card.", 6000
+            )
+        if refused:
+            self._say_left_out("Files for a card", f"Added {added}.", refused)
+
+    def _add_card_link(self, card: Character) -> None:
+        address, ok = QInputDialog.getText(
+            self._dialog_parent(),
+            "Add a link",
+            f"The address of a file {card.name}'s card points to (https://…). It is kept as a "
+            "link and never fetched.",
+        )
+        address = address.strip()
+        if not ok or not address:
+            return
+        problem = link_problem(address)
+        if problem:
+            self._warn_plain("Not added", problem)
+            return
+        collection.add_link(card, address, TYPES[0][0])
+        self._files_changed(card, len(card.tavern.assets) - 1)
+
+    def _remove_card_file(self, card: Character, asset: CardAsset) -> None:
+        name = asset.name or asset.type
+        answer = QMessageBox.question(
+            self._dialog_parent(),
+            "Remove this file?",
+            f"Take {name} off {card.name}'s card?"
+            + (" The file kept for it is deleted." if asset.held else ""),
+        )
+        if answer != QMessageBox.Yes or card.tavern is None or asset not in card.tavern.assets:
+            return
+        row = card.tavern.assets.index(asset)
+        card.tavern.assets.remove(asset)
+        self._files_changed(card, min(row, len(card.tavern.assets) - 1))
+        used = {file for other in self._kept() for file in collection.files_of(other)}
+        if asset.held and asset.file not in used:
+            self._collection_store().remove(asset.file)
 
     def _collection_expressions(self, card_id: str) -> None:
         card = self._kept_card(card_id)

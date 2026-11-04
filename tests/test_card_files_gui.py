@@ -77,32 +77,32 @@ def choose(about, name: str) -> None:
     raise AssertionError(f"no file named {name}")
 
 
-def test_the_about_tab_lists_every_file_and_saves_one(app, window, tmp_path, monkeypatch):
+def test_the_files_tab_lists_every_file_and_saves_one(app, window, tmp_path, monkeypatch):
     elena = window._kept()[0]
     window.show_collection(True, elena.id)
-    about = window.collection_page.about_form
+    about = window.collection_page.files_form
     names = [about.files.item(row).text() for row in range(about.files.count())]
     assert names == ["main", "Farmhouse", "snow", "wind", "you", "tiny"]
-    assert "kept with the card" in about.files_said.text()
+    assert "kept with the card" in about.said.text()
     choose(about, "you")  # a link: nothing to save
-    assert not about.file_save.isEnabled()
+    assert not about.save_button.isEnabled()
     choose(about, "wind")
-    assert about.file_save.isEnabled() and not about.file_picture.isEnabled()
+    assert about.save_button.isEnabled() and not about.picture_button.isEnabled()
     saved = tmp_path / "wind.mp3"
     monkeypatch.setattr(
         window_collection.QFileDialog, "getSaveFileName", lambda *a, **k: (str(saved), "")
     )
-    about.file_save.click()
+    about.save_button.click()
     assert saved.read_bytes() == WIND
 
 
 def test_a_file_on_the_card_can_be_one_of_their_pictures(app, window):
     elena = window._kept()[0]
     window.show_collection(True, elena.id)
-    about = window.collection_page.about_form
+    about = window.collection_page.files_form
     before = len(elena.reference_images)
     choose(about, "Farmhouse")
-    about.file_picture.click()
+    about.picture_button.click()
     added = elena.reference_images[-1]
     assert len(elena.reference_images) == before + 1 and added.caption == "Farmhouse"
     assert window._collection_store().read(added.file) == FARMHOUSE
@@ -198,8 +198,8 @@ def test_an_imported_card_says_what_its_files_are(app, window, tmp_path, monkeyp
     assert "left out" not in words
     assert "1 background, 3 other pictures and 1 other file" in words
     page = window.collection_page
-    assert page.about_form.files.count() == 6
-    assert page.about_form.files.item(0).data(Qt.UserRole) == 0
+    assert page.files_form.files.count() == 6
+    assert page.files_form.files.item(0).data(Qt.UserRole) == 0
 
 
 def test_a_charx_with_every_file_is_offered_whatever_the_pictures(app, window):
@@ -217,7 +217,7 @@ def test_a_charx_with_every_file_is_offered_whatever_the_pictures(app, window):
 def test_a_click_on_a_picture_on_the_card_shows_it_full_size(app, window, monkeypatch):
     elena = window._kept()[0]
     window.show_collection(True, elena.id)
-    about = window.collection_page.about_form
+    about = window.collection_page.files_form
     shown: list[tuple[str, bytes]] = []
     monkeypatch.setattr(window, "_show_whole", lambda title, data: shown.append((title, data)))
 
@@ -234,40 +234,6 @@ def test_a_click_on_a_picture_on_the_card_shows_it_full_size(app, window, monkey
     click("wind")  # a sound: chosen, nothing to show
     click("you")  # a link: nothing here to show
     assert len(shown) == 1
-
-
-def test_the_card_lorebook_entries_can_be_read(app, window):
-    elena = window._kept()[0]
-    elena.tavern.character_book = {
-        "entries": [
-            {
-                "keys": ["farmhouse", "farm"],
-                "content": "The farmhouse has a red door.",
-                "comment": "The farmhouse",
-            },
-            {
-                "keys": [],
-                "content": "Nobody goes out after dark.",
-                "constant": True,
-                "name": "Curfew",
-                "enabled": False,
-            },
-        ]
-    }
-    window.show_collection(True, elena.id)
-    about = window.collection_page.about_form
-    about.load(elena)
-    rows = [about.book_list.item(r).text() for r in range(about.book_list.count())]
-    assert rows == ["The farmhouse", "Curfew · always sent · switched off"]
-    assert not about.book_list.isHidden() and not about.book_text.isHidden()
-    text = about.book_text.toPlainText()
-    assert "Keywords: farmhouse, farm" in text and "a red door" in text
-    about.book_list.setCurrentRow(1)
-    assert "always sent" in about.book_text.toPlainText()
-    assert "after dark" in about.book_text.toPlainText()
-    elena.tavern.character_book = None
-    about.show_book()
-    assert about.book_list.isHidden() and about.book_list.count() == 0
 
 
 def test_opening_your_characters_moves_files_kept_in_one_folder(app, window):

@@ -931,7 +931,8 @@ tag to list them by, and an order (by name, changed last, added last);
 
 ![Your characters: thirty characters from the five sample stories, each with their portrait and the story they came from, and down the left a search, tags and the list of them, with New character and Import](screenshots/your-characters.webp)
 
-A character's card has four tabs:
+A character's card has six tabs, and everything on it can be changed, added
+to or taken off:
 
 - **Card**: the character as a story has them: name, aliases, summary,
   description, personality, voice, competence and skills, with their portrait
@@ -942,12 +943,26 @@ A character's card has four tabs:
   expressions, with the gaps ready to draw, pictures from your computer
   dropped on a place, and Restyle.
 - **For chats**: what a SillyTavern card has for a one-to-one chat: the
-  scenario, the first message and the other greetings, example messages, the
-  card's own system prompt and what comes after the chat (SillyTavern's
-  post-history instructions). A story never sends these.
+  scenario, the first message and the other greetings, the greetings for
+  SillyTavern's group chats, example messages, the card's own system prompt
+  and what comes after the chat (SillyTavern's post-history instructions). A
+  story never sends these.
+- **Lorebook**: the card's own lore, offered to a story's lore when they join
+  one. **Add an entry**, **Copy** or **Remove** one; the one chosen shows its
+  name, keywords, text, whether it is on or always sent, SillyTavern's second
+  keywords and how its keywords match. Everything else on an entry (its order
+  and place in the prompt, its chance, groups and timing, other apps'
+  settings) is under **Everything else on this entry (JSON)**, and the book's
+  own settings likewise. A story uses an entry's keywords, its text and its
+  switches; the rest goes out with the card for SillyTavern and other apps.
+  **Import a lorebook…** puts another in its place (a card's own is kept as it
+  came, every setting of it), **Export…** saves the entries as a SillyTavern
+  lorebook file, and **Remove the lorebook** takes it off.
+- **Files**: every other file on the card (below).
 - **About**: who made the card, its version, its tags, its maker's notes, its
-  own lorebook (each entry listed, and the one chosen shown with its keywords
-  and text), every other file on the card, and where it came from.
+  sources, and where it came from; and, each under a heading that opens it,
+  the maker's notes in other languages and other apps' settings on the card
+  (as JSON).
 
 ![A character's card in Your characters: Professor Adelaide Quill from Brasshaven, her portrait with the buttons that draw or change it, her name, aliases, summary, description and voice, and above them Chat with them…, Draft a story with them…, Add to the story, Export and More](screenshots/your-characters-card.webp)
 
@@ -958,13 +973,16 @@ becomes the end of the description.)
 **Every file on the card is kept too.** Besides the portrait and expression
 pictures, a card can carry a background, pictures its greetings show (RisuAI
 cards often have dozens), a second icon, sounds and fonts. They are kept with
-the character, listed under **Files on the card** on the About tab (a picture
-as a thumbnail; click it to see it full size), and go out with them in a
-CHARX export. Each character's files are in a folder of their own, under the
-names the card gave them. **Save as…** saves
-one where you choose; **Add to their pictures** makes a copy of a picture one
-of the character's own, for portraits, looks and expressions. A file the card
-only links to (an address on the web) is kept as a link and never fetched.
+the character, listed on the **Files** tab (a picture as a thumbnail; click it
+to see it full size), and go out with them in a CHARX export. Each
+character's files are in a folder of their own, under the names the card
+gave them. **Add files…** puts files from your computer on the card and
+**Add a link…** a file it only points to (an `https://` address, never
+fetched); **Remove** takes one off. The one chosen can be renamed (a
+greeting names its pictures so) and given another kind (a background, an
+expression, RisuAI's own, or any you type). **Save as…** saves one where you
+choose; **Add to their pictures** makes a copy of a picture one of the
+character's own, for portraits, looks and expressions.
 What SealedLore does with them:
 
 - the card's **background** goes behind a chat with them, or a story made
@@ -986,10 +1004,13 @@ files (several at once), a card by link, and a SillyTavern expression pack
 a PNG card with their portrait, a CHARX card with every picture and every
 file the card came with (under its own type, name and place), or a JSON
 card (a PNG or JSON card keeps only the files that are links: the spec asks
-for a card's files to go in a CHARX). **More** makes a new version of a character (a whole copy kept with
-them, chosen above the card, to change as you like), renames a version,
-duplicates one as a character of their own, or deletes one: their card goes
-to the Trash as a CHARX file you can import again. **A story from their
+for a card's files to go in a CHARX). A card goes out as you have changed
+it, dated by its last change. To change a copy and keep the original as it
+is, use **More**: **New version of this character…** makes a whole copy kept
+with them (chosen above the card), and **Duplicate as a new character** a
+whole copy of their own; either has its own pictures, files and lorebook.
+More also renames a version, or deletes one: their card goes to the Trash as
+a CHARX file you can import again. **A story from their
 card's own scenario…** (also under More) makes a new story from the card as a
 SillyTavern card does (below).
 

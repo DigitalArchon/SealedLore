@@ -109,7 +109,7 @@ def test_cards_imported_on_the_page_are_kept_beside_the_stories(
     assert page.chat_form.system_prompt.toPlainText() == ELENA["system_prompt"]
     assert page.about_form.creator.text() == "someone"
     assert page.about_form.tags.text() == "survival"
-    assert "1 entry" in page.about_form.book.text()
+    assert page.lorebook_form.list.count() == 1
 
 
 def test_edits_on_the_page_are_kept(app, window, tmp_path: Path, monkeypatch):

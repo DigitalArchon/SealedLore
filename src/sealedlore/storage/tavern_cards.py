@@ -29,6 +29,7 @@ import re
 import zipfile
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, BinaryIO
 from urllib.parse import unquote_to_bytes
@@ -1058,6 +1059,14 @@ def _skills(character: Character) -> str:
     return "Skills: " + "; ".join(parts) if parts else ""
 
 
+def _seconds(when: str) -> int | None:
+    """An ISO time as the V3 spec's seconds since 1970."""
+    try:
+        return int(datetime.fromisoformat(when).timestamp())
+    except (TypeError, ValueError):
+        return None
+
+
 def card_data(
     character: Character,
     *,
@@ -1128,6 +1137,15 @@ def card_data(
     for key in ("creation_date", "modification_date"):
         if getattr(tavern, key) is not None:
             v3_data[key] = getattr(tavern, key)
+    kept = character.collection
+    if kept is not None:
+        # Changed in Your characters since it was kept: the card says when,
+        # so whoever it is shared with can tell it from the one it came from.
+        added, changed = _seconds(kept.added_at), _seconds(kept.changed_at)
+        if tavern.creation_date is None and not kept.came_from and added is not None:
+            v3_data["creation_date"] = added
+        if changed is not None and added is not None and changed > added:
+            v3_data["modification_date"] = max(changed, tavern.modification_date or 0)
     links = [
         {"type": a.type, "uri": a.uri, "name": a.name, "ext": a.ext}
         for a in tavern.assets

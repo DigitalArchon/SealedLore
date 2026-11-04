@@ -7,7 +7,10 @@ the page's tabs (gui/collection_page.py):
 - `ChatForm`, what a SillyTavern card has for a chat with them: the scenario,
   the greetings, example messages and the card's own instructions;
 - `AboutForm`, the card itself: who made it, its version and tags, its
-  notes, its own lorebook, where it came from.
+  notes and sources, where it came from, and what it keeps for other apps.
+
+Their lorebook and their card's other files have tabs of their own
+(gui/lorebook_form.py, gui/card_files_form.py).
 
 Each edits the character it is given in place and says so (`changed`); the
 window keeps it.
@@ -15,47 +18,35 @@ window keeps it.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QListView,
     QListWidget,
     QListWidgetItem,
     QMessageBox,
     QPushButton,
     QSizePolicy,
-    QStyle,
     QVBoxLayout,
     QWidget,
 )
 
 from sealedlore.gui.fields import FormScroll, set_field_text
+from sealedlore.gui.json_field import JsonField
 from sealedlore.gui.portrait_view import PortraitView
 from sealedlore.gui.ref_images import RefImageStrip, StoryPictures
 from sealedlore.gui.sizing import GrowingText
 from sealedlore.gui.skills_table import SkillsTable
 from sealedlore.gui.start_page import when_played
 from sealedlore.models.character import Character
-from sealedlore.models.lore import LoreEntry
 from sealedlore.models.tavern import TavernFields
-from sealedlore.storage.collection import files_said
-from sealedlore.storage.tavern_lore import lore_from_book
-
-if TYPE_CHECKING:
-    from sealedlore.gui.cast_board import Thumbs
 
 # The card's left column, the portrait and its other pictures, as the Cast
 # page has it; wider here, with the whole window to fill.
 PORTRAIT_COLUMN = 340
-# A card's other files on the About tab, as thumbnails.
-FILE_ICON = 72
 PORTRAIT_COLUMN_MIN = 200
 MACROS_HINT = (
     "Write {{char}} for their name and {{user}} for whoever they talk to: the names go in "
@@ -425,6 +416,9 @@ class ChatForm(QWidget):
         self.first_mes.setPlaceholderText("Their first message in a chat: how it opens.")
         self.greetings = GreetingsList()
         self.greetings.changed.connect(self._apply)
+        # SillyTavern's group chats only: never used here, kept for the card.
+        self.group_greetings = GreetingsList()
+        self.group_greetings.changed.connect(self._apply)
         self.mes_example = GrowingText(lines=4, most=20)
         self.mes_example.setPlaceholderText(
             "<START>\n{{user}}: Hello?\n{{char}}: Hands where I can see them."
@@ -458,6 +452,8 @@ class ChatForm(QWidget):
         form.addRow("Scenario", self.scenario)
         form.addRow("First message", self.first_mes)
         form.addRow("Other greetings", self.greetings)
+        form.addRow("Group chat greetings", self.group_greetings)
+        form.addRow("", _hint("SillyTavern's greetings for its group chats only."))
         form.addRow("Example messages", self.mes_example)
         form.addRow("", _hint("<START> on its own line between one exchange and the next."))
         form.addRow("System prompt", self.system_prompt)
@@ -477,6 +473,7 @@ class ChatForm(QWidget):
         self.scenario.setPlainText(tavern.scenario)
         self.first_mes.setPlainText(tavern.first_mes)
         self.greetings.set_greetings(tavern.alternate_greetings)
+        self.group_greetings.set_greetings(tavern.group_only_greetings)
         self.mes_example.setPlainText(tavern.mes_example)
         self.system_prompt.setPlainText(tavern.system_prompt)
         self.post_history.setPlainText(tavern.post_history_instructions)
@@ -500,18 +497,11 @@ class AboutForm(QWidget):
     """The card itself (see the module)."""
 
     changed = Signal()
-    # "import", "export" or "remove": the card's own lorebook.
-    lorebook_requested = Signal(str)
-    # "save", "picture" or "whole", and which of the card's files (its place
-    # in `tavern.assets`): saved where the author says, made one of their
-    # pictures, or a picture seen full size.
-    file_requested = Signal(str, int)
 
-    def __init__(self, thumbs: Thumbs | None = None) -> None:
+    def __init__(self) -> None:
         super().__init__()
         self._character: Character | None = None
         self._loading = False
-        self._thumbs = thumbs
         self.creator = QLineEdit()
         self.version = QLineEdit()
         self.version.setPlaceholderText("The card's own version, as its maker numbered it")
@@ -519,80 +509,26 @@ class AboutForm(QWidget):
         self.tags.setPlaceholderText("comma-separated: Your characters can be listed by them")
         self.creator_notes = GrowingText(lines=3, most=16)
         self.creator_notes.setPlaceholderText("What the card's maker says of it.")
+        self.source = GrowingText(lines=2, most=8)
+        self.source.setPlaceholderText(
+            "Where the card is from, one a line: an address or an id (the V3 card's source)."
+        )
         for line in (self.creator, self.version, self.tags):
             line.textChanged.connect(self._apply)
-        self.creator_notes.textChanged.connect(self._apply)
-        self.book = QLabel()
-        self.book.setWordWrap(True)
-        self.book_import = QPushButton("Import a lorebook…")
-        self.book_import.clicked.connect(lambda: self.lorebook_requested.emit("import"))
-        self.book_export = QPushButton("Export…")
-        self.book_export.clicked.connect(lambda: self.lorebook_requested.emit("export"))
-        self.book_remove = QPushButton("Remove")
-        self.book_remove.clicked.connect(lambda: self.lorebook_requested.emit("remove"))
-        book_buttons = QHBoxLayout()
-        book_buttons.setContentsMargins(0, 0, 0, 0)
-        for button in (self.book_import, self.book_export, self.book_remove):
-            book_buttons.addWidget(button)
-        book_buttons.addStretch(1)
-        # Its entries, read as a story will take them (storage/tavern_lore.py),
-        # and the chosen one's keywords and text: the count alone said there
-        # was lore and showed none of it (the author, Nov 4 2026).
-        self._book: list[LoreEntry] = []
-        self.book_list = QListWidget()
-        self.book_list.setObjectName("cardBook")
-        self.book_list.currentRowChanged.connect(self._show_entry)
-        self.book_text = GrowingText(lines=3, most=16)
-        self.book_text.setReadOnly(True)
-        book_box = QWidget()
-        # As tall as it is, as the files below: spare height went to the label.
-        book_box.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
-        self.book.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
-        book_layout = QVBoxLayout(book_box)
-        book_layout.setContentsMargins(0, 0, 0, 0)
-        book_layout.addWidget(self.book)
-        book_layout.addWidget(self.book_list)
-        book_layout.addWidget(self.book_text)
-        book_layout.addLayout(book_buttons)
-        self.files_said = QLabel()
-        self.files_said.setWordWrap(True)
-        self.files = QListWidget()
-        self.files.setObjectName("cardFiles")
-        self.files.setViewMode(QListView.IconMode)
-        self.files.setMovement(QListView.Static)
-        self.files.setResizeMode(QListView.Adjust)
-        self.files.setWrapping(True)
-        self.files.setIconSize(QSize(FILE_ICON, FILE_ICON))
-        self.files.setGridSize(QSize(FILE_ICON + 28, FILE_ICON + 36))
-        self.files.setFixedHeight(2 * (FILE_ICON + 36) + 12)
-        self.files.setSelectionMode(QListWidget.SingleSelection)
-        self.files.itemSelectionChanged.connect(self._sync_file_buttons)
-        # A click on a picture shows it full size, and leaves it chosen for
-        # the buttons below.
-        self.files.itemClicked.connect(self._file_clicked)
-        self.file_save = QPushButton("Save as…")
-        self.file_save.setToolTip("Save this file of the card's where you choose")
-        self.file_save.clicked.connect(lambda: self._file_action("save"))
-        self.file_picture = QPushButton("Add to their pictures")
-        self.file_picture.setToolTip(
-            "A copy among their pictures (Card and Pictures tabs), to use as any of theirs; "
-            "the card keeps its own"
+        for text in (self.creator_notes, self.source):
+            text.textChanged.connect(self._apply)
+        # The rest of the card, for other apps: nothing on it out of reach.
+        self.notes_elsewhere = JsonField(
+            "Maker's notes in other languages (JSON)",
+            tip='Each language\'s code and its notes: {"de": "…", "ja": "…"}',
         )
-        self.file_picture.clicked.connect(lambda: self._file_action("picture"))
-        file_buttons = QHBoxLayout()
-        file_buttons.setContentsMargins(0, 0, 0, 0)
-        for button in (self.file_save, self.file_picture):
-            file_buttons.addWidget(button)
-        file_buttons.addStretch(1)
-        files_box = QWidget()
-        # As tall as it is: spare height in the page went to its label.
-        files_box.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
-        self.files_said.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
-        files_layout = QVBoxLayout(files_box)
-        files_layout.setContentsMargins(0, 0, 0, 0)
-        files_layout.addWidget(self.files_said)
-        files_layout.addWidget(self.files)
-        files_layout.addLayout(file_buttons)
+        self.notes_elsewhere.edited.connect(self._notes_elsewhere_edited)
+        self.extensions = JsonField(
+            "Other apps' settings (JSON)",
+            tip="What SillyTavern, Chub, RisuAI and others keep on the card (`extensions`). "
+            "SealedLore's own are added when it is exported.",
+        )
+        self.extensions.edited.connect(self._extensions_edited)
         self.came_from = QLabel()
         self.came_from.setWordWrap(True)
         self.came_from.setTextFormat(Qt.PlainText)
@@ -605,10 +541,11 @@ class AboutForm(QWidget):
         form.addRow("Card version", self.version)
         form.addRow("Tags", self.tags)
         form.addRow("Maker's notes", self.creator_notes)
-        form.addRow("Lorebook", book_box)
-        form.addRow("Files on the card", files_box)
+        form.addRow("Sources", self.source)
         form.addRow("Came from", self.came_from)
         form.addRow("", self.dates)
+        form.addRow("", self.notes_elsewhere)
+        form.addRow("", self.extensions)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(FormScroll(content))
@@ -624,128 +561,15 @@ class AboutForm(QWidget):
         set_field_text(self.version, tavern.character_version)
         set_field_text(self.tags, ", ".join(tavern.tags))
         self.creator_notes.setPlainText(tavern.creator_notes)
+        self.source.setPlainText("\n".join(tavern.source))
+        self.notes_elsewhere.set_value(dict(tavern.creator_notes_multilingual))
+        self.extensions.set_value(dict(tavern.extensions))
         self._loading = False
-        self.show_book()
-        self.show_files()
         kept = character.collection
         self.came_from.setText((kept.came_from if kept else "") or "Made here")
         if kept is not None:
             added, changed = when_played(kept.added_at), when_played(kept.changed_at)
             self.dates.setText(f"Added {added} · changed {changed}")
-
-    def show_book(self) -> None:
-        character = self._character
-        entries = _tavern(character).book_entries if character is not None else 0
-        self.book.setText(
-            f"{entries} entr{'y' if entries == 1 else 'ies'}: offered as lore when they join a "
-            "story."
-            if entries
-            else "None. A card's own lore goes into a story's lore when they join it."
-        )
-        self.book_export.setEnabled(bool(entries))
-        self.book_remove.setEnabled(bool(entries))
-        book = _tavern(character).character_book if character is not None else None
-        self._book = lore_from_book(book).entries if book else []
-        self.book_list.clear()
-        for entry in self._book:
-            marks = (["always sent"] if entry.always_on else []) + (
-                ["switched off"] if not entry.enabled else []
-            )
-            item = QListWidgetItem(" · ".join([entry.title, *marks]))
-            item.setToolTip(", ".join(entry.keywords) or "No keywords")
-            self.book_list.addItem(item)
-        shown = bool(self._book)
-        self.book_list.setVisible(shown)
-        self.book_text.setVisible(shown)
-        if shown:
-            rows = min(len(self._book), 6)
-            frame = 2 * self.book_list.frameWidth()
-            self.book_list.setFixedHeight(rows * self.book_list.sizeHintForRow(0) + frame + 4)
-            self.book_list.setCurrentRow(0)
-        else:
-            self.book_text.clear()
-
-    def _show_entry(self, row: int) -> None:
-        entry = self._book[row] if 0 <= row < len(self._book) else None
-        if entry is None:
-            self.book_text.clear()
-            return
-        keywords = ", ".join(entry.keywords) or "none (sent only when chosen as relevant)"
-        if entry.always_on:
-            keywords = "always sent"
-        self.book_text.setPlainText(f"Keywords: {keywords}\n\n{entry.content}")
-
-    def show_files(self) -> None:
-        """The card's other files (a background, pictures its greetings show,
-        sounds), each by its name, a picture as a thumbnail."""
-        character = self._character
-        assets = _tavern(character).assets if character is not None else []
-        self.files.clear()
-        self.files_said.setText(
-            files_said(assets)
-            if assets
-            else "None besides their pictures. A card's background, the pictures its "
-            "greetings show and its sounds are kept here, and go out with it as a CHARX."
-        )
-        style = self.style()
-        for index, asset in enumerate(assets):
-            item = QListWidgetItem(asset.name or asset.type)
-            where = asset.uri if not asset.held else f"{asset.ext.upper()} file"
-            tip = f"{asset.name or '(no name)'} · {asset.type} · {where}"
-            if asset.held and asset.picture:
-                tip += "\nClick to see it full size."
-            item.setToolTip(tip)
-            item.setData(Qt.UserRole, index)
-            if not asset.held:
-                item.setIcon(style.standardIcon(QStyle.SP_DriveNetIcon))
-            elif not asset.picture:
-                item.setIcon(style.standardIcon(QStyle.SP_FileIcon))
-            self.files.addItem(item)
-        self.files.setVisible(bool(assets))
-        self.refresh_file_icons()
-        self._sync_file_buttons()
-
-    def refresh_file_icons(self) -> None:
-        """Thumbnails as they are read (a card may have hundreds)."""
-        character = self._character
-        if self._thumbs is None or character is None:
-            return
-        assets = _tavern(character).assets
-        for row in range(self.files.count()):
-            item = self.files.item(row)
-            index = item.data(Qt.UserRole)
-            asset = assets[index] if 0 <= index < len(assets) else None
-            if asset is None or not asset.held or not asset.picture:
-                continue
-            pixmap = self._thumbs.get(asset.file, FILE_ICON, FILE_ICON)
-            if pixmap is not None:
-                item.setIcon(QIcon(pixmap))
-
-    def _file_clicked(self, item: QListWidgetItem) -> None:
-        character = self._character
-        assets = _tavern(character).assets if character is not None else []
-        index = item.data(Qt.UserRole)
-        if 0 <= index < len(assets) and assets[index].held and assets[index].picture:
-            self.file_requested.emit("whole", index)
-
-    def _chosen_file(self) -> int | None:
-        item = self.files.currentItem()
-        return item.data(Qt.UserRole) if item is not None and item.isSelected() else None
-
-    def _sync_file_buttons(self) -> None:
-        character = self._character
-        index = self._chosen_file()
-        assets = _tavern(character).assets if character is not None else []
-        asset = assets[index] if index is not None and 0 <= index < len(assets) else None
-        self.file_save.setEnabled(asset is not None and asset.held)
-        self.file_picture.setEnabled(asset is not None and asset.held and asset.picture)
-        self.file_save.setVisible(bool(assets))
-        self.file_picture.setVisible(bool(assets))
-
-    def _file_action(self, action: str) -> None:
-        index = self._chosen_file()
-        if index is not None:
-            self.file_requested.emit(action, index)
 
     def _apply(self) -> None:
         character = self._character
@@ -756,4 +580,17 @@ class AboutForm(QWidget):
         tavern.character_version = self.version.text().strip()
         tavern.tags = [tag.strip() for tag in self.tags.text().split(",") if tag.strip()]
         tavern.creator_notes = self.creator_notes.toPlainText()
+        tavern.source = [
+            line.strip() for line in self.source.toPlainText().splitlines() if line.strip()
+        ]
         self.changed.emit()
+
+    def _notes_elsewhere_edited(self, value: dict) -> None:
+        if self._character is not None:
+            _tavern(self._character).creator_notes_multilingual = value
+            self.changed.emit()
+
+    def _extensions_edited(self, value: dict) -> None:
+        if self._character is not None:
+            _tavern(self._character).extensions = value
+            self.changed.emit()

@@ -39,8 +39,10 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.gui import theme
+from sealedlore.gui.card_files_form import FilesForm
 from sealedlore.gui.card_form import AboutForm, CharacterForm, ChatForm
 from sealedlore.gui.cast_board import CastBoard, Thumbs, scaled_font
+from sealedlore.gui.lorebook_form import LorebookForm
 from sealedlore.gui.ref_images import StoryPictures
 from sealedlore.gui.wrap_row import WrapRow
 from sealedlore.models.character import Character
@@ -59,7 +61,9 @@ TABS = (
     ("Card", "The character as a story has them: what a story's storyteller is told"),
     ("Pictures", "Their pictures as a sheet of looks and expressions, as the cast board has it"),
     ("For chats", "What a SillyTavern card has for a one-to-one chat with them"),
-    ("About", "The card itself: who made it, its version and tags, its own lorebook"),
+    ("Lorebook", "Their own lore, every entry to read, change, add or remove"),
+    ("Files", "Every other file on their card: a background, a greeting's pictures, sounds"),
+    ("About", "The card itself: who made it, its version, tags and sources, other apps' settings"),
 )
 # The actions the page asks the window for (`action_requested`).
 NEW, IMPORT, LINK, EXPRESSIONS = "new", "import", "link", "expressions"
@@ -359,21 +363,23 @@ class CollectionPage(QWidget):
             widget.hide()
         self.chat_form = ChatForm()
         self.chat_form.changed.connect(lambda: self._current and self.changed.emit(self._current))
-        self.about_form = AboutForm(self._thumbs)
-        self.about_form.changed.connect(self._about_changed)
-        self.about_form.file_requested.connect(
+        self.lorebook_form = LorebookForm()
+        self.lorebook_form.changed.connect(self._counted_changed)
+        self.lorebook_form.lorebook_requested.connect(
+            lambda what: self._current and self.lorebook_requested.emit(what, self._current)
+        )
+        self.files_form = FilesForm(self._thumbs)
+        self.files_form.changed.connect(self._counted_changed)
+        self.files_form.file_requested.connect(
             lambda what, index: (
                 self._current and self.file_requested.emit(what, index, self._current)
             )
         )
-        self.about_form.lorebook_requested.connect(
-            lambda what: self._current and self.lorebook_requested.emit(what, self._current)
-        )
+        self.about_form = AboutForm()
+        self.about_form.changed.connect(self._about_changed)
         self.tabs = QTabWidget()
         self.tabs.setObjectName("collectionTabs")
-        for widget, (name, tip) in zip(
-            (self.card_form, self.board, self.chat_form, self.about_form), TABS, strict=True
-        ):
+        for widget, (name, tip) in zip(self._tab_forms(), TABS, strict=True):
             index = self.tabs.addTab(widget, name)
             self.tabs.setTabToolTip(index, tip)
 
@@ -452,6 +458,36 @@ class CollectionPage(QWidget):
     def current(self) -> str | None:
         return self._current
 
+    def _tab_forms(self) -> tuple[QWidget, ...]:
+        return (
+            self.card_form,
+            self.board,
+            self.chat_form,
+            self.lorebook_form,
+            self.files_form,
+            self.about_form,
+        )
+
+    def _forms(self) -> tuple:
+        """Every form that edits the card shown (the board is filled apart)."""
+        return (
+            self.card_form,
+            self.chat_form,
+            self.lorebook_form,
+            self.files_form,
+            self.about_form,
+        )
+
+    def show_book(self) -> None:
+        """Their lorebook again, after the window changed it whole."""
+        self.lorebook_form.load(self._card(self._current))
+        self._show_stats()
+
+    def show_files(self, chosen: int | None = None) -> None:
+        """Their card's files again, after the window added or took one off."""
+        self.files_form.load(self._card(self._current), chosen=chosen)
+        self._show_stats()
+
     def current_character(self) -> Character | None:
         return self._card(self._current)
 
@@ -466,7 +502,7 @@ class CollectionPage(QWidget):
         """The forms loaded afresh the next time a card shows: its fields
         may have changed while the page was put away."""
         self._loaded = None
-        for form in (self.card_form, self.chat_form, self.about_form):
+        for form in self._forms():
             form.load(None)
 
     def forget_pictures(self) -> None:
@@ -561,7 +597,7 @@ class CollectionPage(QWidget):
 
     def _thumbs_ready(self) -> None:
         self.overview.viewport().update()
-        self.about_form.refresh_file_icons()
+        self.files_form.refresh_file_icons()
 
     # --- one of them ----------------------------------------------------------------------
 
@@ -595,9 +631,8 @@ class CollectionPage(QWidget):
         self.rename_action.setEnabled(not main)
         self.png_action.setEnabled(bool(card.reference_images))
         if self.card_form.character is not card:
-            self.card_form.load(card)
-            self.chat_form.load(card)
-            self.about_form.load(card)
+            for form in self._forms():
+                form.load(card)
         self.pages.setCurrentIndex(1)
         self._show_stats()
 
@@ -644,6 +679,12 @@ class CollectionPage(QWidget):
             line = self._line(card)
             item.setText(f"{card.name}\n{line}" if line else card.name)
         self.changed.emit(card.id)
+
+    def _counted_changed(self) -> None:
+        """A change the line over the tabs counts (lore entries, files)."""
+        if self._current is not None:
+            self._show_stats()
+            self.changed.emit(self._current)
 
     def _about_changed(self) -> None:
         if self._current is not None:

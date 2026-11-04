@@ -905,6 +905,12 @@ QTabBar QToolButton {
   color: @text_payload;
 }
 
+/* A card's settings for other apps, as JSON (gui/json_field.py). */
+#jsonText {
+  font-family: @font_mono;
+  font-size: 12px;
+}
+
 /* --- menus, status bar, dialogs -------------------------------------- */
 
 QMenuBar {

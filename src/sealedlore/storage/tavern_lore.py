@@ -251,6 +251,156 @@ def character_book_from_lore(entries: Sequence[LoreEntry], name: str = "") -> di
     }
 
 
+# --- a card's own lorebook, edited in place -------------------------------------------------
+#
+# Your characters keep a card's lorebook as it came (TavernFields.character_book):
+# the spec's shape (entries in a list), or SillyTavern's own (entries keyed
+# by number) that some cards carry. The editor reads and writes each field
+# under whichever name the entry already uses, so an edit changes only what
+# was edited and the book goes out again in its own shape.
+
+# A field as the editor names it: the spec's name, then SillyTavern's.
+_ALIASES = {
+    "keys": ("keys", "key"),
+    "secondary_keys": ("secondary_keys", "keysecondary"),
+    "insertion_order": ("insertion_order", "order"),
+    "case_sensitive": ("case_sensitive", "caseSensitive"),
+}
+# What the editor shows in fields of its own; the rest of an entry is edited
+# as JSON (`entry_rest`).
+EDITED = (
+    "comment",
+    "name",
+    "keys",
+    "key",
+    "secondary_keys",
+    "keysecondary",
+    "content",
+    "constant",
+    "enabled",
+    "disable",
+    "selective",
+    "use_regex",
+    "case_sensitive",
+    "caseSensitive",
+)
+BOOK_EDITED = ("name", "description", "entries")
+
+
+def _name_in(raw: Mapping[str, Any], field_name: str) -> str:
+    names = _ALIASES.get(field_name, (field_name,))
+    return next((name for name in names if name in raw), names[0])
+
+
+def entry_get(raw: Mapping[str, Any], field_name: str, default: Any = None) -> Any:
+    return raw.get(_name_in(raw, field_name), default)
+
+
+def entry_set(raw: dict[str, Any], field_name: str, value: Any) -> None:
+    raw[_name_in(raw, field_name)] = value
+
+
+def entry_title(raw: Mapping[str, Any]) -> str:
+    return str(raw.get("comment") or raw.get("name") or "").strip()
+
+
+def set_entry_title(raw: dict[str, Any], title: str) -> None:
+    """The title is SillyTavern's memo (`comment`); a spec entry's `name`
+    follows it where it has one."""
+    raw["comment"] = title
+    if "name" in raw:
+        raw["name"] = title
+
+
+def entry_keys(raw: Mapping[str, Any], field_name: str = "keys") -> list[str]:
+    return _keys(entry_get(raw, field_name))
+
+
+def entry_enabled(raw: Mapping[str, Any]) -> bool:
+    if "enabled" in raw:
+        return bool(raw["enabled"])
+    return not raw.get("disable", False)
+
+
+def set_entry_enabled(raw: dict[str, Any], enabled: bool) -> None:
+    if "disable" in raw and "enabled" not in raw:
+        raw["disable"] = not enabled
+    else:
+        raw["enabled"] = enabled
+
+
+def book_entries(book: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """The book's own entry objects, in its order, to change in place."""
+    return entries_of(book)  # type: ignore[return-value]
+
+
+def new_book(name: str = "") -> dict[str, Any]:
+    """An empty lorebook in the spec's shape, for a card that had none."""
+    return character_book_from_lore([], name=name)
+
+
+def add_entry(book: dict[str, Any]) -> dict[str, Any]:
+    """A new, empty entry at the end of the book, in the book's own shape."""
+    entries = book.get("entries")
+    if isinstance(entries, Mapping):
+        found = [entry for entry in entries.values() if isinstance(entry, Mapping)]
+        uid = max([*(_int(entry.get("uid"), -1) for entry in found), -1]) + 1
+        raw = _entry(uid, LoreEntry(title="", content=""))
+        entries[str(uid)] = raw
+        return raw
+    if not isinstance(entries, list):
+        entries = book["entries"] = []
+    ids = [_int(entry.get("id"), -1) for entry in entries if isinstance(entry, Mapping)]
+    raw = character_book_from_lore([LoreEntry(title="", content="")])["entries"][0]
+    raw["id"] = max([*ids, -1]) + 1
+    entries.append(raw)
+    return raw
+
+
+def remove_entry(book: dict[str, Any], raw: Mapping[str, Any]) -> None:
+    entries = book.get("entries")
+    if isinstance(entries, Mapping):
+        for key, entry in list(entries.items()):
+            if entry is raw:
+                del entries[key]
+    elif isinstance(entries, list):
+        book["entries"] = [entry for entry in entries if entry is not raw]
+
+
+def copy_entry(book: dict[str, Any], raw: Mapping[str, Any]) -> dict[str, Any]:
+    """Another entry like `raw`, under a number of its own, after the others."""
+    new = add_entry(book)
+    number = {key: new[key] for key in ("uid", "id", "displayIndex") if key in new}
+    new.clear()
+    new.update(json.loads(json.dumps(raw)))
+    new.update(number)
+    return new
+
+
+def entry_rest(raw: Mapping[str, Any]) -> dict[str, Any]:
+    """Everything on an entry the editor has no field for (its order, its
+    place in the prompt, SillyTavern's own settings), to edit as JSON."""
+    return {key: value for key, value in raw.items() if key not in EDITED}
+
+
+def set_entry_rest(raw: dict[str, Any], rest: Mapping[str, Any]) -> None:
+    for key in [key for key in raw if key not in EDITED]:
+        del raw[key]
+    raw.update({key: value for key, value in rest.items() if key not in EDITED})
+
+
+def book_rest(book: Mapping[str, Any]) -> dict[str, Any]:
+    """The book's own settings beyond its name and description (how deep
+    SillyTavern scans, its budget, recursion, other apps' settings)."""
+    return {key: value for key, value in book.items() if key not in BOOK_EDITED}
+
+
+def set_book_rest(book: dict[str, Any], rest: Mapping[str, Any]) -> None:
+    for key in [key for key in book if key not in BOOK_EDITED]:
+        del book[key]
+    book.update({key: value for key, value in rest.items() if key not in BOOK_EDITED})
+
+
 def read_json(path: Path) -> Any:
     """A JSON file, refused in plain words when it can't be one."""
     name = Path(path).name

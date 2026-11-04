@@ -205,6 +205,55 @@ def copy_files(
     character.tavern.assets = kept
 
 
+def _taken(character: Character, but: CardAsset | None = None) -> set[str]:
+    assets = character.tavern.assets if character.tavern is not None else []
+    return {a.file.casefold() for a in assets if a.held and a is not but}
+
+
+def add_file(
+    character: Character, store: PictureStore, name: str, ext: str, data: bytes, kind: str
+) -> CardAsset:
+    """A file onto the character's card, kept in their folder under `name`."""
+    if character.tavern is None:
+        character.tavern = TavernFields()
+    asset = CardAsset(type=kind, name=name, ext=ext.lower().lstrip("."))
+    asset.file = file_path(character, asset, _taken(character))
+    store.write(asset.file, data)
+    character.tavern.assets.append(asset)
+    return asset
+
+
+def add_link(character: Character, address: str, kind: str) -> CardAsset:
+    """A file the card only links to: named by the address's last part,
+    never fetched."""
+    if character.tavern is None:
+        character.tavern = TavernFields()
+    last = address.split("?", 1)[0].rstrip("/").rsplit("/", 1)[-1].rsplit(":", 1)[-1]
+    stem, _dot, ext = last.rpartition(".")
+    asset = CardAsset(type=kind, name=stem or last or "link", ext=ext.lower() if stem else "")
+    asset.uri = address
+    character.tavern.assets.append(asset)
+    return asset
+
+
+def rename_file(character: Character, asset: CardAsset, store: PictureStore) -> str | None:
+    """A renamed file kept under its new name too: written there, its record
+    pointed there, and the old place returned for the window to remove once
+    the record is saved. None when nothing needed moving or it couldn't be
+    read."""
+    if not asset.held:
+        return None
+    wanted = file_path(character, asset, _taken(character, but=asset))
+    if wanted.casefold() == asset.file.casefold():
+        return None
+    data = store.read(asset.file)
+    if data is None:
+        return None
+    old, asset.file = asset.file, wanted
+    store.write(asset.file, data)
+    return old
+
+
 def settle_files(characters: Sequence[Character], store: PictureStore) -> list[str]:
     """Card files kept before each character had a folder (3.0.0b1 kept them
     all in one) moved into their own character's: each written in its new
