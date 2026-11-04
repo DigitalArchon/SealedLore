@@ -38,7 +38,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from sealedlore.gui import theme
+from sealedlore.gui import text_size, theme
 from sealedlore.gui.card_files_form import FilesForm
 from sealedlore.gui.card_form import AboutForm, CharacterForm, ChatForm
 from sealedlore.gui.cast_board import CastBoard, Thumbs, scaled_font
@@ -65,6 +65,8 @@ TABS = (
     ("Files", "Every other file on their card: a background, a greeting's pictures, sounds"),
     ("About", "The card itself: who made it, its version, tags and sources, other apps' settings"),
 )
+# The list's column at 100% text.
+LEFT_WIDTH = 300
 # Character cards, by their files' endings (dropped on the page).
 CARD_SUFFIXES = (".png", ".json", ".charx")
 # The actions the page asks the window for (`action_requested`).
@@ -251,7 +253,8 @@ class CollectionPage(QWidget):
         filters.addWidget(self.tag, 1)
         filters.addWidget(self.sort, 1)
         left = QWidget()
-        left.setFixedWidth(300)
+        self._left = left
+        self._fit_left()
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(6)
@@ -432,6 +435,16 @@ class CollectionPage(QWidget):
             target.setAcceptDrops(True)
             target.installEventFilter(self)
         self._show()
+
+    def _fit_left(self) -> None:
+        """The list's column, wider with the text (View → Text size): at 150%
+        a fixed 300px cut "New character" short."""
+        self._left.setFixedWidth(round(LEFT_WIDTH * text_size.scale()))
+
+    def changeEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        super().changeEvent(event)
+        if event.type() in (QEvent.FontChange, QEvent.StyleChange) and hasattr(self, "_left"):
+            self._fit_left()
 
     def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt naming
         # Shown only in the whole window, the story's panels put away (as the

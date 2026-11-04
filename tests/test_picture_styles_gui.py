@@ -14,7 +14,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
 from sealedlore.engine.picture_styles import DEFAULT_LABEL, OWN_LABEL, STYLES  # noqa: E402
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS  # noqa: E402
@@ -248,7 +248,7 @@ def _png() -> bytes:
 PNG = _png()
 
 
-def test_a_picture_of_the_story_may_have_its_own_style(app, window):
+def test_a_picture_of_the_story_may_have_its_own_style(app, window, monkeypatch):
     from sealedlore.gui.image_dialog import ImageDialog
 
     session = window.session
@@ -274,7 +274,15 @@ def test_a_picture_of_the_story_may_have_its_own_style(app, window):
     comic = DEFAULT_TEXTS["pictures.styles.comic"]
     assert dialog.prompt.toPlainText() == f"{comic}. My own scene."
     assert session.story.picture_style == "gritty"  # the story's is unchanged
+    # A prompt changed by hand is asked about before Cancel loses it.
+    asked: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda _parent, title, *_a, **_k: asked.append(title) or QMessageBox.Discard,
+    )
     dialog.reject()
+    assert asked == ["Discard your prompt?"]
 
 
 def test_change_this_picture_redraws_it_in_a_style_or_shows_more_of_them(app, window):

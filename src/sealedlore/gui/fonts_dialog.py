@@ -42,7 +42,7 @@ class FontsDialog(QDialog):
 
         hint = QLabel(
             "Window is every label, button and field. Story is the passages and turns, and "
-            "the boxes you write them in. Monospace is the Prompt tab and the plot file "
+            "the boxes you write them in. Monospace is the Prompt page and the plot file "
             "preview. The size is View → Text size."
         )
         hint.setObjectName("hintLabel")

@@ -141,7 +141,10 @@ def test_recommended_models_are_offered_beside_the_field_with_their_notes(app):
     field = ModelField("", recommended=choices)
     actions = [a for a in field.recommended_button.menu().actions() if not a.isSeparator()]
     assert actions[0].text() == "FLUX.3 Klein (default)"
-    assert not actions[1].isEnabled() and "klein" in actions[1].text()  # the note
+    # The note, wrapped in a label of its own: a menu entry never wraps.
+    note = actions[1].defaultWidget()
+    assert not actions[1].isEnabled() and "klein" in note.text().lower()
+    assert note.wordWrap()
     premium = next(a for a in actions if a.text().startswith("Seedream 5.0 Pro"))
     premium.trigger()
     assert field.text() == "bytedance/seedream-v5.0-pro"

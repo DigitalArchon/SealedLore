@@ -15,7 +15,6 @@ endpoints, local servers, a model the list leaves out.
 from __future__ import annotations
 
 import inspect
-import textwrap
 import weakref
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -35,6 +34,7 @@ from PySide6.QtWidgets import (
     QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
+    QWidgetAction,
 )
 
 from sealedlore.engine.catalog import ModelInfo, chat_models, matches, short_count
@@ -583,18 +583,25 @@ def recommended_button(
         action.setToolTip(choice.note)
         action.setStatusTip(choice.note)
         action.triggered.connect(lambda _checked=False, model=choice.id: choose(model))
-        # The note itself, readable without hovering: a disabled line under it.
-        note = menu.addAction(_wrapped(choice.note))
+        # The note itself, readable without hovering, wrapped under it: a
+        # menu entry never wraps (one held a note across the whole screen).
+        words = QLabel(choice.note)
+        words.setObjectName("hintLabel")
+        words.setWordWrap(True)
+        words.setFixedWidth(NOTE_WIDTH)
+        words.setContentsMargins(24, 0, 12, 4)
+        note = QWidgetAction(menu)
+        note.setDefaultWidget(words)
         note.setEnabled(False)
+        menu.addAction(note)
         if index < len(choices) - 1:
             menu.addSeparator()
     button.setMenu(menu)
     return button
 
 
-def _wrapped(text: str, width: int = 64) -> str:
-    """A note broken into lines for a menu entry, which never wraps itself."""
-    return "\n".join(textwrap.wrap(text, width))
+# A Recommended note's width in its menu.
+NOTE_WIDTH = 460
 
 
 class ModelField(QWidget):

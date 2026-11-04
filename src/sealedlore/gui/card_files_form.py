@@ -178,7 +178,7 @@ class FilesForm(QWidget):
 
         content = QWidget()
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(0, 10, 8, 0)
+        layout.setContentsMargins(10, 10, 10, 0)
         layout.setSpacing(6)
         layout.addWidget(self.said)
         layout.addWidget(self.files)

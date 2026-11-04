@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from sealedlore.engine.looks import look_words
 from sealedlore.gui.picture_words import (
     AGAIN_LABEL,
     EDIT_LABEL,
@@ -128,7 +129,7 @@ class ImagesPanel(QWidget):
         self.hint = QLabel(
             "No pictures or videos yet. Picture… beside Send (or Story → Draw a picture…) "
             "pictures what is happening, and Story → Generate video… makes a few seconds of "
-            "it; right-click one here for more."
+            "it. Double-click one here to see it whole; right-click it for more."
         )
         self.hint.setObjectName("hintLabel")
         self.hint.setWordWrap(True)
@@ -258,7 +259,15 @@ class ImagesPanel(QWidget):
             for card in cards:
                 name = card.name if isinstance(card, Character) else card.title
                 for ref in card.reference_images:
-                    shown = ref.caption if ref.caption and ref.caption != "portrait" else ""
+                    # A character's look and expression tell their pictures
+                    # apart (seven tiles all read "John").
+                    shown = (
+                        look_words(ref)
+                        if (ref.look or ref.expression)
+                        else ref.caption
+                        if ref.caption and ref.caption != "portrait"
+                        else ""
+                    )
                     caption = f"{name}\n{shown}" if shown else name
                     item = QListWidgetItem(caption)
                     item.setData(Qt.UserRole, card.id)
@@ -275,6 +284,7 @@ class ImagesPanel(QWidget):
             (self.story_heading, self.list, "Story"),
         ):
             heading.setText(f"{word.upper()} · {counts[word]}")
+            heading.setToolTip("Double-click a picture to see it whole; right-click it for more")
             shown = counts[word] > 0
             heading.setVisible(shown)
             gallery.setVisible(shown)

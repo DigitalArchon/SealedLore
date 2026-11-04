@@ -3138,7 +3138,7 @@ class StorySession(
         except (ProviderError, ValueError) as exc:
             yield self._failed_notice(
                 f"Couldn't read the scene from this passage ({exc}). The roster is as it "
-                "was; set it in the Scene panel if the story has moved on.",
+                "was; set it on the Scene page if the story has moved on.",
                 exc,
                 node=node,
             )

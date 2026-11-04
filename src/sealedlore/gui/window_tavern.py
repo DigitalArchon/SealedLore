@@ -553,6 +553,7 @@ class TavernWindow:
         if self._link_fetch is not None:
             return
         if where != "collection" and self._busy:
+            self._say_wait("Import from a link")
             return
         if where in ("cast", "lore") and (self.session is None or self.in_chat):
             return

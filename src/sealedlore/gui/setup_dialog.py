@@ -18,14 +18,18 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
+    QAbstractButton,
+    QAbstractSpinBox,
     QButtonGroup,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
     QLabel,
+    QLineEdit,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QRadioButton,
@@ -116,6 +120,7 @@ class SetupDialog(QDialog):
         models: ModelChoices | None = None,
         describe_style: Callable[[], tuple[str, bytes, str] | None] | None = None,
         saved_prompts: SavedPrompts | None = None,
+        hidden: frozenset[str] = frozenset(),
     ) -> None:
         """`cast`: the story's own list, read again whenever the Starting
         scene tab is shown, since `characters` (the Cast page, lent) may
@@ -130,8 +135,11 @@ class SetupDialog(QDialog):
         self.setMinimumSize(640, 560)
         size_to_screen(self, 0.62 if characters is not None else 0.5, 0.82)
         self.story = story
+        # Whom the plot keeps out until an event brings them: not offered to
+        # pin at the start (a spoiler), unless spoilers are shown.
+        self._hidden = hidden
         self._live_cast = cast
-        self.cast = list(cast)
+        self.cast = [c for c in cast if c.id not in hidden]
         self.first_message = first_message
         self.model_fields: dict[str, ModelField] = {}
         self._models = models
@@ -163,8 +171,16 @@ class SetupDialog(QDialog):
 
     def _add_buttons(self) -> None:
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        for button in buttons.buttons():
+            # Enter in a field (the title) never saves and closes Setup.
+            button.setAutoDefault(False)
+            button.setDefault(False)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
+        # What the author changed here, to ask about before Cancel or Esc
+        # drops it (`_watch`, once the dialog shows).
+        self._edited = False
+        self._watched: set[int] = set()
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.tabs)
@@ -172,7 +188,60 @@ class SetupDialog(QDialog):
 
     # --- tabs -------------------------------------------------------------
 
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        super().showEvent(event)
+        # Once filled in: what is set from here on is the author's doing.
+        QTimer.singleShot(0, self._watch)
+
+    def _watch(self) -> None:
+        """Every field's user-made change marks Setup edited. The lent Cast
+        page is left out: its cards are kept as they are made."""
+        lent = getattr(self, "_lent_panel", None)
+        for widget in self.findChildren(QWidget):
+            if id(widget) in self._watched or (lent is not None and lent.isAncestorOf(widget)):
+                continue
+            self._watched.add(id(widget))
+            if isinstance(widget, QLineEdit):
+                widget.textEdited.connect(self._mark_edited)
+            elif isinstance(widget, QPlainTextEdit) and not widget.isReadOnly():
+                widget.textChanged.connect(self._mark_edited)
+            elif isinstance(widget, QComboBox):
+                widget.activated.connect(self._mark_edited)
+            elif isinstance(widget, QAbstractButton) and widget.isCheckable():
+                widget.clicked.connect(self._mark_edited)
+            elif isinstance(widget, QAbstractSpinBox):
+                widget.editingFinished.connect(self._mark_edited)
+
+    def _mark_edited(self, *_args) -> None:
+        self._edited = True
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        """Enter in a field never presses a button for it: a dialog makes its
+        first button the default, and Enter in a line saved and closed it
+        (or pressed whatever button came first)."""
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter) and not isinstance(
+            self.focusWidget(), QAbstractButton
+        ):
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def reject(self) -> None:
+        """Cancel, Esc or closing: changes made here are asked about first."""
+        if self._edited:
+            answer = QMessageBox.question(
+                self,
+                "Discard your changes?",
+                "Close Setup without saving what you changed?",
+                QMessageBox.Discard | QMessageBox.Cancel,
+                QMessageBox.Cancel,
+            )
+            if answer != QMessageBox.Discard:
+                return
+        super().reject()
+
     def _characters_tab(self, panel: QWidget) -> QWidget:
+        self._lent_panel = panel
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.addWidget(
@@ -191,9 +260,11 @@ class SetupDialog(QDialog):
     def _on_tab_changed(self, index: int) -> None:
         """Back on the Starting scene with a cast that changed meanwhile: the
         roster and the suggestion list it, choices kept."""
+        # A tab rebuilt here has new fields to watch.
+        QTimer.singleShot(0, self._watch)
         if self.tabs.widget(index) is not self.scene_tab:
             return
-        live = list(self._live_cast)
+        live = [c for c in self._live_cast if c.id not in self._hidden]
         if [(c.id, c.name, c.is_player_available) for c in live] == [
             (c.id, c.name, c.is_player_available) for c in self.cast
         ]:

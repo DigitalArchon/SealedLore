@@ -438,7 +438,9 @@ def test_the_menus_are_grouped(app, window: MainWindow, monkeypatch):
     import sealedlore.gui.main_window as main_window
 
     monkeypatch.setattr(
-        main_window.QDesktopServices, "openUrl", lambda url: opened.append(url.toLocalFile())
+        main_window.QDesktopServices,
+        "openUrl",
+        lambda url: opened.append(url.toLocalFile()) or True,
     )
     help_menu = _menu(window, "Help")
     next(a for a in help_menu.actions() if "Plot format guide" in a.text()).trigger()

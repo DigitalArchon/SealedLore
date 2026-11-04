@@ -504,7 +504,7 @@ def test_the_editor_opens_both_guides_from_its_help_menu(app, editor, monkeypatc
 
     opened: list[str] = []
     monkeypatch.setattr(
-        guides.QDesktopServices, "openUrl", lambda url: opened.append(url.toLocalFile())
+        guides.QDesktopServices, "openUrl", lambda url: opened.append(url.toLocalFile()) or True
     )
     menu = next(a.menu() for a in editor.menuBar().actions() if a.text() == "&Help")
     for action in menu.actions():

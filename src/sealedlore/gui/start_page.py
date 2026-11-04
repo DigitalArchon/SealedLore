@@ -25,6 +25,7 @@ from PySide6.QtCore import QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QKeyEvent, QMouseEvent, QPixmap
 from PySide6.QtWidgets import (
     QDialog,
+    QDialogButtonBox,
     QFrame,
     QGridLayout,
     QLabel,
@@ -422,6 +423,11 @@ class NewDialog(QDialog):
         )
         self.chooser.chosen.connect(self._chosen)
         layout.addWidget(self.chooser)
+        # A way out that isn't only Esc or the title bar.
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(self.reject)
+        buttons.setContentsMargins(12, 0, 12, 12)
+        layout.addWidget(buttons)
 
     def _chosen(self, kind: str, value: object) -> None:
         self.choice = (kind, value)

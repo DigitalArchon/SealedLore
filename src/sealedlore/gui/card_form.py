@@ -190,7 +190,7 @@ class CharacterForm(QWidget):
         form.addRow(self.author_only)
         host = QWidget()
         card = QHBoxLayout(host)
-        card.setContentsMargins(0, 10, 8, 0)
+        card.setContentsMargins(10, 10, 10, 0)
         card.setSpacing(16)
         card.addWidget(pictures_column, 0, Qt.AlignTop)
         # At the top: beside a taller picture column the form's rows were
@@ -492,7 +492,7 @@ class ChatForm(QWidget):
             widget.textChanged.connect(self._apply)
         content = QWidget()
         form = QFormLayout(content)
-        form.setContentsMargins(0, 10, 8, 0)
+        form.setContentsMargins(10, 10, 10, 0)
         form.addRow(
             _hint(
                 "A SillyTavern card's fields for a one-to-one chat. A story has its own world, "
@@ -601,7 +601,7 @@ class AboutForm(QWidget):
         self.dates.setObjectName("hintLabel")
         content = QWidget()
         form = QFormLayout(content)
-        form.setContentsMargins(0, 10, 8, 0)
+        form.setContentsMargins(10, 10, 10, 0)
         form.addRow("Made by", self.creator)
         form.addRow("Maker's version", self.version)
         form.addRow("Tags", self.tags)

@@ -144,7 +144,7 @@ PAGE_ABOUT = {
     "Context": "How much of the story the storyteller is sent each turn, and how older "
     "parts are summarised into chapters.",
     "Lore": "How lore entries are chosen for each turn.",
-    "Images": "Pictures of the story, portraits of its characters, and the map's pictures.",
+    "Images": "Pictures of the story, portraits of its characters, and pictures of its places.",
     "Video": "Short videos of the story. Off until video has a key of its own.",
     "Private": "Private scenes: played on a model of their own, and kept out of the story's model.",
     "Phone": "Playing shared stories from a phone's Tor Browser, through SealedLore's own tor.",
@@ -159,6 +159,14 @@ RECALL_CHOICES = (
     ("Questions: chapters and passages", "exchanges|questions"),
     ("Questions and turns: chapters and passages", "exchanges|everywhere"),
 )
+
+
+class SettingsProblem(ValueError):
+    """What can't be saved, and the page it is on."""
+
+    def __init__(self, page: str, words: str) -> None:
+        super().__init__(words)
+        self.page = page
 
 
 class SettingsDialog(QDialog):
@@ -460,16 +468,18 @@ class SettingsDialog(QDialog):
         seen: set[str] = set()
         for settings in endpoints:
             if not settings.name:
-                raise ValueError("Every endpoint needs a name (Endpoints).")
+                raise SettingsProblem("Endpoints", "Every endpoint needs a name.")
             if settings.name in seen:
-                raise ValueError(f"Two endpoints are called {settings.name!r}: rename one.")
+                raise SettingsProblem(
+                    "Endpoints", f"Two endpoints are called {settings.name!r}: rename one."
+                )
             seen.add(settings.name)
             if ENDPOINT_SEPARATOR in settings.name:
                 raise ValueError(f"An endpoint's name can't hold '{ENDPOINT_SEPARATOR}'.")
             try:
                 require_https(settings.base_url.strip())
             except ValueError as exc:
-                raise ValueError(f"{settings.name}: {exc}") from exc
+                raise SettingsProblem("Endpoints", f"{settings.name}'s address {exc}") from exc
 
     def _carry_keys(self, endpoints: list[ProviderConfig]) -> None:
         """A renamed endpoint's key follows it: its keychain slot is its
@@ -602,8 +612,19 @@ class SettingsDialog(QDialog):
         self.base_url.textChanged.connect(self._sync_api_note)
 
         self.cache_mode = QComboBox()
-        self.cache_mode.addItems(["auto", "on", "off"])
-        self.cache_mode.setCurrentText(self.config.cache_control_mode)
+        for words, value in (
+            ("For Claude models (auto)", "auto"),
+            ("For every model", "on"),
+            ("Never", "off"),
+        ):
+            self.cache_mode.addItem(words, value)
+        self.cache_mode.setCurrentIndex(
+            max(0, self.cache_mode.findData(self.config.cache_control_mode))
+        )
+        self.cache_mode.setToolTip(
+            "Whether the story's unchanging start is marked to be cached for the model, so "
+            "each turn reads it from the cache instead of paying for it again"
+        )
         self.cache_ttl = QComboBox()
         self.cache_ttl.addItem("1 hour", "1h")
         self.cache_ttl.addItem("5 minutes", "5m")
@@ -619,6 +640,10 @@ class SettingsDialog(QDialog):
         form.addRow("Speaks", self.chat_api)
         form.addRow("API key", self.api_key)
         form.addRow(self.api_note)
+        # What follows is for every endpoint, not the one chosen above.
+        every = QLabel("For every endpoint")
+        every.setObjectName("peopleSection")
+        form.addRow(every)
         form.addRow("Keep API keys in", self.key_storage)
         form.addRow(self._key_note())
         hint = QLabel(
@@ -633,9 +658,9 @@ class SettingsDialog(QDialog):
         caching.add_row("Prompt caching", self.cache_mode)
         caching.add_row("Cache lifetime", self.cache_ttl)
         caching_hint = QLabel(
-            "On 'auto', cache_control blocks go only to Anthropic models, on every "
-            "endpoint, so a long story's unchanging start is read from the cache each turn "
-            "instead of paid for again."
+            "For Claude models: the story's unchanging start is marked for Anthropic's cache "
+            "on every endpoint, so each turn reads it from the cache instead of paying for it "
+            "again. Other models cache on their own where their host does."
         )
         caching_hint.setObjectName("hintLabel")
         caching_hint.setWordWrap(True)
@@ -761,7 +786,7 @@ class SettingsDialog(QDialog):
         form.addRow("Story model", self.model)
 
         self.summarization_model = self._routed_field(self.config.summarization_model or "")
-        self.summarization_model.setPlaceholderText("same as the story model")
+        self.summarization_model.setPlaceholderText("same as the story's model")
         self.summarization_model.setToolTip(
             "Writes the chapters as the story is archived, and merges them."
         )
@@ -1063,7 +1088,10 @@ class SettingsDialog(QDialog):
         sampling.add_row("Frequency penalty", self.frequency_penalty)
         sampling.add_row("Seed", self.seed)
         sampling.add_row("Stop sequences", self.stop)
-        hint = QLabel("Negative values mean 'leave unset' — the field is then omitted.")
+        hint = QLabel(
+            "At its lowest each value reads “unset”: it isn't sent, and the model's own "
+            "default is used."
+        )
         hint.setObjectName("hintLabel")
         hint.setWordWrap(True)
         sampling.add_row(hint)
@@ -1246,7 +1274,7 @@ class SettingsDialog(QDialog):
             "prompt prefix survives. The most recent turns always stay verbatim. "
             "When it runs it keeps going until the prompt is back down to the share "
             "of the budget above, so it happens rarely rather than every few turns. "
-            "The model that writes the chapters is on the Models tab."
+            "The model that writes the chapters is on the Models page."
         )
         hint.setObjectName("hintLabel")
         hint.setWordWrap(True)
@@ -1301,7 +1329,7 @@ class SettingsDialog(QDialog):
             "SealedLore runs its own tor and gives this computer an onion address, so "
             "nothing has to be set up on your router and no port is opened. Turn it on for "
             "this run with File → Phone access; pair phones and choose the stories they may "
-            "see in File → Phone devices…. Stories that keep a map stay on the desktop for now."
+            "see in File → Phone devices…."
         )
         intro.setObjectName("hintLabel")
         intro.setWordWrap(True)
@@ -1341,7 +1369,7 @@ class SettingsDialog(QDialog):
         widget = QWidget()
         form = QFormLayout(widget)
         intro = QLabel(
-            "Private scenes (the button beside the composer) are played on this model "
+            "Private scenes (the Private button, under More beside Send) are played on this model "
             "alone: nothing from them reaches the story's model or any other, and only the "
             "summary you approve goes back into the story. A local server (Ollama "
             "http://localhost:11434/v1, LM Studio http://localhost:1234/v1, llama.cpp "
@@ -1499,11 +1527,11 @@ class SettingsDialog(QDialog):
         form.addRow("Pictures per request", self.image_count)
         hint = QLabel(
             "Every prompt is shown to you, and can be changed, before anything is sent "
-            "(its writer is on the Models tab). The model list and prices come from the "
+            "(its writer is on the Models page). The model list and prices come from the "
             "endpoint the first time you generate an image."
             if not self._image_models
             else "Every prompt is shown to you, and can be changed, before anything is sent "
-            "(its writer is on the Models tab)."
+            "(its writer is on the Models page)."
         )
         hint.setObjectName("hintLabel")
         hint.setWordWrap(True)
@@ -1727,7 +1755,7 @@ class SettingsDialog(QDialog):
             "what your turn names. About 0.8s more per turn and ~$0.001 (NanoGPT only).\n"
             "Similarity and keywords: no extra calls. At 100 entries it left several times "
             "as many lore mistakes as either model.\n\n"
-            "The lore model is on the Models tab."
+            "The lore model is on the Models page."
         )
         form.addRow("Large lorebooks", self.lore_selector)
         form.addRow(self.embeddings_enabled)
@@ -1785,6 +1813,8 @@ class SettingsDialog(QDialog):
         box.setDecimals(2)
         box.setSpecialValueText("unset")
         box.setValue(UNSET if value is None else value)
+        # A number's width, not the page's (they stretched across 650px).
+        box.setMaximumWidth(140)
         return box
 
     def _int_field(self, value: int | None, *, maximum: int) -> QSpinBox:
@@ -1792,6 +1822,7 @@ class SettingsDialog(QDialog):
         box.setRange(UNSET_INT, maximum)
         box.setSpecialValueText("unset")
         box.setValue(UNSET_INT if value is None else value)
+        box.setMaximumWidth(140)
         return box
 
     # --- saving -----------------------------------------------------------
@@ -1801,17 +1832,32 @@ class SettingsDialog(QDialog):
         embed_url = self.embed_base_url.text().strip()
         try:
             self._check_endpoints(endpoints)
-            if self.embeddings_enabled.isChecked() and embed_url:
-                require_https(embed_url)
-            for media_url in (self.image_url.text().strip(), self.video_url.text().strip()):
-                if media_url:
-                    require_https(media_url)
-            if self.private_url.text().strip():
-                require_https(self.private_url.text().strip())
+            checks = [
+                (
+                    "Lore",
+                    "The embeddings address",
+                    embed_url if self.embeddings_enabled.isChecked() else "",
+                ),
+                ("Images", "The picture endpoint's address", self.image_url.text().strip()),
+                ("Video", "The video endpoint's address", self.video_url.text().strip()),
+                ("Private", "The private model's address", self.private_url.text().strip()),
+            ]
+            for page, field, url in checks:
+                if url:
+                    try:
+                        require_https(url)
+                    except ValueError as exc:
+                        raise SettingsProblem(page, f"{field} {exc}") from exc
             self._carry_keys(endpoints)
         except ValueError as exc:
-            self.error.setText(str(exc))
+            # Said where it is, and that page shown: a bad address on another
+            # page used to leave the author looking at the one they were on.
+            page = exc.page if isinstance(exc, SettingsProblem) else ""
+            self.error.setText(f"{page}: {exc}" if page else str(exc))
             self.error.show()
+            for index in range(self.tabs.count()):
+                if page and self.tabs.tabText(index) == page:
+                    self.tabs.setCurrentIndex(index)
             return
 
         # The list as it stands replaces the saved one: a renamed endpoint is
@@ -1891,7 +1937,7 @@ class SettingsDialog(QDialog):
         self.config.scene_model = self._role_model(self.scene_model) or None
         self.config.plot_reads = self.plot_reads.isChecked()
         self.config.plot_model = self._role_model(self.plot_model) or None
-        self.config.cache_control_mode = self.cache_mode.currentText()  # type: ignore[assignment]
+        self.config.cache_control_mode = self.cache_mode.currentData()  # type: ignore[assignment]
         self.config.cache_ttl = self.cache_ttl.currentData()
 
         if self.embeddings_enabled.isChecked():

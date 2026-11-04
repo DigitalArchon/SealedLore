@@ -162,8 +162,32 @@ class ImagesWindow:
             tip += " A new one is drawn from the last, as the place is now."
         self.place_button.setToolTip(tip)
         can = not self._busy and session.config.images() is not None
+        if session.config.images() is None:
+            # Greyed: says why, after what it would do.
+            self.place_button.setToolTip(
+                f"{tip} Pictures need a picture endpoint first: Settings → Images."
+            )
         self.place_button.setEnabled(can)
         self.place_action.setEnabled(can)
+
+    def _no_picture_endpoint(self) -> None:
+        """A picture asked for with nowhere to send it: said, with the way to
+        set one up (it was a dead end that named a Settings page)."""
+        box = QMessageBox(
+            QMessageBox.Information,
+            "Pictures need an endpoint",
+            "There is no endpoint for pictures yet. Set one up under Settings → Images: "
+            "NanoGPT's picture models work with the same key as its text models.",
+            QMessageBox.Cancel,
+            self._dialog_parent(),
+        )
+        settings = box.addButton("Open Settings → Images", QMessageBox.AcceptRole)
+        box.setDefaultButton(settings)
+        box.exec()
+        clicked = box.clickedButton()
+        box.deleteLater()
+        if clicked is settings:
+            self.open_settings("Images")
 
     def _sync_place_picture(self) -> None:
         """After the scene or a card changed: the button's words, and the
@@ -341,7 +365,7 @@ class ImagesWindow:
             )
             return False
         if self.session.config.images() is None:
-            self._warn_plain("No endpoint", "Set up an endpoint in Settings first.")
+            self._no_picture_endpoint()
             return False
         if anchor_id is not None and not any(n.id == anchor_id for n in self.session.nodes):
             anchor_id = None
@@ -422,7 +446,7 @@ class ImagesWindow:
             self.statusBar().showMessage("Pictures wait until the private scene ends.", 6000)
             return True
         if session.config.images() is None:
-            self._warn_plain("No endpoint", "Set up an image endpoint in Settings first.")
+            self._no_picture_endpoint()
             return True
         return False
 
@@ -736,7 +760,7 @@ class ImagesWindow:
             # the picture endpoint as Settings has it now.
             client = session.image_client()
             if client is None:
-                self._warn_plain("No endpoint", "Set up an image endpoint in Settings first.")
+                self._no_picture_endpoint()
                 return
             self.image_jobs.dismiss(job_id)
             self.image_jobs.start(failure.request, client, failure.store)
@@ -808,7 +832,11 @@ class ImagesWindow:
             self._edit_picture(VariantSubject.of_picture(image))
         elif action == "delete":
             answer = QMessageBox.question(
-                self, "Delete picture", "Delete this picture? Its file is removed."
+                self,
+                "Delete picture",
+                "Delete this picture? Its file is removed.",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
             )
             if answer == QMessageBox.Yes:
                 store.remove_image(image.id)
@@ -1067,7 +1095,7 @@ class ImagesWindow:
             self.statusBar().showMessage("Pictures wait until the private scene ends.", 6000)
             return
         if session.config.images() is None:
-            self._warn_plain("No endpoint", "Set up an image endpoint in Settings first.")
+            self._no_picture_endpoint()
             return
         shown = session.pictures.read(subject.file)
         dialog = PictureVariantDialog(
@@ -1141,6 +1169,8 @@ class ImagesWindow:
             f"{count} picture{'s are' if count != 1 else ' is'} still being drawn. Close "
             "anyway? The image service may still finish and charge for "
             f"{'them' if count != 1 else 'it'}, and the picture won't be kept.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
         )
         if answer != QMessageBox.Yes:
             return False

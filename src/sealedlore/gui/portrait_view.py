@@ -12,7 +12,6 @@ from __future__ import annotations
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
-    QDialog,
     QLabel,
     QPushButton,
     QSizePolicy,
@@ -21,7 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.gui.expression_set import SET_LABEL, SET_TIP
-from sealedlore.gui.image_dialog import FitPicture
+from sealedlore.gui.image_dialog import show_whole
 from sealedlore.gui.picture_labels import LABELS_LABEL, LABELS_TIP
 from sealedlore.gui.picture_words import (
     AGAIN_LABEL,
@@ -31,7 +30,7 @@ from sealedlore.gui.picture_words import (
     SCENE_LABEL,
     SENDS_PICTURE,
 )
-from sealedlore.gui.ref_images import image_of, pixmap_of
+from sealedlore.gui.ref_images import image_of
 from sealedlore.gui.wrap_row import WrapRow
 
 # The tallest the portrait is drawn, and the widest it is held at.
@@ -250,12 +249,5 @@ class PortraitView(QWidget):
         self.set_button.setVisible(on and has and self._person)
 
     def _show_whole(self) -> None:
-        if not self._data:
-            return
-        dialog = QDialog(self)
-        dialog.setAttribute(Qt.WA_DeleteOnClose)  # with its picture, once closed
-        dialog.setWindowTitle(self._name or self._noun.capitalize())
-        layout = QVBoxLayout(dialog)
-        layout.addWidget(FitPicture(pixmap_of(self._data)))
-        dialog.resize(800, 860)
-        dialog.exec()
+        # The one viewer every picture opens in.
+        show_whole(self, self._name or self._noun.capitalize(), self._data)

@@ -579,7 +579,7 @@ class PlotRuntime:
             )
             yield self._failed_notice(
                 f"Couldn't read the clock and facts from this passage ({exc}). "
-                "They are as they were; set them in the Plot panel if they moved." + also,
+                "They are as they were; set them on the Plot page if they moved." + also,
                 exc,
                 node=node,
             )

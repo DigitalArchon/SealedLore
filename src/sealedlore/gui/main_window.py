@@ -8,6 +8,7 @@ and difficulty) live in the composer's second row, per §10.
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -248,6 +249,21 @@ CENTRE_MARGIN = 10
 # Help → User manual: the manual isn't bundled, so its copy in the public
 # repository.
 MANUAL_URL = "https://github.com/DigitalArchon/SealedLore/blob/master/docs/manual.md"
+
+
+def _standard_keys(action: QAction, key: QKeySequence.StandardKey, *also: str) -> None:
+    """A standard shortcut. On Linux as it always was (the platform's first
+    key); on Windows every key the platform binds, and `also` (the manual's
+    Ctrl+W and Ctrl+Q: Qt's Quit has no key there, and its Close is Ctrl+F4
+    first)."""
+    if sys.platform != "win32":
+        action.setShortcut(key)
+        return
+    keys = list(QKeySequence.keyBindings(key))
+    for extra in also:
+        if QKeySequence(extra) not in keys:
+            keys.append(QKeySequence(extra))
+    action.setShortcuts(keys)
 
 
 class MainWindow(
@@ -659,7 +675,7 @@ class MainWindow(
         # sample and Import, five items side by side, said nothing of which
         # was which). The start page shows the same choices.
         new_action = QAction("&New…", self)
-        new_action.setShortcut(QKeySequence.New)
+        _standard_keys(new_action, QKeySequence.New)
         new_action.setStatusTip(
             "Start a story (from an idea, from scratch or a sample), a simple chat, "
             "or import a file"
@@ -670,10 +686,10 @@ class MainWindow(
         # that each took either file, and a tester reasonably concluded that
         # the one they hadn't used had lost their story.
         import_action = QAction("&Import…", self)
-        import_action.setShortcut(QKeySequence.Open)
+        _standard_keys(import_action, QKeySequence.Open)
         import_action.setStatusTip(
-            "A new story from a scenario, a story backup, a plot file (.md) or a "
-            "SillyTavern card; a lorebook or a prompt set too"
+            "A new story from a scenario, a story backup or a plot file (.md); a SillyTavern "
+            "card into Your characters; a lorebook or a prompt set too"
         )
         import_action.triggered.connect(self.import_file)
         file_menu.addAction(import_action)
@@ -681,8 +697,8 @@ class MainWindow(
         # RisuRealm or anywhere a file can be linked to.
         link_action = QAction(LINK_IMPORT_LABEL, self)
         link_action.setStatusTip(
-            "A new story from a SillyTavern card on Chub, RisuRealm or anywhere a card's "
-            "file is linked; a lorebook goes into the open story's lore"
+            "A SillyTavern card on Chub, RisuRealm or anywhere a card's file is linked, into "
+            "Your characters; a lorebook goes into the open story's lore"
         )
         link_action.triggered.connect(lambda _checked=False: self.import_from_link())
         file_menu.addAction(link_action)
@@ -692,7 +708,7 @@ class MainWindow(
         # Leaving a story used to take opening another or making a new one.
         # Shown only while one is open (`_update_controls`).
         self.close_story_action = QAction("&Close story", self)
-        self.close_story_action.setShortcut(QKeySequence.Close)
+        _standard_keys(self.close_story_action, QKeySequence.Close, "Ctrl+W")
         self.close_story_action.setStatusTip("Back to the start page")
         self.close_story_action.triggered.connect(self.close_story)
         file_menu.addAction(self.close_story_action)
@@ -706,7 +722,7 @@ class MainWindow(
         # A story saves itself as it goes; Ctrl+S still saves at once, but
         # a Save in the menu said there was something to lose without it.
         save_action = QAction("Save", self)
-        save_action.setShortcut(QKeySequence.Save)
+        _standard_keys(save_action, QKeySequence.Save)
         save_action.triggered.connect(self.save_story)
         self.addAction(save_action)
 
@@ -742,7 +758,10 @@ class MainWindow(
 
         file_menu.addSeparator()
         quit_action = QAction("&Quit", self)
-        quit_action.setShortcut(QKeySequence.Quit)
+        quit_action.setStatusTip(
+            "Close SealedLore (anything kept in memory only is asked about first)"
+        )
+        _standard_keys(quit_action, QKeySequence.Quit, "Ctrl+Q")
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
 
@@ -757,6 +776,9 @@ class MainWindow(
         self.start_action.triggered.connect(self.start_story)
         story_menu.addAction(self.start_action)
         self.restart_action = QAction("&Restart as new playthrough…", self)
+        self.restart_action.setStatusTip(
+            "A new story from this one's setup: the same world, cast, lore and plot, from the start"
+        )
         self.restart_action.triggered.connect(lambda: self.restart_story(review=True))
         story_menu.addAction(self.restart_action)
         # Pictures before the rarer things: they are what play reaches for.
@@ -803,9 +825,15 @@ class MainWindow(
         self.archive_action.triggered.connect(self.export_story_archive)
         self.export_menu.addAction(self.archive_action)
         self.markdown_action = QAction("&Markdown (this branch)…", self)
+        self.markdown_action.setStatusTip(
+            "The whole branch being read as a Markdown file: the prose alone, to read or share"
+        )
         self.markdown_action.triggered.connect(lambda: self.export_markdown(chapter_only=False))
         self.export_menu.addAction(self.markdown_action)
         self.chapter_markdown_action = QAction("Current &chapter as Markdown…", self)
+        self.chapter_markdown_action.setStatusTip(
+            "Only what came after the last chapter summary, as a Markdown file"
+        )
         self.chapter_markdown_action.triggered.connect(
             lambda: self.export_markdown(chapter_only=True)
         )
@@ -823,6 +851,9 @@ class MainWindow(
         self.lorebook_export_action.triggered.connect(self.export_lorebook)
         self.export_menu.addAction(self.lorebook_export_action)
         self.usage_action = QAction("&Usage and cost…", self)
+        self.usage_action.setStatusTip(
+            "What this story has cost so far, call by call and model by model"
+        )
         self.usage_action.triggered.connect(self.show_usage)
         story_menu.addAction(self.usage_action)
 
@@ -867,7 +898,7 @@ class MainWindow(
         # The manual isn't in the AppImage: the public repository's copy.
         manual_action = QAction("User &manual", self)
         manual_action.setStatusTip("Open the user manual in your web browser")
-        manual_action.triggered.connect(lambda: QDesktopServices.openUrl(QUrl(MANUAL_URL)))
+        manual_action.triggered.connect(self._open_manual)
         help_menu.addAction(manual_action)
         samples_action = QAction("&Plot format guide and samples", self)
         samples_action.setStatusTip(
@@ -948,6 +979,12 @@ class MainWindow(
         page.play_requested.connect(self._play_as)
         page.look_requested.connect(self._show_look)
         page.board_requested.connect(lambda card_id: self.show_cast_board(True, card_id))
+        page.whole_requested.connect(
+            lambda name, file: (
+                self.session is not None
+                and self._show_whole(name, self.session.pictures.read(file))
+            )
+        )
         page.variant_requested.connect(self._on_card_picture)
         page.wanted_requested.connect(
             lambda card_id, ref_id, wanted: self._on_card_picture(
@@ -958,7 +995,7 @@ class MainWindow(
         page.background_requested.connect(lambda: self.generate_image(background=True))
         page.background_file_requested.connect(self.choose_background)
         page.settings_requested.connect(lambda: self.open_settings("Images"))
-        page.scene_requested.connect(lambda: self.right_tabs.setCurrentWidget(self.scene_panel))
+        page.scene_requested.connect(self._correct_scene)
         page.add_requested.connect(self._add_character)
 
     def _add_character(self) -> None:
@@ -1107,9 +1144,13 @@ class MainWindow(
         self.config.composer_more = on
 
     def _on_escape(self) -> None:
+        editing = self.transcript.open_editor(focused=True)
         # Typing in the find bar, Esc closes it, even while a passage streams.
         if self.find_open() and self.find_bar.isAncestorOf(self.focusWidget()):
             self.close_find()
+        elif editing is not None:
+            # In a message's editor, Esc cancels the edit (asked if changed).
+            editing.escape_edit()
         elif self.collection_shown():
             # As the board: the page hides the story, so Esc there means "back";
             # but typing in one of its fields, Esc first leaves the field.
@@ -1198,9 +1239,27 @@ class MainWindow(
             return
         self.start_story()
 
+    def _correct_scene(self) -> None:
+        """The People page's Correct the scene…: the Scene page, unless a
+        private scene has frozen it (the page could only be looked at)."""
+        if self.in_private:
+            self.statusBar().showMessage(
+                "The scene card is frozen while the private scene is open: end it to correct "
+                "the scene.",
+                8000,
+            )
+            return
+        self.right_tabs.setCurrentWidget(self.scene_panel)
+
+    def _say_wait(self, what: str) -> None:
+        """A menu item that can't act while a job runs says so, rather than
+        doing nothing at all."""
+        self.statusBar().showMessage(f"{what} can be opened once the current job is done.", 6000)
+
     def new_from_chooser(self) -> None:
         """File → New…: the start page's choices in a dialog."""
         if self._busy:
+            self._say_wait("A new story or chat")
             return
         dialog = NewDialog(self)
         dialog.exec()
@@ -1244,6 +1303,7 @@ class MainWindow(
         editor. Only what opens another story asks about a memory-only scene
         or chat (`_import_path`)."""
         if self._busy:
+            self._say_wait("Import")
             return
         self._import_path(
             "Import",
@@ -1396,6 +1456,8 @@ class MainWindow(
                 self,
                 "Replace plot",
                 "This story already has a plot. Replace it with this one?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
             )
             if answer != QMessageBox.Yes:
                 return
@@ -1644,6 +1706,9 @@ class MainWindow(
         dialog = SetupDialog(
             self.session.story,
             self.session.cast,
+            hidden=frozenset(
+                set() if self.config.show_plot_spoilers else self.session.hidden_ids()
+            ),
             first_message=path[0] if path else None,
             texts=self.session.texts,
             parent=self,
@@ -1743,7 +1808,9 @@ class MainWindow(
         kept = read_kept(template_of(story), self.root) if template_of(story) else None
         dialog = StartDialog(
             story,
-            self.session.cast,
+            # Whom the plot keeps out until an event brings them: not offered
+            # to play or pin (a spoiler), unless spoilers are shown.
+            self.session.cast if self.config.show_plot_spoilers else self.session.visible_cast(),
             parent=self,
             without_pictures=offered,
             kept=kept,
@@ -1788,7 +1855,7 @@ class MainWindow(
         if self.config.active_provider() is None and not self.use_mock:
             QMessageBox.information(
                 self,
-                "No provider configured",
+                "No endpoint set up",
                 "Set a base URL, API key and model in Settings first.",
             )
             return
@@ -2360,8 +2427,28 @@ class MainWindow(
         self._select_from_map(start_id, node_id)
         self.show_map(False)
 
+    def _edit_allows_leave(self) -> bool:
+        """A message's edit open and changed: asked before the story goes or
+        moves on (it was dropped without a word)."""
+        editing = self.transcript.open_editor()
+        if editing is None or not editing.edit_changed():
+            return True
+        answer = QMessageBox.question(
+            self,
+            "Discard your edit?",
+            "A message you were editing hasn't been saved. Discard the edit?",
+            QMessageBox.Discard | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        )
+        if answer != QMessageBox.Discard:
+            return False
+        editing.cancel_edit()
+        return True
+
     def _switch_branch(self, start_id: str | None) -> None:
         if self.session is None or self._busy or self.session.in_private:
+            return
+        if not self._edit_allows_leave():
             return
         leaf = self.session.switch_branch(start_id)
         self._after_navigation(leaf.id)
@@ -2404,6 +2491,8 @@ class MainWindow(
             f"Delete the branch “{branch.name}”: its {len(doomed.node_ids)} messages"
             + (f", and the branches made from it ({', '.join(inside)})" if inside else "")
             + "? Pictures are kept. This can't be undone.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
         )
         if answer != QMessageBox.Yes:
             return
@@ -2449,7 +2538,7 @@ class MainWindow(
         if self.config.active_provider() is None and not self.use_mock:
             QMessageBox.information(
                 self,
-                "No provider configured",
+                "No endpoint set up",
                 "Set a base URL, API key and model in Settings first.",
             )
             return
@@ -2731,6 +2820,12 @@ class MainWindow(
     # --- generation --------------------------------------------------------
 
     def send_turn(self) -> None:
+        # Ctrl+Enter in a message's editor saves that edit: it used to send the
+        # composer's draft as a turn, the edit left open above it.
+        editing = self.transcript.open_editor(focused=True)
+        if editing is not None:
+            editing.commit_edit()
+            return
         if self.session is None or (self._busy and not self._can_queue()):
             return
         if self._page_covers():
@@ -2742,7 +2837,7 @@ class MainWindow(
         if self.config.active_provider() is None and not self.use_mock:
             QMessageBox.information(
                 self,
-                "No provider configured",
+                "No endpoint set up",
                 "Set a base URL, API key and model in Settings first.",
             )
             return
@@ -2967,6 +3062,11 @@ class MainWindow(
                 if chat
                 else "The chapter summary covering it will be removed; the prose it "
                 "covered goes back to the model word for word."
+            )
+        if self.composer.text().strip():
+            # It takes the box's place: what is typed there now would be lost.
+            details.append(
+                "What you are writing in the box now is replaced by it (copy it first to keep it)."
             )
         details.append("This can't be undone.")
 
@@ -3435,7 +3535,14 @@ class MainWindow(
                 "of SealedLore (they are in SampleStories/ in the source).",
             )
             return
-        QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder))):
+            self._warn_plain("Couldn't open the folder", f"The samples are in\n{folder}")
+
+    def _open_manual(self) -> None:
+        if not QDesktopServices.openUrl(QUrl(MANUAL_URL)):
+            self._warn_plain(
+                "Couldn't open the manual", f"No web browser opened it. It is at\n{MANUAL_URL}"
+            )
 
     def _no_story_page(self) -> QWidget:
         """The inspector while no story is open."""
@@ -3720,7 +3827,7 @@ class MainWindow(
         if self.config.active_provider() is None and not self.use_mock:
             QMessageBox.information(
                 self,
-                "No provider configured",
+                "No endpoint set up",
                 "Set a base URL, API key and model in Settings first.",
             )
             return True
@@ -4135,7 +4242,7 @@ class MainWindow(
                 self.model_button.setToolTip(
                     self._say(
                         "A private scene: every turn goes to the private model only. End "
-                        "it with the button beside the composer."
+                        "it with the Private button, under More beside Send."
                     )
                     + self._tee_tip()
                 )
@@ -4297,7 +4404,7 @@ class MainWindow(
         if self.config.active_provider() is None and not self.use_mock:
             QMessageBox.information(
                 self,
-                "No provider configured",
+                "No endpoint set up",
                 "Set a base URL, API key and model in Settings first.",
             )
             return
@@ -4355,7 +4462,7 @@ class MainWindow(
         if self.config.active_provider() is None and not self.use_mock:
             QMessageBox.information(
                 self,
-                "No provider configured",
+                "No endpoint set up",
                 "Set a base URL, API key and model in Settings first.",
             )
             return
@@ -4398,7 +4505,7 @@ class MainWindow(
         hidden = set() if self.config.show_plot_spoilers else session.hidden_ids()
         self.scene_panel.set_scene(
             session.story.scene,
-            session.cast,
+            [c for c in session.cast if c.id not in hidden],
             supporting=[c for c in session.supporting if c.id not in hidden],
             held_id=session.story.held_character_id,
             log=session.scene_log_on_path(),
@@ -4900,6 +5007,17 @@ class MainWindow(
             self.usage_action,
         ):
             action.setEnabled(has_story and not busy)
+        # A private scene freezes the plot and the setup (session
+        # `_refuse_in_private`): offered, they only refused.
+        if self.in_private:
+            for action in (self.setup_action, self.import_plot_action):
+                action.setEnabled(False)
+                action.setStatusTip("Paused while the private scene is open: end it first")
+        else:
+            self.setup_action.setStatusTip("The story's world, style, opening, cast and models")
+            self.import_plot_action.setStatusTip(
+                "Give this story the facts and events from a plot file (.md)"
+            )
         unstarted = has_story and not (self.session and self.session.nodes)
         self.start_action.setEnabled(unstarted and not busy)
         # Once the story has begun it can only restart: greyed for good, it

@@ -17,6 +17,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
+    QAbstractButton,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -92,6 +93,8 @@ class PromptEditorDialog(QDialog):
             "story": {k: e.model_copy() for k, e in (story.prompt_edits if story else {}).items()},
             "app": {k: e.model_copy() for k, e in config.prompt_edits.items()},
         }
+        # As they were, to tell whether Cancel would lose anything.
+        self._opened = self._snapshot()
         self._key: str | None = None
         self._loading = False
 
@@ -114,6 +117,8 @@ class PromptEditorDialog(QDialog):
         self.search = QLineEdit()
         self.search.setPlaceholderText("Find a text: its name, what it does, or its words")
         self.search.setClearButtonEnabled(True)
+        # Enter here goes to the first text found, never to Save.
+        self.search.returnPressed.connect(self._first_found)
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
         self.tree.setUniformRowHeights(True)
@@ -180,6 +185,10 @@ class PromptEditorDialog(QDialog):
         )
         self.reset_all_button = QPushButton("Reset all…")
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        for button in buttons.buttons():
+            # Enter in a field never saves and closes the dialog.
+            button.setAutoDefault(False)
+            button.setDefault(False)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         bottom = QHBoxLayout()
@@ -279,6 +288,48 @@ class PromptEditorDialog(QDialog):
             )
         self.counts.setText("; ".join(parts) + ".")
         self.reset_all_button.setEnabled(bool(self.here))
+
+    def _snapshot(self) -> dict[str, dict[str, str]]:
+        return {
+            scope: {key: edit.model_dump_json() for key, edit in edits.items()}
+            for scope, edits in self.edits.items()
+        }
+
+    def _first_found(self) -> None:
+        """The first text the search shows, chosen."""
+        for index in range(self.tree.topLevelItemCount()):
+            group = self.tree.topLevelItem(index)
+            for row in range(group.childCount()):
+                item = group.child(row)
+                if not item.isHidden() and item.data(0, KEY_ROLE):
+                    self.tree.setCurrentItem(item)
+                    return
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        """Enter in a field never presses a button for it: a dialog makes its
+        first button the default, and Enter in a line saved and closed it
+        (or pressed whatever button came first)."""
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter) and not isinstance(
+            self.focusWidget(), QAbstractButton
+        ):
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def reject(self) -> None:
+        """Cancel, Esc or the window's close: edits made here are asked
+        about first, never dropped without a word."""
+        if self._snapshot() != self._opened:
+            answer = QMessageBox.question(
+                self,
+                "Discard your changes?",
+                "Close without saving the changes made to the prompts?",
+                QMessageBox.Discard | QMessageBox.Cancel,
+                QMessageBox.Cancel,
+            )
+            if answer != QMessageBox.Discard:
+                return
+        super().reject()
 
     def _filter(self) -> None:
         words = self.search.text().strip().lower()

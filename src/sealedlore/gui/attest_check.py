@@ -14,7 +14,7 @@ import weakref
 from collections.abc import Callable
 from itertools import count
 
-from PySide6.QtCore import QCoreApplication, QObject, QThread, Signal
+from PySide6.QtCore import QCoreApplication, QObject, Qt, QThread, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from sealedlore.engine.attestation_check import (
@@ -152,9 +152,17 @@ class AttestationButton(QWidget):
         # run to several lines, and would crowd the form).
         self.result.setText(check.headline)
         self.result.setToolTip(check.detail)
+        # A refusal or a check that couldn't run is an error, said as one; a
+        # partial result a warning (they read as dim hints, easy to miss).
         self.result.setObjectName(
-            "warningLabel" if check.outcome in ("refused", "retired") else "hintLabel"
+            "errorLabel"
+            if check.outcome in ("refused", "retired", "error")
+            else "warningLabel"
+            if check.outcome == "partial"
+            else "hintLabel"
         )
+        # The details could only be hovered: selectable now, to copy.
+        self.result.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.result.style().unpolish(self.result)
         self.result.style().polish(self.result)
         self.result.show()

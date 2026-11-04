@@ -132,6 +132,10 @@ class ChatWindow:
         # A chat has no cast and no lore to give SillyTavern.
         self.card_export_action.setVisible(not chat)
         self.lorebook_export_action.setVisible(not chat)
+        # Nor dice, nor faces over passages or a stage: shown, they did nothing.
+        for action in (self.dice_rolls_action, self.stage_action, self.passage_faces_action):
+            action.setVisible(not chat)
+        self.close_story_action.setText("&Close chat" if chat else "&Close story")
         for page in (
             self.people_page,
             self.scene_panel,

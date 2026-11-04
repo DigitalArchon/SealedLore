@@ -36,7 +36,19 @@ def open_guide(parent: QWidget, name: str = PLOT_WRITING_GUIDE) -> bool:
         box.setTextFormat(Qt.PlainText)
         box.exec()
         return False
-    QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+    if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
+        # Nothing on this desktop opens it: say where it is, rather than
+        # nothing at all.
+        box = QMessageBox(
+            QMessageBox.Information,
+            "Couldn't open the guide",
+            f"Nothing on this computer opened it. It is here:\n{path}",
+            QMessageBox.Ok,
+            parent,
+        )
+        box.setTextFormat(Qt.PlainText)
+        box.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        box.exec()
     return True
 
 

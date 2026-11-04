@@ -172,11 +172,12 @@ class PortraitsDialog(QDialog):
             what += " and a picture of each lore entry"
         elif lore:
             what = "A picture of each lore entry"
+        writer = session.image_prompt_model or "The story's model"
         intro = QLabel(
-            f"{what}, drawn from the cards. {session.image_prompt_model} is writing a "
-            "prompt for each: read them, change any you like and untick anything you'd "
-            "rather not draw. Nothing is drawn until you press Draw. Each picture goes "
-            "first among its card's pictures, shown large on the Cast or Lore page, and "
+            f"{what}, drawn from the cards. {writer} writes a prompt for each: read them, "
+            "change any you like and untick anything you'd rather not draw. Nothing is "
+            "drawn until you press Draw. Each picture goes first among its card's pictures, "
+            "shown large on the Cast or Lore page, and "
             "is kept in Media with its prompt and cost."
         )
         intro.setWordWrap(True)
@@ -239,6 +240,10 @@ class PortraitsDialog(QDialog):
                     else None
                 )
                 row = _Row(card, thumb)
+                if first is not None and len(characters) + len(lore) > 1:
+                    # Has a picture already: drawn again only if ticked (all
+                    # were, and each new one went in front of the old).
+                    row.tick.setChecked(False)
                 row.tick.toggled.connect(self._sync)
                 row.prompt.textChanged.connect(self._sync)
                 self.rows.append(row)

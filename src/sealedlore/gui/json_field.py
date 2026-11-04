@@ -40,7 +40,8 @@ class JsonField(QWidget):
         self.text.setObjectName("jsonText")
         self.text.textChanged.connect(self._edited)
         self.problem = QLabel()
-        self.problem.setObjectName("hintLabel")
+        # Said as an error is (it read as a dim hint, easy to miss).
+        self.problem.setObjectName("errorLabel")
         self.problem.setWordWrap(True)
         self.problem.hide()
         layout = QVBoxLayout(self)

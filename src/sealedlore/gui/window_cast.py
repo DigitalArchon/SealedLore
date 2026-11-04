@@ -110,7 +110,7 @@ class CastWindow:
         if self.config.active_provider() is None and not self.use_mock:
             QMessageBox.information(
                 self,
-                "No provider configured",
+                "No endpoint set up",
                 "Set up an endpoint and a model in Settings first.",
             )
             return

@@ -263,7 +263,10 @@ def test_a_blank_or_repeated_name_or_a_plain_http_address_is_refused(app):
     dialog.provider_name.setText("Proxy")
     dialog.base_url.setText("http://proxy.example/v1")
     dialog._save()
-    assert dialog.error.text().startswith("Proxy: endpoint must use https")
+    assert dialog.error.text().startswith("Endpoints: Proxy's address must use https")
+    dialog.base_url.setText("")
+    dialog._save()
+    assert "needs an address" in dialog.error.text()
     assert [p.name for p in cfg.providers] == ["NanoGPT", "Anthropic"], "nothing saved"
     dialog.deleteLater()
 

@@ -172,6 +172,12 @@ class TurnEditor(QPlainTextEdit):
 
     submitted = Signal()
 
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        # Tab goes on to the note and Send, as in any form: a tab character
+        # in a turn is never what was meant.
+        self.setTabChangesFocus(True)
+
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802 - Qt naming
         if not _sent_or_new_line(self, event):
             super().keyPressEvent(event)
@@ -210,7 +216,9 @@ class Composer(QWidget):
 
         self.held = QComboBox()
         self.held.setObjectName("heldSelector")
-        self.held.setMinimumWidth(150)
+        # As Speaking as: room for a long name when the row has it (it was
+        # held at 150px, "Seraphina Valcourt-Ashdown" read "Seraphina Valcou").
+        self._compact(self.held, 12)
         self.held.currentIndexChanged.connect(self._on_held_changed)
         # Choosing the one already shown changes no index; it still asks for
         # them to be held (back in the scene, if a branch left them out).
@@ -453,6 +461,7 @@ class Composer(QWidget):
 
     def _refit_popups(self) -> None:
         for combo in (
+            self.held,
             self.speaker,
             self.length,
             self.agency,
@@ -518,6 +527,7 @@ class Composer(QWidget):
                 self.held.addItem(character.name, character.id)
         self._select(self.held, held_id or NOBODY)
         self.held.blockSignals(False)
+        self._fit_popup(self.held)
 
         self.speaker.blockSignals(True)
         self.speaker.clear()

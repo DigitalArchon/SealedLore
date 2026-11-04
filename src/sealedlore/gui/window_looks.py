@@ -101,6 +101,15 @@ class LooksWindow:
             same_person=same_person,
         )
 
+    def _opens_whole(self, name: str, file: str) -> Callable[[], None]:
+        """What a face's click does: the picture whole, read when asked."""
+
+        def open_it() -> None:
+            if self.session is not None:
+                self._show_whole(name, self.session.pictures.read(file))
+
+        return open_it
+
     def _passage_faces(
         self, nodes: Sequence[Node]
     ) -> Callable[[str], list[tuple[str, QPixmap]]] | None:
@@ -110,9 +119,13 @@ class LooksWindow:
         if faces is None:
             return None
 
-        def faces_for(node_id: str) -> list[tuple[str, QPixmap]]:
+        def faces_for(node_id: str) -> list[tuple]:
             return [
-                (character.name, self._face_pixmap(ref.file, FACE_HEIGHT))
+                (
+                    character.name,
+                    self._face_pixmap(ref.file, FACE_HEIGHT),
+                    self._opens_whole(character.name, ref.file),
+                )
                 for character, ref in faces.get(node_id, [])
             ]
 
@@ -136,7 +149,7 @@ class LooksWindow:
         shown = self.centre_stack.currentWidget() is self.transcript
         if shown:
             people = [
-                (name, self._face_pixmap(file, STAGE_HEIGHT))
+                (name, self._face_pixmap(file, STAGE_HEIGHT), self._opens_whole(name, file))
                 for name, _picture, file in self._stage_people()
             ]
             shown = bool(people)

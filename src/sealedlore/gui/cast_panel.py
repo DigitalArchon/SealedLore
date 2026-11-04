@@ -594,6 +594,8 @@ class CastPanel(QWidget):
             "Remove the portrait?",
             f"Take this portrait off {character.name}'s card? Their next picture becomes "
             "the portrait. Pictures drawn for the story stay in Media.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
         )
         if answer == QMessageBox.Yes and self._current is not None:
             if self._current.id == character.id:
@@ -800,6 +802,15 @@ class CastPanel(QWidget):
 
     def _remove_character(self) -> None:
         if self._current is None:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Remove this character?",
+            f"Take {self._current.name} out of the story? Their card goes, pictures and all.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
             return
         tier = self._supporting if self._is_supporting(self._current) else self._cast
         tier.remove(self._current)

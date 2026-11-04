@@ -130,7 +130,7 @@ def test_the_button_shows_only_for_tee_models_and_reports_what_it_found(app, mon
     wait_for(app, lambda: button.button.isEnabled())
     assert asked[0].model == "TEE/gemma4-31b"
     assert button.result.text().startswith("TEE/gemma4-31b: ✗ Refused")
-    assert button.result.objectName() == "warningLabel"
+    assert button.result.objectName() == "errorLabel"  # a refusal, said as an error
     button.model_changed("TEE/other")
     assert button.result.isHidden(), "a new model clears the old result"
     button.deleteLater()

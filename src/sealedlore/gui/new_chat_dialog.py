@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -32,7 +33,7 @@ from PySide6.QtWidgets import (
 from sealedlore.gui.attest_check import AttestationButton
 from sealedlore.gui.model_picker import Browse, BrowseRoute, ModelField
 from sealedlore.gui.saved_prompts import SavedPrompts, SavedPromptsButton
-from sealedlore.gui.sizing import GrowingText, size_to_screen
+from sealedlore.gui.sizing import GrowingText, may_discard, size_to_screen, typed_texts
 from sealedlore.models.config import Config, ProviderConfig, split_model
 from sealedlore.providers.tee import is_private_mode, is_tee
 
@@ -99,6 +100,7 @@ class NewChatDialog(QDialog):
             hosts_of=hosts_of,
         )
         self.prompt = QPlainTextEdit()
+        self.prompt.setTabChangesFocus(True)
         self.prompt.setPlaceholderText("e.g. You are a helpful assistant. Answer concisely.")
         self.prompt.setMinimumHeight(140)
         prompt_hint = QLabel(
@@ -202,7 +204,28 @@ class NewChatDialog(QDialog):
         else:
             hints = PLAIN_HINTS
         self.keep_hint.setText(hints[self.keep.currentData()])
-        self.ok_button.setEnabled(bool(self.title.text().strip() and self.model.text().strip()))
+        missing = [
+            words
+            for words, value in (("a name", self.title.text()), ("a model", self.model.text()))
+            if not value.strip()
+        ]
+        self.ok_button.setEnabled(not missing)
+        self.ok_button.setToolTip(
+            f"The chat needs {' and '.join(missing)} first." if missing else ""
+        )
+
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        super().showEvent(event)
+        # Once filled in: what changes from here on is the author's typing.
+        if getattr(self, "_typed", None) is None:
+            QTimer.singleShot(0, lambda: setattr(self, "_typed", typed_texts(self)))
+
+    def reject(self) -> None:
+        """Cancel or Esc: a system prompt or greeting typed here is asked
+        about before it is lost."""
+        if not may_discard(self, getattr(self, "_typed", None)):
+            return
+        super().reject()
 
     def _accept(self) -> None:
         if self.title.text().strip() and self.model.text().strip():

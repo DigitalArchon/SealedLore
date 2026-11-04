@@ -142,6 +142,32 @@ class RefusingImages:
 
 
 @pytest.fixture(autouse=True)
+def _unanswered_boxes_fail(monkeypatch):
+    """A message box no test answers waits forever offscreen, and the whole
+    run hangs with nothing said. Here it fails at once instead, naming the
+    box; a test that means to answer one patches it as before."""
+    try:
+        from PySide6.QtWidgets import QMessageBox
+    except ImportError:
+        yield
+        return
+
+    def static(kind: str):
+        def ask(_parent, title, text, *_args, **_kwargs):
+            raise AssertionError(f"unanswered {kind}: {title!r}: {text!r}")
+
+        return staticmethod(ask)
+
+    def exec_(box):
+        raise AssertionError(f"unanswered message box: {box.windowTitle()!r}: {box.text()!r}")
+
+    for kind in ("question", "information", "warning", "critical"):
+        monkeypatch.setattr(QMessageBox, kind, static(kind))
+    monkeypatch.setattr(QMessageBox, "exec", exec_)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def memory_keychain():
     from sealedlore.storage import keychain
 

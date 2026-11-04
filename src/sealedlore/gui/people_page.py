@@ -256,6 +256,8 @@ class PersonCard(QFrame):
     look_requested = Signal(str, str)
     # Their pictures, on the cast board (gui/cast_board.py).
     board_requested = Signal(str)
+    # (name, picture file): the picture shown, full size.
+    whole_requested = Signal(str, str)
     # (card id, picture id, what): "edit" or "set" of the picture shown.
     variant_requested = Signal(str, str, str)
     # (card id, picture id, "look · expression"): draw the look found missing.
@@ -373,6 +375,13 @@ class PersonCard(QFrame):
         actions: list[tuple[str, Callable[[], None]]] = [
             ("Open the profile", lambda: self.profile_requested.emit(person.card_id)),
         ]
+        if person.picture:
+            actions.append(
+                (
+                    "See the picture full size",
+                    lambda: self.whole_requested.emit(person.name, person.picture),
+                )
+            )
         if self._can_draw:
             label = "Draw a new portrait…" if person.picture else "Draw a portrait…"
             actions.append((label, lambda: self.draw_requested.emit(person.card_id)))
@@ -445,6 +454,8 @@ class PeoplePage(QScrollArea):
     look_requested = Signal(str, str)
     # Their pictures, on the cast board (gui/cast_board.py).
     board_requested = Signal(str)
+    # (name, picture file): the picture shown, full size.
+    whole_requested = Signal(str, str)
     variant_requested = Signal(str, str, str)
     wanted_requested = Signal(str, str, str)
     draw_all_requested = Signal()
@@ -666,6 +677,7 @@ class PeoplePage(QScrollArea):
             card.play_requested.connect(self.play_requested)
             card.look_requested.connect(self.look_requested)
             card.board_requested.connect(self.board_requested)
+            card.whole_requested.connect(self.whole_requested)
             card.variant_requested.connect(self.variant_requested)
             card.wanted_requested.connect(self.wanted_requested)
             self.cards[person.card_id] = card

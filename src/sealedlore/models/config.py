@@ -167,10 +167,9 @@ RECOMMENDED_TEXT_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
             id=DEFAULT_STORY_MODEL,
             label="Claude Sonnet 4.6",
             tag="default",
-            note="Best on price for quality: about 1¢ a turn on a map story and 2-3¢ on a "
-            "long story with a warm cache. It keeps the rules (no held character written and "
-            "no shortcut in 128 judged passages), writes short passages on the map (about 65 "
-            "words), and made a few errors fewer than Opus over whole stories.",
+            note="Best on price for quality: 2-3¢ a turn on a long story with a warm cache. "
+            "It keeps the rules (no held character written and no shortcut in 128 judged "
+            "passages), and made a few errors fewer than Opus over whole stories.",
         ),
         RecommendedModel(
             id="anthropic/claude-opus-5.5",
@@ -178,10 +177,9 @@ RECOMMENDED_TEXT_MODELS: dict[str, tuple[RecommendedModel, ...]] = {
             tag="premium",
             note="The better writer on every blind judge, Claude and not: preferred in about 9 "
             "turns of 10 by the Claude judges and more often than not by DeepSeek, with more "
-            "specific detail and fuller answers. About 2.4 times Sonnet's cost (2.3¢ a map "
-            "turn, ~5¢ on a long story), passages twice as long on the map (about 135 "
-            "words), and no fewer errors over whole stories. It counts about half as many "
-            "tokens again as the app estimates.",
+            "specific detail and fuller answers. About 2.4 times Sonnet's cost (~5¢ a turn "
+            "on a long story), longer passages, and no fewer errors over whole stories. It "
+            "counts about half as many tokens again as the app estimates.",
         ),
         RecommendedModel(
             id="z-ai/glm-5.3",
@@ -285,12 +283,21 @@ LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
 def require_https(url: str) -> str:
+    """`url` when it is https, or http to this computer; refused in words a
+    person can act on otherwise."""
     parsed = urlparse(url)
     if parsed.scheme == "https":
         return url
     if parsed.scheme == "http" and (parsed.hostname or "") in LOOPBACK_HOSTS:
         return url
-    raise ValueError(f"endpoint must use https (http is allowed only on loopback): {url!r}")
+    if not url.strip():
+        raise ValueError("needs an address (https://…)")
+    if not parsed.scheme or not parsed.netloc:
+        raise ValueError(f"{url!r} needs to begin with https://")
+    raise ValueError(
+        f"must use https: {url!r} isn't (plain http is allowed only for a server on this "
+        "computer: localhost)"
+    )
 
 
 def _same_host(first: str, second: str) -> bool:

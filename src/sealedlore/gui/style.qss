@@ -442,6 +442,11 @@ QDockWidget::title {
   color: @text_accent;
 }
 
+#foldButton:focus {
+  color: @text_accent;
+  text-decoration: underline;
+}
+
 /* --- the People page (gui/people_page.py) ----------------------------- */
 
 #peoplePage, #peopleColumn {
@@ -677,6 +682,20 @@ QToolButton:hover {
 
 QToolButton:pressed {
   background: @button_pressed;
+}
+
+/* Where the keyboard is, as on push buttons: a tool button, a check box or
+   a radio button with the focus showed nothing before. */
+QToolButton:focus {
+  border-color: @hover_border_accent;
+}
+
+QCheckBox::indicator:focus, QRadioButton::indicator:focus {
+  border-color: @hover_border_accent;
+}
+
+QCheckBox:focus, QRadioButton:focus {
+  color: @text_accent;
 }
 
 QToolButton:disabled {

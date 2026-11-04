@@ -84,8 +84,11 @@ class StartDialog(QDialog):
                 cast,
                 story.setup.starting_scene.present_character_ids,
                 story.setup.absent_at_start,
+                max_height=None,
             )
-            layout.addWidget(self.presence)
+            # The roster takes the spare height (it scrolled in a small box
+            # over an empty half of the dialog).
+            layout.addWidget(self.presence, 1)
             self.play_as.currentIndexChanged.connect(self._lock_rows)
             self._lock_rows()
         # A picture of each card (the author, Oct 15 2026): ticked here, the
@@ -116,6 +119,8 @@ class StartDialog(QDialog):
         note.setObjectName("hintLabel")
         note.setWordWrap(True)
         layout.addWidget(note)
+        if self.presence is None:
+            layout.addStretch(1)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
         start = buttons.addButton("Start", QDialogButtonBox.AcceptRole)

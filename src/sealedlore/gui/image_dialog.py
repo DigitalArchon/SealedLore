@@ -167,6 +167,9 @@ class ImageDialog(QDialog):
         # The prompt as the writer last gave it, the style line it was given,
         # and a style chosen while it was being written.
         self._written_prompt: str | None = None
+        # The prompt it opened with (Generate again, Edit…): not the author's
+        # typing, nothing to ask about on Cancel. Set once filled in.
+        self._opened_prompt: str | None = None
         self._written_lead = ""
         self._writing_lead = ""
         self._again = False
@@ -188,6 +191,7 @@ class ImageDialog(QDialog):
             self._for_place()
         if prefill is not None:
             self._prefill(prefill)
+            self._opened_prompt = self.prompt.toPlainText()
         # A place's picture is a card's: the portrait model draws it (FLUX.3
         # Klein by default; the author, Oct 24 2026: Klein for all of these).
         first_model = (
@@ -887,7 +891,7 @@ class ImageDialog(QDialog):
         elif not accepts:
             self.ref_note.setText(f"{WORDS_ONLY} This model takes no reference pictures.")
         elif not sending:
-            self.ref_note.setText(f"{WORDS_ONLY} Add a picture below to keep a look.")
+            self.ref_note.setText(f"{WORDS_ONLY} Add… a picture to keep a look.")
         else:
             what = "this picture" if sending == 1 else f"these {sending} pictures"
             self.ref_note.setText(
@@ -967,6 +971,18 @@ class ImageDialog(QDialog):
             self._worker.stop()
             self._show_status("Stopping…")
             return
+        text = self.prompt.toPlainText()
+        if text.strip() and text not in (self._written_prompt, self._opened_prompt):
+            # A prompt changed by hand: asked about before it is lost.
+            answer = QMessageBox.question(
+                self,
+                "Discard your prompt?",
+                "Close without drawing? The changes you made to the prompt are lost.",
+                QMessageBox.Discard | QMessageBox.Cancel,
+                QMessageBox.Cancel,
+            )
+            if answer != QMessageBox.Discard:
+                return
         super().reject()
 
 
@@ -983,7 +999,10 @@ class FitPicture(QWidget):
     def paintEvent(self, _event) -> None:  # noqa: N802 - Qt naming
         if self._pixmap.isNull():
             return
-        scaled = self._pixmap.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        # Smaller to fit, never larger than the picture is: a small one blown
+        # up to the window only blurred.
+        room = self._pixmap.size().boundedTo(self.size())
+        scaled = self._pixmap.scaled(room, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         painter = QPainter(self)
         painter.drawPixmap(
             (self.width() - scaled.width()) // 2, (self.height() - scaled.height()) // 2, scaled

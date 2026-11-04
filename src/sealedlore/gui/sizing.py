@@ -51,17 +51,22 @@ def size_to_screen(
 ) -> None:
     """Resize `widget` to `width` × `height` of the available screen (shares,
     0-1), but no smaller than its layout needs or `at_least`, and no larger
-    than `MOST_OF_SCREEN` of the screen."""
+    than `MOST_OF_SCREEN` of the screen. Shares and `at_least` grow with the
+    text (View → Text size): at 150% Settings opened at its 100% size and its
+    fields cut the model ids short."""
+    from sealedlore.gui import text_size
+
     anchor = widget.parentWidget() or widget
     screen = anchor.screen() or QGuiApplication.primaryScreen()
     if screen is None:
         return
     room = screen.availableGeometry().size()
+    factor = max(1.0, text_size.scale())
     need = widget.minimumSizeHint().expandedTo(widget.minimumSize())
     if at_least is not None:
-        need = need.expandedTo(at_least)
-    wide = max(int(room.width() * width), need.width())
-    tall = max(int(room.height() * height), need.height())
+        need = need.expandedTo(at_least * factor)
+    wide = max(int(room.width() * width * factor), need.width())
+    tall = max(int(room.height() * height * factor), need.height())
     widget.resize(
         min(wide, int(room.width() * MOST_OF_SCREEN)),
         min(tall, int(room.height() * MOST_OF_SCREEN)),
@@ -248,3 +253,32 @@ def adjustable_columns(
     fitter = _ColumnFitter(view, stretch, widest)
     fitter.fit()
     return fitter
+
+
+def typed_texts(widget: QWidget) -> list[str]:
+    """What a dialog's text boxes hold now, in order: to tell, on Cancel,
+    whether anything typed would be lost."""
+    from PySide6.QtWidgets import QLineEdit
+
+    return [
+        child.text() if isinstance(child, QLineEdit) else child.toPlainText()
+        for child in widget.findChildren(QLineEdit | QPlainTextEdit)
+        if not child.isReadOnly()
+    ]
+
+
+def may_discard(dialog: QWidget, before: list[str] | None) -> bool:
+    """Cancel or Esc: True when nothing typed would be lost, or the author
+    says to discard it."""
+    from PySide6.QtWidgets import QMessageBox
+
+    if before is None or typed_texts(dialog) == before:
+        return True
+    answer = QMessageBox.question(
+        dialog,
+        "Discard what you wrote?",
+        "Close without keeping what you typed here?",
+        QMessageBox.Discard | QMessageBox.Cancel,
+        QMessageBox.Cancel,
+    )
+    return answer == QMessageBox.Discard

@@ -195,7 +195,7 @@ class LorebookForm(QWidget):
 
         content = QWidget()
         form = QFormLayout(content)
-        form.setContentsMargins(0, 10, 8, 0)
+        form.setContentsMargins(10, 10, 10, 0)
         form.addRow(intro)
         form.addRow("", book_buttons)
         form.addRow("Book's name", self.book_name)

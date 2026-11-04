@@ -75,7 +75,8 @@ class QrWidget(QWidget):
         painter = QPainter(self)
         painter.fillRect(QRectF(left, top, side, side), QColor("white"))
         painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor("black"))
+        # A code that has run out is drawn faded: it must not look scannable.
+        painter.setBrush(QColor("black") if self.isEnabled() else QColor("#d8d8d8"))
         for row, line in enumerate(self.matrix):
             for col, dark in enumerate(line):
                 if dark:
@@ -108,6 +109,7 @@ class PairSheet(QDialog):
         row = QHBoxLayout()
         copy = QPushButton("Copy link")
         copy.clicked.connect(lambda: copy_text(self.link))
+        self.copy_button = copy
         row.addWidget(copy)
         self.countdown = QLabel()
         self.countdown.setObjectName("hintLabel")
@@ -127,6 +129,8 @@ class PairSheet(QDialog):
         if self._left <= 0:
             self.countdown.setText("This code has run out. Close and pair again.")
             self.code.setEnabled(False)
+            self.code.update()
+            self.copy_button.setEnabled(False)
             self._timer.stop()
             return
         minutes, seconds = divmod(self._left, 60)

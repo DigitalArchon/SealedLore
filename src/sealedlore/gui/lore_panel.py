@@ -348,6 +348,8 @@ class LorePanel(QWidget):
             "Remove the picture?",
             f"Take this picture off “{entry.title}”? Its next picture takes its place. "
             "Pictures drawn for the story stay in Media.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
         )
         if answer == QMessageBox.Yes and self._current is not None:
             if self._current.id == entry.id:
@@ -433,6 +435,15 @@ class LorePanel(QWidget):
 
     def _remove_entry(self) -> None:
         if self._current is None:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Remove this entry?",
+            f"Take “{self._current.title or 'this entry'}” out of the story's lore?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
             return
         self._entries.remove(self._current)
         self._current = None

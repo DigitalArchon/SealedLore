@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMenu,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
@@ -403,10 +404,10 @@ class MessageWidget(QFrame):
         line = QHBoxLayout(row)
         line.setContentsMargins(0, 0, 0, 0)
         line.setSpacing(6)
-        for name, pixmap in faces:
-            face = QLabel(row)
+        for name, pixmap, *opened in faces:
+            face = _FaceLabel(row, opened[0] if opened else None)
             face.setPixmap(pixmap)
-            face.setToolTip(name)
+            face.setToolTip(f"{name}: click to see the picture full size" if opened else name)
             face.setAccessibleName(name)
             line.addWidget(face)
         line.addStretch(1)
@@ -641,6 +642,31 @@ class MessageWidget(QFrame):
         self._save_button = save
         self._sync_save()
         editor.setFocus(Qt.OtherFocusReason)
+
+    def edit_changed(self) -> bool:
+        """The open editor holds text other than the message's own."""
+        if self._editor is None:
+            return False
+        ooc = self._ooc_editor.toPlainText() if self._ooc_editor is not None else self._ooc_text
+        return self._editor.toPlainText() != self.body.source or ooc != self._ooc_text
+
+    def commit_edit(self) -> None:
+        """Save, as its button does (Ctrl+Enter in the editor)."""
+        self._commit_edit()
+
+    def escape_edit(self) -> None:
+        """Esc in the editor: cancelled, asked first when it was changed."""
+        if self.edit_changed():
+            answer = QMessageBox.question(
+                self,
+                "Discard this edit?",
+                "Close the editor without saving what you changed?",
+                QMessageBox.Discard | QMessageBox.Cancel,
+                QMessageBox.Cancel,
+            )
+            if answer != QMessageBox.Discard:
+                return
+        self.cancel_edit()
 
     def cancel_edit(self, *, committing: bool = False) -> None:
         if self._editor is None:
@@ -1170,6 +1196,22 @@ def _line_top(label: QLabel, position: int) -> int:
     return label.contentsRect().top() + int(top + (line.y() if line.isValid() else 0))
 
 
+class _FaceLabel(QLabel):
+    """A face over a passage: a click shows the picture whole."""
+
+    def __init__(self, parent: QWidget, opened: Callable[[], None] | None) -> None:
+        super().__init__(parent)
+        self._opened = opened
+        if opened is not None:
+            self.setCursor(Qt.PointingHandCursor)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        if event.button() == Qt.LeftButton and self._opened is not None:
+            self._opened()
+            return
+        super().mouseReleaseEvent(event)
+
+
 # The reply's mark (providers/tee.py `check_reply`: "verified" when the
 # attested key's record is for the exact bytes received, "signed" when they
 # couldn't be compared, "unchecked" when no record could be read; the manual,
@@ -1480,6 +1522,17 @@ class TranscriptView(QScrollArea):
             action = widget.actions_.get("continue")
             if action is not None and self._layout.indexOf(widget) >= 0:
                 action.setVisible(can)
+
+    def open_editor(self, *, focused: bool = False) -> MessageWidget | None:
+        """The message whose editor is open (with the keyboard's focus in it,
+        if `focused`), or None."""
+        focus = QApplication.focusWidget()
+        for widget in self._container.findChildren(MessageWidget):
+            if self._layout.indexOf(widget) < 0 or not widget.editing():
+                continue
+            if not focused or (focus is not None and widget.isAncestorOf(focus)):
+                return widget
+        return None
 
     def editing(self) -> bool:
         """Whether a message's editor is open: a rebuild would destroy it."""

@@ -895,7 +895,10 @@ class PrivateWindow:
     def _private_allows_close(self) -> bool:
         """Closing, or leaving the story (New, Import, Duplicate), in the
         middle of a memory-only scene loses it: ask. Yes discards the scene.
-        A chat kept in memory only asks the same (window_chat)."""
+        A chat kept in memory only asks the same (window_chat). A message's
+        edit still open is asked about first, whatever the story."""
+        if not self._edit_allows_leave():
+            return False
         session = self.session
         if session is not None and session.memory_only:
             return self._chat_allows_close()
