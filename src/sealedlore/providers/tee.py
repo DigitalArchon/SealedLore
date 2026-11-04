@@ -64,6 +64,9 @@ RECEIPT_RETRY_SECONDS = 2.0
 # Models whose streams nano-gpt rebuilds from the upstream's, so their bytes
 # never match the receipt's hash (nano-gpt, Nov 2026).
 REBUILT_STREAMS = frozenset({"TEE/gemma-4-31b-it"})
+# Named on the model button (a shortfall): the quote binds the key that signs
+# each reply's record, not the receipt keys around it.
+RECEIPT_KEYS_LOOSE = "receipt keys not in the quote"
 
 
 def _canonical(value: Any) -> bytes:
@@ -453,6 +456,11 @@ class TeeClient:
         ):
             check = _Checks("the Intel TDX quote binds the signing key to our nonce")
             tie = "its receipt keys are published beside the attested signing key" if holds else ""
+            # The receipts' word that the model was verified then rests on the
+            # relay's JSON, not the hardware (nano-gpt, Nov 2026), and the same
+            # with no keyset at all: said either way, so leaving it out never
+            # reads better than sending it.
+            check.fall_short(RECEIPT_KEYS_LOOSE)
         elif keyset is not None and holds and report_data == _statement(keyset, nonce):
             check = _Checks(
                 "the Intel TDX quote binds the gateway's keys, its signing key among them, "
@@ -483,6 +491,7 @@ class TeeClient:
         not_after = keyset.get("not_after")
         if not isinstance(not_after, int) or not_after <= time.time():
             check.note("its receipt keys have expired, so receipts aren't checked")
+            check.fall_short("receipt keys expired")
             return
         self.keyset, self.keyset_digest = keyset, _digest(_canonical(keyset))
         check.note(tie)

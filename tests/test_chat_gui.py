@@ -652,12 +652,23 @@ def test_a_refused_tee_chat_sends_nothing_until_attested_again(app, window, monk
     window._tee_thread = None
 
     # Attested, partially: sending goes ahead and the reason is on the model button.
+    # As nano-gpt's RedPill models attest (Nov 2026): the button names both,
+    # its tooltip says what they cost, and the window grows no wider for it.
+    from sealedlore.providers.tee import RECEIPT_KEYS_LOOSE
+
+    widest = window.minimumSizeHint().width()
     partial = Attestation(
-        verified=True, level="partial", shortfalls=["no GPU evidence"], signing_address="0xab"
+        verified=True,
+        level="partial",
+        shortfalls=["no GPU evidence", RECEIPT_KEYS_LOOSE],
+        signing_address="0xab",
     )
     window._on_attested(None, _FakeTee(), [partial], [])
     assert session.tee_block is None
-    assert "partial: no GPU evidence" in window._private_model_text()
+    assert f"partial: no GPU evidence, {RECEIPT_KEYS_LOOSE}" in window._private_model_text()
+    assert "rests on NanoGPT's relay" in window.model_button.toolTip()
+    assert "no GPU was checked" in window.model_button.toolTip()
+    assert window.minimumSizeHint().width() <= max(widest, 1920)
     list(session.send(window._chat_turn("Hello")))
     assert session.provider.requests
 

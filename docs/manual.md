@@ -2052,21 +2052,39 @@ Providers that run several instances (such as `TEE/kimi-k3`) have every
 instance checked the same way. Anything forged, revoked, for another nonce,
 or a model that offers no attestation is **refused**, and nothing is sent to
 it. What couldn't be checked (no GPU evidence offered, Intel's or NVIDIA's
-service out of reach, a rating below up to date) is shown as **partial**,
-with the reason on the model button.
+service out of reach, a rating below up to date, receipt keys the quote
+doesn't bind) is shown as **⚠ partial**, with the reasons on the model button
+and what each one means in its tooltip. Sending still goes ahead.
 
 After each reply the app fetches the record NanoGPT keeps for it, signed by
 the attested key. The record holds a hash of the reply as the enclave's
-gateway sent it, which for most models is the exact text the app received:
-such a reply is marked "TEE verified". Where the gateway also keeps a signed
-receipt (NanoGPT's TEE models served through RedPill), that is checked too:
-signed by a key the gateway publishes beside the attested one, for the same
-reply, and saying the model it came from was verified. A reply whose text
-can't be compared (NanoGPT rebuilds some models' replies) is marked "TEE
-signed"; one that doesn't match its record, "TEE ⚠ check failed"; and "TEE
-signature unavailable" when the provider keeps no record for it. Your own
-messages are marked with how they were sent: "sent to the attested TEE", or
-"end-to-end encrypted" on a `private/` model.
+gateway sent it, which for most models is the exact text the app received.
+Each reply is marked with what its check showed:
+
+- **TEE verified**: the record is for the exact text the app received. Where
+  the gateway also keeps a signed receipt (NanoGPT's TEE models served
+  through RedPill), that is checked too: for the same reply, and saying the
+  model it came from was verified.
+- **TEE signed, text not compared**: the record was signed by the attested
+  key, but NanoGPT rebuilds this model's replies, so the text can't be
+  compared with it.
+- **TEE ⚠ reply not verified**: no record of the reply could be read (the
+  provider keeps none for this model, or the check couldn't be reached), so
+  nothing shows it came from the attested enclave.
+- **TEE ⚠ check failed**: the reply doesn't match its record.
+
+Your own messages are marked with how they were sent: "sent to the attested
+TEE", or "end-to-end encrypted" on a `private/` model.
+
+**Through NanoGPT, the receipt keys aren't in the quote** (November 2026),
+and the model button says so ("receipt keys not in the quote"). The quote
+binds the key that signs each reply's record, so the record's tie to the
+attested enclave holds. The receipt's own key is only published beside that
+key, so the receipt's word that the model was verified rests on NanoGPT's
+relay, not on the hardware. Some `TEE/` models are refused outright for now:
+those NanoGPT can't attest for a fresh nonce of ours (the Tinfoil-hosted ones,
+and those relayed from Chutes). Several have an end-to-end encrypted
+`private/` version, which is attested its own way (below).
 
 **Check TEE models** (Settings → Private, on by default) is that whole check
 for `TEE/` models. Switched off, a `TEE/` model is used like any other: no
@@ -2083,9 +2101,7 @@ works before a scene or chat depends on it. The details are in its tooltip.
 
 What it doesn't prove: which software the enclave runs, or what was sent
 (the record hashes the request as NanoGPT forwarded it, which the app can't
-reproduce). Through NanoGPT the quote binds the key that signs the records,
-not the receipt's key, which is only published beside it. And the text still
-passes NanoGPT's gateway in the clear; for that, use a `private/` model (below). Everything else the
+reproduce). And the text still passes NanoGPT's gateway in the clear; for that, use a `private/` model (below). Everything else the
 app does with the story is paused while the scene is open, including the
 scene and plot reads, so the scene card and the plot are frozen until it ends.
 Ending the scene asks the private model for a summary; you approve, edit or
@@ -2183,7 +2199,8 @@ story is (Settings → Context), with a plain summariser.
 - **On a NanoGPT `TEE/` model** the chat is private as a private scene is:
   the enclave is attested when the chat opens (unless Check TEE models is off
   under Settings → Private, which the model button then says), each reply is
-  checked to be signed by it ("TEE signed"), every call (summaries and
+  checked against the record the attested key signs and marked with what the
+  check showed (see "Private scenes"), every call (summaries and
   picture prompts included) goes to that model, and the chat can move only
   to another TEE model. The text still passes NanoGPT's gateway, as a
   private scene's does, unless the model is a `private/` one: then it is

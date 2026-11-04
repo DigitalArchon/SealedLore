@@ -108,12 +108,13 @@ class NodeMeta(BaseModel):
     private_span: str | None = None
     # On the approved summary that stands in for a private scene.
     private_summary_of: str | None = None
-    # A TEE private model's reply: whether its signature checked out against
-    # the attested enclave (providers/tee.py), or "encrypted": it came back
+    # A TEE private model's reply: how its check against the attested enclave
+    # went (providers/tee.py `check_reply`: "verified", "signed", "failed", or
+    # "unchecked" when no check could be made), or "encrypted": it came back
     # sealed by the attested enclave's key (providers/private_mode.py).
     # On the author's message: "encrypted" (sent sealed) or "attested" (sent to
     # the attested TEE/ enclave; its text still passed nano-gpt's gateway).
-    tee: Literal["verified", "failed", "unchecked", "encrypted", "attested"] | None = None
+    tee: Literal["verified", "signed", "failed", "unchecked", "encrypted", "attested"] | None = None
     # The first message of a branch carries its name (engine/branches.py).
     # A branch is made only by rewriting an earlier message; takes are not.
     branch_name: str | None = None

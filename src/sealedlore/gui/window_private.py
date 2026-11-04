@@ -22,11 +22,35 @@ from sealedlore.models.config import ProviderConfig
 from sealedlore.providers import make_chat_provider
 from sealedlore.providers.base import ChatProvider
 from sealedlore.providers.private_mode import ModelRetired, PrivateModeProvider
-from sealedlore.providers.tee import TeeClient, is_private_mode, is_tee, move_refusal
+from sealedlore.providers.tee import (
+    RECEIPT_KEYS_LOOSE,
+    TeeClient,
+    is_private_mode,
+    is_tee,
+    move_refusal,
+)
 from sealedlore.storage.repository import save_config
 
 # On the model button while a TEE/ model runs unchecked (Settings → Private).
 UNCHECKED_TEE = "⚠ not checked (Check TEE models is off)"
+# What a partial attestation's shortfalls mean (providers/tee.py), in the
+# model button's tooltip: the button names them, this says what they cost.
+SHORTFALL_TIPS = {
+    RECEIPT_KEYS_LOOSE: (
+        "Receipt keys not in the quote: the hardware's quote binds the key that signs "
+        "each reply's record, not the key of the gateway's receipts, so a receipt's "
+        "word that the model was verified rests on NanoGPT's relay."
+    ),
+    "receipt keys expired": "Receipt keys expired: the gateway's receipts aren't read.",
+    "no GPU evidence": "No GPU evidence: none was offered, so no GPU was checked.",
+    "GPUs unverified": "GPUs unverified: NVIDIA's attestation service couldn't be reached.",
+    "NVIDIA signature unchecked": (
+        "NVIDIA signature unchecked: NVIDIA's keys couldn't be fetched to check its verdict."
+    ),
+    "Intel TCB unchecked": (
+        "Intel TCB unchecked: Intel's revocation lists and ratings couldn't be fetched."
+    ),
+}
 # What a private scene pauses, and how to get it back (the author: people
 # weren't told, and found Settings and the stories list simply greyed out).
 PAUSED_IN_PRIVATE = (
@@ -160,6 +184,23 @@ class PrivateWindow:
             return None
         where = "memory only" if span.keep == "memory" else "kept on disk"
         return f"🔒 {span.model.rsplit('/', 1)[-1]} · {where}{self._tee_badge()}"
+
+    def _tee_tip(self) -> str:
+        """What the attestation in force fell short in, said plainly, for the
+        model button's tooltip ("" when nothing did)."""
+        session = self.session
+        if session is None:
+            return ""
+        span = session.open_span
+        attestation = span.attestation if span is not None else session.story.chat_attestation
+        if attestation is None or not attestation.shortfalls:
+            return ""
+        lines = [
+            SHORTFALL_TIPS.get(what)
+            or (f"{what}: Intel rates the machine below up to date." if "TCB" in what else what)
+            for what in attestation.shortfalls
+        ]
+        return "\n\n" + "\n".join(lines)
 
     def _tee_badge(self) -> str:
         if not self._tee_state:
@@ -438,14 +479,14 @@ class PrivateWindow:
             return
         self.session.tee_block = None
         shortfalls = ", ".join(attestation.shortfalls)
-        self._tee_state = f"attested (partial: {shortfalls})" if shortfalls else "attested"
+        self._tee_state = f"attested (⚠ partial: {shortfalls})" if shortfalls else "attested"
         if attestation.instances > 1:
             self._tee_state += f", {attestation.instances} instances"
         self._refresh_model_button()
         self.statusBar().showMessage(
             f"TEE attested{' (partial: ' + shortfalls + ')' if shortfalls else ''}: "
-            f"{attestation.detail}. Replies are checked to be signed by the attested key; "
-            "their content is not compared to the signature.",
+            f"{attestation.detail}. Each reply is checked against the record the attested "
+            "key signs for it.",
             15000,
         )
 
@@ -722,7 +763,14 @@ class PrivateWindow:
                 "This summary doesn't match its record: not signed by the attested key, or "
                 "not the text that was signed."
             ),
-            "unchecked": "This summary's signature couldn't be checked.",
+            "signed": (
+                "This summary's record was signed by the attested key, but its text "
+                "couldn't be compared with the record."
+            ),
+            "unchecked": (
+                "⚠ This summary isn't verified: no signed record of it could be read, so "
+                "nothing shows it came from the attested enclave."
+            ),
         }
         dialog = PrivateSummaryDialog(
             summary,

@@ -4128,12 +4128,13 @@ class MainWindow(
                         "A private scene: every turn goes to the private model only. End "
                         "it with the button beside the composer."
                     )
+                    + self._tee_tip()
                 )
                 self.model_button.setEnabled(False)
             else:
                 self.model_button.setToolTip(
                     "A TEE chat: every call goes to this model, attested when the chat "
-                    "opened. Click to move to another TEE model."
+                    "opened. Click to move to another TEE model." + self._tee_tip()
                 )
                 self.model_button.setEnabled(not self._busy)
             self.model_button.setVisible(True)

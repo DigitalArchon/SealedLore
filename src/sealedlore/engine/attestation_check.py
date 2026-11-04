@@ -86,7 +86,7 @@ def check_attestation(settings: ProviderConfig) -> AttestationCheck:
     if attestation.level == "partial":
         return AttestationCheck(
             "partial",
-            f"✓ TEE attested, partially: {', '.join(attestation.shortfalls)}{summary}",
+            f"⚠ TEE attested, partially: {', '.join(attestation.shortfalls)}{summary}",
             attestation.detail,
         )
     return AttestationCheck("full", f"✓ TEE attested{summary}", attestation.detail)

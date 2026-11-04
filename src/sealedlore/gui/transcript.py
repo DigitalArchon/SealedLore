@@ -1172,13 +1172,15 @@ def _line_top(label: QLabel, position: int) -> int:
 
 # The reply's mark (providers/tee.py `check_reply`: "verified" when the
 # attested key's record is for the exact bytes received, "signed" when they
-# couldn't be compared; the manual, "Private scenes") and the author's
-# message's (how it was sent).
+# couldn't be compared, "unchecked" when no record could be read; the manual,
+# "Private scenes") and the author's message's (how it was sent). Anything
+# short of verified says so in the mark itself (the author, Nov 2026: warn
+# wherever it is less secure than wanted), not only in its tooltip.
 TEE_MARKS = {
     "verified": "  ·  TEE verified",
-    "signed": "  ·  TEE signed",
+    "signed": "  ·  TEE signed, text not compared",
     "failed": "  ·  TEE ⚠ check failed",
-    "unchecked": "  ·  TEE signature unavailable",
+    "unchecked": "  ·  TEE ⚠ reply not verified",
     "encrypted": "  ·  end-to-end encrypted",
     "attested": "  ·  sent to the attested TEE",
 }
@@ -1186,20 +1188,29 @@ TEE_MARK_TIPS = {
     "verified": (
         "TEE verified: the attested enclave's key signed this reply's record, and the "
         "record is for the exact text this app received. Where the gateway keeps a "
-        "signed receipt, it was read too: it names the same reply and says the model "
-        "it came from was verified. The text passed NanoGPT's gateway in the clear."
+        "signed receipt it was read too, saying the model the reply came from was "
+        "verified; that part is only as strong as the receipt's key, which the model "
+        "button names when the hardware's quote doesn't bind it. The text passed "
+        "NanoGPT's gateway in the clear."
     ),
     "signed": (
         "TEE signed: the attested enclave's key signed this reply's record, but the "
-        "reply's text can't be compared with it (NanoGPT rebuilds this model's replies). "
-        "The text passed NanoGPT's gateway in the clear."
+        "reply's text can't be compared with it (NanoGPT rebuilds this model's replies), "
+        "so a change on the way here wouldn't show. The text passed NanoGPT's gateway "
+        "in the clear."
     ),
     "failed": (
         "This reply doesn't match its record: not signed by the attested key, not the "
         "text that was signed, or its receipt doesn't hold (another key, another reply, "
         "or a model that wasn't verified)."
     ),
-    "unchecked": "This model's provider keeps no signature for its replies.",
+    "unchecked": (
+        "Not verified: no signed record of this reply could be read (this model's "
+        "provider keeps none, or the check couldn't be reached), so nothing shows it "
+        "came from the enclave that was attested when the chat or scene began. The "
+        "text passed NanoGPT's gateway in the clear. A private/ model is end-to-end "
+        "encrypted instead."
+    ),
     "encrypted": (
         "End-to-end encrypted: sealed on this machine to the attested enclave's key, and "
         "the reply opened with it. NanoGPT relayed ciphertext."

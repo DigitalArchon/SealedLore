@@ -24,7 +24,13 @@ from sealedlore.providers.ethsig import (
     sign,
 )
 from sealedlore.providers.openai_compat import OpenAICompatibleProvider
-from sealedlore.providers.tee import NRAS_URL, TeeClient, TeeRefused, is_tee
+from sealedlore.providers.tee import (
+    NRAS_URL,
+    RECEIPT_KEYS_LOOSE,
+    TeeClient,
+    TeeRefused,
+    is_tee,
+)
 
 KEY = 0xB25C7DB31FEED9122727BF0939DC769A96564B2DE4C4726D035B36ECF1E5B364
 ADDRESS = "0x5ce9454909639D2D17A3F753ce7d93fa0b9aB12E"
@@ -155,10 +161,17 @@ def client_for(*, intel=UP_TO_DATE, nvidia=8, **server) -> TeeClient:
     )
 
 
-def test_a_bound_quote_intel_and_nvidia_vouch_for_is_fully_attested():
+def besides_receipts(result) -> list[str]:
+    """The shortfalls other than the receipt keys, which nano-gpt's form always has."""
+    return [what for what in result.shortfalls if what != RECEIPT_KEYS_LOOSE]
+
+
+def test_a_bound_quote_intel_and_nvidia_vouch_for_is_attested_its_receipt_keys_named():
+    # The quote binds the signing key, as nano-gpt serves it (Nov 2026): the
+    # receipts' keys aren't in it, said on the model button.
     client = client_for()
     result = client.attest()
-    assert result.level == "full" and result.verified and not result.shortfalls
+    assert result.verified and result.shortfalls == [RECEIPT_KEYS_LOOSE]
     assert (result.gpus, result.tcb_status, result.gpu_ok) == (8, "UpToDate", True)
     assert result.signing_address == address_of(KEY).lower()
     assert "binds the signing key to our nonce" in result.detail
@@ -181,20 +194,20 @@ def test_a_quote_intel_does_not_vouch_for_is_refused():
 
 def test_what_couldnt_be_checked_or_isnt_current_is_partial_and_named():
     stale = dcap.Result(status="OutOfDate", platform="OutOfDate", qe="UpToDate")
-    assert client_for(intel=stale).attest().shortfalls == ["Intel TCB OutOfDate"]
+    assert besides_receipts(client_for(intel=stale).attest()) == ["Intel TCB OutOfDate"]
     unchecked = client_for(intel=dcap.Result(collateral=False)).attest()
-    assert unchecked.level == "partial" and unchecked.shortfalls == ["Intel TCB unchecked"]
+    assert unchecked.level == "partial" and besides_receipts(unchecked) == ["Intel TCB unchecked"]
     no_gpu = client_for(evidence=False).attest()
     assert no_gpu.level == "partial" and no_gpu.gpu_ok is None
-    assert no_gpu.shortfalls == ["no GPU evidence"]
+    assert besides_receipts(no_gpu) == ["no GPU evidence"]
 
 
 def test_nvidia_unreachable_is_partial_and_nvidia_rejecting_is_refused():
     down = client_for(nras_status=503).attest()
-    assert down.level == "partial" and down.shortfalls == ["GPUs unverified"]
+    assert down.level == "partial" and besides_receipts(down) == ["GPUs unverified"]
     assert "couldn't be reached" in down.detail
     keys = client_for(nvidia=nras.KeysUnavailable("keys could not be fetched")).attest()
-    assert keys.shortfalls == ["NVIDIA signature unchecked"]
+    assert besides_receipts(keys) == ["NVIDIA signature unchecked"]
     with pytest.raises(TeeRefused, match="NVIDIA rejected"):
         client_for(nras_status=400).attest()
     with pytest.raises(TeeRefused, match="NVIDIA rejected"):
@@ -397,7 +410,7 @@ def test_a_key_nvidia_does_not_publish_is_refused(real):
         nvidia(real, jwks={"keys": []})
 
 
-def test_the_whole_real_attestation_is_full(real, monkeypatch):
+def test_the_whole_real_attestation_holds_with_only_its_receipt_keys_short(real, monkeypatch):
     import sealedlore.providers.tee as tee_module
 
     client = TeeClient(
@@ -410,7 +423,8 @@ def test_the_whole_real_attestation_is_full(real, monkeypatch):
     )
     monkeypatch.setattr(tee_module.secrets, "token_hex", lambda _n: real["nonce"])
     result = client.attest()
-    assert result.level == "full" and not result.shortfalls
+    # Sept 2026's capture has no keyset: no receipts, so nothing binds them either.
+    assert result.verified and result.shortfalls == [RECEIPT_KEYS_LOOSE]
     assert (result.gpus, result.tcb_status) == (8, "UpToDate")
     assert result.signing_address == real["signing_address"]
 
@@ -713,6 +727,7 @@ def receipt_server(
     digest: str | None = None,
     not_ready: int = 0,
     seen: list | None = None,
+    not_after: int = 4_000_000_000,
 ):
     """nano-gpt as live (Nov 4 2026): the attestation's quote binds the signing
     key; the keyset beside it lists that key as its e2ee key ("e2ee"), or the
@@ -730,7 +745,7 @@ def receipt_server(
     public = gateway.public_key().public_bytes_raw().hex()
     keyset = {
         "subject": None,
-        "not_after": 4_000_000_000,
+        "not_after": not_after,
         "receipt_signing_keys": [
             {"key_id": "dstack-kms-receipt-ed25519-v1", "algo": "ed25519", "public_key": public}
         ],
@@ -870,6 +885,7 @@ def test_a_receipt_under_keys_renewed_since_is_unchecked_not_failed():
 def test_a_keyset_the_quote_binds_itself_is_taken_and_one_tied_neither_way_is_not():
     bound = receipt_client(tied="statement")
     assert bound.keyset is not None
+    assert bound.attest().level == "full", "RedPill's own form binds the receipt keys"
     loose = receipt_client(tied="none")
     assert loose.keyset is None
     # Still signed by the attested key, for these bytes: the receipt goes unread.
@@ -917,3 +933,19 @@ def test_a_reply_whose_bytes_cant_be_compared_is_signed_not_verified():
     assert receipt_client(upstream="failed").check_reply("req_9", body_hash=streamed()) == (
         "failed"
     )
+
+
+def test_the_receipt_keys_are_named_short_whether_a_keyset_comes_or_not():
+    """Leaving the keyset out must never read better than sending it loose."""
+    with_keys = receipt_client()
+    assert with_keys.keyset is not None
+    assert RECEIPT_KEYS_LOOSE in with_keys.attest().shortfalls
+    without = receipt_client(tied="none")
+    assert without.keyset is None
+    assert RECEIPT_KEYS_LOOSE in without.attest().shortfalls
+
+
+def test_expired_receipt_keys_are_named_short():
+    client = receipt_client(tied="statement", not_after=1)
+    result = client.attest()
+    assert client.keyset is None and result.shortfalls == ["receipt keys expired"]

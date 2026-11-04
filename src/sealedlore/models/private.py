@@ -73,7 +73,8 @@ class PrivateSpan(BaseModel):
     handoff_through: str | None = None
     attestation: Attestation | None = None
     # A TEE model's summary, the one reply that joins the story: "verified",
-    # "failed" or "unchecked", like `NodeMeta.tee` for the scene's passages.
+    # "signed", "failed" or "unchecked", like `NodeMeta.tee` for the scene's
+    # passages ("encrypted" on a private/ model).
     summary_tee: str | None = None
     # A scene that outgrows the private model's context is condensed by the
     # private model itself: a rolling summary of its oldest messages, and the

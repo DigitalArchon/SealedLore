@@ -293,7 +293,11 @@ def test_a_tee_reply_is_marked_by_what_its_check_proved(app, window: MainWindow)
     window.composer.private_toggle.click()
     send(app, window, f"I whisper {MARKER}.")
     leaf = window.session.full_path()[-1]
-    for mark, words in (("verified", "TEE verified"), ("signed", "TEE signed")):
+    for mark, words in (
+        ("verified", "TEE verified"),
+        ("signed", "TEE signed, text not compared"),
+        ("unchecked", "TEE ⚠ reply not verified"),
+    ):
         leaf.meta.tee = mark
         window.reload_transcript()
         headers = [
@@ -303,6 +307,17 @@ def test_a_tee_reply_is_marked_by_what_its_check_proved(app, window: MainWindow)
             )
         ]
         assert any(words in header for header in headers), mark
+
+
+def test_every_tee_mark_is_one_a_saved_story_loads_again():
+    # "signed" was stored by check_reply and refused by NodeMeta on loading:
+    # the story's nodes.json wouldn't have read back.
+    from sealedlore.gui.transcript import TEE_MARK_TIPS, TEE_MARKS
+    from sealedlore.models.node import NodeMeta
+
+    assert set(TEE_MARKS) == set(TEE_MARK_TIPS)
+    for mark in TEE_MARKS:
+        assert NodeMeta.model_validate_json(NodeMeta(tee=mark).model_dump_json()).tee == mark
 
 
 def test_a_scene_says_what_it_pauses_until_told_not_to(app, window: MainWindow, monkeypatch):

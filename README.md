@@ -186,6 +186,12 @@ A simple chat can do the same: the Private button holds the next part of the
 conversation on your private model, and the chat's own model reads only the
 summary you approve.
 
+Of NanoGPT's models, the end-to-end encrypted `private/` ones are the
+stronger choice. A `TEE/` model's text still passes NanoGPT's gateway in the
+clear, and for now some of what its checks should prove can't be checked
+through NanoGPT. The app says what fell short on the model button and under
+each reply, and refuses the TEE models it can't attest at all.
+
 ### Author-driven plots
 
 The "Sealed" in the name also refers to plots written by a person (or, I
