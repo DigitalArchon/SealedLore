@@ -178,6 +178,12 @@ class CollectionWindow:
         the folder at all."""
         return self._collection.pictures if self._collection is not None else None
 
+    def _collection_store(self) -> PictureStore:
+        """Their pictures' store, their session opened for it: for whatever
+        reads or writes one of their pictures now. Keep in Your characters…
+        is the Cast page's, and nothing had opened them before it."""
+        return self._collection_session().pictures
+
     def _save_collection(self) -> None:
         self._collection_save.stop()
         if self._collection_problem:
@@ -452,7 +458,7 @@ class CollectionWindow:
             return
         copy = collection.copied(
             card,
-            self._collection_pictures(),
+            self._collection_store(),
             name=collection.unique_name(card.name + collection.COPY_SUFFIX, self._kept()),
             came_from=f"a copy of {card.name}",
         )
@@ -473,7 +479,7 @@ class CollectionWindow:
         if not ok or not name.strip():
             return
         version = collection.copied(
-            card, self._collection_pictures(), family=main.id, version=name.strip()
+            card, self._collection_store(), family=main.id, version=name.strip()
         )
         self._added_to_collection([version], [], f"A new version of {main.name}: {name.strip()}.")
 
@@ -515,7 +521,7 @@ class CollectionWindow:
         )
         if answer != QMessageBox.Yes:
             return
-        store = self._collection_pictures()
+        store = self._collection_store()
         folder = collection_dir(self.root) / "deleted"
         path = folder / f"{_safe(card.name)}.charx"
         trashed = False
@@ -550,7 +556,7 @@ class CollectionWindow:
 
     def _charx_of(self, card: Character) -> bytes:
         """The character as a CHARX with every picture, labelled."""
-        store = self._collection_pictures()
+        store = self._collection_store()
         pictures = []
         for ref in card.reference_images:
             data = store.read(ref.file)
@@ -562,7 +568,7 @@ class CollectionWindow:
     def _kept_portrait_png(self, card: Character) -> bytes | None:
         if not card.reference_images:
             return None
-        image = image_of(self._collection_pictures().read(card.reference_images[0].file))
+        image = image_of(self._collection_store().read(card.reference_images[0].file))
         # Encoded afresh whatever it was, and stripped: Qt copies a file's
         # text into what it writes.
         return None if image.isNull() else strip_metadata(encoded(image, "PNG"))
@@ -712,7 +718,7 @@ class CollectionWindow:
         except CardError as exc:
             self._warn_plain("Could not read the expression pictures", str(exc))
             return
-        store = self._collection_pictures()
+        store = self._collection_store()
 
         def keep(data: bytes, suffix: str, label: str):
             ref = store_reference(self._clean_picture(data), suffix, store)
@@ -741,7 +747,7 @@ class CollectionWindow:
             words = look_words(ref) if (ref.look or ref.expression) else ref.caption
             self._show_whole(
                 f"{card.name} · {words}" if words else card.name,
-                self._collection_pictures().read(ref.file),
+                self._collection_store().read(ref.file),
             )
         elif what in ("edit", "again", "set"):
             self._on_card_picture(card_id, ref_id, what, session=self._collection_session())
@@ -794,7 +800,7 @@ class CollectionWindow:
             paths, _ = QFileDialog.getOpenFileNames(
                 self, f"Pictures of {card.name}", str(Path.home()), PICTURE_FILTER
             )
-        store = self._collection_pictures()
+        store = self._collection_store()
         added, problems = 0, []
         for number, path in enumerate(paths, 1):
             counter = f"{number} of {len(paths)}" if len(paths) > 1 else ""

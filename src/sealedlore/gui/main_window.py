@@ -3751,7 +3751,7 @@ class MainWindow(
         try:
             if getattr(dialog.draft, "characters", None):
                 bundle, warnings = dialog.draft.build(
-                    root=self.root, kept=self._kept(), read=self._collection_pictures().read
+                    root=self.root, kept=self._kept(), read=self._collection_store().read
                 )
             else:
                 bundle, warnings = dialog.draft.build(root=self.root)

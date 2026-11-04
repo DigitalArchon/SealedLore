@@ -142,7 +142,7 @@ class CardLinkWindow:
     def _sides(self, character: Character, card: Character) -> Sides:
         session = self.session
         story = self._marks(character.reference_images, session.pictures, session.story.id)
-        theirs = self._marks(card.reference_images, self._collection_pictures(), COLLECTION_ID)
+        theirs = self._marks(card.reference_images, self._collection_store(), COLLECTION_ID)
         return Sides(*story[:2], *theirs[:2], story[2], theirs[2])
 
     # --- putting them into the story ------------------------------------------------------
@@ -190,7 +190,7 @@ class CardLinkWindow:
         session = self.session
         user = self._story_user()
         copy = card_link.story_copy(card, self._kept(), user)
-        source = self._collection_pictures()
+        source = self._collection_store()
         marks = []
         for ref in card.reference_images:
             new = copy_picture(ref, source, session.pictures)
@@ -334,7 +334,7 @@ class CardLinkWindow:
         found = sides.changes(character, card)
         story_marks, story_refs = sides.story_marks, sides.story_refs
         card_refs = sides.card_refs
-        sources = [(story_refs, session.pictures), (card_refs, self._collection_pictures())]
+        sources = [(story_refs, session.pictures), (card_refs, self._collection_store())]
 
         def thumb(sha: str, side: str) -> QPixmap | None:
             """A picture seen from `side` ("story" or "card"), read from
@@ -354,7 +354,7 @@ class CardLinkWindow:
         dialog.deleteLater()
         if not accepted:
             return
-        collection_store = self._collection_pictures()
+        collection_store = self._collection_store()
         if choice == SAVE and chosen:
             card_link.save_to_card(
                 character,
@@ -415,7 +415,7 @@ class CardLinkWindow:
             return
         version = card_link.version_from_story(character, card, kept, name=name.strip())
         version.collection.came_from = f"the story {session.story.title}"
-        store = self._collection_pictures()
+        store = self._collection_store()
         for ref in character.reference_images:
             new = copy_picture(ref, session.pictures, store)
             if new is not None:
@@ -438,7 +438,7 @@ class CardLinkWindow:
             return
         kept = card_link.kept_from_story(character, f"the story {session.story.title}")
         kept.name = character.name
-        store = self._collection_pictures()
+        store = self._collection_store()
         for ref in character.reference_images:
             new = copy_picture(ref, session.pictures, store)
             if new is not None:

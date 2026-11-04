@@ -100,7 +100,7 @@ class CardStartWindow:
         of the chat draws them as they look."""
         if not card.reference_images:
             return {}
-        data = self._collection_pictures().read(card.reference_images[0].file)
+        data = self._collection_store().read(card.reference_images[0].file)
         suffix = picture_kind(data) if data else None
         if data is None or suffix is None:
             return {}

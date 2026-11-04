@@ -208,6 +208,21 @@ def test_a_storys_own_character_can_be_kept(app, window, monkeypatch):
     assert "In step with their card" in window.cast_panel.link_words.text()
 
 
+def test_a_character_with_pictures_is_kept_before_the_page_was_ever_opened(app, window):
+    # The window reads nothing of Your characters at start; keeping one must
+    # open them for the pictures (the store was None, and Keep crashed).
+    window.session.pictures.write(f"{REFS_DIR}/john.png", tiny_png() + b"john")
+    john = window.session.cast[0]
+    john.reference_images.append(ImageRef(id="john-face", file=f"{REFS_DIR}/john.png"))
+    window.cast_panel.select_character("john")
+    assert window._collection is None
+    window.cast_panel.link_button.click()
+    kept = window._kept_card(john.linked.card_id)
+    assert window._collection_pictures().read(kept.reference_images[0].file) == (
+        tiny_png() + b"john"
+    )
+
+
 def test_the_page_adds_the_character_shown_to_the_open_story(app, window, monkeypatch):
     elena = window._kept()[0]
     window.show_collection(True, elena.id)
