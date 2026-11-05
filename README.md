@@ -3,7 +3,7 @@
 A Linux and Windows application for AI-driven roleplay with many characters
 in an open world, with a number of particularly useful features.
 
-![The start page: five sample stories, each with its picture and a line on what it is, and below them the ways to start a story of your own](docs/screenshots/start-page.webp)
+![The start page: five sample stories, each with its picture and a line on what it is, and below them the ways to start a story of your own and Your characters](docs/screenshots/start-page.webp)
 
 *Beta.* This application has been tested extensively both through
 automation and manually by the developer. It is however still in early
@@ -53,7 +53,7 @@ fun to play. This app will remain focused on text based roleplay.
   system prompts (**Saved prompts**). A SillyTavern card imported from File
   now goes into Your characters.
 
-![Your characters: thirty characters from the five sample stories, each with their portrait and the story they came from, and down the left a search, tags and the list of them, with New character and Import](docs/screenshots/your-characters.webp)
+![Your characters: thirty characters from the five sample stories, each with their portrait and the story they came from, and down the left a search, tags and the list of them, with New character, Import and Backup](docs/screenshots/your-characters.webp)
 
 - **Characters with many faces** (3.0.0b1). A character's pictures can be
   labelled with the look they wear (a winter coat, combat armour) and the

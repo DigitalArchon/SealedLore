@@ -486,7 +486,7 @@ and the sample stories, each with its picture. **File → New…** (Ctrl+N), and
 the Stories list, show the same choices. A story saves itself as you go
 (Ctrl+S saves at once).
 
-![The start page with no stories yet: the sample stories first, each with its picture and a line on what it is, then the ways to start your own](screenshots/start-page.webp)
+![The start page with no stories yet: the sample stories first, each with its picture and a line on what it is, then the ways to start your own and Your characters](screenshots/start-page.webp)
 
 **The Stories list.** Each row says what kind of story it is (**Simple**,
 **Standard** or **With Plot**), how many messages it has, when it was started
@@ -951,7 +951,7 @@ Ctrl or Shift to do the same to them all, each with their versions: add them to
 the open story, export their cards into a folder (CHARX, PNG or JSON), add or
 take off a tag, or delete them (the Delete key too).
 
-![Your characters: thirty characters from the five sample stories, each with their portrait and the story they came from, and down the left a search, tags and the list of them, with New character and Import](screenshots/your-characters.webp)
+![Your characters: thirty characters from the five sample stories, each with their portrait and the story they came from, and down the left a search, tags and the list of them, with New character, Import and Backup](screenshots/your-characters.webp)
 
 A character's card has six tabs, and everything on it can be changed, added
 to or taken off:
@@ -1001,7 +1001,7 @@ to or taken off:
   the maker's notes in other languages and other apps' settings on the card
   (as JSON).
 
-![A character's card in Your characters: Professor Adelaide Quill from Brasshaven, her portrait with the buttons that draw or change it, her name, aliases, summary, description and voice, and above them Chat with them…, Draft a story with them…, Add to the story, Export and More](screenshots/your-characters-card.webp)
+![A character's card in Your characters, on the first of its six tabs: Professor Adelaide Quill from Brasshaven, her portrait with the buttons that draw or change it, her name, aliases, summary, description and voice, and above them Chat with them…, Draft a story with them…, Add to the story, Export and More](screenshots/your-characters-card.webp)
 
 Every field of a SillyTavern V3 card is kept, so a card imported and exported
 again comes back as it was. (The note SillyTavern puts at a depth in a chat
@@ -1823,7 +1823,7 @@ marks it "held back" or "mentioned".
 
 ## Pictures
 
-![The picture dialog: a direction, the prompt the story's model wrote from it, the herbwife's and the ranger's portraits as the reference pictures, numbered as the prompt refers to them, and the model, size and price, with Generate](screenshots/picture-dialog.png)
+![The picture dialog: a direction, the picture's style, the prompt the story's model wrote from it, the herbwife's and the ranger's portraits as the reference pictures, numbered as the prompt refers to them, and the model, size and price, with Generate](screenshots/picture-dialog.png)
 
 **Story → Draw a picture…** (Ctrl+Shift+I), the **Picture…** button beside the
 composer, or **Illustrate this passage…** in a passage's ⋯ menu asks the
