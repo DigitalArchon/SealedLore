@@ -81,6 +81,15 @@ fun to play. This app will remain focused on text based roleplay.
   down to other apps' settings. Export it as changed, for others to use, or
   change a copy and keep the original. A lorebook goes out and comes in
   exactly as SillyTavern itself converts one.
+- **Kept safe, and quicker to work with** (3.0.0b2). Back up all of Your
+  characters in one file and put them back, here or on another computer,
+  with their versions, pictures and links to your stories. Choose several at
+  once to delete, export, tag or add to the story; replace a card's file;
+  bring in NovelAI, Agnai and RisuAI lorebooks, and move entries up and down.
+  A story made from a card's own scenario stays linked to the card. Ctrl+R
+  regenerates the latest passage and Ctrl+Shift+Enter continues it, and a key
+  that would go over plain http to another machine on your network is asked
+  about before it is sent.
 
 ### New in version 2
 
