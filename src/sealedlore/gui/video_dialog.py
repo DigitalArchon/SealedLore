@@ -58,7 +58,7 @@ from sealedlore.gui.picture_style import (
     PictureStyleField,
 )
 from sealedlore.gui.ref_images import PICTURE_FILTER, store_reference, thumbnail_of
-from sealedlore.gui.sizing import GrowingText, size_to_screen
+from sealedlore.gui.sizing import GrowingText, may_discard, size_to_screen
 from sealedlore.gui.video_jobs import VideoCatalog
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.image import RefUse
@@ -107,6 +107,7 @@ class VideoDialog(QDialog):
         self._thread: QThread | None = None
         self._closing = False
         self._written: str | None = None
+        self._untouched: list[str] = []
         # The style line the prompt was written with, and the one being.
         self._written_lead = ""
         self._writing_lead = ""
@@ -128,6 +129,9 @@ class VideoDialog(QDialog):
         if start is not None:
             self._add_frame_choice(start)
             self._select_frame(self.start_choice, start)
+        # The direction and the prompt as the author has left them: as the
+        # dialog opened, then each prompt the writer gives (`_untouched`).
+        self._untouched = self._words()
         self._sync()
         if catalog is not None:
             catalog.changed.connect(self._on_listing)
@@ -603,7 +607,10 @@ class VideoDialog(QDialog):
         if self._written is None:
             self._show_status("Stopped before a prompt was written.")
             return
+        # The writer's prompt over the author's own: nothing typed is lost to
+        # it, and it is no typing of the author's.
         self.prompt.setPlainText(self._written)
+        self._untouched = self._words()
         self._written_lead = self._writing_lead
         self._show_status(
             "Check the prompt and the settings, change anything, then Generate. If you change "
@@ -622,8 +629,11 @@ class VideoDialog(QDialog):
         old = self._written_lead
         if old and text.startswith(f"{old}. "):
             rest = text[len(old) + 2 :]
+            untouched = self._words() == self._untouched
             self.prompt.setPlainText(f"{words}. {rest}" if words else rest)
             self._written_lead = words
+            if untouched:
+                self._untouched = self._words()
         self._show_status("Write prompt again to have the whole prompt written for the style.")
 
     def _set_running(self, running: bool) -> None:
@@ -724,7 +734,14 @@ class VideoDialog(QDialog):
         )
         self.accept()
 
+    def _words(self) -> list[str]:
+        return [self.direction.toPlainText(), self.prompt.toPlainText()]
+
     def reject(self) -> None:
+        """Cancel or Esc: a direction typed, or the prompt changed by hand,
+        is asked about before it is lost. The writer's own prompt isn't."""
+        if not may_discard(self, self._untouched, self._words()):
+            return
         if self._worker is not None:
             self._closing = True
             self._worker.stop()

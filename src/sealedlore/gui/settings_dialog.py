@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -59,7 +59,7 @@ from sealedlore.gui.model_picker import (
 )
 from sealedlore.gui.phone_dialog import PHONE_KEEPS
 from sealedlore.gui.settings_pages import Fold, SettingsPages
-from sealedlore.gui.sizing import size_to_screen
+from sealedlore.gui.sizing import entered, size_to_screen
 from sealedlore.gui.speed_test import SpeedTestDialog, speed_tests
 from sealedlore.gui.video_jobs import VideoCatalog
 from sealedlore.models.config import (
@@ -246,6 +246,41 @@ class SettingsDialog(QDialog):
         self.error.hide()
         layout.addWidget(self.error)
         layout.addWidget(buttons)
+        # Everything as it stood once filled in (`_state`), to tell on Cancel
+        # whether anything would be lost.
+        self._opened: tuple | None = None
+
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        super().showEvent(event)
+        if self._opened is None:
+            QTimer.singleShot(0, self._remember_opened)
+
+    def _remember_opened(self) -> None:
+        if self._opened is None:
+            self._opened = self._state()
+
+    def _state(self) -> tuple:
+        """Every field as it stands. The endpoint's fields show whichever
+        endpoint is selected, so the working copies say what was typed into
+        each, and the fields themselves are left out."""
+        endpoints = [p.model_dump() for p in self._endpoints_as_typed()]
+        shown = (self.provider_name, self.base_url, self.api_key, self.chat_api)
+        return endpoints, self._default_index, entered(self, leaving_out=shown)
+
+    def reject(self) -> None:
+        """Cancel, Esc or closing: what was typed or changed here is asked
+        about first (an API key pasted, then Esc, was gone without a word)."""
+        if self._opened is not None and self._state() != self._opened:
+            answer = QMessageBox.question(
+                self,
+                "Discard your changes?",
+                "Close Settings without saving what you changed?",
+                QMessageBox.Discard | QMessageBox.Cancel,
+                QMessageBox.Cancel,
+            )
+            if answer != QMessageBox.Discard:
+                return
+        super().reject()
 
     # --- tabs -------------------------------------------------------------
 

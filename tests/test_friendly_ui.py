@@ -656,11 +656,14 @@ def test_what_most_never_change_is_put_away_under_a_heading(app, window):
     assert dialog.temperature.isVisible() and "▾" in fold.text()
     # Semantic lore retrieval opens its endpoint's fields.
     dialog.tabs.setCurrentIndex(4)
+    was = dialog.embeddings_enabled.isChecked()
     dialog.embeddings_enabled.setChecked(False)
     dialog.embeddings_fold.set_open(False)
     dialog.embeddings_enabled.setChecked(True)
     settle(app)
     assert dialog.embeddings_fold.is_open() and dialog.embed_base_url.isVisible()
+    # As it was, so closing has nothing to ask about (a fold opened is no change).
+    dialog.embeddings_enabled.setChecked(was)
     dialog.close()
     dialog.deleteLater()
 

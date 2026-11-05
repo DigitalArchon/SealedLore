@@ -129,9 +129,10 @@ def test_setup_asks_before_cancel_loses_an_edit_and_enter_never_saves(app, windo
     app.processEvents()
     assert dialog.isVisible(), "Enter in the title doesn't save and close Setup"
     titles = asked(monkeypatch, QMessageBox.Cancel)
-    dialog.title.textEdited.emit("A new title")  # as typing it does
+    dialog.title.setText("A new title")
     dialog.reject()
     assert dialog.isVisible() and titles == ["Discard your changes?"]
+    dialog.title.setText(window.session.story.title)
     dialog.close()
 
 
@@ -158,3 +159,287 @@ def test_the_changes_dialog_marks_the_words_that_differ():
         (" and keeps the farm.", False),
     ]
     assert marked("Same words.", "Same words.") == [("Same words.", False)]
+
+
+# --- the window's second look (Nov 2026): what a dialog holds -------------------------
+
+
+def settle(app, rounds: int = 5) -> None:
+    for _ in range(rounds):
+        app.processEvents()
+
+
+def press_enter(widget) -> None:
+    for kind in (QKeyEvent.KeyPress, QKeyEvent.KeyRelease):
+        QApplication.sendEvent(widget, QKeyEvent(kind, Qt.Key_Return, Qt.NoModifier))
+
+
+def test_a_new_chat_asks_on_cancel_once_something_is_typed(app, monkeypatch):
+    """`typed_texts` gave findChildren a union of types, which PySide6
+    refuses: New simple chat and Chat with them… never asked."""
+    from sealedlore.gui.card_chat_dialog import CardChatDialog
+    from sealedlore.gui.new_chat_dialog import NewChatDialog
+    from sealedlore.models.character import Character
+
+    titles = asked(monkeypatch, QMessageBox.Cancel)
+    untouched = NewChatDialog(model="zai-org/glm-5.3")
+    untouched.show()
+    settle(app)
+    untouched.reject()
+    assert not untouched.isVisible() and titles == [], "nothing typed: closed, nothing asked"
+    typed = NewChatDialog(model="zai-org/glm-5.3")
+    typed.show()
+    settle(app)
+    typed.prompt.insertPlainText("You are a terse assistant.")
+    typed.reject()
+    assert typed.isVisible() and titles == ["Discard what you wrote?"], "Cancel keeps it"
+    typed.done(0)
+    card = Character(id="c1", name="Jane Moss", summary="A farmer.", description="Keeps a farm.")
+    chat = CardChatDialog(card, model="zai-org/glm-5.3")
+    chat.show()
+    settle(app)
+    chat.reject()
+    assert not chat.isVisible() and titles == ["Discard what you wrote?"]
+
+
+@pytest.mark.parametrize("which", ["setup", "prompts"])
+def test_enter_presses_only_the_push_button_it_is_on(app, window, which):
+    """The button box made Save the default again as the dialog showed, and
+    Enter anywhere on a button was handed on to it: Enter on Cancel, a check
+    box, a radio button or Browse… saved the dialog and closed it."""
+    from PySide6.QtWidgets import QCheckBox, QDialogButtonBox, QRadioButton, QToolButton
+
+    def make():
+        if which == "setup":
+            return SetupDialog(window.session.story, window.session.cast, parent=window)
+        return PromptEditorDialog(window.config, window.session.story, parent=window)
+
+    dialog = make()
+    dialog.show()
+    settle(app)
+    pages = dialog.tabs.count() if which == "setup" else 1
+    tried = []
+    for index in range(pages):
+        if which == "setup":
+            dialog.tabs.setCurrentIndex(index)
+            settle(app)
+        for kind in (QCheckBox, QRadioButton, QToolButton):
+            found = [
+                b
+                for b in dialog.findChildren(kind)
+                if b.isVisible() and b.isEnabled() and b.focusPolicy() != Qt.NoFocus
+            ]
+            for button in found[:1]:
+                button.setFocus()
+                settle(app)
+                if QApplication.focusWidget() is not button:
+                    continue
+                press_enter(button)
+                settle(app)
+                tried.append(kind)
+                assert dialog.isVisible() and dialog.result() == 0, f"Enter on a {kind.__name__}"
+    # The prompt editor has no button but push buttons to put the focus on.
+    assert tried or which == "prompts", "something besides a push button had the focus"
+    cancel = dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.Cancel)
+    cancel.setFocus()
+    settle(app)
+    assert QApplication.focusWidget() is cancel
+    press_enter(cancel)
+    settle(app)
+    assert not dialog.isVisible() and dialog.result() == 0, "Enter on Cancel cancels"
+    saved = make()
+    saved.show()
+    settle(app)
+    save = saved.findChild(QDialogButtonBox).button(QDialogButtonBox.Save)
+    save.setFocus()
+    settle(app)
+    press_enter(save)
+    settle(app)
+    assert not saved.isVisible() and saved.result() == 1, "Enter on Save saves"
+
+
+def test_setup_asks_about_changes_no_typing_made(app, window, monkeypatch):
+    """Setup watched typing and choosing only: From a picture…, Style's Edit
+    text (read-only when the watch ran), a model chosen with Recommended or
+    Browse…, and Use the models in Settings were dropped by Cancel without a
+    word. It compares what Save would write with what it would have written
+    as it opened."""
+    from sealedlore.gui.setup_dialog import ModelChoices
+
+    session = window.session
+    session.story.defaults.scene_model = "some/own-model"
+    titles = asked(monkeypatch, QMessageBox.Cancel)
+
+    def opened() -> SetupDialog:
+        dialog = SetupDialog(
+            session.story,
+            session.cast,
+            parent=window,
+            models=ModelChoices(window.config),
+            describe_style=lambda: ("sepia ink, cross-hatched", b"\x89PNG not really", ".png"),
+        )
+        dialog.show()
+        settle(app)
+        return dialog
+
+    untouched = opened()
+    untouched.reject()
+    assert not untouched.isVisible() and titles == [], "nothing changed: closed, nothing asked"
+
+    def edit_style_text(dialog: SetupDialog) -> None:
+        dialog.style_panel.detach_button.click()
+        dialog.style_panel.preview.appendPlainText("Mine.")
+
+    for change in (
+        lambda d: d.picture_style.from_picture.click(),
+        edit_style_text,
+        lambda d: d.model_fields["story"]._choose_recommended("anthropic/claude-opus-5.5"),
+        lambda d: d.reset_models.click(),
+    ):
+        dialog = opened()
+        change(dialog)
+        settle(app)
+        before = len(titles)
+        dialog.reject()
+        assert dialog.isVisible() and titles[before:] == ["Discard your changes?"]
+        dialog.done(0)
+    assert session.story.defaults.scene_model == "some/own-model", "Cancel wrote nothing"
+
+
+def test_setup_sees_a_change_on_a_starting_scene_built_again(app, window, monkeypatch):
+    """The watch kept the widgets it had seen by id(), which Python gives
+    again to new ones: rebuilt twice for a changed cast, the Starting scene
+    tab's fields could be skipped, and Cancel dropped a change made there."""
+    from PySide6.QtWidgets import QComboBox, QWidget
+
+    from sealedlore.gui.start_presence import StartPresence
+    from sealedlore.models.character import Character
+
+    session = window.session
+    titles = asked(monkeypatch, QMessageBox.Cancel)
+    dialog = SetupDialog(session.story, session.cast, parent=window, characters=QWidget())
+    dialog.show()
+    settle(app)
+    scene = dialog.tabs.indexOf(dialog.scene_tab)
+    for round_ in range(3):
+        dialog.tabs.setCurrentIndex(0)
+        settle(app)
+        session.cast.append(Character(id=f"char-new{round_}", name=f"Nadia Venn {round_}"))
+        dialog.tabs.setCurrentIndex(scene)
+        settle(app)
+    choice = dialog.scene_tab.findChild(StartPresence).findChildren(QComboBox)[-1]
+    choice.setCurrentIndex(1)  # the newest, pinned present
+    dialog.reject()
+    assert dialog.isVisible() and titles == ["Discard your changes?"]
+    dialog.done(0)
+
+
+def test_settings_asks_once_a_key_is_typed_and_not_after_a_look_round(app, monkeypatch):
+    """Esc after pasting an API key lost it without a word. Choosing another
+    endpoint, which fills the fields with its own, changes nothing."""
+    from sealedlore.gui.settings_dialog import SettingsDialog
+    from sealedlore.models.config import Config, ProviderConfig
+
+    def config() -> Config:
+        return Config(
+            providers=[
+                ProviderConfig(name="NanoGPT", base_url="https://nano-gpt.com/api/v1", api_key="k"),
+                ProviderConfig(name="Other", base_url="https://api.example.com/v1", api_key="o"),
+            ],
+            active_provider_name="NanoGPT",
+        )
+
+    titles = asked(monkeypatch, QMessageBox.Cancel)
+    looked = SettingsDialog(config(), None)
+    looked.show()
+    settle(app)
+    looked.endpoint_list.setCurrentRow(1)
+    for index in range(looked.tabs.count()):
+        looked.tabs.setCurrentIndex(index)
+    settle(app)
+    looked.reject()
+    assert not looked.isVisible() and titles == [], "only looked: closed, nothing asked"
+    typed = SettingsDialog(config(), None)
+    typed.show()
+    settle(app)
+    typed.api_key.setText("sk-a-long-key-pasted-in")
+    typed.endpoint_list.setCurrentRow(1)  # the key is kept on its endpoint's copy
+    typed.reject()
+    assert typed.isVisible() and titles == ["Discard your changes?"]
+    typed.done(0)
+
+
+def test_an_edited_private_summary_is_asked_about_before_it_is_lost(app, monkeypatch):
+    """Esc (Back to the scene) and Write it again dropped an edited summary."""
+    from PySide6.QtWidgets import QPushButton
+
+    from sealedlore.gui.private_dialogs import PrivateSummaryDialog
+
+    titles = asked(monkeypatch, QMessageBox.Cancel)
+    dialog = PrivateSummaryDialog("They talked until dawn.")
+    dialog.reject()
+    assert dialog.choice == dialog.BACK and titles == [], "unchanged: back at once"
+    dialog = PrivateSummaryDialog("They talked until dawn.")
+    dialog.show()
+    dialog.editor.setPlainText("They talked until dawn, and Maela heard none of it.")
+    dialog.reject()
+    assert dialog.isVisible() and titles == ["Discard what you wrote?"]
+    again = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Write it again")
+    again.click()
+    assert dialog.isVisible() and dialog.choice == dialog.BACK and len(titles) == 2
+    dialog.approve.click()
+    assert dialog.choice == dialog.APPROVE and len(titles) == 2, "approving loses nothing"
+
+
+def test_a_premise_and_a_review_complaint_are_asked_about(app, monkeypatch):
+    from sealedlore.engine.session import ReviewSizes
+    from sealedlore.gui.generate_dialog import GenerateDialog
+    from sealedlore.gui.review_dialog import ReviewRequestDialog
+    from sealedlore.providers.mock import MockChatProvider
+
+    titles = asked(monkeypatch, QMessageBox.Cancel)
+    draft = GenerateDialog(MockChatProvider(["{}"]), model="", default_model="m")
+    draft.reject()
+    assert titles == [], "nothing typed: closed"
+    draft = GenerateDialog(MockChatProvider(["{}"]), model="", default_model="m")
+    draft.show()
+    draft.premise.setPlainText("A lighthouse keeper and the thing in the fog.")
+    draft.reject()
+    assert draft.isVisible() and titles == ["Discard what you wrote?"]
+    draft.done(0)
+    sizes = ReviewSizes(
+        settings=1000,
+        system_prompt=2000,
+        tail=500,
+        whole_prompt=9000,
+        exchanges=(300,),
+        in_prompt=1,
+        marked=(),
+    )
+    review = ReviewRequestDialog(sizes=sizes, model="", default_model="m", last_complaint="Long.")
+    review.show()
+    review.reject()
+    assert not review.isVisible() and len(titles) == 1, "the last complaint, as it came"
+    review = ReviewRequestDialog(sizes=sizes, model="", default_model="m")
+    review.show()
+    review.complaint.setPlainText("Everyone agrees with everything I suggest.")
+    review.reject()
+    assert review.isVisible() and titles[1:] == ["Discard what you wrote?"]
+    review.done(0)
+
+
+def test_a_videos_direction_is_asked_about_and_the_writers_prompt_is_not(app, window, monkeypatch):
+    from sealedlore.gui.video_dialog import VideoDialog
+
+    titles = asked(monkeypatch, QMessageBox.Cancel)
+    dialog = VideoDialog(window.session, parent=window)
+    dialog._written = "Snow drifts past the porch light."
+    dialog._on_written()  # as the prompt writer's answer lands
+    dialog.reject()
+    assert titles == [], "the writer's prompt is not the author's typing"
+    dialog = VideoDialog(window.session, parent=window)
+    dialog.show()
+    dialog.direction.setPlainText("Slow, from the porch.")
+    dialog.reject()
+    assert dialog.isVisible() and titles == ["Discard what you wrote?"]
+    dialog.done(0)

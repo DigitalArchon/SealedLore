@@ -28,7 +28,7 @@ from sealedlore.engine.authoring import parse_generated
 from sealedlore.engine.drafting import StoryDraft
 from sealedlore.engine.prompt_texts import DEFAULT_TEXTS, PromptTexts
 from sealedlore.gui.model_picker import Browse, ModelField
-from sealedlore.gui.sizing import size_to_screen
+from sealedlore.gui.sizing import may_discard, size_to_screen
 from sealedlore.gui.worker import GenerationWorker
 from sealedlore.models.character import Character
 from sealedlore.models.generation import ReasoningConfig
@@ -187,6 +187,9 @@ class GenerateDialog(QDialog):
         layout.addWidget(self.progress)
         layout.addWidget(self.reply_view)
         layout.addWidget(self.buttons)
+        # The premise and the model as the dialog opened, to tell on Cancel
+        # whether anything typed would be lost.
+        self._typed = self._as_typed()
 
     def model_text(self) -> str:
         return self.model.text().strip()
@@ -302,7 +305,15 @@ class GenerateDialog(QDialog):
             return
         self.accept()
 
+    def _as_typed(self) -> list[str]:
+        # By name, not `typed_texts`: both boxes are read-only while drafting.
+        return [self.premise.toPlainText(), self.model.text()]
+
     def reject(self) -> None:
+        """Cancel or Esc: a premise typed here is asked about before it is
+        lost, a draft under way or not."""
+        if not may_discard(self, self._typed, self._as_typed()):
+            return
         if self._worker is not None:
             # Closing mid-draft aborts the call and creates no story. The stream
             # only notices at its next chunk, so close once the thread is done

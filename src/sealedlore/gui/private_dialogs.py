@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from sealedlore.engine.session_private import PrivateFit
-from sealedlore.gui.sizing import size_to_screen
+from sealedlore.gui.sizing import may_discard, size_to_screen, typed_texts
 
 # A simple chat has private parts on a story's terms, so every message about
 # one is written once, of a story, and said of a chat by these. In order: the
@@ -173,10 +173,22 @@ class PrivateSummaryDialog(QDialog):
         layout.addWidget(self.editor, 1)
         layout.addLayout(row)
         size_to_screen(self, 0.42, 0.6, at_least=QSize(640, 420))
+        # The summary as the model wrote it: changed, it is the author's, and
+        # going back to the scene or writing it again would lose it.
+        self._typed = typed_texts(self)
 
     def text(self) -> str:
         return self.editor.toPlainText()
 
     def _done(self, choice: str) -> None:
+        if choice in (self.BACK, self.AGAIN) and not may_discard(self, self._typed):
+            return
         self.choice = choice
         self.accept()
+
+    def reject(self) -> None:
+        """Esc is Back to the scene: an edited summary is asked about first."""
+        if not may_discard(self, self._typed):
+            return
+        self.choice = self.BACK
+        super().reject()

@@ -40,7 +40,7 @@ from sealedlore.engine.authoring import (
 )
 from sealedlore.engine.session import ReviewSizes
 from sealedlore.gui.model_picker import Browse, ModelField
-from sealedlore.gui.sizing import GrowingText, size_to_screen
+from sealedlore.gui.sizing import GrowingText, may_discard, size_to_screen, typed_texts
 from sealedlore.gui.winprivacy import copy_text
 from sealedlore.models.authoring import SettingsChange, SettingsReview
 from sealedlore.models.config import ModelPrice
@@ -194,6 +194,14 @@ class ReviewRequestDialog(QDialog):
         self.side_texts.toggled.connect(self._show_size)
         self.model.textChanged.connect(self._show_size)
         self._show_size()
+        # The complaint as it opened (the last one, or none): one written
+        # here is asked about before Cancel or Esc loses it.
+        self._typed = typed_texts(self)
+
+    def reject(self) -> None:
+        if not may_discard(self, self._typed):
+            return
+        super().reject()
 
     def complaint_text(self) -> str:
         return self.complaint.toPlainText().strip()

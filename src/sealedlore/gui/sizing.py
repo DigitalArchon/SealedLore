@@ -20,10 +20,14 @@ all text and adjust column widths or field sizes" wherever possible.
   or narrower. Qt allows no dragging of a column that sizes itself to its
   contents, so the columns fit their contents until the author drags one,
   and from then on are the author's.
+- `typed_texts`, `entered`, `may_discard` and `enter_only_on_buttons`: what
+  a dialog holds, so Cancel and Esc ask before it is lost, and an Enter that
+  never saves a whole dialog by mistake (the window's review, Nov 2026).
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from math import ceil
 
 from PySide6.QtCore import QObject, QSize, Qt, QTimer
@@ -256,23 +260,58 @@ def adjustable_columns(
 
 
 def typed_texts(widget: QWidget) -> list[str]:
-    """What a dialog's text boxes hold now, in order: to tell, on Cancel,
-    whether anything typed would be lost."""
+    """What a dialog's text boxes hold now: to tell, on Cancel, whether
+    anything typed would be lost. One `findChildren` a type: given a union of
+    them it raised in PySide6, so the dialogs using this never asked."""
     from PySide6.QtWidgets import QLineEdit
 
-    return [
-        child.text() if isinstance(child, QLineEdit) else child.toPlainText()
-        for child in widget.findChildren(QLineEdit | QPlainTextEdit)
+    lines = [child.text() for child in widget.findChildren(QLineEdit) if not child.isReadOnly()]
+    boxes = [
+        child.toPlainText()
+        for child in widget.findChildren(QPlainTextEdit)
         if not child.isReadOnly()
     ]
+    return lines + boxes
 
 
-def may_discard(dialog: QWidget, before: list[str] | None) -> bool:
+def entered(widget: QWidget, *, leaving_out: Sequence[QWidget] = ()) -> dict[QWidget, object]:
+    """Everything set in a dialog's fields now, by field: what each text box
+    holds, which entry each list shows and whether each box is ticked (a
+    check box or a radio button: a tool button toggled is a fold opened, not
+    a setting). By field, not in a list: Qt lists a page's fields in another
+    order once another page has been shown. `leaving_out`: fields (and what
+    is in them) whose changes the dialog tells its own way."""
+    from PySide6.QtWidgets import QCheckBox, QComboBox, QLineEdit, QRadioButton
+
+    def counted(child: QWidget) -> bool:
+        return not any(field is child or field.isAncestorOf(child) for field in leaving_out)
+
+    found: dict[QWidget, object] = {}
+    for child in widget.findChildren(QLineEdit):
+        if not child.isReadOnly() and counted(child):
+            found[child] = child.text()
+    for child in widget.findChildren(QPlainTextEdit):
+        if not child.isReadOnly() and counted(child):
+            found[child] = child.toPlainText()
+    for child in widget.findChildren(QComboBox):
+        # An editable list's text is its line's, above.
+        if not child.isEditable() and counted(child):
+            found[child] = child.currentIndex()
+    for kind in (QCheckBox, QRadioButton):
+        for child in widget.findChildren(kind):
+            if counted(child):
+                found[child] = child.isChecked()
+    return found
+
+
+def may_discard(dialog: QWidget, before: list | None, now: list | None = None) -> bool:
     """Cancel or Esc: True when nothing typed would be lost, or the author
-    says to discard it."""
+    says to discard it. `before`: what the boxes held once the dialog was
+    filled in (`typed_texts`); `now`: what to compare it with, when the
+    dialog tells its changes its own way (`typed_texts` by default)."""
     from PySide6.QtWidgets import QMessageBox
 
-    if before is None or typed_texts(dialog) == before:
+    if before is None or (typed_texts(dialog) if now is None else now) == before:
         return True
     answer = QMessageBox.question(
         dialog,
@@ -282,3 +321,21 @@ def may_discard(dialog: QWidget, before: list[str] | None) -> bool:
         QMessageBox.Cancel,
     )
     return answer == QMessageBox.Discard
+
+
+def enter_only_on_buttons(dialog: QWidget, event) -> bool:
+    """A dialog's Enter, for one that must never be saved by Enter in a
+    field: True when it was taken here. It presses only a push button that
+    has the keyboard's focus, as Space does, and does nothing anywhere else.
+    Handed on to QDialog, Enter pressed the default button, which the button
+    box makes Save again when the dialog shows: Enter on a focused Cancel, a
+    check box, a radio button or Browse… saved the dialog and closed it."""
+    from PySide6.QtWidgets import QPushButton
+
+    if event.key() not in (Qt.Key_Return, Qt.Key_Enter):
+        return False
+    event.accept()
+    button = dialog.focusWidget()
+    if isinstance(button, QPushButton) and button.isEnabled() and button.isVisible():
+        button.click()
+    return True

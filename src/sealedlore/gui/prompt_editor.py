@@ -17,7 +17,6 @@ from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (
-    QAbstractButton,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -48,7 +47,7 @@ from sealedlore.engine.prompt_edits import (
     unknown_keys,
 )
 from sealedlore.engine.prompt_texts import GROUPS, TEXTS
-from sealedlore.gui.sizing import size_to_screen
+from sealedlore.gui.sizing import enter_only_on_buttons, size_to_screen
 from sealedlore.models.config import Config
 from sealedlore.models.prompt_edit import PromptEdit
 from sealedlore.models.story import Story
@@ -306,15 +305,10 @@ class PromptEditorDialog(QDialog):
                     return
 
     def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt naming
-        """Enter in a field never presses a button for it: a dialog makes its
-        first button the default, and Enter in a line saved and closed it
-        (or pressed whatever button came first)."""
-        if event.key() in (Qt.Key_Return, Qt.Key_Enter) and not isinstance(
-            self.focusWidget(), QAbstractButton
-        ):
-            event.accept()
-            return
-        super().keyPressEvent(event)
+        """Enter in a field never presses a button for it, and on a button
+        presses that one only (gui/sizing.py `enter_only_on_buttons`)."""
+        if not enter_only_on_buttons(self, event):
+            super().keyPressEvent(event)
 
     def reject(self) -> None:
         """Cancel, Esc or the window's close: edits made here are asked

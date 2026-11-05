@@ -20,15 +20,12 @@ from dataclasses import dataclass
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
-    QAbstractButton,
-    QAbstractSpinBox,
     QButtonGroup,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
     QLabel,
-    QLineEdit,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -50,7 +47,7 @@ from sealedlore.gui.fields import line_edit, set_field_text
 from sealedlore.gui.model_picker import BrowseRoute, ModelField, Qualify, RouteEndpoint
 from sealedlore.gui.picture_style import PictureStyleField
 from sealedlore.gui.saved_prompts import SavedPrompts, SavedPromptsButton
-from sealedlore.gui.sizing import GrowingText, size_to_screen
+from sealedlore.gui.sizing import GrowingText, enter_only_on_buttons, size_to_screen
 from sealedlore.gui.start_presence import StartPresence
 from sealedlore.gui.style_panel import StylePanel
 from sealedlore.models.character import Character
@@ -84,6 +81,20 @@ MODEL_ROLES = (
 )
 # What a simple chat calls (engine/chat.py), and what it calls its own model.
 CHAT_MODEL_ROLES = ("story", "summarisation", "image_prompt")
+# The story's fields Save writes (`SetupDialog._write`): what Cancel would
+# lose is told by comparing them with what they were as Setup opened.
+WRITTEN = {
+    "title",
+    "world_bible",
+    "setup",
+    "defaults",
+    "style",
+    "picture_style",
+    "image_style",
+    "private_prompt",
+    "chat_prompt",
+    "chat_tail",
+}
 ALL_IN_SETTINGS = "Every model here goes with Settings → Models, and follows it when it changes."
 SOME_OF_ITS_OWN = "The filled-in ones are this story's alone; the rest go with Settings → Models."
 
@@ -177,10 +188,9 @@ class SetupDialog(QDialog):
             button.setDefault(False)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
-        # What the author changed here, to ask about before Cancel or Esc
-        # drops it (`_watch`, once the dialog shows).
-        self._edited = False
-        self._watched: set[int] = set()
+        # What Save would write as Setup opened, to tell before Cancel or Esc
+        # whether anything would be lost (`_written`, once the dialog shows).
+        self._opened: tuple | None = None
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.tabs)
@@ -190,45 +200,42 @@ class SetupDialog(QDialog):
 
     def showEvent(self, event) -> None:  # noqa: N802 - Qt naming
         super().showEvent(event)
-        # Once filled in: what is set from here on is the author's doing.
-        QTimer.singleShot(0, self._watch)
+        # Once filled in: what changes from here on is the author's doing.
+        if self._opened is None:
+            QTimer.singleShot(0, self._remember_opened)
 
-    def _watch(self) -> None:
-        """Every field's user-made change marks Setup edited. The lent Cast
-        page is left out: its cards are kept as they are made."""
-        lent = getattr(self, "_lent_panel", None)
-        for widget in self.findChildren(QWidget):
-            if id(widget) in self._watched or (lent is not None and lent.isAncestorOf(widget)):
-                continue
-            self._watched.add(id(widget))
-            if isinstance(widget, QLineEdit):
-                widget.textEdited.connect(self._mark_edited)
-            elif isinstance(widget, QPlainTextEdit) and not widget.isReadOnly():
-                widget.textChanged.connect(self._mark_edited)
-            elif isinstance(widget, QComboBox):
-                widget.activated.connect(self._mark_edited)
-            elif isinstance(widget, QAbstractButton) and widget.isCheckable():
-                widget.clicked.connect(self._mark_edited)
-            elif isinstance(widget, QAbstractSpinBox):
-                widget.editingFinished.connect(self._mark_edited)
+    def _remember_opened(self) -> None:
+        if self._opened is None:
+            self._opened = self._written()
 
-    def _mark_edited(self, *_args) -> None:
-        self._edited = True
+    def _written(self) -> tuple:
+        """What Save would write, as the fields stand: `_write` on a copy of
+        the story, so nothing changes. Compared with what it was as Setup
+        opened, it tells whatever way a change was made: typed, chosen, or
+        set by a button. A watch on the fields saw only typing and choosing,
+        so From a picture…, Style's Edit text, a model chosen with Recommended
+        or Browse…, and Use the models in Settings were dropped by Cancel
+        without a word. The lent Cast page is not Setup's: its cards are kept
+        as they are made."""
+        story = self.story.model_copy(deep=True)
+        self._write(story)
+        written = story.model_dump(include=WRITTEN)
+        picture = None if story.chat else self.picture_style.picture_choice()
+        return written, picture
+
+    def edited(self) -> bool:
+        """Whether Save would write anything other than what Setup opened with."""
+        return self._opened is not None and self._written() != self._opened
 
     def keyPressEvent(self, event) -> None:  # noqa: N802 - Qt naming
-        """Enter in a field never presses a button for it: a dialog makes its
-        first button the default, and Enter in a line saved and closed it
-        (or pressed whatever button came first)."""
-        if event.key() in (Qt.Key_Return, Qt.Key_Enter) and not isinstance(
-            self.focusWidget(), QAbstractButton
-        ):
-            event.accept()
-            return
-        super().keyPressEvent(event)
+        """Enter in a field never presses a button for it, and on a button
+        presses that one only (gui/sizing.py `enter_only_on_buttons`)."""
+        if not enter_only_on_buttons(self, event):
+            super().keyPressEvent(event)
 
     def reject(self) -> None:
         """Cancel, Esc or closing: changes made here are asked about first."""
-        if self._edited:
+        if self.edited():
             answer = QMessageBox.question(
                 self,
                 "Discard your changes?",
@@ -260,8 +267,6 @@ class SetupDialog(QDialog):
     def _on_tab_changed(self, index: int) -> None:
         """Back on the Starting scene with a cast that changed meanwhile: the
         roster and the suggestion list it, choices kept."""
-        # A tab rebuilt here has new fields to watch.
-        QTimer.singleShot(0, self._watch)
         if self.tabs.widget(index) is not self.scene_tab:
             return
         live = [c for c in self._live_cast if c.id not in self._hidden]
@@ -371,8 +376,7 @@ class SetupDialog(QDialog):
         self.reset_models.setEnabled(own)
         self.models_note.setText(SOME_OF_ITS_OWN if own else ALL_IN_SETTINGS)
 
-    def _save_models(self) -> None:
-        story = self.story
+    def _save_models(self, story: Story) -> None:
         defaults = story.defaults
         for role, field in self.model_fields.items():
             model = field.text().strip() or None
@@ -753,14 +757,18 @@ class SetupDialog(QDialog):
         )
 
     def _save(self) -> None:
-        story = self.story
+        self._write(self.story)
+        self.accept()
+
+    def _write(self, story: Story) -> None:
+        """The fields into `story`: the story itself on Save, a copy to tell
+        what Save would write (`_written`)."""
         story.title = self.title.text().strip() or story.title
         if story.chat:
             story.setup.description = self.description.toPlainText().strip() or None
             story.chat_prompt = self.chat_prompt.toPlainText().strip()
             story.chat_tail = self.chat_tail.toPlainText().strip()
-            self._save_models()
-            self.accept()
+            self._save_models(story)
             return
         story.world_bible = self.world.toPlainText().strip() or None
         setup = story.setup
@@ -778,5 +786,4 @@ class SetupDialog(QDialog):
         setup.absent_at_start = self._pinned()[1]
         if self.suggested is not None:
             setup.suggested_character_id = self.suggested.currentData()
-        self._save_models()
-        self.accept()
+        self._save_models(story)
