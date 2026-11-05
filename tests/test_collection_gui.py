@@ -684,6 +684,24 @@ def test_a_tag_goes_on_and_off_every_one_chosen_and_their_versions(
     )
 
 
+def test_those_chosen_stay_chosen_after_a_tag_while_two_are_listed(
+    app, window, tmp_path: Path, monkeypatch
+):
+    """A tag added to them refreshed the list and let go of them: the next
+    thing done to them, an export say, found nobody chosen (the lab walk)."""
+    elena, ben, _older = three_kept(window, tmp_path, monkeypatch)
+    page = window.collection_page
+    choose(page, elena.id, ben.id)
+    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("winter", True))
+    page._chosen("tag")
+    assert sorted(page.chosen_ids()) == sorted([elena.id, ben.id])
+    assert page.pages.currentIndex() == 2 and page.title.text() == "2 characters"
+    page.search.setText("Ben")
+    assert len(page.chosen_ids()) < 2 and page.pages.currentIndex() != 2, "one left listed"
+    page.search.setText("")
+    assert page.pages.currentIndex() != 2
+
+
 def test_those_chosen_are_exported_into_a_folder_versions_too(
     app, window, tmp_path: Path, monkeypatch
 ):

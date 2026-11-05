@@ -501,6 +501,8 @@ class CollectionPage(QWidget):
             self._current = None
         self._fill()
         self._show()
+        if len(self.chosen_ids()) >= 2:
+            self._on_chosen()
 
     def _fill_tags(self) -> None:
         tags = collection.tags_of(self._characters)
@@ -652,6 +654,11 @@ class CollectionPage(QWidget):
 
     def _fill(self) -> None:
         shown = self._shown_mains()
+        # Several chosen stay chosen while two or more of them are listed (a
+        # tag just added to them, a search typed): the next thing to do to
+        # them needs them still chosen.
+        chosen = set(self.chosen_ids())
+        still = {main.id for main in shown} & chosen if len(chosen) >= 2 else set()
         self.people.blockSignals(True)
         self.people.clear()
         everyone = QListWidgetItem(f"{EVERYONE}\n{_plural(len(shown), 'character')}")
@@ -671,7 +678,12 @@ class CollectionPage(QWidget):
             self.people.addItem(item)
         self.people.blockSignals(False)
         self._people_icons()
-        self._select_person()
+        if len(still) >= 2:
+            self._choose(still)
+        else:
+            self._select_person()
+            # Fewer than two of them listed: one at a time again.
+            self._on_chosen()
         self.overview.clear()
         for main in shown:
             item = QListWidgetItem()
@@ -682,6 +694,17 @@ class CollectionPage(QWidget):
         self.empty.setVisible(not self._characters)
         self.overview.setVisible(bool(self._characters))
         self._show_stats()
+
+    def _choose(self, ids: set[str]) -> None:
+        """Exactly those of `ids` listed chosen, and the page for them."""
+        self.people.blockSignals(True)
+        self.people.clearSelection()
+        for row in range(self.people.count()):
+            item = self.people.item(row)
+            if item.data(Qt.UserRole) in ids:
+                item.setSelected(True)
+        self.people.blockSignals(False)
+        self._on_chosen()
 
     def _select_person(self) -> None:
         card = self._card(self._current)
