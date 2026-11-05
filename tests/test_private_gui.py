@@ -302,6 +302,80 @@ def test_archive_now_waits_for_the_private_scene(app, window):
     assert archive.toolTip() == ""
 
 
+def test_a_memory_scene_is_asked_about_only_once_the_new_story_is_certain(
+    app, window, monkeypatch, tmp_path
+):
+    """New… and Import… asked before anything was certain: Yes, then a guide
+    cancelled at its first step or a plot file with errors, cost the scene
+    for nothing. And the guide saved its story before the question, so a
+    No left a story nobody had opened."""
+    from PySide6.QtWidgets import QDialog, QFileDialog
+
+    from sealedlore.gui.new_story_guide import NewStoryGuide
+    from sealedlore.models.story import Story
+    from sealedlore.storage.paths import stories_dir
+
+    window.composer.private_keep.setCurrentIndex(window.composer.private_keep.findData("memory"))
+    window.composer.private_toggle.click()
+    send(app, window, f"I whisper {MARKER}.")
+    titles: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox, "question", lambda _p, t, *_a, **_k: titles.append(t) or QMessageBox.Cancel
+    )
+    monkeypatch.setattr(NewStoryGuide, "exec", lambda guide: QDialog.Rejected)
+    window.new_story()  # cancelled at its first step
+    broken = tmp_path / "broken.sealedlore-plot.md"
+    broken.write_text("---\ntitle: Broken\n---\n# Events\n## \n", encoding="utf-8")
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(broken), ""))
+    monkeypatch.setattr(QMessageBox, "exec", lambda box: QMessageBox.Ok)  # its errors, read
+    window.import_file()
+    assert titles == [] and window.session.in_private, "nothing new: nothing asked, nothing lost"
+    stories = sorted(stories_dir(tmp_path).iterdir())
+    assert not window.guide_make_story(StoryBundle(story=Story(title="Made by the guide")))
+    assert titles == ["Private scene still open"] and window.session.in_private
+    assert sorted(stories_dir(tmp_path).iterdir()) == stories, "a No saves nothing"
+
+
+@pytest.mark.parametrize("how", ["sample", "duplicate settings", "duplicate story"])
+def test_a_memory_chat_is_asked_about_once_as_something_new_opens(app, window, monkeypatch, how):
+    """A sample, Duplicate settings and Duplicate entire story asked about a
+    chat kept in memory only, kept it on Yes, then asked again as the new
+    story opened."""
+    from pathlib import Path
+
+    import sealedlore.gui.window_chat as window_chat
+    from sealedlore.gui.setup_dialog import SetupDialog
+    from sealedlore.gui.start_dialog import StartDialog
+
+    story_id = window.session.story.id
+
+    class Dialog(window_chat.NewChatDialog):
+        def exec(self):  # noqa: A003 - Qt naming
+            self.title.setText("Tutor")
+            self.model.setText("z-ai/glm-5.3")
+            self.keep.setCurrentIndex(self.keep.findData("memory"))
+            return window_chat.NewChatDialog.Accepted
+
+    monkeypatch.setattr(window_chat, "NewChatDialog", Dialog)
+    window.new_chat()
+    assert window.session.memory_only
+    monkeypatch.setattr(SetupDialog, "exec", lambda dialog: 0)
+    monkeypatch.setattr(StartDialog, "exec", lambda dialog: 0)
+    titles: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox, "question", lambda _p, t, *_a, **_k: titles.append(t) or QMessageBox.Yes
+    )
+    if how == "sample":
+        sample = Path(__file__).parent.parent / "SampleStories" / "Doomsville.md"
+        window.import_sample(sample)
+    elif how == "duplicate settings":
+        window.duplicate_story_settings(story_id)
+    else:
+        window.duplicate_entire_story(story_id)
+    assert titles == ["Chat kept in memory only"], titles
+    assert window.session is not None and not window.session.memory_only
+
+
 def test_no_private_model_says_where_to_set_one(app, window: MainWindow, monkeypatch):
     window.config.private_provider = None
     shown = []
@@ -365,10 +439,20 @@ def test_leaving_the_story_mid_memory_scene_asks_first(app, window: MainWindow, 
         return QMessageBox.Cancel
 
     monkeypatch.setattr(QMessageBox, "question", cancel)
-    # Import… asks once the file is known to open another story: a scenario.
+    # New… asks as the guide makes its story; Import… once the file is known
+    # to open another story (a scenario).
+    from PySide6.QtWidgets import QDialog
+
+    from sealedlore.gui.new_story_guide import NewStoryGuide
     from sealedlore.models.scenario import Scenario
     from sealedlore.storage.scenario import SCENARIO_SUFFIX, write_scenario
 
+    def through_the_first_step(guide) -> int:
+        guide.title.setText("From the guide")
+        assert not guide._make(), "asked, and Cancel makes nothing"
+        return QDialog.Rejected
+
+    monkeypatch.setattr(NewStoryGuide, "exec", through_the_first_step)
     scenario = window.root / f"other{SCENARIO_SUFFIX}"
     write_scenario(scenario, Scenario(title="Another story"))
     monkeypatch.setattr(

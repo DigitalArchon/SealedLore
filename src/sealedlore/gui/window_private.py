@@ -967,12 +967,8 @@ class PrivateWindow:
         """A memory-only scene the author agreed to lose (`_private_may_close`),
         and what was typed in it."""
         session = self.session
-        if (
-            session is not None
-            and not session.memory_only
-            and session.in_private
-            and session.open_span.keep == "memory"
-        ):
+        span = session.open_span if session is not None else None
+        if span is not None and span.keep == "memory" and not session.memory_only:
             session.discard_private()
             self._drop_scene_draft()
 

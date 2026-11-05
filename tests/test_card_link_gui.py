@@ -72,7 +72,7 @@ def window(app, tmp_path: Path):
     window.open_story("story-1")
     yield window
     # A memory-only chat left open asks before it is lost: not at teardown.
-    window._private_allows_close = lambda: True
+    window._private_allows_close = window._private_may_close = lambda: True
     window.close()
 
 

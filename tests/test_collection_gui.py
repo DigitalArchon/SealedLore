@@ -327,7 +327,7 @@ def test_a_memory_chat_opened_from_the_page_closes_it(app, window):
         StoryBundle(story=Story(title="Quiet", mode="chat", chat_keep="memory"))
     )
     assert not window.collection_shown() and not window.composer.isHidden()
-    window._private_allows_close = lambda: True
+    window._private_allows_close = window._private_may_close = lambda: True
 
 
 def test_the_page_shows_a_card_as_it_is_after_a_story_changed_it(

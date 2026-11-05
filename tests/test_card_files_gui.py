@@ -52,7 +52,7 @@ def window(app, tmp_path: Path):
     window = MainWindow(root=root, use_mock=True)
     window.open_story("story-1")
     yield window
-    window._private_allows_close = lambda: True
+    window._private_allows_close = window._private_may_close = lambda: True
     window.close()
 
 

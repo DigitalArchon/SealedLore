@@ -1192,8 +1192,10 @@ class MainWindow(
     def new_story(self) -> None:
         """Write a story from scratch: the guide's four steps, then Start
         (gui/new_story_guide.py); or Setup, with every option, if the author
-        skips to it."""
-        if self._busy or not self._private_allows_close():
+        skips to it. A memory-only scene or chat is asked about once the
+        guide has a story to make (`guide_make_story`): asked here, a Yes
+        then a guide cancelled at its first step cost the scene for nothing."""
+        if self._busy:
             return
         guide = NewStoryGuide(self)
         self._guide = guide
@@ -1308,7 +1310,7 @@ class MainWindow(
         """A new story from a sample plot file, exactly as File → Import… would.
         The samples are inside the AppImage, at a mount point that changes
         every launch: Import… could never find them there."""
-        if self._busy or not self._private_allows_close():
+        if self._busy:
             return
         self._import_plot_file(path)
 
@@ -1360,15 +1362,10 @@ class MainWindow(
         suffix = Path(path).suffix.lower()
         # A picture or a zip is never one of SealedLore's own files.
         kind = None if suffix in (PLOT_SUFFIX, ".png", ".charx") else file_format(Path(path))
-        stays = (
-            suffix in (".png", ".charx")
-            or kind == PROMPT_SET_FORMAT
-            or (kind != ARCHIVE_FORMAT and tavern_kind(Path(path)) is not None)
-        )
-        # A card, a lorebook or a prompt set leaves the story open: only what
-        # opens another asks about a memory-only scene or chat.
-        if not stays and not self._private_allows_close():
-            return
+        # A card, a lorebook or a prompt set leaves the story open. What opens
+        # another asks about a memory-only scene or chat once the file is read
+        # and the new story certain (`_leave_for_new`): asked first, a file
+        # with errors, or notes answered Cancel, still cost the scene.
         if suffix == PLOT_SUFFIX:
             self._import_plot_file(Path(path))
         elif suffix in (".png", ".charx"):
@@ -1403,6 +1400,8 @@ class MainWindow(
             scenario = read_scenario(path)
         except ScenarioError as exc:
             self._warn_plain("Could not read scenario", str(exc))
+            return
+        if not self._leave_for_new():
             return
         bundle = bundle_from_scenario(scenario)
         bundle.pending_files = clean_incoming(bundle.pending_files)
@@ -1450,7 +1449,7 @@ class MainWindow(
 
     def _import_plot_file(self, path: Path) -> None:
         parsed = self._read_plot_file(path)
-        if parsed is None:
+        if parsed is None or not self._leave_for_new():
             return
         bundle = bundle_from_scenario(parsed.scenario)
         self._open_new_bundle(bundle, review=True)
@@ -1536,13 +1535,17 @@ class MainWindow(
             return None
 
     def duplicate_story_settings(self, story_id: str) -> None:
-        if self._busy or not self._private_allows_close():
+        if self._busy:
             return
         if (source := self._bundle_for(story_id)) is None:
             return
         bundle = fresh_playthrough(
             source, f"{source.story.title} (copy)", reference_files(source, self.root)
         )
+        # Once, before anything is written: a chat kept in memory only was
+        # asked about here, and again as the copy opened.
+        if not self._leave_for_new():
+            return
         save_story_bundle(bundle, root=self.root)
         self.stories.refresh(selected_id=bundle.story.id)
         self.open_story(bundle.story.id)
@@ -1556,9 +1559,9 @@ class MainWindow(
         )
 
     def duplicate_entire_story(self, story_id: str) -> None:
-        if self._busy or not self._private_allows_close():
+        if self._busy:
             return
-        if (source := self._bundle_for(story_id)) is None:
+        if (source := self._bundle_for(story_id)) is None or not self._leave_for_new():
             return
         try:
             copy = copy_story(story_id, title=f"{source.story.title} (copy)", root=self.root)
@@ -2698,7 +2701,7 @@ class MainWindow(
                 # Exported from a chat kept in memory only: back into memory,
                 # with nothing written, or saved as an ordinary chat.
                 where = self._ask_memory_import(bundle.story.title)
-                if where is None:
+                if where is None or not self._leave_for_new():
                     return
                 if where == "memory":
                     files, bundle.pending_files = bundle.pending_files, {}
@@ -2707,6 +2710,8 @@ class MainWindow(
                         f"Opened {bundle.story.title} in memory only", 6000
                     )
                     return
+            elif not self._leave_for_new():
+                return
             bundle = restore_archive(bundle, api_log, root=self.root)
         except ArchiveError as exc:
             self._warn_plain("Could not import the story backup", str(exc))

@@ -36,7 +36,13 @@ class CastWindow:
     # --- the new story guide (gui/new_story_guide.py) -------------------------
 
     def guide_make_story(self, bundle: StoryBundle) -> bool:
-        """The guide's story, saved and opened behind it."""
+        """The guide's story, saved and opened behind it. A memory-only scene
+        or chat is asked about first, now that there is a story to open, and
+        on a No nothing is saved (`_leave_for_new`): saved first, a No as it
+        opened left a story nobody had opened, and a chat kept in memory only
+        was asked about twice."""
+        if not self._leave_for_new():
+            return False
         save_story_bundle(bundle, root=self.root)
         self.stories.refresh(selected_id=bundle.story.id)
         self.open_story(bundle.story.id)
