@@ -525,6 +525,34 @@ def test_a_memory_chat_with_them_sent_and_answered_writes_nothing(app, window, m
     assert everything() == before
 
 
+def test_who_you_are_in_a_chat_with_them_is_offered_next_time(app, window, monkeypatch):
+    """You are and About you were typed again for every card; a memory-only
+    chat teaches the settings nothing."""
+    elena = window._kept()[0]
+    offered: list[tuple[str, str]] = []
+
+    def chat(name: str, about: str, keep: str):
+        def exec_(dialog: CardChatDialog) -> int:
+            offered.append((dialog.user.text(), dialog.about.toPlainText()))
+            dialog.user.setText(name)
+            dialog.about.setPlainText(about)
+            dialog.keep.setCurrentIndex(dialog.keep.findData(keep))
+            dialog.model.setText("mock-model")
+            return QDialog.Accepted
+
+        monkeypatch.setattr(CardChatDialog, "exec", exec_)
+        window.chat_with_kept(elena.id)
+        wait_for(app, lambda: not window._busy)
+
+    chat("Mara", "A medic from the coast.", "disk")
+    chat("Someone else", "Nobody you know.", "memory")
+    window._close_story()
+    chat("Mara", "A medic from the coast.", "disk")
+    assert offered[1] == ("Mara", "A medic from the coast.")
+    assert offered[2] == ("Mara", "A medic from the coast."), "memory taught nothing"
+    assert window.config.chat_user_name == "Mara"
+
+
 def test_a_memory_chats_prompt_is_kept_only_when_said(app, window, monkeypatch):
     from PySide6.QtWidgets import QPlainTextEdit
 

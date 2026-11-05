@@ -334,8 +334,9 @@ def test_a_new_looks_row_waits_while_pictures_cant_be_drawn(app, window, monkeyp
     monkeypatch.setattr(window, "_card_pictures_refused", lambda session: True)
     window._start_waiting()
     assert started == [] and window._board_waiting == [row]
+    # The scene ends: what waited is drawn then, with nothing else to set it off.
     monkeypatch.setattr(window, "_card_pictures_refused", lambda session: False)
-    window._start_waiting()
+    window._sync_private_ui()
     assert [r.card_expression for r in started] == ["happy"] and window._board_waiting == []
 
 

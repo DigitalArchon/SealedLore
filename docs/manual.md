@@ -1046,7 +1046,8 @@ they wait, as the story's cards' pictures do.
 **Chat with them…** starts a simple chat (see "Simple chat") from their card.
 Before it starts you see, and can change, everything it is made of:
 
-- who you are (the card's `{{user}}`) and, if you like, a few words about you;
+- who you are (the card's `{{user}}`) and, if you like, a few words about you,
+  offered again the next time (unless the chat is kept in memory only);
 - the **system prompt**: the card's own if it has one (where it writes
   `{{original}}`, the plain one goes), else a plain one telling the model to
   write only their replies; **Saved prompts** puts one of yours in its place;

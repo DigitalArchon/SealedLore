@@ -819,6 +819,11 @@ class Config(BaseModel):
     # System prompts kept for simple chats, to choose from where one is
     # written (New simple chat, Chat with them…, Setup).
     chat_prompts: list[SavedPrompt] = Field(default_factory=list)
+    # Who the author is in a chat with one of their characters (Chat with
+    # them…: You are, About you), offered again the next time rather than
+    # typed for every card. Never learnt from a memory-only chat.
+    chat_user_name: str = ""
+    chat_user_about: str = ""
     # Whether the Inspector shows the Prompt page (View → Prompt page): what
     # the storyteller was sent, for checking the model's work. Off by default.
     prompt_page: bool = False

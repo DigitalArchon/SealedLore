@@ -166,6 +166,10 @@ class PrivateWindow:
         )
         self._refresh_model_button()
         self._sync_capture()
+        if span is None:
+            # Pictures for the cards approved while a scene was open waited
+            # for it to end (window_board): now they can be drawn.
+            self._start_waiting()
 
     def _shows_private(self) -> bool:
         """A private scene is open, or a TEE or end-to-end encrypted chat."""

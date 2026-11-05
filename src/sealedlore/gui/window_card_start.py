@@ -19,7 +19,7 @@ from sealedlore.models.tavern import CardAsset
 from sealedlore.storage import card_files
 from sealedlore.storage.image_meta import picture_kind
 from sealedlore.storage.images import IMAGES_DIR, REFS_DIR
-from sealedlore.storage.repository import StoryBundle, save_story_bundle
+from sealedlore.storage.repository import StoryBundle, save_config, save_story_bundle
 
 
 class CardStartWindow:
@@ -40,15 +40,25 @@ class CardStartWindow:
             browse_route=self._browse_models_and_route,
             hosts_of=self._hosts_of,
             saved=self.saved_prompts(),
+            you=self.config.chat_user_name,
+            about=self.config.chat_user_about,
         )
         accepted = dialog.exec() == QDialog.Accepted
         setup, keep = dialog.setup(), dialog.keep_choice()
         model, route = dialog.model.text().strip(), dialog.route()
+        you, about = dialog.user.text().strip(), dialog.about.toPlainText().strip()
         dialog.deleteLater()
         # Asked once the chat is wanted: asked first, a Cancel of the dialog
         # had already cost a memory-only scene or chat.
         if not accepted or not self._leave_for_new():
             return
+        if keep != "memory" and (you, about) != (
+            self.config.chat_user_name,
+            self.config.chat_user_about,
+        ):
+            # Offered next time. A memory-only chat teaches the config nothing.
+            self.config.chat_user_name, self.config.chat_user_about = you, about
+            save_config(self.config, root=self.root)
         story = Story(
             title=setup.title or card.name,
             mode="chat",

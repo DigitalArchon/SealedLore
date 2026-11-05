@@ -36,7 +36,15 @@ def _words(text: str, count: int = 9) -> str:
 
 
 class CardChatDialog(NewChatDialog):
-    def __init__(self, card: Character, *, texts: PromptTexts = DEFAULT_TEXTS, **kwargs) -> None:
+    def __init__(
+        self,
+        card: Character,
+        *,
+        texts: PromptTexts = DEFAULT_TEXTS,
+        you: str = "",
+        about: str = "",
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
         self.card = card
         self.texts = texts
@@ -53,9 +61,11 @@ class CardChatDialog(NewChatDialog):
         # changed is left alone when the names change.
         self._given: dict[object, str] = {}
 
-        self.user = QLineEdit(card_chat.DEFAULT_USER)
+        # Who you were in the last chat with one of them (`you`, `about`):
+        # typed again for every card otherwise.
+        self.user = QLineEdit(you or card_chat.DEFAULT_USER)
         self.user.setPlaceholderText("Your name in the chat (the card's {{user}})")
-        self.about = GrowingText(lines=2, most=6)
+        self.about = GrowingText(about, lines=2, most=6)
         self.about.setPlaceholderText("Optional: who you are, as a SillyTavern persona says")
         self.first = GrowingText(lines=6, most=16)
         self.greeting = QComboBox()
