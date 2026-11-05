@@ -279,12 +279,11 @@ class CollectionPage(QWidget):
         backup_menu.setToolTipsVisible(True)
         self.backup_button.setMenu(backup_menu)
         self.backup_button.setToolTip("Back up all your characters, or put a backup back")
-        left_buttons = QHBoxLayout()
-        left_buttons.setContentsMargins(0, 0, 0, 0)
-        left_buttons.addWidget(self.new_button)
-        left_buttons.addWidget(self.import_button)
-        left_buttons.addWidget(self.backup_button)
-        left_buttons.addStretch(1)
+        # Wrapping: the column is a fixed width, and with Backup beside them a
+        # row of three cut "New character" short. Import and Backup together.
+        left_buttons = WrapRow(spacing=6, group_spacing=6)
+        left_buttons.add_group([self.new_button])
+        left_buttons.add_group([self.import_button, self.backup_button])
         filters = QHBoxLayout()
         filters.setContentsMargins(0, 0, 0, 0)
         filters.addWidget(self.tag, 1)

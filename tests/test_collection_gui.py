@@ -63,6 +63,31 @@ def kept_elena(window: MainWindow, tmp_path: Path, monkeypatch):
     return window.collection_page.current_character()
 
 
+def test_the_lists_buttons_are_whole_in_its_column(app, window):
+    """The list's column is a fixed width: New character, Import and Backup
+    in one row cut "New character" short ("w charac"). Each is whole, inside
+    the column, wrapping to a second line where they don't fit."""
+    from sealedlore.gui.app import load_stylesheet
+    from tests.test_ui_tidy import needs_real_fonts, settle
+
+    needs_real_fonts()
+    before = app.styleSheet()
+    # The buttons' padding is the stylesheet's: unstyled, all three fitted.
+    app.setStyleSheet(load_stylesheet())
+    try:
+        window.resize(1920, 1080)
+        window.show()
+        window.show_collection(True)
+        settle(app)
+        page = window.collection_page
+        for button in (page.new_button, page.import_button, page.backup_button):
+            assert button.isVisible(), button.text()
+            assert button.width() >= button.sizeHint().width(), button.text()
+            assert button.geometry().right() < page._left.width(), button.text()
+    finally:
+        app.setStyleSheet(before)
+
+
 def test_the_page_takes_the_window_and_gives_the_story_back(app, window, story, cast):
     save_story_bundle(StoryBundle(story=story, cast=list(cast)), root=window.root)
     window.open_story(story.id)
