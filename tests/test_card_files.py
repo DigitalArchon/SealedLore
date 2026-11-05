@@ -8,11 +8,14 @@ shape RisuAI writes, from the spec: never one from a card site."""
 from __future__ import annotations
 
 import base64
+import io
 import json
 import time
 import zipfile
 import zlib
 from pathlib import Path
+
+import pytest
 
 from sealedlore.engine import card_link
 from sealedlore.engine.session import StorySession
@@ -28,7 +31,13 @@ from sealedlore.storage.picture_store import DiskPictures
 from sealedlore.storage.png_text import with_text
 from sealedlore.storage.repository import load_story_bundle, save_story_bundle
 from sealedlore.storage.scenario import bundle_from_scenario, scenario_from_bundle
-from sealedlore.storage.tavern_cards import card_charx, card_data, read_card, scenario_from_card
+from sealedlore.storage.tavern_cards import (
+    CardError,
+    card_charx,
+    card_data,
+    read_card,
+    scenario_from_card,
+)
 from tests.test_private import make_config
 from tests.test_tavern import ELENA
 
@@ -523,3 +532,87 @@ def test_a_picture_nothing_can_clean_is_left_out_and_said(tmp_path: Path):
     assert not any(b"51.5007N" in file.read_bytes() for file in folder.iterdir())
     said = " ".join(notes)
     assert "2 pictures on the card (beach, dusk) are in a format SealedLore can't remove" in said
+
+
+def test_a_picture_whose_hidden_data_cant_be_removed_stops_an_export(tmp_path: Path):
+    """Out of the computer, as a scenario file's pictures do: nothing goes."""
+    _v2, v3 = card_data(collection.kept("Jane Moss"))
+    dance = CardAsset(type="x-risu-asset", name="dance", ext="gif", file="images/a/dance.gif")
+    with pytest.raises(CardError, match="The file dance couldn't have its hidden data removed"):
+        card_charx(v3, [], [(dance, GIF)])
+    with pytest.raises(CardError, match="Their picture 1 couldn't have its hidden data removed"):
+        card_charx(v3, [(ImageRef(file="images/refs/a.heic"), heif())])
+    # A copy kept here (the Trash's) takes it as it is; a sound goes either way.
+    wind = CardAsset(type="x-risu-asset", name="wind", ext="mp3", file="images/a/wind.mp3")
+    kept = card_charx(v3, [], [(dance, GIF), (wind, WIND)], shared=False)
+    with zipfile.ZipFile(io.BytesIO(kept)) as archive:
+        assert sorted(archive.read(name) for name in archive.namelist()[1:]) == sorted([GIF, WIND])
+    assert card_charx(v3, [], [(wind, WIND)])
+
+
+# --- a CHARX's own paths, and its labels --------------------------------------------------
+
+
+def test_a_cards_files_go_out_under_their_own_paths_or_safe_new_ones(tmp_path: Path):
+    """A card's own `type` made the path of a file that had none, so
+    "../../../tmp/evil" climbed out of the archive; a path at the top of
+    the card, or in another script, was renamed, and a greeting naming it
+    by its place showed nothing once read back."""
+    greeting = 'Look. <img src="embeded://barn.png"> ![dusk](embeded://images/雪.png)'
+    data = {
+        **ELENA,
+        "first_mes": greeting,
+        "assets": [
+            {
+                "type": "../../../../../tmp/evil",
+                "uri": "data:image/png;base64," + base64.b64encode(TINY).decode(),
+                "name": "evil",
+                "ext": "png",
+            },
+            {"type": "background", "uri": "embeded://barn.png", "name": "barn", "ext": "png"},
+            {"type": "x-risu-asset", "uri": "embeded://images/雪.png", "name": "dusk"},
+        ],
+    }
+    source = tmp_path / "elena.charx"
+    with zipfile.ZipFile(source, "w") as archive:
+        archive.writestr("card.json", json.dumps({"spec": "chara_card_v3", "data": data}))
+        archive.writestr("barn.png", BARN)
+        archive.writestr("images/雪.png", SNOW)
+    root = tmp_path / "data"
+    elena, _notes = collection.kept_from_card(read_card(source), store(root))
+    files = [(a, store(root).read(a.file)) for a in elena.tavern.assets]
+    out = tmp_path / "out.charx"
+    out.write_bytes(card_charx(card_data(elena)[1], [], files))
+    with zipfile.ZipFile(out) as archive:
+        names = archive.namelist()
+    assert names == ["card.json", "assets/tmp_evil/images/evil.png", "barn.png", "images/雪.png"]
+    again, _notes = collection.kept_from_card(read_card(out), store(root))
+    shown = greeting_pictures(again.tavern.first_mes, again.tavern.assets)
+    assert [p.name for p in shown.pictures] == ["barn", "dusk"]
+    # A file of no place of its own is named the same from one export to the
+    # next, whatever was taken off before it.
+    out.write_bytes(card_charx(card_data(elena)[1], [], files[1:]))
+    with zipfile.ZipFile(out) as archive:
+        assert archive.namelist() == ["card.json", "barn.png", "images/雪.png"]
+    tiny = CardAsset(type="x-risu-asset", name="tiny", ext="png", file="images/a/tiny.png")
+    first = card_charx(card_data(elena)[1], [], [files[0], (tiny, TINY)])
+    second = card_charx(card_data(elena)[1], [], [(tiny, TINY)])
+    member = "assets/x-risu-asset/images/tiny.png"
+    assert member in zipfile.ZipFile(io.BytesIO(first)).namelist()
+    assert member in zipfile.ZipFile(io.BytesIO(second)).namelist()
+
+
+def test_the_portrait_keeps_its_labels_beside_a_picture_labelled_main(tmp_path: Path):
+    """A picture labelled "main" took the portrait's name, and the two
+    shared a row of labels: the portrait came back as the other."""
+    pictures = [
+        (ImageRef(file="images/refs/a.png", look="winter coat", caption="portrait"), FACE),
+        (ImageRef(file="images/refs/b.png", expression="main", framing="torso"), BARN),
+    ]
+    path = tmp_path / "jane.charx"
+    path.write_bytes(card_charx(card_data(collection.kept("Jane Moss"))[1], pictures))
+    jane, _notes = collection.kept_from_card(read_card(path), store(tmp_path / "data"))
+    assert [(r.look, r.expression, r.caption, r.framing) for r in jane.reference_images] == [
+        ("winter coat", "", "portrait", ""),
+        ("", "main", "", "torso"),
+    ]

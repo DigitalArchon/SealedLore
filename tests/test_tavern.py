@@ -16,6 +16,7 @@ import pytest
 from sealedlore.engine.rules import render_cast_sheet
 from sealedlore.models.character import Character, Competence
 from sealedlore.models.lore import LoreEntry
+from sealedlore.models.tavern import CardAsset, TavernFields
 from sealedlore.storage import collection, png_text, tavern_cards
 from sealedlore.storage.paths import COLLECTION_ID
 from sealedlore.storage.picture_store import DiskPictures
@@ -606,12 +607,35 @@ def test_a_character_goes_out_and_comes_back_whole(tmp_path: Path):
     assert json.loads(base64.b64decode(text_chunks(path.read_bytes())["chara"]))["name"] == "Gus"
 
 
-def test_a_json_card_is_v2(tmp_path: Path):
-    first, third = card_data(Character(name="Gus", summary="Runs the bar."))
+def test_a_json_card_is_v3_with_v1_on_top_and_only_its_links(tmp_path: Path):
+    """Written as V2, a JSON card lost what only V3 has a place for, which a
+    PNG or a CHARX of the same character kept."""
+    gus = Character(name="Gus", aliases=["Old Gus"], summary="Runs the bar.")
+    gus.tavern = TavernFields(
+        group_only_greetings=["Evening, all."],
+        source=["https://example.com/gus"],
+        creator_notes_multilingual={"de": "Der Wirt."},
+        creation_date=1_700_000_000,
+        assets=[
+            CardAsset(type="background", name="bar", ext="png", uri="https://example.com/bar.png"),
+            CardAsset(type="x-risu-asset", name="song", ext="mp3", file="images/assets/g/song.mp3"),
+        ],
+    )
+    first, third = card_data(gus)
     path = tmp_path / "gus.json"
     write_card(path, first, third, None)
     data = json.loads(path.read_text())
-    assert data["spec"] == "chara_card_v2" and data["data"]["description"] == "Runs the bar."
+    assert (data["spec"], data["spec_version"]) == ("chara_card_v3", "3.0")
+    # V1's fields on top too, for readers that know no other.
+    assert data["name"] == "Gus" and data["description"] == "Runs the bar."
+    inner = data["data"]
+    assert inner["nickname"] == "Old Gus" and inner["group_only_greetings"] == ["Evening, all."]
+    assert inner["source"] == ["https://example.com/gus"]
+    assert inner["creator_notes_multilingual"] == {"de": "Der Wirt."}
+    assert inner["creation_date"] == 1_700_000_000
+    # A JSON card holds no files: its links go, the song stays behind.
+    assert [a["uri"] for a in inner["assets"]] == ["https://example.com/bar.png"]
+    assert read_card(path).fields["group_only_greetings"] == ["Evening, all."]
     with pytest.raises(CardError, match="needs the character's picture"):
         write_card(tmp_path / "gus.png", first, third, None)
 

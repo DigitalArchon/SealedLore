@@ -48,7 +48,13 @@ from sealedlore.models.story import OpeningPicture, StyleDirectives
 from sealedlore.models.tavern import CardAsset, TavernFields
 from sealedlore.storage.atomic import atomic_write_json
 from sealedlore.storage.card_files import background_of, greeting_pictures
-from sealedlore.storage.image_meta import picture_kind, stripped_or_same
+from sealedlore.storage.image_meta import (
+    MetadataError,
+    picture_kind,
+    raster_kind,
+    strip_metadata,
+    stripped_or_same,
+)
 from sealedlore.storage.images import IMAGES_DIR, REFS_DIR, write_bytes_atomic
 from sealedlore.storage.png_text import PngTextError, text_chunks, with_text
 from sealedlore.storage.tavern_lore import (
@@ -938,6 +944,8 @@ def card_charx(
     v3: Mapping[str, Any],
     pictures: Sequence[tuple[ImageRef, bytes]],
     files: Sequence[tuple[CardAsset, bytes | None]] = (),
+    *,
+    shared: bool = True,
 ) -> bytes:
     """A character as a CHARX (a zip of card.json and its pictures): the
     first picture its icon, every other one an "emotion" asset named by its
@@ -946,14 +954,22 @@ def card_charx(
     `extensions.sealedlore.pictures` by asset name, so they come back whole.
     Each picture's hidden data is removed first. `files`: the card's other
     files (CardAsset, with its bytes, None for a link), back under their own
-    type, name and path, so a card read in goes out whole."""
+    type, name and path, so a card read in goes out whole.
+
+    `shared`: the card leaves this computer (an export), so a picture whose
+    hidden data can't be removed stops it (CardError), as it stops a
+    scenario file. A copy kept here (the Trash's, or one read back to make a
+    story) takes every file as it is."""
     data = json.loads(json.dumps(v3["data"]))
     assets: list[dict[str, Any]] = []
     rows: list[dict[str, str]] = []
     members: list[tuple[str, bytes]] = []
-    used: dict[str, int] = {}
+    # The portrait is the icon named "main": no other picture may take its
+    # name, or the two would share a row of labels and the portrait come
+    # back with the other's.
+    used: dict[str, int] = {ICON_NAME: 1}
     for index, (ref, raw) in enumerate(pictures):
-        cleaned = stripped_or_same(raw)
+        cleaned = _outgoing(raw, f"their picture {index + 1}", shared)
         suffix = picture_kind(cleaned) or ".png"
         ext = suffix.lstrip(".")
         if index == 0:
@@ -976,21 +992,23 @@ def card_charx(
         )
         members.append((member, cleaned))
     taken = {member for member, _raw in members} | {"card.json"}
-    for number, (asset, raw) in enumerate(files, start=1):
+    for asset, raw in files:
         entry = {"type": asset.type, "name": asset.name, "ext": asset.ext}
         if raw is None:
             if not asset.uri:
                 continue  # its file was lost
             assets.append({**entry, "uri": asset.uri})
             continue
-        member = asset.path if _safe_member(asset.path) and asset.path not in taken else ""
-        if not member:
-            folder = "images" if asset.ext in ("png", "jpg", "jpeg", "webp", "gif") else "other"
-            stem = re.sub(r"[^A-Za-z0-9_-]+", "_", asset.name).strip("_") or "file"
-            member = f"assets/{asset.type}/{folder}/{number}_{stem}.{asset.ext or 'bin'}"
+        # Its own path wherever that is safe, so what names it by its place
+        # (a greeting's `<img src="embeded://barn.png">`) still finds it in
+        # the card read back.
+        if _safe_member(asset.path) and asset.path not in taken:
+            member = asset.path
+        else:
+            member = _new_member(asset, taken)
         taken.add(member)
         assets.append({**entry, "uri": f"embeded://{member}"})
-        members.append((member, stripped_or_same(raw)))
+        members.append((member, _outgoing(raw, f"the file {asset.name or asset.type}", shared)))
     data["assets"] = assets
     extensions = dict(data.get("extensions") or {})
     own = dict(extensions.get("sealedlore") or {})
@@ -1010,13 +1028,63 @@ def _plural(count: int, what: str) -> str:
     return f"{count} {what}{'' if count == 1 else 's'}"
 
 
+def _outgoing(data: bytes, what: str, shared: bool) -> bytes:
+    """One of a card's files as it goes out in a CHARX: a picture with its
+    hidden data removed (told by its bytes; CardError when that can't be
+    done and the card is `shared`), a video blanked, anything else as it
+    is."""
+    if shared and raster_kind(data) is not None:
+        try:
+            return strip_metadata(data)
+        except MetadataError as exc:
+            raise CardError(
+                f"{what[:1].upper()}{what[1:]} couldn't have its hidden data removed ({exc}), "
+                "so nothing was written. Take it off the card, or put on another copy of it."
+            ) from exc
+    return stripped_or_same(data)
+
+
 def _safe_member(path: str) -> bool:
     """A path a card's file may be written back under in a CHARX: relative,
-    ASCII, inside the archive, never card.json."""
-    if not path or not path.isascii() or "\\" in path or path == "card.json":
+    inside the archive, every part of it one any file system can hold
+    (extracted, nothing climbs out or lands elsewhere), never card.json. At
+    the top or in any script, as the card had it."""
+    if not path or path == "card.json" or path.startswith("/") or "\\" in path:
         return False
-    parts = PurePosixPath(path).parts
-    return not PurePosixPath(path).is_absolute() and ".." not in parts and len(parts) >= 2
+    return all(_safe_part(part) for part in path.split("/"))
+
+
+def _safe_part(part: str) -> bool:
+    try:
+        size = len(part.encode("utf-8"))
+    except UnicodeEncodeError:  # half a UTF-16 pair: no zip can name it
+        return False
+    return (
+        0 < size <= 255
+        and part not in (".", "..")
+        and not part.endswith((".", " "))
+        and not any(ord(char) < 32 or ord(char) == 127 or char in '<>:"|?*' for char in part)
+    )
+
+
+def _new_member(asset: CardAsset, taken: set[str]) -> str:
+    """A place in a CHARX for a file that has no safe one of its own (one
+    added here, a JSON card's data: URL): under its type and name, every
+    part made of letters, digits, "_" and "-" alone, numbered only when
+    another file has the place, so it is the same from one export to the
+    next."""
+
+    def part(text: str) -> str:
+        return re.sub(r"[^A-Za-z0-9_-]+", "_", text).strip("_")[:64]
+
+    kind = part(asset.type) or "other"
+    ext = re.sub(r"[^a-z0-9]+", "", asset.ext.lower())[:10] or "bin"
+    folder = "images" if ext in ("png", "jpg", "jpeg", "webp", "gif") else "other"
+    stem = part(asset.name) or "file"
+    member, number = f"assets/{kind}/{folder}/{stem}.{ext}", 2
+    while member in taken:
+        member, number = f"assets/{kind}/{folder}/{stem}-{number}.{ext}", number + 1
+    return member
 
 
 def scenario_from_card(
@@ -1329,13 +1397,44 @@ def card_png(png: bytes, v2: Mapping[str, Any], v3: Mapping[str, Any]) -> bytes:
     return with_text(png, {"chara": encoded(v2), "ccv3": encoded(v3)})
 
 
+def json_card(v3: Mapping[str, Any]) -> dict[str, Any]:
+    """A card as a .json file: V3, as a CHARX's card.json and a PNG's ccv3
+    chunk have it (V2 had no place for a card's group greetings, its sources,
+    its notes in other languages, its dates or its nickname, and they were
+    lost), with only its links among its assets, since a JSON card holds no
+    files. V1's fields ride at the top too, as SillyTavern writes them, for
+    readers that know no other."""
+    data = dict(v3["data"])
+
+    def linked(asset: Any) -> bool:
+        uri = str(asset.get("uri") or "") if isinstance(asset, Mapping) else ""
+        return bool(uri) and not _Held.holds(uri) and uri != "ccdefault:"
+
+    links = [asset for asset in data.pop("assets", None) or [] if linked(asset)]
+    if links:
+        data["assets"] = links
+    return {
+        **{key: data.get(key, "") for key in _V1},
+        "tags": list(data.get("tags") or []),
+        "spec": SPEC_V3,
+        "spec_version": "3.0",
+        "data": data,
+    }
+
+
 def write_card(path: Path, v2: Mapping[str, Any], v3: Mapping[str, Any], png: bytes | None) -> None:
-    """A .png card with the picture, or a .json card (V2, which every
-    reader takes)."""
+    """A .png card with the picture (its hidden data removed, or CardError),
+    or a .json card (`json_card`)."""
     path = Path(path)
     if path.suffix.lower() == ".png":
         if png is None:
             raise CardError("a PNG card needs the character's picture")
+        try:
+            png = strip_metadata(png)
+        except MetadataError as exc:
+            raise CardError(f"their picture couldn't have its hidden data removed ({exc})") from exc
+        if picture_kind(png) != ".png":
+            raise CardError("a PNG card's picture must be a PNG")
         write_bytes_atomic(path, card_png(png, v2, v3))
     else:
-        atomic_write_json(path, v2)
+        atomic_write_json(path, json_card(v3))

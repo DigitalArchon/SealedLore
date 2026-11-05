@@ -11,7 +11,13 @@ from sealedlore.models.character import Character
 from sealedlore.models.collection import CollectionInfo
 from sealedlore.storage import collection
 from sealedlore.storage import tavern_lore as lore
-from sealedlore.storage.tavern_cards import card_charx, card_data, read_card, tavern_from_file
+from sealedlore.storage.tavern_cards import (
+    card_charx,
+    card_data,
+    read_card,
+    tavern_from_file,
+    write_card,
+)
 from tests.test_card_files import FARMHOUSE, kept_elena, store
 
 SPEC_BOOK = {
@@ -135,6 +141,57 @@ def test_an_edited_card_goes_out_as_edited(tmp_path: Path):
     assert data["extensions"]["talkativeness"] == "0.8"
     assert data["group_only_greetings"] == ["Everyone, inside."]
     assert any(f.name == "theme" and f.data == b"ID3 new" for f in again.files)
+
+
+def test_a_json_card_brings_back_every_field_the_page_edits(tmp_path: Path):
+    """A JSON card was V2: what only V3 has a place for (the group greetings,
+    the sources, the notes in other languages, the dates, the nickname and
+    the links) didn't come back, though a PNG or a CHARX brought it."""
+    root, elena, _notes = kept_elena(tmp_path)
+    elena.aliases = ["Ellie", "the farmer"]
+    elena.summary = "Keeps the farmhouse."
+    elena.full_description = "Keeps the farmhouse north of Hellsville."
+    elena.personality = "wary, dry"
+    elena.voice_notes = "Short sentences."
+    elena.canon = "Doomsville"
+    elena.is_player_available, elena.author_only = True, True
+    tavern = elena.tavern
+    tavern.first_mes = "{{char}} lowers the rifle."
+    tavern.alternate_greetings = ["The door is barred."]
+    tavern.group_only_greetings = ["Everyone, inside."]
+    tavern.scenario = "Four winters after the end."
+    tavern.mes_example = "<START>\n{{char}}: Hands up."
+    tavern.system_prompt = "Stay {{char}}."
+    tavern.post_history_instructions = "Keep it short."
+    tavern.creator_notes = "A slow burn."
+    tavern.creator_notes_multilingual = {"de": "Langsam."}
+    tavern.creator, tavern.character_version = "someone", "2"
+    tavern.tags = ["survival", "farm"]
+    tavern.source = ["https://example.com/elena"]
+    tavern.extensions = {"talkativeness": "0.8", "risuai": {"utilityBot": False}}
+    tavern.character_book = {**SPEC_BOOK, "entries": [dict(SPEC_BOOK["entries"][0])]}
+    tavern.creation_date, tavern.modification_date = 1_700_000_000, 1_750_000_000
+    elena.collection.added_at = elena.collection.changed_at = "2026-11-01T00:00:00+00:00"
+    path = tmp_path / "elena.json"
+    write_card(path, *card_data(elena), None)
+
+    back, _notes = collection.kept_from_card(read_card(path), store(tmp_path / "again"))
+    own = (
+        "name",
+        "aliases",
+        "summary",
+        "full_description",
+        "personality",
+        "voice_notes",
+        "canon",
+        "is_player_available",
+        "author_only",
+    )
+    assert back.model_dump(include=set(own)) == elena.model_dump(include=set(own))
+    fields = set(type(tavern).model_fields) - {"assets"}
+    assert back.tavern.model_dump(include=fields) == tavern.model_dump(include=fields)
+    links = [(a.type, a.name, a.uri) for a in tavern.assets if not a.held]
+    assert [(a.type, a.name, a.uri) for a in back.tavern.assets] == links
 
 
 def test_a_card_changed_here_says_when(tmp_path: Path):
