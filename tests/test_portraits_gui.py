@@ -181,6 +181,42 @@ class _Catalog(QObject):
         pass
 
 
+def test_the_prompt_writer_is_asked_only_for_the_cards_to_draw(
+    app, tmp_path: Path, story, cast, monkeypatch
+):
+    """A card with a picture already starts unticked, but its prompt was
+    written, and paid for, with the rest. Ticked later, it is written then."""
+    session = _session(tmp_path, story, cast)
+    pictured = cast[0]
+    pictured.reference_images = [ImageRef(id="r1", file="images/refs/r1.png")]
+    session.pictures.write("images/refs/r1.png", PNG)
+    asked: list[list[str]] = []
+
+    def write(characters, lore, **_kwargs):
+        asked.append([c.name for c in characters])
+        return {c.id: f"A face for {c.name}." for c in characters}, None
+
+    monkeypatch.setattr(session, "write_card_prompts", write)
+    dialog = PortraitsDialog(session, cast, catalog=None, browse=None)
+    wait_for(app, lambda: not dialog.writing())
+    app.processEvents()
+    assert asked == [[c.name for c in cast[1:]]], "not the one with a picture"
+    row = dialog.rows[0]
+    assert not row.tick.isChecked() and not row.written and not row.wanted()
+    row.tick.setChecked(True)
+    wait_for(app, lambda: not dialog.writing())
+    app.processEvents()
+    assert asked[-1] == [pictured.name] and row.wanted()
+    assert row.prompt.toPlainText() == f"A face for {pictured.name}."
+    # Ticked while others are written, it waits for them, then is written.
+    dialog.rows[1].tick.setChecked(False)
+    dialog.framing.setCurrentIndex((dialog.framing.currentIndex() + 1) % dialog.framing.count())
+    dialog.rows[1].tick.setChecked(True)
+    wait_for(app, lambda: not dialog.writing() and dialog.rows[1].written)
+    assert all(row.written for row in dialog.rows)
+    dialog.reject()
+
+
 def _session(tmp_path: Path, story, cast, replies=("x",)) -> StorySession:
     bundle = StoryBundle(story=story, cast=cast)
     save_story_bundle(bundle, root=tmp_path)

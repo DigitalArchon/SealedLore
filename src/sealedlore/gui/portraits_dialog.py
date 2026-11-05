@@ -63,6 +63,7 @@ WRITING = "Writing…"
 # written again.
 RESTYLE_DELAY_MS = 900
 NOTHING_TO_SEE = "The writer found nothing here a picture could show; write a prompt to draw one."
+UNTICKED = "Tick it to draw it, and its prompt is written."
 
 
 def card_name(card: Card) -> str:
@@ -127,6 +128,16 @@ class _Row(QFrame):
         self._filling = True
         self.prompt.setPlainText(WRITING)
         self._filling = False
+        self.prompt.setEnabled(False)
+
+    def wait(self) -> None:
+        """No prompt until it is ticked: the writer is asked only for cards
+        that are to be drawn."""
+        self.written = False
+        self._filling = True
+        self.prompt.setPlainText("")
+        self._filling = False
+        self.prompt.setPlaceholderText(UNTICKED)
         self.prompt.setEnabled(False)
 
     def _on_edited(self) -> None:
@@ -222,6 +233,10 @@ class PortraitsDialog(QDialog):
 
         pictures = session.pictures
         self.rows: list[_Row] = []
+        # Rows whose prompts are being written, and rows ticked meanwhile
+        # that wait for theirs.
+        self._writing: list[_Row] = []
+        self._ticked_meanwhile: list[_Row] = []
         holder = QWidget()
         rows = QVBoxLayout(holder)
         rows.setContentsMargins(0, 0, 6, 0)
@@ -244,7 +259,8 @@ class PortraitsDialog(QDialog):
                     # Has a picture already: drawn again only if ticked (all
                     # were, and each new one went in front of the old).
                     row.tick.setChecked(False)
-                row.tick.toggled.connect(self._sync)
+                    row.wait()
+                row.tick.toggled.connect(lambda on, row=row: self._ticked(row, on))
                 row.prompt.textChanged.connect(self._sync)
                 self.rows.append(row)
                 rows.addWidget(row)
@@ -297,7 +313,11 @@ class PortraitsDialog(QDialog):
         if catalog is not None:
             catalog.changed.connect(self._sync)
             catalog.ensure()
-        self._write(self.rows)
+        # Only the cards to be drawn: every prompt was written, and paid for,
+        # the unticked ones' too.
+        ticked = [row for row in self.rows if row.tick.isChecked()]
+        if ticked:
+            self._write(ticked)
         self._sync()
         size_to_screen(self, 0.5, 0.88, at_least=QSize(720, 760))
 
@@ -346,10 +366,26 @@ class PortraitsDialog(QDialog):
         self._writing = []
         if self._failure is not None:
             self._problem = f"The prompts couldn't be written: {self._failure}"
+        waiting, self._ticked_meanwhile = self._ticked_meanwhile, []
         if self._again:
             self._again = False
-            self._restyle()
+            self._restyle()  # those ticked meanwhile among them
             return
+        waiting = [row for row in waiting if row.tick.isChecked() and not row.written]
+        if waiting:
+            self._write(waiting)
+        self._sync()
+
+    def _ticked(self, row: _Row, on: bool) -> None:
+        """A card ticked with no prompt yet: its prompt written now, or once
+        the writing under way is done."""
+        if on and not row.written and not row.edited:
+            if self.writing():
+                if row not in self._ticked_meanwhile:
+                    self._ticked_meanwhile.append(row)
+                row.rewrite()
+            else:
+                self._write([row])
         self._sync()
 
     def _restyle(self) -> None:
@@ -359,7 +395,10 @@ class PortraitsDialog(QDialog):
         if self.writing():
             self._again = True
             return
-        rows = [row for row in self.rows if not row.edited]
+        for row in self.rows:
+            if not row.edited and not row.tick.isChecked():
+                row.wait()  # written in the new style once it is ticked
+        rows = [row for row in self.rows if not row.edited and row.tick.isChecked()]
         if rows:
             self._write(rows)
         self._sync()
